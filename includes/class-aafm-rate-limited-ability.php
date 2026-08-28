@@ -42,11 +42,12 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * discard the OUTER call's still-open frame: the outer row was left stuck at 'started' forever
  * while the outer callback, finding nothing pending, opened and resolved a duplicate row.
  * aafm_begin_invocation() now hands this specific execute() call a unique token before
- * parent::execute() runs, and the finally passes that SAME token to
- * aafm_discard_invocation_if_mine(), which discards the top frame only when it is still the one
- * this token opened - never a nested or outer invocation's frame. See that function's own docblock
- * in includes/register.php for the full mechanism and why the other consumers of this stack
- * (the decorated permission and execute callbacks) do not need the same check.
+ * parent::execute() runs, and the finally passes that SAME token, plus whatever parent::execute()
+ * returned, to aafm_resolve_dangling_invocation_if_mine(), which touches the top frame only when
+ * it is still the one this token opened - never a nested or outer invocation's frame. See that
+ * function's own docblock in includes/register.php for the full mechanism, for why the other
+ * consumers of this stack (the decorated permission and execute callbacks) do not need the same
+ * check, and for which dangling frames it is now safe to resolve rather than merely discard.
  *
  * Releasing both in a finally around parent::execute() closes every in-execute path at once, for
  * both concerns: input refusal, the permission re-check, the callback itself, output refusal, and a
@@ -69,12 +70,24 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * across a future core bump the way a hardcoded version-number comparison would not be. On any core
  * that has it (this plugin's 7.1 ceiling and beyond), the branch below is a no-op and
  * wp_ability_invoked keeps doing this exact job exactly as before - zero behavior change there.
+ *
+ * Stuck-row gap closed (found in the 1.7.1 CI review, 2026-08-28): a call core itself refuses at
+ * WP_Ability::validate_input() - malformed input failing the ability's own JSON Schema - never
+ * reaches either decorated callback, on EITHER version this plugin supports, and used to leave its
+ * 'started' row stuck there forever: a real, deterministic, core-owned outcome recorded as though
+ * the call were still in flight. This class already runs unconditionally, on every WP version this
+ * plugin supports, immediately around parent::execute() - exactly the choke point needed to see
+ * what parent::execute() returned and resolve that one class of dangling row. See
+ * aafm_resolve_dangling_invocation_if_mine() and aafm_core_input_rejection_code() in
+ * includes/register.php for the mechanism and for the other dangling-row cases (a
+ * wp_pre_execute_ability short-circuit, a rethrown permission crash) that deliberately keep their
+ * row stuck, unchanged.
  */
 class AAFM_Rate_Limited_Ability extends WP_Ability {
 
 	/**
-	 * Execute the ability, releasing the per-call rate memo and any dangling audit-log correlation
-	 * however the call resolves.
+	 * Execute the ability, releasing the per-call rate memo and resolving or releasing any dangling
+	 * audit-log correlation however the call resolves.
 	 *
 	 * @param mixed $input Optional. The input data for the ability. Default `null`.
 	 * @return mixed|WP_Error The result of the ability execution, or WP_Error on failure.
@@ -87,11 +100,18 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 			// docblock above for why this check gates cleanly on every core this plugin supports.
 			aafm_open_pending_invocation_row( $this->get_name(), $input );
 		}
+		// Captured so the finally below can decide, from what parent::execute() actually
+		// returned, whether a still-dangling row names a real core refusal or must stay exactly
+		// where the call left it. Stays null if parent::execute() never returns at all (an
+		// uncaught Throwable from an unwrapped core filter) - aafm_core_input_rejection_code()
+		// treats null as "nothing to recognise", so that path is unaffected by this change.
+		$result = null;
 		try {
-			return parent::execute( $input );
+			$result = parent::execute( $input );
+			return $result;
 		} finally {
 			aafm_rate_limit_call_reset( $this->get_name() );
-			aafm_discard_invocation_if_mine( $this->get_name(), $invocation_token );
+			aafm_resolve_dangling_invocation_if_mine( $this->get_name(), $invocation_token, $result );
 		}
 	}
 }

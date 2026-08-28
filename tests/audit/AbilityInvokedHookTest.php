@@ -164,8 +164,17 @@ final class AbilityInvokedHookTest extends TestCase {
 	 * test_denied_is_audited cases work), would pop and resolve the FIRST call's row instead of
 	 * writing its own - misattributing the second call's denial onto the first call, and leaving the
 	 * second call with no audit row of its own at all.
+	 *
+	 * 1.7.1 CI review: the fixture's first row used to stay stuck at 'started' forever, on both WP
+	 * 6.9 and 7.1 - a real, deterministic, core-owned refusal recorded as though the call were still
+	 * in flight. AAFM_Rate_Limited_Ability::execute() now resolves that class of dangling row (see
+	 * aafm_resolve_dangling_invocation_if_mine() in includes/register.php), so the first assertion
+	 * below pins the NEW contract: a terminal 'error' status naming the schema refusal, never
+	 * 'denied' (no capability decision was ever made) and never the old permanent 'started'. The
+	 * rest of the test is unchanged: it still proves the resolved first row is never touched again
+	 * by a later, unrelated call for the same ability.
 	 */
-	public function test_a_validation_failure_leaves_no_dangling_row_for_a_later_denied_call(): void {
+	public function test_a_validation_failure_resolves_to_error_and_leaves_no_dangling_row_for_a_later_denied_call(): void {
 		$name = 'aafm-test/invoked-hook-validation-then-denial';
 		$this->in_action(
 			'wp_abilities_api_init',
@@ -191,10 +200,21 @@ final class AbilityInvokedHookTest extends TestCase {
 
 		$first = wp_get_ability( $name )->execute( array( 'n' => 'not-an-integer' ) );
 		$this->assertTrue( is_wp_error( $first ), 'Fixture check: the malformed input must actually fail core validation before any permission check.' );
+		$this->assertSame( 'ability_invalid_input', $first->get_error_code(), 'Fixture check: this must be validate_input()\'s own refusal code, not some other WP_Error.' );
 
 		$rows_after_first = aafm_query_activity( array( 'ability' => $name ) );
-		$this->assertCount( 1, $rows_after_first, 'Fixture check: the invalid call still opened its own started row.' );
-		$this->assertSame( 'started', $rows_after_first[0]['status'] );
+		$this->assertCount( 1, $rows_after_first, 'The invalid call opens its own row and resolves it in the same request - never a second row.' );
+		$this->assertSame( 'error', $rows_after_first[0]['status'], 'A call core itself refused at validate_input() must resolve to a terminal status, not stay started forever.' );
+		$this->assertNotSame(
+			'denied',
+			$rows_after_first[0]['status'],
+			'Never denied: the permission callback was never invoked, so no capability decision was ever made.'
+		);
+		$this->assertStringContainsString(
+			'ability_invalid_input',
+			(string) $rows_after_first[0]['detail'],
+			'The detail must name the schema/validation refusal, drawn from the WP_Error code only.'
+		);
 		$first_row_id = (int) $rows_after_first[0]['id'];
 
 		// Simulate the adapter's preliminary check_permission() call, exactly like this suite's own
@@ -204,14 +224,54 @@ final class AbilityInvokedHookTest extends TestCase {
 		$this->assertNotTrue( $second, 'Fixture check: the marker input must actually be denied.' );
 
 		$rows_after_second = aafm_query_activity( array( 'ability' => $name ) );
-		$this->assertCount( 2, $rows_after_second, "The second call must write its OWN row, not resolve the first call's dangling started row." );
+		$this->assertCount( 2, $rows_after_second, "The second call must write its OWN row, not resolve the first call's already-settled row." );
 
 		$first_row_again = current( array_filter( $rows_after_second, static fn( $r ) => (int) $r['id'] === $first_row_id ) );
 		$this->assertNotFalse( $first_row_again, "The first call's row must still exist, untouched." );
-		$this->assertSame( 'started', $first_row_again['status'], "The first call's row must remain at started - the second call must not have resolved it." );
+		$this->assertSame( 'error', $first_row_again['status'], "The first call's row must stay exactly as it resolved - the second call must not touch it." );
 
 		$second_row = current( array_filter( $rows_after_second, static fn( $r ) => (int) $r['id'] !== $first_row_id ) );
 		$this->assertSame( 'denied', $second_row['status'], 'The second call must be attributed as its own, distinct denied row.' );
+	}
+
+	/**
+	 * The floor counterpart of the test above: on pre-7.1 core, wp_ability_invoked never fires at
+	 * all, so AAFM_Rate_Limited_Ability::execute() opens the pending row itself
+	 * (aafm_open_pending_invocation_row(), called directly from that class - see
+	 * includes/class-aafm-rate-limited-ability.php) before calling parent::execute(). That is a
+	 * DIFFERENT code path from the 7.1+ hook, so it needs its own proof that the resolution reaches
+	 * it too, not only an inference from the 7.1 case above.
+	 */
+	public function test_a_validation_failure_resolves_to_error_on_every_supported_core(): void {
+		$name = 'aafm-test/invoked-hook-validation-floor';
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Invoked-hook fixture (validation floor)',
+						'description'         => 'Test fixture: strict input schema, on every supported core.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array( 'n' => array( 'type' => 'integer' ) ),
+							'required'   => array( 'n' ),
+						),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+
+		$result = wp_get_ability( $name )->execute( array( 'n' => 'not-an-integer' ) );
+		$this->assertTrue( is_wp_error( $result ), 'Fixture check: the malformed input must actually fail core validation.' );
+
+		$rows = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 1, $rows, 'Exactly one row: opened and resolved for the same call, on any supported core.' );
+		$this->assertSame( 'error', $rows[0]['status'] );
 	}
 
 	/**
@@ -453,6 +513,73 @@ final class AbilityInvokedHookTest extends TestCase {
 
 		$statuses = wp_list_pluck( $rows, 'status' );
 		$this->assertSame( array( 'success', 'success' ), $statuses, 'Both calls ran to completion and neither was left at started nor duplicated.' );
+	}
+
+	/**
+	 * Nesting counterpart to the validation-failure fix (see
+	 * test_a_validation_failure_resolves_to_error_and_leaves_no_dangling_row_for_a_later_denied_call
+	 * above): a nested same-ability call that fails validate_input() must resolve to exactly its OWN
+	 * row. Same shape as test_a_recursive_same_ability_call_resolves_exactly_two_rows above, but the
+	 * NESTED call is the one that fails, not the one that succeeds - the case that would expose a
+	 * resolve reaching past the nested call's own frame into the OUTER call's still-open one
+	 * underneath it, since aafm_resolve_dangling_invocation_if_mine() is the new code path added by
+	 * that fix and this suite's existing nesting proof never exercised it.
+	 */
+	public function test_a_nested_validation_failure_resolves_only_its_own_row(): void {
+		$this->skip_unless_wp_71_abilities_surface();
+		$name = 'aafm-test/invoked-hook-nested-validation-failure';
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Invoked-hook fixture (nested validation failure)',
+						'description'         => 'Test fixture: strict input schema, nested call sends malformed input.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array( 'n' => array( 'type' => 'integer' ) ),
+							'required'   => array( 'n' ),
+						),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+
+		$recursed = false;
+		add_filter(
+			'wp_pre_execute_ability',
+			static function ( $pre, string $ability_name ) use ( $name, &$recursed ) {
+				if ( $name === $ability_name && ! $recursed ) {
+					$recursed = true;
+					// The nested call fails validate_input() and must resolve to its OWN row,
+					// without ever touching the OUTER call's frame, still open underneath it on
+					// the stack at this exact point.
+					wp_get_ability( $name )->execute( array( 'n' => 'not-an-integer' ) );
+				}
+				return $pre; // Not a short-circuit: let the OUTER call proceed normally.
+			},
+			10,
+			2
+		);
+
+		$outer = wp_get_ability( $name )->execute( array( 'n' => 1 ) );
+		$this->assertSame( array( 'ok' => true ), $outer, 'Fixture check: the outer call must resolve normally despite the nested failure.' );
+
+		$rows = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 2, $rows, 'The outer call and the nested, failed call must each resolve to exactly their own row.' );
+
+		$statuses = wp_list_pluck( $rows, 'status' );
+		sort( $statuses );
+		$this->assertSame(
+			array( 'error', 'success' ),
+			$statuses,
+			'The nested call resolves to its own validation-refusal error and the outer call still succeeds - neither touches the other.'
+		);
 	}
 
 	/**

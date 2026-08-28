@@ -91,9 +91,9 @@ function &aafm_invocation_stacks(): array {
  *
  * Called ONLY by AAFM_Rate_Limited_Ability::execute(), once per execute() invocation, before
  * calling parent::execute(). The returned token is this specific invocation's identity: pass it
- * back to aafm_discard_invocation_if_mine() in that same method's finally, and nowhere else. A
- * nested same-ability call pushes its OWN frame on top of this one and is responsible for its own
- * token, never this one.
+ * back to aafm_resolve_dangling_invocation_if_mine() in that same method's finally, and nowhere
+ * else. A nested same-ability call pushes its OWN frame on top of this one and is responsible for
+ * its own token, never this one.
  *
  * @param string $name Ability name.
  * @return string A token unique to this invocation.
@@ -119,7 +119,8 @@ function aafm_begin_invocation( string $name ): string {
  * invocation's own frame and before anything else for the same ability name could possibly run.
  * The top frame at this exact moment is therefore always this invocation's own by construction;
  * no token check is needed here; the check matters only later, in
- * aafm_discard_invocation_if_mine(), once a nested call has had the chance to run in between.
+ * aafm_resolve_dangling_invocation_if_mine(), once a nested call has had the chance to run in
+ * between.
  *
  * @param string $name   Ability name.
  * @param int    $row_id The row id just opened for this invocation.
@@ -143,8 +144,9 @@ function aafm_tag_current_invocation_row( string $name, int $row_id ): void {
  * have happened earlier in this same invocation (during wp_pre_execute_ability, for example) has
  * already been fully pushed, resolved or discarded - so the top frame here is always this
  * invocation's own, and no token check is needed. That guarantee is exactly what
- * aafm_discard_invocation_if_mine()'s token check exists to protect: nesting only stays correctly
- * ordered because the nested call's own finally never touches a frame that is not its own.
+ * aafm_resolve_dangling_invocation_if_mine()'s token check exists to protect: nesting only stays
+ * correctly ordered because the nested call's own finally never touches a frame that is not its
+ * own.
  *
  * @param string $name Ability name.
  * @return int|null The row id, or null if nothing was pending (pre-7.1 core, where
@@ -160,37 +162,107 @@ function aafm_resolve_current_invocation_row( string $name ): ?int {
 }
 
 /**
- * Discard the invocation frame for $name, but ONLY if it is still the one $token opened.
+ * Whether a WP_Ability::execute() return value is core's OWN input-validation refusal - the one
+ * class of dangling row aafm_resolve_dangling_invocation_if_mine() below is allowed to resolve on
+ * its own authority, rather than leave stuck at 'started' the way every other dangling case still
+ * does.
+ *
+ * Scoped deliberately narrow, to the two literal WP_Error codes WP_Ability::validate_input() ever
+ * returns: `ability_invalid_input` (the ordinary schema-mismatch path, including its
+ * wp_ability_validate_input filter branch) and `ability_missing_input_schema` (the ability-has-no-
+ * schema-but-received-input branch). Both are core's own hardcoded string literals - constant
+ * across every ability and every install - so recognising them can never depend on caller input or
+ * on which ability was called.
+ *
+ * Two other WP_Error-shaped exits reach the same call site and MUST NOT be resolved here, which is
+ * exactly why this stays a narrow allowlist instead of "any WP_Error". A wp_pre_execute_ability
+ * short-circuit can substitute any value at all, including a third-party WP_Error carrying a code
+ * that plugin invented - resolving on code alone would let a foreign plugin's short-circuit
+ * dictate this plugin's own audit outcome, and per the existing, still-binding contract
+ * (AbilityInvokedHookTest::test_a_short_circuited_call_still_writes_a_started_row) a short-circuit
+ * never resolves past 'started' at all, because nothing this plugin owns ran the call. And
+ * `ability_invalid_permissions` - the generic wrapper WP_Ability::execute() itself builds around
+ * ANY permission-phase failure - must keep leaving its row exactly where it is: that is also the
+ * code core wraps around this plugin's own deliberate WP_DEBUG rethrow (the catch a few hundred
+ * lines up, in the decorated permission closure), whose docblock says in as many words that the
+ * absent resolution is intentional and must not be "fixed". Neither case is an input-validation
+ * refusal, so neither is safe to narrate as one.
+ *
+ * @param mixed $result Whatever WP_Ability::execute() returned.
+ * @return string|null The recognised code, or null when $result is not one of the two literals.
+ */
+function aafm_core_input_rejection_code( $result ): ?string {
+	if ( ! is_wp_error( $result ) ) {
+		return null;
+	}
+	$code = $result->get_error_code();
+	return in_array( $code, array( 'ability_invalid_input', 'ability_missing_input_schema' ), true ) ? $code : null;
+}
+
+/**
+ * Resolve the CURRENT invocation's own dangling frame when $result names core's own input
+ * rejection; otherwise discard the frame exactly as aafm_discard_invocation_if_mine() (this
+ * function's predecessor, since removed) always did - leaving any row it still carries untouched.
  *
  * Called from AAFM_Rate_Limited_Ability::execute()'s finally, once per execute() invocation,
  * after parent::execute() returns however it returns, passing the exact token
- * aafm_begin_invocation() returned for this same invocation. This is the ONE call site in this
- * file that must check whose frame it is looking at: by the time it runs, a nested same-ability
- * call may have already pushed and popped its own frame on top of this one and left THIS
- * invocation's frame exposed again, or this invocation's own frame may already have been resolved
- * by aafm_resolve_current_invocation_row() above. Either way, if the top frame's token is not
- * this one, it belongs to an outer invocation that has not finished yet, and touching it would be
- * exactly the corruption this token exists to prevent - so this leaves it strictly alone.
+ * aafm_begin_invocation() returned for this same invocation and whatever parent::execute()
+ * returned (or null, if it never returned at all - see that method for why). The token-ownership
+ * check below is UNCHANGED from the predecessor it replaces: by the time this runs, a nested
+ * same-ability call may have already pushed and popped its own frame on top of this one and left
+ * THIS invocation's frame exposed again, or this invocation's own frame may already have been
+ * resolved by aafm_resolve_current_invocation_row() (the decorated permission and execute
+ * closures both call it). Either way, if the top frame's token is not this one, it belongs to an
+ * outer invocation that has not finished yet, and touching it would be exactly the corruption the
+ * token exists to prevent - so this leaves it strictly alone, before ever looking at $result.
  *
- * When the token DOES match, the frame is discarded without touching the database row: if it
- * still carries a row id, that row stays exactly where the short-circuit/normalize-failure/
- * validate-failure path (or a rethrown permission crash) left it - stuck at 'started', the same
- * forensic signal every other unresolved-row path in this file already relies on. Only the
- * in-memory correlation is cleared, so it can never be inherited by a later, unrelated call for
- * the same ability name.
+ * A row only reaches the $result decision at all, therefore, on the paths register.php's own
+ * docblocks already name as leaving a frame dangling: a wp_pre_execute_ability short-circuit, a
+ * normalize_input()/validate_input() refusal, or a rethrown permission crash. THE DEFECT this
+ * closes: a validate_input() refusal is a real, deterministic, core-owned outcome - the plugin can
+ * say exactly what happened - and used to leave its row stuck at 'started' forever regardless,
+ * indistinguishable from a genuine in-flight call, on every WP version this plugin supports. The
+ * other two paths stay exactly as they were: aafm_core_input_rejection_code() is what draws the
+ * line, so see its docblock for why a short-circuit's substitute value and the rethrow's generic
+ * `ability_invalid_permissions` wrapper are both left untouched here.
  *
- * @param string $name  Ability name.
- * @param string $token This invocation's own token, from aafm_begin_invocation().
+ * @param string $name   Ability name.
+ * @param string $token  This invocation's own token, from aafm_begin_invocation().
+ * @param mixed  $result Whatever parent::execute() returned.
  * @return void
  */
-function aafm_discard_invocation_if_mine( string $name, string $token ): void {
+function aafm_resolve_dangling_invocation_if_mine( string $name, string $token, $result ): void {
 	$stacks =& aafm_invocation_stacks();
 	if ( empty( $stacks[ $name ] ) ) {
 		return;
 	}
 	$top =& $stacks[ $name ][ count( $stacks[ $name ] ) - 1 ];
-	if ( $top['token'] === $token ) {
-		array_pop( $stacks[ $name ] );
+	if ( $top['token'] !== $token ) {
+		return;
+	}
+	$frame = array_pop( $stacks[ $name ] );
+
+	$rejection_code = aafm_core_input_rejection_code( $result );
+	if ( null === $rejection_code || null === $frame['row_id'] || $frame['row_id'] <= 0 ) {
+		// Nothing to resolve: no row was ever tagged onto this frame, or $result is not one of
+		// the two refusal codes above - a short-circuit substitute, a rethrown permission crash's
+		// generic wrapper, or (rarer still) an uncaught Throwable from an unwrapped core filter,
+		// which leaves $result null. The row, if any, stays exactly where it already was.
+		return;
+	}
+
+	// The code only, never $result->get_error_message() - includes/audit/log.php forbids raw
+	// error text in this column, and aafm_activity_detail_field()'s 'key' type is the same
+	// identifier-only allowlist aafm_log_aborted_tool_call() uses for the same reason. The
+	// fallback string still fires (harmlessly) if that check ever rejects one of the two literals
+	// aafm_core_input_rejection_code() already constrained $rejection_code to.
+	$code   = aafm_activity_detail_field( 'key', $rejection_code );
+	$detail = null !== $code
+		? "rejected by WP_Ability::validate_input(): {$code}"
+		: 'rejected by WP_Ability::validate_input()';
+
+	if ( aafm_update_activity_status( $frame['row_id'], 'error', null, $detail ) ) {
+		aafm_announce_ability_resolved( $frame['row_id'], 'error', null, $detail );
 	}
 }
 

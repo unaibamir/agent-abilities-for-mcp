@@ -21,6 +21,25 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
+	 * Skip a test whose fixture genuinely cannot be built on this core: wp_pre_execute_ability, the
+	 * wp_ability_invoked action, and WP_Ability::invoke_callback()'s Throwable-to-WP_Error
+	 * conversion are all part of the same `@since 7.1.0` abilities-API surface, absent entirely
+	 * below that floor (verified against a real populated 6.9 tree, not merely quieter there).
+	 * class_exists( 'WP_Filter_Sentinel' ) is the same capability probe
+	 * includes/class-aafm-rate-limited-ability.php uses for its own version gate: that class is
+	 * core's default sentinel for wp_pre_execute_ability, introduced in the exact release that added
+	 * both hooks, so it stands in reliably for "does this core have the 7.1 surface" without pinning
+	 * to a version-number string.
+	 *
+	 * @return void
+	 */
+	private function skip_unless_wp_71_abilities_surface(): void {
+		if ( ! class_exists( 'WP_Filter_Sentinel' ) ) {
+			$this->markTestSkipped( 'Requires the WP 7.1 abilities API surface (wp_ability_invoked / wp_pre_execute_ability / the invoke_callback exception-to-WP_Error conversion), absent on this core.' );
+		}
+	}
+
+	/**
 	 * Register a fixture ability that returns a fixed, cheap-to-assert-on result.
 	 *
 	 * @param string $name Ability name.
@@ -52,6 +71,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	 * there is no wp_ability_invoked listener at all, so this assertion fails against a fresh log.
 	 */
 	public function test_a_short_circuited_call_still_writes_a_started_row(): void {
+		$this->skip_unless_wp_71_abilities_surface();
 		$this->register_fixture( 'aafm-test/invoked-hook-short-circuit' );
 
 		add_filter(
@@ -201,6 +221,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	 * validation-failure case above, same fix, separate proof.
 	 */
 	public function test_a_short_circuited_call_leaves_no_dangling_row_for_a_later_denied_call(): void {
+		$this->skip_unless_wp_71_abilities_surface();
 		$name = 'aafm-test/invoked-hook-short-circuit-then-denial';
 		$this->in_action(
 			'wp_abilities_api_init',
@@ -338,6 +359,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	 * receives back, which is core's ordinary behavior for this case, not part of the defect.
 	 */
 	public function test_a_rethrown_permission_crash_leaves_no_dangling_row_for_a_later_call(): void {
+		$this->skip_unless_wp_71_abilities_surface();
 		$name = 'aafm-test/invoked-hook-crash-then-success';
 		add_filter( 'aafm_rethrow_ability_exceptions', '__return_true' );
 
@@ -402,6 +424,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	 * replacement, yielding three rows (one stuck, two resolved) instead of the correct two.
 	 */
 	public function test_a_recursive_same_ability_call_resolves_exactly_two_rows(): void {
+		$this->skip_unless_wp_71_abilities_surface();
 		$name = 'aafm-test/invoked-hook-recursive-same-ability';
 		$this->register_fixture( $name );
 
@@ -439,6 +462,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	 * any reason to collide with the other's.
 	 */
 	public function test_nesting_a_different_ability_resolves_both_independently(): void {
+		$this->skip_unless_wp_71_abilities_surface();
 		$outer_name = 'aafm-test/invoked-hook-nesting-outer';
 		$inner_name = 'aafm-test/invoked-hook-nesting-inner';
 		$this->register_fixture( $outer_name );

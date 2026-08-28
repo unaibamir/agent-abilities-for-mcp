@@ -195,39 +195,43 @@ function aafm_discard_invocation_if_mine( string $name, string $token ): void {
 }
 
 /**
- * Open a 'started' audit row the instant an ability we registered is invoked - before core's
- * wp_pre_execute_ability filter gets a chance to short-circuit the rest of execute() and skip our
- * decorated execute_callback (includes/register.php), which is otherwise the ONLY place this
- * plugin writes an audit row. Closes a real visibility gap: a third party hooking
- * wp_pre_execute_ability can otherwise return a result to an MCP client with zero audit rows
- * logged, even though our own permission check already ran via the adapter's separate
- * check_permission() call.
+ * Open a 'started' audit row for an invocation and tag it onto the frame
+ * aafm_begin_invocation() already pushed, so the decorated permission/execute callbacks below
+ * (or a later denial write) find and reuse it instead of opening a second row for the same call.
+ *
+ * Two callers, same row shape, covering every WP version this plugin supports:
+ *
+ * - aafm_log_ability_invocation() (below), hooked on wp_ability_invoked - WP 7.1+ only, fires
+ *   before core does any work, so it also catches a wp_pre_execute_ability short-circuit.
+ * - AAFM_Rate_Limited_Ability::execute() (includes/class-aafm-rate-limited-ability.php), for the
+ *   WP 6.9 floor, where wp_ability_invoked never fires at all: without this fallback, a call core
+ *   itself rejects before EITHER decorated callback ever runs - malformed input failing core's own
+ *   validate_input() - left zero audit trace whatsoever on that floor, not even the stuck 'started'
+ *   row 7.1+ leaves via the hook. See that class for the version gate.
  *
  * $input here is RAW and UNNORMALISED (core's own docblock on wp_ability_invoked says so
- * explicitly) - cast defensively before it reaches anything, the same way every other call site in
- * this file treats caller input. aafm_build_activity_detail()'s own field-level checks
- * (includes/audit/detail.php) already reject non-scalar values per key, so this is safe once cast.
+ * explicitly, and AAFM_Rate_Limited_Ability::execute() receives the same raw parameter core will
+ * pass to normalize_input() next) - cast defensively before it reaches anything, the same way
+ * every other call site in this file treats caller input. aafm_build_activity_detail()'s own
+ * field-level checks (includes/audit/detail.php) already reject non-scalar values per key, so this
+ * is safe once cast.
  *
  * Scoped to abilities THIS PLUGIN registered: aafm_remember_raw_permission() (read mode) already
  * remembers one for every ability aafm_register_ability_with_log() processes, so its presence is a
- * free "is this ours" test with no new bookkeeping. wp_ability_invoked fires for every registered
- * ability's execute() call, native or third-party, and this plugin's audit log is not the place to
- * log a call it never registered.
+ * free "is this ours" test with no new bookkeeping. A foreign ability (native core, or a third
+ * party) never reaches AAFM_Rate_Limited_Ability::execute() at all - that subclass is only ever
+ * assigned inside aafm_register_ability_with_log() - so this scoping check matters only for the
+ * wp_ability_invoked path, which fires for every registered ability's execute() call.
  *
- * A call that short-circuits here never reaches the decorated execute_callback, but that does not
- * leak the per-call rate-limit token: AAFM_Rate_Limited_Ability::execute() already wraps every exit
- * from parent::execute() in a finally that releases it regardless (short-circuit included, since a
- * finally runs on an early return the same as any other). See that class for the equivalent
- * guarantee this fix round adds for the pending invocation row below.
+ * A call that short-circuits or fails validation here never reaches the decorated execute_callback,
+ * but that does not leak the per-call rate-limit token: AAFM_Rate_Limited_Ability::execute() already
+ * wraps every exit from parent::execute() in a finally that releases it regardless.
  *
- * @param string     $ability_name The ability name.
- * @param mixed      $input        Raw, unnormalized input.
- * @param WP_Ability $ability      The ability instance (unused; required by the hook signature).
+ * @param string $ability_name The ability name.
+ * @param mixed  $input        Raw, unnormalized input.
  * @return void
  */
-function aafm_log_ability_invocation( string $ability_name, $input, $ability ): void {
-	unset( $ability );
-
+function aafm_open_pending_invocation_row( string $ability_name, $input ): void {
 	if ( null === aafm_remember_raw_permission( $ability_name ) ) {
 		return; // Not an ability this plugin registered through the choke point.
 	}
@@ -248,6 +252,25 @@ function aafm_log_ability_invocation( string $ability_name, $input, $ability ): 
 	);
 
 	aafm_tag_current_invocation_row( $ability_name, $row_id );
+}
+
+/**
+ * The wp_ability_invoked listener (WP 7.1+ only - see aafm_open_pending_invocation_row() above for
+ * the pre-7.1 floor's equivalent). Fires as the very first action inside core's execute(), before
+ * wp_pre_execute_ability gets a chance to short-circuit the rest of execute() and skip our
+ * decorated execute_callback, which would otherwise be the ONLY place this plugin writes an audit
+ * row. Closes a real visibility gap: a third party hooking wp_pre_execute_ability can otherwise
+ * return a result to an MCP client with zero audit rows logged, even though our own permission
+ * check already ran via the adapter's separate check_permission() call.
+ *
+ * @param string     $ability_name The ability name.
+ * @param mixed      $input        Raw, unnormalized input.
+ * @param WP_Ability $ability      The ability instance (unused; required by the hook signature).
+ * @return void
+ */
+function aafm_log_ability_invocation( string $ability_name, $input, $ability ): void {
+	unset( $ability );
+	aafm_open_pending_invocation_row( $ability_name, $input );
 }
 add_action( 'wp_ability_invoked', 'aafm_log_ability_invocation', 10, 3 );
 

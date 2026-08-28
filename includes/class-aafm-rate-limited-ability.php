@@ -53,6 +53,22 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * rethrown crash. The one dead-call path outside execute() - a consumer WP_Error on
  * mcp_adapter_pre_tool_call - is covered by aafm_release_rate_memo_on_aborted_tool_call() instead;
  * that path never reaches wp_ability_invoked either, so it never has a pending row to discard.
+ *
+ * WP 6.9 floor gap (found in the 1.7.1 CI review, 2026-08-27): wp_ability_invoked and
+ * wp_pre_execute_ability are both `@since 7.1.0` in core - absent entirely below that floor, not
+ * merely quieter. Without a fallback, a call core itself rejects before EITHER decorated callback
+ * ever runs - malformed input failing core's own validate_input() - left ZERO audit trace at all on
+ * 6.9, where 7.1+ at least leaves the stuck 'started' row wp_ability_invoked opens. This class
+ * already runs unconditionally, on every WP version this plugin supports, before parent::execute()
+ * does any work - exactly the choke point wp_ability_invoked exists to approximate for cores that
+ * have it. So execute() below opens that same row directly, via the function
+ * aafm_log_ability_invocation() itself calls, whenever the running core lacks the 7.1 surface.
+ * class_exists( 'WP_Filter_Sentinel' ) is the capability probe: that class is core's own default
+ * sentinel for the wp_pre_execute_ability filter, introduced in the exact same 7.1.0 release as
+ * both hooks, so it is a reliable stand-in for "does this core fire wp_ability_invoked" - reliable
+ * across a future core bump the way a hardcoded version-number comparison would not be. On any core
+ * that has it (this plugin's 7.1 ceiling and beyond), the branch below is a no-op and
+ * wp_ability_invoked keeps doing this exact job exactly as before - zero behavior change there.
  */
 class AAFM_Rate_Limited_Ability extends WP_Ability {
 
@@ -65,6 +81,12 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 	 */
 	public function execute( $input = null ) {
 		$invocation_token = aafm_begin_invocation( $this->get_name() );
+		if ( ! class_exists( 'WP_Filter_Sentinel' ) ) {
+			// Pre-7.1 core: wp_ability_invoked will never fire for this call, so open the same
+			// pending row here ourselves, before parent::execute() does any work. See the class
+			// docblock above for why this check gates cleanly on every core this plugin supports.
+			aafm_open_pending_invocation_row( $this->get_name(), $input );
+		}
 		try {
 			return parent::execute( $input );
 		} finally {

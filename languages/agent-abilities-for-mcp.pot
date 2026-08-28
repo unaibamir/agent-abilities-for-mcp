@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-28T08:58:53+00:00\n"
+"POT-Creation-Date: 2026-08-28T09:21:15+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -6773,100 +6773,100 @@ msgid "Guarded write abilities exposed to AI agents."
 msgstr ""
 
 #. translators: 1: ability name, 2: comma-separated list of required property names.
-#: includes/register.php:524
+#: includes/register.php:547
 #, php-format
 msgid "Ability \"%1$s\" has invalid input. These required properties are missing: %2$s"
 msgstr ""
 
-#: includes/register.php:559
+#: includes/register.php:582
 msgid "Call aafm-get-media-item, which returns the alt text as a plain \"alt\" field."
 msgstr ""
 
-#: includes/register.php:560
+#: includes/register.php:583
 msgid "Call aafm-update-media and pass its \"alt\" parameter."
 msgstr ""
 
-#: includes/register.php:561
+#: includes/register.php:584
 msgid "Call aafm-update-media with an empty \"alt\" to clear it."
 msgstr ""
 
-#: includes/register.php:564
+#: includes/register.php:587
 msgid "Call aafm-get-post or aafm-get-page, which return the \"featured_image\" object."
 msgstr ""
 
-#: includes/register.php:565
+#: includes/register.php:588
 msgid "Call aafm-set-featured-image, or pass \"featured_media\" to aafm-update-post or aafm-update-page."
 msgstr ""
 
-#: includes/register.php:569
+#: includes/register.php:592
 msgid "Call aafm-wc-get-product, which returns it as a \"regular_price\" field."
 msgstr ""
 
-#: includes/register.php:570
+#: includes/register.php:593
 msgid "Call aafm-wc-update-product and pass its \"regular_price\" parameter."
 msgstr ""
 
-#: includes/register.php:571
+#: includes/register.php:594
 msgid "Call aafm-wc-update-product with an empty \"regular_price\" to clear it."
 msgstr ""
 
-#: includes/register.php:574
+#: includes/register.php:597
 msgid "Call aafm-wc-get-product, which returns the active price as a \"price\" field."
 msgstr ""
 
-#: includes/register.php:575
+#: includes/register.php:598
 msgid "This is WooCommerce's own computed cache, not directly settable; call aafm-wc-update-product with \"regular_price\" and/or \"sale_price\" instead, and WooCommerce recalculates it."
 msgstr ""
 
-#: includes/register.php:579
+#: includes/register.php:602
 msgid "Call aafm-yoast-get-post, which returns it as a \"description\" field."
 msgstr ""
 
-#: includes/register.php:580
+#: includes/register.php:603
 msgid "Call aafm-yoast-update-post and pass its \"description\" parameter."
 msgstr ""
 
-#: includes/register.php:581
+#: includes/register.php:604
 msgid "Call aafm-yoast-update-post with an empty \"description\" to clear it."
 msgstr ""
 
 #. translators: %s: the WordPress-reserved meta key the call named.
-#: includes/register.php:672
+#: includes/register.php:695
 #, php-format
 msgid "The meta key \"%s\" is protected by WordPress, so no user can reach it through this tool."
 msgstr ""
 
-#: includes/register.php:692
+#: includes/register.php:715
 msgid "Call aafm-get-user, which returns the user's roles as a \"roles\" field."
 msgstr ""
 
-#: includes/register.php:693
+#: includes/register.php:716
 msgid "Call aafm-update-user and pass its \"role\" parameter."
 msgstr ""
 
 #. translators: %s: the WordPress-reserved user-meta key the call named.
-#: includes/register.php:740
+#: includes/register.php:763
 #, php-format
 msgid "The user meta key \"%s\" is protected by WordPress, so no user can reach it through this tool."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:761
+#: includes/register.php:784
 #, php-format
 msgid "Ability \"%s\" was not registered: a permission_callback is required."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:776
+#: includes/register.php:799
 #, php-format
 msgid "Ability \"%s\" was not registered: an execute_callback is required."
 msgstr ""
 
-#: includes/register.php:1104
+#: includes/register.php:1127
 msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
 msgstr ""
 
-#: includes/register.php:1133
+#: includes/register.php:1156
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 

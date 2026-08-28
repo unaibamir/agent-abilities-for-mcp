@@ -819,4 +819,89 @@ final class WooShippingTest extends TestCase {
 			),
 		);
 	}
+
+	/**
+	 * Task 12a: the create/update-zone descriptions must name the zone_locations gap plainly and
+	 * point at the route that actually works (the WooCommerce admin), not just say "not settable"
+	 * with no next step.
+	 */
+	public function test_create_and_update_shipping_zone_descriptions_name_the_locations_gap(): void {
+		$create_description = (string) wp_get_ability( 'aafm/wc-create-shipping-zone' )->get_description();
+		$update_description = (string) wp_get_ability( 'aafm/wc-update-shipping-zone' )->get_description();
+
+		foreach ( array( $create_description, $update_description ) as $description ) {
+			$this->assertStringContainsString(
+				'zone_locations',
+				$description,
+				'the description must name the exact field that cannot be set, not just gesture at "locations".'
+			);
+			$this->assertStringContainsString(
+				'WooCommerce > Settings > Shipping',
+				$description,
+				'the description must point at the admin route that actually works.'
+			);
+		}
+	}
+
+	/**
+	 * Task 12a: the create/update-method descriptions must name the cost gap plainly and point at
+	 * the route that actually works.
+	 */
+	public function test_create_and_update_shipping_method_descriptions_name_the_cost_gap(): void {
+		$create_description = (string) wp_get_ability( 'aafm/wc-create-shipping-method' )->get_description();
+		$update_description = (string) wp_get_ability( 'aafm/wc-update-shipping-method' )->get_description();
+
+		// Test-quality finding 3 (fix round 1, 208): a bare 'cost' substring is an ordinary English
+		// word that a future edit could satisfy with unrelated cost-adjacent prose while silently
+		// dropping the actual capability-gap explanation. Assert the specific fragments that state
+		// the field cannot be written, matching the sibling zone_locations test's exact-field-name
+		// discipline instead of a generic word.
+		$this->assertStringContainsString(
+			"cost is left at WooCommerce's own default",
+			$create_description,
+			'the create description must explain that the method\'s cost is not settable through this ability.'
+		);
+		$this->assertStringContainsString(
+			'this plugin\'s abilities cannot write it',
+			$create_description,
+			'the create description must state plainly that this plugin cannot write the cost.'
+		);
+		$this->assertStringContainsString(
+			'cost cannot be changed through this plugin\'s abilities',
+			$update_description,
+			'the update description must state plainly that this plugin cannot write the cost.'
+		);
+
+		foreach ( array( $create_description, $update_description ) as $description ) {
+			$this->assertStringContainsString(
+				"zone's shipping method settings",
+				$description,
+				'the description must point at the admin route that actually works.'
+			);
+		}
+	}
+
+	/**
+	 * FIX-3 item 2 (sweep finding A1): the shared zone resolver used by 7 of this file's 8
+	 * abilities now delegates to WC_Shipping_Zones::get_zone() instead of hand-instantiating
+	 * WC_Shipping_Zone in a try/catch with a redundant id re-check. Traced both paths line by
+	 * line against real WooCommerce source and found no observable difference today (the vendor
+	 * resolver does the identical instantiate-inside-try/catch internally), so there is no
+	 * behavioural difference to drive a test red - this pins the source-level fact instead, as the
+	 * finding predicted, and states plainly it could not go red any other way.
+	 */
+	public function test_zone_resolver_delegates_to_wc_shipping_zones(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/shipping.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
+		$this->assertStringContainsString(
+			'\WC_Shipping_Zones::get_zone( $zone_id )',
+			$source,
+			'aafm_wc_get_shipping_zone_object() must delegate to WC_Shipping_Zones::get_zone(), the same resolver WooCommerce\'s own REST controller base class uses.'
+		);
+		preg_match( '/function aafm_wc_get_shipping_zone_object.*?\n}/s', $source, $matches );
+		$this->assertStringNotContainsString(
+			'new \WC_Shipping_Zone(',
+			$matches[0] ?? '',
+			'the zone resolver\'s own function body must not hand-instantiate WC_Shipping_Zone directly any more (a different function, wc-create-shipping-zone, legitimately still does).'
+		);
+	}
 }

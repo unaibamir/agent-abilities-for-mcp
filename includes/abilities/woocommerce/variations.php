@@ -635,7 +635,7 @@ function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product
 	}
 
 	if ( array() === $unknown && array() === $display_only ) {
-		return aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, $attributes );
+		return aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, $attributes, $parent_product->get_id() );
 	}
 
 	if ( array() === $for_variations ) {
@@ -712,9 +712,11 @@ function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product
  *
  * @param array<int|string,mixed> $parent_attributes The parent product's attribute map.
  * @param array<int|string,mixed> $attributes        The requested attribute map.
+ * @param int                     $product_id        The parent product's id (208 FIX-2 item 3:
+ *                                                    threaded through to aafm_wc_variation_attribute_options()).
  * @return \WP_Error|null Null when every value is one the parent declares, or empty.
  */
-function aafm_wc_invalid_variation_attribute_values_error( array $parent_attributes, array $attributes ): ?\WP_Error {
+function aafm_wc_invalid_variation_attribute_values_error( array $parent_attributes, array $attributes, int $product_id ): ?\WP_Error {
 	$invalid = array();
 	foreach ( $attributes as $raw_key => $raw_value ) {
 		// A non-scalar never reaches storage: the closed schema refuses it before execute and
@@ -731,7 +733,7 @@ function aafm_wc_invalid_variation_attribute_values_error( array $parent_attribu
 		if ( '' === $value ) {
 			continue; // WooCommerce's "Any <attribute>".
 		}
-		$options = aafm_wc_variation_attribute_options( $attribute );
+		$options = aafm_wc_variation_attribute_options( $attribute, $product_id );
 		if ( null === $options || in_array( $value, $options, true ) ) {
 			continue;
 		}
@@ -768,15 +770,25 @@ function aafm_wc_invalid_variation_attribute_values_error( array $parent_attribu
  * A validator built on it would mutate the site's taxonomy as a side effect of checking a request
  * it is about to REFUSE, and it would do so invisibly, because the validation still returns the
  * right answer. On a plugin whose whole point is least-privilege governance, a write-on-validate
- * path is not an acceptable shortcut. So the options are resolved here, read-only, and a term that
- * cannot be found is simply not found.
+ * path is not an acceptable shortcut. So the options are resolved here, read-only.
  *
- * The insert branch is not currently reachable from a product read -- read_attributes() sets a
- * taxonomy attribute's options from wc_get_object_terms( ..., 'term_id' ), whose ids are ints, and
- * get_slugs() only takes the insert path for a non-int option. That reachability argument is
- * exactly why it is not relied on: it runs through three separate pieces of WooCommerce and
- * WordPress internals, any of which a version bump or a woocommerce_product_get_attributes filter
- * can change, and the cost of being wrong is silent term creation.
+ * Sweep finding 1 (208 FIX-2 item 3): the taxonomy branch used to resolve each option id one at a
+ * time via aafm_wc_find_attribute_term() (get_term_by() per id). This caller always reads the
+ * parent in 'edit' context (aafm_wc_unknown_variation_attributes_error():608), which is exactly
+ * the context WC_Product_Data_Store_CPT::read_attributes() populates a taxonomy attribute's
+ * options from in the first place (wc_get_object_terms( $product_id, $name, 'term_id' )), so every
+ * option here already came from one vendor term-lookup call. wc_get_product_terms( $product_id,
+ * $name, ['fields' => 'slugs'] ) - WooCommerce's own REST product controllers' bulk slug read
+ * (class-wc-rest-products-v2-controller.php:687-695) - resolves the identical set in one cached,
+ * filtered call instead of one lookup per option.
+ *
+ * Not reused for the SHARED aafm_wc_attribute_shape()/aafm_wc_find_attribute_term() helper used by
+ * wc-get-product/wc-create-product/wc-update-product: that helper deliberately runs against
+ * VIEW-context attributes too, to detect a display filter presenting a term id that was never
+ * actually assigned (the R7B-1 masking check). wc_get_product_terms() reads the product's REAL
+ * assigned terms and would silently drop a filter-invented id instead of surfacing it, which would
+ * quietly break that detector. This function is the one call site guaranteed to be edit-context and
+ * product-scoped, which is what makes the delegation safe here and nowhere else in this file family.
  *
  * Null is returned in three cases, all of them "no honest list exists" rather than "everything is
  * fine":
@@ -784,19 +796,23 @@ function aafm_wc_invalid_variation_attribute_values_error( array $parent_attribu
  * - The attribute declares no options, so it constrains nothing.
  * - It is a taxonomy attribute whose taxonomy is not registered. Its options are still raw term
  *   ids, and matching a sent value against numeric ids would refuse every legitimate write.
- * - Any one of its options cannot be resolved read-only. Judging a value against the PARTIAL list
- *   that remains would reject a value the parent genuinely declares, punishing the caller for a
- *   defect in the parent product's own data. Skipping is the lesser harm, and unlike a wrongly
- *   rejected write it costs nothing the caller can see.
+ * - wc_get_product_terms() returned fewer slugs than the attribute declares options, meaning at
+ *   least one could not be resolved. Judging a value against the PARTIAL list that remains would
+ *   reject a value the parent genuinely declares, punishing the caller for a defect in the parent
+ *   product's own data. Skipping is the lesser harm, and unlike a wrongly rejected write it costs
+ *   nothing the caller can see. (The prior per-option loop expressed this the same way: any single
+ *   unresolved id discarded the whole list rather than returning a partial one.)
  *
  * is_taxonomy() is reproduced as `0 < get_id()` rather than called. That is real WooCommerce's own
  * definition of the method (class-wc-product-attribute.php), and taking it from get_id() keeps this
  * function to the four accessors the class has always had.
  *
- * @param \WC_Product_Attribute $attribute One of the parent product's attributes.
+ * @param \WC_Product_Attribute $attribute  One of the parent product's attributes.
+ * @param int                   $product_id The parent product's id, so a taxonomy attribute's
+ *                                          options can be resolved through wc_get_product_terms().
  * @return array<string>|null
  */
-function aafm_wc_variation_attribute_options( \WC_Product_Attribute $attribute ): ?array {
+function aafm_wc_variation_attribute_options( \WC_Product_Attribute $attribute, int $product_id ): ?array {
 	$name        = (string) $attribute->get_name();
 	$is_taxonomy = 0 < (int) $attribute->get_id();
 	$options     = (array) $attribute->get_options();
@@ -808,20 +824,26 @@ function aafm_wc_variation_attribute_options( \WC_Product_Attribute $attribute )
 		return array() === $options ? null : $options;
 	}
 
-	if ( ! taxonomy_exists( $name ) ) {
+	if ( array() === $options || ! taxonomy_exists( $name ) ) {
 		return null;
 	}
 
-	$slugs = array();
-	foreach ( $options as $option ) {
-		$term = aafm_wc_find_attribute_term( $option, $name );
-		if ( ! $term instanceof \WP_Term ) {
-			return null; // An option this cannot resolve without writing leaves no honest list.
-		}
-		$slugs[] = (string) $term->slug;
+	$slugs = array_values(
+		array_map(
+			'strval',
+			wc_get_product_terms( $product_id, $name, array( 'fields' => 'slugs' ) )
+		)
+	);
+
+	// Fewer slugs came back than options declared: at least one option did not resolve. Same
+	// no-honest-list softening the old per-option loop applied when any single id came back empty.
+	// $options is non-empty here (the empty check above already returned), so a count match means
+	// $slugs is non-empty too - there is no separate empty case left to soften.
+	if ( count( $slugs ) !== count( $options ) ) {
+		return null;
 	}
 
-	return array() === $slugs ? null : $slugs;
+	return $slugs;
 }
 
 

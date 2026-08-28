@@ -214,6 +214,25 @@ final class TermsWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
+	/**
+	 * Task 12b: a WooCommerce product attribute taxonomy is usually not public (doc 206), so
+	 * aafm/create-term refuses it - and that refusal happens at the PERMISSION callback
+	 * (aafm_perm_manage_terms() calls the same aafm_validate_taxonomy() and denies before
+	 * execute ever runs), which is a flat, non-object-specific "not permitted" the ability
+	 * framework generates, not text this plugin controls or can safely enrich per doc 181's
+	 * B-01 precedent (a permission-stage refusal must not become object-specific). The only
+	 * place this plugin CAN tell the caller the real story is proactively, in the schema
+	 * description read before the call is ever attempted.
+	 */
+	public function test_create_term_taxonomy_description_warns_about_attribute_taxonomies(): void {
+		$schema      = wp_get_ability( 'aafm/create-term' )->get_input_schema();
+		$description = (string) $schema['properties']['taxonomy']['description'];
+
+		$this->assertStringContainsString( 'pa_', $description, 'must name the actual WooCommerce attribute taxonomy prefix.' );
+		$this->assertStringContainsString( 'Products > Attributes', $description, 'must point at the admin route that actually works.' );
+		$this->assertStringContainsString( 'wc-create-product-variation', $description, 'must name the follow-up ability, in its callable dash form.' );
+	}
+
 	public function test_create_term_sanitizes_script_in_description(): void {
 		$this->acting_as( 'editor' );
 		$out  = wp_get_ability( 'aafm/create-term' )->execute(
@@ -378,5 +397,27 @@ final class TermsWriteTest extends TestCase {
 		);
 		$this->assertSame( 'After', $out['term']['name'] );
 		$this->assertSame( 'After', get_term( $term, 'category' )->name );
+	}
+
+	/**
+	 * B-update-term-wording: create-term's taxonomy property and top-level description both
+	 * name the taxonomy-specific manage_terms requirement; update-term shares the exact same
+	 * permission_callback (aafm_perm_manage_terms()) but named it nowhere, so a refused agent
+	 * saw a bare "Permission denied" naming no capability and no taxonomy.
+	 */
+	public function test_update_term_documents_its_permission_requirement_like_create_term(): void {
+		$registry = apply_filters( 'aafm_abilities_registry', array() );
+		$this->assertStringContainsString(
+			'manage-terms capability',
+			$registry['aafm/update-term']['description'],
+			'the top-level description must name the requirement, mirroring create-term.'
+		);
+
+		$schema = wp_get_ability( 'aafm/update-term' )->get_input_schema();
+		$this->assertStringContainsString(
+			'manage-terms capability',
+			(string) $schema['properties']['taxonomy']['description'],
+			'the taxonomy property must name the requirement, mirroring create-term.'
+		);
 	}
 }

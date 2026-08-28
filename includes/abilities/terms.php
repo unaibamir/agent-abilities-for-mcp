@@ -36,7 +36,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-term']      = array(
 		'label'        => __( 'Update term', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting. Requires that taxonomy\'s own manage-terms capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
@@ -176,47 +176,59 @@ function aafm_exec_get_terms( array $input ) {
 	if ( is_wp_error( $lang ) ) {
 		return $lang;
 	}
-	$result = aafm_with_language(
-		$lang,
-		static function () use ( $taxonomy, $search, $paging ): array {
-			$terms = get_terms(
-				array(
-					'taxonomy'   => $taxonomy,
-					'hide_empty' => false,
-					'search'     => $search,
-					'number'     => $paging['per_page'],
-					'offset'     => ( $paging['page'] - 1 ) * $paging['per_page'],
-				)
-			);
 
-			// total is the full match count for the same taxonomy + search filter (not paged), so
-			// an agent can page through the whole set. wp_count_terms() honors hide_empty/search the
-			// same way the listing query does.
-			$total = wp_count_terms(
-				array(
-					'taxonomy'   => $taxonomy,
-					'hide_empty' => false,
-					'search'     => $search,
-				)
-			);
+	$build_page = static function () use ( $taxonomy, $search, $paging ): array {
+		$terms = get_terms(
+			array(
+				'taxonomy'   => $taxonomy,
+				'hide_empty' => false,
+				'search'     => $search,
+				'number'     => $paging['per_page'],
+				'offset'     => ( $paging['page'] - 1 ) * $paging['per_page'],
+			)
+		);
 
-			return array( $terms, $total );
+		// total is the full match count for the same taxonomy + search filter (not paged), so
+		// an agent can page through the whole set. wp_count_terms() honors hide_empty/search the
+		// same way the listing query does.
+		$total = wp_count_terms(
+			array(
+				'taxonomy'   => $taxonomy,
+				'hide_empty' => false,
+				'search'     => $search,
+			)
+		);
+
+		return array( $terms, $total );
+	};
+
+	$objects = array();
+	$total   = 0;
+	if ( 'all' === $lang ) {
+		// A single language's get_terms() error would repeat identically for every language
+		// (same taxonomy, same args - only the ambient language differs), so skipping a failed
+		// language and merging the rest degrades gracefully rather than discarding everything.
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			list( $terms, $lang_total ) = aafm_with_language( $code, $build_page );
+			if ( is_wp_error( $terms ) ) {
+				continue;
+			}
+			$filtered = array_values( array_filter( (array) $terms, static fn( $term ): bool => $term instanceof WP_Term ) );
+			$objects  = array_merge( $objects, $filtered );
+			$total   += is_wp_error( $lang_total ) ? count( $filtered ) : (int) $lang_total;
 		}
-	);
-
-	list( $terms, $total ) = $result;
-	if ( is_wp_error( $terms ) ) {
-		return aafm_generic_error();
+	} else {
+		list( $terms, $lang_total ) = aafm_with_language( $lang, $build_page );
+		if ( is_wp_error( $terms ) ) {
+			return aafm_generic_error();
+		}
+		$objects = array_values( array_filter( (array) $terms, static fn( $term ): bool => $term instanceof WP_Term ) );
+		$total   = is_wp_error( $lang_total ) ? count( $objects ) : (int) $lang_total;
 	}
-
-	$objects = array_filter(
-		(array) $terms,
-		static fn( $term ): bool => $term instanceof WP_Term
-	);
 
 	return array(
 		'terms'    => array_values( array_map( 'aafm_redact_term', $objects ) ),
-		'total'    => is_wp_error( $total ) ? count( $objects ) : (int) $total,
+		'total'    => $total,
 		'language' => $lang,
 	);
 }
@@ -779,7 +791,7 @@ function aafm_args_create_term(): array {
 				'taxonomy'    => array(
 					'type'        => 'string',
 					'default'     => 'category',
-					'description' => __( 'Slug of the public taxonomy to create the term in. Defaults to category. Creating requires that taxonomy\'s own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Slug of the public taxonomy to create the term in. Defaults to category. Creating requires that taxonomy\'s own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission. A WooCommerce product attribute taxonomy (pa_color, pa_size, and similar) is usually not public and is refused here; add a new option to an attribute in the WooCommerce admin under Products > Attributes (or the product\'s own Attributes tab for a custom attribute), then use wc-create-product-variation or wc-update-product-variation to build variations that use it.', 'agent-abilities-for-mcp' ),
 				),
 				'name'        => array(
 					'type'        => 'string',
@@ -898,7 +910,7 @@ function aafm_args_update_term(): array {
 				'taxonomy'    => array(
 					'type'        => 'string',
 					'default'     => 'category',
-					'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category. The term must belong to this taxonomy or the update is rejected.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category. The term must belong to this taxonomy or the update is rejected. Updating requires that taxonomy\'s own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission.', 'agent-abilities-for-mcp' ),
 				),
 				'term_id'     => array(
 					'type'        => 'integer',

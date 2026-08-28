@@ -98,13 +98,66 @@ function aafm_rankmath_active(): bool {
 }
 
 /**
- * Whether All in One SEO is active, behind a filterable seam (see aafm_yoast_active for the
- * rationale; AIOSEO is stubbed with a process-wide aioseo() marker function).
+ * The minimum AIOSEO version aafm/aioseo-update-post requires.
+ *
+ * Fix round 2 (sweep review security finding, 208-sweep-review-security.md): AIOSEO's own docblock
+ * at Post.php:908-910 dates its patch-aware partial-save behavior ("only syncs meta for keys
+ * present in $data, so partial saves ... don't warn on, or wipe, fields they didn't touch") to
+ * this exact version. Before 4.9.8, per the vendor's own words, a partial save through
+ * Post::savePost() could wipe fields the caller never touched. This plugin's delegation to
+ * savePost() (fix round 1) depends on that patch-aware behavior being present.
+ */
+if ( ! defined( 'AAFM_AIOSEO_MIN_VERSION' ) ) {
+	define( 'AAFM_AIOSEO_MIN_VERSION', '4.9.8' );
+}
+
+/**
+ * The AIOSEO version this site reports, or null when undetectable.
+ *
+ * Wrapped in its own filter, mirroring aafm_woocommerce_version() and for the same reason: the
+ * PHPUnit suite can pin an arbitrary version for the floor check without ever defining the real
+ * AIOSEO_VERSION constant, since a PHP constant can never be undefined once defined and would
+ * otherwise leak one test's pinned version into every later test in the same process. Production
+ * passes the real AIOSEO_VERSION through unchanged.
+ *
+ * @return string|null
+ */
+function aafm_aioseo_version(): ?string {
+	$version = defined( 'AIOSEO_VERSION' ) ? (string) AIOSEO_VERSION : null;
+
+	/**
+	 * Filters the AIOSEO version reported for the ability floor check.
+	 *
+	 * @param string|null $version Detected version, or null when AIOSEO_VERSION is undefined.
+	 */
+	return apply_filters( 'aafm_aioseo_version', $version );
+}
+
+/**
+ * Whether All in One SEO is active AND at or above the abilities' required version floor, behind
+ * a filterable seam (see aafm_yoast_active for the rationale; AIOSEO is stubbed with a
+ * process-wide aioseo() marker function).
+ *
+ * Fail-closed by deliberate choice, unlike aafm_woocommerce_active()'s fail-open when its version
+ * is undetectable. The two floors protect different things: the WooCommerce floor exists so a
+ * detection quirk never disables a working store's abilities (fail-open is the safer default
+ * there). This floor exists specifically because the vendor's own patch-aware partial-save
+ * behavior is dated to 4.9.8 (see AAFM_AIOSEO_MIN_VERSION above) - registering the write ability
+ * against an AIOSEO whose version this plugin cannot confirm risks the exact silent field-wipe
+ * this floor exists to prevent, so an undetectable version is treated as NOT meeting the floor.
+ * In practice AIOSEO always defines AIOSEO_VERSION once loaded (confirmed in vendor source,
+ * app/AIOSEO.php: derived from the plugin's own header on every load), so this only bites a
+ * hypothetical fork that omits the constant - the same narrow theoretical case the WooCommerce
+ * floor already tolerates in the other direction.
  *
  * @return bool
  */
 function aafm_aioseo_active(): bool {
 	$active = function_exists( 'aioseo' );
+	if ( $active ) {
+		$version = aafm_aioseo_version();
+		$active  = null !== $version && version_compare( $version, AAFM_AIOSEO_MIN_VERSION, '>=' );
+	}
 
 	/**
 	 * Filters whether AIOSEO is reported active.

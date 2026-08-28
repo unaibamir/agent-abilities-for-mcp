@@ -133,6 +133,44 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
+	 * Doc 214, finding 6: WcOrderStubStore::get_notes() used to apply no WooCommerce filter at
+	 * all, unlike real wc_get_order_note() (wc-order-functions.php), which applies
+	 * 'woocommerce_get_order_note' over the whole note array before returning it. Hook the filter
+	 * and confirm the changed content reaches the wire.
+	 */
+	public function test_list_order_notes_applies_the_real_woocommerce_get_order_note_filter(): void {
+		$this->register_group_b();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::seed_notes(
+			5001,
+			array(
+				array(
+					'id'            => 1,
+					'note'          => 'Payment received.',
+					'added_by_user' => false,
+					'date_created'  => '2024-06-01T10:01:00',
+					'customer_note' => false,
+				),
+			)
+		);
+		add_filter(
+			'woocommerce_get_order_note',
+			static function ( array $note ): array {
+				$note['content'] = 'Filtered note text.';
+				return $note;
+			}
+		);
+
+		$res = wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
+
+		remove_all_filters( 'woocommerce_get_order_note' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Filtered note text.', $res['notes'][0]['note'], 'A real WooCommerce order-note filter must reach this shape.' );
+	}
+
+	/**
 	 * M12: real WooCommerce never emits the literal string 'user' for added_by - a programmatic
 	 * note is attributed 'system', a user-added note is attributed the acting user's display name.
 	 * added_by_user must be derived from "not 'system'", not from a check for the literal 'user'.
@@ -448,6 +486,37 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertArrayHasKey( 'date_created', $res );
 	}
 
+	/**
+	 * Doc 214, finding 6: the WC_Order_Refund stub's getters used to apply no WooCommerce filter
+	 * at all, unlike real WC_Order_Refund (get_prop()-backed, filtered
+	 * 'woocommerce_order_refund_get_{prop}'). Hook one of the getters this ability's own shaping
+	 * reads and confirm the filtered value reaches the wire.
+	 */
+	public function test_get_order_refund_applies_the_real_woocommerce_order_refund_filter(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::seed_refunds(
+			5001,
+			array(
+				array(
+					'id'           => 200,
+					'amount'       => '14.99',
+					'reason'       => 'Damaged item',
+					'date_created' => '2024-06-10T08:00:00',
+				),
+			)
+		);
+		add_filter( 'woocommerce_order_refund_get_reason', static fn() => 'Filtered reason' );
+
+		$res = wp_get_ability( 'aafm/wc-get-order-refund' )->execute( array( 'refund_id' => 200 ) );
+
+		remove_all_filters( 'woocommerce_order_refund_get_reason' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Filtered reason', $res['reason'], 'A real WooCommerce order-refund filter must reach this shape.' );
+	}
+
 	public function test_get_order_refund_unknown_refund_returns_error(): void {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
@@ -597,6 +666,71 @@ final class WooOrderNotesRefundsTest extends TestCase {
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 1, WcOrderStubStore::$last_refund_args['line_items'] ?? array() );
+	}
+
+	/**
+	 * R8C-3: a line_item_id resolving to a COUPON order item is a real, existing item - the
+	 * existing B24 guard (which only checks existence) lets it through - but wc_create_refund()'s
+	 * own loop only ever iterates line_item/fee/shipping items, so it silently drops a coupon or
+	 * tax id from the refund with no error. Refuse it before the call, mirroring the exact type set
+	 * wc_create_refund() itself consumes.
+	 */
+	public function test_create_order_refund_refuses_a_coupon_line_item_id(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+		WcOrderStubStore::$orders[5001]['items'][] = array(
+			'id'   => 55,
+			'name' => 'SAVE10',
+			'type' => 'coupon',
+		);
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 55,
+						'refund_total' => '5.00',
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a coupon-type line_item_id must be refused, not silently dropped by wc_create_refund().' );
+		$this->assertSame( 'aafm_wc_unrefundable_line_item_type', $res->get_error_code() );
+		$this->assertSame( array(), WcOrderStubStore::$last_refund_args, 'wc_create_refund() must never run with a line id it would silently drop.' );
+	}
+
+	/**
+	 * The type guard's counterpart: a known line_item_id of the ALLOWED types still succeeds,
+	 * proving the new guard only bites the type it names.
+	 */
+	public function test_create_order_refund_known_fee_line_item_id_still_succeeds(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+		WcOrderStubStore::$orders[5001]['items'][] = array(
+			'id'   => 56,
+			'name' => 'Gift wrap',
+			'type' => 'fee',
+		);
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 56,
+						'refund_total' => '5.00',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
 	}
 
 	/**

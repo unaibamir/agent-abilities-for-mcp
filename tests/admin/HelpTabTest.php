@@ -181,6 +181,32 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'data-copy="SetEnvIf Authorization', $html );
 	}
 
+	/**
+	 * PR #52 follow-up (LESSONS-LEARNED, 2026-06-29): the Help tab's local $inline
+	 * wp_kses allowlist has no svg/path/rect or span entries, so aafm_help_copy_line()'s
+	 * icon is stripped outright and its label span loses its wrapper (the bare word
+	 * survives unwrapped - wp_kses keeps a disallowed tag's inner text - but the icon
+	 * and the .aafm-copy-label hook are both gone).
+	 *
+	 * The svg assertion is scoped to the copy button's OWN icon, not just any <svg> on
+	 * the page: aafm_render_help_entry() renders roughly 19 unrelated <summary> icons
+	 * through a separate wp_kses() call this fix never touches, so a bare "contains
+	 * <svg" assertion would still pass even with the copy button's icon fully stripped.
+	 * aafm_icon('copy') is the only icon whose inner shape is a rect at x=9,y=9 sized
+	 * 11x11 with a 2px radius (includes/admin/icons.php), so that exact fragment can
+	 * only survive if the copy button's icon specifically made it through kses.
+	 */
+	public function test_help_copy_lines_keep_the_icon_svg_and_label_span(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '<rect x="9" y="9" width="11" height="11" rx="2"', $html );
+		$this->assertStringContainsString( 'aafm-copy-label', $html );
+	}
+
 	public function test_help_entry_escapes_summary_and_filters_body(): void {
 		ob_start();
 		aafm_render_help_entry( '<script>x</script>', '<p>ok</p><iframe src="x"></iframe>' );

@@ -86,12 +86,27 @@ trait IntegrationStubs {
 	 * string. The rank_math_* post meta (incl. the serialized robots array and the dynamic schema
 	 * keys) is read/written with core get_post_meta/update_post_meta, so no extra store is needed.
 	 *
+	 * Also defines a stub \RankMath\Sitemap\Cache_Watcher (fix round 1, delegation audit sweep):
+	 * the real class's invalidate_post() is a public static that records nothing, so a stub that
+	 * only records its calls is enough to prove which write paths call it and which do not, without
+	 * modelling the real sitemap cache itself.
+	 *
 	 * @return void
 	 */
 	protected function stub_rankmath(): void {
 		if ( ! class_exists( 'RankMath' ) ) {
 			eval( 'class RankMath {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class-only marker stub for tests; never shipped.
 		}
+		if ( ! class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a call-recording stub for tests; never shipped.
+			eval(
+				'namespace RankMath\\Sitemap; class Cache_Watcher {'
+				. 'public static array $invalidated_post_ids = array();'
+				. 'public static function invalidate_post( $post_id ) { self::$invalidated_post_ids[] = (int) $post_id; }'
+				. '}'
+			);
+		}
+		\RankMath\Sitemap\Cache_Watcher::$invalidated_post_ids = array();
 		add_filter(
 			'aafm_seo_rendered_head',
 			static fn( string $head, int $id, string $plugin ): string => 'rankmath' === $plugin ? '<title>Rank Math head ' . $id . '</title>' : $head,
@@ -116,6 +131,32 @@ trait IntegrationStubs {
 		if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 			eval( $this->aafm_aioseo_post_model_source() );
+		}
+		// Fix round 2 (assertion-count reconciliation): the stubbed AIOSEO must look like a
+		// SUPPORTED one, since that is what it is standing in for. aafm_aioseo_version() has no
+		// real AIOSEO_VERSION constant to read in this environment (only the marker function
+		// above is defined), so without this the version floor added in fix round 2 fails closed
+		// for every test that relies on real (unforced) detection rather than the outer
+		// aafm_integration_active_aioseo filter.
+		//
+		// A real, defined constant here, NOT a filter - measured, not assumed. A filter added
+		// inside a test method does not survive to the NEXT test method: WP's own test base class
+		// snapshots $wp_filter once before the very first test runs and restores that exact
+		// snapshot in every test's tear_down() (_backup_hooks()/_restore_hooks() in
+		// wordpress-tests-lib/includes/abstract-testcase.php), which silently erases any filter a
+		// test adds, whether or not it is ever explicitly removed. Confirmed directly: an earlier
+		// attempt at this fix used add_filter() here and a later test in the same run still saw
+		// has_filter('aafm_aioseo_version') === false. A defined constant is a language-level fact,
+		// not a hook, so it survives that restore exactly the way the aioseo() marker function and
+		// the model class above already do - the established, working pattern in this same method.
+		// This does NOT reopen AioseoVersionFloorTest's below-floor/undetectable cases: aafm_aioseo_
+		// version() applies apply_filters() AFTER reading the constant, and that test's own filter
+		// callback ignores the value it receives and returns its own fixed one, so it fully
+		// overrides this constant for the one test method where it runs - constants and filters
+		// compose here, they do not conflict.
+		if ( ! defined( 'AIOSEO_VERSION' ) ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- mimicking AIOSEO's own constant so the version floor sees a supported install; a test stub, never shipped.
+			define( 'AIOSEO_VERSION', '5.0.0.1' );
 		}
 		add_filter(
 			'aafm_seo_rendered_head',
@@ -165,6 +206,33 @@ class Post {
 		}
 		$model->post_id = (int) $post_id;
 		return $model;
+	}
+	public static function savePost( $postId, $data ) {
+		// Fix round 1, delegation audit sweep: mirrors the SHAPE of the real AIOSEO
+		// Post::savePost($postId, $data) - a patch-keyed $data array applied onto the CURRENT
+		// model, then saved - without replicating the real vendor's own internal filters/hooks/
+		// default-format-tracking, which are the real vendor's job, not this plugin's. What this
+		// stub exists to verify is the PATCH KEY MAPPING: the real vendor's robots patch keys are
+		// the bare 'noindex'/'nofollow'/'default', NOT the model column names
+		// 'robots_noindex'/'robots_nofollow'/'robots_default'. Records every call so a test can
+		// assert the vendor save path (not a bare property-set-then-save()) was actually taken.
+		\AAFM\Tests\AioseoStubStore::$save_post_calls[] = array( 'post_id' => (int) $postId, 'data' => $data );
+		if ( empty( $data ) ) {
+			return false;
+		}
+		$robots_columns = array(
+			'noindex'  => 'robots_noindex',
+			'nofollow' => 'robots_nofollow',
+			'default'  => 'robots_default',
+		);
+		$model = self::getPost( $postId );
+		foreach ( $data as $key => $value ) {
+			$column = $robots_columns[ $key ] ?? $key;
+			if ( property_exists( $model, $column ) ) {
+				$model->$column = $value;
+			}
+		}
+		$model->save();
 	}
 	public function save() {
 		// Real AIOSEO's Model::save() returns void, never a bool (L11) - a "failure" here means the
@@ -376,6 +444,15 @@ PHP;
 			// abilities call are implemented. A test-only stub, never shipped.
 			eval( $this->aafm_wc_product_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 		}
+		if ( ! class_exists( 'WC_Product_Simple' ) ) {
+			// 208 FIX-2 item 4: real WooCommerce's own create path instantiates WC_Product_Simple, not
+			// the bare WC_Product base class. Empty body is enough here - the only real difference,
+			// pushing 'ajax_add_to_cart' onto $supports in the constructor, is a front-end template
+			// flag this MCP ability never reads (it builds its response from accessors, never a
+			// template), and the object is superseded by a fresh wc_get_product() factory read
+			// before any response is built either way.
+			eval( 'class WC_Product_Simple extends WC_Product {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+		}
 		if ( ! class_exists( 'WC_Product_Variation' ) ) {
 			// A minimal WC_Product_Variation backed by the same WcStubStore (a variation is a product
 			// row carrying type='variation' and a parent_id). Its get_attributes() returns the flat
@@ -394,6 +471,15 @@ PHP;
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_products( $args = array() ) { return \AAFM\Tests\WcStubStore::query( $args ); }' );
 		}
+		if ( ! function_exists( 'wc_get_product_terms' ) ) {
+			// Mirrors real WooCommerce's wc_get_product_terms() (wc-term-functions.php:178-184)
+			// without its caching wrapper (caching is transparent to the outcome under test): reads
+			// REAL WordPress object-term relationships via the real wp_get_post_terms(), so a product
+			// id genuinely has to carry a real term assignment (wp_set_object_terms()) for this to
+			// return anything - exactly the coupling the production delegation now relies on.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_product_terms( $product_id, $taxonomy, $args = array() ) { if ( ! taxonomy_exists( $taxonomy ) ) { return array(); } return apply_filters( "woocommerce_get_product_terms", wp_get_post_terms( $product_id, $taxonomy, $args ), $product_id, $taxonomy, $args ); }' );
+		}
 
 		// Global product attribute (taxonomy) stubs (W4-WC1c). Each mirrors the real WC function's
 		// signature and delegates to WcAttributeStubStore, which holds a stdClass row per attribute
@@ -401,6 +487,13 @@ PHP;
 		if ( ! function_exists( 'wc_get_attribute_taxonomies' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_attribute_taxonomies() { return \AAFM\Tests\WcAttributeStubStore::all(); }' );
+		}
+		if ( ! function_exists( 'wc_get_attribute' ) ) {
+			// Mirrors real WooCommerce's wc_get_attribute() (wc-attribute-functions.php:472-488)
+			// field-for-field: looks the id up in the same store wc_get_attribute_taxonomies() reads,
+			// then renames to the API shape, including wc_attribute_taxonomy_name() for slug.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_attribute( $id ) { $row = \AAFM\Tests\WcAttributeStubStore::$attributes[ (int) $id ] ?? null; if ( null === $row ) { return null; } $attribute = new \stdClass(); $attribute->id = (int) $row->attribute_id; $attribute->name = $row->attribute_label; $attribute->slug = wc_attribute_taxonomy_name( $row->attribute_name ); $attribute->type = $row->attribute_type; $attribute->order_by = $row->attribute_orderby; $attribute->has_archives = (bool) $row->attribute_public; return $attribute; }' );
 		}
 		if ( ! function_exists( 'wc_create_attribute' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
@@ -433,6 +526,14 @@ PHP;
 		if ( ! function_exists( 'wc_get_orders' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_orders( $args = array() ) { return \AAFM\Tests\WcOrderStubStore::query( $args ); }' );
+		}
+		if ( ! function_exists( 'wc_orders_count' ) ) {
+			// 208 FIX-3 item 3: mirrors what the production count executor asked wc_get_orders() for
+			// directly before this fix, now behind the real vendor function's own signature -
+			// reusing WcOrderStubStore::query() keeps the type/status filtering identical to every
+			// other order-reading stub in this trait.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_orders_count( $status, $type = "" ) { $args = array( "status" => $status, "limit" => 1, "paginate" => true, "return" => "ids" ); if ( "" !== $type ) { $args["type"] = $type; } $result = \AAFM\Tests\WcOrderStubStore::query( $args ); return ( is_object( $result ) && isset( $result->total ) ) ? (int) $result->total : 0; }' );
 		}
 		// NOTE: wc_get_order() is also defined above for products (returns WC_Product). WooCommerce
 		// uses the same function name for both - in real WC, wc_get_order() returns a WC_Order when
@@ -481,7 +582,7 @@ PHP;
 		// line id resolves to this base class so the executor's method_exists() guard is exercisable.
 		if ( ! class_exists( 'WC_Order_Item' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( 'class WC_Order_Item { protected $data = array(); public function __construct( $data = array() ) { $this->data = (array) $data; } public function get_id() { return (int) ( $this->data["id"] ?? 0 ); } }' );
+			eval( 'class WC_Order_Item { protected $data = array(); public function __construct( $data = array() ) { $this->data = (array) $data; } public function get_id() { return (int) ( $this->data["id"] ?? 0 ); } public function get_type() { return (string) ( $this->data["type"] ?? "line_item" ); } }' );
 		}
 		// A product line item carries the tax map the refund executor reads via
 		// $order->get_item()->get_taxes(). get_taxes() returns the real WooCommerce shape:
@@ -606,46 +707,53 @@ class WC_Order {
 		$stored = \AAFM\Tests\WcOrderStubStore::get( $id );
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
 	}
+	// Doc 214, finding 6. get_order_number() mirrors real WC_Order::get_order_number()
+	// (class-wc-order.php), which applies the literal 'woocommerce_order_number' filter - NOT the
+	// get_prop() 'woocommerce_order_get_*' pattern every other simple prop below uses (object_type
+	// = 'order'). get_items() mirrors WC_Abstract_Order::get_items(), filtered
+	// 'woocommerce_order_get_items'. get_total_refunded/get_total_tax_refunded/
+	// get_total_shipping_refunded are read straight off the data store cache in real WC with NO
+	// filter at all (class-wc-order.php), so they deliberately stay unfiltered here too.
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
-	public function get_order_number() { return (string) ( $this->data['number'] ?? (string) $this->get_id() ); }
-	public function get_status() { return (string) ( $this->data['status'] ?? 'processing' ); }
+	public function get_order_number() { return (string) apply_filters( 'woocommerce_order_number', $this->data['number'] ?? (string) $this->get_id(), $this ); }
+	public function get_status() { return (string) apply_filters( 'woocommerce_order_get_status', $this->data['status'] ?? 'processing', $this ); }
 	// Mirrors WC_Order::is_editable(): pending, on-hold and auto-draft only. That is the line
 	// WooCommerce itself draws for editing an order's items, and the order abilities now use it to
 	// decide whether recalculating totals may also recompute tax.
 	public function is_editable() { return in_array( $this->get_status(), array( 'pending', 'on-hold', 'auto-draft' ), true ); }
-	public function get_total() { return (string) ( $this->data['total'] ?? '0.00' ); }
-	public function get_currency() { return (string) ( $this->data['currency'] ?? 'USD' ); }
-	public function get_date_created() { return $this->data['date_created'] ?? null; }
-	public function get_date_paid() { return $this->data['date_paid'] ?? null; }
-	public function get_customer_id() { return (int) ( $this->data['customer_id'] ?? 0 ); }
-	public function get_customer_note() { return (string) ( $this->data['customer_note'] ?? '' ); }
-	public function get_items( $types = 'line_item' ) { return (array) ( $this->data['items'] ?? array() ); }
-	public function get_total_tax() { return (string) ( $this->data['total_tax'] ?? '0.00' ); }
-	public function get_subtotal() { return (string) ( $this->data['subtotal'] ?? '0.00' ); }
-	public function get_shipping_total() { return (string) ( $this->data['shipping_total'] ?? '0.00' ); }
+	public function get_total() { return (string) apply_filters( 'woocommerce_order_get_total', $this->data['total'] ?? '0.00', $this ); }
+	public function get_currency() { return (string) apply_filters( 'woocommerce_order_get_currency', $this->data['currency'] ?? 'USD', $this ); }
+	public function get_date_created() { return apply_filters( 'woocommerce_order_get_date_created', $this->data['date_created'] ?? null, $this ); }
+	public function get_date_paid() { return apply_filters( 'woocommerce_order_get_date_paid', $this->data['date_paid'] ?? null, $this ); }
+	public function get_customer_id() { return (int) apply_filters( 'woocommerce_order_get_customer_id', $this->data['customer_id'] ?? 0, $this ); }
+	public function get_customer_note() { return (string) apply_filters( 'woocommerce_order_get_customer_note', $this->data['customer_note'] ?? '', $this ); }
+	public function get_items( $types = 'line_item' ) { return (array) apply_filters( 'woocommerce_order_get_items', $this->data['items'] ?? array(), $this, $types ); }
+	public function get_total_tax() { return (string) apply_filters( 'woocommerce_order_get_total_tax', $this->data['total_tax'] ?? '0.00', $this ); }
+	public function get_subtotal() { return (string) apply_filters( 'woocommerce_order_get_subtotal', $this->data['subtotal'] ?? '0.00', $this ); }
+	public function get_shipping_total() { return (string) apply_filters( 'woocommerce_order_get_shipping_total', $this->data['shipping_total'] ?? '0.00', $this ); }
 	public function get_total_refunded() { return (float) ( $this->data['total_refunded'] ?? 0 ); }
 	public function get_total_tax_refunded() { return (float) ( $this->data['total_tax_refunded'] ?? 0 ); }
 	public function get_total_shipping_refunded() { return (float) ( $this->data['total_shipping_refunded'] ?? 0 ); }
-	public function get_billing_first_name() { return (string) ( $this->data['billing']['first_name'] ?? '' ); }
-	public function get_billing_last_name() { return (string) ( $this->data['billing']['last_name'] ?? '' ); }
-	public function get_billing_company() { return (string) ( $this->data['billing']['company'] ?? '' ); }
-	public function get_billing_address_1() { return (string) ( $this->data['billing']['address_1'] ?? '' ); }
-	public function get_billing_address_2() { return (string) ( $this->data['billing']['address_2'] ?? '' ); }
-	public function get_billing_city() { return (string) ( $this->data['billing']['city'] ?? '' ); }
-	public function get_billing_state() { return (string) ( $this->data['billing']['state'] ?? '' ); }
-	public function get_billing_postcode() { return (string) ( $this->data['billing']['postcode'] ?? '' ); }
-	public function get_billing_country() { return (string) ( $this->data['billing']['country'] ?? '' ); }
-	public function get_billing_email() { return (string) ( $this->data['billing']['email'] ?? '' ); }
-	public function get_billing_phone() { return (string) ( $this->data['billing']['phone'] ?? '' ); }
-	public function get_shipping_first_name() { return (string) ( $this->data['shipping']['first_name'] ?? '' ); }
-	public function get_shipping_last_name() { return (string) ( $this->data['shipping']['last_name'] ?? '' ); }
-	public function get_shipping_company() { return (string) ( $this->data['shipping']['company'] ?? '' ); }
-	public function get_shipping_address_1() { return (string) ( $this->data['shipping']['address_1'] ?? '' ); }
-	public function get_shipping_address_2() { return (string) ( $this->data['shipping']['address_2'] ?? '' ); }
-	public function get_shipping_city() { return (string) ( $this->data['shipping']['city'] ?? '' ); }
-	public function get_shipping_state() { return (string) ( $this->data['shipping']['state'] ?? '' ); }
-	public function get_shipping_postcode() { return (string) ( $this->data['shipping']['postcode'] ?? '' ); }
-	public function get_shipping_country() { return (string) ( $this->data['shipping']['country'] ?? '' ); }
+	public function get_billing_first_name() { return (string) apply_filters( 'woocommerce_order_get_billing_first_name', $this->data['billing']['first_name'] ?? '', $this ); }
+	public function get_billing_last_name() { return (string) apply_filters( 'woocommerce_order_get_billing_last_name', $this->data['billing']['last_name'] ?? '', $this ); }
+	public function get_billing_company() { return (string) apply_filters( 'woocommerce_order_get_billing_company', $this->data['billing']['company'] ?? '', $this ); }
+	public function get_billing_address_1() { return (string) apply_filters( 'woocommerce_order_get_billing_address_1', $this->data['billing']['address_1'] ?? '', $this ); }
+	public function get_billing_address_2() { return (string) apply_filters( 'woocommerce_order_get_billing_address_2', $this->data['billing']['address_2'] ?? '', $this ); }
+	public function get_billing_city() { return (string) apply_filters( 'woocommerce_order_get_billing_city', $this->data['billing']['city'] ?? '', $this ); }
+	public function get_billing_state() { return (string) apply_filters( 'woocommerce_order_get_billing_state', $this->data['billing']['state'] ?? '', $this ); }
+	public function get_billing_postcode() { return (string) apply_filters( 'woocommerce_order_get_billing_postcode', $this->data['billing']['postcode'] ?? '', $this ); }
+	public function get_billing_country() { return (string) apply_filters( 'woocommerce_order_get_billing_country', $this->data['billing']['country'] ?? '', $this ); }
+	public function get_billing_email() { return (string) apply_filters( 'woocommerce_order_get_billing_email', $this->data['billing']['email'] ?? '', $this ); }
+	public function get_billing_phone() { return (string) apply_filters( 'woocommerce_order_get_billing_phone', $this->data['billing']['phone'] ?? '', $this ); }
+	public function get_shipping_first_name() { return (string) apply_filters( 'woocommerce_order_get_shipping_first_name', $this->data['shipping']['first_name'] ?? '', $this ); }
+	public function get_shipping_last_name() { return (string) apply_filters( 'woocommerce_order_get_shipping_last_name', $this->data['shipping']['last_name'] ?? '', $this ); }
+	public function get_shipping_company() { return (string) apply_filters( 'woocommerce_order_get_shipping_company', $this->data['shipping']['company'] ?? '', $this ); }
+	public function get_shipping_address_1() { return (string) apply_filters( 'woocommerce_order_get_shipping_address_1', $this->data['shipping']['address_1'] ?? '', $this ); }
+	public function get_shipping_address_2() { return (string) apply_filters( 'woocommerce_order_get_shipping_address_2', $this->data['shipping']['address_2'] ?? '', $this ); }
+	public function get_shipping_city() { return (string) apply_filters( 'woocommerce_order_get_shipping_city', $this->data['shipping']['city'] ?? '', $this ); }
+	public function get_shipping_state() { return (string) apply_filters( 'woocommerce_order_get_shipping_state', $this->data['shipping']['state'] ?? '', $this ); }
+	public function get_shipping_postcode() { return (string) apply_filters( 'woocommerce_order_get_shipping_postcode', $this->data['shipping']['postcode'] ?? '', $this ); }
+	public function get_shipping_country() { return (string) apply_filters( 'woocommerce_order_get_shipping_country', $this->data['shipping']['country'] ?? '', $this ); }
 	public function set_status( $v ) { $s = (string) $v; $this->data['status'] = 'wc-' === substr( $s, 0, 3 ) ? substr( $s, 3 ) : $s; }
 	public function update_status( $v ) { if ( \AAFM\Tests\WcOrderStubStore::$update_status_should_fail ) { return false; } $s = (string) $v; $this->data['status'] = 'wc-' === substr( $s, 0, 3 ) ? substr( $s, 3 ) : $s; return true; }
 	public function set_customer_id( $v ) { $this->data['customer_id'] = (int) $v; }
@@ -745,7 +853,7 @@ class WC_Product {
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
 	}
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
-	public function get_name() { return (string) ( $this->data['name'] ?? '' ); }
+	public function get_name() { return (string) apply_filters( 'woocommerce_product_get_name', $this->data['name'] ?? '', $this ); }
 	public function get_type() { return (string) ( $this->data['type'] ?? 'simple' ); }
 	public function get_status() { return (string) ( $this->data['status'] ?? 'publish' ); }
 	public function get_sku() { return (string) ( $this->data['sku'] ?? '' ); }
@@ -928,10 +1036,12 @@ class WC_Order_Refund {
 		$stored = \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id );
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0, 'amount' => '0.00', 'reason' => '', 'date_created' => '' );
 	}
+	// Doc 214, finding 6: mirrors real WC_Order_Refund (class-wc-order-refund.php, object_type =
+	// 'order_refund'), whose get_prop()-backed getters filter 'woocommerce_order_refund_get_{prop}'.
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
-	public function get_amount() { return (string) ( $this->data['amount'] ?? '0.00' ); }
-	public function get_reason() { return (string) ( $this->data['reason'] ?? '' ); }
-	public function get_date_created() { return $this->data['date_created'] ?? null; }
+	public function get_amount() { return (string) apply_filters( 'woocommerce_order_refund_get_amount', $this->data['amount'] ?? '0.00', $this ); }
+	public function get_reason() { return (string) apply_filters( 'woocommerce_order_refund_get_reason', $this->data['reason'] ?? '', $this ); }
+	public function get_date_created() { return apply_filters( 'woocommerce_order_refund_get_date_created', $this->data['date_created'] ?? null, $this ); }
 	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_refund( $id ); }
 }
 PHP;
@@ -1065,34 +1175,43 @@ class WC_Customer {
 			$this->data = array( 'id' => 0 );
 		}
 	}
+	// Doc 214, finding 6. get_email/get_first_name/get_last_name/get_username/get_date_created
+	// mirror real WC_Customer's plain WC_Data props, filtered 'woocommerce_customer_get_{prop}'
+	// via get_prop() (class-wc-customer.php, object_type = 'customer'). get_order_count and
+	// get_total_spent are NOT WC_Data props in real WC - they read a cached user-meta value
+	// through the customer data store, but that read is itself wrapped in the SAME-shaped
+	// 'woocommerce_customer_get_order_count' / 'woocommerce_customer_get_total_spent' filters
+	// (class-wc-customer-data-store.php), so they get the identical treatment here. Every
+	// billing_*/shipping_* getter mirrors get_address_prop(), filtered
+	// 'woocommerce_customer_get_{billing|shipping}_{prop}'.
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
-	public function get_email() { return (string) ( $this->data['email'] ?? '' ); }
-	public function get_first_name() { return (string) ( $this->data['first_name'] ?? '' ); }
-	public function get_last_name() { return (string) ( $this->data['last_name'] ?? '' ); }
-	public function get_username() { return (string) ( $this->data['username'] ?? '' ); }
-	public function get_order_count() { return (int) ( $this->data['orders_count'] ?? 0 ); }
-	public function get_total_spent() { return (string) ( $this->data['total_spent'] ?? '0.00' ); }
-	public function get_date_created() { return $this->data['date_created'] ?? null; }
-	public function get_billing_first_name() { return (string) ( $this->data['billing']['first_name'] ?? '' ); }
-	public function get_billing_last_name() { return (string) ( $this->data['billing']['last_name'] ?? '' ); }
-	public function get_billing_company() { return (string) ( $this->data['billing']['company'] ?? '' ); }
-	public function get_billing_address_1() { return (string) ( $this->data['billing']['address_1'] ?? '' ); }
-	public function get_billing_address_2() { return (string) ( $this->data['billing']['address_2'] ?? '' ); }
-	public function get_billing_city() { return (string) ( $this->data['billing']['city'] ?? '' ); }
-	public function get_billing_state() { return (string) ( $this->data['billing']['state'] ?? '' ); }
-	public function get_billing_postcode() { return (string) ( $this->data['billing']['postcode'] ?? '' ); }
-	public function get_billing_country() { return (string) ( $this->data['billing']['country'] ?? '' ); }
-	public function get_billing_email() { return (string) ( $this->data['billing']['email'] ?? '' ); }
-	public function get_billing_phone() { return (string) ( $this->data['billing']['phone'] ?? '' ); }
-	public function get_shipping_first_name() { return (string) ( $this->data['shipping']['first_name'] ?? '' ); }
-	public function get_shipping_last_name() { return (string) ( $this->data['shipping']['last_name'] ?? '' ); }
-	public function get_shipping_company() { return (string) ( $this->data['shipping']['company'] ?? '' ); }
-	public function get_shipping_address_1() { return (string) ( $this->data['shipping']['address_1'] ?? '' ); }
-	public function get_shipping_address_2() { return (string) ( $this->data['shipping']['address_2'] ?? '' ); }
-	public function get_shipping_city() { return (string) ( $this->data['shipping']['city'] ?? '' ); }
-	public function get_shipping_state() { return (string) ( $this->data['shipping']['state'] ?? '' ); }
-	public function get_shipping_postcode() { return (string) ( $this->data['shipping']['postcode'] ?? '' ); }
-	public function get_shipping_country() { return (string) ( $this->data['shipping']['country'] ?? '' ); }
+	public function get_email() { return (string) apply_filters( 'woocommerce_customer_get_email', $this->data['email'] ?? '', $this ); }
+	public function get_first_name() { return (string) apply_filters( 'woocommerce_customer_get_first_name', $this->data['first_name'] ?? '', $this ); }
+	public function get_last_name() { return (string) apply_filters( 'woocommerce_customer_get_last_name', $this->data['last_name'] ?? '', $this ); }
+	public function get_username() { return (string) apply_filters( 'woocommerce_customer_get_username', $this->data['username'] ?? '', $this ); }
+	public function get_order_count() { return (int) apply_filters( 'woocommerce_customer_get_order_count', $this->data['orders_count'] ?? 0, $this ); }
+	public function get_total_spent() { return (string) apply_filters( 'woocommerce_customer_get_total_spent', $this->data['total_spent'] ?? '0.00', $this ); }
+	public function get_date_created() { return apply_filters( 'woocommerce_customer_get_date_created', $this->data['date_created'] ?? null, $this ); }
+	public function get_billing_first_name() { return (string) apply_filters( 'woocommerce_customer_get_billing_first_name', $this->data['billing']['first_name'] ?? '', $this ); }
+	public function get_billing_last_name() { return (string) apply_filters( 'woocommerce_customer_get_billing_last_name', $this->data['billing']['last_name'] ?? '', $this ); }
+	public function get_billing_company() { return (string) apply_filters( 'woocommerce_customer_get_billing_company', $this->data['billing']['company'] ?? '', $this ); }
+	public function get_billing_address_1() { return (string) apply_filters( 'woocommerce_customer_get_billing_address_1', $this->data['billing']['address_1'] ?? '', $this ); }
+	public function get_billing_address_2() { return (string) apply_filters( 'woocommerce_customer_get_billing_address_2', $this->data['billing']['address_2'] ?? '', $this ); }
+	public function get_billing_city() { return (string) apply_filters( 'woocommerce_customer_get_billing_city', $this->data['billing']['city'] ?? '', $this ); }
+	public function get_billing_state() { return (string) apply_filters( 'woocommerce_customer_get_billing_state', $this->data['billing']['state'] ?? '', $this ); }
+	public function get_billing_postcode() { return (string) apply_filters( 'woocommerce_customer_get_billing_postcode', $this->data['billing']['postcode'] ?? '', $this ); }
+	public function get_billing_country() { return (string) apply_filters( 'woocommerce_customer_get_billing_country', $this->data['billing']['country'] ?? '', $this ); }
+	public function get_billing_email() { return (string) apply_filters( 'woocommerce_customer_get_billing_email', $this->data['billing']['email'] ?? '', $this ); }
+	public function get_billing_phone() { return (string) apply_filters( 'woocommerce_customer_get_billing_phone', $this->data['billing']['phone'] ?? '', $this ); }
+	public function get_shipping_first_name() { return (string) apply_filters( 'woocommerce_customer_get_shipping_first_name', $this->data['shipping']['first_name'] ?? '', $this ); }
+	public function get_shipping_last_name() { return (string) apply_filters( 'woocommerce_customer_get_shipping_last_name', $this->data['shipping']['last_name'] ?? '', $this ); }
+	public function get_shipping_company() { return (string) apply_filters( 'woocommerce_customer_get_shipping_company', $this->data['shipping']['company'] ?? '', $this ); }
+	public function get_shipping_address_1() { return (string) apply_filters( 'woocommerce_customer_get_shipping_address_1', $this->data['shipping']['address_1'] ?? '', $this ); }
+	public function get_shipping_address_2() { return (string) apply_filters( 'woocommerce_customer_get_shipping_address_2', $this->data['shipping']['address_2'] ?? '', $this ); }
+	public function get_shipping_city() { return (string) apply_filters( 'woocommerce_customer_get_shipping_city', $this->data['shipping']['city'] ?? '', $this ); }
+	public function get_shipping_state() { return (string) apply_filters( 'woocommerce_customer_get_shipping_state', $this->data['shipping']['state'] ?? '', $this ); }
+	public function get_shipping_postcode() { return (string) apply_filters( 'woocommerce_customer_get_shipping_postcode', $this->data['shipping']['postcode'] ?? '', $this ); }
+	public function get_shipping_country() { return (string) apply_filters( 'woocommerce_customer_get_shipping_country', $this->data['shipping']['country'] ?? '', $this ); }
 	public function set_email( $v ) { $this->data['email'] = (string) $v; }
 	public function set_first_name( $v ) { $this->data['first_name'] = (string) $v; }
 	public function set_last_name( $v ) { $this->data['last_name'] = (string) $v; }
@@ -1249,22 +1368,25 @@ class WC_Coupon {
 			$this->data = array( 'id' => 0 );
 		}
 	}
+	// Every getter below mirrors real WC_Coupon: each is a WC_Data prop read through get_prop(),
+	// which applies a 'woocommerce_coupon_get_{prop}' filter in view context
+	// (class-wc-coupon.php, get_hook_prefix() = 'woocommerce_coupon_get_'). Doc 214, finding 6.
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
-	public function get_code() { return (string) ( $this->data['code'] ?? '' ); }
-	public function get_amount() { return (string) ( $this->data['amount'] ?? '0.00' ); }
-	public function get_discount_type() { return (string) ( $this->data['discount_type'] ?? 'fixed_cart' ); }
-	public function get_description() { return (string) ( $this->data['description'] ?? '' ); }
-	public function get_date_expires() { return $this->data['date_expires'] ?? null; }
-	public function get_usage_count() { return (int) ( $this->data['usage_count'] ?? 0 ); }
-	public function get_usage_limit() { $v = $this->data['usage_limit'] ?? null; return ( null === $v ) ? null : (int) $v; }
-	public function get_usage_limit_per_user() { $v = $this->data['usage_limit_per_user'] ?? null; return ( null === $v ) ? null : (int) $v; }
-	public function get_minimum_amount() { return (string) ( $this->data['minimum_amount'] ?? '' ); }
-	public function get_maximum_amount() { return (string) ( $this->data['maximum_amount'] ?? '' ); }
-	public function get_individual_use() { return (bool) ( $this->data['individual_use'] ?? false ); }
-	public function get_exclude_sale_items() { return (bool) ( $this->data['exclude_sale_items'] ?? false ); }
-	public function get_product_ids() { return (array) ( $this->data['product_ids'] ?? array() ); }
-	public function get_excluded_product_ids() { return (array) ( $this->data['excluded_product_ids'] ?? array() ); }
-	public function get_email_restrictions() { return (array) ( $this->data['email_restrictions'] ?? array() ); }
+	public function get_code() { return (string) apply_filters( 'woocommerce_coupon_get_code', $this->data['code'] ?? '', $this ); }
+	public function get_amount() { return (string) apply_filters( 'woocommerce_coupon_get_amount', $this->data['amount'] ?? '0.00', $this ); }
+	public function get_discount_type() { return (string) apply_filters( 'woocommerce_coupon_get_discount_type', $this->data['discount_type'] ?? 'fixed_cart', $this ); }
+	public function get_description() { return (string) apply_filters( 'woocommerce_coupon_get_description', $this->data['description'] ?? '', $this ); }
+	public function get_date_expires() { return apply_filters( 'woocommerce_coupon_get_date_expires', $this->data['date_expires'] ?? null, $this ); }
+	public function get_usage_count() { return (int) apply_filters( 'woocommerce_coupon_get_usage_count', $this->data['usage_count'] ?? 0, $this ); }
+	public function get_usage_limit() { $v = $this->data['usage_limit'] ?? null; return apply_filters( 'woocommerce_coupon_get_usage_limit', ( null === $v ) ? null : (int) $v, $this ); }
+	public function get_usage_limit_per_user() { $v = $this->data['usage_limit_per_user'] ?? null; return apply_filters( 'woocommerce_coupon_get_usage_limit_per_user', ( null === $v ) ? null : (int) $v, $this ); }
+	public function get_minimum_amount() { return (string) apply_filters( 'woocommerce_coupon_get_minimum_amount', $this->data['minimum_amount'] ?? '', $this ); }
+	public function get_maximum_amount() { return (string) apply_filters( 'woocommerce_coupon_get_maximum_amount', $this->data['maximum_amount'] ?? '', $this ); }
+	public function get_individual_use() { return (bool) apply_filters( 'woocommerce_coupon_get_individual_use', $this->data['individual_use'] ?? false, $this ); }
+	public function get_exclude_sale_items() { return (bool) apply_filters( 'woocommerce_coupon_get_exclude_sale_items', $this->data['exclude_sale_items'] ?? false, $this ); }
+	public function get_product_ids() { return (array) apply_filters( 'woocommerce_coupon_get_product_ids', $this->data['product_ids'] ?? array(), $this ); }
+	public function get_excluded_product_ids() { return (array) apply_filters( 'woocommerce_coupon_get_excluded_product_ids', $this->data['excluded_product_ids'] ?? array(), $this ); }
+	public function get_email_restrictions() { return (array) apply_filters( 'woocommerce_coupon_get_email_restrictions', $this->data['email_restrictions'] ?? array(), $this ); }
 	public function set_code( $v ) { $this->data['code'] = strtolower( (string) $v ); }
 	public function set_amount( $v ) { $amount = (float) $v; if ( $amount < 0 ) { throw new \WC_Data_Exception( 'coupon_invalid_amount', 'Invalid discount amount' ); } if ( 'percent' === $this->get_discount_type() && $amount > 100 ) { throw new \WC_Data_Exception( 'coupon_invalid_amount', 'Invalid discount amount' ); } $this->data['amount'] = (string) $v; }
 	public function set_discount_type( $v ) { $this->data['discount_type'] = (string) $v; }
@@ -1402,7 +1524,10 @@ PHP;
 			// zone_object key - the earlier stub fabricated one, which is exactly what hid the
 			// production bug that read $zone_data['zone_object'].
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( 'class WC_Shipping_Zones { public static function get_zones( $context = "admin" ) { if ( is_array( \AAFM\Tests\WcShippingStubStore::$rows_override ) ) { return \AAFM\Tests\WcShippingStubStore::$rows_override; } $rows = \AAFM\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); if ( $zone_id < 1 ) { continue; } $z = new \WC_Shipping_Zone( $zone_id ); $data = $z->get_data(); $data["zone_id"] = $zone_id; $data["formatted_zone_location"] = ""; $data["shipping_methods"] = $z->get_shipping_methods( false ); $out[$zone_id] = $data; } return $out; } }' );
+			// get_zone() mirrors real WC_Shipping_Zones::get_zone_by() (208 FIX-3 item 2): instantiate
+			// inside try/catch(Exception), false on failure - the exact vendor pattern
+			// aafm_wc_get_shipping_zone_object() now delegates to.
+			eval( 'class WC_Shipping_Zones { public static function get_zones( $context = "admin" ) { if ( is_array( \AAFM\Tests\WcShippingStubStore::$rows_override ) ) { return \AAFM\Tests\WcShippingStubStore::$rows_override; } $rows = \AAFM\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); if ( $zone_id < 1 ) { continue; } $z = new \WC_Shipping_Zone( $zone_id ); $data = $z->get_data(); $data["zone_id"] = $zone_id; $data["formatted_zone_location"] = ""; $data["shipping_methods"] = $z->get_shipping_methods( false ); $out[$zone_id] = $data; } return $out; } public static function get_zone( $zone_id ) { try { return new \WC_Shipping_Zone( (int) $zone_id ); } catch ( \Exception $e ) { return false; } } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 		}
 	}
 
@@ -1741,6 +1866,22 @@ class WC_Tax {
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$wpdb->update( $table, $tax_rate, array( 'tax_rate_id' => $tax_rate_id ) );
+	}
+
+	/**
+	 * Get tax rate by id, mirroring real WooCommerce's own single-row read
+	 * (class-wc-tax.php:1122): a plain SELECT * against the same real temp table
+	 * _insert_tax_rate()/_update_tax_rate() write to, returned in the requested output type.
+	 *
+	 * @param int    $tax_rate_id Tax rate id.
+	 * @param string $output_type ARRAY_A or OBJECT.
+	 * @return array<string,mixed>|object|null
+	 */
+	public static function _get_tax_rate( int $tax_rate_id, string $output_type = ARRAY_A ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'woocommerce_tax_rates';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE tax_rate_id = %d", $tax_rate_id ), $output_type );
 	}
 }
 PHP;

@@ -540,20 +540,18 @@ function aafm_exec_wc_count_orders( array $input ) { // phpcs:ignore Generic.Cod
  * @return int
  */
 function aafm_wc_count_orders_by_status( string $status ): int {
+	// FIX-3 item 3 (sweep finding, A2 batch): this used to hand-roll a per-status count via a
+	// wc_get_orders() pagination probe. WooCommerce ships the exact public helper for this job,
+	// wc_orders_count() (wc-order-functions.php:392), which is HPOS/legacy-abstracted and reads
+	// through a cache layer (OrderCountCache -> OrderUtil::get_count_for_type(), which for HPOS
+	// routes to OrdersTableDataStore::get_order_count()) instead of a hand-rolled, uncached probe.
+	//
 	// 'type' is not optional: under HPOS refunds live in the same wc_orders table with type
 	// shop_order_refund, and a refund against a completed order carries status wc-completed itself.
-	// An untyped probe therefore counts refunds as orders - a store with no completed orders and
-	// three refunds reported three completed orders.
-	$result = wc_get_orders(
-		array(
-			'type'     => 'shop_order',
-			'status'   => $status,
-			'limit'    => 1,
-			'paginate' => true,
-			'return'   => 'ids',
-		)
-	);
-	return ( is_object( $result ) && isset( $result->total ) ) ? (int) $result->total : 0;
+	// An untyped count therefore counts refunds as orders - a store with no completed orders and
+	// three refunds reported three completed orders (B3). wc_orders_count() takes the identical
+	// $type parameter for the identical reason, so the pin carries over unchanged.
+	return wc_orders_count( $status, 'shop_order' );
 }
 
 // =============================================================================

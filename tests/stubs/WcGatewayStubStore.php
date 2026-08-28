@@ -15,6 +15,16 @@ namespace AAFM\Tests;
 
 /**
  * Process-wide backing store for the WooCommerce payment gateway stubs.
+ *
+ * Doc 214, finding 6: this store deliberately applies no WooCommerce filters, checked and
+ * confirmed rather than assumed. aafm_wc_gateway_shape() (gateways.php) reads $gateway->id,
+ * ->title, ->description, ->enabled, and ->settings as PLAIN PUBLIC PROPERTIES, never through a
+ * getter method. Real WC_Payment_Gateway (abstract-wc-payment-gateway.php) extends
+ * WC_Settings_API, not WC_Data, so those properties carry no get_prop()-style filter at all; only
+ * the METHODS get_title() and get_description() apply filters ('woocommerce_gateway_title',
+ * 'woocommerce_gateway_description'), and this plugin never calls either. So the stub's plain
+ * property access already matches real WooCommerce's unfiltered behavior for the fields this
+ * plugin actually reads - there is nothing to wire.
  */
 class WcGatewayStubStore {
 

@@ -1474,7 +1474,24 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	} elseif ( $is_protected ) {
 		$shape['excerpt'] = '';
 	} else {
-		$shape['excerpt'] = wp_trim_words( wp_strip_all_tags( $rendered ), 55 );
+		// Delegate to core's own auto-excerpt mechanism (get_the_excerpt() -> core's
+		// wp_trim_excerpt(), hooked on the get_the_excerpt filter) instead of hand-rolling it.
+		// Reaching this branch already proves the post is not protected (the branch above
+		// catches that case), so the "protected post placeholder" objection that keeps
+		// get_the_excerpt() out of that branch does not apply here. get_the_excerpt( $post )
+		// takes the post explicitly and threads it through get_the_content( '', false, $post ),
+		// which only falls back to the global $post when its OWN argument is null - verified
+		// against core source, and pinned by
+		// RichPostTest::test_rich_post_auto_excerpt_belongs_to_the_passed_post_not_the_global().
+		// That guarantee covers get_the_content()'s own fallback specifically, not every filter
+		// wp_trim_excerpt() goes on to run: its apply_filters( 'the_content', $text ) pass still
+		// executes core's own prepend_attachment(), which reads $GLOBALS['post'] with no argument
+		// of its own. See this function's own top-level note above on that general class of risk -
+		// unchanged by this delegation, since $rendered already ran the identical filter chain.
+		// This also picks up excerpt_length/excerpt_more and strip_shortcodes()/
+		// excerpt_remove_blocks()/excerpt_remove_footnotes() for free, none of which the
+		// previous wp_trim_words( wp_strip_all_tags( $rendered ), 55 ) expression respected.
+		$shape['excerpt'] = get_the_excerpt( $post );
 	}
 
 	if ( $include_content && ! $is_protected ) {

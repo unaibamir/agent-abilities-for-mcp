@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 1.7.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 
 = WordPress MCP server for AI agents, governed and off by default =
 
-Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
+Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
 Nothing is exposed until you turn it on. Permission controls are the point: the agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities before it runs. The audit log covers the rest. Every call is written down before it runs, denied attempts included, so you can see both what the agent did and what it was stopped from doing. You add reach as you build trust, not all at once. Your own AI client connects in to your site; Agent Abilities for MCP makes no requests to any external or third-party service and has no telemetry.
 
@@ -271,7 +271,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 == Screenshots ==
 
 1. The first run walks you through connecting an agent in three steps. Turn the connection on, choose what it can touch, then hand the endpoint to your AI client.
-2. Nothing is exposed until you switch it on. Nine of this site's 153 abilities are enabled here, all of them reads, using the button that turns on a section's reads and leaves its writes alone.
+2. Nothing is exposed until you switch it on. Three of this site's 153 abilities are enabled here, all of them reads, using the button that turns on a section's reads and leaves its writes alone.
 3. Read-only mode in force. Every ability that writes loses its checkbox completely and says which switch is holding it down, so a bulk enable cannot sweep one back in by accident.
 4. Read-only mode is a single switch on the Settings tab. While it is on, the high-risk category underneath is held as well, and says so instead of sitting there looking live.
 5. The WooCommerce abilities that move money or grant authority stay padlocked behind a second switch of their own, sitting among ordinary writes you can turn on one at a time.
@@ -282,6 +282,18 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==
+
+= 1.7.1 =
+
+* **Fix:** lang:"all" measured a partial set of languages and reported success anyway. It now queries every configured WPML language for posts, pages, media, terms, search, and WooCommerce products, and the shared count helper sums across all of them.
+* **Fix:** A tool's visibility in tools/list could disagree with what its execute-time permission check actually allowed, both ways, hiding tools an agent could use and advertising ones it couldn't. Discovery is reconciled with execute-time permissions across custom post types, pages, and ACF term fields.
+* **Fix:** The RFC 9728 protected-resource-metadata route 404'd at the path agents actually request it at, breaking Claude connections for at least one user who reported it. It now resolves at the path-suffixed URL the spec calls for.
+* **Fix:** moderate-comment reported failure when a comment was already in the requested state (already approved, already spam, and so on), even though nothing was wrong. It reports success on a no-op now, and no longer logs one as an audit error.
+* **Fix:** Several code paths could short-circuit or reject a call before it finished, leaving a stuck or unreadable "started" row in the audit log rather than a real outcome, including on WordPress cores before 7.1. Every invocation now gets a unique token and closes out its row cleanly.
+* **Fix:** Bridged output from a third-party plugin's own ability could hide an unsafe object a level or two deep. The bridge now recurses into the result to find it, and refuses a bare or ambiguous object rather than assuming it's safe. Bridged output isn't redacted the way this plugin's own abilities' output is, and the readme now says so.
+* **Fix:** Media uploads now go through WordPress's own sideload handling and re-sanitize the resulting attachment's content, and the pixel-size cap that no longer matched that path is gone.
+* **Fix:** A batch of smaller correctness fixes across WooCommerce, ACF, AIOSEO, Rank Math, and Yoast: writes and reads route through each vendor's own functions instead of re-deriving their behavior, plus fixes to tool descriptions, cache invalidation, and a few pages that had the wrong discovery floor.
+* **Chore:** Uninstall now clears both daily cron events, not just the one tied to deleting data.
 
 = 1.7.0 =
 
@@ -433,6 +445,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.7.0 =
+
+Tested up to WordPress 7.1. On hosts without ImageMagick, an upload that would need more memory to decode than the site has now gets refused up front instead of risking a crash. The Abilities tab gained an "Enable all writes" bulk button beside "Enable all reads"; it only ticks the ordinary writes, so deletes and high risk abilities still need turning on by hand.
 
 = 1.6.1 =
 

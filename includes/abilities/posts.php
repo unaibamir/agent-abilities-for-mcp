@@ -252,27 +252,19 @@ function aafm_exec_get_posts( array $input ) {
 	if ( is_wp_error( $lang ) ) {
 		return $lang;
 	}
-	$query = aafm_with_language(
-		$lang,
-		static function () use ( $type, $status, $input, $paging ): WP_Query {
-			return new WP_Query(
-				array(
-					'post_type'        => $type,
-					'post_status'      => $status,
-					's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-					'posts_per_page'   => $paging['per_page'],
-					'paged'            => $paging['page'],
-					'no_found_rows'    => false,
-					'suppress_filters' => false,
-				)
-			);
-		}
-	);
-
-	$objects = array_filter(
-		$query->posts,
-		static fn( $post ): bool => $post instanceof WP_Post
-	);
+	$build_query = static function () use ( $type, $status, $input, $paging ): WP_Query {
+		return new WP_Query(
+			array(
+				'post_type'        => $type,
+				'post_status'      => $status,
+				's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+				'posts_per_page'   => $paging['per_page'],
+				'paged'            => $paging['page'],
+				'no_found_rows'    => false,
+				'suppress_filters' => false,
+			)
+		);
+	};
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
 	$include_content = ! empty( $input['include_content'] );
@@ -281,14 +273,56 @@ function aafm_exec_get_posts( array $input ) {
 		'include_content' => $include_content,
 	);
 
-	$posts = array_map(
-		static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
-		array_values( $objects )
-	);
+	// 'all' iterates every active language and concatenates: page/per_page apply PER language
+	// (documented on the lang schema fragment), total is the sum of each language's own count.
+	//
+	// Branch review fix (lang scope and result shaping, round 2): aafm_rich_post() must run
+	// INSIDE the query's own aafm_with_language() scope, not after that scope restores to
+	// ambient - on BOTH branches, not only 'all'. Round 1's fix moved the shaping for 'all'
+	// but a query for a single EXPLICIT language had the identical gap: aafm_with_language()
+	// restores the original language before returning, and the shape step used to run after
+	// that restore. A theme or plugin filtering get_the_excerpt() (or any other
+	// language-sensitive field aafm_rich_post() derives) by ambient language stamped the
+	// result with whichever language was active before the call, not the one actually
+	// requested - a silent wrong-language shape on a post the call still reports finding
+	// correctly. Needs both plan 207's fix (before it, the non-default-language rows were
+	// never returned at all) and plan 208's delegation to get_the_excerpt() (before it, the
+	// auto-excerpt never ran a filter chain ambient language could reach). See
+	// WpmlLangAllTest and WpmlLanguageTest for the regression proofs, list-path and
+	// single-item respectively.
+	$shape_language = static function ( ?string $code ) use ( $build_query, $options ): array {
+		return aafm_with_language(
+			$code,
+			static function () use ( $build_query, $options ): array {
+				$query = $build_query();
+				return array(
+					'rows'  => array_map(
+						static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
+						array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
+					),
+					'found' => (int) $query->found_posts,
+				);
+			}
+		);
+	};
+
+	$posts = array();
+	$total = 0;
+	if ( 'all' === $lang ) {
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			$shaped = $shape_language( $code );
+			$posts  = array_merge( $posts, $shaped['rows'] );
+			$total += $shaped['found'];
+		}
+	} else {
+		$shaped = $shape_language( $lang );
+		$posts  = $shaped['rows'];
+		$total  = $shaped['found'];
+	}
 
 	return array(
 		'posts'    => $posts,
-		'total'    => (int) $query->found_posts,
+		'total'    => $total,
 		'language' => $lang,
 	);
 }
@@ -530,8 +564,20 @@ function aafm_exec_get_post( array $input ) {
 		return aafm_generic_error();
 	}
 	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	// Branch review fix (lang scope and result shaping): shape under the CORRECT language,
+	// never ambient. An explicit requested language shapes under that language, matching the
+	// translation aafm_get_post_lang_resolved_id() already resolved above. "all" or no lang at
+	// all shapes under the POST'S OWN language instead - both already treat id resolution as a
+	// no-op passthrough above (aafm_get_post_lang_resolved_id() itself branches on
+	// !is_string($lang) || 'all' === $lang), so neither one names a specific target for us to
+	// switch to. aafm_wpml_post_language() and aafm_with_language() both no-op when WPML is
+	// off, so a non-multilingual site is unaffected either way.
+	$shape_lang = ( is_string( $lang ) && 'all' !== $lang ) ? $lang : aafm_wpml_post_language( $post->ID );
 	return array(
-		'post' => aafm_rich_post( $post, array( 'content_format' => $format ) ),
+		'post' => aafm_with_language(
+			$shape_lang,
+			static fn(): array => aafm_rich_post( $post, array( 'content_format' => $format ) )
+		),
 	);
 }
 
@@ -620,7 +666,7 @@ function aafm_write_cpt_content_schema( bool $require_title ): array {
 	$schema['properties']['post_type'] = array(
 		'type'        => 'string',
 		'minLength'   => 1,
-		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable - only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable - only types the operator has exposed to agents are accepted; others are rejected. Call aafm-get-post-types and use the writable flag to find valid slugs.', 'agent-abilities-for-mcp' ),
 	);
 	$required                          = $schema['required'] ?? array();
 	$required[]                        = 'post_type';

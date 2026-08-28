@@ -99,6 +99,174 @@ final class RichPostTest extends TestCase {
 		$this->assertLessThan( strlen( $body ), strlen( $shape['excerpt'] ) );
 	}
 
+	/**
+	 * Fix round (Task 15 sweep, finding C1): the auto-excerpt fallback must delegate to
+	 * get_the_excerpt() so a site's excerpt_length customization is honored, exactly like every
+	 * other part of the same site.
+	 */
+	public function test_rich_post_auto_excerpt_honors_excerpt_length_filter(): void {
+		add_filter( 'excerpt_length', static fn() => 3 );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => 'one two three four five six seven',
+			)
+		);
+		$shape   = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertSame(
+			'one two three [&hellip;]',
+			$shape['excerpt'],
+			"the excerpt_length filter must be honored, exactly as core's own get_the_excerpt() applies it"
+		);
+	}
+
+	/**
+	 * Same finding, the excerpt_more half: a theme or SEO plugin customizing the trailing "more"
+	 * string must see that customization reflected here too.
+	 */
+	public function test_rich_post_auto_excerpt_honors_excerpt_more_filter(): void {
+		add_filter( 'excerpt_more', static fn() => ' <<CUSTOM_MORE>>' );
+
+		$words    = array_map( static fn( int $i ): string => "w{$i}", range( 1, 60 ) );
+		$post_id  = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => implode( ' ', $words ),
+			)
+		);
+		$shape    = aafm_rich_post( get_post( $post_id ) );
+		$expected = implode( ' ', array_slice( $words, 0, 55 ) ) . ' <<CUSTOM_MORE>>';
+
+		$this->assertSame(
+			$expected,
+			$shape['excerpt'],
+			"the excerpt_more filter must be honored, exactly as core's own get_the_excerpt() applies it"
+		);
+	}
+
+	/**
+	 * Same finding: strip_shortcodes() runs on core's real excerpt path before the_content's
+	 * do_shortcode filter would otherwise execute and leak a shortcode callback's output. The
+	 * hand-rolled version reused the already-rendered content field, where the shortcode had
+	 * already run.
+	 */
+	public function test_rich_post_auto_excerpt_strips_shortcode_output(): void {
+		add_shortcode( 'aafm-test-shortcode', static fn() => 'SHORTCODEOUTPUTMARKER777' );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => 'Visible text before. [aafm-test-shortcode] Visible text after.',
+			)
+		);
+		$shape   = aafm_rich_post( get_post( $post_id ) );
+
+		remove_shortcode( 'aafm-test-shortcode' );
+
+		$this->assertStringContainsString( 'Visible text before.', $shape['excerpt'] );
+		$this->assertStringContainsString( 'Visible text after.', $shape['excerpt'] );
+		$this->assertStringNotContainsString(
+			'SHORTCODEOUTPUTMARKER777',
+			$shape['excerpt'],
+			"core's real excerpt path strips the shortcode tag instead of executing it"
+		);
+	}
+
+	/**
+	 * Same finding: excerpt_remove_blocks() drops non-text blocks (galleries, images, embeds) that
+	 * core deliberately keeps out of auto-excerpts. The hand-rolled version reused the fully
+	 * rendered content field, where an image block's caption text renders normally.
+	 */
+	public function test_rich_post_auto_excerpt_strips_non_text_block_content(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => "<!-- wp:paragraph --><p>Visible paragraph KEEPPARAGRAPHTEXT.</p><!-- /wp:paragraph -->\n" .
+					'<!-- wp:image --><figure class="wp-block-image"><img src="https://example.com/test.jpg" alt=""/>' .
+					'<figcaption>GALLERYCAPTIONMARKER888</figcaption></figure><!-- /wp:image -->',
+			)
+		);
+		$shape   = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertStringContainsString( 'KEEPPARAGRAPHTEXT', $shape['excerpt'] );
+		$this->assertStringNotContainsString(
+			'GALLERYCAPTIONMARKER888',
+			$shape['excerpt'],
+			"core's real excerpt path drops non-text blocks like images, so their caption text must not leak"
+		);
+	}
+
+	/**
+	 * Same finding: excerpt_remove_footnotes() strips footnote reference markup before the excerpt
+	 * text is trimmed. The hand-rolled version reused the fully rendered content field, where the
+	 * footnote reference number renders as ordinary visible text.
+	 */
+	public function test_rich_post_auto_excerpt_strips_footnote_reference_markup(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => 'Body text before footnote KEEPBEFORE.' .
+					'<sup data-fn="fn1" class="fn"><a href="#fn1" id="fnref1">777</a></sup>' .
+					' Body text after KEEPAFTER.',
+			)
+		);
+		$shape   = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertStringContainsString( 'KEEPBEFORE', $shape['excerpt'] );
+		$this->assertStringContainsString( 'KEEPAFTER', $shape['excerpt'] );
+		$this->assertStringNotContainsString(
+			'777',
+			$shape['excerpt'],
+			"core's real excerpt path strips footnote reference markup, so the footnote number must not leak"
+		);
+	}
+
+	/**
+	 * The global-state trap: get_the_excerpt() and the core filters it triggers can read from the
+	 * global post context on some paths. The excerpt aafm_rich_post() returns must always belong to
+	 * the $post object it was explicitly passed, never to whatever The Loop left as the current
+	 * global post.
+	 */
+	public function test_rich_post_auto_excerpt_belongs_to_the_passed_post_not_the_global(): void {
+		$other_id  = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => 'GLOBALPOSTMARKER should never leak into the passed post excerpt.',
+			)
+		);
+		$passed_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => 'PASSEDPOSTMARKER is the content that must actually be used.',
+			)
+		);
+
+		// Simulate The Loop having left a DIFFERENT post as the current global post.
+		global $post;
+		$post = get_post( $other_id );
+		setup_postdata( $post );
+
+		$shape = aafm_rich_post( get_post( $passed_id ) );
+
+		wp_reset_postdata();
+
+		$this->assertStringContainsString( 'PASSEDPOSTMARKER', $shape['excerpt'], 'The excerpt must belong to the passed $post.' );
+		$this->assertStringNotContainsString(
+			'GLOBALPOSTMARKER',
+			$shape['excerpt'],
+			'The excerpt must never fall back to the global $post left over from an unrelated loop.'
+		);
+	}
+
 	public function test_rich_post_terms_grouped_by_taxonomy(): void {
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 		$cat_id  = self::factory()->term->create(

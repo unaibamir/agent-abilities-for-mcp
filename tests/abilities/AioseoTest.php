@@ -198,6 +198,58 @@ final class AioseoTest extends TestCase {
 		$this->assertStringNotContainsString( '$wpdb', $source, 'aioseo.php must never use raw $wpdb.' );
 	}
 
+	/**
+	 * Fix round 1, delegation audit sweep (210-sweep-B5-report.md): the write must go through
+	 * AIOSEO's own Post::savePost($id, $data) - the same method AIOSEO's own REST controller and
+	 * every other real caller in its codebase use - not a bare property-set-then-save(). Asserts
+	 * BOTH that the vendor save path was actually called AND that the robots fields were translated
+	 * to savePost()'s own patch-data keys ('noindex'/'nofollow'/'default'), not the model column
+	 * names ('robots_noindex'/'robots_nofollow'/'robots_default') a naive rename would produce -
+	 * sending the wrong key is a silent no-op under savePost()'s patch semantics.
+	 */
+	public function test_aioseo_update_post_calls_the_vendor_save_post_with_correct_patch_keys(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'        => $post_id,
+				'title'          => 'Vendor Path Title',
+				'robots_noindex' => true,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$calls = \AAFM\Tests\AioseoStubStore::$save_post_calls;
+		$this->assertCount( 1, $calls, 'The write must call savePost() exactly once.' );
+		$this->assertSame( $post_id, $calls[0]['post_id'] );
+		$this->assertSame( 'Vendor Path Title', $calls[0]['data']['title'] ?? null, 'The title patch key matches its column name.' );
+		$this->assertArrayHasKey( 'noindex', $calls[0]['data'], 'The robots patch key must be the bare savePost() key, not the column name.' );
+		$this->assertTrue( $calls[0]['data']['noindex'] );
+		$this->assertArrayNotHasKey( 'robots_noindex', $calls[0]['data'], 'The model COLUMN name must never be sent as a savePost() data key.' );
+		$this->assertArrayHasKey( 'default', $calls[0]['data'], 'The robots_default flip must use its bare savePost() key too.' );
+		$this->assertFalse( $calls[0]['data']['default'] );
+	}
+
+	/**
+	 * Companion to the vendor-save-path test above: fields this ability refuses (anything outside
+	 * its allowlisted input schema) must stay refused after the delegation rewrite. Schema-level
+	 * rejection happens before the executor runs, so this is unaffected by the save-path change,
+	 * but the fix round dispatch asks for it to be pinned explicitly rather than assumed.
+	 */
+	public function test_aioseo_update_post_still_rejects_an_unallowlisted_field_after_the_savepost_rewrite(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+		$res     = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'schema'  => array( '@type' => 'Article' ),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertCount( 0, \AAFM\Tests\AioseoStubStore::$save_post_calls, 'A refused call must never reach savePost().' );
+	}
+
 	public function test_aioseo_url_fields_are_url_sanitized(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
@@ -566,5 +618,28 @@ final class AioseoTest extends TestCase {
 		aafm_registry_cache_should_flush( true );
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/aioseo-get-post', $registry );
+	}
+
+	/**
+	 * Fix round 2, assertion-count reconciliation: pins the exact contract two GENERIC,
+	 * registry-wide scanner tests elsewhere in the suite (AbilitiesSaveTest::
+	 * test_every_registry_entry_declares_a_subject, AnnotationCorrectnessTest::
+	 * test_scan_reports_what_it_skipped_and_why) silently depend on without asserting it
+	 * themselves: that the stubbed AIOSEO represents a SUPPORTED install by real, UNFORCED
+	 * detection, not merely a present one. Deliberately does NOT call force_integration('aioseo')
+	 * (the outer aafm_integration_active_aioseo override every other test in this file uses,
+	 * which is immune to the version floor and would mask a regression here) - it asserts
+	 * aafm_aioseo_active() itself, the exact function the version floor lives in. Before the
+	 * version floor's own test-fixture fix, this failed silently everywhere except here: those two
+	 * scanners just iterated over fewer registry entries and stayed green, rather than naming what
+	 * broke.
+	 */
+	public function test_stub_represents_a_version_floor_supported_aioseo_by_default(): void {
+		$this->assertTrue(
+			aafm_aioseo_active(),
+			'The AIOSEO test stub must represent a version at or above AAFM_AIOSEO_MIN_VERSION by ' .
+			'default, so tests relying on real (unforced) detection see a supported host, not an ' .
+			'unversioned one the fail-closed floor correctly excludes.'
+		);
 	}
 }

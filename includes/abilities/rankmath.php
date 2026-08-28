@@ -535,6 +535,21 @@ function aafm_exec_rankmath_update_post( array $input ) {
 			)
 		);
 		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
+
+		// Delegation audit sweep (210-sweep-B5-report.md): rank_math_robots is the exact meta key
+		// Sitemap::is_object_indexable() reads to decide sitemap inclusion, but Cache_Watcher only
+		// invalidates the cached sitemap on save_post/transition_post_status (class-cache-watcher.php),
+		// never on a bare meta write. A normal robots edit through the classic/Gutenberg metabox is
+		// always a full post save and so fires save_post naturally; this ability is the only write
+		// path that can flip robots without one, so it is the one path that must close the gap. Scoped
+		// to robots only: Rank Math's own bulk-edit REST controller (Rest\Post::save_column()) writes
+		// title/description/focus_keyword the same raw way with no invalidation either, so matching
+		// that vendor behaviour for those fields is deliberate, not an oversight. invalidate_post()
+		// degrades to a no-op when the class is absent (Rank Math inactive) or sitemap caching is
+		// disabled (Cache_Watcher::clear() checks Sitemap::is_cache_enabled() internally).
+		if ( class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {
+			\RankMath\Sitemap\Cache_Watcher::invalidate_post( $id );
+		}
 	}
 
 	return aafm_rankmath_read_fields( $id );

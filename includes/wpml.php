@@ -65,7 +65,7 @@ function aafm_lang_schema_fragment(): array {
 	return array(
 		'lang' => array(
 			'type'        => 'string',
-			'description' => __( 'WPML language code to scope the query to (for example "en"), or "all" to span every active language. A code that is not an active WPML language is rejected with an error naming the valid codes. Ignored when WPML is not active. When omitted, the site default language is used.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'WPML language code to scope the query to (for example "en"), or "all" to span every active language. On a paginated list, "all" applies page and per_page separately to EACH active language and concatenates the results in language order, so the response can hold more than per_page items; total is the sum of every language\'s own match count. A code that is not an active WPML language is rejected with an error naming the valid codes. Ignored when WPML is not active. When omitted, the site default language is used.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }
@@ -107,6 +107,20 @@ function aafm_resolve_lang( array $input ) {
 }
 
 /**
+ * The set of language codes an `aafm_resolve_lang()` result of 'all' should iterate: every
+ * WPML active language code, or - the degenerate case where WPML reports itself loaded but
+ * names no active languages - a single null entry, so the caller runs its query exactly once,
+ * unscoped, rather than silently returning nothing. aafm_with_language() already treats null
+ * as "no switch", so every element of this array can be passed straight to it.
+ *
+ * @return array<int,string|null>
+ */
+function aafm_wpml_all_language_codes_for_iteration(): array {
+	$codes = aafm_wpml_active_language_codes();
+	return array() === $codes ? array( null ) : $codes;
+}
+
+/**
  * Run $fn inside a WPML language scope, then restore the original language.
  * Snapshot-switch-restore per the house wordpress-safety rule; restores even
  * when $fn throws. When $lang is null or WPML is off, $fn runs unscoped.
@@ -123,7 +137,23 @@ function aafm_with_language( ?string $lang, callable $fn ) {
 		return $fn();
 	}
 	$original = aafm_wpml_current_language();
-	$switch   = ( null !== $original && $lang !== $original );
+	// Investigated (doc 214, finding 4, LOW/SUSPECTED): if WPML reports itself loaded but
+	// $original comes back null, this skips the switch and $lang runs under whatever ambient
+	// language WPML actually holds - which looks like the same silent-wrong-language class fixed
+	// three times on this branch. Left alone deliberately, for two reasons. First, $original can
+	// only be null here if the documented `wpml_current_language` filter itself returns an empty
+	// or non-string value while `wpml_loaded` has fired - stock WPML always resolves to a real
+	// code (falling back to the site default) once loaded, so the only path to null is a
+	// misbehaving third party overriding that exact filter, and no such path is known to be
+	// reachable in practice. Second, and more importantly, the "obvious" fix of switching
+	// whenever `$lang !== $original` makes things WORSE in exactly that edge case: the restore in
+	// the finally block below would then call `do_action( 'wpml_switch_language', null )`,
+	// handing WPML's own action a value it does not document accepting. A crash or a corrupted
+	// "current language" there would outlive this one call, silently mis-scoping every WPML-aware
+	// operation for the rest of the request - a strictly worse failure than this function quietly
+	// not switching. So the asymmetry is a fail-safe: refuse to switch into a state this function
+	// cannot safely restore out of, rather than guess.
+	$switch = ( null !== $original && $lang !== $original );
 	if ( $switch ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- third-party WPML hook.
 		do_action( 'wpml_switch_language', $lang );
@@ -179,27 +209,38 @@ function aafm_wpml_count_posts_by_status( string $type, ?string $lang, string $p
 		$counts = (array) wp_count_posts( $type, $perm );
 		return array_map( 'intval', $counts );
 	}
-	$statuses = get_post_stati();
-	return aafm_with_language(
-		'all' === $lang ? 'all' : $lang,
-		static function () use ( $type, $statuses ): array {
-			$out = array();
-			foreach ( $statuses as $status ) {
-				$q              = new WP_Query(
-					array(
-						'post_type'        => $type,
-						'post_status'      => $status,
-						'posts_per_page'   => 1,
-						'fields'           => 'ids',
-						'no_found_rows'    => false,
-						'suppress_filters' => false,
-					)
-				);
-				$out[ $status ] = (int) $q->found_posts;
-			}
-			return $out;
+	$statuses       = get_post_stati();
+	$count_for_lang = static function () use ( $type, $statuses ): array {
+		$out = array();
+		foreach ( $statuses as $status ) {
+			$q              = new WP_Query(
+				array(
+					'post_type'        => $type,
+					'post_status'      => $status,
+					'posts_per_page'   => 1,
+					'fields'           => 'ids',
+					'no_found_rows'    => false,
+					'suppress_filters' => false,
+				)
+			);
+			$out[ $status ] = (int) $q->found_posts;
 		}
-	);
+		return $out;
+	};
+
+	if ( 'all' === $lang ) {
+		// Sum per status across every active language - safe because each language's matching
+		// posts are DISTINCT rows (a translation is its own post), never double-counted.
+		$totals = array_fill_keys( $statuses, 0 );
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			foreach ( aafm_with_language( $code, $count_for_lang ) as $status => $n ) {
+				$totals[ $status ] += $n;
+			}
+		}
+		return $totals;
+	}
+
+	return aafm_with_language( $lang, $count_for_lang );
 }
 
 /**

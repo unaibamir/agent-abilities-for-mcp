@@ -48,6 +48,16 @@ class AioseoStubStore {
 	public static bool $normalize_urls = false;
 
 	/**
+	 * Every call made to the stub Post::savePost($postId, $data), in order: array{post_id:int,
+	 * data:array<string,mixed>}. Fix round 1, delegation audit sweep - lets a test assert the
+	 * vendor's own savePost() path was actually taken, and with which patch-data keys, rather than
+	 * a bare property-set-then-save().
+	 *
+	 * @var array<int,array{post_id:int,data:array<string,mixed>}>
+	 */
+	public static array $save_post_calls = array();
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -56,6 +66,7 @@ class AioseoStubStore {
 		self::$rows             = array();
 		self::$save_should_fail = false;
 		self::$normalize_urls   = false;
+		self::$save_post_calls  = array();
 	}
 
 	/**

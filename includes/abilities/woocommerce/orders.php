@@ -2601,6 +2601,26 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 				);
 			}
 
+			// R8C-3: wc_create_refund() (wc-order-functions.php:600) only ever iterates
+			// $order->get_items(array('line_item','fee','shipping')) - a coupon or tax order item
+			// id is a REAL id that resolves above, but wc_create_refund() silently drops it from
+			// $args['line_items'] because its own loop key never matches one. Refuse before the
+			// call rather than let WooCommerce silently ignore part of a documented per-line
+			// refund, mirroring the unknown-id guard above with the exact type set
+			// wc_create_refund() itself consumes.
+			$refundable_types = array( 'line_item', 'fee', 'shipping' );
+			if ( ! in_array( $order_item->get_type(), $refundable_types, true ) ) {
+				return new \WP_Error(
+					'aafm_wc_unrefundable_line_item_type',
+					sprintf(
+						/* translators: 1: the line item id, 2: its actual item type, e.g. "coupon" or "tax". */
+						__( 'Line item %1$d is a %2$s, which WooCommerce cannot refund a per-line amount against. Refund a coupon or tax adjustment through the top-level amount instead.', 'agent-abilities-for-mcp' ),
+						$line_item_id,
+						$order_item->get_type()
+					)
+				);
+			}
+
 			// MONEY SAFETY: the input schema constrains the per-line refund_total/refund_tax only to
 			// `type: string`, not to a non-negative number (unlike the top-level `amount`, which has a
 			// `^\d+(\.\d{1,2})?$` pattern). Reject a non-numeric or negative value here, before
@@ -2701,6 +2721,15 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 		$refund_args['line_items'] = $line_items;
 	}
 
+	// R8C-9, resolved by verification rather than a new check (delegation audit, 2026-08-22):
+	// wc_create_refund() (wc-order-functions.php:584), WC_AJAX::refund_line_items()
+	// (class-wc-ajax.php:2416-2417, the admin Refund screen's own handler), and
+	// WC_REST_Order_Refunds_Controller::create_item() (v3, line 50-51) were all read end to end -
+	// NONE of WooCommerce's own three refund-creation surfaces reconciles the sum of per-line
+	// refund_total against the top-level amount; each validates only the top-level amount against
+	// $order->get_remaining_refund_amount(). Adding that reconciliation here would make this
+	// plugin stricter than WooCommerce's own admin UI and REST API - the exact anti-pattern the
+	// delegation audit exists to stop. KEEP, DOCUMENTED: no reconciliation check is added.
 	$refund = wc_create_refund( $refund_args );
 
 	if ( is_wp_error( $refund ) || ! ( $refund instanceof \WC_Order_Refund ) ) {

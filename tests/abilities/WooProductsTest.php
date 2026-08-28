@@ -611,6 +611,44 @@ final class WooProductsTest extends TestCase {
 		$this->assertSame( '9.50', $read['regular_price'], 'The price round-trips on a following read.' );
 	}
 
+	/**
+	 * B-regular-price-delete-route: the reserved-meta routing table
+	 * (aafm_reserved_post_meta_routes() in includes/register.php) tells an agent that clearing
+	 * `_regular_price` is "Call aafm-wc-update-product with an empty 'regular_price' to clear
+	 * it." That call has to actually succeed - an empty regular_price/sale_price is a normal,
+	 * WooCommerce-native way to price nothing, mirrored by WC_Product::set_regular_price()
+	 * running the value through wc_format_decimal(), which passes an empty string straight
+	 * through rather than rejecting it. This pins the route's claim against the ability's own
+	 * schema and execute path, so a route naming a call the schema itself rejects fails here
+	 * instead of only being caught by hand.
+	 */
+	public function test_update_product_can_clear_regular_and_sale_price_with_an_empty_string(): void {
+		$this->acting_as( 'administrator' );
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'Clearable Price Product',
+				'regular_price' => '9.50',
+				'sale_price'    => '7.00',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+
+		$cleared = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'    => (int) $created['id'],
+				'regular_price' => '',
+				'sale_price'    => '',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $cleared, 'An empty regular_price/sale_price is the documented way to clear a price, not a validation error.' );
+		$this->assertSame( '', $cleared['regular_price'], 'regular_price is cleared.' );
+		$this->assertSame( '', $cleared['sale_price'], 'sale_price is cleared.' );
+
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
+		$this->assertSame( '', $read['regular_price'], 'The cleared price round-trips on a following read.' );
+		$this->assertSame( '', $read['sale_price'], 'The cleared sale price round-trips on a following read.' );
+	}
+
 	public function test_create_product_denies_an_editor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
@@ -994,5 +1032,43 @@ final class WooProductsTest extends TestCase {
 		remove_role( 'aafm_test_wc_product_scoped' );
 		wp_delete_post( $foreign_id, true );
 		wp_delete_post( $own_id, true );
+	}
+
+	/**
+	 * B-list-products-filtering-clause: the description didn't say the endpoint returns
+	 * unfiltered rows (beyond status) and that narrowing by price or any other field is the
+	 * caller's job. One model answered NONE on a satisfiable "products under $20" request while
+	 * another got it right - a description-clarity gap, not a missing capability.
+	 */
+	public function test_list_products_description_says_it_does_not_filter_server_side(): void {
+		$registry = apply_filters( 'aafm_abilities_registry', array() );
+		$this->assertStringContainsString(
+			'caller',
+			$registry['aafm/wc-list-products']['description'],
+			'the description must say narrowing results is the caller\'s job.'
+		);
+	}
+
+	/**
+	 * Sweep finding 2 (208 FIX-2 item 4): create-product now instantiates WC_Product_Simple, matching
+	 * WooCommerce's own create path, rather than the bare WC_Product base class it never uses for a
+	 * new product. No observable difference exists to drive a behavioural test red - WC_Product::get_type()
+	 * already defaults to 'simple' and the response is rebuilt from a fresh wc_get_product() read
+	 * after save() either way, both confirmed by this file's existing create-product tests staying
+	 * green unchanged. What this test pins instead: the vendor's own create-path class is genuinely
+	 * the one instantiated, not merely available.
+	 */
+	public function test_create_product_instantiates_the_vendor_create_path_class(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/products.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
+		$this->assertStringContainsString(
+			'new \WC_Product_Simple()',
+			$source,
+			'aafm_exec_wc_create_product() must instantiate WC_Product_Simple, matching WooCommerce\'s own create path.'
+		);
+		$this->assertStringNotContainsString(
+			'new \WC_Product()',
+			$source,
+			'the bare WC_Product base class must not be instantiated directly anywhere in this file.'
+		);
 	}
 }

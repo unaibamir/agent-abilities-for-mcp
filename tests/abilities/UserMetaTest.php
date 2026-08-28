@@ -176,6 +176,12 @@ final class UserMetaTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$uid = self::factory()->user->create( array( 'role' => 'author' ) );
 
+		// wp_capabilities now has a routing message (aafm_unreachable_user_meta_key_error()), so its
+		// three execute() calls below return a permission WP_Error, which core's execute() refuses to
+		// relay and _doing_it_wrong()s over before returning its own generic refusal. Same core policy
+		// the post-meta routing already documents at ReservedMetaKeyRouteTest::test_the_reserved_key_refusal_never_becomes_a_write().
+		$this->setExpectedIncorrectUsage( 'WP_Ability::execute' );
+
 		foreach ( $denied as $key ) {
 			$before = get_user_meta( $uid, $key, true );
 
@@ -244,5 +250,41 @@ final class UserMetaTest extends TestCase {
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-user-meta' ) );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-user-meta' ) );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-user-meta' ) );
+	}
+
+	/**
+	 * B-user-meta-routing (SHOULD, per planning doc 200): wp_capabilities is hard-blocked
+	 * user meta with a real, already-governed alternative - aafm-update-user's role parameter -
+	 * exactly the shape the post-meta routing map already fixed for alt text and the
+	 * featured image. This mirrors that pattern for user meta.
+	 */
+	public function test_wp_capabilities_names_the_update_user_route(): void {
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$error = aafm_unreachable_user_meta_key_error(
+				'aafm/update-user-meta',
+				array( 'key' => 'wp_capabilities' )
+			)
+		);
+		$this->assertStringContainsString( 'wp_capabilities', $error->get_error_message() );
+		$this->assertStringContainsString( 'aafm-update-user', $error->get_error_message() );
+		$this->assertStringContainsString( '"role"', $error->get_error_message() );
+
+		$read = aafm_unreachable_user_meta_key_error(
+			'aafm/get-user-meta',
+			array( 'key' => 'wp_capabilities' )
+		);
+		$this->assertInstanceOf( \WP_Error::class, $read );
+		$this->assertStringContainsString( 'aafm-get-user', $read->get_error_message() );
+		$this->assertStringContainsString( '"roles"', $read->get_error_message() );
+
+		// Scoped to exactly the three user-meta abilities, mirroring the post-meta helper.
+		$this->assertNull(
+			aafm_unreachable_user_meta_key_error( 'aafm/get-post-meta', array( 'key' => 'wp_capabilities' ) )
+		);
+		// A malformed key must not fatal.
+		$this->assertNull(
+			aafm_unreachable_user_meta_key_error( 'aafm/get-user-meta', array( 'key' => array( 'x' ) ) )
+		);
 	}
 }

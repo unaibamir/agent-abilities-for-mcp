@@ -762,6 +762,23 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$gateway->update_option( $key, $value );
 	}
 
+	// FIX-3 item 4 (sweep finding, B4 batch, the one live gap in this dispatch): WC_Settings_API::
+	// process_admin_options() - the method that runs when a gateway is saved through wp-admin >
+	// WooCommerce > Settings > Payments - fires this action once per settings save, immediately
+	// before its own update_option() call (abstract-wc-settings-api.php:237). This ability wrote
+	// every field through WC_Payment_Gateway::update_option() without ever firing it. A verified
+	// real consumer exists: WC_Settings_Tracking::add_option_to_list() is wired to this exact hook,
+	// feeding WooCommerce's own opt-in anonymous usage-tracking snapshot of which settings admins
+	// touch - so a gateway change made through this ability previously would not appear in that
+	// tracker's snapshot the way an identical wp-admin save would. Fired only when a gateway
+	// setting was actually sent, mirroring process_admin_options()'s own scope (the order write
+	// below is a separate option, not part of this gateway's own settings).
+	if ( array() !== $desired ) {
+		// This hook is documented in WooCommerce: includes/abstracts/abstract-wc-settings-api.php.
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce-core action; fired with WC's own signature so extensions hooking the save (e.g. usage tracking) stay in sync.
+		do_action( 'woocommerce_update_option', array( 'id' => $gateway->get_option_key() ) );
+	}
+
 	$order_val = null;
 	if ( isset( $input['order'] ) ) {
 		// Display order is not a per-gateway setting, and WC_Payment_Gateway has no `order` property

@@ -280,11 +280,20 @@ function aafm_config_option_names(): array {
 /**
  * Remove this plugin's data for the current blog.
  *
- * Reads the per-site data-retention flag first. When the flag is not set (the default),
- * data is kept and the function returns immediately so nothing is deleted. When the flag
- * is explicitly turned on by the site admin, the full teardown runs: every configuration
- * option, the activity-log table, and the four OAuth tables are all removed. The flag
- * itself is deleted last so it cannot leak after uninstall.
+ * Clears this site's cron registrations FIRST, unconditionally - cron registrations are
+ * executable plugin machinery, not retained user data, so they go regardless of the
+ * data-retention choice below them. Without this, a default (retain-data) uninstall left both
+ * daily events behind: their callbacks no longer exist once the plugin is gone, so WordPress
+ * reschedules and examines two orphaned hooks on every site forever. The plugin's own
+ * deactivation callbacks (agent-abilities-for-mcp.php) clear both correctly, but only in the
+ * CURRENT blog context - they cannot reach every site on a multisite network the way
+ * aafm_run_uninstall() (uninstall.php) does by switching through each one.
+ *
+ * Reads the per-site data-retention flag next. When the flag is not set (the default), data is
+ * kept and the function returns before touching anything else. When the flag is explicitly
+ * turned on by the site admin, the full teardown runs: every configuration option, the
+ * activity-log table, and the four OAuth tables are all removed. The flag itself is deleted
+ * last so it cannot leak after uninstall.
  *
  * Called once per site by aafm_run_uninstall() in uninstall.php. Declared here (settings.php)
  * so the PHPUnit suite can call it directly without bootstrapping the uninstall context.
@@ -292,6 +301,9 @@ function aafm_config_option_names(): array {
  * @return void
  */
 function aafm_uninstall_site_data(): void {
+	wp_clear_scheduled_hook( 'aafm_prune_activity_log_daily' );
+	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
+
 	if ( ! get_option( 'aafm_delete_data_on_uninstall', false ) ) {
 		return;
 	}
@@ -304,7 +316,6 @@ function aafm_uninstall_site_data(): void {
 	// here so a delete-data uninstall leaves nothing behind. It is deliberately NOT in the reset set:
 	// clearing it on reset would let the preserve migration re-run and could flip OAuth back on.
 	delete_option( 'aafm_oauth_toggle_migrated' );
-	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
 	delete_option( 'aafm_delete_data_on_uninstall' );
 }
 

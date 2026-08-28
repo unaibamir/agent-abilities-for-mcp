@@ -815,8 +815,7 @@ function aafm_acf_sub_field_by_address( array $parent_def, string $address, stri
  * out-parameter rather than a second function so that ONE traversal answers both questions: a
  * second walk would have to repeat this function's descent rules (which values are rows, which
  * index a row sits at, which layout a row resolves under), and two copies of a descent rule is
- * where this project's documented drift starts. aafm_upload_max_pixels() reports its pre-filter
- * ceiling the same way, for the same reason.
+ * where this project's documented drift starts.
  *
  * @param array<string,mixed> $def         The field definition, from acf_get_field().
  * @param mixed               $sent        The sanitized value the caller asked to write at this depth.

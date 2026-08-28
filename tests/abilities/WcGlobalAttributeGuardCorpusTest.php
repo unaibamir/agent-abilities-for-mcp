@@ -445,11 +445,93 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 
 		$this->assertInstanceOf( WP_Error::class, $error );
 		$this->assertStringNotContainsString( 'unchanged', $error->get_error_message() );
-		$this->assertStringContainsString(
+		$this->assertStringNotContainsString(
 			'wc-update-product-attribute',
 			$error->get_error_message(),
-			'It must still name the tool that CAN change the attribute.'
+			'wc-update-product-attribute cannot change an attribute\'s options at all, so it must not be named as a remedy.'
 		);
+	}
+
+	/**
+	 * B-wc-attribute-remedy: neither refusal message may point the caller at
+	 * wc-update-product-attribute as if it could change a global attribute's options - it only
+	 * exposes name/slug/type/order_by/has_archives (aafm_wc_attribute_write_properties()),
+	 * never options/terms. Following that pointer was a guaranteed second refusal.
+	 */
+	public function test_the_not_editable_message_does_not_point_at_a_tool_that_cannot_do_it(): void {
+		$error = aafm_wc_global_attribute_change_error(
+			array(
+				array(
+					'name'    => self::TAXONOMY,
+					'options' => array( 'purple' ),
+				),
+			),
+			array(
+				$this->attribute(
+					array(
+						'id'      => 7,
+						'name'    => self::TAXONOMY,
+						'options' => array( 'blue', 'green' ),
+					)
+				),
+			),
+			array(
+				$this->attribute(
+					array(
+						'id'      => 7,
+						'name'    => self::TAXONOMY,
+						'options' => array( 'blue', 'green' ),
+					)
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $error );
+		$this->assertStringNotContainsString(
+			'wc-update-product-attribute',
+			$error->get_error_message(),
+			'wc-update-product-attribute cannot change an attribute\'s options at all, so it must not be named as a remedy.'
+		);
+	}
+
+	/**
+	 * Task 12b: this message and create-term's own taxonomy-description warning are the two
+	 * halves of the same real-world story ("add a new color to this product") - a caller who hits
+	 * this wall must be told the same route create-term's schema already names, not a dead end
+	 * that only says "use the WooCommerce admin" with no next step. Same error code as before.
+	 */
+	public function test_the_not_editable_message_names_the_multistep_route(): void {
+		$error = aafm_wc_global_attribute_change_error(
+			array(
+				array(
+					'name'    => self::TAXONOMY,
+					'options' => array( 'purple' ),
+				),
+			),
+			array(
+				$this->attribute(
+					array(
+						'id'      => 7,
+						'name'    => self::TAXONOMY,
+						'options' => array( 'blue', 'green' ),
+					)
+				),
+			),
+			array(
+				$this->attribute(
+					array(
+						'id'      => 7,
+						'name'    => self::TAXONOMY,
+						'options' => array( 'blue', 'green' ),
+					)
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $error );
+		$this->assertSame( 'aafm_wc_global_attribute_not_editable', $error->get_error_code(), 'the error code must not change, wording only.' );
+		$this->assertStringContainsString( 'Products > Attributes', $error->get_error_message() );
+		$this->assertStringContainsString( 'wc-create-product-variation', $error->get_error_message() );
 	}
 
 	/**
@@ -646,19 +728,21 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	 * "Any <attribute>", a supported configuration.
 	 */
 	public function test_a_variation_attribute_value_the_parent_never_declared_is_refused(): void {
-		$parent_attributes = $this->corpus_parent()->get_attributes();
+		$parent            = $this->corpus_parent();
+		$parent_attributes = $parent->get_attributes();
+		$product_id        = $parent->get_id();
 
-		$error = aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => 'purple' ) );
+		$error = aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => 'purple' ), $product_id );
 		$this->assertInstanceOf( WP_Error::class, $error );
 		$this->assertSame( 'aafm_wc_invalid_variation_attribute_value', $error->get_error_code() );
 		$this->assertStringContainsString( 'blue', $error->get_error_message(), 'The error must list the real options.' );
 
 		$this->assertNull(
-			aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => 'blue' ) ),
+			aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => 'blue' ), $product_id ),
 			'A declared option must be accepted.'
 		);
 		$this->assertNull(
-			aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => '' ) ),
+			aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => '' ), $product_id ),
 			'An empty value is WooCommerce\'s "Any", and refusing it would break valid variations.'
 		);
 	}
@@ -689,6 +773,12 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 		);
 		WcStubStore::seed( 500, $parent );
+
+		// 208 FIX-2 item 3: aafm_wc_variation_attribute_options() now delegates to
+		// wc_get_product_terms(), which reads real object-term relationships, so the corpus
+		// taxonomy's declared options ('blue', 'green') have to genuinely be assigned to product
+		// 500, matching what real WooCommerce's own read_attributes() would have populated from.
+		wp_set_object_terms( 500, array( $this->terms['blue'], $this->terms['green'] ), self::TAXONOMY );
 
 		$product = wc_get_product( 500 );
 		$this->assertInstanceOf( \WC_Product::class, $product );

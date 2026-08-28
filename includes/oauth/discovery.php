@@ -350,6 +350,16 @@ function aafm_oauth_match_well_known( string $path ): string {
 		return 'protected-resource';
 	}
 
+	// RFC 9728 3.1: when the protected resource identifier has a path component, the metadata
+	// document is ALSO discoverable at a URL formed by inserting the well-known path segment
+	// immediately after the authority, before the resource's own path. aafm_endpoint_url() is the
+	// exact URL this plugin advertises as `resource` in the metadata document itself
+	// (aafm_oauth_protected_resource_metadata()), so the two must stay in lockstep by construction.
+	$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
+	if ( '' !== $resource_path && '.well-known/oauth-protected-resource/' . $resource_path === $path ) {
+		return 'protected-resource';
+	}
+
 	if ( '.well-known/oauth-authorization-server' === $path ) {
 		return 'authorization-server';
 	}

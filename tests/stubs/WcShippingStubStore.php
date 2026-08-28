@@ -22,6 +22,18 @@ namespace AAFM\Tests;
  * WC_Shipping_Zones::get_zones() / new WC_Shipping_Zone() inside one test, and ->delete() removes
  * it. stub_wc_shipping() reset()s and seeds it each test; reset_integration_stubs() clears it on
  * tear-down.
+ *
+ * Doc 214, finding 6: this store deliberately applies no WooCommerce filters, checked and
+ * confirmed rather than assumed, for both entities it backs. Zone shaping
+ * (aafm_redact_wc_shipping_zone(), aafm_rich_wc_shipping_zone() in shipping.php) reads
+ * $zone->get_data(), and real WC_Data::get_data() (abstract-wc-data.php) returns
+ * `array_merge(['id' => $this->get_id()], $this->data, ...)` directly - the raw internal array,
+ * bypassing get_prop() and every filter it would apply. Method shaping
+ * (aafm_rich_wc_shipping_method()) reads $method->title, ->method_title, ->instance_id, ->id,
+ * ->enabled, and ->instance_settings as plain public properties; real WC_Shipping_Method
+ * (abstract-wc-shipping-method.php) extends WC_Settings_API, not WC_Data, so those properties
+ * carry no filter either - the same shape as WC_Payment_Gateway (see WcGatewayStubStore.php).
+ * There is nothing to wire for either entity.
  */
 class WcShippingStubStore {
 

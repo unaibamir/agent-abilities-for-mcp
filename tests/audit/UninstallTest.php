@@ -38,6 +38,25 @@ final class UninstallTest extends TestCase {
 	}
 
 	/**
+	 * Team-lead item A: the default (retain-data) uninstall path used to return before ever
+	 * reaching either wp_clear_scheduled_hook() call, leaving both daily cron events behind
+	 * with no plugin left to run their callbacks. Cron registrations are executable plugin
+	 * machinery, not retained user data, so they must go regardless of the retention choice.
+	 */
+	public function test_uninstall_clears_both_cron_events_when_flag_not_set(): void {
+		delete_option( 'aafm_delete_data_on_uninstall' );
+		wp_schedule_event( time(), 'daily', 'aafm_prune_activity_log_daily' );
+		wp_schedule_event( time(), 'daily', 'aafm_oauth_cleanup' );
+		$this->assertNotFalse( wp_next_scheduled( 'aafm_prune_activity_log_daily' ), 'precondition: the prune event must be scheduled.' );
+		$this->assertNotFalse( wp_next_scheduled( 'aafm_oauth_cleanup' ), 'precondition: the OAuth cleanup event must be scheduled.' );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( wp_next_scheduled( 'aafm_prune_activity_log_daily' ), 'the prune event must be cleared even when data is retained.' );
+		$this->assertFalse( wp_next_scheduled( 'aafm_oauth_cleanup' ), 'the OAuth cleanup event must be cleared even when data is retained.' );
+	}
+
+	/**
 	 * When aafm_delete_data_on_uninstall is explicitly set to true, aafm_uninstall_site_data()
 	 * must run the full teardown: all config options gone, activity-log table dropped, OAuth
 	 * schema-version option gone, and the flag option itself must also be gone.
@@ -84,6 +103,51 @@ final class UninstallTest extends TestCase {
 		update_option( 'aafm_delete_data_on_uninstall', true );
 		aafm_uninstall_site_data();
 		$this->assertFalse( get_option( 'aafm_oauth_toggle_migrated', false ), 'Uninstall-with-delete-data must remove the OAuth preserve guard.' );
+	}
+
+	/**
+	 * Team-lead item A, the delete-data path: both cron events must still be cleared, the same
+	 * as the retain-data path - the unconditional clear at the top of the function must not
+	 * regress once the full teardown below it also runs.
+	 */
+	public function test_uninstall_clears_both_cron_events_when_flag_is_set(): void {
+		update_option( 'aafm_delete_data_on_uninstall', true );
+		wp_schedule_event( time(), 'daily', 'aafm_prune_activity_log_daily' );
+		wp_schedule_event( time(), 'daily', 'aafm_oauth_cleanup' );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( wp_next_scheduled( 'aafm_prune_activity_log_daily' ), 'the prune event must be cleared when data is deleted.' );
+		$this->assertFalse( wp_next_scheduled( 'aafm_oauth_cleanup' ), 'the OAuth cleanup event must be cleared when data is deleted.' );
+	}
+
+	/**
+	 * Team-lead item A, multisite: the plugin's own deactivation callbacks only clear cron in
+	 * the CURRENT blog context, so they cannot close this gap on a network. uninstall.php's
+	 * aafm_run_uninstall() reaches every site by switching into it before calling
+	 * aafm_uninstall_site_data() - this pins that a switched-to subsite's own cron gets
+	 * cleared, not just the main site's.
+	 *
+	 * @group ms-required
+	 */
+	public function test_uninstall_clears_cron_on_a_switched_multisite_blog(): void {
+		$this->skipWithoutMultisite();
+		$blog_id = (int) self::factory()->blog->create();
+
+		switch_to_blog( $blog_id );
+		delete_option( 'aafm_delete_data_on_uninstall' );
+		wp_schedule_event( time(), 'daily', 'aafm_prune_activity_log_daily' );
+		wp_schedule_event( time(), 'daily', 'aafm_oauth_cleanup' );
+		$this->assertNotFalse( wp_next_scheduled( 'aafm_prune_activity_log_daily' ), 'precondition: the subsite must have the prune event scheduled.' );
+
+		aafm_uninstall_site_data();
+
+		$prune_after = wp_next_scheduled( 'aafm_prune_activity_log_daily' );
+		$oauth_after = wp_next_scheduled( 'aafm_oauth_cleanup' );
+		restore_current_blog();
+
+		$this->assertFalse( $prune_after, 'the prune event must be cleared on the switched-to subsite.' );
+		$this->assertFalse( $oauth_after, 'the OAuth cleanup event must be cleared on the switched-to subsite.' );
 	}
 
 	public function test_cleanup_drops_table_and_option(): void {

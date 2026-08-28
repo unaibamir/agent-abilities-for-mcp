@@ -726,13 +726,16 @@ function aafm_exec_moderate_comment( array $input ) {
 
 	switch ( $action ) {
 		case 'approve':
-			$ok = wp_set_comment_status( $id, 'approve' );
+			$ok              = wp_set_comment_status( $id, 'approve' );
+			$target_approved = '1';
 			break;
 		case 'unapprove':
-			$ok = wp_set_comment_status( $id, 'hold' );
+			$ok              = wp_set_comment_status( $id, 'hold' );
+			$target_approved = '0';
 			break;
 		case 'spam':
-			$ok = (bool) wp_spam_comment( $id );
+			$ok              = (bool) wp_spam_comment( $id );
+			$target_approved = 'spam';
 			break;
 		case 'trash':
 			if ( ! aafm_trash_is_enabled() ) {
@@ -740,17 +743,14 @@ function aafm_exec_moderate_comment( array $input ) {
 				// refuse rather than permanently destroy the comment.
 				return aafm_trash_disabled_error();
 			}
-			$ok = (bool) wp_trash_comment( $id );
+			$ok              = (bool) wp_trash_comment( $id );
+			$target_approved = 'trash';
 			break;
 		default:
 			return new WP_Error(
 				'aafm_invalid_action',
 				__( 'Unsupported moderation action.', 'agent-abilities-for-mcp' )
 			);
-	}
-
-	if ( ! $ok ) {
-		return aafm_generic_error();
 	}
 
 	// $ok can be true here even when the comment no longer exists at all:
@@ -763,7 +763,18 @@ function aafm_exec_moderate_comment( array $input ) {
 	// type:string but told the caller nothing usable about whether its moderation took effect.
 	// 1.6.2 reverses that decision: a comment that vanished mid-write is an error, the same
 	// aafm_generic_error() every other miss path in this file returns.
-	if ( ! get_comment( $id ) instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue (a wp_set_comment_status hook can delete the row after the guard above)
+	$comment = get_comment( $id );
+	if ( ! $comment instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue (a wp_set_comment_status hook can delete the row after the guard above)
+		return aafm_generic_error();
+	}
+
+	// $ok can also come back false when the underlying $wpdb->update() matched the comment's row
+	// but changed nothing: MySQL reports 0 affected rows for a same-value UPDATE, WordPress does
+	// not set CLIENT_FOUND_ROWS, and wp_set_comment_status() (unlike wp_insert_post()'s update
+	// branch, which checks `false === $wpdb->update(...)`) treats that 0 as a plain failure. So a
+	// falsy $ok on a comment already sitting in the requested state is a no-op, not an error -
+	// report it the same as a successful transition rather than failing an idempotent request.
+	if ( ! $ok && $comment->comment_approved !== $target_approved ) {
 		return aafm_generic_error();
 	}
 

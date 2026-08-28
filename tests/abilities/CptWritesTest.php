@@ -483,4 +483,26 @@ final class CptWritesTest extends TestCase {
 
 		$this->assertStringNotContainsString( '<script>', get_post_field( 'post_content', $post_id ) );
 	}
+
+	/**
+	 * B-slash-form: every description an agent can read must name the MCP tool name a client
+	 * can actually call (dash form), never the internal ability id (slash form) - a client has
+	 * never seen the slash form and cannot call it. 6/6 live model samples hallucinated a call
+	 * to "aafm/get-post-types" because this description told them to.
+	 */
+	public function test_post_type_property_names_the_dash_form_tool(): void {
+		$schema      = wp_get_ability( 'aafm/create-cpt-item' )->get_input_schema();
+		$description = (string) $schema['properties']['post_type']['description'];
+
+		$this->assertStringContainsString(
+			'aafm-get-post-types',
+			$description,
+			'the description must name the real MCP tool name a client can call.'
+		);
+		$this->assertStringNotContainsString(
+			'aafm/get-post-types',
+			$description,
+			'the description must never name the internal slash-form ability id.'
+		);
+	}
 }

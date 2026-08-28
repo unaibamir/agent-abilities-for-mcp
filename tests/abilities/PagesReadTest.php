@@ -125,6 +125,30 @@ final class PagesReadTest extends TestCase {
 		$this->assertArrayNotHasKey( 'post_password', $out['post'] );
 	}
 
+	/**
+	 * Sweep review finding (test quality, fix round 2): RichPostTest pins the shared
+	 * aafm_rich_post() excerpt delegation directly, and aafm_exec_get_page() calls that same
+	 * function with no branching of its own (verified: pages.php:279 passes the post straight
+	 * through). This asserts the same excerpt_length behaviour through aafm/get-page's own call
+	 * path, so the caller-level claim is pinned by a test rather than only by reading the source.
+	 */
+	public function test_get_page_excerpt_honors_excerpt_length_filter(): void {
+		add_filter( 'excerpt_length', static fn() => 3 );
+
+		$this->acting_as( 'editor' );
+		$id  = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => 'one two three four five six seven',
+			)
+		);
+		$out = wp_get_ability( 'aafm/get-page' )->execute( array( 'page_id' => $id ) );
+
+		$this->assertSame( 'one two three [&hellip;]', $out['post']['excerpt'] );
+	}
+
 	public function test_get_page_accepts_lang_arg(): void {
 		$schema = wp_get_ability( 'aafm/get-page' )->get_input_schema();
 		$this->assertArrayHasKey( 'lang', $schema['properties'] );

@@ -23,6 +23,11 @@ namespace AAFM\Tests;
  * update) is visible to a following WP_Query / new WC_Coupon() inside one test, and ->delete()
  * removes both the post and the field row. stub_wc_coupons() reset()s and seeds it each test;
  * reset_integration_stubs() clears it on tear-down.
+ *
+ * This store itself is plain data and applies no filters (correctly - the array here is not what
+ * a caller reads). Doc 214, finding 6 found the WC_Coupon GETTERS applied none either, unlike real
+ * WC_Coupon's get_prop()-backed getters, which all filter 'woocommerce_coupon_get_{prop}'. Fixed
+ * in IntegrationStubs.php's aafm_wc_coupon_class_source(), not here.
  */
 class WcCouponStubStore {
 

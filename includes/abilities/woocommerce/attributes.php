@@ -105,27 +105,6 @@ function aafm_wc_attributes_registry_definitions(): array {
 // The redactor maps these to the API's flat shape.
 
 /**
- * Resolve a global attribute id to its stdClass row, or null when not found.
- *
- * Iterates over wc_get_attribute_taxonomies() so it always reflects the live
- * store (no separate index to keep in sync).
- *
- * @param int $id Attribute id.
- * @return \stdClass|null
- */
-function aafm_wc_get_attribute( int $id ): ?\stdClass {
-	if ( $id <= 0 ) {
-		return null;
-	}
-	foreach ( wc_get_attribute_taxonomies() as $attr ) {
-		if ( (int) ( $attr->attribute_id ?? 0 ) === $id ) {
-			return $attr;
-		}
-	}
-	return null;
-}
-
-/**
  * The output properties shared by every attribute ability (list row, get, create, update).
  *
  * @return array<string,mixed>
@@ -143,6 +122,14 @@ function aafm_wc_attribute_output_properties(): array {
 
 /**
  * Redact one WooCommerce global attribute stdClass into the API row shape.
+ *
+ * Sweep finding A (208 FIX-2 item 1): this is now used ONLY by wc-list-product-attributes' bulk
+ * row mapping. The two by-id lookups (create's post-write re-read, update's before/after reads)
+ * were rewritten to call wc_get_attribute( $id ) directly - WooCommerce's own by-id lookup already
+ * returns a stdClass in this exact renamed shape (wc-attribute-functions.php:472-488), including
+ * wc_attribute_taxonomy_name() for slug, so redacting its output here would just repeat the same
+ * mapping a second time. No vendor equivalent exists for a bulk cross-attribute row map, which is
+ * why this function stays for the list path.
  *
  * @param \stdClass $attr Raw attribute object from wc_get_attribute_taxonomies().
  * @return array<string,mixed>
@@ -301,8 +288,9 @@ function aafm_args_wc_create_product_attribute(): array {
 /**
  * Execute aafm/wc-create-product-attribute.
  *
- * Sanitizes all inputs, delegates to wc_create_attribute(), then re-reads the
- * created row via aafm_wc_get_attribute() and returns the rich shape.
+ * Sanitizes all inputs, delegates to wc_create_attribute(), then re-reads the created row via
+ * wc_get_attribute() - WooCommerce's own by-id lookup, already in the API's exact field shape
+ * (sweep finding A, 208 FIX-2 item 1) - and returns it directly.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
@@ -326,11 +314,11 @@ function aafm_exec_wc_create_product_attribute( array $input ) {
 		return aafm_generic_error();
 	}
 	$id   = (int) $result;
-	$attr = aafm_wc_get_attribute( $id );
+	$attr = wc_get_attribute( $id );
 	if ( null === $attr ) {
 		return aafm_generic_error();
 	}
-	return aafm_redact_wc_attribute( $attr );
+	return (array) $attr;
 }
 
 // -----------------------------------------------------------------------------
@@ -383,34 +371,42 @@ function aafm_args_wc_update_product_attribute(): array {
 /**
  * Execute aafm/wc-update-product-attribute.
  *
- * Resolve-before-mutate: unknown id returns a generic error.
+ * Resolve-before-mutate: unknown id returns a generic error. Passing an unresolvable id straight
+ * to wc_update_attribute() would fall through to its own `$args['id'] = $attribute ? $attribute->id
+ * : 0` branch and silently CREATE a new attribute instead of failing (wc-attribute-functions.php:701),
+ * so this check stays regardless of what else changes here.
  *
- * Version-safe (M3 / the WC 9.1 floor's belt-and-braces guard): rather than sending a partial
- * PATCH and relying on wc_update_attribute()'s own field backfill (only present from WC 9.1.0 -
- * below that, an omitted field is reset to its default, wiping has_archives/order_by/type), the
- * full field set is built here FIRST from the resolved attribute's current values, then
- * overwritten with whatever the caller actually sent. wc_update_attribute() always receives every
- * field, so this ability's correctness never depends on which WooCommerce version is installed.
- * $changed tracks whether the caller sent anything at all, so an empty patch stays a genuine no-op
- * (no write) exactly as before.
+ * Sweep finding B (208 FIX-2 item 2): a prior version of this function manually rebuilt the full
+ * field set from the resolved attribute before calling wc_update_attribute(), guarding against
+ * that function's own backfill being "only present from WC 9.1.0". Verified that guard is now
+ * unreachable dead code: wc_update_attribute() (wc-attribute-functions.php:696-720) has done this
+ * exact backfill natively since exactly 9.1.0, and AAFM_WOOCOMMERCE_MIN_VERSION
+ * (includes/integrations.php:233-234) is pinned to that release for precisely this reason - the
+ * WooCommerce abilities, this one included, never register at all below that floor, so on any
+ * install whose WooCommerce version can be read, the "below 9.1 it wipes fields" case this guard
+ * defended against cannot arise. One honest caveat on that, raised by the 208 sweep review: the
+ * floor gate is deliberately fail-OPEN on an undeterminable version - aafm_woocommerce_active()
+ * (includes/integrations.php:339) treats a null version as meeting the floor rather than refusing -
+ * so the guarantee rests on WC_VERSION being defined, which real WooCommerce always does whenever
+ * the WooCommerce class itself exists. It is a very strong guarantee, not an absolute one, and the
+ * distinction is recorded here rather than overstated.
+ *
+ * $args is now built from only the keys the caller sent;
+ * wc_update_attribute() backfills the rest from its own resolved current row, the same way its
+ * own callers (including WooCommerce's own REST controller) already rely on it to. $changed still
+ * tracks whether the caller sent anything at all, so an empty patch stays a genuine no-op.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_update_product_attribute( array $input ) {
 	$id   = (int) ( $input['attribute_id'] ?? 0 );
-	$attr = aafm_wc_get_attribute( $id );
+	$attr = wc_get_attribute( $id );
 	if ( null === $attr ) {
 		return aafm_generic_error();
 	}
 
-	$args = array(
-		'name'         => (string) ( $attr->attribute_label ?? '' ),
-		'slug'         => (string) ( $attr->attribute_name ?? '' ),
-		'type'         => (string) ( $attr->attribute_type ?? 'select' ),
-		'order_by'     => (string) ( $attr->attribute_orderby ?? 'menu_order' ),
-		'has_archives' => (bool) ( $attr->attribute_public ?? false ),
-	);
+	$args = array();
 
 	$changed = false;
 	if ( array_key_exists( 'name', $input ) ) {
@@ -441,9 +437,9 @@ function aafm_exec_wc_update_product_attribute( array $input ) {
 		}
 	}
 
-	$updated = aafm_wc_get_attribute( $id );
+	$updated = wc_get_attribute( $id );
 	if ( null === $updated ) {
 		return aafm_generic_error();
 	}
-	return aafm_redact_wc_attribute( $updated );
+	return (array) $updated;
 }

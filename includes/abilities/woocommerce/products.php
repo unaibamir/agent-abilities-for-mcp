@@ -57,7 +57,7 @@ function aafm_wc_products_registry_definitions(): array {
 	return array(
 		'aafm/wc-list-products'  => array(
 			'label'        => __( 'List WooCommerce products', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, plus a total. Only status is filtered server-side; there is no price, name, or other field filter, so narrowing the returned rows (for example to products under a price) is the caller\'s job. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -420,39 +420,61 @@ function aafm_exec_wc_list_products( array $input ) {
 	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
 	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
 
-	// aafm_with_language() returns mixed, so restore the concrete type wc_get_products() promises
-	// (an array of WC_Product, or a stdClass carrying ->products/->total when paginate is true) -
-	// otherwise the is_object() narrowing below loses stdClass's dynamic-property allowance.
-	/**
-	 * The raw WooCommerce product query result.
-	 *
-	 * @var WC_Product[]|\stdClass $query
-	 */
-	$query = aafm_with_language(
-		$lang,
-		static function () use ( $per_page, $page, $status ) {
-			return wc_get_products(
-				array(
-					'limit'    => $per_page,
-					'page'     => $page,
-					'status'   => $status,
-					'paginate' => true,
-				)
-			);
-		}
-	);
+	$build_page = static function () use ( $per_page, $page, $status ) {
+		return wc_get_products(
+			array(
+				'limit'    => $per_page,
+				'page'     => $page,
+				'status'   => $status,
+				'paginate' => true,
+			)
+		);
+	};
 
 	// With paginate => true WooCommerce returns an object carrying ->products (the page) and ->total
 	// (the full matching count); total is the grand total for pagination, not the page row count.
-	$products = is_object( $query ) ? (array) $query->products : (array) $query;
-	$total    = is_object( $query ) ? (int) $query->total : count( $products );
+	//
+	// Branch review fix (lang scope and result shaping, round 3): aafm_redact_wc_product() must
+	// run INSIDE the query's own aafm_with_language() scope, not after it restores to ambient -
+	// on both branches. WooCommerce's get_name(), get_price(), and get_category_ids() all apply
+	// vendor filters a theme or plugin can key off ambient language, same defect class as
+	// aafm_exec_get_posts() in posts.php.
+	$shape_language = static function ( ?string $code ) use ( $build_page ): array {
+		return aafm_with_language(
+			$code,
+			static function () use ( $build_page ): array {
+				/**
+				 * The raw WooCommerce product query result.
+				 *
+				 * @var WC_Product[]|\stdClass $query
+				 */
+				$query      = $build_page();
+				$page_items = is_object( $query ) ? (array) $query->products : (array) $query;
+				$rows       = array();
+				foreach ( $page_items as $product ) {
+					if ( $product instanceof \WC_Product ) {
+						$rows[] = aafm_redact_wc_product( $product );
+					}
+				}
+				return array(
+					'rows'  => $rows,
+					'found' => is_object( $query ) ? (int) $query->total : count( $page_items ),
+				);
+			}
+		);
+	};
 
-	foreach ( $products as $product ) {
-		if ( $product instanceof \WC_Product ) {
-			$out['products'][] = aafm_redact_wc_product( $product );
+	if ( 'all' === $lang ) {
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			$shaped          = $shape_language( $code );
+			$out['products'] = array_merge( $out['products'], $shaped['rows'] );
+			$out['total']   += $shaped['found'];
 		}
+	} else {
+		$shaped          = $shape_language( $lang );
+		$out['products'] = $shaped['rows'];
+		$out['total']    = $shaped['found'];
 	}
-	$out['total'] = $total;
 
 	return $out;
 }
@@ -544,13 +566,21 @@ function aafm_wc_product_write_properties(): array {
 		),
 		'regular_price'     => array(
 			'type'        => 'string',
-			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator).',
+			// Empty string is deliberately accepted alongside a decimal: it is WooCommerce's own
+			// way of clearing a price. set_regular_price() runs the value through
+			// wc_format_decimal(), which returns '' unchanged for an empty input rather than
+			// rejecting it, and aafm_reserved_post_meta_routes() tells an agent to clear
+			// `_regular_price` by sending exactly that. A pattern that only matched a populated
+			// decimal made that documented route impossible to call.
+			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator), or an empty string to clear the price.',
 		),
 		'sale_price'        => array(
 			'type'        => 'string',
-			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "14.99". Must be at or below regular_price to take effect.',
+			// Same reasoning as regular_price above: an empty string is the normal way to end a
+			// sale (clear the sale price) rather than an invalid one.
+			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.',
 		),
 		'stock_status'      => array(
 			'type'        => 'string',
@@ -883,7 +913,7 @@ function aafm_wc_global_attribute_change_error( array $sanitized, array $stored,
 			'aafm_wc_global_attribute_display_masked',
 			sprintf(
 				/* translators: %s: comma-separated list of global attribute slugs whose displayed options differ from the stored ones. */
-				__( 'Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean "leave this alone" or it could mean "remove the terms I was not shown", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. To change the attribute itself, use wc-update-product-attribute.', 'agent-abilities-for-mcp' ),
+				__( 'Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean "leave this alone" or it could mean "remove the terms I was not shown", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. Changing a global attribute\'s own options is not available through this plugin; that has to be done in the WooCommerce admin.', 'agent-abilities-for-mcp' ),
 				implode( ', ', $masked )
 			)
 		);
@@ -897,7 +927,7 @@ function aafm_wc_global_attribute_change_error( array $sanitized, array $stored,
 		'aafm_wc_global_attribute_not_editable',
 		sprintf(
 			/* translators: %s: comma-separated list of global attribute slugs the request tried to change. */
-			__( 'These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product\'s own custom attributes, and it has no way to express a global attribute\'s terms. Use wc-update-product-attribute to change the attribute itself, or send its current options back unchanged to leave it alone.', 'agent-abilities-for-mcp' ),
+			__( 'These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product\'s own custom attributes, and it has no way to express a global attribute\'s terms. Changing a global attribute\'s options is not available through this plugin\'s abilities; add or remove the option in the WooCommerce admin under Products > Attributes, then use wc-create-product-variation or wc-update-product-variation here to build variations with it. Send its current options back unchanged to leave it alone.', 'agent-abilities-for-mcp' ),
 			implode( ', ', $refused )
 		)
 	);
@@ -1085,7 +1115,7 @@ function aafm_args_wc_create_product(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_wc_create_product( array $input ) {
-	if ( ! class_exists( 'WC_Product' ) ) {
+	if ( ! class_exists( 'WC_Product' ) || ! class_exists( 'WC_Product_Simple' ) ) {
 		return aafm_generic_error();
 	}
 	$name = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
@@ -1102,7 +1132,14 @@ function aafm_exec_wc_create_product( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$product = new \WC_Product();
+	// Sweep finding 2 (208 FIX-2 item 4): WooCommerce's own create path
+	// (WC_REST_Products_Controller::prepare_object_for_database()) never instantiates the bare
+	// WC_Product base class - it builds a WC_Product_Simple when no type or id is given, matching
+	// this ability's exact case. No observable difference either way (WC_Product::get_type()
+	// already defaults to 'simple', and the response is rebuilt from a fresh wc_get_product() read
+	// after save() regardless), but this uses the vendor's own create-path class rather than one it
+	// never uses for a new product.
+	$product = new \WC_Product_Simple();
 	unset( $input['type'] );
 	$error = aafm_wc_apply_product_input( $product, $input );
 	if ( null !== $error ) {
@@ -1344,6 +1381,21 @@ function aafm_exec_wc_delete_product( array $input ) {
 	// WC_Data::delete() returns true whenever a data store exists, and a loaded product always has
 	// one, so its return never signals a store-level failure. Verify the row is actually gone by
 	// re-reading rather than trusting the return.
+	//
+	// Sweep flagged an asymmetry with its sibling wc-delete-product-variation: that ability does NOT
+	// trust a re-read here at all, because WC_Product_Data_Store_CPT::delete() (shared by both post
+	// types, confirmed at class-wc-product-data-store-cpt.php:406-431) never calls clear_caches(), so
+	// a stale product-instance-cache read is possible in principle. Live-probed rather than assumed
+	// either way (208 FIX-2 item 0, .scratch/wc-delete-product-cache-probe.php, throwaway product
+	// created and deleted, nothing else touched): on this WooCommerce install (11.0.1) the re-read
+	// after delete() correctly returns nothing, twice in a row. The reason the plain re-read is safe
+	// here even though the raw data-store gap is real: WooCommerce's own
+	// Automattic\WooCommerce\Internal\Caches\ProductCacheController hooks core's clean_post_cache
+	// action (fired unconditionally by the wp_delete_post() call inside delete()) and invalidates the
+	// product-instance cache from there, independently of clear_caches(). That hook is a newer,
+	// version-dependent internal, not a documented guarantee, so this is OBSERVED ONLY on 11.0.1 - if
+	// re-probing after a WooCommerce upgrade ever finds a stale read, switch to the variation
+	// sibling's clean_post_cache()-plus-existence-check pattern rather than assuming this is still safe.
 	if ( null !== aafm_wc_get_product( $id ) ) {
 		return aafm_generic_error();
 	}

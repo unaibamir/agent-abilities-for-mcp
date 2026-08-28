@@ -436,6 +436,31 @@ final class SafetyEnforcementTest extends TestCase {
 			'An aborted call must not leave its allowed memo behind for the next same-ability call.'
 		);
 
+		// Finding 2 (doc 214): the short-circuit must also leave an audit row. This plugin's own
+		// permission check ALLOWED the call, so it must not read as a 'denied' capability decision,
+		// and there is no pending 'started' row to resolve - wp_ability_invoked, which opens one,
+		// only fires from inside execute(), which the short-circuit prevented from ever running.
+		$aborted = aafm_query_activity(
+			array(
+				'status'   => 'error',
+				'ability'  => 'aafm/rl-abort-probe',
+				'per_page' => 1,
+			)
+		);
+		$this->assertNotEmpty( $aborted, 'A call this plugin allowed, then a consumer filter killed, must not vanish from the log.' );
+		$this->assertStringContainsString( 'mcp_adapter_pre_tool_call', (string) $aborted[0]['detail'] );
+		$this->assertStringContainsString( 'blocked', (string) $aborted[0]['detail'], "The short-circuit's own error code must be recorded." );
+
+		// The pass-through control call earlier in this test must not have written anything: only
+		// an actual short-circuit reaches this handler's WP_Error branch.
+		$pass_rows = aafm_query_activity(
+			array(
+				'ability'  => 'aafm/rl-pass-probe',
+				'per_page' => 50,
+			)
+		);
+		$this->assertEmpty( $pass_rows, 'A pass-through pre_tool_call result must never write an audit row.' );
+
 		// A malformed hook payload (no tool object) must pass through without a fatal.
 		$this->assertSame( array(), aafm_release_rate_memo_on_aborted_tool_call( array(), 'aafm-rl-abort-probe', null ) );
 	}

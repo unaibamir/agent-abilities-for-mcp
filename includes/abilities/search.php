@@ -173,24 +173,20 @@ function aafm_exec_search_content( array $input ) {
 		}
 	}
 
-	$paging  = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
-	$query   = aafm_with_language(
-		$lang,
-		static function () use ( $types, $status, $search, $paging ): WP_Query {
-			return new WP_Query(
-				array(
-					'post_type'        => $types,
-					'post_status'      => $status,
-					's'                => $search,
-					'posts_per_page'   => $paging['per_page'],
-					'paged'            => $paging['page'],
-					'no_found_rows'    => false,
-					'suppress_filters' => false,
-				)
-			);
-		}
-	);
-	$objects = array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post );
+	$paging      = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
+	$build_query = static function () use ( $types, $status, $search, $paging ): WP_Query {
+		return new WP_Query(
+			array(
+				'post_type'        => $types,
+				'post_status'      => $status,
+				's'                => $search,
+				'posts_per_page'   => $paging['per_page'],
+				'paged'            => $paging['page'],
+				'no_found_rows'    => false,
+				'suppress_filters' => false,
+			)
+		);
+	};
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
 	$include_content = ! empty( $input['include_content'] );
@@ -199,12 +195,45 @@ function aafm_exec_search_content( array $input ) {
 		'include_content' => $include_content,
 	);
 
+	// Branch review fix (lang scope and result shaping, round 2): aafm_rich_post() must run
+	// INSIDE the query's own aafm_with_language() scope on BOTH branches, not only 'all' - an
+	// explicit single language has the identical gap, since aafm_with_language() restores the
+	// original language before returning and the shape step used to run after that restore.
+	// Same reasoning as aafm_exec_get_posts() in posts.php - see that function's comment for
+	// the full explanation and WpmlLangAllTest/WpmlLanguageTest for the regression proofs.
+	$shape_language = static function ( ?string $code ) use ( $build_query, $options ): array {
+		return aafm_with_language(
+			$code,
+			static function () use ( $build_query, $options ): array {
+				$query = $build_query();
+				return array(
+					'rows'  => array_map(
+						static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
+						array_values( array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post ) )
+					),
+					'found' => (int) $query->found_posts,
+				);
+			}
+		);
+	};
+
+	$results = array();
+	$total   = 0;
+	if ( 'all' === $lang ) {
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			$shaped  = $shape_language( $code );
+			$results = array_merge( $results, $shaped['rows'] );
+			$total  += $shaped['found'];
+		}
+	} else {
+		$shaped  = $shape_language( $lang );
+		$results = $shaped['rows'];
+		$total   = $shaped['found'];
+	}
+
 	return array(
-		'results'  => array_map(
-			static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
-			array_values( $objects )
-		),
-		'total'    => (int) $query->found_posts,
+		'results'  => $results,
+		'total'    => $total,
 		'language' => $lang,
 	);
 }

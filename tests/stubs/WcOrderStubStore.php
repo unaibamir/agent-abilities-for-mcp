@@ -21,6 +21,15 @@ namespace AAFM\Tests;
  * stub reads and writes, so tests can assert the shape of the order abilities without WooCommerce
  * installed. seed_wc_orders() resets + seeds it per test, and reset_integration_stubs() clears it
  * via reset().
+ *
+ * Doc 214, finding 6: neither WC_Order nor WC_Order_Refund's getters applied a WooCommerce filter,
+ * unlike real WC_Order (get_prop()-backed getters filtered 'woocommerce_order_get_{prop}', plus
+ * get_order_number()'s own 'woocommerce_order_number' and get_items()'s
+ * 'woocommerce_order_get_items') and real WC_Order_Refund ('woocommerce_order_refund_get_{prop}').
+ * Fixed in IntegrationStubs.php's aafm_wc_order_class_source() and
+ * aafm_wc_order_refund_class_source(). get_notes() BELOW, in this file, gets the equivalent fix
+ * directly: real wc_get_order_note() applies 'woocommerce_get_order_note' over the whole note
+ * array before returning it.
  */
 class WcOrderStubStore {
 
@@ -480,18 +489,26 @@ class WcOrderStubStore {
 		$rows = self::$notes[ $order_id ] ?? array();
 		return array_values(
 			array_map(
-				static function ( array $row ): object {
+				static function ( array $row ) use ( $order_id ): object {
 					// Mirror the normalized objects real wc_get_order_notes() returns: ->id and ->content.
 					// Real WooCommerce never emits the literal 'user' (M12) - a programmatic note is
 					// attributed 'system' (comment_author 'WooCommerce'), a user-added note is attributed
 					// the acting user's display name, which the fixture stands in for here.
-					$obj                = new \stdClass();
-					$obj->id            = (int) $row['id'];
-					$obj->content       = (string) $row['note'];
-					$obj->added_by      = $row['added_by_user'] ? 'AAFM Test User' : 'system';
-					$obj->date_created  = (string) $row['date_created'];
-					$obj->customer_note = (bool) $row['customer_note'];
-					return $obj;
+					$note = array(
+						'id'            => (int) $row['id'],
+						'date_created'  => (string) $row['date_created'],
+						'content'       => (string) $row['note'],
+						'customer_note' => (bool) $row['customer_note'],
+						'added_by'      => $row['added_by_user'] ? 'AAFM Test User' : 'system',
+						'order_id'      => $order_id,
+					);
+					// Doc 214, finding 6: real wc_get_order_note() (wc-order-functions.php) applies this
+					// exact filter over the whole note array before casting to an object. The second
+					// argument there is the backing WP_Comment; null here, since the stub has no real
+					// comment behind a note - passing a fabricated stand-in would be less honest than
+					// admitting there isn't one.
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- third-party WooCommerce hook.
+					return (object) apply_filters( 'woocommerce_get_order_note', $note, null );
 				},
 				$rows
 			)

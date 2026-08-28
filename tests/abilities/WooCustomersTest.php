@@ -319,6 +319,28 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
+	 * Doc 214, finding 6: the WC_Customer stub's getters used to apply no WooCommerce filter at
+	 * all, unlike real WC_Customer (get_prop()/get_address_prop()-backed, filtered
+	 * 'woocommerce_customer_get_{prop}'). Hook two of the getters this ability's own shaping
+	 * reads - a plain prop and a billing address prop - and confirm the filtered value reaches
+	 * the wire.
+	 */
+	public function test_get_customer_applies_real_woocommerce_customer_filters(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'woocommerce_customer_get_first_name', static fn() => 'Filtered' );
+		add_filter( 'woocommerce_customer_get_billing_email', static fn() => 'filtered@example.com' );
+
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => $this->customer_id ) );
+
+		remove_all_filters( 'woocommerce_customer_get_first_name' );
+		remove_all_filters( 'woocommerce_customer_get_billing_email' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Filtered', $res['first_name'], 'A real WooCommerce customer filter must reach this shape.' );
+		$this->assertSame( 'filtered@example.com', $res['billing']['email'] );
+	}
+
+	/**
 	 * Unknown customer id returns WP_Error.
 	 */
 	public function test_get_customer_unknown_id_returns_error(): void {

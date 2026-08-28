@@ -136,6 +136,14 @@ if ( ! class_exists( 'WC_Product' ) ) {
 	}
 }
 
+if ( ! class_exists( 'WC_Product_Simple' ) ) {
+	/**
+	 * Minimal signature for static analysis only (208 FIX-2 item 4).
+	 */
+	class WC_Product_Simple extends WC_Product {
+	}
+}
+
 if ( ! class_exists( 'WC_Data_Exception' ) ) {
 	/**
 	 * Minimal WC_Data_Exception signature for static analysis only. Thrown by
@@ -311,6 +319,28 @@ if ( ! function_exists( 'wc_get_attribute_taxonomies' ) ) {
 	 * @return \stdClass[]
 	 */
 	function wc_get_attribute_taxonomies() {
+		return array();
+	}
+}
+
+if ( ! function_exists( 'wc_get_attribute' ) ) {
+	/**
+	 * @param int $id
+	 * @return \stdClass|null
+	 */
+	function wc_get_attribute( $id ) {
+		return null;
+	}
+}
+
+if ( ! function_exists( 'wc_get_product_terms' ) ) {
+	/**
+	 * @param int                  $product_id
+	 * @param string               $taxonomy
+	 * @param array<string,mixed>  $args
+	 * @return array<int,mixed>
+	 */
+	function wc_get_product_terms( $product_id, $taxonomy, $args = array() ) {
 		return array();
 	}
 }
@@ -612,6 +642,9 @@ if ( ! class_exists( 'WC_Order_Item' ) ) {
 	class WC_Order_Item {
 		/** @return int */
 		public function get_id() { return 0; }
+
+		/** @return string */
+		public function get_type() { return 'line_item'; }
 	}
 }
 
@@ -654,6 +687,19 @@ if ( ! function_exists( 'wc_get_orders' ) ) {
 	 */
 	function wc_get_orders( $args = array() ) {
 		return array();
+	}
+}
+
+if ( ! function_exists( 'wc_orders_count' ) ) {
+	/**
+	 * 208 FIX-3 item 3.
+	 *
+	 * @param string $status
+	 * @param string $type
+	 * @return int
+	 */
+	function wc_orders_count( $status, string $type = '' ) {
+		return 0;
 	}
 }
 
@@ -1003,6 +1049,14 @@ if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
 		 * @return array<int,array<string,mixed>>
 		 */
 		public static function get_zones( $args = array() ) { return array(); }
+
+		/**
+		 * Get shipping zone using its ID (208 FIX-3 item 2).
+		 *
+		 * @param int $zone_id
+		 * @return \WC_Shipping_Zone|bool
+		 */
+		public static function get_zone( $zone_id ) { return false; }
 	}
 }
 if ( ! class_exists( 'WC_Tax' ) ) {
@@ -1058,6 +1112,15 @@ if ( ! class_exists( 'WC_Tax' ) ) {
 		 * @return void
 		 */
 		public static function _update_tax_rate( int $tax_rate_id, array $tax_rate ): void {}
+
+		/**
+		 * Get tax rate by id (208 FIX-3 item 1).
+		 *
+		 * @param int    $tax_rate_id Tax rate id.
+		 * @param string $output_type ARRAY_A or OBJECT.
+		 * @return array<string,mixed>|object|null
+		 */
+		public static function _get_tax_rate( int $tax_rate_id, string $output_type = ARRAY_A ) { return null; }
 	}
 }
 if ( ! class_exists( 'WC_Payment_Gateway' ) ) {

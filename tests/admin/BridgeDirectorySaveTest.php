@@ -369,6 +369,23 @@ final class BridgeDirectorySaveTest extends TestCase {
 		$this->assertStringContainsString( 'data-bridge-bulk="disable"', $html );
 	}
 
+	/**
+	 * Finding 3 (doc 214): unlike this plugin's own abilities, a bridged ability's output is never
+	 * scanned or redacted (bridge.php returns the foreign ability's result unmodified). The
+	 * disclaimer must say so plainly rather than reading as blanket "governed" the way it did
+	 * before this fix, since the surrounding sentences about role scoping and the activity log are
+	 * true but do not cover output shape at all.
+	 */
+	public function test_directory_disclaimer_discloses_unredacted_output(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		ob_start();
+		aafm_render_bridge_directory();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'aafm-integrations-disclaimer', $html );
+		$this->assertStringContainsString( 'not filtered or redacted', $html );
+	}
+
 	public function test_directory_surfaces_effective_permission(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 

@@ -36,6 +36,43 @@ final class SearchTest extends TestCase {
 		$this->assertNull( $out['language'] ); // WPML off in the unit suite.
 	}
 
+	/**
+	 * Sweep review finding (test quality, fix round 2): RichPostTest pins the shared
+	 * aafm_rich_post() excerpt delegation directly, and aafm_exec_search_content() calls that
+	 * same function with no branching of its own (verified: search.php:217 passes each result
+	 * post straight through). This asserts the same excerpt_length behaviour through
+	 * aafm/search-content's own call path, so the caller-level claim is pinned by a test rather
+	 * than only by reading the source.
+	 */
+	public function test_search_excerpt_honors_excerpt_length_filter(): void {
+		add_filter( 'excerpt_length', static fn() => 3 );
+
+		// A search term distinct from "findme": aafm_clear_activity_log() below issues a TRUNCATE,
+		// which MySQL treats as DDL and implicitly commits (see TestCase::set_up()'s own comment on
+		// this), so a plain "findme" fixture from an earlier test in this class can escape its
+		// per-test rollback and still be present here. A unique term keeps this assertion from ever
+		// matching that leftover post.
+		$this->acting_as( 'subscriber' );
+		self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_title'   => 'findmeexcerptfilter',
+				'post_excerpt' => '',
+				'post_content' => 'one two three four five six seven',
+			)
+		);
+
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->register_enabled( array( 'aafm/search-content' ) );
+
+		$out = wp_get_ability( 'aafm/search-content' )->execute( array( 'search' => 'findmeexcerptfilter' ) );
+
+		$this->assertCount( 1, $out['results'], wp_json_encode( wp_list_pluck( $out['results'], 'title' ) ) );
+		$this->assertSame( 'one two three [&hellip;]', $out['results'][0]['excerpt'] );
+	}
+
 	public function test_search_spans_allowlisted_types_redacted(): void {
 		register_post_type(
 			'aafm_book',

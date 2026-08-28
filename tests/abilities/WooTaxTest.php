@@ -546,4 +546,20 @@ final class WooTaxTest extends TestCase {
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( 'aafm/wc-create-tax-class', $abilities );
 	}
+
+	/**
+	 * FIX-3 item 1 (pilot finding, delegation sweep): the by-id single-rate read now delegates to
+	 * WC_Tax::_get_tax_rate() instead of a hand-rolled $wpdb->get_row(). Both queries read the
+	 * identical table with no caching or hook on either side, so there is no behavioural
+	 * difference to drive a test red - this pins the source-level fact instead, as the pilot's own
+	 * finding predicted, and states plainly it could not go red any other way.
+	 */
+	public function test_get_tax_rate_by_id_delegates_to_wc_tax(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/tax.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
+		$this->assertStringContainsString(
+			'\WC_Tax::_get_tax_rate( $rate_id, ARRAY_A )',
+			$source,
+			'aafm_wc_get_tax_rate_by_id() must delegate to WC_Tax::_get_tax_rate(), the same by-id read WooCommerce\'s own REST controller uses.'
+		);
+	}
 }

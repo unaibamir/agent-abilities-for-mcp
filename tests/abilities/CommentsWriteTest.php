@@ -207,6 +207,109 @@ final class CommentsWriteTest extends TestCase {
 	}
 
 	/**
+	 * Approving an already-approved comment must still report success. Core's
+	 * wp_set_comment_status() returns false when its $wpdb->update() call reports 0 affected
+	 * rows, which MySQL does for a same-value UPDATE - indistinguishable at that layer from a
+	 * genuine DB failure. An agent asking for an idempotent end state must not be told the
+	 * request failed while the comment already sits exactly where it asked.
+	 */
+	public function test_approve_on_an_already_approved_comment_still_reports_success(): void {
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '1',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'action'     => 'approve',
+			)
+		);
+
+		$this->assertSame( 'approved', $out['status'] );
+		$this->assertSame( 'approved', wp_get_comment_status( $comment ) );
+	}
+
+	/**
+	 * Same no-op contract as approve, see
+	 * test_approve_on_an_already_approved_comment_still_reports_success().
+	 */
+	public function test_unapprove_on_an_already_held_comment_still_reports_success(): void {
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '0',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'action'     => 'unapprove',
+			)
+		);
+
+		$this->assertSame( 'unapproved', $out['status'] );
+		$this->assertSame( 'unapproved', wp_get_comment_status( $comment ) );
+	}
+
+	/**
+	 * Same no-op contract: wp_spam_comment() delegates to wp_set_comment_status() behind a
+	 * truthy check, so it inherits the same false-on-no-op shape.
+	 */
+	public function test_spam_on_an_already_spam_comment_still_reports_success(): void {
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => 'spam',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'action'     => 'spam',
+			)
+		);
+
+		$this->assertSame( 'spam', $out['status'] );
+		$this->assertSame( 'spam', wp_get_comment_status( $comment ) );
+	}
+
+	/**
+	 * Same no-op contract: wp_trash_comment() delegates to wp_set_comment_status() behind the
+	 * same truthy check as spam.
+	 */
+	public function test_trash_on_an_already_trashed_comment_still_reports_success(): void {
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => 'trash',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'action'     => 'trash',
+			)
+		);
+
+		$this->assertSame( 'trash', $out['status'] );
+		$this->assertSame( 'trash', wp_get_comment_status( $comment ) );
+	}
+
+	/**
 	 * The route: wp_set_comment_status() (wp-includes/comment.php) fires its
 	 * 'wp_set_comment_status' action AFTER the DB update has already succeeded, and returns `true`
 	 * unconditionally once that update ran - what any listener on that action does afterward,

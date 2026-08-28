@@ -27,6 +27,13 @@ namespace AAFM\Tests;
  * of these stubs invented a wc_get_customers() function that WooCommerce has never had, which let
  * a broken ability pass its tests for three releases - do not stub a vendor API without first
  * reading it in the vendor's source.
+ *
+ * This store itself is plain data and applies no filters (correctly - the array here is not what
+ * a caller reads). Doc 214, finding 6 found the WC_Customer GETTERS applied none either, unlike
+ * real WC_Customer's mix of get_prop()/get_address_prop()-backed getters (all filtered
+ * 'woocommerce_customer_get_{prop}') and its data-store-backed get_order_count()/get_total_spent()
+ * (filtered the same shape from class-wc-customer-data-store.php). Fixed in IntegrationStubs.php's
+ * aafm_wc_customer_class_source(), not here.
  */
 class WcCustomerStubStore {
 

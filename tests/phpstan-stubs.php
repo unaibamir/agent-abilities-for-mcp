@@ -170,7 +170,7 @@ if ( ! class_exists( 'WC_Product_Variation' ) ) {
 		public function get_id(): int {
 			return 0;
 		}
-		public function get_parent_id(): int {
+		public function get_parent_id( $context = 'view' ): int {
 			return 0;
 		}
 		public function get_type(): string {

@@ -1027,6 +1027,35 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		$instance_settings = apply_filters( 'woocommerce_shipping_' . $method->id . '_instance_settings_values', $instance_settings, $method );
 
 		update_option( $method->get_instance_option_key(), $instance_settings );
+
+		// Verify the write actually persisted. update_option() returns false both on genuine
+		// failure and when the new value equals the old one, so its return value alone cannot
+		// distinguish "nothing changed" from "a filter (a caching/compliance layer's
+		// pre_update_option_* veto) silently blocked the write" - read the option back instead,
+		// mirroring the gateway settings write's own read-back (gateways.php,
+		// aafm_wc_gateway_write_failed_error()).
+		//
+		// Compare against $instance_settings['title'] - the value AFTER the
+		// woocommerce_shipping_{id}_instance_settings_values filter ran and was actually handed
+		// to update_option() - not the raw pre-filter $title. That filter is a documented WC
+		// value-transformation hook (abstract-wc-shipping-method.php,
+		// class-wc-rest-shipping-zone-methods-v2-controller.php), not merely a veto mechanism;
+		// comparing against the pre-filter value would misreport a legitimate site-level title
+		// transform as a write failure.
+		$persisted       = get_option( $method->get_instance_option_key(), array() );
+		$persisted_title = is_array( $persisted ) && array_key_exists( 'title', $persisted ) ? (string) $persisted['title'] : null;
+		$expected_title  = array_key_exists( 'title', $instance_settings ) ? (string) $instance_settings['title'] : $title;
+		if ( $persisted_title !== $expected_title ) {
+			// `enabled` (if present in this request) is written strictly before this point and
+			// already returned on its own failure above, so reaching here means any `enabled`
+			// write in THIS request genuinely persisted - the message must not claim otherwise.
+			return new \WP_Error(
+				'aafm_wc_shipping_title_write_failed',
+				array_key_exists( 'enabled', $input )
+					? __( 'The method title could not be saved, but the enabled state was already updated. Read the shipping method to see its current state.', 'agent-abilities-for-mcp' )
+					: __( 'The method title could not be saved. Nothing on the shipping method was changed.', 'agent-abilities-for-mcp' )
+			);
+		}
 	}
 
 	// Re-resolve from the zone so the returned shape reflects what was just persisted. Every write

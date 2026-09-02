@@ -1013,7 +1013,15 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 	// every real attribute the variation had is cleared, so the variation ends up reading "Any" on
 	// everything while the response reports success.
 	if ( array_key_exists( 'attributes', $input ) ) {
-		$parent = aafm_wc_get_product( (int) $variation->get_parent_id() );
+		// 1.7.2 finding 1: 'edit' context, not the default 'view'. The variation's parent is
+		// resolved here to VALIDATE and APPLY the attribute write against - the same identity-
+		// sensitive use as the delete path's cache-bust parent id below, which already reads
+		// 'edit' for exactly this reason (WC_Data::get_prop() runs the
+		// woocommerce_product_variation_get_parent_id display filter only in view context;
+		// WooCommerce's own clear_caches() reads get_parent_id( 'edit' ) too). Reading the
+		// default view-context id here would validate and apply the write against whatever a
+		// display filter substitutes rather than the real parent.
+		$parent = aafm_wc_get_product( (int) $variation->get_parent_id( 'edit' ) );
 		// An unresolvable parent used to fall through to the setters, on the reasoning that there
 		// was nothing to validate against. That reads the wrong way round: the field's schema
 		// promises every key already exists on the parent and is enabled for variations, so with no
@@ -1168,6 +1176,19 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	if ( null === $variation ) {
 		return aafm_generic_error();
 	}
+	// Captured before delete(): WC_Data::delete() zeroes the deleted object's OWN id
+	// ($this->set_id(0)) but leaves its other in-memory properties, including parent_id, alone -
+	// still safer to read it before the delete call than to rely on that.
+	//
+	// 1.7.2 defect 1: read in 'edit' context, not the default 'view'. WC_Data::get_prop() runs a
+	// display filter (woocommerce_product_variation_get_parent_id) only in view context, so the
+	// default read can be substituted by an extension. The whole point of this parent-cache bust
+	// is to invalidate the REAL parent's stale price/stock range, so it has to bust the real
+	// (edit-context) parent - the same context WooCommerce core's own clear_caches() reads.
+	// Busting whatever a view filter substitutes instead would silently reintroduce the very bug
+	// this block exists to fix.
+	$parent_id = (int) $variation->get_parent_id( 'edit' );
+
 	$variation->delete( true );
 
 	// WC_Data::delete() returns true whenever a data store exists, and a loaded variation always has
@@ -1186,6 +1207,46 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	clean_post_cache( $id );
 	if ( $variation->get_id() > 0 || get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
+	}
+
+	// 1.7.2 bug #2 (delete-only, see WooVariationsTest for the scope reasoning): unlike
+	// WC_Product_Data_Store_CPT::create()/update(), ::delete() never calls clear_caches() on the
+	// parent, so none of the parent-facing cache busts it does for free on save happen on a
+	// variation delete. Left alone, the parent keeps answering with a stale price/stock range
+	// (min/max variation price, "in stock" rollup) until something else happens to bust it. Bust
+	// it here, only once the delete above is confirmed - mirroring the PARENT-facing portion of
+	// clear_caches() (WC 11.0.1, class-wc-product-data-store-cpt.php:1159-1180) as closely as
+	// this executor can without calling a protected data-store method directly.
+	if ( $parent_id > 0 ) {
+		if ( function_exists( 'wc_delete_product_transients' ) ) {
+			wc_delete_product_transients( $parent_id );
+		}
+		if ( class_exists( '\WC_Cache_Helper' ) ) {
+			\WC_Cache_Helper::invalidate_cache_group( 'product_' . $parent_id );
+		}
+		// Guarded, feature-flagged parity with clear_caches()'s object-cache branch: only
+		// reached when the site has WooCommerce's product_instance_caching feature enabled
+		// (experimental, off by default as of WC 11.0.1). Every other site is fully covered by
+		// the transient + cache-group busts above; this branch is defensive best-effort parity,
+		// not a load-bearing part of the fix, and a container-resolution failure here must never
+		// fail a delete that has already succeeded.
+		if ( class_exists( '\Automattic\WooCommerce\Utilities\FeaturesUtil' )
+			&& function_exists( 'wc_get_container' )
+			&& \Automattic\WooCommerce\Utilities\FeaturesUtil::feature_is_enabled( 'product_instance_caching' )
+		) {
+			try {
+				// A string literal, not ::class, on purpose: the namespace this resolves is not
+				// present in this codebase's static-analysis stubs (guarded, WC-internal, and
+				// off by default - see the block comment above), so a bare class-constant
+				// reference to it is unresolvable to PHPStan even though the class_exists() guard
+				// above makes it safe at runtime. wc_get_container()->get() takes a string id, so
+				// this is functionally identical to the class-constant form.
+				$product_cache = wc_get_container()->get( 'Automattic\WooCommerce\Internal\Caches\ProductCache' );
+				$product_cache->remove( $parent_id );
+			} catch ( \Throwable $e ) {
+				unset( $e );
+			}
+		}
 	}
 
 	return array(

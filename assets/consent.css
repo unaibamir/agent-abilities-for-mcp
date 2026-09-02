@@ -41,6 +41,8 @@ h1 strong{font-weight:700;}
 .avatar{width:46px; height:46px; border-radius:11px; flex:0 0 auto; display:grid; place-items:center; border:1px solid var(--border); background:var(--surface-2);}
 .avatar.client{background:#0B1020; border-color:#0B1020;}
 .avatar.site{background:var(--accent-soft); border-color:#cfe3f3; color:var(--accent); font-weight:700; font-size:17px;}
+.avatar.site.has-icon{background:#fff; overflow:hidden;}
+.avatar.site img{width:100%; height:100%; object-fit:cover; border-radius:10px; display:block;}
 .flow{display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--text-muted);}
 .flow svg{display:block;}
 .flow span{font-size:10px; letter-spacing:.05em; text-transform:uppercase; font-weight:600;}

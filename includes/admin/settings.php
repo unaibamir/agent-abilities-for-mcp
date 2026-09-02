@@ -246,6 +246,8 @@ function aafm_config_option_names(): array {
 		'aafm_block_guard_strict',
 		'aafm_oauth_enabled',
 		'aafm_oauth_dcr_enabled',
+		'aafm_oauth_access_ttl',
+		'aafm_oauth_refresh_ttl',
 		'aafm_ip_allowlist',
 		'aafm_denied_meta_keys',
 		'aafm_exposed_user_meta_keys',
@@ -274,6 +276,15 @@ function aafm_config_option_names(): array {
 		// reset returns the site to out-of-the-box, and out of the box the mode is off. Nothing is
 		// exposed by that on its own, because a reset also clears every enabled ability.
 		'aafm_read_only_mode',
+		// Derived state, not user config: the set of abilities the registration-time preflight left
+		// out of the server (schema over the bounds, or over the tool cap). It is regenerated on the
+		// next MCP request, so clearing it here is safe and correct - a reset wipes the enabled set
+		// that produced any breach, and a delete-data uninstall must not leak the row. Listed here
+		// (rather than deleted ad hoc) so it travels with the canonical cleanup like every sibling.
+		// The literal is AAFM_OMITTED_ABILITIES_OPTION (includes/server.php); it is spelled out here
+		// because uninstall.php loads this file but NOT server.php, so the constant is not defined in
+		// the uninstall context. A drift guard in OmittedAbilitiesPreflightTest keeps the two in step.
+		'aafm_omitted_abilities',
 	);
 }
 

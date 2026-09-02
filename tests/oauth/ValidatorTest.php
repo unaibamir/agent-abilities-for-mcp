@@ -295,6 +295,36 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * Transport visibility: the HTTPS-required plain-http bail used to be silent. A real aafm_oat_
+	 * bearer presented over http now leaves one bounded (transport) denied row so the failure is
+	 * traceable, while the auth decision itself (no user resolved) is unchanged.
+	 */
+	public function test_plain_http_bail_writes_a_transport_row(): void {
+		if ( ! aafm_oauth_https_required() ) {
+			$this->markTestSkipped( 'HTTPS is not required in this environment; the plain-http gate cannot be exercised.' );
+		}
+
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		unset( $_SERVER['HTTPS'] );
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
+
+		$row = $this->latest_activity_row();
+		$this->assertNotNull( $row, 'The HTTPS-scheme bail must write a transport row instead of staying invisible.' );
+		$this->assertSame( '(transport)', $row['ability'] );
+		$this->assertSame( 'denied', $row['status'] );
+		$this->assertSame( 'Bearer token presented over insecure HTTP', $row['detail'] );
+	}
+
+	/**
 	 * T1-8: deactivating a client invalidates its live access tokens - a bearer whose owning
 	 * client is disabled no longer resolves a user, even on the MCP route.
 	 */

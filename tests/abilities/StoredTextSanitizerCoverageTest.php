@@ -225,9 +225,8 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 				'sanitize_text_field( wp_unslash( $_GET[\'aafm_oauth\'] ) )',
 				'sanitize_text_field( wp_unslash( $_POST[\'_wpnonce\'] ) )',
 				'sanitize_text_field( wp_unslash( $_POST[\'aafm_oauth_decision\'] ) )',
-				'sanitize_text_field( wp_unslash( $_SERVER[\'REQUEST_URI\'] ) )',
 			),
-			'reason' => 'The request-shaped reads around the consent POST: the ?aafm_oauth marker, REQUEST_URI, the _wpnonce, and the approve/deny decision. All four are compared against known values within the request and none is persisted. The client_name, which IS stored and rendered on this very screen, uses the helper.',
+			'reason' => 'The request-shaped reads around the consent POST: the ?aafm_oauth marker, the _wpnonce, and the approve/deny decision. All three are compared against known values within the request and none is persisted. The client_name, which IS stored and rendered on this very screen, uses the helper. REQUEST_URI used to be sanitized here too, but 1.7.2 bug #9 moved it to esc_url_raw() (below), since it is reused as a URL, not compared as plain text, and sanitize_text_field() was silently stripping its percent-encoded octets.',
 		),
 		'includes/oauth/authorize.php::aafm_oauth_read_authorize_params::sanitize_text_field' => array(
 			'calls'  => array(

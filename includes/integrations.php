@@ -207,7 +207,7 @@ function aafm_perm_seo_get_head_floor(): bool {
  * is neither scalar nor array (objects, resources) is dropped. So script payloads cannot survive at
  * any level.
  *
- * Recursion is depth-bounded (default 32 levels via AAFM_SCHEMA_MAX_DEPTH): a nested array deeper
+ * Recursion is depth-bounded (default 30 levels via AAFM_SCHEMA_MAX_DEPTH): a nested array deeper
  * than the limit is dropped rather than recursed into, so a maliciously or accidentally deep
  * payload cannot exhaust the stack. Real JSON-LD graphs are only a handful of levels deep, so the
  * bound never clips legitimate input.
@@ -217,10 +217,6 @@ function aafm_perm_seo_get_head_floor(): bool {
  * @return array<int|string,mixed>
  */
 function aafm_sanitize_schema_array( array $schema, int $depth = 0 ): array {
-	if ( ! defined( 'AAFM_SCHEMA_MAX_DEPTH' ) ) {
-		define( 'AAFM_SCHEMA_MAX_DEPTH', 32 );
-	}
-
 	$url_keys = array( 'url', 'image', 'logo', 'sameas', '@id', 'contenturl', 'thumbnailurl' );
 	$clean    = array();
 	foreach ( $schema as $key => $value ) {

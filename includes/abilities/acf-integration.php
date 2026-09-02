@@ -1668,7 +1668,8 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		);
 	}
 
-	$failed = array();
+	$failed    = array();
+	$persisted = array();
 	foreach ( $cleaned as $field_key => $entry ) {
 		$def   = $entry['def'];
 		$clean = $entry['value'];
@@ -1720,15 +1721,63 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 			$as_sent  = wp_json_encode( aafm_acf_canonicalize_for_compare( $expected ) );
 			if ( $as_read !== $as_sent ) {
 				$failed[] = (string) $field_key;
+			} else {
+				$persisted[] = (string) $field_key;
 			}
+		} else {
+			// No get_field() to verify against (should not happen while ACF is active - defence
+			// in depth only). Nothing contradicts the write, so count it as persisted, matching
+			// this branch's pre-existing behaviour of never adding to $failed either.
+			$persisted[] = (string) $field_key;
 		}
 	}
 
 	if ( array() !== $failed ) {
-		return aafm_generic_error(); // At least one field did not persist; the write as a whole failed.
+		return aafm_acf_write_failed_error( $persisted, $failed );
 	}
 
 	return aafm_acf_read_fields( $selector );
+}
+
+/**
+ * The refusal for an ACF multi-field write where at least one field failed to persist, naming
+ * which fields actually landed and which did not. Mirrors
+ * aafm_wc_gateway_write_failed_error() (woocommerce/gateways.php) so a caller retrying a
+ * partial write can act on structured error data instead of re-reading the whole object to
+ * discover what already changed.
+ *
+ * @param array<int,string> $persisted Field keys/names confirmed persisted.
+ * @param array<int,string> $failed    Field keys/names that did not persist.
+ * @return WP_Error
+ */
+function aafm_acf_write_failed_error( array $persisted, array $failed ): WP_Error {
+	$data = array(
+		'persisted' => $persisted,
+		'failed'    => $failed,
+	);
+
+	if ( array() === $persisted ) {
+		return new WP_Error(
+			'aafm_acf_write_failed',
+			sprintf(
+				/* translators: %s: comma-separated list of ACF field addresses that failed to persist. */
+				__( 'None of the requested fields could be saved (%s failed to persist). Nothing was changed.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $failed )
+			),
+			$data
+		);
+	}
+
+	return new WP_Error(
+		'aafm_acf_write_failed',
+		sprintf(
+			/* translators: 1: comma-separated fields that saved, 2: comma-separated fields that failed. */
+			__( 'Only part of the field update persisted: %1$s saved, but %2$s failed. Read the fields to see their current state.', 'agent-abilities-for-mcp' ),
+			implode( ', ', $persisted ),
+			implode( ', ', $failed )
+		),
+		$data
+	);
 }
 
 /**

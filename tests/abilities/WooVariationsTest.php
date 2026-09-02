@@ -24,6 +24,23 @@ final class WooVariationsTest extends TestCase {
 
 	use IntegrationStubs;
 
+	/**
+	 * Recording sink for the wc_delete_product_transients() test spy (bug #2). A plain array on the
+	 * test class, since the eval'd spy function needs a stable, reachable place to record into.
+	 *
+	 * @var array<int,int>
+	 */
+	public static array $transient_bust_calls = array();
+
+	/**
+	 * Recording sink for the WC_Cache_Helper::invalidate_cache_group() test spy (bug #2). Same
+	 * eval'd-stand-in pattern as $transient_bust_calls, but for a class rather than a function,
+	 * since real WooCommerce classes are not loaded in this unit test environment.
+	 *
+	 * @var array<int,string>
+	 */
+	public static array $cache_group_invalidate_calls = array();
+
 	public function set_up(): void {
 		parent::set_up();
 		aafm_install_activity_log();
@@ -1265,6 +1282,118 @@ final class WooVariationsTest extends TestCase {
 		$this->assertSame( 601, $res['id'] );
 	}
 
+	/**
+	 * 1.7.2 bug #2: a variation DELETE never busts the parent's own cache.
+	 *
+	 * WooCommerce's own product data store calls wc_delete_product_transients( $parent_id ) (plus a
+	 * product-cache-group invalidation) from clear_caches(), which its create()/update() methods both
+	 * call synchronously - already correct for those two writes. Its delete() method, read directly
+	 * from WooCommerce 11.0.1's class-wc-product-data-store-cpt.php, never calls clear_caches() at
+	 * all. So a parent variable product's price-range transient and object cache outlive a variation
+	 * delete, and the next read of the parent can answer with a stale price/stock range that still
+	 * includes the variation that was just removed - a silent-wrong-answer, not merely cosmetic.
+	 *
+	 * Scope: delete-only. create/update are unaffected (verified against WC 11.0.1 source), so this
+	 * plugin needs no change there.
+	 *
+	 * Real WooCommerce is not loaded in this test environment - WcStubStore is a plain array with no
+	 * cache layer of its own to go stale - so this pins the CONTRACT the fix must satisfy directly: the
+	 * delete exec must itself bust the parent's cache the way WC's own create/update path already does
+	 * for free, using WooCommerce's own dedicated helper for exactly this (the same one clear_caches()
+	 * calls). A test-only spy stands in for that vendor function, which this environment never loads.
+	 *
+	 * RED against the current code: aafm_exec_wc_delete_product_variation() calls
+	 * $variation->delete( true ) and clean_post_cache( $id ) for the variation's OWN id, but never
+	 * touches the PARENT's cache at all - the spy is never called.
+	 */
+	public function test_delete_variation_busts_the_parent_product_cache(): void {
+		if ( ! function_exists( 'wc_delete_product_transients' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- test-only spy standing in for a WC helper this environment never loads; never shipped.
+			eval( 'function wc_delete_product_transients( $post_id = 0 ) { \AAFM\Tests\Abilities\WooVariationsTest::$transient_bust_calls[] = (int) $post_id; }' );
+		}
+		if ( ! class_exists( 'WC_Cache_Helper' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- test-only spy standing in for a WC helper this environment never loads; never shipped.
+			eval( 'class WC_Cache_Helper { public static function invalidate_cache_group( $group ) { \AAFM\Tests\Abilities\WooVariationsTest::$cache_group_invalidate_calls[] = (string) $group; } }' );
+		}
+		self::$transient_bust_calls         = array();
+		self::$cache_group_invalidate_calls = array();
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-delete-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$this->assertContains(
+			500,
+			self::$transient_bust_calls,
+			"Deleting a variation must bust the parent product's cache/transients (parent id 500), the same way WooCommerce's own create/update path already does for free - otherwise the parent keeps answering with a stale price/stock range."
+		);
+		$this->assertContains(
+			'product_500',
+			self::$cache_group_invalidate_calls,
+			"Deleting a variation must also invalidate the parent's product cache GROUP (WC_Cache_Helper::invalidate_cache_group), the same way WooCommerce's own create/update path does via clear_caches() - a transient bust alone does not cover a persistent object cache."
+		);
+	}
+
+	/**
+	 * 1.7.2 defect 1 (found on review of the bug #2 fix above): reading the parent id in the
+	 * DEFAULT 'view' context runs the woocommerce_product_variation_get_parent_id filter. If an
+	 * extension filters the displayed parent id, the fix busts the WRONG parent's cache and the
+	 * real parent (601's actual owner, 500) keeps answering with the stale price/stock range this
+	 * whole fix exists to prevent - reintroducing the original bug through a filtered read.
+	 * WooCommerce core's own clear_caches() reads get_parent_id( 'edit' ) for exactly this reason.
+	 *
+	 * RED against the unfixed exec: $variation->get_parent_id() (no context) applies the filter
+	 * below, so the transient/cache-group busts land on the filtered id (999999) and never touch
+	 * the real parent, 500.
+	 */
+	public function test_delete_variation_busts_the_real_parent_cache_even_when_a_filter_changes_the_displayed_parent_id(): void {
+		if ( ! function_exists( 'wc_delete_product_transients' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- test-only spy standing in for a WC helper this environment never loads; never shipped.
+			eval( 'function wc_delete_product_transients( $post_id = 0 ) { \AAFM\Tests\Abilities\WooVariationsTest::$transient_bust_calls[] = (int) $post_id; }' );
+		}
+		if ( ! class_exists( 'WC_Cache_Helper' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- test-only spy standing in for a WC helper this environment never loads; never shipped.
+			eval( 'class WC_Cache_Helper { public static function invalidate_cache_group( $group ) { \AAFM\Tests\Abilities\WooVariationsTest::$cache_group_invalidate_calls[] = (string) $group; } }' );
+		}
+		self::$transient_bust_calls         = array();
+		self::$cache_group_invalidate_calls = array();
+
+		// Variation 601's real (edit-context) parent is 500. A third-party filter that substitutes
+		// a different id for the VIEW-context read (as a translation/multi-vendor plugin might)
+		// must never steer which parent's cache gets busted.
+		add_filter(
+			'woocommerce_product_variation_get_parent_id',
+			static function () {
+				return 999999;
+			}
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-delete-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$this->assertContains(
+			500,
+			self::$transient_bust_calls,
+			"The REAL parent (500, read in 'edit' context) must have its transients busted, regardless of what a view-context filter substitutes."
+		);
+		$this->assertNotContains(
+			999999,
+			self::$transient_bust_calls,
+			'A view-context parent-id filter must never redirect the cache bust to a different, filtered id.'
+		);
+		$this->assertContains(
+			'product_500',
+			self::$cache_group_invalidate_calls,
+			"The REAL parent's cache group (product_500) must be invalidated, regardless of the view-context filter."
+		);
+		$this->assertNotContains(
+			'product_999999',
+			self::$cache_group_invalidate_calls,
+			'A view-context parent-id filter must never redirect the cache-group invalidation to a different, filtered id.'
+		);
+	}
+
 	public function test_delete_variation_is_annotated_destructive(): void {
 		$annotations = wp_get_ability( 'aafm/wc-delete-product-variation' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $annotations['destructive'] ?? false, 'wc-delete-product-variation must be destructive.' );
@@ -1507,6 +1636,52 @@ final class WooVariationsTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result, 'An orphaned variation must not accept an attribute write.' );
+	}
+
+	/**
+	 * 1.7.2 finding 1 (Codex re-review, same bug class as the delete-path fix above): the
+	 * update-attributes path resolved the variation's parent for attribute VALIDATION via
+	 * $variation->get_parent_id() in the DEFAULT 'view' context. A
+	 * woocommerce_product_variation_get_parent_id filter substituting a different id for that
+	 * VIEW-context read must never steer which product the write is validated and applied
+	 * against - WooCommerce core's own clear_caches() reads get_parent_id( 'edit' ) for exactly
+	 * this reason, and the sibling delete-path fix (above) already reads 'edit' context too.
+	 *
+	 * RED against the unfixed exec: $variation->get_parent_id() (no context) resolves to the
+	 * filtered id (999999, which does not exist), so aafm_wc_get_product() returns null and the
+	 * write is wrongly REFUSED even though variation 601's real parent (500, edit context)
+	 * legitimately declares pa_color as a variation attribute. Fixed, the write reads the real
+	 * parent (500) and succeeds.
+	 */
+	public function test_update_variation_attributes_validates_against_the_real_parent_even_when_a_filter_changes_the_displayed_parent_id(): void {
+		// Variation 601's real (edit-context) parent is 500. A third-party filter that
+		// substitutes a different id for the VIEW-context read (as a translation/multi-vendor
+		// plugin might) must never steer which parent the attribute write is validated against.
+		add_filter(
+			'woocommerce_product_variation_get_parent_id',
+			static function () {
+				return 999999;
+			}
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'attributes'   => array( 'pa_color' => 'blue' ),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			"The attribute write must validate against the REAL parent (500, read in 'edit' context), not a view-context filtered id (999999) that resolves to no product at all."
+		);
+		$this->assertSame(
+			'blue',
+			( (array) $res['attributes'] )['pa_color'] ?? null,
+			'The write must actually apply against the real parent, not merely avoid an error.'
+		);
 	}
 
 	/**

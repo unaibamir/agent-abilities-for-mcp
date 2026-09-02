@@ -58,6 +58,124 @@ function aafm_oauth_site_initials( string $site_name ): string {
 }
 
 /**
+ * Whether a Site Icon URL is served from this site's own origin.
+ *
+ * The consent page renders under a strict CSP whose img-src is `'self' data:` only, so an
+ * off-origin Site Icon (WordPress can hand back a CDN/offload URL from get_site_icon_url()) is
+ * silently blocked by the browser and the avatar renders empty. Rather than widen the CSP to
+ * trust an arbitrary host, the caller falls back to the derived initials whenever the icon is not
+ * same-origin. A URL that fails to parse a host, or whose host differs from the site host, is
+ * treated as off-origin (fail closed to the initials).
+ *
+ * @param string $icon_url The Site Icon URL from get_site_icon_url().
+ * @return bool True only when the icon host equals the site host.
+ */
+function aafm_oauth_site_icon_is_same_origin( string $icon_url ): bool {
+	if ( '' === $icon_url ) {
+		return false;
+	}
+	$icon_host = wp_parse_url( $icon_url, PHP_URL_HOST );
+	if ( ! is_string( $icon_host ) || '' === $icon_host ) {
+		return false;
+	}
+	$site_host = wp_parse_url( home_url(), PHP_URL_HOST );
+	return is_string( $site_host ) && '' !== $site_host && strtolower( $icon_host ) === strtolower( $site_host );
+}
+
+/**
+ * Return the connecting client's brand icon as an inline SVG, matched to the connector.
+ *
+ * The consent screen's client avatar sits on a dark (#0B1020) tile, so every mark below
+ * is filled in a colour that reads on dark. Vendor brand marks are used with the operator's
+ * explicit approval; each is a static, kses-safe primitive (path/line/polygon), no external
+ * fetch. An unrecognised connector gets a neutral plug glyph - never a decorative star, which
+ * would imply a rating or a "featured" status the plugin never confers.
+ *
+ * SECURITY: the vendor is chosen SOLELY from the redirect host, matched with an exact,
+ * boundary-checked suffix against a small allowlist of each vendor's real fixed domains - never
+ * from the client-supplied display name, and never with a loose substring. Dynamic client
+ * registration lets a self-registered app pick any display name it likes AND register any
+ * redirect host it can actually receive the authorization code at; the display name is therefore
+ * pure attacker input, and a loose host substring (the old `strpos()` match) would let
+ * `evil-openai.com` or `claude.ai.attacker.com` steal a trusted vendor logo and defeat the
+ * "Unverified app" warning. Matching only the host, and only against the exact real domains an
+ * impostor cannot receive a code at, closes that. Any host not on the allowlist renders the
+ * neutral plug glyph; real vendors still get their icon.
+ *
+ * Every icon carries a `conn-<vendor>` class so the choice is assertable in tests and survives
+ * the SVG kses pass (class is allowlisted on <svg>).
+ *
+ * @param string $client_name   The client's self-declared display name (deliberately UNUSED for
+ *                              vendor selection - see the security note above).
+ * @param string $redirect_host The host portion of the client's redirect URI.
+ * @return string Inline SVG markup (run it through aafm_svg_allowed_html() on output).
+ */
+function aafm_oauth_connector_icon( string $client_name, string $redirect_host ): string {
+	unset( $client_name ); // Vendor selection is by verified host ONLY; the display name is attacker-controlled.
+
+	// Normalise the host: lowercase, and strip any explicit :port suffix so a defensive
+	// "host:443" cannot slip past the exact-match allowlist. A real vendor never carries a port.
+	$host = strtolower( trim( $redirect_host ) );
+	$host = (string) preg_replace( '/:\d+$/', '', $host );
+
+	// Exact host, or a genuine subdomain of it (boundary-checked with a leading dot so
+	// `evilclaude.ai` does NOT match `claude.ai` while `foo.claude.ai` does). No substring match.
+	$host_is = static function ( string $host, array $domains ): bool {
+		foreach ( $domains as $domain ) {
+			if ( $host === $domain ) {
+				return true;
+			}
+			$suffix = '.' . $domain;
+			if ( strlen( $host ) > strlen( $suffix ) && substr( $host, -strlen( $suffix ) ) === $suffix ) {
+				return true;
+			}
+		}
+		return false;
+	};
+
+	// Claude / Anthropic - the Anthropic radial burst, in the brand clay.
+	if ( $host_is( $host, array( 'claude.ai', 'claude.com', 'anthropic.com' ) ) ) {
+		return '<svg class="conn-icon conn-claude" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">'
+			. '<g stroke="#D97757" stroke-width="1.9" stroke-linecap="round">'
+			. '<line x1="12" y1="2.5" x2="12" y2="9.4"/><line x1="12" y1="14.6" x2="12" y2="21.5"/>'
+			. '<line x1="2.5" y1="12" x2="9.4" y2="12"/><line x1="14.6" y1="12" x2="21.5" y2="12"/>'
+			. '<line x1="5.28" y1="5.28" x2="10.16" y2="10.16"/><line x1="13.84" y1="13.84" x2="18.72" y2="18.72"/>'
+			. '<line x1="5.28" y1="18.72" x2="10.16" y2="13.84"/><line x1="13.84" y1="10.16" x2="18.72" y2="5.28"/>'
+			. '</g></svg>';
+	}
+
+	// ChatGPT / OpenAI - the official OpenAI knot mark (single path), in white for the dark tile.
+	if ( $host_is( $host, array( 'chatgpt.com', 'openai.com' ) ) ) {
+		return '<svg class="conn-icon conn-openai" width="25" height="25" viewBox="0 0 24 24" aria-hidden="true">'
+			. '<path fill="#ffffff" d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7476-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997z"/>'
+			. '</svg>';
+	}
+
+	// Cursor - the isometric cube, three white faces at descending opacity (its layered look).
+	if ( $host_is( $host, array( 'cursor.com', 'cursor.sh' ) ) ) {
+		return '<svg class="conn-icon conn-cursor" width="25" height="25" viewBox="0 0 24 24" aria-hidden="true">'
+			. '<polygon points="12,3 20.5,7.5 12,12 3.5,7.5" fill="#ffffff" opacity=".95"/>'
+			. '<polygon points="3.5,7.5 12,12 12,21 3.5,16.5" fill="#ffffff" opacity=".55"/>'
+			. '<polygon points="20.5,7.5 12,12 12,21 20.5,16.5" fill="#ffffff" opacity=".75"/>'
+			. '</svg>';
+	}
+
+	// VS Code - the official ribbon mark (single path), in the VS Code blue.
+	if ( $host_is( $host, array( 'vscode.dev', 'visualstudio.com' ) ) ) {
+		return '<svg class="conn-icon conn-vscode" width="25" height="25" viewBox="0 0 24 24" aria-hidden="true">'
+			. '<path fill="#2AA2E8" d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448z"/>'
+			. '</svg>';
+	}
+
+	// Unknown connector - a neutral plug glyph (two prongs, body, cord). Not a star.
+	return '<svg class="conn-icon conn-generic" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+		. '<path d="M9 2v4M15 2v4" stroke="#B9C0CC" stroke-width="1.8" stroke-linecap="round"/>'
+		. '<path d="M7 6h10v3a5 5 0 0 1-10 0V6Z" stroke="#B9C0CC" stroke-width="1.8" stroke-linejoin="round"/>'
+		. '<path d="M12 14v6" stroke="#B9C0CC" stroke-width="1.8" stroke-linecap="round"/>'
+		. '</svg>';
+}
+
+/**
  * Render the OAuth consent page as a complete standalone HTML document.
  *
  * Echoes the full page (DOCTYPE through </html>). Every dynamic value is escaped at
@@ -111,23 +229,21 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	// outside wp-admin (custom headers + exit), so admin.css is never enqueued. The token
 	// values in that file stay in lockstep with includes/admin/assets/admin.css (:root).
 
-	// Static inline SVGs (no dynamic data). The hub mark is the plugin logo.
+	// Static inline SVGs (no dynamic data). The mark is the plugin's real brand logo: the blue
+	// shield + check (the favicon geometry from assets/wp-admin-icon.svg, white on the brand blue
+	// field). The .mark CSS supplies the rounded-square framing and drop shadow.
 	$mark_svg = '<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="' . esc_attr__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '">'
 		. '<defs>'
-		. '<radialGradient id="aGlow" cx="50%" cy="42%" r="55%"><stop offset="0%" stop-color="#9BC4FF"/><stop offset="55%" stop-color="#4F9DFF"/><stop offset="100%" stop-color="#2E6FD6"/></radialGradient>'
-		. '<linearGradient id="aLine" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6AA9FF"/><stop offset="100%" stop-color="#4F9DFF"/></linearGradient>'
+		. '<linearGradient id="aafmBrand" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4F9DFF"/><stop offset="100%" stop-color="#2E6FD6"/></linearGradient>'
 		. '</defs>'
-		. '<rect x="2" y="2" width="60" height="60" rx="16" fill="#0B1020"/>'
-		. '<rect x="2.5" y="2.5" width="59" height="59" rx="15.5" fill="none" stroke="#27345a" stroke-width="1"/>'
-		. '<g stroke="url(#aLine)" stroke-width="1.6" stroke-linecap="round" opacity=".85">'
-		. '<line x1="32" y1="32" x2="32" y2="13"/><line x1="32" y1="32" x2="49" y2="22"/><line x1="32" y1="32" x2="49" y2="44"/><line x1="32" y1="32" x2="16" y2="46"/><line x1="32" y1="32" x2="14" y2="26"/>'
+		. '<rect x="2" y="2" width="60" height="60" rx="16" fill="url(#aafmBrand)"/>'
+		. '<g transform="translate(8 8) scale(1.5)" fill="none" stroke="#ffffff">'
+		. '<path d="M16 5 7 8.4v6.9c0 5.4 3.7 9.6 9 11.2 5.3-1.6 9-5.8 9-11.2V8.4L16 5Z" stroke-width="1.9" stroke-linejoin="round"/>'
+		. '<path d="m11.6 15.6 3 3 6-6.4" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>'
 		. '</g>'
-		. '<g fill="#6AA9FF"><circle cx="32" cy="13" r="3"/><circle cx="49" cy="22" r="3"/><circle cx="49" cy="44" r="3"/><circle cx="16" cy="46" r="3"/><circle cx="14" cy="26" r="3"/></g>'
-		. '<circle cx="32" cy="32" r="8.5" fill="url(#aGlow)"/><circle cx="32" cy="32" r="3.4" fill="#EAF3FF"/>'
-		. '<path d="M36 36 L46 40 L41 41.5 L43.5 47 L41 48 L38.5 42.5 L35.5 46 Z" fill="#EAF3FF" stroke="#0B1020" stroke-width="1" stroke-linejoin="round"/>'
 		. '</svg>';
 
-	$client_glyph = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l1.9 5.4L19 9l-4.3 3.5L16 18l-4-3-4 3 1.3-5.5L5 9l5.1-.6z" fill="#6AA9FF"/></svg>';
+	$client_glyph = aafm_oauth_connector_icon( $client_name, $redirect_host );
 	$flow_svg     = '<svg width="28" height="14" viewBox="0 0 28 14" fill="none" aria-hidden="true"><path d="M1 7h22m0 0l-5-5m5 5l-5 5" stroke="#787c82" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 	$acting_icon  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="#996800" stroke-width="1.7"/><path d="M12 7.5v5.5M12 16.2v.1" stroke="#996800" stroke-width="1.9" stroke-linecap="round"/></svg>';
 	$dest_icon    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 11l18-8-8 18-2-8-8-2z" stroke="#8a2011" stroke-width="1.7" stroke-linejoin="round"/></svg>';
@@ -178,7 +294,19 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	echo '<div class="connect-row" aria-hidden="true">';
 	echo '<span class="avatar client">' . wp_kses( $client_glyph, aafm_svg_allowed_html() ) . '</span>';
 	echo '<span class="flow">' . wp_kses( $flow_svg, aafm_svg_allowed_html() ) . '<span>' . esc_html__( 'connect', 'agent-abilities-for-mcp' ) . '</span></span>';
-	echo '<span class="avatar site">' . esc_html( aafm_oauth_site_initials( $site_name ) ) . '</span>';
+	// Site avatar: the admin's uploaded Customizer Site Icon when one is set AND served from this
+	// site's own origin, else the derived initials. The Site Icon is emitted as a plain <img> (URL
+	// escaped with esc_url) rather than inlined as a data URI; the consent CSP widens img-src to
+	// 'self' data: for exactly this - a same-origin-only relaxation, no external host. But
+	// get_site_icon_url() can return an off-origin CDN/offload URL, which that CSP silently blocks,
+	// leaving the avatar empty - so an off-origin icon falls back to the initials rather than a
+	// broken image. The row is aria-hidden, so the image is decorative (alt="").
+	$site_icon_url = ( function_exists( 'has_site_icon' ) && has_site_icon() ) ? (string) get_site_icon_url( 96 ) : '';
+	if ( '' !== $site_icon_url && aafm_oauth_site_icon_is_same_origin( $site_icon_url ) ) {
+		echo '<span class="avatar site has-icon"><img src="' . esc_url( $site_icon_url ) . '" alt="" width="46" height="46" decoding="async"></span>';
+	} else {
+		echo '<span class="avatar site">' . esc_html( aafm_oauth_site_initials( $site_name ) ) . '</span>';
+	}
 	echo '</div>';
 
 	// Destination + unverified-app caution. The redirect host is the single most decision-relevant

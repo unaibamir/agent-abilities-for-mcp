@@ -941,7 +941,19 @@ class WC_Product_Variation {
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0, 'type' => 'variation' );
 	}
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
-	public function get_parent_id() { return (int) ( $this->data['parent_id'] ?? 0 ); }
+	// Context-aware, like the real getter. WC_Product_Variation::get_parent_id( $context = 'view' )
+	// goes through WC_Data::get_prop(), which runs the woocommerce_product_variation_get_parent_id
+	// filter in view context (the default) and skips it in edit. A stub that ignored the argument
+	// could not tell a caller reading the RAW stored parent apart from one reading whatever a
+	// display filter substitutes, so a regression that read the filtered value where it needed the
+	// raw one would pass against this stub either way (1.7.2 defect 1).
+	public function get_parent_id( $context = 'view' ) {
+		$value = (int) ( $this->data['parent_id'] ?? 0 );
+		if ( 'view' === $context ) {
+			$value = (int) apply_filters( 'woocommerce_product_variation_get_parent_id', $value, $this );
+		}
+		return $value;
+	}
 	public function get_type() { return 'variation'; }
 	public function get_status() { return (string) ( $this->data['status'] ?? 'publish' ); }
 	public function get_sku() { return (string) ( $this->data['sku'] ?? '' ); }

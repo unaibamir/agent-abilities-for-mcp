@@ -321,6 +321,23 @@ function aafm_bootstrap() {
 	// aafm_mcp_rest_route() - the first thing this filter calls - is defined.
 	add_filter( 'rest_post_dispatch', 'aafm_mcp_filter_governed_error_status', 10, 3 );
 
+	// Session-persistence guard: the adapter's SessionManager::create_session() returns a session id
+	// without checking its update_user_meta() write succeeded, so a silent write failure hands the
+	// client a valid-looking Mcp-Session-Id that its next request can't resolve (the "OAuth ok, then
+	// can't connect" field report). This verifies the just-issued session is actually in the user's
+	// store; when it is not, it strips the phantom header and rewrites the body to a JSON-RPC -32603 so
+	// the client gets an honest, retryable error. Priority 11 so it runs AFTER the transport's own
+	// priority-10 rest_post_dispatch closure has stamped the Mcp-Session-Id header, and registered
+	// BEFORE aafm_log_mcp_transport_outcome() (also priority 11) so the -32603 it produces is logged as
+	// a (transport) internal_error row.
+	add_filter( 'rest_post_dispatch', 'aafm_mcp_guard_unpersisted_session', 11, 3 );
+
+	// Transport-visibility logging: write one (transport) activity row for an MCP-route JSON-RPC
+	// error response, so a failed /mcp request is self-diagnosing (reached-WP-and-failed vs
+	// never-reached-WP). Pure observability - reads the response, changes no status. Priority 11 so
+	// it runs AFTER the governed-status rewrite above and records the final HTTP status the client sees.
+	add_filter( 'rest_post_dispatch', 'aafm_log_mcp_transport_outcome', 11, 3 );
+
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/pages.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/terms.php';
@@ -422,6 +439,7 @@ function aafm_bootstrap() {
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
+		add_action( 'admin_notices', 'aafm_notice_omitted_abilities' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}
 

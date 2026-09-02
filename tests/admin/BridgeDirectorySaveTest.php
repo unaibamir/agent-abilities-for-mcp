@@ -262,6 +262,26 @@ final class BridgeDirectorySaveTest extends TestCase {
 	}
 
 	/**
+	 * 1.7.2 bug #8: AIOSEO registers its abilities under FIVE real namespaces -
+	 * aioseo-posts / aioseo-settings / aioseo-notifications / aioseo-robots / aioseo-audit - none of
+	 * which is 'aioseo' or 'all-in-one-seo-pack', the only two keys
+	 * aafm_bridge_known_plugin_labels() carries. Every real AIOSEO namespace therefore falls through
+	 * to the generic Title Case transform, so the bridge directory shows five separate "Aioseo
+	 * Posts", "Aioseo Settings", etc. cards instead of one "All in One SEO" group, unlike every other
+	 * known plugin in this map.
+	 *
+	 * RED against the current code: each of the five resolves to a generic "Aioseo ..." Title Case
+	 * label instead of "All in One SEO".
+	 */
+	public function test_all_five_real_aioseo_namespaces_render_the_plugin_display_name(): void {
+		$this->assertSame( 'All in One SEO', aafm_bridge_display_label( 'aioseo-posts' ) );
+		$this->assertSame( 'All in One SEO', aafm_bridge_display_label( 'aioseo-settings' ) );
+		$this->assertSame( 'All in One SEO', aafm_bridge_display_label( 'aioseo-notifications' ) );
+		$this->assertSame( 'All in One SEO', aafm_bridge_display_label( 'aioseo-robots' ) );
+		$this->assertSame( 'All in One SEO', aafm_bridge_display_label( 'aioseo-audit' ) );
+	}
+
+	/**
 	 * Build a minimal synthetic bridge ability row for aafm_render_bridge_group(), bypassing real
 	 * Abilities API registration so the count-header tests below can control the exact risk mix.
 	 *

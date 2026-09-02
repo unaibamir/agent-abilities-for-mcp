@@ -456,6 +456,78 @@ final class RankMathTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'A type with disallowed characters must be refused.' );
 	}
 
+	/**
+	 * 1.7.2 bug #5: aafm_exec_rankmath_update_schema() writes with update_post_meta() and ignores its
+	 * return, then answers with the sanitized INPUT echoed straight back - never a read-back through
+	 * get_post_meta() the way every sibling writer (update-post, ACF, the AIOSEO/Yoast writers) does.
+	 * A filter that vetoes the postmeta write (update_post_metadata short-circuited to non-null, the
+	 * documented way a caching/compliance plugin blocks a meta write) leaves storage untouched, but
+	 * this ability still reports the schema it was ASKED to write as though it landed.
+	 *
+	 * RED against the current code: it returns $clean (the input) unconditionally, so the response
+	 * shows the vetoed schema as though it were persisted, and the request is not a WP_Error.
+	 */
+	public function test_rankmath_update_schema_read_back_catches_a_filter_vetoed_write(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+
+		// Short-circuit update_post_metadata so nothing is actually written - the documented way a
+		// caching/compliance plugin can silently veto a meta write while update_post_meta() itself
+		// still returns truthy.
+		$veto = static function () {
+			return true;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+
+		$res = wp_get_ability( 'aafm/rankmath-update-schema' )->execute(
+			array(
+				'post_id' => $post_id,
+				'type'    => 'Article',
+				'schema'  => array(
+					'@type' => 'Article',
+					'name'  => 'Vetoed',
+				),
+			)
+		);
+
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		// Precondition: the veto really did block the write.
+		$this->assertSame(
+			'',
+			get_post_meta( $post_id, 'rank_math_schema_Article', true ),
+			'precondition: the veto filter must have kept the schema meta unwritten.'
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A schema write that never persisted must be reported as failed, not answered with the sanitized input echoed back as though it were stored.'
+		);
+	}
+
+	/**
+	 * 1.7.2 bug #6: AAFM_SCHEMA_MAX_DEPTH has two declaration sites that disagree.
+	 * includes/bridge.php:60 declares `const AAFM_SCHEMA_MAX_DEPTH = 30;` (the value that actually
+	 * wins, since it loads first); includes/integrations.php:220 carries a dead
+	 * `define( 'AAFM_SCHEMA_MAX_DEPTH', 32 )` behind a defined() guard that never runs today, but
+	 * would fatal with "Cannot redefine constant" if load order ever flipped, and disagrees with the
+	 * constant's own doc comment either way.
+	 *
+	 * RED against the current source: the dead define() with the disagreeing literal (32) is still
+	 * present in integrations.php.
+	 */
+	public function test_schema_max_depth_has_no_duplicate_declaration_with_a_disagreeing_value(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading local plugin source off disk, never a remote URL.
+		$integrations_source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/integrations.php' );
+
+		$this->assertStringNotContainsString(
+			"AAFM_SCHEMA_MAX_DEPTH', 32",
+			$integrations_source,
+			"integrations.php must not carry a duplicate declaration of AAFM_SCHEMA_MAX_DEPTH whose literal (32) disagrees with bridge.php's authoritative const (30) - a latent redeclare-constant fatal if load order ever flips, and a doc/behavior mismatch either way."
+		);
+	}
+
 	public function test_rankmath_get_schema_denies_a_subscriber(): void {
 		$post_id = (int) self::factory()->post->create();
 		$this->acting_as( 'subscriber' );

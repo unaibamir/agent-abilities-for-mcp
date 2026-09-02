@@ -412,10 +412,13 @@ function aafm_args_delete_revision(): array {
 }
 
 /**
- * Permission for aafm/delete-revision: the SAME gate as restore - parent editable AND
- * the revision genuinely belongs to that parent. An agent that cannot edit the parent
- * cannot delete its revisions, and a revision_id that is not a child of the named
- * post_id is rejected.
+ * Permission for aafm/delete-revision: the parent must be EDITABLE (same base gate as restore)
+ * AND the caller must hold DELETE on the parent - WordPress core's own REST revisions
+ * controller requires delete_post to remove a revision, not merely edit_post, because deleting
+ * revision history is irreversible in a way restoring one is not. An agent that can edit a post
+ * but cannot delete it must not be able to wipe that post's revision history.
+ *
+ * The revision must also genuinely belong to the named post_id.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
@@ -424,8 +427,12 @@ function aafm_perm_delete_revision( array $input ): bool {
 	if ( ! aafm_revision_parent_editable( $input ) ) {
 		return false;
 	}
+	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post    = $post_id ? get_post( $post_id ) : null;
+	if ( ! $post instanceof WP_Post || ! aafm_can_delete_post_object( $post ) ) {
+		return false;
+	}
 	$revision_id = isset( $input['revision_id'] ) ? absint( $input['revision_id'] ) : 0;
-	$post_id     = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	return ! is_wp_error( aafm_validate_revision( $revision_id, $post_id ) );
 }
 

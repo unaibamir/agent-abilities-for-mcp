@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-02T18:54:43+05:00\n"
+"POT-Creation-Date: 2026-09-02T19:30:35+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -4594,7 +4594,7 @@ msgstr ""
 #: includes/admin/quickconnect.php:397
 #: includes/catalog.php:121
 #: includes/oauth/consent-template.php:235
-#: includes/server.php:1379
+#: includes/server.php:1386
 msgid "Agent Abilities for MCP"
 msgstr ""
 
@@ -6916,50 +6916,50 @@ msgid "The MCP request body must be a JSON object."
 msgstr ""
 
 #. translators: 1: ability name, 2: human-readable reason it was left out.
-#: includes/server.php:1279
+#: includes/server.php:1286
 #, php-format
 msgid "%1$s (%2$s)"
 msgstr ""
 
-#: includes/server.php:1287
+#: includes/server.php:1294
 msgid "Agent Abilities for MCP left one ability out of the agent tool list because it exceeded a safety limit:"
 msgid_plural "Agent Abilities for MCP left some abilities out of the agent tool list because they exceeded a safety limit:"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/server.php:1308
+#: includes/server.php:1315
 msgid "its schema is nested too deeply"
 msgstr ""
 
-#: includes/server.php:1310
+#: includes/server.php:1317
 msgid "its schema has too many fields"
 msgstr ""
 
-#: includes/server.php:1312
+#: includes/server.php:1319
 msgid "its schema contains a value that is not valid JSON"
 msgstr ""
 
-#: includes/server.php:1314
+#: includes/server.php:1321
 msgid "its schema is too large"
 msgstr ""
 
-#: includes/server.php:1316
+#: includes/server.php:1323
 msgid "its schema could not be serialized"
 msgstr ""
 
-#: includes/server.php:1318
+#: includes/server.php:1325
 msgid "the enabled tool limit was reached"
 msgstr ""
 
-#: includes/server.php:1320
+#: includes/server.php:1327
 msgid "it exceeded a safety limit"
 msgstr ""
 
-#: includes/server.php:1380
+#: includes/server.php:1387
 msgid "Curated, governed WordPress abilities for AI agents."
 msgstr ""
 
-#: includes/server.php:1624
+#: includes/server.php:1631
 msgid "Session could not be persisted; please retry."
 msgstr ""
 

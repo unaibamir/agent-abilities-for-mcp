@@ -21,18 +21,19 @@ namespace AAFM\Tests\OAuth;
 use AAFM\Tests\TestCase;
 
 /**
- * Covers preservation of an absent toggle row, non-clobbering of a seeded '0' and of
- * an explicit opt-out, per-key independence, and the once-only guard.
+ * Covers preservation of an absent OAuth toggle row (which carries DCR with it now),
+ * non-clobbering of a seeded '0' and of an explicit opt-out, and the once-only guard.
  */
 class UpgradeMigrationTest extends TestCase {
 
 	/**
-	 * An install that updated in place from a pre-1.3.0 version has NO stored toggle
-	 * row and was running OAuth on the old on-by-default reader. The migration writes
-	 * '1' for both toggles so the surface (and any live connection) keeps working
-	 * after the off-by-default change.
+	 * An install that updated in place from a pre-1.3.0 version has NO stored OAuth
+	 * toggle row and was running OAuth on the old on-by-default reader. The migration
+	 * writes '1' for OAuth so the surface (and any live connection) keeps working after
+	 * the off-by-default change. DCR now follows OAuth, so preserving OAuth on carries
+	 * DCR on with it - no separate DCR row is written.
 	 */
-	public function test_absent_rows_are_preserved_on(): void {
+	public function test_absent_oauth_row_is_preserved_on_and_dcr_follows(): void {
 		delete_option( 'aafm_oauth_toggle_migrated' );
 		delete_option( 'aafm_oauth_enabled' );
 		delete_option( 'aafm_oauth_dcr_enabled' );
@@ -40,43 +41,41 @@ class UpgradeMigrationTest extends TestCase {
 		aafm_oauth_preserve_toggle_on_upgrade();
 
 		$this->assertSame( '1', get_option( 'aafm_oauth_enabled' ) );
-		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
+		$this->assertFalse( get_option( 'aafm_oauth_dcr_enabled', false ), 'The migration no longer writes a DCR row.' );
 		$this->assertTrue( aafm_oauth_enabled() );
-		$this->assertTrue( aafm_oauth_dcr_enabled() );
+		$this->assertTrue( aafm_oauth_dcr_enabled(), 'DCR follows the preserved OAuth state.' );
 	}
 
 	/**
-	 * A fresh 1.3.0 install seeds an explicit '0' row at activation before this
-	 * migration ever runs, so the migration must leave those rows off - the
-	 * off-by-default default is only correct for genuinely new installs.
+	 * A fresh 1.3.0 install seeds an explicit '0' OAuth row at activation before this
+	 * migration ever runs, so the migration must leave it off - the off-by-default
+	 * default is only correct for genuinely new installs. DCR follows off.
 	 */
-	public function test_seeded_zero_rows_stay_off(): void {
+	public function test_seeded_zero_row_stays_off(): void {
 		delete_option( 'aafm_oauth_toggle_migrated' );
 		update_option( 'aafm_oauth_enabled', '0' );
-		update_option( 'aafm_oauth_dcr_enabled', '0' );
 
 		aafm_oauth_preserve_toggle_on_upgrade();
 
 		$this->assertSame( '0', get_option( 'aafm_oauth_enabled' ) );
-		$this->assertSame( '0', get_option( 'aafm_oauth_dcr_enabled' ) );
 		$this->assertFalse( aafm_oauth_enabled() );
 		$this->assertFalse( aafm_oauth_dcr_enabled() );
 	}
 
 	/**
-	 * Per-key independence: an operator who explicitly turned the main toggle off
-	 * ('0' stored) keeps it off, while a sibling toggle that was never stored is
-	 * still preserved on. An explicit opt-out is never clobbered.
+	 * An operator who explicitly turned OAuth off ('0' stored) keeps it off across the
+	 * migration, and DCR follows off - even if a stale legacy DCR row says otherwise,
+	 * because the helper no longer reads it. An explicit opt-out is never clobbered.
 	 */
-	public function test_explicit_optout_is_kept_while_absent_sibling_preserved(): void {
+	public function test_explicit_optout_is_kept_and_dcr_follows_off(): void {
 		delete_option( 'aafm_oauth_toggle_migrated' );
 		update_option( 'aafm_oauth_enabled', '0' );
-		delete_option( 'aafm_oauth_dcr_enabled' );
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
 
 		aafm_oauth_preserve_toggle_on_upgrade();
 
 		$this->assertSame( '0', get_option( 'aafm_oauth_enabled' ) );
-		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
+		$this->assertFalse( aafm_oauth_dcr_enabled(), 'DCR follows the OAuth opt-out; the legacy DCR row is ignored.' );
 	}
 
 	/**

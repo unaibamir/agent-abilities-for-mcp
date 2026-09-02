@@ -47,18 +47,32 @@ class DiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * The registration_endpoint key appears only when DCR is enabled: the route
-	 * 404s when it is off, so advertising the key then would point clients at a
-	 * dead endpoint.
+	 * DCR follows OAuth: registration_endpoint appears whenever OAuth is enabled and
+	 * disappears when OAuth is off (the route 404s then, so advertising a dead endpoint
+	 * would mislead clients). The legacy aafm_oauth_dcr_enabled option is no longer read;
+	 * the aafm_oauth_dcr_enabled filter is the one escape hatch that can force it closed
+	 * while OAuth stays on.
 	 */
-	public function test_registration_endpoint_present_only_when_dcr_enabled(): void {
-		update_option( 'aafm_oauth_dcr_enabled', '1' );
+	public function test_registration_endpoint_follows_oauth_and_the_filter(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
 		$meta = aafm_oauth_authorization_server_metadata();
 		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/register', $meta['registration_endpoint'] );
 
-		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		update_option( 'aafm_oauth_enabled', '0' );
 		$meta = aafm_oauth_authorization_server_metadata();
 		$this->assertArrayNotHasKey( 'registration_endpoint', $meta );
+
+		// A stale legacy DCR option does not resurrect the endpoint while OAuth is off.
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+		$meta = aafm_oauth_authorization_server_metadata();
+		$this->assertArrayNotHasKey( 'registration_endpoint', $meta, 'The legacy DCR option must not be read.' );
+
+		// Filter escape hatch: OAuth on, but an operator forces registration closed.
+		update_option( 'aafm_oauth_enabled', '1' );
+		add_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
+		$meta = aafm_oauth_authorization_server_metadata();
+		remove_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
+		$this->assertArrayNotHasKey( 'registration_endpoint', $meta, 'The filter must be able to force DCR off while OAuth is on.' );
 	}
 
 	/**
@@ -106,22 +120,26 @@ class DiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Both feature toggles default to DISABLED when their options are unset: the
-	 * public OAuth surface and open client registration are opt-in, never a
-	 * fresh-install default. A stored truthy row (an existing install, or an
-	 * operator opt-in) still reads on.
+	 * OAuth defaults to DISABLED when its option is unset: the public OAuth surface is
+	 * opt-in, never a fresh-install default. DCR follows OAuth rather than carrying its
+	 * own toggle, so it is off exactly when OAuth is off and on exactly when OAuth is on,
+	 * regardless of any stored legacy aafm_oauth_dcr_enabled value.
 	 */
-	public function test_toggles_default_to_disabled(): void {
+	public function test_oauth_defaults_off_and_dcr_follows_it(): void {
 		delete_option( 'aafm_oauth_enabled' );
 		delete_option( 'aafm_oauth_dcr_enabled' );
 
 		$this->assertFalse( aafm_oauth_enabled(), 'OAuth must be off by default on a fresh install.' );
-		$this->assertFalse( aafm_oauth_dcr_enabled(), 'DCR must be off by default on a fresh install.' );
+		$this->assertFalse( aafm_oauth_dcr_enabled(), 'DCR must be off when OAuth is off.' );
 
-		// An existing/opted-in install with a stored truthy row keeps working (non-breaking).
+		// Turning OAuth on turns DCR on in lockstep - no separate DCR option to set.
 		update_option( 'aafm_oauth_enabled', '1' );
-		update_option( 'aafm_oauth_dcr_enabled', '1' );
 		$this->assertTrue( aafm_oauth_enabled(), 'A stored 1 must read on (existing installs preserved).' );
-		$this->assertTrue( aafm_oauth_dcr_enabled(), 'A stored 1 must read on (existing installs preserved).' );
+		$this->assertTrue( aafm_oauth_dcr_enabled(), 'DCR follows OAuth: on when OAuth is on.' );
+
+		// A stored legacy DCR value cannot flip DCR against the OAuth state either way.
+		update_option( 'aafm_oauth_enabled', '0' );
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+		$this->assertFalse( aafm_oauth_dcr_enabled(), 'The legacy DCR option is ignored; DCR stays off while OAuth is off.' );
 	}
 }

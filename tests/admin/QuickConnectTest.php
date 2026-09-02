@@ -288,18 +288,18 @@ final class QuickConnectTest extends TestCase {
 	/**
 	 * Issue #90 - the wizard-only path used to leave a NON-connectable state.
 	 *
-	 * The wizard's connection step enables OAuth, but Dynamic Client Registration lives in a
-	 * SEPARATE option (aafm_oauth_dcr_enabled) that the wizard never touched, so it stayed off. A
-	 * user who set OAuth up entirely through the wizard - the wizard's whole purpose, since its copy
-	 * says this "is what lets ChatGPT, Claude, and Manus connect" - ended up with DCR silently
-	 * unavailable: the AS metadata omitted registration_endpoint and POST /register 404'd, which is
-	 * the DCR failure the issue reports. The wizard must leave a state a DCR client can connect to,
-	 * so enabling OAuth from the wizard now also enables DCR.
+	 * The wizard's connection step enables OAuth, but Dynamic Client Registration used to live in a
+	 * SEPARATE option the wizard never touched, so it stayed off. A user who set OAuth up entirely
+	 * through the wizard - the wizard's whole purpose, since its copy says this "is what lets ChatGPT,
+	 * Claude, and Manus connect" - ended up with DCR silently unavailable: the AS metadata omitted
+	 * registration_endpoint and POST /register 404'd, which is the DCR failure the issue reports. DCR
+	 * now follows OAuth, so enabling OAuth from the wizard makes registration effective with no
+	 * separate option to write.
 	 */
 	public function test_wizard_oauth_enable_also_enables_dcr_and_advertises_registration(): void {
 		$this->acting_as( 'administrator' );
 
-		$this->assertFalse( aafm_oauth_dcr_enabled(), 'Fixture: DCR starts off (off-by-default posture).' );
+		$this->assertFalse( aafm_oauth_dcr_enabled(), 'Fixture: DCR starts off (OAuth off, so DCR follows off).' );
 		$this->assertArrayNotHasKey(
 			'registration_endpoint',
 			aafm_oauth_authorization_server_metadata(),
@@ -311,9 +311,12 @@ final class QuickConnectTest extends TestCase {
 		$this->assertTrue( aafm_oauth_enabled(), 'The explicit connection action turns OAuth on.' );
 		$this->assertTrue(
 			aafm_oauth_dcr_enabled(),
-			'Enabling OAuth through the wizard must also enable DCR, or the wizard leaves a non-connectable state.'
+			'Enabling OAuth through the wizard must also make DCR effective, or the wizard leaves a non-connectable state.'
 		);
-		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ), 'The DCR option is persisted on, not merely reported on.' );
+		$this->assertFalse(
+			get_option( 'aafm_oauth_dcr_enabled', false ),
+			'DCR follows OAuth - the wizard no longer writes a separate DCR option.'
+		);
 
 		$meta = aafm_oauth_authorization_server_metadata();
 		$this->assertArrayHasKey(
@@ -368,9 +371,9 @@ final class QuickConnectTest extends TestCase {
 
 	/**
 	 * The wizard's connection step stays authoritative for both halves of the connection: turning
-	 * OAuth off again in the wizard also turns DCR off, so the wizard never leaves a stray
-	 * self-registration surface on without the OAuth server that backs it. The independent Settings
-	 * toggles are untouched by this and still let an advanced operator control DCR on their own.
+	 * OAuth off again in the wizard turns DCR off with it (DCR follows OAuth), so the wizard never
+	 * leaves a stray self-registration surface on without the OAuth server that backs it. An advanced
+	 * operator can still force DCR off while OAuth is on with the aafm_oauth_dcr_enabled filter.
 	 */
 	public function test_wizard_oauth_disable_also_disables_dcr(): void {
 		$this->acting_as( 'administrator' );

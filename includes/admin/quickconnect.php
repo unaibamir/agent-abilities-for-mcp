@@ -272,17 +272,14 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
  * never touches the option, so a new install keeps OAuth off until the operator actively proceeds -
  * the 1.3.0 off-by-default posture is preserved. Nonce + manage_options gated.
  *
- * Dynamic Client Registration is enabled in lockstep with OAuth here (issue #90). It is a separate
- * option (aafm_oauth_dcr_enabled), also off by default, and the wizard never surfaced it - so a
- * user who set OAuth up entirely through the wizard (the wizard's whole purpose: its copy says this
- * "is what lets ChatGPT, Claude, and Manus connect") ended up connectable in name only. Discovery
- * omitted registration_endpoint and POST /oauth/register 404'd, because both routes gate on DCR
- * being on, so a real MCP client that self-registers over DCR could never complete its first
- * connect. The wizard's job is to leave a state a client can actually connect to, so the same
- * explicit action that turns OAuth on turns DCR on, and turning the connection back off in the
- * wizard turns both off together - the wizard is authoritative for its own connection step and
- * never leaves a self-registration surface on without the OAuth server behind it. The independent
- * Settings-tab toggle is untouched, so an advanced operator can still control DCR on its own there.
+ * Dynamic Client Registration follows OAuth automatically (issue #90): aafm_oauth_dcr_enabled()
+ * now derives from the OAuth-enabled state, so turning OAuth on here makes self-registration
+ * effective in the same step, and turning the connection back off disables both together - with no
+ * separate DCR option to write. This is what leaves a state a real MCP client can actually connect
+ * to: before, a user who set OAuth up entirely through the wizard (its copy says this "is what lets
+ * ChatGPT, Claude, and Manus connect") ended up connectable in name only, because discovery omitted
+ * registration_endpoint and POST /oauth/register 404'd while the wizard never turned DCR on. The
+ * response still reports the derived DCR state so the UI can reflect it.
  *
  * @return void
  */
@@ -294,11 +291,11 @@ function aafm_ajax_quickconnect_oauth(): void {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$enabled = ! empty( $_POST['enabled'] ) ? '1' : '0';
 	update_option( 'aafm_oauth_enabled', $enabled );
-	update_option( 'aafm_oauth_dcr_enabled', $enabled );
 	wp_send_json_success(
 		array(
 			'aafm_oauth_enabled'     => $enabled,
-			'aafm_oauth_dcr_enabled' => $enabled,
+			// Derived from the OAuth state just written (DCR follows OAuth), not a separate option.
+			'aafm_oauth_dcr_enabled' => aafm_oauth_dcr_enabled() ? '1' : '0',
 		)
 	);
 }

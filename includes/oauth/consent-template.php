@@ -229,18 +229,13 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	// outside wp-admin (custom headers + exit), so admin.css is never enqueued. The token
 	// values in that file stay in lockstep with includes/admin/assets/admin.css (:root).
 
-	// Static inline SVGs (no dynamic data). The mark is the plugin's real brand logo: the blue
-	// shield + check (the favicon geometry from assets/wp-admin-icon.svg, white on the brand blue
-	// field). The .mark CSS supplies the rounded-square framing and drop shadow.
-	$mark_svg = '<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="' . esc_attr__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '">'
-		. '<defs>'
-		. '<linearGradient id="aafmBrand" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4F9DFF"/><stop offset="100%" stop-color="#2E6FD6"/></linearGradient>'
-		. '</defs>'
-		. '<rect x="2" y="2" width="60" height="60" rx="16" fill="url(#aafmBrand)"/>'
-		. '<g transform="translate(8 8) scale(1.5)" fill="none" stroke="#ffffff">'
-		. '<path d="M16 5 7 8.4v6.9c0 5.4 3.7 9.6 9 11.2 5.3-1.6 9-5.8 9-11.2V8.4L16 5Z" stroke-width="1.9" stroke-linejoin="round"/>'
-		. '<path d="m11.6 15.6 3 3 6-6.4" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>'
-		. '</g>'
+	// Static inline SVG (no dynamic data). The mark is the plugin's real brand logo, matching the
+	// site favicon exactly (agentabilitieswp.com/favicon.svg): a white shield + check on a solid
+	// brand-blue rounded square. The .mark CSS supplies the sizing and drop shadow.
+	$mark_svg = '<svg class="mark" viewBox="0 0 32 32" role="img" aria-label="' . esc_attr__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '">'
+		. '<rect width="32" height="32" rx="7" fill="#2271b1"/>'
+		. '<path d="M16 5 7 8.4v6.9c0 5.4 3.7 9.6 9 11.2 5.3-1.6 9-5.8 9-11.2V8.4L16 5Z" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linejoin="round"/>'
+		. '<path d="m11.6 15.6 3 3 6-6.4" fill="none" stroke="#ffffff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>'
 		. '</svg>';
 
 	$client_glyph = aafm_oauth_connector_icon( $client_name, $redirect_host );

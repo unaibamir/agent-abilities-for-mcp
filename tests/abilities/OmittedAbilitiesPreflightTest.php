@@ -295,28 +295,51 @@ final class OmittedAbilitiesPreflightTest extends TestCase {
 	}
 
 	/**
-	 * FIX B (1.7.2): the bounded walk must treat ANY object or resource as a violation, before the
-	 * byte-size step ever hands the tree to wp_json_encode(). A throwing JsonSerializable is the worst
-	 * case: if the walk let it through, its jsonSerialize() would fatal uncatchably at serialization.
-	 * The test completing at all is the proof the walk rejected it without ever calling jsonSerialize().
+	 * A deeply-nested stdClass graph $levels objects deep, built iteratively (no recursion in the
+	 * builder, so it never overflows however deep we ask for). Proves objects are walked for the
+	 * structural bounds exactly like arrays.
+	 *
+	 * @param int $levels How many stdClass wrappers to stack.
+	 * @return \stdClass
 	 */
-	public function test_walk_rejects_objects_and_resources_as_unsafe_values(): void {
+	private function deep_object( int $levels ): \stdClass {
+		$node = new \stdClass();
+		for ( $i = 0; $i < $levels; $i++ ) {
+			$wrapper        = new \stdClass();
+			$wrapper->child = $node;
+			$node           = $wrapper;
+		}
+		return $node;
+	}
+
+	/**
+	 * FIX (1.7.2): the bounded walk must NOT reject a plain or empty object. A well-formed JSON Schema
+	 * legitimately carries empty objects - a `"default": {}` value decodes to a stdClass, because PHP's
+	 * array() encodes to [] and only an object encodes to {}. So an empty stdClass and a normal nested
+	 * object are within bounds (the walk returns null); only a genuine resource is rejected outright.
+	 * The walk still applies the depth and node bounds to objects, exactly as it does to arrays.
+	 */
+	public function test_walk_allows_objects_but_rejects_resources(): void {
+		// An empty object - the exact live-bug shape (a `{}` default) - is one node and passes.
 		$nodes = 0;
-		$this->assertSame(
-			'schema_unsafe_value',
+		$this->assertNull(
 			aafm_schema_bounds_walk( new \stdClass(), 0, $nodes ),
-			'A bare object is an unsafe value.'
+			'An empty object is a valid JSON value and must not be a violation.'
+		);
+		$this->assertSame( 1, $nodes, 'An empty object contributes exactly one node and no children.' );
+
+		// A normal object with array/scalar children walks into its subtree and passes.
+		$normal = (object) array(
+			'type'       => 'object',
+			'properties' => array( 'note' => array( 'type' => 'string' ) ),
+		);
+		$nodes  = 0;
+		$this->assertNull(
+			aafm_schema_bounds_walk( $normal, 0, $nodes ),
+			'A normal nested object is within bounds and must not be a violation.'
 		);
 
-		$nodes = 0;
-		$this->assertSame(
-			'schema_unsafe_value',
-			aafm_schema_bounds_walk( array( 'properties' => array( 'x' => $this->throwing_json_serializable() ) ), 0, $nodes ),
-			'A throwing JsonSerializable buried in the schema is rejected before wp_json_encode() is reached.'
-		);
-
-		// A stream-context is a resource (no filesystem handle to clean up), so it exercises the
-		// is_resource() branch without any file operation.
+		// A resource can never appear in a schema and cannot serialize: still rejected outright.
 		$resource = stream_context_create();
 		$nodes    = 0;
 		$this->assertSame(
@@ -327,11 +350,67 @@ final class OmittedAbilitiesPreflightTest extends TestCase {
 	}
 
 	/**
-	 * FIX B (1.7.2): an ability whose schema smuggles in a throwing JsonSerializable is OMITTED from
-	 * the server (reason schema_unsafe_value) with no fatal - the preflight stays un-crashable even
-	 * against a foreign schema built to defeat it.
+	 * FIX (1.7.2): objects are still bounded by depth and node caps, just like arrays. An object graph
+	 * nested past the depth cap trips schema_too_deep; a flat object with more properties than the node
+	 * cap trips schema_too_many_nodes. Objects are walked, not waved through.
 	 */
-	public function test_ability_with_unsafe_schema_value_is_omitted_not_fatal(): void {
+	public function test_walk_bounds_objects_by_depth_and_nodes(): void {
+		$nodes = 0;
+		$this->assertSame(
+			'schema_too_deep',
+			aafm_schema_bounds_walk( $this->deep_object( 5000 ), 0, $nodes ),
+			'A 5000-level object graph must trip the depth bound, not recurse to the bottom.'
+		);
+
+		$props = new \stdClass();
+		for ( $i = 0; $i < AAFM_SCHEMA_MAX_NODES + 500; $i++ ) {
+			$key           = 'p' . $i;
+			$props->{$key} = 'x';
+		}
+		$nodes = 0;
+		$this->assertSame(
+			'schema_too_many_nodes',
+			aafm_schema_bounds_walk( $props, 0, $nodes ),
+			'An object with more properties than the node cap must trip the node bound.'
+		);
+	}
+
+	/**
+	 * Regression for the live bug (1.7.2): an ability whose input schema carries a stdClass empty
+	 * object at `default` (a well-formed `"default": {}`) must NOT be omitted - it serializes to valid
+	 * JSON and belongs in tools/list. Before the fix, the blanket object rejection dropped ~13 real
+	 * bridged abilities (AIOSEO, WooCommerce, core-info) that carry exactly this shape.
+	 */
+	public function test_empty_object_default_schema_is_kept(): void {
+		$this->register_ability(
+			'demo/empty-object-default',
+			array(
+				'type'    => 'object',
+				'default' => new \stdClass(),
+			)
+		);
+
+		$kept = aafm_preflight_bound_server_tools( array( 'demo/empty-object-default' ) );
+
+		$this->assertSame(
+			array( 'demo/empty-object-default' ),
+			$kept,
+			'A schema with an empty-object default is well-formed and must stay in the tool set.'
+		);
+		$this->assertFalse(
+			get_option( AAFM_OMITTED_ABILITIES_OPTION ),
+			'Nothing was omitted, so no option is written.'
+		);
+	}
+
+	/**
+	 * FIX (1.7.2): an ability whose schema smuggles in a THROWING JsonSerializable is still OMITTED
+	 * from the server with no fatal. The walk no longer rejects the object up front; instead the throw
+	 * surfaces at wp_json_encode() in aafm_schema_bounds_violation(), where the try/catch (\Throwable)
+	 * catches it and fails the ability closed as schema_unserializable. The preflight stays
+	 * un-crashable even against a foreign schema built to defeat it.
+	 */
+	public function test_ability_with_throwing_serializable_is_omitted_not_fatal(): void {
 		$this->register_ability(
 			'demo/unsafe',
 			array(
@@ -347,11 +426,11 @@ final class OmittedAbilitiesPreflightTest extends TestCase {
 
 		$kept = aafm_preflight_bound_server_tools( array( 'demo/unsafe' ) );
 
-		$this->assertNotContains( 'demo/unsafe', $kept, 'A schema carrying an unserializable object must be kept out of the server.' );
+		$this->assertNotContains( 'demo/unsafe', $kept, 'A schema whose object throws at encode must be kept out of the server.' );
 		$this->assertSame(
-			array( 'demo/unsafe' => 'schema_unsafe_value' ),
+			array( 'demo/unsafe' => 'schema_unserializable' ),
 			get_option( AAFM_OMITTED_ABILITIES_OPTION ),
-			'The omission and its reason must be persisted.'
+			'The throw is caught at wp_json_encode() and recorded as schema_unserializable.'
 		);
 	}
 

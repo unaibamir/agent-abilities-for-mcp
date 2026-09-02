@@ -982,13 +982,18 @@ const AAFM_OMITTED_ABILITIES_OPTION = 'aafm_omitted_abilities';
  * reference-cyclic array (which a plain recursive walk would loop on forever) is capped by the
  * node counter and cannot hang or overflow the stack.
  *
- * A "node" is every value visited: each array container and each scalar leaf. An object or resource
- * encountered anywhere in the tree is itself a VIOLATION, not a harmless leaf: a well-formed JSON
- * Schema is array-and-scalar only, and treating an object as a leaf would let it survive to the
- * byte-size step, where wp_json_encode() hands it to json_encode() - a JsonSerializable whose
- * jsonSerialize() throws, recurses, or allocates unbounded would then defeat the very preflight this
- * walk exists to make un-crashable. Rejecting objects here, before serialization is ever reached,
- * closes that. A resource is rejected the same way (json_encode cannot represent one).
+ * A "node" is every value visited: each array container, each object container, and each scalar
+ * leaf. Objects are walked exactly like arrays here, because a well-formed JSON Schema legitimately
+ * contains empty objects - a `"default": {}` value, for instance, decodes to a stdClass, since PHP's
+ * `array()` encodes to `[]` and only an object encodes to `{}`. An empty stdClass therefore
+ * contributes one node and no children (it passes), and a pathologically deep or large object graph
+ * is bounded by exactly the same depth and node caps as an array. The danger this walk was once
+ * thought to need a blanket object rejection for - a JsonSerializable whose jsonSerialize() throws,
+ * recurses, or allocates unbounded during wp_json_encode() at the byte-size step - is already handled
+ * downstream in aafm_schema_bounds_violation() by the try/catch (\Throwable) around wp_json_encode(),
+ * the is_string() check on its result, and the AAFM_SCHEMA_MAX_BYTES cap. Only a resource is rejected
+ * outright here, because json_encode() cannot represent one and it can never legitimately appear in a
+ * schema.
  *
  * @param mixed $value The schema value to measure (array, scalar, object, or resource).
  * @param int   $depth Current recursion depth (callers pass 0).
@@ -1005,14 +1010,16 @@ function aafm_schema_bounds_walk( $value, int $depth, int &$nodes ): ?string {
 	if ( $nodes > AAFM_SCHEMA_MAX_NODES ) {
 		return 'schema_too_many_nodes';
 	}
-	// An object or resource cannot appear in a well-formed JSON Schema, and letting one through would
-	// carry it into wp_json_encode() at the byte-size step - where a throwing/recursing/unbounded
-	// JsonSerializable is exactly the crash the preflight is supposed to prevent. Reject it here.
-	if ( is_object( $value ) || is_resource( $value ) ) {
+	// A resource can never appear in a well-formed JSON Schema and json_encode() cannot represent one,
+	// so reject it outright. Objects, by contrast, are legitimate: an empty stdClass is how a `{}`
+	// default round-trips through PHP. Walk into objects the same way as arrays so depth and node
+	// bounds still apply; a throwing/huge JsonSerializable is caught downstream by the wp_json_encode()
+	// try/catch and byte cap in aafm_schema_bounds_violation(), not here.
+	if ( is_resource( $value ) ) {
 		return 'schema_unsafe_value';
 	}
-	if ( is_array( $value ) ) {
-		foreach ( $value as $child ) {
+	if ( is_array( $value ) || is_object( $value ) ) {
+		foreach ( (array) $value as $child ) {
 			$violation = aafm_schema_bounds_walk( $child, $depth + 1, $nodes );
 			if ( null !== $violation ) {
 				return $violation;

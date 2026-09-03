@@ -46,6 +46,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		remove_filter( 'wp_doing_ajax', '__return_true' );
 		remove_all_filters( 'pre_option_aafm_read_only_mode' );
 		remove_all_filters( 'pre_option_aafm_high_risk_abilities_unlocked' );
+		remove_all_filters( 'pre_option_aafm_rate_limit_per_min' );
 		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['aafm_read_only_mode'], $_POST['aafm_high_risk_abilities_unlocked'] );
 		wp_cache_delete( 'alloptions', 'options' );
 		delete_option( 'aafm_read_only_mode' );
@@ -218,6 +219,36 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 			'Read-only mode must NOT have been turned off: the paired restrictive change failed first, so the permissive change must never have been attempted.'
 		);
 		$this->assertTrue( (bool) get_option( 'aafm_read_only_mode', false ), 'The read-only-mode row itself must be untouched, not merely the floored reader.' );
+	}
+
+	/**
+	 * HIGH (Codex hotfix re-check, new finding 1): the verified ordinary-settings loop used to run
+	 * BEFORE either governance switch, so a save that requested read-only mode ON and also happened
+	 * to include an ordinary setting that failed to persist would abort on the ordinary setting and
+	 * never even attempt the requested read-only-on - leaving the site wider open than the operator
+	 * asked for, on top of reporting an error. Read-only ON is the restrictive direction and must
+	 * persist before an unrelated ordinary-setting failure gets a chance to cut the save short.
+	 */
+	public function test_an_ordinary_setting_failure_does_not_block_a_requested_restrictive_read_only_on(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'aafm_read_only_mode' );
+		delete_option( 'aafm_rate_limit_per_min' );
+		// A cache the plugin cannot repair for this one ordinary option: whatever is written, the
+		// read keeps coming back at a value nothing posted could ever match.
+		add_filter( 'pre_option_aafm_rate_limit_per_min', static fn() => '999999' );
+
+		$_POST['aafm_read_only_mode'] = '1';
+		$json                         = $this->post_settings_save();
+		unset( $_POST['aafm_read_only_mode'] );
+		remove_all_filters( 'pre_option_aafm_rate_limit_per_min' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the ordinary setting failed to persist.' );
+		$this->assertTrue(
+			aafm_read_only_mode(),
+			'The requested restrictive switch (read-only ON) must still persist even though a later ordinary setting failed to verify.'
+		);
+		$row = $this->latest_log_row( 'aafm/read-only-mode' );
+		$this->assertSame( 'success', $row['status'] ?? null, 'The restrictive switch that did persist must be logged as a success, not left unlogged.' );
 	}
 
 	public function test_a_switch_that_will_not_persist_is_reported_as_an_error_not_success(): void {

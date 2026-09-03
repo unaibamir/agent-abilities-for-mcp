@@ -135,12 +135,42 @@ function aafm_ajax_save_settings(): void {
 	// forces the mode on through the filter still records what the operator actually changed.
 	$read_only_before = (bool) get_option( 'aafm_read_only_mode', false );
 
+	// Delete rather than store false: locked is the option's out-of-the-box (row-absent) state, and
+	// both readers (this file's checked() call and aafm_high_risk_unlocked()) already default to
+	// off on a missing row, so a stored false and an absent row behave identically today. But an
+	// explicit false is a state a fresh install can never be in, and it is the one state the UI
+	// itself cannot restore to once the switch has been touched once. Deleting on "off" keeps a
+	// site that never unlocks the category, or that unlocks then re-locks it, in the same absent
+	// row either way.
+	//
+	// The two switches are applied restrictive direction first, and BEFORE anything else in this
+	// save touches the database: locking high-risk abilities and turning read-only mode on both
+	// narrow what an agent can reach, so either one that was requested persists before the ordinary
+	// settings loop below gets a chance to fail and cut the save short. A verified-settings failure
+	// used to abort the whole handler above this point, which could leave a requested lock or
+	// read-only-on never even attempted while everything else the operator posted had already
+	// changed - narrower than intended is tolerable, wider than intended or wider than requested is
+	// not. A switch whose requested direction is itself restrictive, or that was not touched by this
+	// save at all, has nothing to defer and is simply left at $high_risk_persisted / a bool true.
+	$high_risk_persisted = $clean['aafm_high_risk_abilities_unlocked'] ? true : aafm_set_high_risk_unlocked( false );
+	$read_only_persisted = $clean['aafm_read_only_mode'] ? aafm_set_read_only_mode( true ) : true;
+
+	if ( ! $high_risk_persisted || ! $read_only_persisted ) {
+		aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+		aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+		if ( ! $high_risk_persisted ) {
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The high-risk abilities switch', 'agent-abilities-for-mcp' ) ) ) );
+		}
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
+	}
+
 	// Every value below only takes effect once it reads back from the database as what was just
 	// written (aafm_update_option_verified()), not merely once update_option() has been called. A
 	// persistent object cache that still disagrees with the database can make a plain
 	// update_option() silently no-op, or write against a row that no longer exists and return
 	// false without touching anything (see that function's docblock) - a save must not tell the
-	// operator a setting changed when the database still holds the old value.
+	// operator a setting changed when the database still holds the old value. This runs only once
+	// the requested restrictive posture above is safely in place.
 	$verified_settings = array(
 		'aafm_rate_limit_per_min'       => array( $clean['aafm_rate_limit_per_min'], __( 'The rate limit', 'agent-abilities-for-mcp' ) ),
 		'aafm_max_title_len'            => array( $clean['aafm_max_title_len'], __( 'The maximum title length', 'agent-abilities-for-mcp' ) ),
@@ -155,38 +185,22 @@ function aafm_ajax_save_settings(): void {
 	foreach ( $verified_settings as $verified_option => $verified_pair ) {
 		list( $verified_value, $verified_label ) = $verified_pair;
 		if ( ! aafm_update_option_verified( $verified_option, $verified_value ) ) {
+			// The requested restrictive posture above already persisted and is not being undone by
+			// this failure, so it still needs its own audit row before the save reports the error.
+			aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+			aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
 			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $verified_label ) ) );
 		}
 	}
-	// Delete rather than store false: locked is the option's out-of-the-box (row-absent) state, and
-	// both readers (this file's checked() call and aafm_high_risk_unlocked()) already default to
-	// off on a missing row, so a stored false and an absent row behave identically today. But an
-	// explicit false is a state a fresh install can never be in, and it is the one state the UI
-	// itself cannot restore to once the switch has been touched once. Deleting on "off" keeps a
-	// site that never unlocks the category, or that unlocks then re-locks it, in the same absent
-	// row either way.
-	//
-	// The two switches are applied restrictive direction first: locking high-risk abilities and
-	// turning read-only mode on both narrow what an agent can reach, so either one that was
-	// requested persists before the other switch is allowed to widen anything. If a requested
-	// restrictive change fails to persist, the permissive step below is skipped entirely rather
-	// than attempted anyway - continuing on could otherwise leave the site more open than either
-	// its prior state or what the operator actually asked for, which a mid-save failure must never
-	// do. A switch whose requested direction is itself restrictive, or that was not touched by this
-	// save at all, has nothing to defer and is simply left at $high_risk_persisted / a bool true.
-	$high_risk_persisted = $clean['aafm_high_risk_abilities_unlocked'] ? true : aafm_set_high_risk_unlocked( false );
-	$read_only_persisted = $clean['aafm_read_only_mode'] ? aafm_set_read_only_mode( true ) : true;
 
-	if ( $high_risk_persisted && $read_only_persisted ) {
-		// Every requested restrictive change is safely in place (or none was requested); only now
-		// is either switch allowed to move in the permissive direction.
-		if ( $clean['aafm_high_risk_abilities_unlocked'] ) {
-			$high_risk_persisted = aafm_set_high_risk_unlocked( true );
-		}
-		if ( ! $clean['aafm_read_only_mode'] ) {
-			// Off deletes the row here too, for the reason spelled out above the high-risk branch.
-			$read_only_persisted = aafm_set_read_only_mode( false );
-		}
+	// Every requested restrictive change is safely in place and every ordinary setting verified, so
+	// only now is either governance switch allowed to move in the permissive direction.
+	if ( $clean['aafm_high_risk_abilities_unlocked'] ) {
+		$high_risk_persisted = aafm_set_high_risk_unlocked( true );
+	}
+	if ( ! $clean['aafm_read_only_mode'] ) {
+		// Off deletes the row here too, for the reason spelled out above the high-risk branch.
+		$read_only_persisted = aafm_set_read_only_mode( false );
 	}
 
 	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );

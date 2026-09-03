@@ -30,7 +30,7 @@ class AuthorizeTest extends TestCase {
 		parent::set_up();
 		aafm_install_oauth_tables();
 		// OAuth is now OFF by default; these authorize-flow tests exercise the enabled surface, so
-		// turn it on explicitly. DCR follows OAuth. The disabled-path tests override.
+		// turn it on explicitly. DCR is on by default. The disabled-path tests override.
 		update_option( 'aafm_oauth_enabled', '1' );
 		// The authorize choke point writes an OAuth lifecycle audit row on success.
 		aafm_install_activity_log();

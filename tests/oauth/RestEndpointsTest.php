@@ -44,8 +44,8 @@ class RestEndpointsTest extends TestCase {
 		aafm_install_oauth_tables();
 
 		// OAuth is OFF by default now; these endpoint tests exercise the enabled surface, so turn
-		// it on explicitly. DCR follows OAuth, so this also enables registration. The disabled-path
-		// tests override per case.
+		// it on explicitly. DCR is on by default, so enabling OAuth also enables registration. The
+		// disabled-path tests override per case.
 		update_option( 'aafm_oauth_enabled', '1' );
 
 		// register/token success now writes an OAuth lifecycle audit row to the activity log.
@@ -488,9 +488,8 @@ class RestEndpointsTest extends TestCase {
 	/**
 	 * Registration returns 404 when OAuth is disabled.
 	 *
-	 * DCR follows OAuth, so turning OAuth off closes the register route too - and a stale
-	 * legacy aafm_oauth_dcr_enabled row cannot reopen it, because the helper no longer
-	 * reads that option.
+	 * The register route gates on OAuth as well as DCR, so turning OAuth off closes it -
+	 * a DCR toggle left on (its default) cannot reopen the route while OAuth is off.
 	 */
 	public function test_register_is_404_when_oauth_disabled(): void {
 		update_option( 'aafm_oauth_enabled', '0' );

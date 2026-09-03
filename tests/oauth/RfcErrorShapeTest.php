@@ -39,7 +39,7 @@ class RfcErrorShapeTest extends TestCase {
 
 		aafm_install_oauth_tables();
 
-		// DCR follows OAuth, so enabling OAuth is enough for the register route in these tests.
+		// DCR is on by default, so enabling OAuth is enough for the register route in these tests.
 		update_option( 'aafm_oauth_enabled', '1' );
 
 		aafm_install_activity_log();

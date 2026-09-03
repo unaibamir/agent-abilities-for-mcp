@@ -272,14 +272,13 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
  * never touches the option, so a new install keeps OAuth off until the operator actively proceeds -
  * the 1.3.0 off-by-default posture is preserved. Nonce + manage_options gated.
  *
- * Dynamic Client Registration follows OAuth automatically (issue #90): aafm_oauth_dcr_enabled()
- * now derives from the OAuth-enabled state, so turning OAuth on here makes self-registration
- * effective in the same step, and turning the connection back off disables both together - with no
- * separate DCR option to write. This is what leaves a state a real MCP client can actually connect
- * to: before, a user who set OAuth up entirely through the wizard (its copy says this "is what lets
- * ChatGPT, Claude, and Manus connect") ended up connectable in name only, because discovery omitted
- * registration_endpoint and POST /oauth/register 404'd while the wizard never turned DCR on. The
- * response still reports the derived DCR state so the UI can reflect it.
+ * Dynamic Client Registration is on by default and has its own Settings toggle, so the wizard does
+ * not write it here: turning OAuth on is enough to leave a state a real MCP client can connect to,
+ * because DCR is already on unless the operator deliberately turned it off. This is what fixes the
+ * #90 dead end, where a user who set OAuth up through the wizard (its copy says this "is what lets
+ * ChatGPT, Claude, and Manus connect") ended up connectable in name only because DCR defaulted off.
+ * The response reports the current DCR state so the UI can reflect it, and the wizard never
+ * overrides an operator who chose to switch DCR off.
  *
  * @return void
  */
@@ -294,7 +293,7 @@ function aafm_ajax_quickconnect_oauth(): void {
 	wp_send_json_success(
 		array(
 			'aafm_oauth_enabled'     => $enabled,
-			// Derived from the OAuth state just written (DCR follows OAuth), not a separate option.
+			// The current DCR toggle state (on by default), reported so the UI can reflect it.
 			'aafm_oauth_dcr_enabled' => aafm_oauth_dcr_enabled() ? '1' : '0',
 		)
 	);

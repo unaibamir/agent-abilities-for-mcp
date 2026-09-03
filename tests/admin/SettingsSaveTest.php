@@ -134,8 +134,8 @@ final class SettingsSaveTest extends TestCase {
 			$this->assertStringContainsString( 'name="' . $name . '"', $html );
 		}
 
-		// The separate DCR toggle was removed - DCR follows OAuth now, so no such input renders.
-		$this->assertStringNotContainsString( 'name="aafm_oauth_dcr_enabled"', $html );
+		// The DCR toggle renders as its own checkbox (on by default) alongside the OAuth switch.
+		$this->assertStringContainsString( 'name="aafm_oauth_dcr_enabled"', $html );
 
 		// No stray empty card: every card-pad body holds real markup (the Wave-4
 		// empty-card defect class). An empty body would render the two tags back to back.
@@ -216,8 +216,8 @@ final class SettingsSaveTest extends TestCase {
 	 * fields, leaving out the OAuth and strict-block toggles. Because the server reads an absent
 	 * checkbox as off, that omission made every save silently write those toggles off - so turning
 	 * OAuth on and saving left it off on reload. This locks the payload contract so a dropped
-	 * checkbox is caught here instead of on a live site. (DCR is no longer a checkbox here - it
-	 * follows OAuth - so it is not in the forwarded set.)
+	 * checkbox is caught here instead of on a live site. DCR is a checkbox again (on by default),
+	 * so it must be forwarded too, or unchecking it in the UI would never persist.
 	 */
 	public function test_settings_save_script_forwards_every_checkbox(): void {
 		$path = AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js';
@@ -236,6 +236,7 @@ final class SettingsSaveTest extends TestCase {
 		foreach (
 			array(
 				'aafm_oauth_enabled',
+				'aafm_oauth_dcr_enabled',
 				'aafm_block_guard_strict',
 				'aafm_high_risk_abilities_unlocked',
 			) as $field
@@ -246,34 +247,29 @@ final class SettingsSaveTest extends TestCase {
 				$field . ' is not forwarded by the settings save handler, so saving would reset it off.'
 			);
 		}
-
-		// The DCR checkbox was removed; the handler must not forward it any more.
-		$this->assertStringNotContainsString(
-			"body.append( 'aafm_oauth_dcr_enabled'",
-			$handler,
-			'DCR follows OAuth now; the save handler must not forward a DCR field.'
-		);
 	}
 
 	/**
 	 * Server-side round-trip contract behind the fix above: with the checkbox present the
 	 * sanitizer keeps the toggle on; with it absent (the payload the pre-fix script sent) it
 	 * coerces off. Documents both sides of the failure mode so the "absent -> off" semantics is
-	 * not accidentally loosened while fixing the payload. DCR is no longer a sanitized field.
+	 * not accidentally loosened while fixing the payload. DCR round-trips the same way.
 	 */
 	public function test_settings_sanitizer_round_trips_oauth_and_block_guard_toggles(): void {
 		$on = aafm_sanitize_settings_input(
 			array(
 				'aafm_oauth_enabled'      => '1',
+				'aafm_oauth_dcr_enabled'  => '1',
 				'aafm_block_guard_strict' => '1',
 			)
 		);
 		$this->assertSame( '1', $on['aafm_oauth_enabled'] );
+		$this->assertSame( '1', $on['aafm_oauth_dcr_enabled'] );
 		$this->assertTrue( $on['aafm_block_guard_strict'] );
-		$this->assertArrayNotHasKey( 'aafm_oauth_dcr_enabled', $on, 'DCR is no longer a sanitized settings field.' );
 
 		$off = aafm_sanitize_settings_input( array() );
 		$this->assertSame( '0', $off['aafm_oauth_enabled'] );
+		$this->assertSame( '0', $off['aafm_oauth_dcr_enabled'], 'An absent DCR checkbox sanitizes to 0.' );
 		$this->assertFalse( $off['aafm_block_guard_strict'] );
 	}
 

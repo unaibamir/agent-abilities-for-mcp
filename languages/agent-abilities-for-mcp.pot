@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-02T23:15:05+05:00\n"
+"POT-Creation-Date: 2026-09-03T02:30:21+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -3392,13 +3392,13 @@ msgstr ""
 #: includes/admin/page.php:806
 #: includes/admin/page.php:972
 #: includes/admin/page.php:1025
-#: includes/admin/quickconnect.php:289
-#: includes/admin/quickconnect.php:316
-#: includes/admin/quickconnect.php:347
+#: includes/admin/quickconnect.php:288
+#: includes/admin/quickconnect.php:315
+#: includes/admin/quickconnect.php:346
 #: includes/admin/review-request.php:742
 #: includes/admin/review-request.php:775
-#: includes/admin/settings.php:119
-#: includes/admin/settings.php:366
+#: includes/admin/settings.php:122
+#: includes/admin/settings.php:373
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -3686,8 +3686,8 @@ msgstr ""
 #: includes/admin/connection.php:1335
 #: includes/admin/dashboard.php:532
 #: includes/admin/page.php:2461
-#: includes/admin/quickconnect.php:450
-#: includes/admin/quickconnect.php:514
+#: includes/admin/quickconnect.php:449
+#: includes/admin/quickconnect.php:513
 msgid "Copy"
 msgstr ""
 
@@ -3760,7 +3760,7 @@ msgid "An Application Password is a whole-site WordPress credential, not somethi
 msgstr ""
 
 #: includes/admin/connection.php:1180
-#: includes/admin/quickconnect.php:470
+#: includes/admin/quickconnect.php:469
 msgid "Create a dedicated agent user"
 msgstr ""
 
@@ -3785,12 +3785,12 @@ msgid "Edit user"
 msgstr ""
 
 #: includes/admin/connection.php:1208
-#: includes/admin/quickconnect.php:473
+#: includes/admin/quickconnect.php:472
 msgid "Agent username"
 msgstr ""
 
 #: includes/admin/connection.php:1208
-#: includes/admin/quickconnect.php:474
+#: includes/admin/quickconnect.php:473
 msgid "Create agent user"
 msgstr ""
 
@@ -4591,7 +4591,7 @@ msgstr ""
 #: includes/admin/page.php:41
 #: includes/admin/page.php:790
 #: includes/admin/page.php:1165
-#: includes/admin/quickconnect.php:394
+#: includes/admin/quickconnect.php:393
 #: includes/catalog.php:121
 #: includes/oauth/consent-template.php:235
 #: includes/server.php:1386
@@ -4770,18 +4770,18 @@ msgid "Could not revoke. Please try again."
 msgstr ""
 
 #: includes/admin/page.php:201
-#: includes/admin/quickconnect.php:425
+#: includes/admin/quickconnect.php:424
 msgid "In progress"
 msgstr ""
 
 #: includes/admin/page.php:202
-#: includes/admin/quickconnect.php:545
-#: includes/admin/quickconnect.php:617
+#: includes/admin/quickconnect.php:544
+#: includes/admin/quickconnect.php:616
 msgid "Not started"
 msgstr ""
 
 #: includes/admin/page.php:203
-#: includes/admin/quickconnect.php:531
+#: includes/admin/quickconnect.php:530
 msgid "OAuth is on. Copy the URL, then continue."
 msgstr ""
 
@@ -4794,8 +4794,8 @@ msgid "mcp-agent created (subscriber)"
 msgstr ""
 
 #: includes/admin/page.php:206
-#: includes/admin/quickconnect.php:660
-#: includes/admin/settings.php:435
+#: includes/admin/quickconnect.php:659
+#: includes/admin/settings.php:446
 msgid "OAuth"
 msgstr ""
 
@@ -4804,12 +4804,12 @@ msgid "Application password"
 msgstr ""
 
 #: includes/admin/page.php:208
-#: includes/admin/quickconnect.php:661
+#: includes/admin/quickconnect.php:660
 msgid "On"
 msgstr ""
 
 #: includes/admin/page.php:209
-#: includes/admin/quickconnect.php:662
+#: includes/admin/quickconnect.php:661
 msgid "Off"
 msgstr ""
 
@@ -5671,218 +5671,218 @@ msgstr ""
 msgid "Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling."
 msgstr ""
 
-#: includes/admin/quickconnect.php:394
+#: includes/admin/quickconnect.php:393
 msgid "Quick connect"
 msgstr ""
 
-#: includes/admin/quickconnect.php:395
+#: includes/admin/quickconnect.php:394
 msgid "Close for now (the wizard reopens until you finish setup)"
 msgstr ""
 
-#: includes/admin/quickconnect.php:400
+#: includes/admin/quickconnect.php:399
 msgid "Connect an AI agent to this site"
 msgstr ""
 
-#: includes/admin/quickconnect.php:401
+#: includes/admin/quickconnect.php:400
 msgid "Give an AI agent a governed way in. Turn the connection on, choose what it can touch, and you are done. Everything else lives in Settings."
 msgstr ""
 
-#: includes/admin/quickconnect.php:404
+#: includes/admin/quickconnect.php:403
 msgid "Step"
 msgstr ""
 
-#: includes/admin/quickconnect.php:404
+#: includes/admin/quickconnect.php:403
 msgid "of 3 to connected"
 msgstr ""
 
-#: includes/admin/quickconnect.php:422
+#: includes/admin/quickconnect.php:421
 msgid "Turn on the connection"
 msgstr ""
 
-#: includes/admin/quickconnect.php:423
+#: includes/admin/quickconnect.php:422
 msgid "Open the door, then hand the address to the agent"
 msgstr ""
 
-#: includes/admin/quickconnect.php:431
-#: includes/admin/quickconnect.php:435
-#: includes/admin/settings.php:411
+#: includes/admin/quickconnect.php:430
+#: includes/admin/quickconnect.php:434
+#: includes/admin/settings.php:418
 msgid "Enable OAuth"
 msgstr ""
 
-#: includes/admin/quickconnect.php:435
+#: includes/admin/quickconnect.php:434
 msgid "recommended"
 msgstr ""
 
-#: includes/admin/quickconnect.php:436
+#: includes/admin/quickconnect.php:435
 msgid "This is what lets ChatGPT, Claude, and Manus connect. The agent approves access in its own browser tab, so there is no secret to copy or store."
 msgstr ""
 
-#: includes/admin/quickconnect.php:442
+#: includes/admin/quickconnect.php:441
 msgid "It stays off until you continue past this step, and you can change it later in Settings."
 msgstr ""
 
-#: includes/admin/quickconnect.php:448
+#: includes/admin/quickconnect.php:447
 msgid "Copy MCP endpoint URL"
 msgstr ""
 
-#: includes/admin/quickconnect.php:455
+#: includes/admin/quickconnect.php:454
 msgid "Paste into <b>ChatGPT &rarr; add a custom connector</b>, or <b>Claude &rarr; Settings &rarr; Connectors</b>, then approve in the browser tab that opens."
 msgstr ""
 
-#: includes/admin/quickconnect.php:462
+#: includes/admin/quickconnect.php:461
 msgid "Not using ChatGPT or Claude? <b>Connect with a username and application password instead</b>"
 msgstr ""
 
-#: includes/admin/quickconnect.php:471
+#: includes/admin/quickconnect.php:470
 msgid "A real, low-privilege <code>subscriber</code> account. The agent signs in as this user, so its reach is capped by that role from the start. One thing to know: the Application Password you generate next is a whole-site credential, not something this plugin can scope. It works anywhere that role can authenticate, REST API and XML-RPC included; the abilities and safety controls below only govern calls made through this plugin's MCP endpoint."
 msgstr ""
 
-#: includes/admin/quickconnect.php:483
+#: includes/admin/quickconnect.php:482
 msgid "Generate an Application Password"
 msgstr ""
 
 #. translators: 1: opening link tag to the profile page, 2: closing link tag, 3: agent username.
-#: includes/admin/quickconnect.php:489
+#: includes/admin/quickconnect.php:488
 #, php-format
 msgid "Open %1$sUsers &rarr; Profile &rarr; Application Passwords%2$s for %3$s, name it \"AI agent\", and copy the generated password once."
 msgstr ""
 
-#: includes/admin/quickconnect.php:507
+#: includes/admin/quickconnect.php:506
 msgid "Copy the config for your MCP client"
 msgstr ""
 
-#: includes/admin/quickconnect.php:508
+#: includes/admin/quickconnect.php:507
 msgid "The endpoint and the <code>mcp-agent</code> username are already filled in."
 msgstr ""
 
-#: includes/admin/quickconnect.php:511
+#: includes/admin/quickconnect.php:510
 msgid "mcp client config"
 msgstr ""
 
-#: includes/admin/quickconnect.php:521
+#: includes/admin/quickconnect.php:520
 msgid "Paste your password over <b>PASTE-APPLICATION-PASSWORD-HERE</b>, then start your client."
 msgstr ""
 
-#: includes/admin/quickconnect.php:530
-#: includes/admin/quickconnect.php:602
+#: includes/admin/quickconnect.php:529
+#: includes/admin/quickconnect.php:601
 msgid "Continue"
 msgstr ""
 
-#: includes/admin/quickconnect.php:542
+#: includes/admin/quickconnect.php:541
 msgid "Choose what the agent can touch"
 msgstr ""
 
-#: includes/admin/quickconnect.php:543
+#: includes/admin/quickconnect.php:542
 msgid "Reading is on. Writing is your call."
 msgstr ""
 
-#: includes/admin/quickconnect.php:552
-#: includes/admin/quickconnect.php:556
-#: includes/admin/quickconnect.php:661
+#: includes/admin/quickconnect.php:551
+#: includes/admin/quickconnect.php:555
+#: includes/admin/quickconnect.php:660
 msgid "Read content"
 msgstr ""
 
-#: includes/admin/quickconnect.php:556
+#: includes/admin/quickconnect.php:555
 msgid "on by default"
 msgstr ""
 
-#: includes/admin/quickconnect.php:557
+#: includes/admin/quickconnect.php:556
 msgid "Core and content: posts, pages, media, and terms. Read-only and safe, so the agent can see the site without changing it."
 msgstr ""
 
-#: includes/admin/quickconnect.php:557
+#: includes/admin/quickconnect.php:556
 msgid "Leaving the write row below off also turns on read-only mode, so nothing that writes can be switched on anywhere until you turn that off in Settings."
 msgstr ""
 
-#: includes/admin/quickconnect.php:563
-#: includes/admin/quickconnect.php:567
+#: includes/admin/quickconnect.php:562
+#: includes/admin/quickconnect.php:566
 msgid "Create and edit content"
 msgstr ""
 
-#: includes/admin/quickconnect.php:567
+#: includes/admin/quickconnect.php:566
 msgid "write"
 msgstr ""
 
-#: includes/admin/quickconnect.php:568
+#: includes/admin/quickconnect.php:567
 msgid "Let the agent draft, update, and publish content."
 msgstr ""
 
-#: includes/admin/quickconnect.php:575
+#: includes/admin/quickconnect.php:574
 msgid "<b>Write is on.</b> The agent can create, update, and publish posts and pages as the connected user. Nothing is deleted permanently; deletes go to Trash."
 msgstr ""
 
-#: includes/admin/quickconnect.php:579
+#: includes/admin/quickconnect.php:578
 msgid "Safety guarantees"
 msgstr ""
 
-#: includes/admin/quickconnect.php:583
-#: includes/admin/settings.php:475
-#: includes/admin/settings.php:515
+#: includes/admin/quickconnect.php:582
+#: includes/admin/settings.php:486
+#: includes/admin/settings.php:526
 msgid "Off by default"
 msgstr ""
 
-#: includes/admin/quickconnect.php:584
+#: includes/admin/quickconnect.php:583
 msgid "Capped to your role"
 msgstr ""
 
-#: includes/admin/quickconnect.php:585
+#: includes/admin/quickconnect.php:584
 msgid "Every action is logged"
 msgstr ""
 
-#: includes/admin/quickconnect.php:598
+#: includes/admin/quickconnect.php:597
 msgid "Need SEO, WooCommerce, or custom fields?"
 msgstr ""
 
-#: includes/admin/quickconnect.php:598
+#: includes/admin/quickconnect.php:597
 msgid "Set those up in Settings"
 msgstr ""
 
-#: includes/admin/quickconnect.php:603
-#: includes/admin/quickconnect.php:626
+#: includes/admin/quickconnect.php:602
+#: includes/admin/quickconnect.php:625
 msgid "Back"
 msgstr ""
 
-#: includes/admin/quickconnect.php:614
+#: includes/admin/quickconnect.php:613
 msgid "Finish and connect"
 msgstr ""
 
-#: includes/admin/quickconnect.php:615
+#: includes/admin/quickconnect.php:614
 msgid "Review, then hand off to the agent"
 msgstr ""
 
-#: includes/admin/quickconnect.php:620
+#: includes/admin/quickconnect.php:619
 msgid "You are set. Approve the connection in the agent when it asks, and it will see exactly what you allowed here, nothing more."
 msgstr ""
 
-#: includes/admin/quickconnect.php:624
+#: includes/admin/quickconnect.php:623
 msgid "Finish setup"
 msgstr ""
 
-#: includes/admin/quickconnect.php:636
+#: includes/admin/quickconnect.php:635
 msgid "Closing keeps this for later; the wizard opens again next time until you finish setup."
 msgstr ""
 
-#: includes/admin/quickconnect.php:638
+#: includes/admin/quickconnect.php:637
 msgid "Don't show this again"
 msgstr ""
 
-#: includes/admin/quickconnect.php:657
+#: includes/admin/quickconnect.php:656
 msgid "Connected and governed"
 msgstr ""
 
-#: includes/admin/quickconnect.php:658
+#: includes/admin/quickconnect.php:657
 msgid "The agent can reach this site through the MCP server now. Approve it in your client and it will only see what you switched on."
 msgstr ""
 
-#: includes/admin/quickconnect.php:660
+#: includes/admin/quickconnect.php:659
 msgid "Connection method"
 msgstr ""
 
-#: includes/admin/quickconnect.php:662
+#: includes/admin/quickconnect.php:661
 msgid "Create & edit content"
 msgstr ""
 
-#: includes/admin/quickconnect.php:665
+#: includes/admin/quickconnect.php:664
 msgid "Go to dashboard"
 msgstr ""
 
@@ -5927,243 +5927,251 @@ msgstr ""
 msgid "Unknown action."
 msgstr ""
 
-#: includes/admin/settings.php:210
+#: includes/admin/settings.php:215
 msgid "High-risk abilities unlocked"
 msgstr ""
 
-#: includes/admin/settings.php:211
+#: includes/admin/settings.php:216
 msgid "High-risk abilities locked"
 msgstr ""
 
-#: includes/admin/settings.php:371
+#: includes/admin/settings.php:378
 msgid "Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone."
 msgstr ""
 
-#: includes/admin/settings.php:414
+#: includes/admin/settings.php:421
 msgid "Let agents connect by pasting your site URL."
 msgstr ""
 
-#: includes/admin/settings.php:415
+#: includes/admin/settings.php:422
 msgid "Let agents connect by pasting your site URL. Application Passwords keep working either way."
 msgstr ""
 
-#: includes/admin/settings.php:424
-msgid "Dynamic client registration is enabled automatically while OAuth is on, so ChatGPT and Claude can connect. Advanced operators can disable it with the aafm_oauth_dcr_enabled filter."
+#: includes/admin/settings.php:430
+msgid "Enable dynamic client registration"
 msgstr ""
 
-#: includes/admin/settings.php:429
+#: includes/admin/settings.php:433
+msgid "Let agents self-register a client automatically."
+msgstr ""
+
+#: includes/admin/settings.php:434
+msgid "On by default, so ChatGPT and Claude can connect. Turn it off to require manual client setup."
+msgstr ""
+
+#: includes/admin/settings.php:440
 msgid "If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it."
 msgstr ""
 
-#: includes/admin/settings.php:445
+#: includes/admin/settings.php:456
 msgid "These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need."
 msgstr ""
 
-#: includes/admin/settings.php:458
+#: includes/admin/settings.php:469
 msgid "Let agents read this site, and nothing else."
 msgstr ""
 
-#: includes/admin/settings.php:459
+#: includes/admin/settings.php:470
 msgid "While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable."
 msgstr ""
 
-#: includes/admin/settings.php:463
+#: includes/admin/settings.php:474
 msgid "That covers this plugin's own abilities and any bridged in from other plugins. It never turns anything on for you: your selections are kept exactly as they are, so switching this back off restores them."
 msgstr ""
 
-#: includes/admin/settings.php:464
+#: includes/admin/settings.php:475
 msgid "A bridged ability counts as a read only when the plugin that wrote it says so. That is the same declaration this plugin already trusts elsewhere, but it is the other plugin making it, not this one."
 msgstr ""
 
-#: includes/admin/settings.php:465
+#: includes/admin/settings.php:476
 msgid "Every flip of this switch is recorded in the activity log, and those entries expire on the same retention schedule as everything else in it."
 msgstr ""
 
-#: includes/admin/settings.php:468
+#: includes/admin/settings.php:479
 msgid "See more about read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:474
+#: includes/admin/settings.php:485
 msgid "Read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:494
+#: includes/admin/settings.php:505
 msgid "Read-only mode is on, so this does nothing right now. Every high-risk ability writes, and read-only mode is already holding all of them. Turn read-only mode off above to use this switch."
 msgstr ""
 
-#: includes/admin/settings.php:500
+#: includes/admin/settings.php:511
 msgid "Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually."
 msgstr ""
 
-#: includes/admin/settings.php:501
+#: includes/admin/settings.php:512
 msgid "While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab."
 msgstr ""
 
-#: includes/admin/settings.php:503
+#: includes/admin/settings.php:514
 msgid "Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart."
 msgstr ""
 
-#: includes/admin/settings.php:504
+#: includes/admin/settings.php:515
 msgid "This switch covers this plugin's own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately."
 msgstr ""
 
-#: includes/admin/settings.php:505
+#: includes/admin/settings.php:516
 msgid "The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting below if you want a longer record of when the category was opened."
 msgstr ""
 
-#: includes/admin/settings.php:508
+#: includes/admin/settings.php:519
 msgid "See more about the high-risk category"
 msgstr ""
 
-#: includes/admin/settings.php:514
+#: includes/admin/settings.php:525
 msgid "Unlock the category"
 msgstr ""
 
-#: includes/admin/settings.php:518
+#: includes/admin/settings.php:529
 msgid "Held by read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:530
+#: includes/admin/settings.php:541
 msgid "Rate limit"
 msgstr ""
 
-#: includes/admin/settings.php:531
+#: includes/admin/settings.php:542
 msgid "Per minute"
 msgstr ""
 
-#: includes/admin/settings.php:535
+#: includes/admin/settings.php:546
 msgid "Rate limit, per minute"
 msgstr ""
 
-#: includes/admin/settings.php:537
+#: includes/admin/settings.php:548
 msgid "How many agent calls one connection can make per minute. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter."
 msgstr ""
 
-#: includes/admin/settings.php:545
+#: includes/admin/settings.php:556
 msgid "Before you save a list with anything in it, add the IP address your AI client connects from. As soon as this list has one entry, any request from an address that is not on it is blocked, including your own agent. Get it wrong and every agent call stops."
 msgstr ""
 
-#: includes/admin/settings.php:550
+#: includes/admin/settings.php:561
 msgid "IP allowlist"
 msgstr ""
 
-#: includes/admin/settings.php:551
+#: includes/admin/settings.php:562
 msgid "One per line"
 msgstr ""
 
-#: includes/admin/settings.php:555
+#: includes/admin/settings.php:566
 msgid "IP allowlist, one per line"
 msgstr ""
 
-#: includes/admin/settings.php:556
+#: includes/admin/settings.php:567
 msgid "One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped."
 msgstr ""
 
-#: includes/admin/settings.php:564
+#: includes/admin/settings.php:575
 msgid "Force draft on create"
 msgstr ""
 
-#: includes/admin/settings.php:566
+#: includes/admin/settings.php:577
 msgid "Save the content an agent creates as a draft, no matter what status the request asked for."
 msgstr ""
 
-#: includes/admin/settings.php:567
+#: includes/admin/settings.php:578
 msgid "Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Things without a draft state (media, menus, terms, comments, users, coupons, orders) and product variations are not affected."
 msgstr ""
 
-#: includes/admin/settings.php:575
+#: includes/admin/settings.php:586
 msgid "Strict block validation"
 msgstr ""
 
-#: includes/admin/settings.php:577
+#: includes/admin/settings.php:588
 msgid "Reject an agent write when its block markup would show as invalid content in the editor."
 msgstr ""
 
-#: includes/admin/settings.php:578
+#: includes/admin/settings.php:589
 msgid "When this is off (the default), a write with questionable block markup still saves, and the agent is sent a warning so it can fix its next attempt. Turn it on to refuse the write instead, so nothing that could look broken in the editor is ever stored."
 msgstr ""
 
-#: includes/admin/settings.php:585
+#: includes/admin/settings.php:596
 msgid "Maximum title length"
 msgstr ""
 
-#: includes/admin/settings.php:586
+#: includes/admin/settings.php:597
 msgid "Characters"
 msgstr ""
 
-#: includes/admin/settings.php:590
+#: includes/admin/settings.php:601
 msgid "Maximum title length, in characters"
 msgstr ""
 
-#: includes/admin/settings.php:592
+#: includes/admin/settings.php:603
 msgid "The longest title, in characters, an agent can set. Set it to 0 to leave the limit off."
 msgstr ""
 
-#: includes/admin/settings.php:599
+#: includes/admin/settings.php:610
 msgid "Keep activity log for"
 msgstr ""
 
-#: includes/admin/settings.php:600
+#: includes/admin/settings.php:611
 msgid "Days"
 msgstr ""
 
-#: includes/admin/settings.php:604
+#: includes/admin/settings.php:615
 msgid "Keep activity log for, in days"
 msgstr ""
 
-#: includes/admin/settings.php:606
+#: includes/admin/settings.php:617
 msgid "How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry."
 msgstr ""
 
-#: includes/admin/settings.php:617
+#: includes/admin/settings.php:628
 msgid "Permanently remove all plugin data when the plugin is deleted."
 msgstr ""
 
-#: includes/admin/settings.php:618
+#: includes/admin/settings.php:629
 msgid "When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone."
 msgstr ""
 
-#: includes/admin/settings.php:620
+#: includes/admin/settings.php:631
 msgid "See more about deleting data on uninstall"
 msgstr ""
 
-#: includes/admin/settings.php:621
+#: includes/admin/settings.php:632
 msgid "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin."
 msgstr ""
 
-#: includes/admin/settings.php:626
+#: includes/admin/settings.php:637
 msgid "Delete data on uninstall"
 msgstr ""
 
-#: includes/admin/settings.php:635
+#: includes/admin/settings.php:646
 msgid "Safety controls"
 msgstr ""
 
-#: includes/admin/settings.php:642
+#: includes/admin/settings.php:653
 msgid "These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests."
 msgstr ""
 
-#: includes/admin/settings.php:654
+#: includes/admin/settings.php:665
 msgid "Save settings"
 msgstr ""
 
-#: includes/admin/settings.php:668
+#: includes/admin/settings.php:679
 msgid "Danger zone"
 msgstr ""
 
-#: includes/admin/settings.php:672
+#: includes/admin/settings.php:683
 msgid "Reset plugin"
 msgstr ""
 
-#: includes/admin/settings.php:672
+#: includes/admin/settings.php:683
 msgid "Cannot be undone"
 msgstr ""
 
-#: includes/admin/settings.php:674
+#: includes/admin/settings.php:685
 msgid "Reset plugin to defaults"
 msgstr ""
 
-#: includes/admin/settings.php:675
+#: includes/admin/settings.php:686
 msgid "Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone."
 msgstr ""
 

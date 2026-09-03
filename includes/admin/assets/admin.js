@@ -1262,6 +1262,9 @@
 				const oauthEnabled = form.querySelector(
 					'input[name="aafm_oauth_enabled"]'
 				);
+				const oauthDcrEnabled = form.querySelector(
+					'input[name="aafm_oauth_dcr_enabled"]'
+				);
 				const readOnlyMode = form.querySelector(
 					'input[name="aafm_read_only_mode"]'
 				);
@@ -1279,9 +1282,8 @@
 				// Every checkbox in this form is forwarded the same way: append '1' when checked,
 				// omit it when unchecked. The server sanitizer reads an absent field as off, so a
 				// checkbox that is left out of the payload is never persisted as on. Leaving any of
-				// these out (the pre-fix bug for the OAuth and strict-block toggles) made the server
-				// coerce them off on every save, so toggling one on never stuck. Dynamic client
-				// registration no longer has a toggle here - it follows the OAuth switch.
+				// these out (the pre-fix bug for the OAuth, DCR, and strict-block toggles) made the
+				// server coerce them off on every save, so toggling one on never stuck.
 				if ( draft?.checked ) {
 					body.append( 'aafm_force_draft', '1' );
 				}
@@ -1293,6 +1295,9 @@
 				}
 				if ( oauthEnabled?.checked ) {
 					body.append( 'aafm_oauth_enabled', '1' );
+				}
+				if ( oauthDcrEnabled?.checked ) {
+					body.append( 'aafm_oauth_dcr_enabled', '1' );
 				}
 				if ( readOnlyMode?.checked ) {
 					body.append( 'aafm_read_only_mode', '1' );

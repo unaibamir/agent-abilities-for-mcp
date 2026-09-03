@@ -232,7 +232,8 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
 add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 
-// Seed the OAuth toggles to "off" at activation (add_option only - never clobbers a saved value).
+// Seed the OAuth toggles at activation (add_option only - never clobbers a saved value): OAuth off,
+// dynamic client registration on.
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
 
 // Flag a genuinely new install so the first-activation admin-menu pointer shows once. The callback
@@ -252,6 +253,12 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_quickconnect_flag_menu_pointer
 // Preserve the prior state once, early, before any request-time toggle read; fresh installs
 // (seeded '0' at activation) stay off. See aafm_oauth_preserve_toggle_on_upgrade().
 add_action( 'plugins_loaded', 'aafm_oauth_preserve_toggle_on_upgrade', 1 );
+
+// One-time DCR default-on adoption: dynamic client registration used to default off (the #90
+// footgun that stopped ChatGPT and Claude connecting), so installs that predate this release hold
+// a stored '0'. Flip that old default on once, early, with its own guard. See
+// aafm_oauth_dcr_adopt_on_by_default().
+add_action( 'plugins_loaded', 'aafm_oauth_dcr_adopt_on_by_default', 1 );
 
 // Surface the transport's 401 challenge (resource_metadata) as a real
 // WWW-Authenticate header on the dispatched REST error response.

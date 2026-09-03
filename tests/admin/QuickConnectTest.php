@@ -120,9 +120,8 @@ final class QuickConnectTest extends TestCase {
 
 	/**
 	 * The OAuth handler is nonce + manage_options gated: a subscriber (with a valid nonce) is denied
-	 * and, critically, neither aafm_oauth_enabled nor aafm_oauth_dcr_enabled is written. Fails if the
-	 * cap gate is removed - a subscriber would then flip the security-relevant OAuth option, and (since
-	 * issue #90 has the handler write DCR in the same breath) the DCR option too.
+	 * and, critically, aafm_oauth_enabled is never written. The wizard does not write a DCR option at
+	 * all (DCR is its own default-on toggle), so a denied call leaves the OAuth surface off.
 	 */
 	public function test_oauth_handler_denies_subscriber_and_never_writes_oauth(): void {
 		$this->acting_as( 'subscriber' );
@@ -131,15 +130,14 @@ final class QuickConnectTest extends TestCase {
 
 		$this->assertTrue( $died, 'The handler must deny a subscriber (wp_die at 403).' );
 		$this->assertFalse( get_option( 'aafm_oauth_enabled', false ), 'A subscriber must not write aafm_oauth_enabled.' );
-		$this->assertFalse( get_option( 'aafm_oauth_dcr_enabled', false ), 'A subscriber must not write aafm_oauth_dcr_enabled either.' );
+		$this->assertFalse( get_option( 'aafm_oauth_dcr_enabled', false ), 'The wizard writes no DCR option at all.' );
 		$this->assertFalse( aafm_oauth_enabled(), 'OAuth must stay off after a denied wizard call.' );
-		$this->assertFalse( aafm_oauth_dcr_enabled(), 'DCR must stay off after a denied wizard call.' );
 	}
 
 	/**
-	 * A bad nonce is rejected before either OAuth option is ever written, even for an admin. Fails if
-	 * the check_ajax_referer gate is removed - the DCR option (written in lockstep since issue #90) is
-	 * guarded by the same gate and pinned here alongside aafm_oauth_enabled.
+	 * A bad nonce is rejected before the OAuth option is ever written, even for an admin. Fails if
+	 * the check_ajax_referer gate is removed. The wizard never writes a DCR option, so that row also
+	 * stays absent.
 	 */
 	public function test_oauth_handler_rejects_bad_nonce_and_never_writes_oauth(): void {
 		$this->acting_as( 'administrator' );
@@ -148,7 +146,7 @@ final class QuickConnectTest extends TestCase {
 
 		$this->assertTrue( $died, 'A bad nonce must be rejected (wp_die).' );
 		$this->assertFalse( get_option( 'aafm_oauth_enabled', false ), 'A bad-nonce call must not write aafm_oauth_enabled.' );
-		$this->assertFalse( get_option( 'aafm_oauth_dcr_enabled', false ), 'A bad-nonce call must not write aafm_oauth_dcr_enabled.' );
+		$this->assertFalse( get_option( 'aafm_oauth_dcr_enabled', false ), 'The wizard writes no DCR option.' );
 	}
 
 	/**
@@ -288,41 +286,39 @@ final class QuickConnectTest extends TestCase {
 	/**
 	 * Issue #90 - the wizard-only path used to leave a NON-connectable state.
 	 *
-	 * The wizard's connection step enables OAuth, but Dynamic Client Registration used to live in a
-	 * SEPARATE option the wizard never touched, so it stayed off. A user who set OAuth up entirely
-	 * through the wizard - the wizard's whole purpose, since its copy says this "is what lets ChatGPT,
-	 * Claude, and Manus connect" - ended up with DCR silently unavailable: the AS metadata omitted
-	 * registration_endpoint and POST /register 404'd, which is the DCR failure the issue reports. DCR
-	 * now follows OAuth, so enabling OAuth from the wizard makes registration effective with no
-	 * separate option to write.
+	 * The wizard's connection step enables OAuth. Dynamic Client Registration is now on by default
+	 * (its own toggle), so enabling OAuth from the wizard is enough to make registration effective:
+	 * a user who set OAuth up entirely through the wizard - its whole purpose, since its copy says
+	 * this "is what lets ChatGPT, Claude, and Manus connect" - now ends up connectable. Before, DCR
+	 * defaulted off, so the AS metadata omitted registration_endpoint and POST /register 404'd. The
+	 * wizard writes no DCR option; DCR is on by default without one.
 	 */
-	public function test_wizard_oauth_enable_also_enables_dcr_and_advertises_registration(): void {
+	public function test_wizard_oauth_enable_advertises_registration_with_default_on_dcr(): void {
 		$this->acting_as( 'administrator' );
 
-		$this->assertFalse( aafm_oauth_dcr_enabled(), 'Fixture: DCR starts off (OAuth off, so DCR follows off).' );
+		// Fixture: OAuth off, so no registration endpoint is advertised even though DCR is on by default.
+		$this->assertFalse( aafm_oauth_enabled(), 'Fixture: OAuth starts off.' );
+		$this->assertTrue( aafm_oauth_dcr_enabled(), 'Fixture: DCR is on by default.' );
 		$this->assertArrayNotHasKey(
 			'registration_endpoint',
 			aafm_oauth_authorization_server_metadata(),
-			'Fixture: with DCR off the AS metadata must not advertise a dead registration endpoint.'
+			'Fixture: with OAuth off the AS metadata must not advertise a registration endpoint.'
 		);
 
 		$this->invoke_ajax( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ) );
 
 		$this->assertTrue( aafm_oauth_enabled(), 'The explicit connection action turns OAuth on.' );
-		$this->assertTrue(
-			aafm_oauth_dcr_enabled(),
-			'Enabling OAuth through the wizard must also make DCR effective, or the wizard leaves a non-connectable state.'
-		);
+		$this->assertTrue( aafm_oauth_dcr_enabled(), 'DCR stays on by default; the wizard leaves a connectable state.' );
 		$this->assertFalse(
 			get_option( 'aafm_oauth_dcr_enabled', false ),
-			'DCR follows OAuth - the wizard no longer writes a separate DCR option.'
+			'The wizard writes no separate DCR option - DCR is on by its own default.'
 		);
 
 		$meta = aafm_oauth_authorization_server_metadata();
 		$this->assertArrayHasKey(
 			'registration_endpoint',
 			$meta,
-			'With DCR now on, discovery must advertise registration_endpoint so a client can self-register.'
+			'With OAuth on and DCR on by default, discovery must advertise registration_endpoint.'
 		);
 		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/register', (string) $meta['registration_endpoint'] );
 	}
@@ -370,63 +366,73 @@ final class QuickConnectTest extends TestCase {
 	}
 
 	/**
-	 * The wizard's connection step stays authoritative for both halves of the connection: turning
-	 * OAuth off again in the wizard turns DCR off with it (DCR follows OAuth), so the wizard never
-	 * leaves a stray self-registration surface on without the OAuth server that backs it. An advanced
-	 * operator can still force DCR off while OAuth is on with the aafm_oauth_dcr_enabled filter.
+	 * Turning OAuth off again in the wizard stops advertising the registration endpoint, because the
+	 * AS metadata gates registration_endpoint on OAuth being on. The DCR toggle itself is a separate
+	 * setting the wizard does not touch, so it stays on by default; there is no orphaned registration
+	 * surface because the register route also gates on OAuth.
 	 */
-	public function test_wizard_oauth_disable_also_disables_dcr(): void {
+	public function test_wizard_oauth_disable_stops_advertising_registration(): void {
 		$this->acting_as( 'administrator' );
 
 		$this->invoke_ajax( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ) );
-		$this->assertTrue( aafm_oauth_dcr_enabled(), 'Precondition: enabling turned DCR on.' );
+		$this->assertArrayHasKey( 'registration_endpoint', aafm_oauth_authorization_server_metadata(), 'Precondition: registration advertised while OAuth is on.' );
 
 		$this->invoke_ajax( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '0' ) );
 
 		$this->assertFalse( aafm_oauth_enabled(), 'Turning the connection off turns OAuth off.' );
-		$this->assertFalse( aafm_oauth_dcr_enabled(), 'It turns DCR off in the same step, leaving no orphaned registration surface.' );
+		$this->assertArrayNotHasKey(
+			'registration_endpoint',
+			aafm_oauth_authorization_server_metadata(),
+			'With OAuth off, no registration endpoint is advertised, whatever the DCR toggle says.'
+		);
+		$this->assertTrue( aafm_oauth_dcr_enabled(), 'The wizard does not touch the DCR toggle; it stays on by default.' );
 	}
 
 	/**
-	 * The OAuth handler's success payload reports the resulting DCR state alongside OAuth, so the
-	 * wizard's Continue step and success receipt can reflect the real connectable state rather than
-	 * assuming it.
+	 * The OAuth handler's success payload reports the current DCR toggle state alongside OAuth, so
+	 * the wizard's Continue step can reflect it. DCR is its own toggle: on by default, and reported
+	 * as such whether OAuth is being turned on or off. When the operator has turned DCR off, the
+	 * payload reports it off.
 	 */
 	public function test_oauth_handler_payload_reports_dcr_state(): void {
 		$this->acting_as( 'administrator' );
 
+		// DCR on by default: reported on both when enabling and disabling OAuth (it is independent).
 		$on = $this->capture_ajax_json( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ) );
 		$this->assertTrue( $on['success'] ?? false );
-		$this->assertSame( '1', $on['data']['aafm_oauth_dcr_enabled'] ?? null, 'Enabling reports DCR on.' );
+		$this->assertSame( '1', $on['data']['aafm_oauth_dcr_enabled'] ?? null, 'DCR is on by default.' );
 
 		$off = $this->capture_ajax_json( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '0' ) );
 		$this->assertTrue( $off['success'] ?? false );
-		$this->assertSame( '0', $off['data']['aafm_oauth_dcr_enabled'] ?? null, 'Disabling reports DCR off.' );
+		$this->assertSame( '1', $off['data']['aafm_oauth_dcr_enabled'] ?? null, 'DCR stays on; the wizard does not touch it.' );
+
+		// With DCR explicitly turned off, the payload reflects that.
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		$dcr_off = $this->capture_ajax_json( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ) );
+		$this->assertSame( '0', $dcr_off['data']['aafm_oauth_dcr_enabled'] ?? null, 'A turned-off DCR toggle is reported off.' );
 	}
 
 	/**
-	 * The finish handler's success payload reports the real DCR state alongside OAuth, so the success
-	 * receipt reflects a connectable state rather than assuming one (issue #90). Pinned both ways: a
-	 * finish after the wizard connected OAuth (which turns DCR on) reports dcr_enabled 1; a finish with
-	 * no connection reports 0. Removing the finish payload's dcr_enabled field fails this.
+	 * The finish handler's success payload reports the current DCR toggle state, so the success
+	 * receipt reflects it. DCR is on by default, so a finish reports dcr_enabled 1 unless the operator
+	 * turned the toggle off, in which case it reports 0. Removing the finish payload's dcr_enabled
+	 * field fails this.
 	 */
 	public function test_finish_handler_payload_reports_dcr_state(): void {
 		$this->acting_as( 'administrator' );
 
-		// No connection step run: DCR is off, and the finish receipt must say so.
-		$off = $this->capture_ajax_json( 'aafm_ajax_quickconnect_finish', array( 'write' => '0' ) );
-		$this->assertTrue( $off['success'] ?? false, 'A privileged finish must report success.' );
-		$this->assertArrayHasKey( 'dcr_enabled', $off['data'] ?? array(), 'The finish payload must carry dcr_enabled.' );
-		$this->assertSame( 0, $off['data']['dcr_enabled'] ?? null, 'With no connection, the finish receipt reports DCR off.' );
-
-		// Now run the connection step (turns OAuth and DCR on), then finish: the receipt reports DCR on.
-		delete_option( 'aafm_quickconnect_finished' );
-		$this->invoke_ajax( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ) );
-		$this->assertTrue( aafm_oauth_dcr_enabled(), 'Precondition: the connection step turned DCR on.' );
-
+		// DCR on by default: the finish receipt reports it on.
 		$on = $this->capture_ajax_json( 'aafm_ajax_quickconnect_finish', array( 'write' => '0' ) );
-		$this->assertTrue( $on['success'] ?? false );
-		$this->assertSame( 1, $on['data']['dcr_enabled'] ?? null, 'After the wizard connects OAuth, the finish receipt reports DCR on.' );
+		$this->assertTrue( $on['success'] ?? false, 'A privileged finish must report success.' );
+		$this->assertArrayHasKey( 'dcr_enabled', $on['data'] ?? array(), 'The finish payload must carry dcr_enabled.' );
+		$this->assertSame( 1, $on['data']['dcr_enabled'] ?? null, 'DCR is on by default, so the finish receipt reports it on.' );
+
+		// Operator turned DCR off: the finish receipt reports it off.
+		delete_option( 'aafm_quickconnect_finished' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		$off = $this->capture_ajax_json( 'aafm_ajax_quickconnect_finish', array( 'write' => '0' ) );
+		$this->assertTrue( $off['success'] ?? false );
+		$this->assertSame( 0, $off['data']['dcr_enabled'] ?? null, 'With DCR turned off, the finish receipt reports it off.' );
 	}
 
 	public function test_should_render_true_for_admin_on_first_run(): void {
@@ -453,14 +459,13 @@ final class QuickConnectTest extends TestCase {
 
 	/**
 	 * The wizard renders on first run and its markup carries the live endpoint, but rendering it
-	 * must NEVER flip either the OAuth option or the DCR option - the off-by-default posture (1.3.0
-	 * for OAuth, issue #90 for DCR) is preserved on load. A render that began writing DCR would let
-	 * the off-by-default DCR posture regress silently; this pins it.
+	 * must NEVER write the OAuth option or the DCR option - it has no side effects on either toggle.
+	 * OAuth's off-by-default posture and DCR's on-by-default posture are both preserved on load
+	 * without a row being written.
 	 */
 	public function test_render_outputs_markup_without_enabling_oauth(): void {
 		$this->acting_as( 'administrator' );
 		$this->assertFalse( aafm_oauth_enabled(), 'Fixture: OAuth starts off.' );
-		$this->assertFalse( aafm_oauth_dcr_enabled(), 'Fixture: DCR starts off.' );
 
 		ob_start();
 		aafm_quickconnect_render();
@@ -468,10 +473,9 @@ final class QuickConnectTest extends TestCase {
 
 		$this->assertStringContainsString( 'id="aafm-qc"', $html );
 		$this->assertStringContainsString( aafm_endpoint_url(), $html );
-		// The load did not turn OAuth on.
+		// The load did not turn OAuth on, and wrote no toggle rows.
 		$this->assertFalse( aafm_oauth_enabled(), 'Rendering the wizard must not enable OAuth.' );
 		$this->assertFalse( get_option( 'aafm_oauth_enabled', false ), 'No aafm_oauth_enabled row may be written on render.' );
-		$this->assertFalse( aafm_oauth_dcr_enabled(), 'Rendering the wizard must not enable DCR.' );
 		$this->assertFalse( get_option( 'aafm_oauth_dcr_enabled', false ), 'No aafm_oauth_dcr_enabled row may be written on render.' );
 	}
 

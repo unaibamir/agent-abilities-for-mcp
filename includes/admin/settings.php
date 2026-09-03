@@ -27,16 +27,17 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   presence of the field (unchecked checkbox -> false). Every reader defaults off on a missing
  *   option, so unlike the OAuth pair below there is nothing to work around: a stored false reads as
  *   off either way.
- * - aafm_oauth_enabled: the STRING '1' when the checkbox is present, '0' when absent. The OAuth
- *   reader treats every falsy stored form as off, so the off state is the literal '0' string.
- *   There is no separate DCR field: aafm_oauth_dcr_enabled() follows the OAuth-enabled state
- *   (filterable), so the Settings tab no longer renders a DCR toggle to sanitize.
+ * - aafm_oauth_enabled, aafm_oauth_dcr_enabled: the STRING '1' when the checkbox is present, '0'
+ *   when absent. The OAuth readers treat every falsy stored form as off, so the off state must be
+ *   the literal '0' string - a PHP bool false would not store as false on a never-created option,
+ *   leaving the toggle stuck on. DCR defaults on, but a save always sends its explicit state, so
+ *   the round-trip is symmetric with OAuth.
  * - aafm_ip_allowlist: split on newlines, trimmed, blanks dropped, and every surviving line
  *   must clear aafm_is_valid_ip_or_cidr(). Invalid lines are dropped (fail-closed), so a
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -49,7 +50,8 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	$high_risk   = ! empty( $posted['aafm_high_risk_abilities_unlocked'] );
 	$read_only   = ! empty( $posted['aafm_read_only_mode'] );
 
-	$oauth = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
+	$oauth     = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
+	$oauth_dcr = empty( $posted['aafm_oauth_dcr_enabled'] ) ? '0' : '1';
 
 	$raw   = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
 	$lines = array();
@@ -71,6 +73,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_high_risk_abilities_unlocked' => $high_risk,
 		'aafm_read_only_mode'               => $read_only,
 		'aafm_oauth_enabled'                => $oauth,
+		'aafm_oauth_dcr_enabled'            => $oauth_dcr,
 		'aafm_ip_allowlist'                 => array_values( array_unique( $lines ) ),
 	);
 }
@@ -153,6 +156,7 @@ function aafm_ajax_save_settings(): void {
 	// Off deletes the row here too, for the reason spelled out above the high-risk branch.
 	aafm_set_read_only_mode( $clean['aafm_read_only_mode'] );
 	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
+	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
 	update_option( 'aafm_ip_allowlist', $clean['aafm_ip_allowlist'] );
 
 	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'] );
@@ -169,6 +173,7 @@ function aafm_ajax_save_settings(): void {
 			'aafm_high_risk_abilities_unlocked' => $clean['aafm_high_risk_abilities_unlocked'],
 			'aafm_read_only_mode'               => $clean['aafm_read_only_mode'],
 			'aafm_oauth_enabled'                => $clean['aafm_oauth_enabled'],
+			'aafm_oauth_dcr_enabled'            => $clean['aafm_oauth_dcr_enabled'],
 			'aafm_ip_allowlist'                 => $clean['aafm_ip_allowlist'],
 			'aafm_ip_allowlist_text'            => implode( "\n", $clean['aafm_ip_allowlist'] ),
 			'aafm_ip_dropped'                   => $dropped,
@@ -319,10 +324,12 @@ function aafm_uninstall_site_data(): void {
 	aafm_drop_oauth_tables();
 	delete_option( 'aafm_oauth_schema_version' );
 	delete_option( 'aafm_activity_log_schema_version' );
-	// The one-time OAuth upgrade-preserve guard (written by the plugins_loaded migration). Cleared
-	// here so a delete-data uninstall leaves nothing behind. It is deliberately NOT in the reset set:
-	// clearing it on reset would let the preserve migration re-run and could flip OAuth back on.
+	// The one-time OAuth upgrade-preserve guard and the DCR default-on adoption guard (both written by
+	// the plugins_loaded migrations). Cleared here so a delete-data uninstall leaves nothing behind.
+	// They are deliberately NOT in the reset set: clearing a guard on reset would let its migration
+	// re-run and could flip a toggle back on.
 	delete_option( 'aafm_oauth_toggle_migrated' );
+	delete_option( 'aafm_oauth_dcr_default_on_migrated' );
 	delete_option( 'aafm_delete_data_on_uninstall' );
 }
 
@@ -415,13 +422,17 @@ function aafm_render_settings_tab(): void {
 	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	// Dynamic client registration is no longer a separate toggle. It follows the OAuth switch above:
-	// while OAuth is on, agents (ChatGPT, Claude) can self-register a client so they can connect.
-	// A switch that appeared to turn registration off while OAuth stayed on stranded exactly the
-	// clients OAuth exists to serve (issue #90), so it is stated here as a note instead. An advanced
-	// operator who registers clients by hand can still force registration closed with the
-	// aafm_oauth_dcr_enabled filter.
-	echo '<p class="help">' . esc_html__( 'Dynamic client registration is enabled automatically while OAuth is on, so ChatGPT and Claude can connect. Advanced operators can disable it with the aafm_oauth_dcr_enabled filter.', 'agent-abilities-for-mcp' ) . '</p>';
+	// Enable dynamic client registration. On by default so ChatGPT and Claude, which only ever
+	// connect by self-registering, work as soon as OAuth is on; turn it off to require manual client
+	// setup. Same .aafm-switch / .aafm-set-row markup and aria wiring as the row above. It stays
+	// inert while OAuth is off, since the register route and discovery both gate on OAuth too.
+	echo '<div class="aafm-set-row">';
+	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-control">';
+	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	echo '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">' . esc_html__( 'Let agents self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
+	echo '<p class="help">' . esc_html__( 'On by default, so ChatGPT and Claude can connect. Turn it off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
 
 	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent
 	// screen tells the approving human the app acts with their full capabilities either way - but

@@ -69,8 +69,8 @@ class HandshakeTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// OAuth is OFF by default now; the full handshake exercises the enabled surface, so turn it
-		// on explicitly. DCR follows OAuth, so this also enables registration. The disabled-route
-		// test overrides.
+		// on explicitly. DCR is on by default, so enabling OAuth also enables registration. The
+		// disabled-route test overrides.
 		update_option( 'aafm_oauth_enabled', '1' );
 
 		// Register the OAuth (and MCP) routes against the REST server for this run.

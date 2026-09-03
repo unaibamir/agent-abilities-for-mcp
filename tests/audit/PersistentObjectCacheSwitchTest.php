@@ -48,6 +48,9 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		remove_all_filters( 'pre_option_aafm_high_risk_abilities_unlocked' );
 		remove_all_filters( 'pre_option_aafm_rate_limit_per_min' );
 		remove_all_filters( 'pre_option_aafm_enabled_abilities' );
+		remove_all_actions( 'added_option' );
+		remove_all_actions( 'updated_option' );
+		remove_all_actions( 'deleted_option' );
 		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['aafm_read_only_mode'], $_POST['aafm_high_risk_abilities_unlocked'] );
 		wp_cache_delete( 'alloptions', 'options' );
 		delete_option( 'aafm_read_only_mode' );
@@ -110,6 +113,48 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		);
 		$row  = is_array( $rows ) && isset( $rows['entries'][0] ) ? $rows['entries'][0] : ( $rows[0] ?? array() );
 		return is_array( $row ) ? $row : array();
+	}
+
+	/**
+	 * Make $option's database row genuinely un-persistable to the value under test: whatever any
+	 * code under test writes, a raw query puts the row straight back to $stuck_raw_value (or, for
+	 * null, deletes it again) immediately afterward, on the `added_option`/`updated_option`/
+	 * `deleted_option` action - whichever one the write under test actually fires.
+	 *
+	 * This replaces the `pre_option_$option` filter this file used before aafm_option_write_certified()
+	 * existed. That filter only fooled `get_option()`'s read; a real `$wpdb->update()` or
+	 * `->delete()`/`->query()` still committed its own row underneath it, which the new
+	 * certification correctly sees (it reads the database directly - see that function's
+	 * docblock). Faking an unrepairable write now means faking the row itself, not the read.
+	 *
+	 * @param string     $option         Option name.
+	 * @param mixed|null $stuck_raw_value Raw (already-serialized) value the row is kept at; null
+	 *                                     keeps the row deleted no matter what re-creates it.
+	 * @return void
+	 */
+	private function make_option_write_unpersistable( string $option, $stuck_raw_value ): void {
+		$revert = static function () use ( $option, $stuck_raw_value ): void {
+			global $wpdb;
+			if ( null === $stuck_raw_value ) {
+				$wpdb->delete( $wpdb->options, array( 'option_name' => $option ) );
+				return;
+			}
+			$wpdb->query(
+				$wpdb->prepare(
+					"REPLACE INTO $wpdb->options (option_name, option_value, autoload) VALUES (%s, %s, 'yes')",
+					$option,
+					$stuck_raw_value
+				)
+			);
+		};
+		$guard  = static function ( $changed ) use ( $option, $revert ): void {
+			if ( $changed === $option ) {
+				$revert();
+			}
+		};
+		add_action( 'added_option', $guard );
+		add_action( 'updated_option', $guard );
+		add_action( 'deleted_option', $guard );
 	}
 
 	public function test_read_only_off_recovers_from_a_stale_persistent_cache(): void {
@@ -218,9 +263,9 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		update_option( 'aafm_read_only_mode', true );
-		// A cache the plugin cannot repair for this one option: whatever is written, the read keeps
-		// coming back unlocked, so the requested LOCK can never actually persist.
-		add_filter( 'pre_option_aafm_high_risk_abilities_unlocked', static fn() => '1' );
+		// The row genuinely cannot be deleted: whatever the save does, it comes straight back
+		// unlocked, so the requested LOCK can never actually persist.
+		$this->make_option_write_unpersistable( 'aafm_high_risk_abilities_unlocked', '1' );
 
 		// Both checkboxes absent from $_POST: the operator asks to lock high-risk abilities
 		// (restrictive) and to turn read-only mode off (permissive) in the same save.
@@ -310,9 +355,9 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		update_option( 'aafm_read_only_mode', true );
-		// A cache the plugin cannot repair for this one option: whatever is written, the read keeps
-		// coming back unlocked, so the requested LOCK can never actually persist.
-		add_filter( 'pre_option_aafm_high_risk_abilities_unlocked', static fn() => '1' );
+		// The row genuinely cannot be deleted: whatever the save does, it comes straight back
+		// unlocked, so the requested LOCK can never actually persist.
+		$this->make_option_write_unpersistable( 'aafm_high_risk_abilities_unlocked', '1' );
 
 		// Both checkboxes absent from $_POST: the operator asks to lock high-risk abilities
 		// (restrictive, fails) and to turn read-only mode off (permissive, deferred) in one save.
@@ -334,8 +379,8 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	public function test_a_switch_that_will_not_persist_is_reported_as_an_error_not_success(): void {
 		$this->acting_as( 'administrator' );
 		update_option( 'aafm_read_only_mode', true );
-		// A cache the plugin cannot repair: whatever is written, the read keeps coming back on.
-		add_filter( 'pre_option_aafm_read_only_mode', static fn() => '1' );
+		// The row genuinely cannot be deleted: whatever the save does, it comes straight back on.
+		$this->make_option_write_unpersistable( 'aafm_read_only_mode', '1' );
 
 		$json = $this->post_settings_save();
 
@@ -343,6 +388,60 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->assertStringContainsString( 'object cache', strtolower( (string) ( $json['data']['message'] ?? '' ) ) );
 		$row = $this->latest_log_row( 'aafm/read-only-mode' );
 		$this->assertSame( 'error', $row['status'] ?? null, 'The activity log must record the failed switch as an error, never as "turned off".' );
+	}
+
+	/**
+	 * PARTIAL finding 6 remainder (Codex hotfix re-check): certification must be checked against
+	 * the database row and the object cache's own forced views (aafm_read_option_views()), not a
+	 * subsequent unforced get_option() read that a drop-in could satisfy from a runtime copy primed
+	 * before its own remote write's result was known. These three cases are exactly the ones the
+	 * review named: DB wins when the cache holds nothing for the option, an absent-intent write is
+	 * NOT certified when the cache still claims the option exists, and an absent-intent write IS
+	 * certified when both views agree it is gone.
+	 */
+	public function test_certification_trusts_the_database_row_when_the_cache_holds_nothing_for_the_option(): void {
+		update_option( 'aafm_read_only_mode', true );
+		wp_cache_delete( 'aafm_read_only_mode', 'options' );
+		$all = wp_load_alloptions( true );
+		unset( $all['aafm_read_only_mode'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+
+		$this->assertTrue(
+			aafm_option_write_certified( 'aafm_read_only_mode', true ),
+			'DB row true + forced cache absent must certify for an "on" intent: the database wins, and an absent cache view is not a contradiction.'
+		);
+	}
+
+	public function test_certification_refuses_an_absent_intent_when_the_cache_still_claims_the_option_exists(): void {
+		global $wpdb;
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_read_only_mode' ) );
+		$all                        = wp_load_alloptions( true );
+		$all['aafm_read_only_mode'] = '1';
+		wp_cache_set( 'alloptions', $all, 'options' );
+
+		$this->assertFalse(
+			aafm_option_write_certified( 'aafm_read_only_mode', false, true ),
+			'DB row absent + forced cache "1" must NOT certify for an "off" (absent) intent: the cache still contradicts it.'
+		);
+	}
+
+	public function test_certification_confirms_an_absent_intent_when_both_views_agree_it_is_gone(): void {
+		global $wpdb;
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_read_only_mode' ) );
+		wp_cache_delete( 'aafm_read_only_mode', 'options' );
+		$all = wp_load_alloptions( true );
+		unset( $all['aafm_read_only_mode'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$not = wp_cache_get( 'notoptions', 'options', true );
+		if ( is_array( $not ) ) {
+			unset( $not['aafm_read_only_mode'] );
+			wp_cache_set( 'notoptions', $not, 'options' );
+		}
+
+		$this->assertTrue(
+			aafm_option_write_certified( 'aafm_read_only_mode', false, true ),
+			'DB row absent + cache absent must certify for an "off" (absent) intent: both independent views agree.'
+		);
 	}
 
 	public function test_forgetting_one_option_leaves_every_other_cached_option_alone(): void {
@@ -467,9 +566,9 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	public function test_the_abilities_ajax_toggle_logs_a_failure_row_not_a_success_diff_when_the_write_will_not_persist(): void {
 		$this->acting_as( 'administrator' );
 		update_option( 'aafm_enabled_abilities', array() );
-		// A cache the plugin cannot repair for this option: whatever is written, the read keeps
-		// coming back empty, which can never match the non-empty set this save intends to enable.
-		add_filter( 'pre_option_aafm_enabled_abilities', static fn() => array() );
+		// The row genuinely cannot be updated: whatever the save writes, it comes straight back
+		// empty, which can never match the non-empty set this save intends to enable.
+		$this->make_option_write_unpersistable( 'aafm_enabled_abilities', serialize( array() ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- planting the raw row a real write would leave, not user-facing data.
 
 		$this->intercept_die();
 		$nonce                   = wp_create_nonce( 'aafm_admin' );
@@ -478,7 +577,6 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$_POST['aafm_abilities'] = array( 'aafm/get-posts' );
 		$json                    = $this->run_handler( 'aafm_ajax_save_abilities' );
 		unset( $_POST['aafm_abilities'] );
-		remove_all_filters( 'pre_option_aafm_enabled_abilities' );
 
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The AJAX toggle must not claim success when the write did not persist.' );
 		$this->assertStringContainsString( 'object cache', strtolower( (string) ( $json['data']['message'] ?? '' ) ) );

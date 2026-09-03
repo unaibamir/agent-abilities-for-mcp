@@ -1323,11 +1323,16 @@
 				}
 				if ( status ) {
 					if ( ! json?.success ) {
-						// A failed save never wrote anything - say so plainly.
-						status.textContent = this.#t(
-							'settingsNotSaved',
-							'Could not save - your previous settings are still in effect.'
-						);
+						// A rejected save never wrote anything, so the generic line is right for it.
+						// The exception is a server message: the governance switches report a change
+						// that did not take (a stale persistent object cache) after every other
+						// setting was stored, and that message names the switch and the remedy.
+						status.textContent =
+							json?.data?.message ??
+							this.#t(
+								'settingsNotSaved',
+								'Could not save - your previous settings are still in effect.'
+							);
 					} else {
 						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
 						const kept = Array.isArray( json.data?.aafm_ip_allowlist )

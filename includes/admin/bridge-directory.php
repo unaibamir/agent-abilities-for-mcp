@@ -848,16 +848,30 @@ function aafm_ajax_save_bridged_abilities(): void {
 		}
 	}
 	$enabled = array_values( array_unique( array_merge( $allowed, $orphans, $lock_kept ) ) );
-	update_option( 'aafm_enabled_bridged_abilities', $enabled );
+	// Verified, not a bare update_option(): see aafm_update_option_verified()'s docblock for why a
+	// persistent object cache can otherwise make the write silently no-op.
+	$enabled_persisted = aafm_update_option_verified( 'aafm_enabled_bridged_abilities', $enabled );
 
 	// B18: the bridge tab changes ability exposure outside the main save path, so it carries the
 	// same audit contract - one ability_enabled/ability_disabled row per changed slug, and one
 	// ability_enable_blocked row per refused fresh write. The reason is passed explicitly:
 	// aafm_ability_lock_reason() is native-only and must never see a bridged slug, and the only
-	// floor that refuses a bridged enable is read-only mode.
-	aafm_log_ability_toggle_diff( $stored, $enabled );
+	// floor that refuses a bridged enable is read-only mode. The refusal rows are logged regardless
+	// of what happens below - they describe what the floor refused to even attempt, not whether the
+	// write that follows persisted.
 	if ( ! empty( $refused ) ) {
 		aafm_log_blocked_ability_enables( $refused, 'read_only' );
+	}
+
+	// The success-style diff must not be logged ahead of knowing whether the write actually took:
+	// a stale persistent object cache can make $enabled_persisted false while $enabled still lists
+	// every slug the operator asked for, and logging the diff first would leave
+	// ability_enabled/ability_disabled rows on record for a change the database never accepted.
+	if ( $enabled_persisted ) {
+		aafm_log_ability_toggle_diff( $stored, $enabled );
+	} else {
+		aafm_log_ability_persist_failure( 'aafm_enabled_bridged_abilities', __( 'The bridged abilities selection', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The bridged abilities selection', 'agent-abilities-for-mcp' ) ) ) );
 	}
 
 	wp_send_json_success(

@@ -2114,3 +2114,17 @@ function aafm_rich_template_output_properties(): array {
 	$base['content'] = array( 'type' => 'string' );
 	return $base;
 }
+
+/**
+ * The operator-facing explanation for a switch that did not persist.
+ *
+ * @param string $label Human name of the switch, already translated.
+ * @return string
+ */
+function aafm_switch_not_persisted_message( string $label ): string {
+	return sprintf(
+		/* translators: %s: the name of the setting, for example "Read-only mode". */
+		__( '%s could not be changed: the site\'s persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
+		$label
+	);
+}

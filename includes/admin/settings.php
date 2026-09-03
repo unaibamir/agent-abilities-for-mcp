@@ -135,12 +135,6 @@ function aafm_ajax_save_settings(): void {
 	// forces the mode on through the filter still records what the operator actually changed.
 	$read_only_before = (bool) get_option( 'aafm_read_only_mode', false );
 
-	update_option( 'aafm_rate_limit_per_min', $clean['aafm_rate_limit_per_min'] );
-	update_option( 'aafm_max_title_len', $clean['aafm_max_title_len'] );
-	update_option( 'aafm_log_retention_days', $clean['aafm_log_retention_days'] );
-	update_option( 'aafm_force_draft', $clean['aafm_force_draft'] );
-	update_option( 'aafm_block_guard_strict', $clean['aafm_block_guard_strict'] );
-	update_option( 'aafm_delete_data_on_uninstall', $clean['aafm_delete_data_on_uninstall'] );
 	// Delete rather than store false: locked is the option's out-of-the-box (row-absent) state, and
 	// both readers (this file's checked() call and aafm_high_risk_unlocked()) already default to
 	// off on a missing row, so a stored false and an absent row behave identically today. But an
@@ -148,19 +142,99 @@ function aafm_ajax_save_settings(): void {
 	// itself cannot restore to once the switch has been touched once. Deleting on "off" keeps a
 	// site that never unlocks the category, or that unlocks then re-locks it, in the same absent
 	// row either way.
-	if ( $clean['aafm_high_risk_abilities_unlocked'] ) {
-		update_option( 'aafm_high_risk_abilities_unlocked', true );
-	} else {
-		delete_option( 'aafm_high_risk_abilities_unlocked' );
-	}
-	// Off deletes the row here too, for the reason spelled out above the high-risk branch.
-	aafm_set_read_only_mode( $clean['aafm_read_only_mode'] );
-	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
-	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
-	update_option( 'aafm_ip_allowlist', $clean['aafm_ip_allowlist'] );
+	//
+	// The two switches are applied restrictive direction first, and BEFORE anything else in this
+	// save touches the database: locking high-risk abilities and turning read-only mode on both
+	// narrow what an agent can reach, so either one that was requested persists before the ordinary
+	// settings loop below gets a chance to fail and cut the save short. A verified-settings failure
+	// used to abort the whole handler above this point, which could leave a requested lock or
+	// read-only-on never even attempted while everything else the operator posted had already
+	// changed - narrower than intended is tolerable, wider than intended or wider than requested is
+	// not. A switch whose requested direction is itself restrictive, or that was not touched by this
+	// save at all, has nothing to defer and is simply left at $high_risk_persisted / a bool true.
+	// A permissive transition (unlock high-risk, turn read-only off) is deferred to the permissive
+	// block further down and is represented here only by a placeholder `true` - no write has been
+	// attempted for it yet. Track that separately from $high_risk_persisted / $read_only_persisted so
+	// an early exit below can tell "attempted, and this is its real result" apart from "not attempted
+	// yet, this is only a placeholder". Logging a deferred transition here would record a write that
+	// never ran as a success (Codex hotfix re-check, new finding 1).
+	$high_risk_attempted = ! $clean['aafm_high_risk_abilities_unlocked'];
+	$read_only_attempted = $clean['aafm_read_only_mode'];
 
-	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'] );
-	aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'] );
+	$high_risk_persisted = $clean['aafm_high_risk_abilities_unlocked'] ? true : aafm_set_high_risk_unlocked( false );
+	$read_only_persisted = $clean['aafm_read_only_mode'] ? aafm_set_read_only_mode( true ) : true;
+
+	if ( ! $high_risk_persisted || ! $read_only_persisted ) {
+		if ( $high_risk_attempted ) {
+			aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+		}
+		if ( $read_only_attempted ) {
+			aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+		}
+		if ( ! $high_risk_persisted ) {
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The high-risk abilities switch', 'agent-abilities-for-mcp' ) ) ) );
+		}
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
+	}
+
+	// Every value below only takes effect once it reads back from the database as what was just
+	// written (aafm_update_option_verified()), not merely once update_option() has been called. A
+	// persistent object cache that still disagrees with the database can make a plain
+	// update_option() silently no-op, or write against a row that no longer exists and return
+	// false without touching anything (see that function's docblock) - a save must not tell the
+	// operator a setting changed when the database still holds the old value. This runs only once
+	// the requested restrictive posture above is safely in place.
+	$verified_settings = array(
+		'aafm_rate_limit_per_min'       => array( $clean['aafm_rate_limit_per_min'], __( 'The rate limit', 'agent-abilities-for-mcp' ) ),
+		'aafm_max_title_len'            => array( $clean['aafm_max_title_len'], __( 'The maximum title length', 'agent-abilities-for-mcp' ) ),
+		'aafm_log_retention_days'       => array( $clean['aafm_log_retention_days'], __( 'The activity log retention setting', 'agent-abilities-for-mcp' ) ),
+		'aafm_force_draft'              => array( $clean['aafm_force_draft'], __( 'Force draft on create', 'agent-abilities-for-mcp' ) ),
+		'aafm_block_guard_strict'       => array( $clean['aafm_block_guard_strict'], __( 'Strict block validation', 'agent-abilities-for-mcp' ) ),
+		'aafm_delete_data_on_uninstall' => array( $clean['aafm_delete_data_on_uninstall'], __( 'Delete data on uninstall', 'agent-abilities-for-mcp' ) ),
+		'aafm_oauth_enabled'            => array( $clean['aafm_oauth_enabled'], __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ),
+		'aafm_oauth_dcr_enabled'        => array( $clean['aafm_oauth_dcr_enabled'], __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) ),
+		'aafm_ip_allowlist'             => array( $clean['aafm_ip_allowlist'], __( 'The IP allowlist', 'agent-abilities-for-mcp' ) ),
+	);
+	foreach ( $verified_settings as $verified_option => $verified_pair ) {
+		list( $verified_value, $verified_label ) = $verified_pair;
+		if ( ! aafm_update_option_verified( $verified_option, $verified_value ) ) {
+			// The requested restrictive posture above already persisted and is not being undone by
+			// this failure, so it still needs its own audit row before the save reports the error - but
+			// only for a switch that was actually attempted. A deferred permissive transition (see the
+			// $high_risk_attempted / $read_only_attempted comment above) must not be logged here: it was
+			// never written, so logging it now would claim a success that never happened.
+			if ( $high_risk_attempted ) {
+				aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+			}
+			if ( $read_only_attempted ) {
+				aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+			}
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $verified_label ) ) );
+		}
+	}
+
+	// Every requested restrictive change is safely in place and every ordinary setting verified, so
+	// only now is either governance switch allowed to move in the permissive direction.
+	if ( $clean['aafm_high_risk_abilities_unlocked'] ) {
+		$high_risk_persisted = aafm_set_high_risk_unlocked( true );
+	}
+	if ( ! $clean['aafm_read_only_mode'] ) {
+		// Off deletes the row here too, for the reason spelled out above the high-risk branch.
+		$read_only_persisted = aafm_set_read_only_mode( false );
+	}
+
+	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+	aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+
+	// Every other setting above is already stored. These two are the governance switches, and a
+	// save that reports success while one of them silently kept its old value is exactly the
+	// failure seen live behind a host Redis drop-in. Say what happened instead.
+	if ( ! $high_risk_persisted ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The high-risk abilities switch', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! $read_only_persisted ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
+	}
 
 	wp_send_json_success(
 		array(
@@ -189,15 +263,28 @@ function aafm_ajax_save_settings(): void {
  * treatment as an ability toggle, for the same reason, so an incident timeline shows who opened
  * the category and when, not only which call fired afterwards.
  *
- * @param bool $before Previous value.
- * @param bool $after  New value.
+ * @param bool $before    Previous value.
+ * @param bool $after     New value.
+ * @param bool $persisted Whether the write actually took (aafm_persist_operator_switch()).
  * @return void
  */
-function aafm_log_high_risk_switch_change( bool $before, bool $after ): void {
-	if ( $before === $after ) {
+function aafm_log_high_risk_switch_change( bool $before, bool $after, bool $persisted = true ): void {
+	if ( $before === $after && $persisted ) {
 		return;
 	}
 	$user = wp_get_current_user();
+	if ( $persisted ) {
+		$detail = $after
+			? __( 'High-risk abilities unlocked', 'agent-abilities-for-mcp' )
+			: __( 'High-risk abilities locked', 'agent-abilities-for-mcp' );
+	} else {
+		// The write did not take (a stale persistent object cache, see
+		// aafm_persist_operator_switch()). A "locked" row over a category that is still open would
+		// be the worst possible lie in this log, so the row says what actually happened.
+		$detail = $after
+			? __( 'High-risk abilities could not be unlocked: object cache stale', 'agent-abilities-for-mcp' )
+			: __( 'High-risk abilities could not be locked: object cache stale', 'agent-abilities-for-mcp' );
+	}
 	aafm_log_activity(
 		array(
 			// Both the admin table (page.php's Event column) and the AJAX-paginated re-render put
@@ -209,11 +296,9 @@ function aafm_log_high_risk_switch_change( bool $before, bool $after ): void {
 			'ability'           => 'aafm/high-risk-abilities-unlocked',
 			'principal_user_id' => (int) $user->ID,
 			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
-			'status'            => 'success',
+			'status'            => $persisted ? 'success' : 'error',
 			'event_type'        => 'setting_changed',
-			'detail'            => $after
-				? __( 'High-risk abilities unlocked', 'agent-abilities-for-mcp' )
-				: __( 'High-risk abilities locked', 'agent-abilities-for-mcp' ),
+			'detail'            => $detail,
 		)
 	);
 }
@@ -290,6 +375,36 @@ function aafm_config_option_names(): array {
 }
 
 /**
+ * Whether the current blog's options TABLE - not the object cache - actually stores a truthy
+ * delete-on-uninstall flag.
+ *
+ * `get_option()` trusts the `alloptions` cache blob without ever consulting the database
+ * (wp-includes/option.php), so a persistent object cache that still disagrees with the database
+ * would let a stale cached "true" authorize `aafm_uninstall_site()` and the OAuth table drops
+ * below, even with the flag's own row absent or false. A decision this destructive has to be as
+ * good as the row actually on disk, not whatever the cache still remembers, so this reads the
+ * table directly rather than going through get_option(). This is the one read in the whole plugin
+ * that is allowed to cost a query it would not otherwise need, because what it gates cannot be
+ * undone.
+ *
+ * @return bool
+ */
+function aafm_uninstall_should_delete_data(): bool {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache; see the docblock above.
+	$raw = $wpdb->get_var(
+		$wpdb->prepare(
+			"SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1",
+			'aafm_delete_data_on_uninstall'
+		)
+	);
+	if ( null === $raw ) {
+		return false;
+	}
+	return (bool) maybe_unserialize( $raw );
+}
+
+/**
  * Remove this plugin's data for the current blog.
  *
  * Clears this site's cron registrations FIRST, unconditionally - cron registrations are
@@ -301,11 +416,13 @@ function aafm_config_option_names(): array {
  * CURRENT blog context - they cannot reach every site on a multisite network the way
  * aafm_run_uninstall() (uninstall.php) does by switching through each one.
  *
- * Reads the per-site data-retention flag next. When the flag is not set (the default), data is
- * kept and the function returns before touching anything else. When the flag is explicitly
- * turned on by the site admin, the full teardown runs: every configuration option, the
- * activity-log table, and the four OAuth tables are all removed. The flag itself is deleted
- * last so it cannot leak after uninstall.
+ * Reads the per-site data-retention flag next - straight off the database
+ * (aafm_uninstall_should_delete_data()), not through get_option(), because a stale persistent
+ * object cache must never be able to authorize this. When the stored value is not truthy (the
+ * default: no row, or a row holding false), data is kept and the function returns before touching
+ * anything else. When it is explicitly turned on by the site admin, the full teardown runs: every
+ * configuration option, the activity-log table, and the four OAuth tables are all removed. The
+ * flag itself is deleted last, cache-safely, so it cannot leak after uninstall.
  *
  * Called once per site by aafm_run_uninstall() in uninstall.php. Declared here (settings.php)
  * so the PHPUnit suite can call it directly without bootstrapping the uninstall context.
@@ -316,21 +433,21 @@ function aafm_uninstall_site_data(): void {
 	wp_clear_scheduled_hook( 'aafm_prune_activity_log_daily' );
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
 
-	if ( ! get_option( 'aafm_delete_data_on_uninstall', false ) ) {
+	if ( ! aafm_uninstall_should_delete_data() ) {
 		return;
 	}
 
 	aafm_uninstall_site();
 	aafm_drop_oauth_tables();
-	delete_option( 'aafm_oauth_schema_version' );
-	delete_option( 'aafm_activity_log_schema_version' );
+	aafm_delete_option_cache_safe( 'aafm_oauth_schema_version' );
+	aafm_delete_option_cache_safe( 'aafm_activity_log_schema_version' );
 	// The one-time OAuth upgrade-preserve guard and the DCR default-on adoption guard (both written by
 	// the plugins_loaded migrations). Cleared here so a delete-data uninstall leaves nothing behind.
 	// They are deliberately NOT in the reset set: clearing a guard on reset would let its migration
 	// re-run and could flip a toggle back on.
-	delete_option( 'aafm_oauth_toggle_migrated' );
-	delete_option( 'aafm_oauth_dcr_default_on_migrated' );
-	delete_option( 'aafm_delete_data_on_uninstall' );
+	aafm_delete_option_cache_safe( 'aafm_oauth_toggle_migrated' );
+	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_migrated' );
+	aafm_delete_option_cache_safe( 'aafm_delete_data_on_uninstall' );
 }
 
 /**
@@ -350,8 +467,10 @@ function aafm_uninstall_site_data(): void {
  * @return void
  */
 function aafm_reset_plugin(): void {
+	// Cache-safe on purpose: reset is what an operator reaches for when a setting looks stuck, and
+	// a stale persistent object cache is one way a setting gets stuck (aafm_forget_option_caches()).
 	foreach ( aafm_config_option_names() as $option ) {
-		delete_option( $option );
+		aafm_delete_option_cache_safe( $option );
 	}
 	aafm_clear_activity_log();
 	aafm_log_activity_cleared_marker();

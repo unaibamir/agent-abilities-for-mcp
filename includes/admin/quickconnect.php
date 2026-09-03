@@ -221,16 +221,28 @@ function aafm_quickconnect_write_abilities(): array {
  * and aafm_set_enabled_abilities() refuses a write that is not already stored while the mode is on,
  * which would otherwise swallow the write bundle this call is trying to enable.
  *
- * @param bool $write Whether the optional write bundle should be enabled.
- * @return void
+ * The return value is whether BOTH the read-only-mode switch and the enabled-abilities write
+ * actually persisted, so the caller can answer the operator honestly instead of reporting success
+ * over a write that silently stuck (see aafm_persist_operator_switch() and
+ * aafm_update_option_verified() for why a stale persistent object cache can do this to either one
+ * independently of the other). The two optional by-reference out params expose which of the two
+ * failed, so the caller can name the actual cause in its error message rather than a generic one.
+ *
+ * @param bool      $write               Whether the optional write bundle should be enabled.
+ * @param bool|null $read_only_persisted Out param: true when read-only mode reads back as requested.
+ * @param bool|null $abilities_persisted Out param: true when the enabled-abilities write verified.
+ * @param-out bool  $read_only_persisted
+ * @param-out bool  $abilities_persisted
+ * @return bool True only when both the read-only-mode switch and the enabled-abilities write
+ *              actually persisted.
  */
-function aafm_quickconnect_apply_abilities( bool $write ): void {
+function aafm_quickconnect_apply_abilities( bool $write, ?bool &$read_only_persisted = null, ?bool &$abilities_persisted = null ): bool {
 	$read_set  = aafm_quickconnect_read_abilities();
 	$write_set = aafm_quickconnect_write_abilities();
 
-	$read_only_before = (bool) get_option( 'aafm_read_only_mode', false );
-	aafm_set_read_only_mode( ! $write );
-	aafm_log_read_only_switch_change( $read_only_before, ! $write );
+	$read_only_before    = (bool) get_option( 'aafm_read_only_mode', false );
+	$read_only_persisted = aafm_set_read_only_mode( ! $write );
+	aafm_log_read_only_switch_change( $read_only_before, ! $write, $read_only_persisted );
 
 	// The RAW stored list, not aafm_get_enabled_abilities(): with read-only mode already on from a
 	// previous run, the floored reader would hand back reads only and every write the operator had
@@ -256,12 +268,21 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
 	// include one by construction (content-subject, non-destructive abilities only), so this is
 	// a defensive pass-through rather than something expected to fire here.
 	//
-	// The toggle diff is logged exactly like the main save path (B18): a wizard run makes
-	// abilities reachable, and "when did this become reachable, and who made it so" is the
-	// question the ability_enabled/ability_disabled rows exist to answer. $current is the raw
-	// stored list read above, before any of this function's writes.
-	$persisted = aafm_set_enabled_abilities( $enabled );
-	aafm_log_ability_toggle_diff( $current, $persisted );
+	// $enabled_final is the INTENDED set aafm_set_enabled_abilities() always returns, not proof the
+	// database agrees with it - $abilities_persisted (the by-reference out param) is that proof.
+	// The toggle diff is logged exactly like the main save path (B18) - "when did this become
+	// reachable, and who made it so" - but only once the write is known to have actually taken;
+	// logging it unconditionally would leave a success-style row for a change a stale persistent
+	// object cache silently swallowed. $current is the raw stored list read above, before any of
+	// this function's writes.
+	$enabled_final = aafm_set_enabled_abilities( $enabled, $abilities_persisted );
+	if ( $abilities_persisted ) {
+		aafm_log_ability_toggle_diff( $current, $enabled_final );
+	} else {
+		aafm_log_ability_persist_failure( 'aafm_enabled_abilities', __( 'The enabled abilities selection', 'agent-abilities-for-mcp' ) );
+	}
+
+	return $read_only_persisted && $abilities_persisted;
 }
 
 /**
@@ -289,7 +310,9 @@ function aafm_ajax_quickconnect_oauth(): void {
 	}
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$enabled = ! empty( $_POST['enabled'] ) ? '1' : '0';
-	update_option( 'aafm_oauth_enabled', $enabled );
+	if ( ! aafm_update_option_verified( 'aafm_oauth_enabled', $enabled ) ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success(
 		array(
 			'aafm_oauth_enabled'     => $enabled,
@@ -317,7 +340,22 @@ function aafm_ajax_quickconnect_finish(): void {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$write = ! empty( $_POST['write'] );
 
-	aafm_quickconnect_apply_abilities( $write );
+	aafm_quickconnect_apply_abilities( $write, $read_only_persisted, $abilities_persisted );
+
+	// Mirrors aafm_ajax_save_settings(): a wizard finish that reports success while either the
+	// read-only switch or the enabled-abilities write it just applied silently stuck is the same
+	// silent-wrong-answer this exists to close - EITHER can fail independently under a stale
+	// persistent object cache (aafm_quickconnect_apply_abilities()'s docblock). The completion flag
+	// is written only once both checks have passed - written first, it would permanently suppress
+	// the wizard on the next page load even though this exact request is about to report an error,
+	// so a reload would show the site as "finished" over a setup that never actually completed.
+	if ( ! $read_only_persisted ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! $abilities_persisted ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The enabled abilities selection', 'agent-abilities-for-mcp' ) ) ) );
+	}
+
 	update_option( 'aafm_quickconnect_finished', '1' );
 
 	wp_send_json_success(

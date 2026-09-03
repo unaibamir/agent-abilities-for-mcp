@@ -171,6 +171,87 @@ final class UninstallTest extends TestCase {
 		$this->assertFalse( get_option( 'aafm_oauth_refresh_ttl', false ), 'aafm_oauth_refresh_ttl must be deleted when the uninstall flag is set.' );
 	}
 
+	/**
+	 * BLOCKER: aafm_uninstall_site_data() must decide whether to wipe the site from the actual
+	 * database row, never from get_option()'s cache. Plants the exact shape a stale persistent
+	 * object cache leaves behind - the row for aafm_delete_data_on_uninstall gone (or never
+	 * written), the autoloaded blob still claiming it is "1" - and asserts nothing is dropped: a
+	 * stale cached true must never authorize a wipe the database itself does not back.
+	 */
+	public function test_uninstall_keeps_data_when_db_row_is_absent_despite_a_stale_cached_true(): void {
+		global $wpdb;
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+		update_option( 'aafm_oauth_schema_version', '4' );
+
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_delete_data_on_uninstall' ) );
+		$all                                  = wp_load_alloptions( true );
+		$all['aafm_delete_data_on_uninstall'] = '1';
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertTrue( (bool) get_option( 'aafm_delete_data_on_uninstall', false ), 'Precondition: the stale cache is what get_option() sees.' );
+		$this->assertNull(
+			$wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s", 'aafm_delete_data_on_uninstall' ) ),
+			'Precondition: no DB row backs the cached true.'
+		);
+
+		aafm_uninstall_site_data();
+
+		$this->assertSame( array( 'aafm/get-posts' ), get_option( 'aafm_enabled_abilities' ), 'A stale cached true must not authorize a wipe when the database row is absent.' );
+		$this->assertTrue( $this->activity_log_table_exists(), 'The activity log table must survive a cache-only "true".' );
+		$this->assertSame( '4', get_option( 'aafm_oauth_schema_version' ), 'aafm_oauth_schema_version must survive a cache-only "true".' );
+	}
+
+	/**
+	 * The mirror image, and the reason this cannot simply always retain data: when the database
+	 * row genuinely says true, the wipe must still proceed, whatever the cache happens to hold.
+	 */
+	public function test_uninstall_wipes_everything_when_the_db_row_is_genuinely_true(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+		update_option( 'aafm_oauth_schema_version', '4' );
+		update_option( 'aafm_delete_data_on_uninstall', true );
+		// A stale cache in the other direction must not block a genuine, DB-backed wipe either.
+		wp_cache_delete( 'aafm_delete_data_on_uninstall', 'options' );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( get_option( 'aafm_enabled_abilities', false ), 'A genuinely stored true must still authorize the wipe.' );
+		$this->assertFalse( $this->activity_log_table_exists(), 'Activity log table must be dropped when the DB row is genuinely true.' );
+		$this->assertFalse( get_option( 'aafm_oauth_schema_version', false ), 'aafm_oauth_schema_version must be deleted when the DB row is genuinely true.' );
+		$this->assertFalse( get_option( 'aafm_delete_data_on_uninstall', false ), 'The flag itself must not leak after the wipe.' );
+	}
+
+	/**
+	 * Multisite variant of the retention case above: a subsite's own cache must not be able to
+	 * authorize a wipe of that subsite's data when its own options table disagrees.
+	 *
+	 * @group ms-required
+	 */
+	public function test_uninstall_keeps_data_on_a_switched_multisite_blog_despite_a_stale_cached_true(): void {
+		global $wpdb;
+		$this->skipWithoutMultisite();
+		$blog_id = (int) self::factory()->blog->create();
+
+		switch_to_blog( $blog_id );
+		aafm_install_activity_log();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_delete_data_on_uninstall' ) );
+		$all                                  = wp_load_alloptions( true );
+		$all['aafm_delete_data_on_uninstall'] = '1';
+		wp_cache_set( 'alloptions', $all, 'options' );
+
+		aafm_uninstall_site_data();
+
+		$kept_enabled = get_option( 'aafm_enabled_abilities' );
+		$log_survived = $this->activity_log_table_exists();
+		restore_current_blog();
+
+		$this->assertSame( array( 'aafm/get-posts' ), $kept_enabled, 'A stale cached true on a subsite must not authorize wiping that subsite.' );
+		$this->assertTrue( $log_survived, "The subsite's activity log table must survive a cache-only \"true\"." );
+	}
+
 	public function test_cleanup_drops_table_and_option(): void {
 		aafm_install_activity_log();
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );

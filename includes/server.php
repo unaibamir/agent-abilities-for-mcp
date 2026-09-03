@@ -1237,7 +1237,7 @@ function aafm_reconcile_omitted_abilities( array $omitted ): void {
 	}
 
 	if ( array() === $omitted ) {
-		delete_option( AAFM_OMITTED_ABILITIES_OPTION );
+		aafm_delete_option_cache_safe( AAFM_OMITTED_ABILITIES_OPTION );
 		return;
 	}
 

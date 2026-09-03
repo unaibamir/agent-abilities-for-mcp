@@ -102,9 +102,14 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 
 		$persisted = aafm_set_read_only_mode( false );
 
-		$this->assertTrue( $persisted, 'The write must report that the off state actually persisted.' );
+		// Observable state first: this is what a page render or a later request would actually see,
+		// and it is the thing that matters. The return-value contract is asserted after it, as its
+		// own, separate claim - against 1.7.2's aafm_set_read_only_mode() (which returned void) this
+		// ordering is what makes the test fail on the boolean contract specifically, rather than
+		// stopping on a fatal before ever reaching the state assertions below.
 		$this->assertFalse( aafm_read_only_mode(), 'Read-only mode must read as off after the operator turns it off.' );
 		$this->assertSame( 'MISSING', get_option( 'aafm_read_only_mode', 'MISSING' ), 'Off is still the absent row.' );
+		$this->assertTrue( $persisted, 'The write must report that the off state actually persisted.' );
 	}
 
 	public function test_read_only_on_recovers_from_a_stale_absent_cache(): void {
@@ -117,8 +122,32 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		wp_cache_set( 'notoptions', array( 'aafm_read_only_mode' => true ), 'options' );
 		$this->assertFalse( get_option( 'aafm_read_only_mode', false ), 'Precondition: the stale cache hides the row.' );
 
-		$this->assertTrue( aafm_set_read_only_mode( true ) );
+		$persisted = aafm_set_read_only_mode( true );
+
+		// Observable state before the return-value contract - see the comment on the test above.
 		$this->assertTrue( aafm_read_only_mode() );
+		$this->assertTrue( $persisted );
+	}
+
+	/**
+	 * MEDIUM (Codex hotfix review, finding 4): the on branch used to call update_option() before
+	 * forgetting any stale cache entry. update_option() decides UPDATE-vs-INSERT from get_option()'s
+	 * cached idea of the current value, so with the row absent and the cache still claiming the
+	 * switch was already on, it ran an UPDATE against a row that did not exist, affected nothing,
+	 * and returned before touching any cache at all - leaving the stale entry for this function's
+	 * own after-write forget to clear a moment later with no write to show for it. That made this
+	 * exact case - cache says on, row absent, operator (again) requests on - fail on the first
+	 * attempt and only succeed on a second call, after the first call's cleanup had already fixed
+	 * the cache for next time. Forgetting the cache BEFORE the write, not only after, closes that.
+	 */
+	public function test_read_only_on_recovers_in_one_attempt_when_cache_and_request_already_agree(): void {
+		$this->plant_stale_on( 'aafm_read_only_mode' );
+
+		$persisted = aafm_set_read_only_mode( true );
+
+		$this->assertTrue( aafm_read_only_mode(), 'Read-only mode must read as on.' );
+		$this->assertSame( '1', get_option( 'aafm_read_only_mode', 'MISSING' ), 'The row must actually be stored, not merely still cached.' );
+		$this->assertTrue( $persisted, 'The write must report success on the FIRST attempt, not require a second save.' );
 	}
 
 	public function test_high_risk_lock_recovers_from_a_stale_persistent_cache_through_the_settings_save(): void {

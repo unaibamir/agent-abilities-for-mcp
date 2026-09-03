@@ -186,8 +186,8 @@ final class UninstallTest extends TestCase {
 		update_option( 'aafm_oauth_schema_version', '4' );
 
 		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_delete_data_on_uninstall' ) );
-		$all                                       = wp_load_alloptions( true );
-		$all['aafm_delete_data_on_uninstall']      = '1';
+		$all                                  = wp_load_alloptions( true );
+		$all['aafm_delete_data_on_uninstall'] = '1';
 		wp_cache_set( 'alloptions', $all, 'options' );
 		$this->assertTrue( (bool) get_option( 'aafm_delete_data_on_uninstall', false ), 'Precondition: the stale cache is what get_option() sees.' );
 		$this->assertNull(

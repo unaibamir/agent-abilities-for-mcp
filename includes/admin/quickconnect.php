@@ -295,7 +295,9 @@ function aafm_ajax_quickconnect_oauth(): void {
 	}
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$enabled = ! empty( $_POST['enabled'] ) ? '1' : '0';
-	update_option( 'aafm_oauth_enabled', $enabled );
+	if ( ! aafm_update_option_verified( 'aafm_oauth_enabled', $enabled ) ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success(
 		array(
 			'aafm_oauth_enabled'     => $enabled,

@@ -848,7 +848,9 @@ function aafm_ajax_save_bridged_abilities(): void {
 		}
 	}
 	$enabled = array_values( array_unique( array_merge( $allowed, $orphans, $lock_kept ) ) );
-	update_option( 'aafm_enabled_bridged_abilities', $enabled );
+	// Verified, not a bare update_option(): see aafm_update_option_verified()'s docblock for why a
+	// persistent object cache can otherwise make the write silently no-op.
+	$enabled_persisted = aafm_update_option_verified( 'aafm_enabled_bridged_abilities', $enabled );
 
 	// B18: the bridge tab changes ability exposure outside the main save path, so it carries the
 	// same audit contract - one ability_enabled/ability_disabled row per changed slug, and one
@@ -858,6 +860,10 @@ function aafm_ajax_save_bridged_abilities(): void {
 	aafm_log_ability_toggle_diff( $stored, $enabled );
 	if ( ! empty( $refused ) ) {
 		aafm_log_blocked_ability_enables( $refused, 'read_only' );
+	}
+
+	if ( ! $enabled_persisted ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The bridged abilities selection', 'agent-abilities-for-mcp' ) ) ) );
 	}
 
 	wp_send_json_success(

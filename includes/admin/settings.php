@@ -135,12 +135,29 @@ function aafm_ajax_save_settings(): void {
 	// forces the mode on through the filter still records what the operator actually changed.
 	$read_only_before = (bool) get_option( 'aafm_read_only_mode', false );
 
-	update_option( 'aafm_rate_limit_per_min', $clean['aafm_rate_limit_per_min'] );
-	update_option( 'aafm_max_title_len', $clean['aafm_max_title_len'] );
-	update_option( 'aafm_log_retention_days', $clean['aafm_log_retention_days'] );
-	update_option( 'aafm_force_draft', $clean['aafm_force_draft'] );
-	update_option( 'aafm_block_guard_strict', $clean['aafm_block_guard_strict'] );
-	update_option( 'aafm_delete_data_on_uninstall', $clean['aafm_delete_data_on_uninstall'] );
+	// Every value below only takes effect once it reads back from the database as what was just
+	// written (aafm_update_option_verified()), not merely once update_option() has been called. A
+	// persistent object cache that still disagrees with the database can make a plain
+	// update_option() silently no-op, or write against a row that no longer exists and return
+	// false without touching anything (see that function's docblock) - a save must not tell the
+	// operator a setting changed when the database still holds the old value.
+	$verified_settings = array(
+		'aafm_rate_limit_per_min'       => array( $clean['aafm_rate_limit_per_min'], __( 'The rate limit', 'agent-abilities-for-mcp' ) ),
+		'aafm_max_title_len'            => array( $clean['aafm_max_title_len'], __( 'The maximum title length', 'agent-abilities-for-mcp' ) ),
+		'aafm_log_retention_days'       => array( $clean['aafm_log_retention_days'], __( 'The activity log retention setting', 'agent-abilities-for-mcp' ) ),
+		'aafm_force_draft'              => array( $clean['aafm_force_draft'], __( 'Force draft on create', 'agent-abilities-for-mcp' ) ),
+		'aafm_block_guard_strict'       => array( $clean['aafm_block_guard_strict'], __( 'Strict block validation', 'agent-abilities-for-mcp' ) ),
+		'aafm_delete_data_on_uninstall' => array( $clean['aafm_delete_data_on_uninstall'], __( 'Delete data on uninstall', 'agent-abilities-for-mcp' ) ),
+		'aafm_oauth_enabled'            => array( $clean['aafm_oauth_enabled'], __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ),
+		'aafm_oauth_dcr_enabled'        => array( $clean['aafm_oauth_dcr_enabled'], __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) ),
+		'aafm_ip_allowlist'             => array( $clean['aafm_ip_allowlist'], __( 'The IP allowlist', 'agent-abilities-for-mcp' ) ),
+	);
+	foreach ( $verified_settings as $verified_option => $verified_pair ) {
+		list( $verified_value, $verified_label ) = $verified_pair;
+		if ( ! aafm_update_option_verified( $verified_option, $verified_value ) ) {
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $verified_label ) ) );
+		}
+	}
 	// Delete rather than store false: locked is the option's out-of-the-box (row-absent) state, and
 	// both readers (this file's checked() call and aafm_high_risk_unlocked()) already default to
 	// off on a missing row, so a stored false and an absent row behave identically today. But an
@@ -151,9 +168,6 @@ function aafm_ajax_save_settings(): void {
 	$high_risk_persisted = aafm_set_high_risk_unlocked( $clean['aafm_high_risk_abilities_unlocked'] );
 	// Off deletes the row here too, for the reason spelled out above the high-risk branch.
 	$read_only_persisted = aafm_set_read_only_mode( $clean['aafm_read_only_mode'] );
-	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
-	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
-	update_option( 'aafm_ip_allowlist', $clean['aafm_ip_allowlist'] );
 
 	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
 	aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
@@ -323,6 +337,7 @@ function aafm_config_option_names(): array {
  */
 function aafm_uninstall_should_delete_data(): bool {
 	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache; see the docblock above.
 	$raw = $wpdb->get_var(
 		$wpdb->prepare(
 			"SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1",

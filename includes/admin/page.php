@@ -282,7 +282,13 @@ function aafm_set_enabled_abilities( array $enabled ): array {
 		}
 	}
 
-	update_option( 'aafm_enabled_abilities', $clean );
+	// Verified, not a bare update_option(): a persistent object cache that still disagrees with the
+	// database can make a plain write silently no-op (aafm_update_option_verified()'s docblock).
+	// This function's return type is the single choke point every caller already depends on for
+	// diff logging and for what it reports as the persisted set, so a failed write is not raised as
+	// an exception here; aafm_ajax_save_abilities() checks the database directly before it reports
+	// success to the operator.
+	aafm_update_option_verified( 'aafm_enabled_abilities', $clean );
 
 	if ( ! empty( $blocked ) ) {
 		aafm_log_blocked_ability_enables( $blocked );
@@ -443,6 +449,14 @@ function aafm_ajax_save_abilities(): void {
 	$posted  = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$enabled = aafm_set_enabled_abilities( $posted );
 	aafm_log_ability_toggle_diff( $before, $enabled );
+
+	// aafm_set_enabled_abilities() already writes through the verified helper, but its return value
+	// is the intended set, not proof the database agrees with it - check the read-back here, where
+	// the response actually gets reported to the operator as saved.
+	if ( maybe_serialize( get_option( 'aafm_enabled_abilities' ) ) !== maybe_serialize( $enabled ) ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Enabled abilities', 'agent-abilities-for-mcp' ) ) ) );
+	}
+
 	wp_send_json_success(
 		array(
 			'enabled'               => $enabled,

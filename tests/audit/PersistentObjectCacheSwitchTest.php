@@ -265,6 +265,72 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->assertSame( 'success', $row['status'] ?? null, 'The restrictive switch that did persist must be logged as a success, not left unlogged.' );
 	}
 
+	/**
+	 * MEDIUM (Codex hotfix re-check, new finding 1): a deferred permissive switch used to be
+	 * represented by a placeholder `true` before any write was attempted for it. When an unrelated
+	 * ordinary setting then failed to verify, the early-exit branch logged that placeholder as if it
+	 * were the switch's real, persisted result - so a request to unlock high-risk abilities that was
+	 * never actually attempted could still produce a success-style "High-risk abilities unlocked" row,
+	 * while the option itself stayed locked. Only a switch that was actually attempted may be logged.
+	 */
+	public function test_an_ordinary_setting_failure_while_requesting_unlock_logs_no_false_success_and_leaves_high_risk_locked(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+		delete_option( 'aafm_rate_limit_per_min' );
+		// A cache the plugin cannot repair for this one ordinary option: whatever is written, the
+		// read keeps coming back at a value nothing posted could ever match.
+		add_filter( 'pre_option_aafm_rate_limit_per_min', static fn() => '999999' );
+
+		$_POST['aafm_high_risk_abilities_unlocked'] = '1';
+		$json                                       = $this->post_settings_save();
+		remove_all_filters( 'pre_option_aafm_rate_limit_per_min' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the ordinary setting failed to persist.' );
+		$this->assertFalse(
+			aafm_high_risk_unlocked(),
+			'The unlock was never attempted (it is deferred past the ordinary-settings loop), so high-risk abilities must stay locked.'
+		);
+		$rows = aafm_query_activity( array( 'per_page' => 20 ) );
+		$this->assertEmpty(
+			array_filter(
+				$rows,
+				static fn( array $r ): bool => 'aafm/high-risk-abilities-unlocked' === ( $r['ability'] ?? '' ) && 'success' === ( $r['status'] ?? '' )
+			),
+			'A deferred unlock that was never attempted must not leave a success-style row in the activity log.'
+		);
+	}
+
+	/**
+	 * MEDIUM (Codex hotfix re-check, new finding 1), the early-restrictive-failure branch's copy of
+	 * the same bug: a restrictive failure (the requested high-risk lock cannot persist) used to log
+	 * the paired deferred permissive transition (read-only mode OFF) as a success too, even though
+	 * that write is never even attempted once the save aborts this early.
+	 */
+	public function test_a_restrictive_failure_logs_no_false_success_for_the_paired_deferred_permissive_switch(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		update_option( 'aafm_read_only_mode', true );
+		// A cache the plugin cannot repair for this one option: whatever is written, the read keeps
+		// coming back unlocked, so the requested LOCK can never actually persist.
+		add_filter( 'pre_option_aafm_high_risk_abilities_unlocked', static fn() => '1' );
+
+		// Both checkboxes absent from $_POST: the operator asks to lock high-risk abilities
+		// (restrictive, fails) and to turn read-only mode off (permissive, deferred) in one save.
+		$json = $this->post_settings_save();
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the requested lock did not persist.' );
+		$rows = aafm_query_activity( array( 'per_page' => 20 ) );
+		$this->assertEmpty(
+			array_filter(
+				$rows,
+				static fn( array $r ): bool => 'aafm/read-only-mode' === ( $r['ability'] ?? '' )
+					&& 'success' === ( $r['status'] ?? '' )
+					&& false !== strpos( (string) ( $r['detail'] ?? '' ), 'turned off' )
+			),
+			'The deferred read-only-off transition was never attempted (the restrictive failure aborted the save first), so no "Read-only mode turned off" success row may exist.'
+		);
+	}
+
 	public function test_a_switch_that_will_not_persist_is_reported_as_an_error_not_success(): void {
 		$this->acting_as( 'administrator' );
 		update_option( 'aafm_read_only_mode', true );

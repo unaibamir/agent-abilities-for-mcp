@@ -152,12 +152,25 @@ function aafm_ajax_save_settings(): void {
 	// changed - narrower than intended is tolerable, wider than intended or wider than requested is
 	// not. A switch whose requested direction is itself restrictive, or that was not touched by this
 	// save at all, has nothing to defer and is simply left at $high_risk_persisted / a bool true.
+	// A permissive transition (unlock high-risk, turn read-only off) is deferred to the permissive
+	// block further down and is represented here only by a placeholder `true` - no write has been
+	// attempted for it yet. Track that separately from $high_risk_persisted / $read_only_persisted so
+	// an early exit below can tell "attempted, and this is its real result" apart from "not attempted
+	// yet, this is only a placeholder". Logging a deferred transition here would record a write that
+	// never ran as a success (Codex hotfix re-check, new finding 1).
+	$high_risk_attempted = ! $clean['aafm_high_risk_abilities_unlocked'];
+	$read_only_attempted = $clean['aafm_read_only_mode'];
+
 	$high_risk_persisted = $clean['aafm_high_risk_abilities_unlocked'] ? true : aafm_set_high_risk_unlocked( false );
 	$read_only_persisted = $clean['aafm_read_only_mode'] ? aafm_set_read_only_mode( true ) : true;
 
 	if ( ! $high_risk_persisted || ! $read_only_persisted ) {
-		aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
-		aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+		if ( $high_risk_attempted ) {
+			aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+		}
+		if ( $read_only_attempted ) {
+			aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+		}
 		if ( ! $high_risk_persisted ) {
 			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The high-risk abilities switch', 'agent-abilities-for-mcp' ) ) ) );
 		}
@@ -186,9 +199,16 @@ function aafm_ajax_save_settings(): void {
 		list( $verified_value, $verified_label ) = $verified_pair;
 		if ( ! aafm_update_option_verified( $verified_option, $verified_value ) ) {
 			// The requested restrictive posture above already persisted and is not being undone by
-			// this failure, so it still needs its own audit row before the save reports the error.
-			aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
-			aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+			// this failure, so it still needs its own audit row before the save reports the error - but
+			// only for a switch that was actually attempted. A deferred permissive transition (see the
+			// $high_risk_attempted / $read_only_attempted comment above) must not be logged here: it was
+			// never written, so logging it now would claim a success that never happened.
+			if ( $high_risk_attempted ) {
+				aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+			}
+			if ( $read_only_attempted ) {
+				aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+			}
 			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $verified_label ) ) );
 		}
 	}

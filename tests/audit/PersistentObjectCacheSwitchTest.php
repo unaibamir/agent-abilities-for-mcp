@@ -205,4 +205,29 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 
 		$this->assertFalse( aafm_high_risk_unlocked(), 'Uninstall must not leave a stale unlock for the next install to inherit.' );
 	}
+
+	/**
+	 * The Quick Connect wizard's finish step is the plugin's other write-gate entry point (first-run
+	 * onboarding, alongside the main settings save covered above). It must not claim success when the
+	 * read-only-mode switch it flips on the operator's behalf fails to persist.
+	 */
+	public function test_quickconnect_finish_reports_an_error_when_read_only_mode_will_not_persist(): void {
+		$this->acting_as( 'administrator' );
+		// A cache the plugin cannot repair: whatever is written, the read keeps coming back off.
+		add_filter( 'pre_option_aafm_read_only_mode', static fn() => '0' );
+
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		// Write off means the wizard turns read-only mode ON, which is the write this filter blocks.
+		$_POST['write'] = '0';
+		$json           = $this->run_handler( 'aafm_ajax_quickconnect_finish' );
+		unset( $_POST['write'] );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The finish handler must not claim success when read-only mode did not persist.' );
+		$this->assertStringContainsString( 'object cache', strtolower( (string) ( $json['data']['message'] ?? '' ) ) );
+		$row = $this->latest_log_row( 'aafm/read-only-mode' );
+		$this->assertSame( 'error', $row['status'] ?? null, 'The activity log must record the failed switch as an error, never as success.' );
+	}
 }

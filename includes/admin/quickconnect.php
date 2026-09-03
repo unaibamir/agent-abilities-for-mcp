@@ -221,16 +221,20 @@ function aafm_quickconnect_write_abilities(): array {
  * and aafm_set_enabled_abilities() refuses a write that is not already stored while the mode is on,
  * which would otherwise swallow the write bundle this call is trying to enable.
  *
+ * The return value is whether the read-only-mode switch actually persisted, so the caller can
+ * answer the operator honestly instead of reporting success over a write that silently stuck
+ * (see aafm_persist_operator_switch() for why a stale persistent object cache can do this).
+ *
  * @param bool $write Whether the optional write bundle should be enabled.
- * @return void
+ * @return bool True when read-only mode now reads back as the state this call requested.
  */
-function aafm_quickconnect_apply_abilities( bool $write ): void {
+function aafm_quickconnect_apply_abilities( bool $write ): bool {
 	$read_set  = aafm_quickconnect_read_abilities();
 	$write_set = aafm_quickconnect_write_abilities();
 
-	$read_only_before = (bool) get_option( 'aafm_read_only_mode', false );
-	$persisted        = aafm_set_read_only_mode( ! $write );
-	aafm_log_read_only_switch_change( $read_only_before, ! $write, $persisted );
+	$read_only_before    = (bool) get_option( 'aafm_read_only_mode', false );
+	$read_only_persisted = aafm_set_read_only_mode( ! $write );
+	aafm_log_read_only_switch_change( $read_only_before, ! $write, $read_only_persisted );
 
 	// The RAW stored list, not aafm_get_enabled_abilities(): with read-only mode already on from a
 	// previous run, the floored reader would hand back reads only and every write the operator had
@@ -260,8 +264,10 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
 	// abilities reachable, and "when did this become reachable, and who made it so" is the
 	// question the ability_enabled/ability_disabled rows exist to answer. $current is the raw
 	// stored list read above, before any of this function's writes.
-	$persisted = aafm_set_enabled_abilities( $enabled );
-	aafm_log_ability_toggle_diff( $current, $persisted );
+	$enabled_persisted = aafm_set_enabled_abilities( $enabled );
+	aafm_log_ability_toggle_diff( $current, $enabled_persisted );
+
+	return $read_only_persisted;
 }
 
 /**
@@ -317,8 +323,14 @@ function aafm_ajax_quickconnect_finish(): void {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$write = ! empty( $_POST['write'] );
 
-	aafm_quickconnect_apply_abilities( $write );
+	$read_only_persisted = aafm_quickconnect_apply_abilities( $write );
 	update_option( 'aafm_quickconnect_finished', '1' );
+
+	// Mirrors aafm_ajax_save_settings(): a wizard finish that reports success while the read-only
+	// switch it just flipped silently stuck is the same silent-wrong-answer this diff exists to close.
+	if ( ! $read_only_persisted ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
+	}
 
 	wp_send_json_success(
 		array(

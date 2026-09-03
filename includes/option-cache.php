@@ -73,9 +73,18 @@ function aafm_delete_option_cache_safe( string $option ): void {
 }
 
 /**
- * Force every read of $option, and of the `alloptions` blob, past whatever this request's own
- * runtime cache still remembers, so a certification below reflects what the persistent cache
- * backend itself is holding rather than a copy this process primed earlier in the same request.
+ * Force every read of $option, of the `alloptions` blob, and of the `notoptions` list, past
+ * whatever this request's own runtime cache still remembers, so a certification below reflects
+ * what the persistent cache backend itself is holding rather than a copy this process primed
+ * earlier in the same request.
+ *
+ * `notoptions` is not a minor third cache entry here: `get_option()` consults it BEFORE ever
+ * querying the database (wp-includes/option.php) - if the option's name is still listed there, the
+ * function returns its default and never reaches the database at all, no matter what the row now
+ * holds. A write that turns a previously-absent option into a real row (the exact shape of
+ * aafm_persist_operator_switch()'s ON branch) is invisible to a read-back that only refreshes
+ * `alloptions` and the per-option key: the stale `notoptions` entry alone is enough to make a
+ * successful write certify as failed.
  *
  * `wp_cache_get( ..., true )`'s `$force` argument is what a drop-in is supposed to honor for this;
  * the bundled Redis drop-in and Automattic's Memcached drop-in both do (see the module docblock
@@ -91,6 +100,7 @@ function aafm_delete_option_cache_safe( string $option ): void {
 function aafm_force_refresh_option_caches( string $option ): void {
 	wp_cache_get( $option, 'options', true );
 	wp_cache_get( 'alloptions', 'options', true );
+	wp_cache_get( 'notoptions', 'options', true );
 }
 
 /**

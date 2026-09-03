@@ -142,6 +142,19 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		// Observable state before the return-value contract - see the comment on the test above.
 		$this->assertTrue( aafm_read_only_mode() );
 		$this->assertTrue( $persisted );
+
+		// PARTIAL finding 6 (Codex hotfix re-check): a stale `notoptions` entry planted before the
+		// write - the exact shape this test opens with - must not survive it either. get_option()
+		// consults `notoptions` BEFORE the database, so a write that leaves the option still listed
+		// there would certify as failed (or worse, read back as absent again on the very next
+		// request) even with `alloptions` and the per-option key both freshly repaired.
+		$not_options = wp_cache_get( 'notoptions', 'options', true );
+		$this->assertIsArray( $not_options, 'The notoptions blob must be rewritten, not dropped.' );
+		$this->assertArrayNotHasKey(
+			'aafm_read_only_mode',
+			$not_options,
+			'A stale notoptions entry planted before the write must not still claim the option is absent after it.'
+		);
 	}
 
 	/**

@@ -273,17 +273,11 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 ## Changelog
 ### 1.7.2
 
-* **Feature:** New consent screen for the sign-in an agent sees. It carries a real brand mark and your Site Icon, and for connectors it recognizes by their verified redirect host, that connector's own icon.
-* **Feature:** The Activity Log now records the outcome of every MCP request that reaches WordPress. A sign-in with no calls after it means the request never arrived, which usually points at a CDN or firewall.
-* **Feature:** Dynamic client registration has its own switch on the Settings tab again, on by default, so ChatGPT and Claude connect without extra setup.
-* **Fix:** ChatGPT reported a discovery failure and could not connect on sites where dynamic client registration was off. It is on by default now, and installs still carrying the old default get switched on when they update.
-* **Fix:** The OAuth authorize step mangled a redirect address containing percent-encoded characters, so some clients could never finish connecting.
-* **Fix:** When a session could not be saved, the server handed back a session ID that did not exist and every later call failed for no visible reason. It returns a real error now.
-* **Fix:** A very large or deeply nested tool schema could exhaust memory while the tool list was built. Depth, size, and count limits now apply, oversized tools drop out of the list, and an admin notice names them.
-* **Fix:** Deleting a revision checked the wrong capability, so the permission gate did not match what WordPress requires.
-* **Fix:** A batch of smaller correctness fixes across WooCommerce, ACF, and Rank Math. Variation writes clear the parent product's price cache, a partly saved ACF batch reports what actually persisted, a shipping method's title is checked after it is set, and Rank Math schema reads back what was written.
-* **Chore:** Uninstall clears the OAuth token-lifetime options it used to leave behind, a duplicated schema-depth constant is gone, an AIOSEO bridge label reads correctly, and a bail on a non-HTTPS request goes to the log instead of passing silently.
-* **Chore:** Both readmes have a new FAQ entry about CDNs and firewalls that block the agent at the edge, with Cloudflare's "Block AI Bots" setting as the usual cause.
+* **Feature:** The consent screen an agent sees at sign-in was rebuilt. It carries a real brand mark, your Site Icon, and the connector's own icon when the plugin recognizes it by its verified redirect host.
+* **Feature:** The Activity Log now records every MCP request that reaches WordPress. A sign-in with no calls after it means a CDN or firewall stopped the agent before it arrived.
+* **Fix:** ChatGPT could not connect on sites where dynamic client registration was off. It has its own switch on the Settings tab again, on by default, and existing installs get switched on when they update.
+* **Fix:** Three connection bugs are gone: the OAuth authorize step mangled percent-encoded redirect addresses, a failed session write handed back a session ID that did not exist, and a very large tool schema could exhaust memory while the tool list was built.
+* **Fix:** Smaller correctness fixes across WooCommerce, ACF, and Rank Math, plus a wrong capability check on delete-revision, OAuth options left behind at uninstall, and a new readme FAQ for CDNs that block the agent at the edge.
 
 ### 1.7.1
 

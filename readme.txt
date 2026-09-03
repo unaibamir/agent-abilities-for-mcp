@@ -293,7 +293,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 = 1.7.3 =
 
-* **Fix:** On sites with a persistent object cache (Redis, Memcached, or a host's own drop-in), read-only mode and the high-risk abilities switch could refuse to turn off. The cache kept serving the old value after the setting was removed, and the Activity Log still recorded the change as done. Both switches now clear their own cache entries, read the stored value back, and report an error that names the cache when the change did not take.
+* **Fix:** The plugin is now fully compatible with a persistent WordPress object cache (Redis, Memcached, or a host's own drop-in): a switch you turn off stays off, and a change that did not take is reported instead of logged as done.
 * **Fix:** Reset to defaults and delete-on-uninstall clear the plugin's own option cache entries too, so a stale cache cannot bring a setting back after a reset.
 
 = 1.7.2 =

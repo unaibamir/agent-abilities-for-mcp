@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-04T03:35:11+05:00\n"
+"POT-Creation-Date: 2026-09-04T04:39:46+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -3398,7 +3398,7 @@ msgstr ""
 #: includes/admin/review-request.php:742
 #: includes/admin/review-request.php:775
 #: includes/admin/settings.php:122
-#: includes/admin/settings.php:472
+#: includes/admin/settings.php:492
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -4802,7 +4802,7 @@ msgstr ""
 
 #: includes/admin/page.php:206
 #: includes/admin/quickconnect.php:697
-#: includes/admin/settings.php:545
+#: includes/admin/settings.php:565
 msgid "OAuth"
 msgstr ""
 
@@ -5692,15 +5692,15 @@ msgstr ""
 #: includes/admin/quickconnect.php:314
 #: includes/admin/quickconnect.php:468
 #: includes/admin/quickconnect.php:472
-#: includes/admin/settings.php:181
-#: includes/admin/settings.php:517
+#: includes/admin/settings.php:194
+#: includes/admin/settings.php:537
 msgid "Enable OAuth"
 msgstr ""
 
 #: includes/admin/quickconnect.php:353
-#: includes/admin/settings.php:164
-#: includes/admin/settings.php:216
-#: includes/admin/settings.php:584
+#: includes/admin/settings.php:177
+#: includes/admin/settings.php:236
+#: includes/admin/settings.php:604
 msgid "Read-only mode"
 msgstr ""
 
@@ -5843,8 +5843,8 @@ msgid "Safety guarantees"
 msgstr ""
 
 #: includes/admin/quickconnect.php:620
-#: includes/admin/settings.php:585
-#: includes/admin/settings.php:625
+#: includes/admin/settings.php:605
+#: includes/admin/settings.php:645
 msgid "Off by default"
 msgstr ""
 
@@ -5954,280 +5954,280 @@ msgstr ""
 msgid "Unknown action."
 msgstr ""
 
-#: includes/admin/settings.php:162
-#: includes/admin/settings.php:213
+#: includes/admin/settings.php:175
+#: includes/admin/settings.php:233
 msgid "The high-risk abilities switch"
 msgstr ""
 
-#: includes/admin/settings.php:175
+#: includes/admin/settings.php:188
 msgid "The rate limit"
 msgstr ""
 
-#: includes/admin/settings.php:176
+#: includes/admin/settings.php:189
 msgid "The maximum title length"
 msgstr ""
 
-#: includes/admin/settings.php:177
+#: includes/admin/settings.php:190
 msgid "The activity log retention setting"
 msgstr ""
 
-#: includes/admin/settings.php:178
-#: includes/admin/settings.php:674
+#: includes/admin/settings.php:191
+#: includes/admin/settings.php:694
 msgid "Force draft on create"
 msgstr ""
 
-#: includes/admin/settings.php:179
-#: includes/admin/settings.php:685
+#: includes/admin/settings.php:192
+#: includes/admin/settings.php:705
 msgid "Strict block validation"
 msgstr ""
 
-#: includes/admin/settings.php:180
-#: includes/admin/settings.php:736
+#: includes/admin/settings.php:193
+#: includes/admin/settings.php:756
 msgid "Delete data on uninstall"
 msgstr ""
 
-#: includes/admin/settings.php:182
-#: includes/admin/settings.php:529
+#: includes/admin/settings.php:195
+#: includes/admin/settings.php:549
 msgid "Enable dynamic client registration"
 msgstr ""
 
-#: includes/admin/settings.php:183
+#: includes/admin/settings.php:196
 msgid "The IP allowlist"
 msgstr ""
 
-#: includes/admin/settings.php:258
+#: includes/admin/settings.php:278
 msgid "High-risk abilities unlocked"
 msgstr ""
 
-#: includes/admin/settings.php:259
+#: includes/admin/settings.php:279
 msgid "High-risk abilities locked"
 msgstr ""
 
-#: includes/admin/settings.php:265
+#: includes/admin/settings.php:285
 msgid "High-risk abilities could not be unlocked: object cache stale"
 msgstr ""
 
-#: includes/admin/settings.php:266
+#: includes/admin/settings.php:286
 msgid "High-risk abilities could not be locked: object cache stale"
 msgstr ""
 
-#: includes/admin/settings.php:477
+#: includes/admin/settings.php:497
 msgid "Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone."
 msgstr ""
 
-#: includes/admin/settings.php:520
+#: includes/admin/settings.php:540
 msgid "Let agents connect by pasting your site URL."
 msgstr ""
 
-#: includes/admin/settings.php:521
+#: includes/admin/settings.php:541
 msgid "Let agents connect by pasting your site URL. Application Passwords keep working either way."
 msgstr ""
 
-#: includes/admin/settings.php:532
+#: includes/admin/settings.php:552
 msgid "Let agents self-register a client automatically."
 msgstr ""
 
-#: includes/admin/settings.php:533
+#: includes/admin/settings.php:553
 msgid "On by default, so ChatGPT and Claude can connect. Turn it off to require manual client setup."
 msgstr ""
 
-#: includes/admin/settings.php:539
+#: includes/admin/settings.php:559
 msgid "If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it."
 msgstr ""
 
-#: includes/admin/settings.php:555
+#: includes/admin/settings.php:575
 msgid "These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need."
 msgstr ""
 
-#: includes/admin/settings.php:568
+#: includes/admin/settings.php:588
 msgid "Let agents read this site, and nothing else."
 msgstr ""
 
-#: includes/admin/settings.php:569
+#: includes/admin/settings.php:589
 msgid "While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable."
 msgstr ""
 
-#: includes/admin/settings.php:573
+#: includes/admin/settings.php:593
 msgid "That covers this plugin's own abilities and any bridged in from other plugins. It never turns anything on for you: your selections are kept exactly as they are, so switching this back off restores them."
 msgstr ""
 
-#: includes/admin/settings.php:574
+#: includes/admin/settings.php:594
 msgid "A bridged ability counts as a read only when the plugin that wrote it says so. That is the same declaration this plugin already trusts elsewhere, but it is the other plugin making it, not this one."
 msgstr ""
 
-#: includes/admin/settings.php:575
+#: includes/admin/settings.php:595
 msgid "Every flip of this switch is recorded in the activity log, and those entries expire on the same retention schedule as everything else in it."
 msgstr ""
 
-#: includes/admin/settings.php:578
+#: includes/admin/settings.php:598
 msgid "See more about read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:604
+#: includes/admin/settings.php:624
 msgid "Read-only mode is on, so this does nothing right now. Every high-risk ability writes, and read-only mode is already holding all of them. Turn read-only mode off above to use this switch."
 msgstr ""
 
-#: includes/admin/settings.php:610
+#: includes/admin/settings.php:630
 msgid "Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually."
 msgstr ""
 
-#: includes/admin/settings.php:611
+#: includes/admin/settings.php:631
 msgid "While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab."
 msgstr ""
 
-#: includes/admin/settings.php:613
+#: includes/admin/settings.php:633
 msgid "Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart."
 msgstr ""
 
-#: includes/admin/settings.php:614
+#: includes/admin/settings.php:634
 msgid "This switch covers this plugin's own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately."
 msgstr ""
 
-#: includes/admin/settings.php:615
+#: includes/admin/settings.php:635
 msgid "The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting below if you want a longer record of when the category was opened."
 msgstr ""
 
-#: includes/admin/settings.php:618
+#: includes/admin/settings.php:638
 msgid "See more about the high-risk category"
 msgstr ""
 
-#: includes/admin/settings.php:624
+#: includes/admin/settings.php:644
 msgid "Unlock the category"
 msgstr ""
 
-#: includes/admin/settings.php:628
+#: includes/admin/settings.php:648
 msgid "Held by read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:640
+#: includes/admin/settings.php:660
 msgid "Rate limit"
 msgstr ""
 
-#: includes/admin/settings.php:641
+#: includes/admin/settings.php:661
 msgid "Per minute"
 msgstr ""
 
-#: includes/admin/settings.php:645
+#: includes/admin/settings.php:665
 msgid "Rate limit, per minute"
 msgstr ""
 
-#: includes/admin/settings.php:647
+#: includes/admin/settings.php:667
 msgid "How many agent calls one connection can make per minute. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter."
 msgstr ""
 
-#: includes/admin/settings.php:655
+#: includes/admin/settings.php:675
 msgid "Before you save a list with anything in it, add the IP address your AI client connects from. As soon as this list has one entry, any request from an address that is not on it is blocked, including your own agent. Get it wrong and every agent call stops."
 msgstr ""
 
-#: includes/admin/settings.php:660
+#: includes/admin/settings.php:680
 msgid "IP allowlist"
 msgstr ""
 
-#: includes/admin/settings.php:661
+#: includes/admin/settings.php:681
 msgid "One per line"
 msgstr ""
 
-#: includes/admin/settings.php:665
+#: includes/admin/settings.php:685
 msgid "IP allowlist, one per line"
 msgstr ""
 
-#: includes/admin/settings.php:666
+#: includes/admin/settings.php:686
 msgid "One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped."
 msgstr ""
 
-#: includes/admin/settings.php:676
+#: includes/admin/settings.php:696
 msgid "Save the content an agent creates as a draft, no matter what status the request asked for."
 msgstr ""
 
-#: includes/admin/settings.php:677
+#: includes/admin/settings.php:697
 msgid "Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Things without a draft state (media, menus, terms, comments, users, coupons, orders) and product variations are not affected."
 msgstr ""
 
-#: includes/admin/settings.php:687
+#: includes/admin/settings.php:707
 msgid "Reject an agent write when its block markup would show as invalid content in the editor."
 msgstr ""
 
-#: includes/admin/settings.php:688
+#: includes/admin/settings.php:708
 msgid "When this is off (the default), a write with questionable block markup still saves, and the agent is sent a warning so it can fix its next attempt. Turn it on to refuse the write instead, so nothing that could look broken in the editor is ever stored."
 msgstr ""
 
-#: includes/admin/settings.php:695
+#: includes/admin/settings.php:715
 msgid "Maximum title length"
 msgstr ""
 
-#: includes/admin/settings.php:696
+#: includes/admin/settings.php:716
 msgid "Characters"
 msgstr ""
 
-#: includes/admin/settings.php:700
+#: includes/admin/settings.php:720
 msgid "Maximum title length, in characters"
 msgstr ""
 
-#: includes/admin/settings.php:702
+#: includes/admin/settings.php:722
 msgid "The longest title, in characters, an agent can set. Set it to 0 to leave the limit off."
 msgstr ""
 
-#: includes/admin/settings.php:709
+#: includes/admin/settings.php:729
 msgid "Keep activity log for"
 msgstr ""
 
-#: includes/admin/settings.php:710
+#: includes/admin/settings.php:730
 msgid "Days"
 msgstr ""
 
-#: includes/admin/settings.php:714
+#: includes/admin/settings.php:734
 msgid "Keep activity log for, in days"
 msgstr ""
 
-#: includes/admin/settings.php:716
+#: includes/admin/settings.php:736
 msgid "How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry."
 msgstr ""
 
-#: includes/admin/settings.php:727
+#: includes/admin/settings.php:747
 msgid "Permanently remove all plugin data when the plugin is deleted."
 msgstr ""
 
-#: includes/admin/settings.php:728
+#: includes/admin/settings.php:748
 msgid "When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone."
 msgstr ""
 
-#: includes/admin/settings.php:730
+#: includes/admin/settings.php:750
 msgid "See more about deleting data on uninstall"
 msgstr ""
 
-#: includes/admin/settings.php:731
+#: includes/admin/settings.php:751
 msgid "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin."
 msgstr ""
 
-#: includes/admin/settings.php:745
+#: includes/admin/settings.php:765
 msgid "Safety controls"
 msgstr ""
 
-#: includes/admin/settings.php:752
+#: includes/admin/settings.php:772
 msgid "These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests."
 msgstr ""
 
-#: includes/admin/settings.php:764
+#: includes/admin/settings.php:784
 msgid "Save settings"
 msgstr ""
 
-#: includes/admin/settings.php:778
+#: includes/admin/settings.php:798
 msgid "Danger zone"
 msgstr ""
 
-#: includes/admin/settings.php:782
+#: includes/admin/settings.php:802
 msgid "Reset plugin"
 msgstr ""
 
-#: includes/admin/settings.php:782
+#: includes/admin/settings.php:802
 msgid "Cannot be undone"
 msgstr ""
 
-#: includes/admin/settings.php:784
+#: includes/admin/settings.php:804
 msgid "Reset plugin to defaults"
 msgstr ""
 
-#: includes/admin/settings.php:785
+#: includes/admin/settings.php:805
 msgid "Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone."
 msgstr ""
 

@@ -47,6 +47,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		remove_all_filters( 'pre_option_aafm_read_only_mode' );
 		remove_all_filters( 'pre_option_aafm_high_risk_abilities_unlocked' );
 		remove_all_filters( 'pre_option_aafm_rate_limit_per_min' );
+		remove_all_filters( 'pre_option_aafm_enabled_abilities' );
 		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['aafm_read_only_mode'], $_POST['aafm_high_risk_abilities_unlocked'] );
 		wp_cache_delete( 'alloptions', 'options' );
 		delete_option( 'aafm_read_only_mode' );
@@ -345,5 +346,73 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		// so a reload after this exact failure would have shown the site as "finished" even though
 		// setup never actually completed. It must stay unset while the response is an error.
 		$this->assertFalse( aafm_quickconnect_is_finished(), 'The wizard must not be marked finished when the switch it flips did not persist.' );
+	}
+
+	/**
+	 * MEDIUM (Codex hotfix re-check, new finding 2): aafm_quickconnect_apply_abilities() used to
+	 * discard aafm_set_enabled_abilities()'s verified-write boolean entirely, and the finish handler
+	 * checked only whether read-only mode persisted - so a run whose enabled-abilities write silently
+	 * failed under a stale persistent object cache still reported success and marked the wizard
+	 * finished, even though the abilities the operator asked for were never actually made reachable.
+	 * Mirrors the read-only-mode failure test above, for the sibling write.
+	 */
+	public function test_quickconnect_finish_reports_an_error_when_the_enabled_abilities_write_will_not_persist(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'aafm_enabled_abilities' );
+		// A cache the plugin cannot repair for this option: whatever is written, the read keeps
+		// coming back empty, which can never match the non-empty read/write bundle the wizard intends
+		// to enable.
+		add_filter( 'pre_option_aafm_enabled_abilities', static fn() => array() );
+
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$_POST['write']    = '1';
+		$json              = $this->run_handler( 'aafm_ajax_quickconnect_finish' );
+		unset( $_POST['write'] );
+		remove_all_filters( 'pre_option_aafm_enabled_abilities' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The finish handler must not claim success when the enabled-abilities write did not persist.' );
+		$this->assertStringContainsString( 'object cache', strtolower( (string) ( $json['data']['message'] ?? '' ) ) );
+		$this->assertFalse( aafm_quickconnect_is_finished(), 'The wizard must not be marked finished when the enabled-abilities write it made did not persist.' );
+	}
+
+	/**
+	 * MEDIUM (Codex hotfix re-check, new finding 3): the Abilities-tab AJAX toggle used to log the
+	 * intended ability_enabled/ability_disabled diff BEFORE checking whether the write actually
+	 * persisted, so a stale persistent object cache could leave a success-style row on record for
+	 * an ability that was never actually made reachable. The row written on a failed persist must
+	 * say so as an error, and no success-style row for the attempted ability may exist at all.
+	 */
+	public function test_the_abilities_ajax_toggle_logs_a_failure_row_not_a_success_diff_when_the_write_will_not_persist(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_enabled_abilities', array() );
+		// A cache the plugin cannot repair for this option: whatever is written, the read keeps
+		// coming back empty, which can never match the non-empty set this save intends to enable.
+		add_filter( 'pre_option_aafm_enabled_abilities', static fn() => array() );
+
+		$this->intercept_die();
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['aafm_abilities'] = array( 'aafm/get-posts' );
+		$json                    = $this->run_handler( 'aafm_ajax_save_abilities' );
+		unset( $_POST['aafm_abilities'] );
+		remove_all_filters( 'pre_option_aafm_enabled_abilities' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The AJAX toggle must not claim success when the write did not persist.' );
+		$this->assertStringContainsString( 'object cache', strtolower( (string) ( $json['data']['message'] ?? '' ) ) );
+
+		$rows = aafm_query_activity( array( 'per_page' => 20 ) );
+		$this->assertEmpty(
+			array_filter(
+				$rows,
+				static fn( array $r ): bool => 'ability_enabled' === ( $r['event_type'] ?? '' ) && 'aafm/get-posts' === ( $r['ability'] ?? '' )
+			),
+			'A write that never persisted must not leave a success-style ability_enabled row for the attempted ability.'
+		);
+		$row = $this->latest_log_row( 'aafm_enabled_abilities' );
+		$this->assertSame( 'error', $row['status'] ?? null, 'The failed write must be logged as a single error row naming the option, not silently dropped.' );
 	}
 }

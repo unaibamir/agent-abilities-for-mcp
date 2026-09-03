@@ -254,10 +254,22 @@ function aafm_get_stored_enabled_abilities_raw(): array {
  * locked name that was NOT already stored is stripped (and logged): it cannot have come from the
  * screen, since the screen rendered no control for it.
  *
- * @param array<int,string> $enabled Ability names to persist.
+ * The optional $persisted by-reference parameter carries out aafm_update_option_verified()'s
+ * write-actually-took boolean, so a caller that needs to know whether the write itself persisted -
+ * not just the intended set this function always returns - can get at it without a second read.
+ * It is a reference parameter rather than a change to the return shape (an array/bool tuple, or a
+ * result object) on purpose: this function's return value is already depended on directly as the
+ * persisted set by every existing caller and by tests across the suite (HighRiskSaveGuardTest,
+ * ReadOnlyModeTest among them), and changing that shape would have broken every one of them for a
+ * concern only two callers actually need (aafm_ajax_save_abilities(),
+ * aafm_quickconnect_apply_abilities()). A caller that does not need it simply omits the argument.
+ *
+ * @param array<int,string> $enabled   Ability names to persist.
+ * @param bool|null         $persisted Out param: true when the write verified as actually stored.
+ * @param-out bool          $persisted
  * @return array<int,string> The names actually written (newly attempted locked names removed).
  */
-function aafm_set_enabled_abilities( array $enabled ): array {
+function aafm_set_enabled_abilities( array $enabled, ?bool &$persisted = null ): array {
 	$before = aafm_get_stored_enabled_abilities_raw();
 
 	$locked  = array_values( array_filter( $enabled, 'aafm_ability_is_locked' ) );
@@ -286,9 +298,9 @@ function aafm_set_enabled_abilities( array $enabled ): array {
 	// database can make a plain write silently no-op (aafm_update_option_verified()'s docblock).
 	// This function's return type is the single choke point every caller already depends on for
 	// diff logging and for what it reports as the persisted set, so a failed write is not raised as
-	// an exception here; aafm_ajax_save_abilities() checks the database directly before it reports
-	// success to the operator.
-	aafm_update_option_verified( 'aafm_enabled_abilities', $clean );
+	// an exception here; a caller that needs to know whether the database actually agreed passes
+	// $persisted by reference rather than being handed a silently-optimistic true.
+	$persisted = aafm_update_option_verified( 'aafm_enabled_abilities', $clean );
 
 	if ( ! empty( $blocked ) ) {
 		aafm_log_blocked_ability_enables( $blocked );
@@ -447,15 +459,17 @@ function aafm_ajax_save_abilities(): void {
 	}
 	$before  = aafm_get_stored_enabled_abilities_raw();
 	$posted  = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$enabled = aafm_set_enabled_abilities( $posted );
-	aafm_log_ability_toggle_diff( $before, $enabled );
+	$enabled = aafm_set_enabled_abilities( $posted, $persisted );
 
-	// aafm_set_enabled_abilities() already writes through the verified helper, but its return value
-	// is the intended set, not proof the database agrees with it - check the read-back here, where
-	// the response actually gets reported to the operator as saved.
-	if ( maybe_serialize( get_option( 'aafm_enabled_abilities' ) ) !== maybe_serialize( $enabled ) ) {
+	// The toggle diff is only ever an accurate record of what actually happened once the write is
+	// known to have persisted - logging it unconditionally would leave success-style rows for a
+	// change a stale persistent object cache silently swallowed (aafm_log_ability_persist_failure()).
+	if ( ! $persisted ) {
+		aafm_log_ability_persist_failure( 'aafm_enabled_abilities', __( 'Enabled abilities', 'agent-abilities-for-mcp' ) );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Enabled abilities', 'agent-abilities-for-mcp' ) ) ) );
 	}
+
+	aafm_log_ability_toggle_diff( $before, $enabled );
 
 	wp_send_json_success(
 		array(
@@ -904,6 +918,37 @@ function aafm_log_ability_toggle_diff( array $before, array $after ): int {
 	}
 
 	return $written;
+}
+
+/**
+ * Record that an enabled-abilities write did not actually persist, instead of the usual
+ * success-style ability_enabled/ability_disabled diff.
+ *
+ * The sibling aafm_log_ability_toggle_diff() logs the INTENDED before/after difference; calling
+ * it unconditionally, before checking whether aafm_update_option_verified() actually got the
+ * value into the database, would leave success-style rows on record for a toggle that a stale
+ * persistent object cache silently swallowed - the exact silent-wrong-answer class
+ * aafm_update_option_verified() exists to catch elsewhere. This is the one row written instead:
+ * status 'error', naming the option so the real cause (option-cache.php's stale-cache class of
+ * bug) is legible straight from the log, without implying any ability actually changed state.
+ *
+ * @param string $option Option name that failed to persist.
+ * @param string $label  Human-readable label for the option, used in the detail message.
+ * @return void
+ */
+function aafm_log_ability_persist_failure( string $option, string $label ): void {
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => $option,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'error',
+			'event_type'        => 'setting_changed',
+			/* translators: %s: human-readable label of the option that failed to persist. */
+			'detail'            => sprintf( __( '%s could not be saved: object cache stale', 'agent-abilities-for-mcp' ), $label ),
+		)
+	);
 }
 
 /**

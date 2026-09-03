@@ -312,7 +312,12 @@ function aafm_oauth_consent_csp( string $redirect_origin = '' ): string {
 		$style_src .= ' ' . $asset_origin;
 	}
 
-	return "default-src 'none'; {$style_src}; img-src data:; {$form_action}; base-uri 'none'; frame-ancestors 'none'";
+	// img-src carries both 'self' and data:. data: covers the inlined SVG marks (brand logo,
+	// connector icons); 'self' covers the one uploaded raster on the page - the Customizer Site
+	// Icon, rendered as a same-origin <img> when the site has one. This is the minimal relaxation:
+	// 'self' admits only the page's own origin, so no external image host can load and the img-src
+	// beacon-exfiltration vector stays closed. Every other directive stays as tight as before.
+	return "default-src 'none'; {$style_src}; img-src 'self' data:; {$form_action}; base-uri 'none'; frame-ancestors 'none'";
 }
 
 /**
@@ -616,8 +621,21 @@ function aafm_oauth_handle_authorize(): void {
 		// returns to this exact endpoint after signing in. Built off home_url() + the
 		// raw REQUEST_URI rather than add_query_arg( array(), null ), which reads the
 		// superglobal implicitly and warns when it is absent.
+		//
+		// 1.7.2 bug #9: this MUST be esc_url_raw(), not sanitize_text_field(). REQUEST_URI is
+		// about to be reused as a URL, and sanitize_text_field() strips every %[a-f0-9]{2}
+		// sequence as part of its plain-text header-injection defense - verified directly:
+		// sanitize_text_field('...redirect_uri=' . rawurlencode('https://app.example/cb'))
+		// comes back as '...redirect_uri=httpsapp.examplecb', every percent-encoded octet gone.
+		// A percent-encoded redirect_uri or resource param (the normal shape for the dynamic-
+		// client-registration first-connect flow) was silently corrupted on every logged-out
+		// authorize request, hard-breaking with a local 400 invalid_redirect_uri once the user
+		// signed back in and this mangled value was used to re-parse the authorize params.
+		// esc_url_raw() is WordPress's own function for a URL string headed back out (not a
+		// display string) and leaves valid percent-encoding intact - verified directly against
+		// the same input above.
 		$request_uri = isset( $_SERVER['REQUEST_URI'] )
-			? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) )
+			? esc_url_raw( wp_unslash( $_SERVER['REQUEST_URI'] ) )
 			: '';
 		$return_to   = home_url( '/' );
 		if ( '' !== $request_uri ) {

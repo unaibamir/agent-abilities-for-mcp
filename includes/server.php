@@ -944,6 +944,391 @@ function aafm_filter_initialize_capabilities( $result, $server = null ) {
 }
 
 /**
+ * The maximum number of tools (native enabled + bridged) the server will register.
+ *
+ * The request-time tools/list path runs one real permission check per advertised tool - and for a
+ * bridged tool that is a FOREIGN plugin's permission_callback - inside a single loop over the whole
+ * catalog (aafm_filter_mcp_tools_list()). That loop has no cost cap of its own, so a pathological
+ * enabled+bridged set (thousands of abilities) could drive it into PHP's memory_limit or
+ * max_execution_time, an uncatchable fatal that returns a blank/500 the client reads as "not a
+ * valid MCP server" with no activity-log row (the fatal dies before rest_post_dispatch). This cap
+ * bounds that loop by bounding the catalog: the preflight registers up to this many tools and omits
+ * (and logs) the overflow.
+ *
+ * Deliberately generous. The heaviest real install measured (a full client clone with WooCommerce,
+ * ACF, LearnDash, BuddyBoss, and three SEO plugins) exposes 205 abilities in total, and the native
+ * catalog ceiling is ~153, so 1000 is several times any real surface and no normal install is ever
+ * trimmed - while still bounding the request-time loop to a fixed maximum.
+ */
+const AAFM_MAX_SERVER_TOOLS = 1000;
+
+/**
+ * The option that carries the abilities the last registration pass left OUT of the server, so an
+ * admin-side notice can surface them long after the (anonymous, non-admin) MCP request that
+ * detected them. Maps ability name => reason code. Absent when nothing was omitted.
+ */
+const AAFM_OMITTED_ABILITIES_OPTION = 'aafm_omitted_abilities';
+
+/**
+ * Depth- and count-bounded measurement walk over one schema value.
+ *
+ * The whole point of the preflight is to stop an unbounded/pathological schema from exhausting
+ * memory or time when the adapter serializes it for tools/list - so the MEASUREMENT itself must
+ * never be the thing that fatals on such a schema. This walk is therefore bounded twice over: it
+ * descends at most AAFM_SCHEMA_MAX_DEPTH levels (returning a violation the moment it would go
+ * deeper) and visits at most AAFM_SCHEMA_MAX_NODES nodes across the whole measurement (the shared
+ * &$nodes counter is threaded across the input and output walks by the caller), returning a
+ * violation the moment the count is exceeded. Either bound terminates the walk early, so even a
+ * reference-cyclic array (which a plain recursive walk would loop on forever) is capped by the
+ * node counter and cannot hang or overflow the stack.
+ *
+ * A "node" is every value visited: each array container, each object container, and each scalar
+ * leaf. Objects are walked exactly like arrays here, because a well-formed JSON Schema legitimately
+ * contains empty objects - a `"default": {}` value, for instance, decodes to a stdClass, since PHP's
+ * `array()` encodes to `[]` and only an object encodes to `{}`. An empty stdClass therefore
+ * contributes one node and no children (it passes), and a pathologically deep or large object graph
+ * is bounded by exactly the same depth and node caps as an array. The danger this walk was once
+ * thought to need a blanket object rejection for - a JsonSerializable whose jsonSerialize() throws,
+ * recurses, or allocates unbounded during wp_json_encode() at the byte-size step - is already handled
+ * downstream in aafm_schema_bounds_violation() by the try/catch (\Throwable) around wp_json_encode(),
+ * the is_string() check on its result, and the AAFM_SCHEMA_MAX_BYTES cap. Only a resource is rejected
+ * outright here, because json_encode() cannot represent one and it can never legitimately appear in a
+ * schema.
+ *
+ * @param mixed $value The schema value to measure (array, scalar, object, or resource).
+ * @param int   $depth Current recursion depth (callers pass 0).
+ * @param int   $nodes Running node count, shared across input+output walks (by reference).
+ * @return string|null A violation code ('schema_too_deep' | 'schema_too_many_nodes' |
+ *                     'schema_unsafe_value') the moment a bound or a type rule is breached, or null
+ *                     when this value and its whole subtree are within bounds.
+ */
+function aafm_schema_bounds_walk( $value, int $depth, int &$nodes ): ?string {
+	if ( $depth > AAFM_SCHEMA_MAX_DEPTH ) {
+		return 'schema_too_deep';
+	}
+	++$nodes;
+	if ( $nodes > AAFM_SCHEMA_MAX_NODES ) {
+		return 'schema_too_many_nodes';
+	}
+	// A resource can never appear in a well-formed JSON Schema and json_encode() cannot represent one,
+	// so reject it outright. Objects, by contrast, are legitimate: an empty stdClass is how a `{}`
+	// default round-trips through PHP. Walk into objects the same way as arrays so depth and node
+	// bounds still apply; a throwing/huge JsonSerializable is caught downstream by the wp_json_encode()
+	// try/catch and byte cap in aafm_schema_bounds_violation(), not here.
+	if ( is_resource( $value ) ) {
+		return 'schema_unsafe_value';
+	}
+	if ( is_array( $value ) || is_object( $value ) ) {
+		foreach ( (array) $value as $child ) {
+			$violation = aafm_schema_bounds_walk( $child, $depth + 1, $nodes );
+			if ( null !== $violation ) {
+				return $violation;
+			}
+		}
+	}
+	return null;
+}
+
+/**
+ * Whether an enabled ability's combined input+output schema breaches the registration-time bounds.
+ *
+ * Runs the bounded walk (aafm_schema_bounds_walk()) over the input schema and then the output
+ * schema, sharing a single node budget across both, and only when depth and node count are within
+ * bounds does it serialize the pair to measure byte size - so wp_json_encode() never runs on an
+ * oversized or pathologically deep structure and cannot itself fatal. A schema that json_encode
+ * still refuses (e.g. its own 512-level encoder depth limit, or a value it cannot encode) fails
+ * closed as a violation rather than being registered unmeasured.
+ *
+ * Returns null (no violation) for anything that is not a resolvable WP_Ability: those names are
+ * dropped downstream by aafm_build_server_tools() anyway, and it is not this guard's job to
+ * second-guess that.
+ *
+ * @param string $ability_name Ability name, e.g. "aafm/get-posts" or "aafm-bridge/some-slug".
+ * @return string|null A violation code ('schema_too_deep' | 'schema_too_many_nodes' |
+ *                     'schema_unsafe_value' | 'schema_too_large' | 'schema_unserializable') or null
+ *                     when within bounds.
+ */
+function aafm_schema_bounds_violation( string $ability_name ): ?string {
+	$ability = function_exists( 'wp_get_ability' ) ? wp_get_ability( $ability_name ) : null;
+	if ( ! $ability instanceof WP_Ability ) {
+		return null;
+	}
+
+	// WP_Ability::get_input_schema()/get_output_schema() are declared to return array, so no
+	// method_exists/is_array guard is needed here (and PHPStan proves it dead against the stubs).
+	$input  = $ability->get_input_schema();
+	$output = $ability->get_output_schema();
+
+	$nodes     = 0;
+	$violation = aafm_schema_bounds_walk( $input, 0, $nodes );
+	if ( null === $violation ) {
+		$violation = aafm_schema_bounds_walk( $output, 0, $nodes );
+	}
+	if ( null !== $violation ) {
+		return $violation;
+	}
+
+	// Depth and node count are within bounds and the walk has already rejected any object/resource,
+	// so the structure is small enough and plain enough to serialize safely. The try/catch is a
+	// second line of defence: json_encode() can still throw on a value the walk did not model (a
+	// leaked JsonSerializable buried in a way the array walk missed), and a throw here must fail the
+	// ability closed as a violation, never escape as the uncatchable fatal the preflight exists to
+	// prevent.
+	try {
+		$serialized = wp_json_encode(
+			array(
+				'input'  => $input,
+				'output' => $output,
+			)
+		);
+	} catch ( \Throwable $e ) {
+		return 'schema_unserializable';
+	}
+	if ( ! is_string( $serialized ) ) {
+		return 'schema_unserializable';
+	}
+	if ( strlen( $serialized ) > AAFM_SCHEMA_MAX_BYTES ) {
+		return 'schema_too_large';
+	}
+
+	return null;
+}
+
+/**
+ * Bound the server tool set before it reaches create_server(): drop any ability whose schema
+ * breaches the measurement limits, then cap the total to AAFM_MAX_SERVER_TOOLS.
+ *
+ * Both cost centers this guards are on the tools/list path only and are otherwise unbounded: the
+ * per-tool permission loop (bounded here by the tool-count cap) and the adapter's recursive schema
+ * serialization (bounded here by the per-schema limits). A breach of either can fatal uncatchably
+ * on a constrained host, so the fix is to keep the offending abilities out of the server entirely
+ * rather than try to catch a fatal that no try/catch reaches.
+ *
+ * Schema-violating abilities are skipped BEFORE they consume tool-cap budget, so the cap counts
+ * only abilities that will actually register - "register up to the cap" is read literally. Every
+ * omission (schema breach OR cap overflow) is recorded so it is never a silent drop.
+ *
+ * @param array<int,string> $tools Enabled native + bridged ability names (order preserved).
+ * @return list<string> The bounded, still-ordered subset to register.
+ */
+function aafm_preflight_bound_server_tools( array $tools ): array {
+	$omitted = array();
+	$kept    = aafm_preflight_partition_server_tools( $tools, $omitted );
+	aafm_reconcile_omitted_abilities( $omitted );
+	return $kept;
+}
+
+/**
+ * The pure partition: split an ordered tool list into the kept subset and an omitted map, applying
+ * the schema-bounds violations and the tool-count cap. No side effects - it neither persists nor logs
+ * anything, so it is safe to call from both the direct (uncached) path and the cached wrapper.
+ *
+ * @param array<int,string>    $tools   Enabled native + bridged ability names (order preserved).
+ * @param array<string,string> $omitted Receives the ability name => reason map (by reference, reset).
+ * @return list<string> The bounded, still-ordered subset to register.
+ */
+function aafm_preflight_partition_server_tools( array $tools, array &$omitted ): array {
+	$kept    = array();
+	$omitted = array();
+
+	foreach ( $tools as $name ) {
+		if ( count( $kept ) >= AAFM_MAX_SERVER_TOOLS ) {
+			$omitted[ $name ] = 'tool_cap';
+			continue;
+		}
+		$violation = aafm_schema_bounds_violation( $name );
+		if ( null !== $violation ) {
+			$omitted[ $name ] = $violation;
+			continue;
+		}
+		$kept[] = $name;
+	}
+
+	return $kept;
+}
+
+/**
+ * The transient key under which a preflight decision is memoised for a given enabled set.
+ *
+ * Keyed by AAFM_VERSION plus the ordered enabled native+bridged ability-name set, so any change to
+ * the set (enable/disable, a bridged-option save that adds or drops a wrapper) - or a plugin version
+ * bump - produces a different key and forces a recompute, while a steady state reuses the same key.
+ *
+ * @param array<int,string> $tools Enabled native + bridged ability names, in order.
+ * @return string The transient key.
+ */
+function aafm_preflight_cache_key( array $tools ): string {
+	return 'aafm_preflight_' . md5( AAFM_VERSION . '|' . implode( "\n", $tools ) );
+}
+
+/**
+ * Cached front end to aafm_preflight_bound_server_tools() for the live registration path.
+ *
+ * The preflight walks every enabled+bridged ability's input AND output schema and json-encodes the
+ * pair to measure it. aafm_register_mcp_server() runs on mcp_adapter_init, which fires on
+ * rest_api_init for EVERY REST request the site serves - so on a large install that per-request walk
+ * is real, repeated, wasted work whenever the enabled set has not changed. This memoises the decision
+ * (the kept list and the omitted map) keyed by aafm_preflight_cache_key(), so the expensive walk runs
+ * only on a cache miss - i.e. only when the enabled set (or the plugin version) actually changes.
+ *
+ * Correctness is preserved two ways: the key changes the instant the enabled set changes (so a
+ * different set never reads a stale decision), and the reconcile step still runs on every call
+ * - hit or miss - so the persisted omission option, its admin notice, and the one-time activity
+ * log stay byte-for-byte identical to the uncached path. Only the measurement walk is skipped on a
+ * hit. A modest TTL bounds the one residual staleness window (a foreign plugin altering an ability's
+ * schema WITHOUT changing its name), after which the next request recomputes.
+ *
+ * @param array<int,string> $tools Enabled native + bridged ability names, in order.
+ * @return list<string> The bounded, still-ordered subset to register.
+ */
+function aafm_preflight_bound_server_tools_cached( array $tools ): array {
+	$key    = aafm_preflight_cache_key( $tools );
+	$cached = get_transient( $key );
+	if ( is_array( $cached ) && isset( $cached['kept'], $cached['omitted'] )
+		&& is_array( $cached['kept'] ) && is_array( $cached['omitted'] )
+	) {
+		// Cache hit: skip the walk, but still reconcile so the option/notice/log reflect the decision
+		// (cheap: one autoloaded read + compare, which early-returns when unchanged).
+		aafm_reconcile_omitted_abilities( $cached['omitted'] );
+		return array_values( array_map( 'strval', $cached['kept'] ) );
+	}
+
+	// Cache miss: run the real walk once, reconcile as usual, then memoise the decision for this set.
+	$omitted = array();
+	$kept    = aafm_preflight_partition_server_tools( $tools, $omitted );
+	aafm_reconcile_omitted_abilities( $omitted );
+
+	set_transient(
+		$key,
+		array(
+			'kept'    => $kept,
+			'omitted' => $omitted,
+		),
+		HOUR_IN_SECONDS
+	);
+
+	return $kept;
+}
+
+/**
+ * Persist the current omission set and log each newly-omitted ability, once.
+ *
+ * Runs on every registration pass (rest_api_init on the web path), so it must not write on a
+ * normal install where nothing is omitted: it early-returns whenever the omission set is unchanged
+ * from what is stored, so the steady state is one autoloaded read and zero writes. It writes only
+ * when the set actually changes - a new breach appears, a breach clears, or a reason changes - and
+ * logs an activity row only for abilities that are newly omitted or changed reason, so a stable
+ * pathological config does not re-log on every MCP request. When the set goes empty again (the
+ * operator fixed the offending ability), the option is deleted so the admin notice clears.
+ *
+ * @param array<string,string> $omitted Ability name => reason code for this pass (possibly empty).
+ * @return void
+ */
+function aafm_reconcile_omitted_abilities( array $omitted ): void {
+	ksort( $omitted );
+
+	$stored = get_option( AAFM_OMITTED_ABILITIES_OPTION, array() );
+	if ( ! is_array( $stored ) ) {
+		$stored = array();
+	}
+
+	if ( $omitted === $stored ) {
+		return; // No change: no write, no duplicate log rows.
+	}
+
+	if ( array() === $omitted ) {
+		delete_option( AAFM_OMITTED_ABILITIES_OPTION );
+		return;
+	}
+
+	update_option( AAFM_OMITTED_ABILITIES_OPTION, $omitted, true );
+
+	foreach ( $omitted as $name => $reason ) {
+		if ( isset( $stored[ $name ] ) && $stored[ $name ] === $reason ) {
+			continue; // Already recorded with this reason; do not re-log.
+		}
+		aafm_log_activity(
+			array(
+				'ability'    => (string) $name,
+				'status'     => 'denied',
+				'event_type' => 'ability_omitted',
+				'detail'     => (string) $reason,
+			)
+		);
+	}
+}
+
+/**
+ * Admin notice naming the abilities the preflight left out of the server, so the operator can fix
+ * the offending ability rather than silently lose the tool.
+ *
+ * Reads the persisted omission set (written by aafm_reconcile_omitted_abilities() during an
+ * anonymous MCP request, which is why this cannot just render from request state). Capability-gated
+ * to the same manage_options the plugin's own settings screens use, and every dynamic value is
+ * escaped. A normal install has no option and renders nothing.
+ *
+ * @return void
+ */
+function aafm_notice_omitted_abilities(): void {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		return;
+	}
+
+	$omitted = get_option( AAFM_OMITTED_ABILITIES_OPTION, array() );
+	if ( ! is_array( $omitted ) || array() === $omitted ) {
+		return;
+	}
+
+	$items = array();
+	foreach ( $omitted as $name => $reason ) {
+		$items[] = sprintf(
+			/* translators: 1: ability name, 2: human-readable reason it was left out. */
+			esc_html__( '%1$s (%2$s)', 'agent-abilities-for-mcp' ),
+			esc_html( (string) $name ),
+			esc_html( aafm_omitted_reason_label( (string) $reason ) )
+		);
+	}
+
+	echo '<div class="notice notice-warning"><p>';
+	echo esc_html(
+		_n(
+			'Agent Abilities for MCP left one ability out of the agent tool list because it exceeded a safety limit:',
+			'Agent Abilities for MCP left some abilities out of the agent tool list because they exceeded a safety limit:',
+			count( $items ),
+			'agent-abilities-for-mcp'
+		)
+	);
+	echo ' ';
+	echo wp_kses_post( implode( ', ', $items ) );
+	echo '</p></div>';
+}
+
+/**
+ * Human-readable label for an omission reason code, for the admin notice.
+ *
+ * @param string $reason One of the reason codes aafm_schema_bounds_violation()/the tool cap emit.
+ * @return string A translated, operator-facing explanation.
+ */
+function aafm_omitted_reason_label( string $reason ): string {
+	switch ( $reason ) {
+		case 'schema_too_deep':
+			return __( 'its schema is nested too deeply', 'agent-abilities-for-mcp' );
+		case 'schema_too_many_nodes':
+			return __( 'its schema has too many fields', 'agent-abilities-for-mcp' );
+		case 'schema_unsafe_value':
+			return __( 'its schema contains a value that is not valid JSON', 'agent-abilities-for-mcp' );
+		case 'schema_too_large':
+			return __( 'its schema is too large', 'agent-abilities-for-mcp' );
+		case 'schema_unserializable':
+			return __( 'its schema could not be serialized', 'agent-abilities-for-mcp' );
+		case 'tool_cap':
+			return __( 'the enabled tool limit was reached', 'agent-abilities-for-mcp' );
+		default:
+			return __( 'it exceeded a safety limit', 'agent-abilities-for-mcp' );
+	}
+}
+
+/**
  * Register the single governed MCP server inside mcp_adapter_init.
  *
  * Phase 0.5.1 confirmed the 13-argument create_server() signature and corrected the
@@ -960,7 +1345,12 @@ function aafm_register_mcp_server( $adapter ): void {
 		return;
 	}
 
-	$tools = aafm_build_server_tools( aafm_all_server_ability_names() );
+	// Preflight bound the catalog before it becomes the server: drop any ability whose schema
+	// breaches the measurement limits and cap the total tool count, so neither the adapter's
+	// recursive schema serialization nor the request-time per-tool permission loop can be driven
+	// into an uncatchable memory/time fatal by a pathological enabled+bridged set. Omissions are
+	// logged and surfaced (aafm_reconcile_omitted_abilities), never silently dropped.
+	$tools = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( aafm_all_server_ability_names() ) );
 
 	// Per-connection capability gate at request time (the user is anonymous here; see
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.
@@ -1104,4 +1494,341 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 	$response->set_status( 200 );
 
 	return $response;
+}
+
+/**
+ * Fail an MCP session-establishing response honestly when its session was never persisted.
+ *
+ * The bundled adapter's SessionManager::create_session()
+ * (vendor/wordpress/mcp-adapter/includes/Transport/Infrastructure/SessionManager.php) writes
+ * the new session into user meta with update_user_meta() and then returns the session id
+ * WITHOUT checking that the write actually succeeded. If that write silently fails - a DB
+ * write error, a read-only or write-again object cache, a storage inconsistency - the
+ * transport still stamps a valid-looking Mcp-Session-Id on the initialize response. The
+ * client "connects", then its very next request echoes that id, the adapter's session lookup
+ * misses (the store never held it), and the request 404s with session_not_found. To the user
+ * that is "OAuth works, then it won't connect" - one of the in-WordPress causes of that field
+ * report, distinct from a CDN/WAF blocking the follow-up at the edge.
+ *
+ * There is no vendor hook at the create_session write to observe, and editing vendor/ is not
+ * an option, so this verifies persistence AFTER dispatch. When an MCP-route response carries
+ * an Mcp-Session-Id header and a user is resolved, it reads that user's stored sessions and
+ * checks the id is genuinely present:
+ *   - present -> the write landed; the response is returned byte-identical (the normal path).
+ *   - absent  -> the write silently failed and the session is already dead. Strip the
+ *                Mcp-Session-Id header so the client does not cling to a phantom id, and
+ *                rewrite the body to a JSON-RPC internal_error (-32603, HTTP 500 - the same
+ *                mapping the adapter's McpErrorFactory uses for that code) so the client gets
+ *                an honest, retryable error on THIS request instead of a fake success followed
+ *                by a mystery disconnect.
+ *
+ * Timing is load-bearing. The transport adds the Mcp-Session-Id header from its OWN
+ * rest_post_dispatch closure at the default priority (10), registered during dispatch (see
+ * HttpRequestHandler::add_session_header_to_response()). This guard must therefore run AFTER
+ * that closure has stamped the header, so it is registered at priority 11 - and BEFORE
+ * aafm_log_mcp_transport_outcome() (also priority 11) so that when it rewrites the body to
+ * -32603, the transport logger that follows records a (transport) internal_error row for the
+ * failure. A priority of 9 or 10 would run before the header exists and never detect anything.
+ *
+ * Scope is narrow: the MCP route only (read from the request, case-insensitive like the
+ * sibling filters and core's own route matching), a WP_REST_Response actually carrying the
+ * session header, and a resolved principal (get_current_user_id() > 0). Any miss returns the
+ * response untouched - a persisted session, a header-less response (every non-initialize call,
+ * and errors), an anonymous request, and every other REST route the site serves all pass
+ * through unchanged. Only initialize ever stamps this header, so the guard is precisely
+ * scoped to the one moment create_session() runs.
+ *
+ * @param mixed $response The dispatch result (WP_REST_Response on the REST path).
+ * @param mixed $server   The REST server (unused).
+ * @param mixed $request  The originating request (WP_REST_Request on the REST path).
+ * @return mixed The response - untouched on the normal path, or rewritten to a -32603 error
+ *               with the session header stripped and status 500 when the session was not
+ *               persisted.
+ */
+function aafm_mcp_guard_unpersisted_session( $response, $server, $request ) {
+	unset( $server );
+
+	if ( ! function_exists( 'aafm_mcp_rest_route' ) ) {
+		return $response;
+	}
+
+	// Route check first: rest_post_dispatch fires on every REST request the whole site serves,
+	// and this alone rules out all but the one MCP route. Case-insensitive, matching the sibling
+	// filters and core's own route regex (built with the `i` modifier).
+	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
+		return $response;
+	}
+
+	if ( ! $response instanceof WP_REST_Response ) {
+		return $response;
+	}
+
+	// A batch (list) response bundles multiple per-message JSON-RPC results; rewriting the whole body
+	// to a single -32603 error would destroy every sibling result - e.g. a batch that merely INCLUDED
+	// an initialize would lose the results of every other call in it. The unpersisted-session rewrite
+	// is only coherent for a single initialize response, so a batch is left untouched here, mirroring
+	// the batch guard aafm_log_mcp_transport_outcome() already carries. array_is_list() needs PHP 8.1
+	// and the floor is 7.4, so the list check is built by hand.
+	$batch_data = $response->get_data();
+	if ( is_array( $batch_data ) && ( array() === $batch_data || array_keys( $batch_data ) === range( 0, count( $batch_data ) - 1 ) ) ) {
+		return $response;
+	}
+
+	// The new session id lives ONLY on the response header - the transport unsets it from the
+	// body before responding. Read it case-insensitively and keep the exact key found, so a
+	// later strip removes the right one whatever its case.
+	$session_id = '';
+	$header_key = '';
+	foreach ( $response->get_headers() as $key => $value ) {
+		if ( 0 === strcasecmp( 'Mcp-Session-Id', (string) $key ) ) {
+			$session_id = is_array( $value ) ? (string) reset( $value ) : (string) $value;
+			$header_key = (string) $key;
+			break;
+		}
+	}
+	if ( '' === $session_id ) {
+		return $response; // No session header: not a session-establishing response - nothing to verify.
+	}
+
+	// Only a resolved principal owns a session store to check against. An anonymous response
+	// cannot be verified here, so it passes through rather than being failed on a guess.
+	$user_id = get_current_user_id();
+	if ( $user_id <= 0 ) {
+		return $response;
+	}
+
+	// Read the adapter's own session store. The meta key mirrors
+	// WP\MCP\Transport\Infrastructure\SessionManager::SESSION_META_KEY, which is a private const
+	// and cannot be read from here; the literal is verified against the bundled adapter copy.
+	// MAINTENANCE: re-verify this key against SessionManager.php whenever the bundled adapter is
+	// updated (same maintenance surface as aafm_adapter_namespace_map()).
+	$sessions = get_user_meta( $user_id, 'mcp_adapter_sessions', true );
+	if ( is_array( $sessions ) && isset( $sessions[ $session_id ] ) ) {
+		return $response; // Persisted: the normal path. Byte-identical pass-through.
+	}
+
+	// The write silently failed: the id the client just received is not in the store, so its
+	// next request would 404 session_not_found. Fail honestly on THIS request instead. Strip the
+	// header by rewriting the header set (version-agnostic, avoids depending on remove_header()).
+	if ( '' !== $header_key ) {
+		$headers = $response->get_headers();
+		unset( $headers[ $header_key ] );
+		$response->set_headers( $headers );
+	}
+
+	// Preserve the JSON-RPC request id from the (successful) body so the error still correlates
+	// to the initialize call; fall back to null when it is not a well-formed body.
+	$data       = $response->get_data();
+	$request_id = ( is_array( $data ) && array_key_exists( 'id', $data ) ) ? $data['id'] : null;
+
+	$response->set_data(
+		array(
+			'jsonrpc' => '2.0',
+			'id'      => $request_id,
+			'error'   => array(
+				'code'    => -32603,
+				'message' => __( 'Session could not be persisted; please retry.', 'agent-abilities-for-mcp' ),
+			),
+		)
+	);
+	// -32603 (internal_error) maps to HTTP 500 in the adapter's McpErrorFactory; match it.
+	$response->set_status( 500 );
+
+	return $response;
+}
+
+/**
+ * Map a known, reachable JSON-RPC error code to a short, human-readable name.
+ *
+ * The names are stable identifiers for the activity log's detail column, not UI copy, so they are
+ * deliberately not translated (the same posture the adapter's own McpErrorFactory takes with its
+ * protocol strings). This is the transport-logging allowlist: the five JSON-RPC standard codes plus
+ * only the adapter codes that are actually reachable as a top-level transport error in this
+ * tools-only server. A code not in the table returns null, and the caller treats that null as "do
+ * not log" - so an arbitrary or unreachable code is dropped rather than recorded as junk.
+ *
+ * Three adapter codes are deliberately left out:
+ *   -32002 resource_not_found and -32004 prompt_not_found - no resources or prompts are registered
+ *   (create_server( ... $tools, array(), array() )), so neither can ever be emitted here.
+ *   -32008 permission_denied - a denied tools/call returns HTTP 200 with isError=true, never a
+ *   top-level -32008, and is already logged per-call in register.php. Logging it here would either
+ *   double-count or record an unreachable code.
+ *
+ * The highest-value signal in what remains is -32005 session_not_found (the field-report failure:
+ * initialize succeeds, the follow-up tools/list 404s on session lookup). -32003 tool_not_found is
+ * kept deliberately - a tool-catalog mismatch is genuine connection/client diagnosis.
+ *
+ * @param int $code The JSON-RPC error code.
+ * @return string|null The mapped name, or null when the code is not on the allowlist.
+ */
+function aafm_mcp_transport_error_name( int $code ): ?string {
+	$names = array(
+		-32700 => 'parse_error',       // JSON-RPC standard.
+		-32600 => 'invalid_request',   // JSON-RPC standard.
+		-32601 => 'method_not_found',  // JSON-RPC standard.
+		-32602 => 'invalid_params',    // JSON-RPC standard.
+		-32603 => 'internal_error',    // JSON-RPC standard.
+		-32000 => 'server_error',      // Adapter: generic server error (includes MCP disabled).
+		-32001 => 'timeout_error',     // Adapter.
+		-32003 => 'tool_not_found',    // Adapter: tool-catalog mismatch, a real client-diagnosis signal.
+		-32005 => 'session_not_found', // Adapter: the field-report failure - initialize succeeds, the
+										// follow-up call 404s on session lookup.
+		-32010 => 'unauthorized',      // Adapter: authentication required.
+	);
+
+	return $names[ $code ] ?? null;
+}
+
+/**
+ * Log a single (transport) row for an MCP-route JSON-RPC error response, so a failed /mcp request is
+ * self-diagnosing after the fact.
+ *
+ * The problem this closes: activity logging fires per ability invocation (on wp_ability_invoked, i.e.
+ * tools/call), so the initialize handshake, tools/list, and session/protocol validation never wrote a
+ * row. When a user reports "OAuth works, then it won't connect", an empty log could not tell apart (a)
+ * the request never reached WordPress (a CDN/WAF blocked it at the edge) from (b) it reached WordPress
+ * and failed session/protocol validation. After this ships, a still-empty log means "never reached
+ * WordPress = the front door", and a (transport) row means "reached WP, here is the exact error".
+ *
+ * Pure observability. This handler only READS the already-built response and writes an audit row; it
+ * returns $response untouched and changes no auth, session, or HTTP-status decision.
+ * aafm_mcp_filter_governed_error_status() owns the one status rewrite (404 -> 200 for four in-band
+ * codes), and that rewrite touches only the HTTP status, never error.code - so reading error.code here
+ * is correct whichever order the two rest_post_dispatch handlers run in. Registered at a later priority
+ * than the governed-status filter so the http:<status> it records is the FINAL status the client sees.
+ *
+ * The predicate is a single JSON-RPC error on the MCP route. That deliberately EXCLUDES the routine
+ * anonymous 401/403 from the transport permission callback: those return a plain WP_Error, whose body
+ * is core's {code,message,data:{status}} shape, not a JSON-RPC {error:{code}} object - so a bare
+ * no-bearer 401 (normal noise) never matches, while a bearer-resolved-then-session/protocol failure
+ * (the signal) does. Flooding is bounded exactly like the other transport-denial rows: one row per
+ * source IP per window through aafm_denial_log_within_cap(), on its own 'tx' bucket, so a client stuck
+ * in a reconnect loop cannot grow the 30-day table without limit.
+ *
+ * The determine_current_user-timing function_exists guards mirror aafm_log_failed_application_password_auth():
+ * rest_post_dispatch runs well after plugins_loaded so the helpers exist in practice, but this stays
+ * defensive rather than assume load order.
+ *
+ * @param mixed $response The dispatch result (WP_REST_Response on the REST path).
+ * @param mixed $server   The REST server (unused).
+ * @param mixed $request  The originating request (WP_REST_Request on the REST path).
+ * @return mixed The response, always returned untouched.
+ */
+function aafm_log_mcp_transport_outcome( $response, $server, $request ) {
+	unset( $server );
+
+	if ( ! function_exists( 'aafm_mcp_rest_route' ) || ! function_exists( 'aafm_log_activity' ) || ! function_exists( 'aafm_denial_log_within_cap' ) ) {
+		return $response;
+	}
+
+	// Route check first: rest_post_dispatch fires on every REST request the whole site serves, and
+	// this alone rules out all but the one MCP route. Case-insensitive, like the sibling filter and
+	// core's own route matching.
+	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
+		return $response;
+	}
+
+	if ( ! $response instanceof WP_REST_Response ) {
+		return $response;
+	}
+
+	$data = $response->get_data();
+	if ( ! is_array( $data ) ) {
+		return $response;
+	}
+
+	// A batch response is a sequential list of per-message results, so it has no top-level 'error'
+	// key and the isset() below already excludes it; this states that intent explicitly. array_is_list()
+	// needs PHP 8.1 and the floor is 7.4, so the list check is built by hand, mirroring the governed filter.
+	if ( array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
+		return $response;
+	}
+
+	if ( ! isset( $data['error']['code'] ) || ! is_numeric( $data['error']['code'] ) ) {
+		return $response;
+	}
+
+	$code = (int) $data['error']['code'];
+	$name = aafm_mcp_transport_error_name( $code );
+
+	// Allowlist gate: only log a code that is both known and actually reachable here (see
+	// aafm_mcp_transport_error_name() for what is dropped and why). An unmapped code - arbitrary junk,
+	// or an adapter code that can never surface as a top-level transport error in this tools-only
+	// server - is ignored, so the log carries only diagnosable failures. This runs before the cap so a
+	// dropped code never burns this IP's budget.
+	if ( null === $name ) {
+		return $response;
+	}
+
+	// Consume a cap slot only once the row is genuinely going to be written - after every cheaper
+	// predicate has passed - so a non-error MCP response never burns this IP's budget.
+	if ( ! aafm_denial_log_within_cap( 'tx' ) ) {
+		return $response; // Bounded: this IP already used its cap for the current window.
+	}
+
+	// The one authentication code (-32010 unauthorized) reads best as 'denied'; every other
+	// protocol/session/internal failure on the allowlist is an 'error'. Both are terminal statuses
+	// aafm_log_activity() accepts.
+	$status = ( -32010 === $code ) ? 'denied' : 'error';
+
+	// Identifier-only detail: the mapped name (always set - the allowlist gate above guarantees it),
+	// the raw code so nothing is lost, the final HTTP status, and the JSON-RPC method when it is
+	// cheaply available and a clean protocol string. NEVER a token, param value, or any argument
+	// content - only the shape of the failure. aafm_sanitize_activity_detail() is the independent
+	// last line.
+	$detail = $name . ' code:' . $code . ' http:' . (int) $response->get_status();
+	$method = aafm_mcp_transport_request_method( $request );
+	if ( '' !== $method ) {
+		$detail .= ' method:' . $method;
+	}
+
+	// Attribute to the resolved principal and OAuth client when they are known (a session/protocol
+	// error on a bearer-authenticated request has both). A pre-auth error simply carries user 0 and
+	// no client id, which is itself part of the signal.
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => '(transport)',
+			'status'            => $status,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => (string) $user->user_login,
+			'client_id'         => function_exists( 'aafm_oauth_current_client_id' ) ? aafm_oauth_current_client_id() : '',
+			'detail'            => $detail,
+		)
+	);
+
+	return $response;
+}
+
+/**
+ * Pull the JSON-RPC `method` off an MCP request for the transport-outcome detail, when it is cheaply
+ * available and safe to record.
+ *
+ * The method is a protocol string ('initialize', 'tools/list', 'tools/call', ...), not user content,
+ * so it is genuinely useful in the audit detail. It is still attacker-influenced (the body is
+ * client-supplied), so it is only accepted when it is a scalar string matching a conservative
+ * protocol-name shape and short; anything else is dropped rather than logged. A batch body has no
+ * single top-level method, so this returns '' for it (the outcome logger already excludes batch
+ * responses anyway).
+ *
+ * @param mixed $request The originating request.
+ * @return string The method name, or '' when absent/unsafe/unavailable.
+ */
+function aafm_mcp_transport_request_method( $request ): string {
+	if ( ! $request instanceof WP_REST_Request ) {
+		return '';
+	}
+	$body = $request->get_json_params();
+	if ( ! is_array( $body ) || ! isset( $body['method'] ) || ! is_string( $body['method'] ) ) {
+		return '';
+	}
+	$method = $body['method'];
+	// Conservative allowlist: JSON-RPC method names in this protocol are lowercase words joined by
+	// '/' (e.g. tools/list), optionally with '.' or '_' - never markup, spaces, or arbitrary text.
+	if ( strlen( $method ) > 64 || 1 !== preg_match( '#^[a-zA-Z0-9._/-]+$#', $method ) ) {
+		return '';
+	}
+	return $method;
 }

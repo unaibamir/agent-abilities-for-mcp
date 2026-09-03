@@ -974,6 +974,70 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
+	 * 1.7.2 bug #3: a partial ACF multi-field write reports the failure as a bare
+	 * aafm_generic_error() with no data at all, hiding which fields actually landed. The gateway
+	 * writer (aafm_wc_gateway_write_failed_error()) already carries this split via
+	 * get_error_data() = ['persisted' => [...], 'failed' => [...]] for the exact same partial-write
+	 * shape; the ACF writer's response should mirror it so a caller does not have to re-read the
+	 * whole object just to learn what its own request already changed.
+	 *
+	 * RED against the current code: aafm_generic_error() carries no error data at all, so
+	 * get_error_data() is null and there is nothing to assert the persisted/failed split against.
+	 */
+	public function test_update_post_fields_partial_failure_reports_which_fields_persisted_and_which_failed(): void {
+		$this->stub_acf_fields(
+			array(
+				array(
+					'key'   => 'field_fail',
+					'name'  => 'fail',
+					'label' => 'Fails',
+					'type'  => 'text',
+				),
+				array(
+					'key'   => 'field_after',
+					'name'  => 'after',
+					'label' => 'After',
+					'type'  => 'text',
+				),
+			)
+		);
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		\AAFM\Tests\AcfStubStore::$fail_keys = array( 'field_fail' );
+		$res                                 = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_fail'  => 'never lands',
+					'field_after' => 'still lands',
+				),
+			)
+		);
+		\AAFM\Tests\AcfStubStore::$fail_keys = array();
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A field that does not persist must fail the request.' );
+
+		$data = $res->get_error_data();
+		$this->assertIsArray(
+			$data,
+			'A partial ACF write must report structured error data (persisted/failed), not a bare generic error.'
+		);
+		$this->assertArrayHasKey( 'persisted', $data, 'The error data must name which fields actually persisted.' );
+		$this->assertArrayHasKey( 'failed', $data, 'The error data must name which fields failed to persist.' );
+		$this->assertSame(
+			array( 'field_fail' ),
+			$data['failed'],
+			'The failed list must name the field that genuinely did not persist.'
+		);
+		$this->assertSame(
+			array( 'field_after' ),
+			$data['persisted'],
+			'The persisted list must name the field that landed, so a caller does not have to re-read the object to learn its own request already partly succeeded.'
+		);
+	}
+
+	/**
 	 * T1-6: a repeater whose sub_fields include a URL subfield must run that nested leaf through
 	 * esc_url_raw, not the plain-text sanitizer - otherwise a javascript: scheme stored in a
 	 * repeater row survives to be rendered by a theme. The plain-text sub_field round-trips

@@ -47,18 +47,36 @@ class DiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * The registration_endpoint key appears only when DCR is enabled: the route
-	 * 404s when it is off, so advertising the key then would point clients at a
-	 * dead endpoint.
+	 * The registration_endpoint appears only when OAuth is on AND dynamic client
+	 * registration is on - the same pair the register route gates on. DCR is a real toggle
+	 * (its own option, on by default), and the aafm_oauth_dcr_enabled filter can still force
+	 * it closed while OAuth stays on.
 	 */
-	public function test_registration_endpoint_present_only_when_dcr_enabled(): void {
-		update_option( 'aafm_oauth_dcr_enabled', '1' );
+	public function test_registration_endpoint_requires_oauth_and_dcr(): void {
+		// OAuth on, DCR on by default (no stored row): advertised.
+		update_option( 'aafm_oauth_enabled', '1' );
+		delete_option( 'aafm_oauth_dcr_enabled' );
 		$meta = aafm_oauth_authorization_server_metadata();
 		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/register', $meta['registration_endpoint'] );
 
-		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		// OAuth off: never advertised, whatever DCR says.
+		update_option( 'aafm_oauth_enabled', '0' );
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
 		$meta = aafm_oauth_authorization_server_metadata();
 		$this->assertArrayNotHasKey( 'registration_endpoint', $meta );
+
+		// OAuth on, DCR toggle off: not advertised (the route would 404).
+		update_option( 'aafm_oauth_enabled', '1' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		$meta = aafm_oauth_authorization_server_metadata();
+		$this->assertArrayNotHasKey( 'registration_endpoint', $meta, 'A stored DCR 0 must hide the endpoint.' );
+
+		// Filter escape hatch: OAuth on, DCR toggle on, but forced closed in code.
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+		add_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
+		$meta = aafm_oauth_authorization_server_metadata();
+		remove_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
+		$this->assertArrayNotHasKey( 'registration_endpoint', $meta, 'The filter must be able to force DCR off while OAuth is on.' );
 	}
 
 	/**
@@ -106,22 +124,30 @@ class DiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Both feature toggles default to DISABLED when their options are unset: the
-	 * public OAuth surface and open client registration are opt-in, never a
-	 * fresh-install default. A stored truthy row (an existing install, or an
-	 * operator opt-in) still reads on.
+	 * OAuth defaults OFF (the public surface is opt-in). Dynamic client registration has
+	 * its own toggle and defaults ON, read from the stored aafm_oauth_dcr_enabled option
+	 * independently of the OAuth state: on when the row is absent or '1', off when '0'.
+	 * The aafm_oauth_dcr_enabled filter wins over the stored value.
 	 */
-	public function test_toggles_default_to_disabled(): void {
+	public function test_oauth_defaults_off_and_dcr_defaults_on(): void {
 		delete_option( 'aafm_oauth_enabled' );
 		delete_option( 'aafm_oauth_dcr_enabled' );
 
 		$this->assertFalse( aafm_oauth_enabled(), 'OAuth must be off by default on a fresh install.' );
-		$this->assertFalse( aafm_oauth_dcr_enabled(), 'DCR must be off by default on a fresh install.' );
+		$this->assertTrue( aafm_oauth_dcr_enabled(), 'DCR must be on by default.' );
 
-		// An existing/opted-in install with a stored truthy row keeps working (non-breaking).
-		update_option( 'aafm_oauth_enabled', '1' );
+		// A stored 0 turns the DCR toggle off, independently of OAuth.
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		$this->assertFalse( aafm_oauth_dcr_enabled(), 'A stored 0 turns the DCR toggle off.' );
+
+		// Back on, and still unaffected by OAuth being off.
 		update_option( 'aafm_oauth_dcr_enabled', '1' );
-		$this->assertTrue( aafm_oauth_enabled(), 'A stored 1 must read on (existing installs preserved).' );
-		$this->assertTrue( aafm_oauth_dcr_enabled(), 'A stored 1 must read on (existing installs preserved).' );
+		$this->assertFalse( aafm_oauth_enabled() );
+		$this->assertTrue( aafm_oauth_dcr_enabled(), 'DCR reads its own toggle, not the OAuth state.' );
+
+		// The filter overrides the stored value.
+		add_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
+		$this->assertFalse( aafm_oauth_dcr_enabled(), 'The filter wins over the stored toggle.' );
+		remove_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
 	}
 }

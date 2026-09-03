@@ -539,6 +539,69 @@ final class RevisionsTest extends TestCase {
 		);
 	}
 
+	/**
+	 * 1.7.2 bug #1: aafm_perm_delete_revision() only calls aafm_revision_parent_editable() (an
+	 * edit_post gate), never delete_post - so a role that can edit but genuinely cannot delete the
+	 * parent post can still permanently wipe its revision history. WP core's own REST revisions
+	 * delete controller requires delete_post here; this ability must match that gate.
+	 *
+	 * No stock WP role carries edit_posts without delete_posts (contributor gets delete_posts too,
+	 * added by populate_roles_210()), so a purpose-built role pins the exact gap this bug is about:
+	 * edit_posts (so map_meta_cap grants edit_post on the author's own unpublished post) but no
+	 * delete_posts/delete_published_posts/delete_others_posts at all, so delete_post can never
+	 * resolve true for any post under this role.
+	 *
+	 * RED against the current code: aafm_perm_delete_revision() returns true here because it never
+	 * checks delete_post.
+	 */
+	public function test_delete_revision_denied_for_a_role_that_can_edit_but_not_delete_the_parent(): void {
+		add_role(
+			'aafm_test_edit_not_delete',
+			'AAFM Test Edit Not Delete',
+			array(
+				'read'       => true,
+				'edit_posts' => true,
+			)
+		);
+		$user = self::factory()->user->create( array( 'role' => 'aafm_test_edit_not_delete' ) );
+		wp_set_current_user( $user );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $user,
+				'post_status'  => 'draft',
+				'post_content' => 'v1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'v2',
+			)
+		);
+		$revs = wp_get_post_revisions( $pid );
+		$rev  = array_shift( $revs );
+
+		// Preconditions establish the exact gap this test targets.
+		$this->assertTrue(
+			current_user_can( 'edit_post', $pid ),
+			'precondition: this role can edit_post its own draft.'
+		);
+		$this->assertFalse(
+			current_user_can( 'delete_post', $pid ),
+			'precondition: this role carries no delete_posts capability at all.'
+		);
+
+		$this->assertFalse(
+			aafm_perm_delete_revision(
+				array(
+					'post_id'     => $pid,
+					'revision_id' => (int) $rev->ID,
+				)
+			),
+			'delete-revision must require delete_post on the parent, not just edit_post - an edit-but-not-delete role must not be able to wipe revision history.'
+		);
+	}
+
 	public function test_delete_revision_rejects_cross_parent_revision_id(): void {
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $author );

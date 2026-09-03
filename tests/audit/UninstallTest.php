@@ -150,6 +150,27 @@ final class UninstallTest extends TestCase {
 		$this->assertFalse( $oauth_after, 'the OAuth cleanup event must be cleared on the switched-to subsite.' );
 	}
 
+	/**
+	 * 1.7.2 bug #7: aafm_config_option_names() never lists aafm_oauth_access_ttl or
+	 * aafm_oauth_refresh_ttl (the two OAuth token-lifetime overrides read by
+	 * includes/oauth/tokens.php), so a delete-data uninstall leaves both behind instead of wiping
+	 * "all my data" as promised.
+	 *
+	 * RED against the current code: both options survive aafm_uninstall_site_data() with the
+	 * delete-data flag set, because they are outside the config-option list every other option in
+	 * this test relies on.
+	 */
+	public function test_uninstall_wipes_oauth_ttl_overrides_when_flag_is_set(): void {
+		update_option( 'aafm_oauth_access_ttl', 1234 );
+		update_option( 'aafm_oauth_refresh_ttl', 5678 );
+		update_option( 'aafm_delete_data_on_uninstall', true );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( get_option( 'aafm_oauth_access_ttl', false ), 'aafm_oauth_access_ttl must be deleted when the uninstall flag is set.' );
+		$this->assertFalse( get_option( 'aafm_oauth_refresh_ttl', false ), 'aafm_oauth_refresh_ttl must be deleted when the uninstall flag is set.' );
+	}
+
 	public function test_cleanup_drops_table_and_option(): void {
 		aafm_install_activity_log();
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );

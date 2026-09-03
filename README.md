@@ -9,7 +9,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.7.1 |
+| **Stable tag** | 1.7.2 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -232,6 +232,14 @@ Windows MCP clients can't launch the npx shim by name. Wrap it in cmd: set `comm
 
 Local stacks like DDEV, Local, and Valet serve a self-signed certificate that Node rejects, so the proxy never reaches WordPress. For local testing only, add `"NODE_TLS_REJECT_UNAUTHORIZED": "0"` to the `env` block (the Connection tab adds it automatically when it detects a local site). Don't ship that setting to production; a public site has a trusted certificate and doesn't need it.
 
+### My agent can't connect and my site is behind Cloudflare or another CDN.
+
+A CDN or firewall in front of WordPress can stop the agent before its request reaches your site. The common culprit is Cloudflare's "Block AI Bots" setting (and Super Bot Fight Mode): the agent finishes signing in, but its MCP request is blocked at the edge because it comes from the AI client's servers with an AI User-Agent. The sign-in shows up in the Activity Log, and no ability calls follow it.
+
+To confirm, open your CDN's firewall or security event log and look for a blocked request to the plugin's MCP endpoint (its path ends in `/mcp`) from the AI client's IP range, around the time you tried to connect. The entry names the rule that blocked it.
+
+The fix is to let that endpoint through. On Cloudflare, either turn off "Block AI Bots" under Security, Bots, or add a rule that skips bot protection for the `/mcp` path so the rest of your site stays covered. Other CDNs and security plugins have the same kind of allowlist or exception.
+
 ### Is there rate limiting?
 
 Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each connection can make that many agent calls a minute, counted per agent user; 0 turns the limit off. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.
@@ -263,6 +271,14 @@ This plugin does not contact any external or third-party service. It registers a
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+### 1.7.2
+
+* **Feature:** The consent screen an agent sees at sign-in was rebuilt. It carries a real brand mark, your Site Icon, and the connector's own icon when the plugin recognizes it by its verified redirect host.
+* **Feature:** The Activity Log now records every MCP request that reaches WordPress. A sign-in with no calls after it means a CDN or firewall stopped the agent before it arrived.
+* **Fix:** ChatGPT could not connect on sites where dynamic client registration was off. It has its own switch on the Settings tab again, on by default, and existing installs get switched on when they update.
+* **Fix:** Three connection bugs are gone: the OAuth authorize step mangled percent-encoded redirect addresses, a failed session write handed back a session ID that did not exist, and a very large tool schema could exhaust memory while the tool list was built.
+* **Fix:** Smaller correctness fixes across WooCommerce, ACF, and Rank Math, plus a wrong capability check on delete-revision, OAuth options left behind at uninstall, and a new readme FAQ for CDNs that block the agent at the edge.
+
 ### 1.7.1
 
 * **Fix:** lang:"all" measured a partial set of languages and reported success anyway. It now queries every configured WPML language for posts, pages, media, terms, search, and WooCommerce products, and the shared count helper sums across all of them.

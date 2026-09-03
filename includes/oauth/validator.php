@@ -164,7 +164,31 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 
 		// 7. Enforce the HTTPS policy. Where HTTPS is required, a bearer presented over
 		// plain http never resolves a user (the other OAuth paths already refuse http).
+		//
+		// Transport visibility: this bail used to be silent, so an operator whose agent presents an
+		// aafm_oat_ token over http (a reverse proxy that terminates TLS but forwards http without
+		// the forwarded-proto header WordPress trusts, say) saw the connection fail with no trace at
+		// all. Record one bounded (transport) row so the HTTPS-scheme bail is visible instead of
+		// invisible. Pure observability - the decision (return $user_id) is unchanged; only a row is
+		// added, and only when a real aafm_oat_ bearer targeting the MCP route was presented (we are
+		// past the prefix and route guards above). Bounded per source IP on its own 'ssl' bucket, the
+		// same anti-flood cap the other transport-denial rows use, so a client retrying over http
+		// cannot grow the log without limit. The function_exists guards mirror the rest of this
+		// resolver: these helpers exist by REST dispatch, but this filter can fire early on
+		// determine_current_user.
 		if ( aafm_oauth_https_required() && ! is_ssl() ) {
+			if ( function_exists( 'aafm_log_activity' )
+				&& function_exists( 'aafm_denial_log_within_cap' )
+				&& aafm_denial_log_within_cap( 'ssl' )
+			) {
+				aafm_log_activity(
+					array(
+						'ability' => '(transport)',
+						'status'  => 'denied',
+						'detail'  => __( 'Bearer token presented over insecure HTTP', 'agent-abilities-for-mcp' ),
+					)
+				);
+			}
 			return $user_id;
 		}
 

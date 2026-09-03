@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.1
+Stable tag: 1.7.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -235,6 +235,14 @@ Apache usually works as-is, because the WordPress .htaccess sends anything that 
 
 To check, request https://your-site/.well-known/oauth-protected-resource. A working setup returns a JSON document instead of a 403 or 404.
 
+= My agent can't connect and my site is behind Cloudflare or another CDN. =
+
+A CDN or firewall in front of WordPress can stop the agent before its request reaches your site. The common culprit is Cloudflare's "Block AI Bots" setting (and Super Bot Fight Mode): the agent finishes signing in, but its MCP request is blocked at the edge because it comes from the AI client's servers with an AI User-Agent. The sign-in shows up in the Activity Log, and no ability calls follow it.
+
+To confirm, open your CDN's firewall or security event log and look for a blocked request to the plugin's MCP endpoint (its path ends in /mcp) from the AI client's IP range, around the time you tried to connect. The entry names the rule that blocked it.
+
+The fix is to let that endpoint through. On Cloudflare, either turn off "Block AI Bots" under Security, Bots, or add a rule that skips bot protection for the /mcp path so the rest of your site stays covered. Other CDNs and security plugins have the same kind of allowlist or exception.
+
 = Is there rate limiting? =
 
 Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each connection can make that many agent calls a minute, counted per agent user; 0 turns the limit off. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.
@@ -282,6 +290,14 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==
+
+= 1.7.2 =
+
+* **Feature:** The consent screen an agent sees at sign-in was rebuilt. It carries a real brand mark, your Site Icon, and the connector's own icon when the plugin recognizes it by its verified redirect host.
+* **Feature:** The Activity Log now records every MCP request that reaches WordPress. A sign-in with no calls after it means a CDN or firewall stopped the agent before it arrived.
+* **Fix:** ChatGPT could not connect on sites where dynamic client registration was off. It has its own switch on the Settings tab again, on by default, and existing installs get switched on when they update.
+* **Fix:** Three connection bugs are gone: the OAuth authorize step mangled percent-encoded redirect addresses, a failed session write handed back a session ID that did not exist, and a very large tool schema could exhaust memory while the tool list was built.
+* **Fix:** Smaller correctness fixes across WooCommerce, ACF, and Rank Math, plus a wrong capability check on delete-revision, OAuth options left behind at uninstall, and a new readme FAQ for CDNs that block the agent at the edge.
 
 = 1.7.1 =
 
@@ -445,6 +461,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.7.2 =
+
+Dynamic client registration is on after this update, including on sites that never touched the setting, so ChatGPT and Claude can connect without extra steps. You can turn it off again on the Settings tab. This release also fixes an OAuth redirect bug that blocked some connections, and adds transport logging to the Activity Log so you can tell a plugin problem apart from a CDN blocking the agent.
 
 = 1.7.0 =
 

@@ -272,6 +272,14 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
  * never touches the option, so a new install keeps OAuth off until the operator actively proceeds -
  * the 1.3.0 off-by-default posture is preserved. Nonce + manage_options gated.
  *
+ * Dynamic Client Registration is on by default and has its own Settings toggle, so the wizard does
+ * not write it here: turning OAuth on is enough to leave a state a real MCP client can connect to,
+ * because DCR is already on unless the operator deliberately turned it off. This is what fixes the
+ * #90 dead end, where a user who set OAuth up through the wizard (its copy says this "is what lets
+ * ChatGPT, Claude, and Manus connect") ended up connectable in name only because DCR defaulted off.
+ * The response reports the current DCR state so the UI can reflect it, and the wizard never
+ * overrides an operator who chose to switch DCR off.
+ *
  * @return void
  */
 function aafm_ajax_quickconnect_oauth(): void {
@@ -282,7 +290,13 @@ function aafm_ajax_quickconnect_oauth(): void {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$enabled = ! empty( $_POST['enabled'] ) ? '1' : '0';
 	update_option( 'aafm_oauth_enabled', $enabled );
-	wp_send_json_success( array( 'aafm_oauth_enabled' => $enabled ) );
+	wp_send_json_success(
+		array(
+			'aafm_oauth_enabled'     => $enabled,
+			// The current DCR toggle state (on by default), reported so the UI can reflect it.
+			'aafm_oauth_dcr_enabled' => aafm_oauth_dcr_enabled() ? '1' : '0',
+		)
+	);
 }
 
 /**
@@ -311,6 +325,9 @@ function aafm_ajax_quickconnect_finish(): void {
 			'write'         => $write ? 1 : 0,
 			'enabled_count' => count( aafm_get_enabled_abilities() ),
 			'oauth_enabled' => aafm_oauth_enabled() ? 1 : 0,
+			// Reported so the success receipt can reflect the real connectable state: OAuth without
+			// DCR is not a state a self-registering MCP client can connect to (issue #90).
+			'dcr_enabled'   => aafm_oauth_dcr_enabled() ? 1 : 0,
 		)
 	);
 }

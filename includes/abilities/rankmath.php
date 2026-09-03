@@ -716,12 +716,29 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 	// update_post_meta() unslashes the value, so a backslash inside the schema is stripped unless
 	// it is slashed first (see the field writer above and the sibling meta writers).
 	update_post_meta( $id, 'rank_math_schema_' . $type, wp_slash( $clean ) );
+
+	// Verify the write actually persisted. update_post_meta() itself returns truthy even when a
+	// consumer short-circuits the write via the documented update_post_metadata filter (a
+	// caching/compliance plugin's veto mechanism), so its return value cannot be trusted on its
+	// own - read the meta back and compare against what was sanitized, mirroring the -get-schema
+	// sibling's own read (aafm_exec_rankmath_get_schema(), above). Returning the RE-READ value
+	// rather than the sanitized input also means a successful response always reflects what
+	// storage genuinely holds, never what the caller merely asked for.
+	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
+	$stored = is_array( $stored ) ? $stored : array();
+	if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
+		return new WP_Error(
+			'aafm_rankmath_schema_write_failed',
+			__( 'The schema could not be saved. Nothing was changed.', 'agent-abilities-for-mcp' )
+		);
+	}
+
 	return array(
 		'post_id' => $id,
 		'type'    => $type,
-		// (object) so an empty sanitized schema JSON-encodes to "{}" per the output_schema's
-		// type:object, never "[]" (mirrors the get-schema reader above).
-		'schema'  => (object) $clean,
+		// (object) so an empty schema JSON-encodes to "{}" per the output_schema's type:object,
+		// never "[]" (mirrors the get-schema reader's own convention).
+		'schema'  => (object) $stored,
 	);
 }
 

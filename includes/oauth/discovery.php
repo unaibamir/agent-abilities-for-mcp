@@ -29,15 +29,19 @@ defined( 'ABSPATH' ) || exit;
  * that stored '1' and the surface keeps working untouched - the default only
  * governs installs with no row, i.e. new installs, which now seed '0'.
  *
- * This is the ONE reader for every OAuth on/off toggle. Both aafm_oauth_enabled()
- * and aafm_oauth_dcr_enabled() route through it; there is no raw get_option()
- * boolean read of those toggles anywhere (verified).
+ * This is the reader for both OAuth on/off toggles. aafm_oauth_enabled() routes
+ * through it with the default '0' (OAuth is off until the operator opts in), and
+ * aafm_oauth_dcr_enabled() routes through it with the default '1' (dynamic client
+ * registration is on by default, disable in Settings). There is no raw get_option()
+ * boolean read of either toggle anywhere (verified). The $default only governs an
+ * install with no stored row; a stored value always wins.
  *
- * @param string $key The toggle option name.
- * @return bool True when the toggle is explicitly enabled, false otherwise.
+ * @param string $key      The toggle option name.
+ * @param string $fallback Value assumed when the row is absent: '0' (off) or '1' (on).
+ * @return bool True when the toggle reads on, false otherwise.
  */
-function aafm_oauth_option_is_on( string $key ): bool {
-	$value = get_option( $key, '0' );
+function aafm_oauth_option_is_on( string $key, string $fallback = '0' ): bool {
+	$value = get_option( $key, $fallback );
 
 	$off = array( false, 0, '0', '', 'false', 'no', 'off' );
 
@@ -54,38 +58,73 @@ function aafm_oauth_enabled(): bool {
 }
 
 /**
- * Whether Dynamic Client Registration is enabled.
+ * Whether Dynamic Client Registration (RFC 7591) is enabled.
  *
- * @return bool True only when the operator has explicitly enabled DCR.
+ * DCR has its own Settings toggle and is ON by default. The MCP clients this OAuth
+ * surface exists to serve - ChatGPT and Claude - only ever connect through DCR, so a
+ * default-off registration endpoint was a dead end that advertised an authorization
+ * server no supported client could actually reach (issue #90). Shipping it on by
+ * default removes that footgun; the operator can still turn it off in Settings when
+ * they register clients by hand. The public /oauth/register route is rate-limited
+ * (per-IP and global, see includes/oauth/http.php) and the real authorization gate is
+ * the human consent screen, so open registration alongside OAuth is low-risk.
+ *
+ * DCR is only reachable when OAuth is on: the register route gates on both toggles and
+ * the discovery metadata is served only once OAuth is enabled, so a default-on DCR
+ * never exposes a registration endpoint on a site whose OAuth surface is still off.
+ *
+ * The stored `aafm_oauth_dcr_enabled` option is the source of truth (default '1'),
+ * read through aafm_oauth_option_is_on(). The `aafm_oauth_dcr_enabled` filter still
+ * wins over the stored value, so a developer can force registration closed in code.
+ *
+ * @return bool True when DCR is enabled (the toggle is on and not filtered off).
  */
 function aafm_oauth_dcr_enabled(): bool {
-	return aafm_oauth_option_is_on( 'aafm_oauth_dcr_enabled' );
+	/**
+	 * Filter whether Dynamic Client Registration is enabled.
+	 *
+	 * Defaults to the stored `aafm_oauth_dcr_enabled` toggle, which is on unless the
+	 * operator turned it off. Return false to force client self-registration closed in
+	 * code. Filtering it true has no practical effect while OAuth is off: the register
+	 * route and the discovery metadata are gated on OAuth being enabled as well, so
+	 * registration stays refused until OAuth itself is on.
+	 *
+	 * @param bool $enabled Whether DCR is enabled. Defaults to the stored toggle (on by default).
+	 */
+	return (bool) apply_filters( 'aafm_oauth_dcr_enabled', aafm_oauth_option_is_on( 'aafm_oauth_dcr_enabled', '1' ) );
 }
 
 /**
- * Seed the OAuth toggle options to "off" at activation, only when they are absent.
+ * Seed the OAuth toggle option to "off" at activation, only when it is absent.
  *
- * OAuth and open dynamic client registration are OFF by default: a public
- * authorization server and self-registration endpoint are a deliberate opt-in, so a
- * fresh install ships them closed and the operator turns them on in Settings. Seeding
- * writes the explicit '0' so the Settings toggles render in their true (off) state
- * from the first load. add_option() (not update_option) is deliberate: it writes only
- * when the option does not yet exist, so this never clobbers an operator's saved
- * value - and, crucially, an install that was activated under an earlier version
- * already holds a stored '1' row, which this leaves untouched. Only genuinely new
- * installs (no row) get the off default.
+ * OAuth is OFF by default: a public authorization server is a deliberate opt-in, so a
+ * fresh install ships it closed and the operator turns it on in Settings. Seeding
+ * writes the explicit '0' so the Settings toggle renders in its true (off) state from
+ * the first load. add_option() (not update_option) is deliberate: it writes only when
+ * the option does not yet exist, so this never clobbers an operator's saved value -
+ * and, crucially, an install that was activated under an earlier version already holds
+ * a stored '1' row, which this leaves untouched. Only genuinely new installs (no row)
+ * get the off default.
+ *
+ * DCR is seeded '1' (on by default): the whole point of the OAuth surface is to let
+ * ChatGPT and Claude connect, and both only ever register dynamically, so a fresh
+ * install ships registration open and the operator turns it off in Settings if they
+ * prefer to register clients by hand. Seeding writes the explicit '1' so the Settings
+ * toggle renders in its true (on) state from the first load. It stays inert until
+ * OAuth itself is switched on, since the register route and discovery both gate on
+ * OAuth as well.
  *
  * @return void
  */
 function aafm_oauth_seed_default_options(): void {
-	// Both toggles are read on EVERY request that could touch the OAuth surface:
-	// aafm_oauth_enabled() gates the CORS filters at bootstrap and the .well-known handler on
-	// parse_request, and aafm_oauth_request_targets_mcp_route() consults it on
-	// determine_current_user. They must stay autoloaded ('yes', the add_option default) so those
-	// hot-path reads never trigger a separate query - switching them to autoload 'no' would be a
-	// per-request regression, not an improvement.
+	// Both toggles are read on requests that touch the OAuth surface: aafm_oauth_enabled() gates
+	// the CORS filters at bootstrap and the .well-known handler on parse_request, and
+	// aafm_oauth_request_targets_mcp_route() consults it on determine_current_user;
+	// aafm_oauth_dcr_enabled() is read by the register route and the discovery metadata. They must
+	// stay autoloaded ('yes', the add_option default) so those hot-path reads never trigger a
+	// separate query - switching either to autoload 'no' would be a per-request regression.
 	add_option( 'aafm_oauth_enabled', '0', '', true );
-	add_option( 'aafm_oauth_dcr_enabled', '0', '', true );
+	add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
 }
 
 /**
@@ -101,11 +140,17 @@ function aafm_oauth_seed_default_options(): void {
  * default would silently disable its OAuth surface - and any live Claude/ChatGPT
  * connection - on update.
  *
- * So, exactly once per install: when a toggle row is ABSENT, write '1' to preserve the
- * prior behaviour. add_option() only writes a missing row, so it never clobbers an
- * operator's explicit '0' opt-out or a seeded fresh install. A guard option makes it
- * idempotent and keeps the steady-state cost to one autoloaded read; a later legitimate
- * absence (e.g. a reset returning to off-by-default) is therefore not forced back on.
+ * So, exactly once per install: when the OAuth toggle row is ABSENT, write '1' to
+ * preserve the prior behaviour. add_option() only writes a missing row, so it never
+ * clobbers an operator's explicit '0' opt-out or a seeded fresh install. A guard option
+ * makes it idempotent and keeps the steady-state cost to one autoloaded read; a later
+ * legitimate absence (e.g. a reset returning to off-by-default) is therefore not forced
+ * back on.
+ *
+ * The DCR default-on adoption is handled separately by aafm_oauth_dcr_adopt_on_by_default(),
+ * which carries its own guard: this function's guard row is already set on installs that
+ * shipped the earlier migration, so folding the DCR flip in here would skip exactly the
+ * installs that need it.
  *
  * Hooked on plugins_loaded (priority 1) so it completes before any request-time toggle
  * read - determine_current_user, the .well-known handler on parse_request, and the REST
@@ -124,11 +169,44 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
 	if ( false === get_option( 'aafm_oauth_enabled', false ) ) {
 		add_option( 'aafm_oauth_enabled', '1', '', true );
 	}
-	if ( false === get_option( 'aafm_oauth_dcr_enabled', false ) ) {
-		add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
-	}
 
 	update_option( 'aafm_oauth_toggle_migrated', '1', true );
+}
+
+/**
+ * Bring an upgrading install up to the DCR-on-by-default policy, exactly once.
+ *
+ * Dynamic client registration used to default OFF, and its activation seed wrote an
+ * explicit '0', so most installs that predate this release hold a stored '0'. That
+ * default was the #90 footgun: ChatGPT and Claude only connect through DCR, so a site
+ * with OAuth on but DCR off advertised an authorization server no supported client
+ * could reach. This release makes DCR on by default, and the same stored '0' would
+ * otherwise keep those installs broken.
+ *
+ * So, once per install: when the DCR row is absent or reads falsy, write '1'. A stored
+ * '0' is treated as the old default rather than a deliberate opt-out - the old UI made
+ * turning it off a footgun, not a considered choice - so it is flipped on here. This
+ * runs a single time (its own guard row), so an operator who turns the toggle off again
+ * afterward is respected, and a developer who wants it off in code can use the
+ * aafm_oauth_dcr_enabled filter regardless.
+ *
+ * Hooked on plugins_loaded (priority 1) alongside aafm_oauth_preserve_toggle_on_upgrade()
+ * so the row is settled before any request-time read.
+ *
+ * @return void
+ */
+function aafm_oauth_dcr_adopt_on_by_default(): void {
+	if ( '1' === get_option( 'aafm_oauth_dcr_default_on_migrated', '' ) ) {
+		return;
+	}
+
+	$stored = get_option( 'aafm_oauth_dcr_enabled', false );
+	$off    = array( false, 0, '0', '', 'false', 'no', 'off' );
+	if ( in_array( $stored, $off, true ) ) {
+		update_option( 'aafm_oauth_dcr_enabled', '1', true );
+	}
+
+	update_option( 'aafm_oauth_dcr_default_on_migrated', '1', true );
 }
 
 /**
@@ -170,15 +248,15 @@ function aafm_oauth_issuer(): string {
  * authorization server: authorization code with PKCE S256, refresh tokens, and
  * public clients (no client secret).
  *
- * `registration_endpoint` is included only when aafm_oauth_dcr_enabled() is true.
- * The route returns a 404 when DCR is off, so advertising the key unconditionally
- * would point every client at a dead endpoint. RFC 8414 section 2 marks
- * `registration_endpoint` specifically as OPTIONAL (unlike `issuer` and
- * `response_types_supported`, which are REQUIRED), so omitting only this key is
- * spec-correct. In production this builder is only reached via
- * aafm_oauth_maybe_serve_well_known(), which already returns early unless OAuth
- * itself is enabled, so checking the DCR toggle here is sufficient without
- * repeating that outer gate.
+ * `registration_endpoint` is included only when OAuth is on AND DCR is on - the
+ * exact pair the register route itself gates on (includes/oauth/rest.php). The route
+ * 404s otherwise, so advertising the key when either is off would point clients at a
+ * dead endpoint. RFC 8414 section 2 marks `registration_endpoint` specifically as
+ * OPTIONAL (unlike `issuer` and `response_types_supported`, which are REQUIRED), so
+ * omitting only this key is spec-correct. In production this builder is only reached
+ * via aafm_oauth_maybe_serve_well_known(), which already returns early unless OAuth
+ * is enabled; the OAuth check here keeps the builder honest when it is called directly
+ * (DCR is on by default, so it cannot be relied on alone to imply OAuth is on).
  *
  * `authorization_response_iss_parameter_supported` is RFC 9207 section 3: an
  * authorization server that provides the iss parameter (we now do on every
@@ -201,7 +279,7 @@ function aafm_oauth_authorization_server_metadata(): array {
 		'authorization_response_iss_parameter_supported' => true,
 	);
 
-	if ( ! aafm_oauth_dcr_enabled() ) {
+	if ( ! aafm_oauth_enabled() || ! aafm_oauth_dcr_enabled() ) {
 		unset( $metadata['registration_endpoint'] );
 	}
 

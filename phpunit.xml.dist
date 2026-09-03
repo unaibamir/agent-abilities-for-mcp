@@ -20,6 +20,7 @@
 			<directory>tests/oauth</directory>
 			<directory>tests/coexistence</directory>
 			<file>tests/WireShapeTest.php</file>
+			<file>tests/BridgeObjectRefusalWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

@@ -43,10 +43,10 @@ class RestEndpointsTest extends TestCase {
 		// The endpoints read and write the OAuth storage tables.
 		aafm_install_oauth_tables();
 
-		// OAuth and DCR are OFF by default now; these endpoint tests exercise the enabled
-		// surface, so turn both on explicitly. The disabled-path tests override per case.
+		// OAuth is OFF by default now; these endpoint tests exercise the enabled surface, so turn
+		// it on explicitly. DCR is on by default, so enabling OAuth also enables registration. The
+		// disabled-path tests override per case.
 		update_option( 'aafm_oauth_enabled', '1' );
-		update_option( 'aafm_oauth_dcr_enabled', '1' );
 
 		// register/token success now writes an OAuth lifecycle audit row to the activity log.
 		aafm_install_activity_log();
@@ -486,14 +486,15 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * When DCR is disabled, registration returns 404.
+	 * Registration returns 404 when OAuth is disabled.
+	 *
+	 * The register route gates on OAuth as well as DCR, so turning OAuth off closes it -
+	 * a DCR toggle left on (its default) cannot reopen the route while OAuth is off.
 	 */
-	public function test_register_is_404_when_dcr_disabled(): void {
-		// Store '0' rather than the boolean false: get_option() with a truthy
-		// default returns that default when the stored value is boolean false (a
-		// WordPress quirk), so the C1 reader aafm_oauth_dcr_enabled() would still
-		// see the option as enabled. The string '0' casts to a clean false.
-		update_option( 'aafm_oauth_dcr_enabled', '0' );
+	public function test_register_is_404_when_oauth_disabled(): void {
+		update_option( 'aafm_oauth_enabled', '0' );
+		// A stale legacy DCR row must not resurrect the route while OAuth is off.
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
 
 		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
@@ -511,19 +512,17 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * Every falsy stored form of the DCR toggle disables registration (404).
+	 * Every falsy stored form of the OAuth toggle disables registration (404).
 	 *
-	 * The fail-open bug: the old reader cast get_option() straight to bool, so
-	 * stored strings like 'false'/'no'/'off' read as ON and kept the endpoint
-	 * live. The hardened reader treats any falsy form as off. A persisted literal
-	 * boolean false (the realistic admin-save state PR E reaches by seeding the
-	 * option on, then toggling it off) is covered as well.
+	 * Registration follows OAuth now, so the register route inherits OAuth's fail-closed
+	 * reader: stored strings like 'false'/'no'/'off' and a persisted literal boolean false
+	 * all read as off and shut the endpoint.
 	 */
-	public function test_register_is_404_when_dcr_disabled_falsy_values(): void {
+	public function test_register_is_404_when_oauth_disabled_falsy_values(): void {
 		$falsy = array( 'false', 'no', 'off', '0', '' );
 
 		foreach ( $falsy as $value ) {
-			update_option( 'aafm_oauth_dcr_enabled', $value );
+			update_option( 'aafm_oauth_enabled', $value );
 
 			$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 			$request->set_header( 'Content-Type', 'application/json' );
@@ -540,20 +539,61 @@ class RestEndpointsTest extends TestCase {
 			$this->assertSame(
 				404,
 				$response->get_status(),
-				'A falsy DCR toggle (' . wp_json_encode( $value ) . ') should disable registration.'
+				'A falsy OAuth toggle (' . wp_json_encode( $value ) . ') should disable registration.'
 			);
 		}
 
 		// Persisted literal boolean false: seed the row on, then toggle it off -
 		// WordPress only stores a literal false when the option already exists.
-		add_option( 'aafm_oauth_dcr_enabled', '1' );
-		update_option( 'aafm_oauth_dcr_enabled', false );
+		add_option( 'aafm_oauth_enabled', '1' );
+		update_option( 'aafm_oauth_enabled', false );
 
 		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( wp_json_encode( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) ) );
 
 		$this->assertSame( 404, rest_do_request( $request )->get_status() );
+	}
+
+	/**
+	 * The aafm_oauth_dcr_enabled filter can force registration closed while OAuth stays on.
+	 *
+	 * This is the one escape hatch for an advanced operator who runs OAuth but registers
+	 * clients by hand: OAuth is enabled (from setUp), yet the filter returning false makes
+	 * aafm_oauth_dcr_enabled() false, so POST /register 404s.
+	 */
+	public function test_register_is_404_when_filter_forces_dcr_off(): void {
+		add_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
+
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) ) );
+
+		$status = rest_do_request( $request )->get_status();
+		remove_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
+
+		$this->assertSame( 404, $status );
+	}
+
+	/**
+	 * With OAuth enabled and no filter override, registration succeeds (201).
+	 *
+	 * The positive half of DCR-follows-OAuth: OAuth on (setUp) is sufficient for a client
+	 * to self-register, with no separate DCR option to set.
+	 */
+	public function test_register_succeeds_when_oauth_enabled(): void {
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'redirect_uris' => array( 'https://app.example/cb' ),
+					'client_name'   => 'Test',
+				)
+			)
+		);
+
+		$this->assertSame( 201, rest_do_request( $request )->get_status() );
 	}
 
 	/**

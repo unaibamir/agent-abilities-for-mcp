@@ -723,6 +723,112 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * 1.7.2 bug #4: method_title is written with update_option( $method->get_instance_option_key(),
+	 * $instance_settings ) and its return is never looked at - unlike the enabled toggle just above,
+	 * which does check and raises aafm_wc_enabled_write_failed on a genuine failure. A filter that
+	 * vetoes the option write (a caching layer, a multisite option-sync plugin, anything hooking
+	 * pre_update_option_{$key}) makes update_option() return false with nothing persisted, and this
+	 * request has no `enabled` field to trip the sibling check - so nothing catches it.
+	 *
+	 * RED against the current code: the title never lands, but the ability answers with success
+	 * built from the re-read method object, which still shows the OLD title with no error at all -
+	 * the caller cannot tell its request was silently ignored.
+	 */
+	public function test_update_shipping_method_title_write_that_does_not_persist_is_not_silently_reported_as_success(): void {
+		$this->acting_as( 'administrator' );
+
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => 'Original Title' ) );
+
+		// A filter that vetoes the write by handing back the option's own old value - update_option()
+		// then sees new === old and returns false, persisting nothing, exactly like a compliance/cache
+		// layer silently swallowing a write this ability never checks the return of.
+		$veto = static function ( $value, $old_value ) {
+			return $old_value;
+		};
+		add_filter( 'pre_update_option_' . $option_key, $veto, 10, 2 );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'method_title' => 'Should Not Silently Succeed',
+			)
+		);
+
+		remove_filter( 'pre_update_option_' . $option_key, $veto, 10 );
+
+		// Precondition: the veto really did block the write.
+		$stored = get_option( $option_key, array() );
+		$this->assertSame(
+			'Original Title',
+			is_array( $stored ) ? ( $stored['title'] ?? null ) : null,
+			'precondition: the veto filter must have kept the title unchanged in storage.'
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A method_title write that never persisted must be reported as failed, not answered as a success carrying the stale title.'
+		);
+	}
+
+	/**
+	 * When a request carries BOTH `enabled` and `method_title`, the enabled toggle is written and
+	 * verified FIRST, so if only the (vetoed) title write then fails, the error must report the
+	 * "enabled state was already updated" variant - NOT the "nothing changed" one, which would lie
+	 * about a toggle that genuinely persisted. This pins the branch in
+	 * aafm_exec_wc_update_shipping_method() that chooses the message by whether `enabled` was present.
+	 */
+	public function test_update_shipping_method_title_veto_with_enabled_reports_enabled_already_updated(): void {
+		$this->acting_as( 'administrator' );
+
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => 'Original Title' ) );
+
+		// Veto only the title (instance-settings) write; the enabled toggle is a direct $wpdb->update()
+		// on the zone-methods table and is unaffected by this option filter, so it persists normally.
+		$veto = static function ( $value, $old_value ) {
+			return $old_value;
+		};
+		add_filter( 'pre_update_option_' . $option_key, $veto, 10, 2 );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'enabled'      => 'no',
+				'method_title' => 'Should Not Persist',
+			)
+		);
+
+		remove_filter( 'pre_update_option_' . $option_key, $veto, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A vetoed title write must still fail the request.' );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $res->get_error_code() );
+		$this->assertStringContainsString(
+			'enabled state was already updated',
+			$res->get_error_message(),
+			'With enabled present and persisted, the error must acknowledge the toggle landed, not claim nothing changed.'
+		);
+		$this->assertStringNotContainsString(
+			'Nothing on the shipping method was changed',
+			$res->get_error_message(),
+			'The "nothing changed" variant would misreport a toggle that genuinely persisted.'
+		);
+
+		// The enabled toggle really did land, confirming the message is truthful.
+		$read = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $read );
+		$this->assertSame( 'no', $read['enabled'], 'the enabled toggle must have persisted despite the vetoed title write.' );
+	}
+
+	/**
 	 * Audit: a successful execute is recorded under the calling ability.
 	 *
 	 * @dataProvider provide_success_audit_cases

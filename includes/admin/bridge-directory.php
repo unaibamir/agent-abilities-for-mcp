@@ -42,7 +42,7 @@ function aafm_render_bridge_directory(): void {
 		return;
 	}
 
-	$groups = aafm_discover_foreign_abilities();
+	$groups = aafm_merge_bridge_groups_by_known_plugin( aafm_discover_foreign_abilities() );
 	// The RAW stored list, never the floored one. Read-only mode subtracts writes from what
 	// registers, not from what the operator chose, so the switches here have to keep showing that
 	// choice - a floored read would render every enabled write unticked and the next save would
@@ -185,29 +185,234 @@ function aafm_render_bridge_filter(): void {
 }
 
 /**
- * Known display names for third-party namespaces whose real brand casing a generic Title Case
- * transform gets wrong ("Woocommerce" instead of "WooCommerce") or drops entirely (an SEO plugin
- * abbreviated to initials, e.g. "ACF"). Keyed by the exact namespace slug (the part of the
- * ability name before the first "/").
+ * Known third-party namespaces this plugin recognizes as belonging to the same product, each
+ * carrying a CANONICAL, UNTRANSLATED id alongside its display label. Keyed by the exact
+ * namespace slug (the part of the ability name before the first "/").
+ *
+ * The 'label' is display data ONLY - it is real product branding, real WordPress i18n, and can
+ * legitimately be translated by a locale's .mo file or filtered by a 'gettext' plugin. The 'id'
+ * exists precisely so nothing that identifies WHICH plugin this is ever depends on that: it is a
+ * plain lowercase-hyphen literal that never passes through __() or the 'gettext' filter, so two
+ * unrelated products can never end up sharing an id just because their labels happen to
+ * translate to the same localized string on some site (1.7.2 residual finding, third Codex
+ * re-review - the prior fix keyed the merge on the translated label itself, which closed the
+ * raw-namespace and sanitize_title aliasing cases but not this one).
  *
  * This list is necessarily incomplete - the Abilities API has no way to ask "what is your
  * plugin's display name" for an arbitrary namespace - so an unlisted plugin still falls back to
- * Title Case in aafm_bridge_display_label(). Extend this map as specific known-bad namespaces
- * are reported.
+ * Title Case in aafm_bridge_display_label() and is never merge-eligible. Extend this map as
+ * specific known-bad namespaces are reported; every namespace for the same product must share
+ * the same 'id'.
+ *
+ * @return array<string,array{id:string,label:string}>
+ */
+function aafm_bridge_known_plugins(): array {
+	return array(
+		'wordpress-seo'          => array(
+			'id'    => 'yoast-seo',
+			'label' => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
+		),
+		'yoast-seo'              => array(
+			'id'    => 'yoast-seo',
+			'label' => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
+		),
+		'rank-math'              => array(
+			'id'    => 'rank-math',
+			'label' => __( 'Rank Math', 'agent-abilities-for-mcp' ),
+		),
+		'all-in-one-seo-pack'    => array(
+			'id'    => 'aioseo',
+			'label' => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+		),
+		'aioseo-posts'           => array(
+			'id'    => 'aioseo',
+			'label' => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+		),
+		'aioseo-settings'        => array(
+			'id'    => 'aioseo',
+			'label' => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+		),
+		'aioseo-notifications'   => array(
+			'id'    => 'aioseo',
+			'label' => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+		),
+		'aioseo-robots'          => array(
+			'id'    => 'aioseo',
+			'label' => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+		),
+		'aioseo-audit'           => array(
+			'id'    => 'aioseo',
+			'label' => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+		),
+		'advanced-custom-fields' => array(
+			'id'    => 'acf',
+			'label' => __( 'ACF', 'agent-abilities-for-mcp' ),
+		),
+		'secure-custom-fields'   => array(
+			'id'    => 'acf',
+			'label' => __( 'ACF', 'agent-abilities-for-mcp' ),
+		),
+		'wp-mail-smtp'           => array(
+			'id'    => 'wp-mail-smtp',
+			'label' => __( 'WP Mail SMTP', 'agent-abilities-for-mcp' ),
+		),
+		'wpmailsmtp'             => array(
+			'id'    => 'wp-mail-smtp',
+			'label' => __( 'WP Mail SMTP', 'agent-abilities-for-mcp' ),
+		),
+	);
+}
+
+/**
+ * Display-label view of aafm_bridge_known_plugins(): namespace => translated label.
+ *
+ * Kept as its own helper because aafm_bridge_display_label() (and anything else that only needs
+ * a label to SHOW) has no business also handling ids - only aafm_bridge_known_plugin_ids() and the
+ * merge in aafm_merge_bridge_groups_by_known_plugin() care about those.
  *
  * @return array<string,string>
  */
 function aafm_bridge_known_plugin_labels(): array {
-	return array(
-		'wordpress-seo'          => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
-		'yoast-seo'              => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
-		'rank-math'              => __( 'Rank Math', 'agent-abilities-for-mcp' ),
-		'all-in-one-seo-pack'    => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
-		'advanced-custom-fields' => __( 'ACF', 'agent-abilities-for-mcp' ),
-		'secure-custom-fields'   => __( 'ACF', 'agent-abilities-for-mcp' ),
-		'wp-mail-smtp'           => __( 'WP Mail SMTP', 'agent-abilities-for-mcp' ),
-		'wpmailsmtp'             => __( 'WP Mail SMTP', 'agent-abilities-for-mcp' ),
-	);
+	return wp_list_pluck( aafm_bridge_known_plugins(), 'label' );
+}
+
+/**
+ * Canonical-id view of aafm_bridge_known_plugins(): namespace => untranslated plugin id.
+ *
+ * This is the map aafm_merge_bridge_groups_by_known_plugin() folds groups on. Never __()'d, never
+ * gettext-filtered - see aafm_bridge_known_plugins()'s docblock for why that is the whole point.
+ *
+ * @return array<string,string>
+ */
+function aafm_bridge_known_plugin_ids(): array {
+	return wp_list_pluck( aafm_bridge_known_plugins(), 'id' );
+}
+
+/**
+ * The prefix a synthetic bridge merge-group key is built with, provably disjoint from every real
+ * ability namespace.
+ *
+ * WordPress core's own Abilities registry only accepts a namespace matching /^[a-z0-9-]+$/
+ * (wp-includes/abilities-api/class-wp-abilities-registry.php, enforced on every
+ * wp_register_ability() call), so a genuine namespace can never contain a colon or an uppercase
+ * character. Both appear in this prefix, which makes a collision with a real raw-namespace key
+ * structurally impossible rather than merely unlikely (1.7.2 finding 2) - unlike the prior
+ * scheme's 'aafm-known-' prefix, itself built entirely from the same [a-z0-9-] alphabet a real
+ * namespace uses, which a real foreign namespace could and did alias.
+ *
+ * @return string
+ */
+function aafm_bridge_merge_group_key_prefix(): string {
+	return 'AAFM-KNOWN:';
+}
+
+/**
+ * Build the merge-group array key for a known plugin.
+ *
+ * Keyed on the CANONICAL, UNTRANSLATED id string (a value of aafm_bridge_known_plugin_ids()),
+ * never the translated display label and never a sanitize_title() of either. Two prior schemes
+ * both leaked translation/normalization into identity and both aliased real products together:
+ * sanitize_title($label) collapsed whitespace/hyphen/case differences between two DIFFERENT
+ * labels onto the same slug, and keying on the label string itself (still __()'d) let two
+ * DIFFERENT known plugins collapse onto the same key whenever their English labels happened to
+ * translate - or get 'gettext'-filtered - to the same localized string (1.7.2 residual finding,
+ * third Codex re-review). An id is a plain literal that is never translated or filtered, so only
+ * two namespaces this map itself declares to be the same product ever share a key.
+ *
+ * @param string $id Canonical known-plugin id (a value of aafm_bridge_known_plugin_ids()).
+ * @return string
+ */
+function aafm_bridge_merge_group_key( string $id ): string {
+	return aafm_bridge_merge_group_key_prefix() . $id;
+}
+
+/**
+ * Fold discovered foreign-ability groups whose namespaces resolve to the SAME known plugin into
+ * a single group, before the render loop draws a card per group.
+ *
+ * Discovery groups strictly by raw namespace. A plugin that registers
+ * its abilities under several namespaces - AIOSEO ships aioseo-posts, aioseo-settings,
+ * aioseo-notifications, aioseo-robots and aioseo-audit - therefore produced one card PER
+ * namespace, and every one of those cards resolved to the same "All in One SEO" heading via
+ * aafm_bridge_display_label(): five identically-titled cards, each listing only a slice of the
+ * plugin's abilities, instead of one card for the plugin (1.7.2 bug #8; the earlier fix only
+ * relabeled the namespaces, it never merged the groups that render from them).
+ *
+ * Only a namespace with an entry in aafm_bridge_known_plugin_ids() is eligible: that map is the
+ * plugin's own record of "these namespaces are the same product," so folding on it can never
+ * merge two genuinely unrelated plugins just because a generic Title Case transform happens to
+ * collide. An unlisted namespace is returned untouched, keeping its own single-namespace group.
+ *
+ * A merged group's own 'label' field is kept as the FIRST member namespace encountered, not the
+ * already-resolved brand name. aafm_render_bridge_group() resolves 'label' through
+ * aafm_bridge_display_label() exactly once, same as any other group; since every namespace
+ * folded into this group is a known-plugin key by construction, resolving any one of them
+ * reaches the same brand name. Storing the resolved name here instead would feed it back through
+ * that resolver a second time - and since the resolved brand is no longer itself a known-
+ * namespace key, it would fall through to the generic Title Case transform and get re-cased
+ * wrong (e.g. "All in One SEO" -> "All In One SEO").
+ *
+ * 1.7.2 finding 2: the synthetic key a merged group is stored under (see
+ * aafm_bridge_merge_group_key() below) must be provably disjoint from every real raw-namespace
+ * key in this same array - see that function's own docblock for how. It is also keyed on the
+ * canonical untranslated id, never the translated label - see aafm_bridge_merge_group_key()'s
+ * own docblock for the residual finding that closed.
+ *
+ * @param array<string,array{label:string,abilities:array<int,array<string,mixed>>}> $groups Discovery groups keyed by namespace.
+ * @return array<string,array{label:string,abilities:array<int,array<string,mixed>>}>
+ */
+function aafm_merge_bridge_groups_by_known_plugin( array $groups ): array {
+	$ids    = aafm_bridge_known_plugin_ids();
+	$merged = array();
+
+	foreach ( $groups as $ns => $group ) {
+		$ns = (string) $ns;
+
+		if ( ! isset( $ids[ $ns ] ) ) {
+			$merged[ $ns ] = $group;
+			continue;
+		}
+
+		$key = aafm_bridge_merge_group_key( $ids[ $ns ] );
+
+		if ( ! isset( $merged[ $key ] ) ) {
+			$merged[ $key ] = array(
+				'label'     => $ns, // Resolved once by the renderer - see the docblock above.
+				'abilities' => array(),
+			);
+		}
+
+		$merged[ $key ]['abilities'] = array_merge( $merged[ $key ]['abilities'], $group['abilities'] ?? array() );
+	}
+
+	// Re-sort the merged card's rows the same way aafm_discover_foreign_abilities() sorts a
+	// single-namespace group: alphabetically by label, ties breaking toward original order. Left
+	// untouched, a card assembled from several source groups would show each source namespace's
+	// own alphabetical run back to back instead of one alphabetized list.
+	$prefix = aafm_bridge_merge_group_key_prefix();
+	foreach ( $merged as $key => &$group ) {
+		if ( 0 !== strncmp( (string) $key, $prefix, strlen( $prefix ) ) ) {
+			continue;
+		}
+		$paired = array_map(
+			static function ( array $item, int $index ): array {
+				return array( $item, $index );
+			},
+			$group['abilities'],
+			array_keys( $group['abilities'] )
+		);
+		usort(
+			$paired,
+			static function ( array $a, array $b ): int {
+				$cmp = strcasecmp( (string) $a[0]['label'], (string) $b[0]['label'] );
+				return 0 !== $cmp ? $cmp : $a[1] <=> $b[1];
+			}
+		);
+		$group['abilities'] = array_column( $paired, 0 );
+	}
+	unset( $group );
+
+	return $merged;
 }
 
 /**

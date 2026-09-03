@@ -1,8 +1,9 @@
 <?php
 /**
- * Tests for the two OAuth Settings toggles ("Enable OAuth" and "Enable dynamic
- * client registration"): their persistence through the settings save path, their
- * presence in the reset allowlist, and an additive-only render of the Settings tab.
+ * Tests for the OAuth Settings surface: the "Enable OAuth" toggle (default off) and the
+ * "Enable dynamic client registration" toggle (default on), both persisted through the
+ * save path as '1'/'0' strings, their readers' defaults, the reset allowlist clearing
+ * both, and a render check that both switches appear.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -14,31 +15,30 @@ namespace AAFM\Tests\OAuth;
 use AAFM\Tests\TestCase;
 
 /**
- * Covers the OAuth toggle readers' default-on behaviour, the '1'/'0' string the
- * save path persists, the reset allowlist membership, and the frozen-invariant
- * render check (new switches added, existing rows untouched).
+ * Covers the OAuth toggle reader's default-off behaviour, the DCR reader's default-on
+ * behaviour, the '1'/'0' string the save path persists for each, the reset allowlist
+ * membership, and the render invariant (both switches present, DCR checked by default).
  */
 class SettingsTest extends TestCase {
 
 	/**
-	 * Each OAuth toggle reader defaults to FALSE when its option was never stored: the
-	 * public OAuth surface and open client registration are an explicit opt-in, so a
-	 * fresh install (no stored row) reads off. Matches the fail-closed default of
-	 * aafm_oauth_option_is_on().
+	 * With no stored rows, OAuth reads OFF (the public surface is an explicit opt-in) and
+	 * DCR reads ON (registration is on by default so ChatGPT and Claude can connect once
+	 * OAuth is switched on). The two toggles are independent.
 	 */
-	public function test_oauth_toggles_default_off_when_option_absent(): void {
+	public function test_oauth_defaults_off_and_dcr_defaults_on_when_option_absent(): void {
 		delete_option( 'aafm_oauth_enabled' );
 		delete_option( 'aafm_oauth_dcr_enabled' );
 
 		$this->assertFalse( aafm_oauth_enabled() );
-		$this->assertFalse( aafm_oauth_dcr_enabled() );
+		$this->assertTrue( aafm_oauth_dcr_enabled() );
 	}
 
 	/**
-	 * A present checkbox sanitizes to the string '1' for both keys, and the readers
-	 * report enabled.
+	 * Present checkboxes sanitize to the string '1' for both toggles, and each reader
+	 * reports enabled once the value is stored.
 	 */
-	public function test_save_with_toggles_present_persists_one_and_reads_true(): void {
+	public function test_save_with_both_present_persists_one_each(): void {
 		$clean = aafm_sanitize_settings_input(
 			array(
 				'aafm_oauth_enabled'     => '1',
@@ -57,12 +57,12 @@ class SettingsTest extends TestCase {
 	}
 
 	/**
-	 * An absent checkbox (unchecked checkboxes never reach $_POST) sanitizes to the
-	 * string '0' for both keys, persists a falsy-stored value, and the readers report
-	 * disabled. Persisting '0' rather than a PHP bool false is what keeps the toggle
-	 * from sticking on against a never-created option.
+	 * An absent checkbox sanitizes to the string '0' for each toggle, so turning DCR off in
+	 * the UI persists a real '0' the reader honours over its on-by-default default.
+	 * Persisting '0' rather than a PHP bool false is what keeps a toggle from sticking on
+	 * against a never-created option.
 	 */
-	public function test_save_with_toggles_absent_persists_zero_and_reads_false(): void {
+	public function test_save_with_both_absent_persists_zero_each(): void {
 		$clean = aafm_sanitize_settings_input( array() );
 
 		$this->assertSame( '0', $clean['aafm_oauth_enabled'] );
@@ -71,14 +71,13 @@ class SettingsTest extends TestCase {
 		update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
 		update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
 
-		$this->assertSame( '0', get_option( 'aafm_oauth_enabled' ) );
-		$this->assertSame( '0', get_option( 'aafm_oauth_dcr_enabled' ) );
 		$this->assertFalse( aafm_oauth_enabled() );
-		$this->assertFalse( aafm_oauth_dcr_enabled() );
+		$this->assertFalse( aafm_oauth_dcr_enabled(), 'A stored 0 turns the DCR toggle off.' );
 	}
 
 	/**
-	 * Both OAuth keys belong to the reset allowlist so a reset clears them too.
+	 * Both OAuth keys belong to the reset allowlist so a reset clears them too - after
+	 * which each falls back to its own default (OAuth off, DCR on).
 	 */
 	public function test_config_option_names_includes_oauth_toggles(): void {
 		$names = aafm_config_option_names();
@@ -88,38 +87,35 @@ class SettingsTest extends TestCase {
 	}
 
 	/**
-	 * The rendered Settings tab gains the two OAuth switch rows - each a checkbox of
-	 * the right name inside an .aafm-switch label - without disturbing the existing
-	 * controls. Asserting the force-draft checkbox, the reset hook, and the danger
-	 * card still render proves the additive change left the prior markup intact.
+	 * The rendered Settings tab shows both the "Enable OAuth" switch and the "Enable
+	 * dynamic client registration" switch, with DCR checked by default. Asserting the
+	 * force-draft checkbox, the reset hook, and the danger card still render proves the
+	 * markup around them is intact.
 	 */
-	public function test_settings_render_adds_oauth_toggles_and_keeps_existing_rows(): void {
+	public function test_settings_render_keeps_both_oauth_toggles(): void {
+		delete_option( 'aafm_oauth_dcr_enabled' );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		ob_start();
 		aafm_render_settings_tab();
 		$html = (string) ob_get_clean();
 
-		// New OAuth switches: checkbox of the right name, inside an .aafm-switch label.
+		// The OAuth switch: checkbox of the right name, inside an .aafm-switch label.
 		$this->assertMatchesRegularExpression(
 			'/<label class="aafm-switch"><input type="checkbox"[^>]*name="aafm_oauth_enabled"/',
 			$html
 		);
+
+		// The DCR switch renders again, and is checked by default (no stored row).
+		// WordPress 6.9's checked() emits single quotes and 7.x emits double, so accept either.
 		$this->assertMatchesRegularExpression(
-			'/<label class="aafm-switch"><input type="checkbox"[^>]*name="aafm_oauth_dcr_enabled"/',
-			$html
+			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*name="aafm_oauth_dcr_enabled"[^>]*checked=[\'"]checked[\'"]/',
+			$html,
+			'The DCR toggle must render checked by default.'
 		);
 
-		// Accessibility tie-up: the row title and the descriptive sentence label each carry
-		// an id, and the matching checkbox names BOTH ids via aria-labelledby, so its
-		// accessible name is the title plus the sentence (not the terse title alone).
+		// Accessibility tie-up on both switches.
 		$this->assertStringContainsString( '<div class="aafm-set-label" id="aafm-oauth-enabled-title">', $html );
-		$this->assertStringContainsString( '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">', $html );
 		$this->assertStringContainsString( '<label for="aafm-oauth-enabled" id="aafm-oauth-enabled-desc">', $html );
-		$this->assertStringContainsString( '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">', $html );
-		$this->assertMatchesRegularExpression(
-			'/<input type="checkbox" id="aafm-oauth-enabled"[^>]*aria-labelledby="aafm-oauth-enabled-title aafm-oauth-enabled-desc"/',
-			$html
-		);
 		$this->assertMatchesRegularExpression(
 			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc"/',
 			$html

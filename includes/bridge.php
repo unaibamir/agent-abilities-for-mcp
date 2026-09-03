@@ -60,6 +60,41 @@ function aafm_normalize_json_schema( $schema ): array {
 const AAFM_SCHEMA_MAX_DEPTH = 30;
 
 /**
+ * The maximum number of nodes a single ability's combined input+output schema may contain
+ * before the registration-time preflight (aafm_schema_bounds_violation() in includes/server.php)
+ * omits that ability from the server.
+ *
+ * A "node" is any value the bounded measurement walk visits - every scalar and every array
+ * container, across the input schema and the output schema together. This bounds the OTHER cost
+ * center a pathological schema drives: the adapter serializes every tool's schema when it builds
+ * tools/list, and that serialization is recursive with no depth or size cap of its own
+ * (SchemaTransformer::convert_objects_to_arrays()), so an ability carrying a schema with a
+ * runaway node count can exhaust memory or time there - an uncatchable fatal on a constrained
+ * host, no try/catch reaches it. This cap keeps that off the table before create_server() ever
+ * sees the ability.
+ *
+ * Chosen far above any real schema: on a heavy production clone (WooCommerce + ACF + LearnDash +
+ * BuddyBoss + three SEO plugins, 205 abilities) the single largest schema is
+ * woocommerce/product-update at 543 nodes, so 5000 is roughly nine times the worst real case and
+ * no normal install is ever trimmed. Only a pathological or malformed schema reaches it.
+ */
+const AAFM_SCHEMA_MAX_NODES = 5000;
+
+/**
+ * The maximum serialized size, in bytes, of a single ability's combined input+output schema
+ * before the registration-time preflight omits that ability from the server.
+ *
+ * Measured as strlen( wp_json_encode( [ input, output ] ) ), and only AFTER the node/depth walk
+ * has already proven the structure bounded - so the encode never runs on an oversized tree and
+ * cannot itself be the thing that fatals. A schema can be small in node count yet large in bytes
+ * (a single enormous default string, say), which is why size is bounded independently of nodes.
+ *
+ * 256 KB is roughly twenty-five times the largest real schema seen (woocommerce/product-update
+ * serializes to ~10 KB on the clone above), so no normal install is ever trimmed.
+ */
+const AAFM_SCHEMA_MAX_BYTES = 262144;
+
+/**
  * The namespace every bridged wrapper is registered under.
  *
  * Single-sourced because this string appears in two different shapes and they have to stay in

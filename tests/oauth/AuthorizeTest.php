@@ -29,10 +29,9 @@ class AuthorizeTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		aafm_install_oauth_tables();
-		// OAuth (and DCR) are now OFF by default; these authorize-flow tests exercise the
-		// enabled surface, so turn them on explicitly. The disabled-path tests override.
+		// OAuth is now OFF by default; these authorize-flow tests exercise the enabled surface, so
+		// turn it on explicitly. DCR is on by default. The disabled-path tests override.
 		update_option( 'aafm_oauth_enabled', '1' );
-		update_option( 'aafm_oauth_dcr_enabled', '1' );
 		// The authorize choke point writes an OAuth lifecycle audit row on success.
 		aafm_install_activity_log();
 	}
@@ -455,6 +454,52 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * 1.7.2 bug #9: the logged-out redirect builds its return-to URL from
+	 * sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ). sanitize_text_field() strips
+	 * EVERY percent-encoded octet (/%[a-f0-9]{2}/i) from the string - documented in WordPress core's
+	 * own _sanitize_text_fields() as "Remove percent-encoded characters" - so a normal, already
+	 * percent-encoded query string (exactly what http_build_query() produces for redirect_uri here)
+	 * gets its %3A/%2F octets stripped before it is ever placed after redirect_to=. A logged-out
+	 * first connection - the ordinary dynamic-client-registration case - comes back from wp-login
+	 * with a mangled redirect_uri and hard-breaks with a local 400 invalid_redirect_uri.
+	 *
+	 * RED against the current code: the round-tripped redirect_uri param inside redirect_to comes
+	 * back with its %XX octets stripped, so it never equals the client's real, registered
+	 * 'https://app.example/cb'.
+	 */
+	public function test_logged_out_redirect_preserves_a_percent_encoded_redirect_uri(): void {
+		wp_set_current_user( 0 );
+		$client = $this->register_client();
+
+		$result = $this->run_authorize_get( $this->valid_params( $client ) );
+
+		$this->assertNotNull( $result['redirect'], 'A logged-out user must be redirected.' );
+
+		// redirect_to carries the full authorize URL (percent-encoded once by wp_login_url()) that
+		// the user returns to after signing in; parse_str() undoes that one layer of encoding.
+		$outer_query = array();
+		parse_str( (string) wp_parse_url( (string) $result['redirect'], PHP_URL_QUERY ), $outer_query );
+		$this->assertArrayHasKey( 'redirect_to', $outer_query );
+
+		// The authorize URL's OWN query string must still carry an intact, correctly percent-encoded
+		// redirect_uri - the exact value the client registered - not one whose %XX octets were
+		// stripped on the way through REQUEST_URI.
+		$return_query = array();
+		parse_str( (string) wp_parse_url( (string) $outer_query['redirect_to'], PHP_URL_QUERY ), $return_query );
+
+		$this->assertArrayHasKey(
+			'redirect_uri',
+			$return_query,
+			'The redirect_uri param must survive the wp-login round-trip in the return-to URL.'
+		);
+		$this->assertSame(
+			'https://app.example/cb',
+			$return_query['redirect_uri'] ?? null,
+			'A percent-encoded redirect_uri must round-trip intact through the logged-out wp-login redirect, not have its %XX octets silently stripped.'
+		);
+	}
+
+	/**
 	 * A LOGGED-IN user with the required capability PROCEEDS to the consent screen
 	 * instead of being bounced to login.
 	 *
@@ -632,6 +677,203 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * The connector icon is chosen from the redirect host: a claude.ai redirect gets the Claude
+	 * mark, an openai.com redirect gets the OpenAI mark, and each carries its own conn-<vendor>
+	 * class. The real vendor hosts (and their genuine subdomains) resolve; the client name plays no
+	 * part in the choice.
+	 */
+	public function test_connector_icon_detects_vendor_from_redirect_host(): void {
+		$claude = aafm_oauth_connector_icon( 'My Agent', 'claude.ai' );
+		$this->assertStringContainsString( 'conn-claude', $claude );
+		$this->assertStringContainsString( '#D97757', $claude, 'The Claude mark is drawn in the Anthropic clay.' );
+
+		$openai = aafm_oauth_connector_icon( 'My Agent', 'chatgpt.com' );
+		$this->assertStringContainsString( 'conn-openai', $openai );
+
+		$cursor = aafm_oauth_connector_icon( 'My Agent', 'cursor.com' );
+		$this->assertStringContainsString( 'conn-cursor', $cursor );
+
+		$vscode = aafm_oauth_connector_icon( 'My Agent', 'vscode.dev' );
+		$this->assertStringContainsString( 'conn-vscode', $vscode );
+
+		// A genuine subdomain of a vendor host still resolves (boundary-checked suffix).
+		$this->assertStringContainsString( 'conn-claude', aafm_oauth_connector_icon( 'My Agent', 'app.claude.ai' ) );
+		// A host with an explicit port still resolves once the port is stripped.
+		$this->assertStringContainsString( 'conn-claude', aafm_oauth_connector_icon( 'My Agent', 'claude.ai:443' ) );
+	}
+
+	/**
+	 * SECURITY (1.7.2 FIX A): the client-supplied display name NEVER selects the vendor icon. A
+	 * self-registered DCR client can name itself anything, so honouring the name would let it paint a
+	 * trusted vendor logo on the consent screen and defeat the "Unverified app" warning. With an
+	 * unknown redirect host, even a name of "Claude Desktop" or "ChatGPT" gets the neutral plug glyph.
+	 */
+	public function test_connector_icon_ignores_client_name_for_vendor_selection(): void {
+		$this->assertStringContainsString( 'conn-generic', aafm_oauth_connector_icon( 'Claude Desktop', 'proxy.example' ) );
+		$this->assertStringContainsString( 'conn-generic', aafm_oauth_connector_icon( 'ChatGPT', 'proxy.example' ) );
+		$this->assertStringContainsString( 'conn-generic', aafm_oauth_connector_icon( 'Cursor', 'proxy.example' ) );
+	}
+
+	/**
+	 * SECURITY (1.7.2 FIX A): a look-alike host that merely CONTAINS a vendor domain as a substring
+	 * must NOT win the vendor icon - the old loose strpos() match let exactly these through. Each of
+	 * these renders the neutral generic glyph, not the impersonated brand mark.
+	 *
+	 * @dataProvider provider_impostor_hosts
+	 *
+	 * @param string $host A look-alike redirect host that must not be granted a vendor icon.
+	 */
+	public function test_connector_icon_rejects_lookalike_hosts( string $host ): void {
+		$icon = aafm_oauth_connector_icon( 'My Agent', $host );
+		$this->assertStringContainsString( 'conn-generic', $icon, "Look-alike host {$host} must get the neutral glyph." );
+		$this->assertStringNotContainsString( 'conn-claude', $icon );
+		$this->assertStringNotContainsString( 'conn-openai', $icon );
+		$this->assertStringNotContainsString( 'conn-cursor', $icon );
+		$this->assertStringNotContainsString( 'conn-vscode', $icon );
+	}
+
+	/**
+	 * Look-alike hosts that defeated the old substring match.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function provider_impostor_hosts(): array {
+		return array(
+			'suffix-attacker-domain'   => array( 'claude.ai.attacker.example' ),
+			'prefix-hyphen-openai'     => array( 'evil-openai.com' ),
+			'embedded-claude'          => array( 'evilclaude.ai' ),
+			'openai-in-path-like-host' => array( 'openai.com.evil.example' ),
+			'cursor-substring'         => array( 'notcursor.com' ),
+			'vscode-substring'         => array( 'myvscode.dev.evil.example' ),
+		);
+	}
+
+	/**
+	 * The branded connector mark for a real allowlisted host survives the page's wp_kses pass: the
+	 * conn-<vendor> class and the vendor stroke colour both reach the rendered output. The consent
+	 * page runs the icon through aafm_svg_allowed_html(), so this proves FIX A's KEPT branch was not
+	 * over-tightened into stripping the legitimate vendor mark along with the impostor ones.
+	 */
+	public function test_consent_render_keeps_branded_icon_through_kses(): void {
+		$view = array(
+			'client_name'   => 'My Agent',
+			'user_login'    => 'mcp-agent',
+			'site_name'     => 'Example Site',
+			'redirect_host' => 'claude.ai',
+			'action_url'    => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'   => '',
+			'hidden_inputs' => array(),
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( $view );
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'conn-claude', $html, 'The Claude mark class must survive wp_kses in the rendered page.' );
+		$this->assertStringContainsString( '#D97757', $html, 'The Claude stroke colour must survive wp_kses.' );
+		$this->assertStringNotContainsString( 'conn-generic', $html, 'A real vendor host must not fall back to the neutral glyph.' );
+	}
+
+	/**
+	 * An unrecognised connector gets the neutral generic plug glyph, never a star. The old star
+	 * mark implied a rating/featured status the plugin never confers, so its removal is pinned here.
+	 */
+	public function test_connector_icon_unknown_returns_generic_not_star(): void {
+		$icon = aafm_oauth_connector_icon( 'Some Random App', 'unknown.example' );
+
+		$this->assertStringContainsString( 'conn-generic', $icon );
+		// The retired star mark's path data must not reappear.
+		$this->assertStringNotContainsString( 'M12 3l1.9 5.4', $icon );
+	}
+
+	/**
+	 * When the site has a same-origin Customizer Site Icon, the site avatar renders it as an <img>
+	 * (decorative, alt="") rather than the initials, and the URL is escaped.
+	 */
+	public function test_consent_render_uses_site_icon_when_present(): void {
+		// Same-origin with the test site's home_url() host, so FIX E's same-origin check passes.
+		$icon_url = home_url( '/wp-content/uploads/site-icon.png' );
+		$filter   = static function () use ( $icon_url ) {
+			return $icon_url;
+		};
+		add_filter( 'get_site_icon_url', $filter, 10, 0 );
+
+		$view = array(
+			'client_name'   => 'App',
+			'user_login'    => 'mcp-agent',
+			'site_name'     => 'Example Site',
+			'action_url'    => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'   => '',
+			'hidden_inputs' => array(),
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( $view );
+		$html = (string) ob_get_clean();
+
+		remove_filter( 'get_site_icon_url', $filter, 10 );
+
+		$this->assertStringContainsString( 'avatar site has-icon', $html );
+		$this->assertStringContainsString( '<img src="' . esc_url( $icon_url ) . '"', $html );
+		$this->assertStringContainsString( 'alt=""', $html );
+		// The initials fall-back is not used when an icon is present.
+		$this->assertStringNotContainsString( '>ES</span>', $html );
+	}
+
+	/**
+	 * FIX E (1.7.2): a Site Icon served from an OFF-ORIGIN host (a CDN/offload URL) is blocked by the
+	 * consent page's `img-src 'self' data:` CSP, so rendering it would leave the avatar empty. The
+	 * page must therefore fall back to the derived initials and emit no <img> for an off-origin icon.
+	 */
+	public function test_consent_render_falls_back_to_initials_for_off_origin_site_icon(): void {
+		$icon_url = 'https://cdn.example.net/offloaded/site-icon.png';
+		$filter   = static function () use ( $icon_url ) {
+			return $icon_url;
+		};
+		add_filter( 'get_site_icon_url', $filter, 10, 0 );
+
+		$view = array(
+			'client_name'   => 'App',
+			'user_login'    => 'mcp-agent',
+			'site_name'     => 'Example Site',
+			'action_url'    => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'   => '',
+			'hidden_inputs' => array(),
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( $view );
+		$html = (string) ob_get_clean();
+
+		remove_filter( 'get_site_icon_url', $filter, 10 );
+
+		// No off-origin <img>; the initials avatar stands in instead.
+		$this->assertStringNotContainsString( 'cdn.example.net', $html, 'An off-origin Site Icon must never reach the page.' );
+		$this->assertStringContainsString( '<span class="avatar site">ES</span>', $html, 'An off-origin icon falls back to the initials.' );
+	}
+
+	/**
+	 * With no Site Icon set, the site avatar falls back to the derived initials and emits no <img>.
+	 */
+	public function test_consent_render_falls_back_to_initials_without_site_icon(): void {
+		$view = array(
+			'client_name'   => 'App',
+			'user_login'    => 'mcp-agent',
+			'site_name'     => 'Example Site',
+			'action_url'    => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'   => '',
+			'hidden_inputs' => array(),
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( $view );
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '<span class="avatar site">ES</span>', $html );
+		$this->assertStringNotContainsString( '<img', $html );
+	}
+
+	/**
 	 * The high-privilege warning shows only when the approving account can administer the site.
 	 */
 	public function test_consent_render_shows_high_privilege_warning_only_for_admins(): void {
@@ -702,7 +944,9 @@ class AuthorizeTest extends TestCase {
 		// Every other hardened directive is preserved exactly.
 		$this->assertStringContainsString( "default-src 'none';", $csp );
 		$this->assertStringContainsString( "style-src 'self';", $csp );
-		$this->assertStringContainsString( 'img-src data:;', $csp );
+		// img-src carries 'self' (the same-origin Customizer Site Icon) alongside data: (the inline
+		// brand + connector SVGs). 'self' is same-origin only, never a wildcard or external host.
+		$this->assertStringContainsString( "img-src 'self' data:;", $csp );
 		$this->assertStringContainsString( "base-uri 'none';", $csp );
 		$this->assertStringContainsString( "frame-ancestors 'none'", $csp );
 		// The policy must not be widened to a wildcard form-action source.

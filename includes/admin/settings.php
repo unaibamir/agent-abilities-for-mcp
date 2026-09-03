@@ -27,10 +27,11 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   presence of the field (unchecked checkbox -> false). Every reader defaults off on a missing
  *   option, so unlike the OAuth pair below there is nothing to work around: a stored false reads as
  *   off either way.
- * - aafm_oauth_enabled, aafm_oauth_dcr_enabled: the STRING '1' when the checkbox is present,
- *   '0' when absent. The OAuth readers default on and treat every falsy stored form as off, so
- *   the off state must be the literal '0' string - a PHP bool false would not store as false on
- *   a never-created option, leaving the toggle stuck on.
+ * - aafm_oauth_enabled, aafm_oauth_dcr_enabled: the STRING '1' when the checkbox is present, '0'
+ *   when absent. The OAuth readers treat every falsy stored form as off, so the off state must be
+ *   the literal '0' string - a PHP bool false would not store as false on a never-created option,
+ *   leaving the toggle stuck on. DCR defaults on, but a save always sends its explicit state, so
+ *   the round-trip is symmetric with OAuth.
  * - aafm_ip_allowlist: split on newlines, trimmed, blanks dropped, and every surviving line
  *   must clear aafm_is_valid_ip_or_cidr(). Invalid lines are dropped (fail-closed), so a
  *   stored non-empty list is always made up entirely of usable entries.
@@ -246,6 +247,8 @@ function aafm_config_option_names(): array {
 		'aafm_block_guard_strict',
 		'aafm_oauth_enabled',
 		'aafm_oauth_dcr_enabled',
+		'aafm_oauth_access_ttl',
+		'aafm_oauth_refresh_ttl',
 		'aafm_ip_allowlist',
 		'aafm_denied_meta_keys',
 		'aafm_exposed_user_meta_keys',
@@ -274,6 +277,15 @@ function aafm_config_option_names(): array {
 		// reset returns the site to out-of-the-box, and out of the box the mode is off. Nothing is
 		// exposed by that on its own, because a reset also clears every enabled ability.
 		'aafm_read_only_mode',
+		// Derived state, not user config: the set of abilities the registration-time preflight left
+		// out of the server (schema over the bounds, or over the tool cap). It is regenerated on the
+		// next MCP request, so clearing it here is safe and correct - a reset wipes the enabled set
+		// that produced any breach, and a delete-data uninstall must not leak the row. Listed here
+		// (rather than deleted ad hoc) so it travels with the canonical cleanup like every sibling.
+		// The literal is AAFM_OMITTED_ABILITIES_OPTION (includes/server.php); it is spelled out here
+		// because uninstall.php loads this file but NOT server.php, so the constant is not defined in
+		// the uninstall context. A drift guard in OmittedAbilitiesPreflightTest keeps the two in step.
+		'aafm_omitted_abilities',
 	);
 }
 
@@ -312,10 +324,12 @@ function aafm_uninstall_site_data(): void {
 	aafm_drop_oauth_tables();
 	delete_option( 'aafm_oauth_schema_version' );
 	delete_option( 'aafm_activity_log_schema_version' );
-	// The one-time OAuth upgrade-preserve guard (written by the plugins_loaded migration). Cleared
-	// here so a delete-data uninstall leaves nothing behind. It is deliberately NOT in the reset set:
-	// clearing it on reset would let the preserve migration re-run and could flip OAuth back on.
+	// The one-time OAuth upgrade-preserve guard and the DCR default-on adoption guard (both written by
+	// the plugins_loaded migrations). Cleared here so a delete-data uninstall leaves nothing behind.
+	// They are deliberately NOT in the reset set: clearing a guard on reset would let its migration
+	// re-run and could flip a toggle back on.
 	delete_option( 'aafm_oauth_toggle_migrated' );
+	delete_option( 'aafm_oauth_dcr_default_on_migrated' );
 	delete_option( 'aafm_delete_data_on_uninstall' );
 }
 
@@ -367,7 +381,8 @@ function aafm_ajax_reset_plugin(): void {
 }
 
 /**
- * Render the Settings tab: an OAuth card with its two toggles, then one Safety controls card of
+ * Render the Settings tab: an OAuth card with its enable toggle (and a note that dynamic client
+ * registration follows it), then one Safety controls card of
  * labelled rows - the two governance switches first, then the optional per-behaviour controls -
  * and the Danger zone last. Both cards sit inside #aafm-settings-form and share the one sticky
  * save bar at its foot.
@@ -385,9 +400,10 @@ function aafm_render_settings_tab(): void {
 
 	echo '<form id="aafm-settings-form">';
 
-	// OAuth: two additive switch rows. Same .aafm-switch / .aafm-set-row markup as the
+	// OAuth: one switch row plus a note. Same .aafm-switch / .aafm-set-row markup as the
 	// force-draft row below; the <input> name/value/checked() contract is what the save
-	// handler binds to, not this markup. Both readers default on (discovery.php).
+	// handler binds to, not this markup. The OAuth reader defaults off (discovery.php), and
+	// dynamic client registration now follows it rather than carrying its own toggle.
 	//
 	// This card leads the tab because connecting an agent is the first thing an operator does
 	// here, and the safety controls below only start mattering once something is connected.
@@ -406,13 +422,16 @@ function aafm_render_settings_tab(): void {
 	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	// Enable dynamic client registration. Same tie-up as the row above.
+	// Enable dynamic client registration. On by default so ChatGPT and Claude, which only ever
+	// connect by self-registering, work as soon as OAuth is on; turn it off to require manual client
+	// setup. Same .aafm-switch / .aafm-set-row markup and aria wiring as the row above. It stays
+	// inert while OAuth is off, since the register route and discovery both gate on OAuth too.
 	echo '<div class="aafm-set-row">';
 	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '<div class="aafm-set-control">';
 	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	echo '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">' . esc_html__( 'Allow agents to self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
-	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">' . esc_html__( 'Let agents self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
+	echo '<p class="help">' . esc_html__( 'On by default, so ChatGPT and Claude can connect. Turn it off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent

@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission controls, off by default, and a full audit log.
- * Version:           1.7.1
+ * Version:           1.7.2
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.7.1' );
+define( 'AAFM_VERSION', '1.7.2' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -232,7 +232,8 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
 add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 
-// Seed the OAuth toggles to "off" at activation (add_option only - never clobbers a saved value).
+// Seed the OAuth toggles at activation (add_option only - never clobbers a saved value): OAuth off,
+// dynamic client registration on.
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
 
 // Flag a genuinely new install so the first-activation admin-menu pointer shows once. The callback
@@ -252,6 +253,12 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_quickconnect_flag_menu_pointer
 // Preserve the prior state once, early, before any request-time toggle read; fresh installs
 // (seeded '0' at activation) stay off. See aafm_oauth_preserve_toggle_on_upgrade().
 add_action( 'plugins_loaded', 'aafm_oauth_preserve_toggle_on_upgrade', 1 );
+
+// One-time DCR default-on adoption: dynamic client registration used to default off (the #90
+// footgun that stopped ChatGPT and Claude connecting), so installs that predate this release hold
+// a stored '0'. Flip that old default on once, early, with its own guard. See
+// aafm_oauth_dcr_adopt_on_by_default().
+add_action( 'plugins_loaded', 'aafm_oauth_dcr_adopt_on_by_default', 1 );
 
 // Surface the transport's 401 challenge (resource_metadata) as a real
 // WWW-Authenticate header on the dispatched REST error response.
@@ -320,6 +327,23 @@ function aafm_bootstrap() {
 	// out and keeps its 404. Registered after bootstrap.php, which is where
 	// aafm_mcp_rest_route() - the first thing this filter calls - is defined.
 	add_filter( 'rest_post_dispatch', 'aafm_mcp_filter_governed_error_status', 10, 3 );
+
+	// Session-persistence guard: the adapter's SessionManager::create_session() returns a session id
+	// without checking its update_user_meta() write succeeded, so a silent write failure hands the
+	// client a valid-looking Mcp-Session-Id that its next request can't resolve (the "OAuth ok, then
+	// can't connect" field report). This verifies the just-issued session is actually in the user's
+	// store; when it is not, it strips the phantom header and rewrites the body to a JSON-RPC -32603 so
+	// the client gets an honest, retryable error. Priority 11 so it runs AFTER the transport's own
+	// priority-10 rest_post_dispatch closure has stamped the Mcp-Session-Id header, and registered
+	// BEFORE aafm_log_mcp_transport_outcome() (also priority 11) so the -32603 it produces is logged as
+	// a (transport) internal_error row.
+	add_filter( 'rest_post_dispatch', 'aafm_mcp_guard_unpersisted_session', 11, 3 );
+
+	// Transport-visibility logging: write one (transport) activity row for an MCP-route JSON-RPC
+	// error response, so a failed /mcp request is self-diagnosing (reached-WP-and-failed vs
+	// never-reached-WP). Pure observability - reads the response, changes no status. Priority 11 so
+	// it runs AFTER the governed-status rewrite above and records the final HTTP status the client sees.
+	add_filter( 'rest_post_dispatch', 'aafm_log_mcp_transport_outcome', 11, 3 );
 
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/pages.php';
@@ -422,6 +446,7 @@ function aafm_bootstrap() {
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
+		add_action( 'admin_notices', 'aafm_notice_omitted_abilities' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}
 

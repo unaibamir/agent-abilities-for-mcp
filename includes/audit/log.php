@@ -53,12 +53,15 @@ function aafm_activity_statuses( bool $include_started = true ): array {
  * ability, a security-relevant setting change, the tamper-evident log-cleared marker, and a
  * permission callback that crashed during a discovery check (aafm_deny_crashed_permission_check()
  * in includes/server.php - those rows carry a real ability name, so only the type can say they
- * are not agent calls). Mirrors aafm_activity_statuses().
+ * are not agent calls), and an ability the registration-time preflight left OUT of the server
+ * because its schema breached the measurement bounds or the enabled set exceeded the tool cap
+ * (aafm_reconcile_omitted_abilities() in includes/server.php - also a real ability name, again
+ * distinguishable only by type). Mirrors aafm_activity_statuses().
  *
  * @return string[] The allowed event_type values.
  */
 function aafm_activity_event_types(): array {
-	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed' );
+	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted' );
 }
 
 /**
@@ -309,7 +312,9 @@ if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
  *
  * @param string $bucket Short key namespace so each denial class gets its own counter:
  *                       'fa' (failed Application Password auth), 'ipb' (IP-blocked transport),
- *                       or 'br' (an invalid OAuth bearer that still matched a real stored token).
+ *                       'br' (an invalid OAuth bearer that still matched a real stored token),
+ *                       'tx' (an MCP-route JSON-RPC error the transport-outcome logger records),
+ *                       or 'ssl' (an aafm_oat_ bearer presented over http where HTTPS is required).
  * @return bool True when the caller may write its row (the slot is consumed), false when this
  *              IP has used up its cap for the current window.
  */

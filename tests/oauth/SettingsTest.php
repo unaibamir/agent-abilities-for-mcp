@@ -106,8 +106,9 @@ class SettingsTest extends TestCase {
 		);
 
 		// The DCR switch renders again, and is checked by default (no stored row).
+		// WordPress 6.9's checked() emits single quotes and 7.x emits double, so accept either.
 		$this->assertMatchesRegularExpression(
-			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*name="aafm_oauth_dcr_enabled"[^>]*checked="checked"/',
+			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*name="aafm_oauth_dcr_enabled"[^>]*checked=[\'"]checked[\'"]/',
 			$html,
 			'The DCR toggle must render checked by default.'
 		);

@@ -367,8 +367,10 @@ function aafm_uninstall_site_data(): void {
  * @return void
  */
 function aafm_reset_plugin(): void {
+	// Cache-safe on purpose: reset is what an operator reaches for when a setting looks stuck, and
+	// a stale persistent object cache is one way a setting gets stuck (aafm_forget_option_caches()).
 	foreach ( aafm_config_option_names() as $option ) {
-		delete_option( $option );
+		aafm_delete_option_cache_safe( $option );
 	}
 	aafm_clear_activity_log();
 	aafm_log_activity_cleared_marker();

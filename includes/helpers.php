@@ -2116,42 +2116,6 @@ function aafm_rich_template_output_properties(): array {
 }
 
 /**
- * Persist an operator switch and prove it took, whatever the object cache was holding.
- *
- * On stores an explicit true; off deletes the row, because off is the option's out-of-the-box
- * state (the same rule the high-risk and read-only switches have followed since 1.5.0). The part
- * that matters is what happens next. A persistent object cache (Redis, Memcached, a host's
- * drop-in) can be serving an autoloaded-options blob that predates the write: after a delete
- * that found no row, core returns before touching the cache, so the stale value survives every
- * later save and the switch can never be turned off from wp-admin (seen live on 2026-09-03: five
- * "Read-only mode turned off" rows in the log while the screen kept showing it on). The mirror
- * image, a cache that lists the option as known-absent while the row exists, hides an ON.
- *
- * So the write is followed by dropping the three option caches that could carry a stale answer
- * (the per-option entry, the autoloaded blob, the known-absent list) and reading the value back.
- * The next read rebuilds from the database, which is the only source of truth here. The return
- * value says whether the read-back matched the intent, so a caller can refuse to log or report
- * success for a change that did not happen.
- *
- * @param string $option Option name.
- * @param bool   $on     Whether the switch should be on.
- * @return bool True when the option now reads back as $on.
- */
-function aafm_persist_operator_switch( string $option, bool $on ): bool {
-	if ( $on ) {
-		update_option( $option, true );
-	} else {
-		delete_option( $option );
-	}
-
-	wp_cache_delete( $option, 'options' );
-	wp_cache_delete( 'alloptions', 'options' );
-	wp_cache_delete( 'notoptions', 'options' );
-
-	return ( (bool) get_option( $option, false ) ) === $on;
-}
-
-/**
  * The operator-facing explanation for a switch that did not persist.
  *
  * @param string $label Human name of the switch, already translated.

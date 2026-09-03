@@ -906,13 +906,14 @@ function aafm_clear_activity_log(): void {
  */
 function aafm_uninstall_site(): void {
 	global $wpdb;
+	$forget = function_exists( 'aafm_delete_option_cache_safe' ) ? 'aafm_delete_option_cache_safe' : 'delete_option';
 	if ( function_exists( 'aafm_config_option_names' ) ) {
 		foreach ( aafm_config_option_names() as $option ) {
-			delete_option( $option );
+			$forget( $option );
 		}
 	} else {
 		// Defensive fallback if settings.php was not loaded - never leave the core option behind.
-		delete_option( 'aafm_enabled_abilities' );
+		$forget( 'aafm_enabled_abilities' );
 	}
 	// Cosmetic detected-keys cache (option-list sibling of the same data class).
 	delete_transient( 'aafm_detected_meta_keys' );

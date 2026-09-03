@@ -53,6 +53,7 @@ aafm_eager_load_adapter();
 require_once AAFM_PLUGIN_DIR . 'includes/text.php';
 
 // Audit log is required early so the activation hook can install its table.
+require_once AAFM_PLUGIN_DIR . 'includes/option-cache.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/detail.php';
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin

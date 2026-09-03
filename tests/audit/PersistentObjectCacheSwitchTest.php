@@ -158,4 +158,51 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$row = $this->latest_log_row( 'aafm/read-only-mode' );
 		$this->assertSame( 'error', $row['status'] ?? null, 'The activity log must record the failed switch as an error, never as "turned off".' );
 	}
+
+	public function test_forgetting_one_option_leaves_every_other_cached_option_alone(): void {
+		update_option( 'aafm_pocs_neighbour', 'kept' );
+		$this->plant_stale_on( 'aafm_read_only_mode' );
+		$before = wp_cache_get( 'alloptions', 'options', true );
+		$this->assertSame( 'kept', $before['aafm_pocs_neighbour'] ?? null );
+
+		aafm_forget_option_caches( 'aafm_read_only_mode' );
+
+		$after = wp_cache_get( 'alloptions', 'options', true );
+		$this->assertIsArray( $after, 'The autoloaded blob must be rewritten, not dropped.' );
+		$this->assertArrayNotHasKey( 'aafm_read_only_mode', $after );
+		$this->assertSame( 'kept', $after['aafm_pocs_neighbour'] ?? null, 'Only the one key is removed.' );
+		$this->assertSame( count( $before ) - 1, count( $after ) );
+		delete_option( 'aafm_pocs_neighbour' );
+	}
+
+	public function test_reset_to_defaults_clears_a_stale_cached_enabled_list(): void {
+		global $wpdb;
+		// Reset truncates the activity-log and OAuth tables too; install them so it runs clean.
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_enabled_abilities' ) );
+		$all                           = wp_load_alloptions( true );
+		$all['aafm_enabled_abilities'] = serialize( array( 'aafm/delete-post' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- planting the raw cache shape.
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame( array( 'aafm/delete-post' ), get_option( 'aafm_enabled_abilities' ), 'Precondition: the stale list is what get_option() sees.' );
+
+		aafm_reset_plugin();
+
+		$this->assertSame( 'MISSING', get_option( 'aafm_enabled_abilities', 'MISSING' ), 'Reset must leave no stale enabled list behind.' );
+	}
+
+	public function test_uninstall_clears_a_stale_cached_enabled_list(): void {
+		global $wpdb;
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_high_risk_abilities_unlocked' ) );
+		$all                                      = wp_load_alloptions( true );
+		$all['aafm_high_risk_abilities_unlocked'] = '1';
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertTrue( aafm_high_risk_unlocked(), 'Precondition: the stale unlock is what the floor sees.' );
+
+		aafm_uninstall_site();
+
+		$this->assertFalse( aafm_high_risk_unlocked(), 'Uninstall must not leave a stale unlock for the next install to inherit.' );
+	}
 }

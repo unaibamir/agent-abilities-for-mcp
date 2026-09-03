@@ -22,6 +22,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'includes/option-cache.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/admin/settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/audit/log.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/oauth/schema.php';

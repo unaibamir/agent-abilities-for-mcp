@@ -326,13 +326,18 @@ function aafm_ajax_quickconnect_finish(): void {
 	$write = ! empty( $_POST['write'] );
 
 	$read_only_persisted = aafm_quickconnect_apply_abilities( $write );
-	update_option( 'aafm_quickconnect_finished', '1' );
 
 	// Mirrors aafm_ajax_save_settings(): a wizard finish that reports success while the read-only
 	// switch it just flipped silently stuck is the same silent-wrong-answer this diff exists to close.
+	// The completion flag is written only once that check has passed - written first, it would
+	// permanently suppress the wizard on the next page load even though this exact request is
+	// about to report an error, so a reload would show the site as "finished" over a setup that
+	// never actually completed.
 	if ( ! $read_only_persisted ) {
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
 	}
+
+	update_option( 'aafm_quickconnect_finished', '1' );
 
 	wp_send_json_success(
 		array(

@@ -9,6 +9,18 @@
  * "turned off" five times in a row. The same shape applies to the high-risk unlock, where the stale
  * direction is the dangerous one: a cache that still says "unlocked" after the operator locked it.
  *
+ * This suite runs against PHPUnit's WP_Object_Cache, WordPress core's own in-process, single-request
+ * object cache stand-in - not a persistent backend, and its wp_cache_get()/wp_cache_set() do not
+ * distinguish `$force` from a normal call, so `aafm_force_refresh_option_caches()`'s forced reads
+ * behave exactly like unforced ones here. That is enough to reproduce and pin the read-modify-write
+ * bug class this file is named for (a stale `alloptions`/`notoptions` entry with no backing DB row),
+ * because that class of bug is about which cache entries get read and rewritten within one request,
+ * not about crossing a network boundary. What this suite cannot exercise - a persistent backend that
+ * actually diverges between processes, honors or ignores `$force` for real, or has a remote write
+ * fail after already priming its own runtime cache (finding 6 in the 1.7.3 hotfix review) - is
+ * covered by the Redis-backed MCP-sim harness and by manual `ddev wp eval` checks against a live
+ * Redis object-cache drop-in, never by this file.
+ *
  * @package AgentAbilitiesForMCP
  */
 
@@ -254,7 +266,13 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->assertSame( 'MISSING', get_option( 'aafm_enabled_abilities', 'MISSING' ), 'Reset must leave no stale enabled list behind.' );
 	}
 
-	public function test_uninstall_clears_a_stale_cached_enabled_list(): void {
+	/**
+	 * Codex hotfix review, finding 9: this test's name previously said "enabled list", but it
+	 * plants and checks aafm_high_risk_abilities_unlocked, not aafm_enabled_abilities - the sibling
+	 * enabled-list case is test_reset_to_defaults_clears_a_stale_cached_enabled_list() above, which
+	 * covers reset rather than uninstall. Renamed to match what the test actually does.
+	 */
+	public function test_uninstall_clears_a_stale_cached_high_risk_unlock(): void {
 		global $wpdb;
 		aafm_install_activity_log();
 		aafm_install_oauth_tables();
@@ -292,5 +310,9 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->assertStringContainsString( 'object cache', strtolower( (string) ( $json['data']['message'] ?? '' ) ) );
 		$row = $this->latest_log_row( 'aafm/read-only-mode' );
 		$this->assertSame( 'error', $row['status'] ?? null, 'The activity log must record the failed switch as an error, never as success.' );
+		// Codex hotfix review, finding 8: the completion flag used to be written before this check,
+		// so a reload after this exact failure would have shown the site as "finished" even though
+		// setup never actually completed. It must stay unset while the response is an error.
+		$this->assertFalse( aafm_quickconnect_is_finished(), 'The wizard must not be marked finished when the switch it flips did not persist.' );
 	}
 }

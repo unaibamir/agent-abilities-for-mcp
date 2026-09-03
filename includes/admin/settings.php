@@ -307,6 +307,35 @@ function aafm_config_option_names(): array {
 }
 
 /**
+ * Whether the current blog's options TABLE - not the object cache - actually stores a truthy
+ * delete-on-uninstall flag.
+ *
+ * `get_option()` trusts the `alloptions` cache blob without ever consulting the database
+ * (wp-includes/option.php), so a persistent object cache that still disagrees with the database
+ * would let a stale cached "true" authorize `aafm_uninstall_site()` and the OAuth table drops
+ * below, even with the flag's own row absent or false. A decision this destructive has to be as
+ * good as the row actually on disk, not whatever the cache still remembers, so this reads the
+ * table directly rather than going through get_option(). This is the one read in the whole plugin
+ * that is allowed to cost a query it would not otherwise need, because what it gates cannot be
+ * undone.
+ *
+ * @return bool
+ */
+function aafm_uninstall_should_delete_data(): bool {
+	global $wpdb;
+	$raw = $wpdb->get_var(
+		$wpdb->prepare(
+			"SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1",
+			'aafm_delete_data_on_uninstall'
+		)
+	);
+	if ( null === $raw ) {
+		return false;
+	}
+	return (bool) maybe_unserialize( $raw );
+}
+
+/**
  * Remove this plugin's data for the current blog.
  *
  * Clears this site's cron registrations FIRST, unconditionally - cron registrations are
@@ -318,11 +347,13 @@ function aafm_config_option_names(): array {
  * CURRENT blog context - they cannot reach every site on a multisite network the way
  * aafm_run_uninstall() (uninstall.php) does by switching through each one.
  *
- * Reads the per-site data-retention flag next. When the flag is not set (the default), data is
- * kept and the function returns before touching anything else. When the flag is explicitly
- * turned on by the site admin, the full teardown runs: every configuration option, the
- * activity-log table, and the four OAuth tables are all removed. The flag itself is deleted
- * last so it cannot leak after uninstall.
+ * Reads the per-site data-retention flag next - straight off the database
+ * (aafm_uninstall_should_delete_data()), not through get_option(), because a stale persistent
+ * object cache must never be able to authorize this. When the stored value is not truthy (the
+ * default: no row, or a row holding false), data is kept and the function returns before touching
+ * anything else. When it is explicitly turned on by the site admin, the full teardown runs: every
+ * configuration option, the activity-log table, and the four OAuth tables are all removed. The
+ * flag itself is deleted last, cache-safely, so it cannot leak after uninstall.
  *
  * Called once per site by aafm_run_uninstall() in uninstall.php. Declared here (settings.php)
  * so the PHPUnit suite can call it directly without bootstrapping the uninstall context.
@@ -333,21 +364,21 @@ function aafm_uninstall_site_data(): void {
 	wp_clear_scheduled_hook( 'aafm_prune_activity_log_daily' );
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
 
-	if ( ! get_option( 'aafm_delete_data_on_uninstall', false ) ) {
+	if ( ! aafm_uninstall_should_delete_data() ) {
 		return;
 	}
 
 	aafm_uninstall_site();
 	aafm_drop_oauth_tables();
-	delete_option( 'aafm_oauth_schema_version' );
-	delete_option( 'aafm_activity_log_schema_version' );
+	aafm_delete_option_cache_safe( 'aafm_oauth_schema_version' );
+	aafm_delete_option_cache_safe( 'aafm_activity_log_schema_version' );
 	// The one-time OAuth upgrade-preserve guard and the DCR default-on adoption guard (both written by
 	// the plugins_loaded migrations). Cleared here so a delete-data uninstall leaves nothing behind.
 	// They are deliberately NOT in the reset set: clearing a guard on reset would let its migration
 	// re-run and could flip a toggle back on.
-	delete_option( 'aafm_oauth_toggle_migrated' );
-	delete_option( 'aafm_oauth_dcr_default_on_migrated' );
-	delete_option( 'aafm_delete_data_on_uninstall' );
+	aafm_delete_option_cache_safe( 'aafm_oauth_toggle_migrated' );
+	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_migrated' );
+	aafm_delete_option_cache_safe( 'aafm_delete_data_on_uninstall' );
 }
 
 /**

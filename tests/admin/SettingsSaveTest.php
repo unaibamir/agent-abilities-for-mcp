@@ -376,7 +376,11 @@ final class SettingsSaveTest extends TestCase {
 		$json = $this->run_handler( 'aafm_ajax_save_settings' );
 
 		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
-		$this->assertTrue( get_option( 'aafm_high_risk_abilities_unlocked', false ) );
+		// (bool), not a strict true: the switch write rebuilds the option cache from the database
+		// (aafm_persist_operator_switch()), so the value reads back as the stored '1', exactly as
+		// it would on the next request. Every reader casts, so the type is not part of the contract.
+		$this->assertTrue( (bool) get_option( 'aafm_high_risk_abilities_unlocked', false ) );
+		$this->assertSame( '1', get_option( 'aafm_high_risk_abilities_unlocked', 'MISSING' ), 'The row is stored, not merely cached.' );
 	}
 
 	/**

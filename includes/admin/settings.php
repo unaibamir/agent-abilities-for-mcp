@@ -148,19 +148,25 @@ function aafm_ajax_save_settings(): void {
 	// itself cannot restore to once the switch has been touched once. Deleting on "off" keeps a
 	// site that never unlocks the category, or that unlocks then re-locks it, in the same absent
 	// row either way.
-	if ( $clean['aafm_high_risk_abilities_unlocked'] ) {
-		update_option( 'aafm_high_risk_abilities_unlocked', true );
-	} else {
-		delete_option( 'aafm_high_risk_abilities_unlocked' );
-	}
+	$high_risk_persisted = aafm_set_high_risk_unlocked( $clean['aafm_high_risk_abilities_unlocked'] );
 	// Off deletes the row here too, for the reason spelled out above the high-risk branch.
-	aafm_set_read_only_mode( $clean['aafm_read_only_mode'] );
+	$read_only_persisted = aafm_set_read_only_mode( $clean['aafm_read_only_mode'] );
 	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
 	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
 	update_option( 'aafm_ip_allowlist', $clean['aafm_ip_allowlist'] );
 
-	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'] );
-	aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'] );
+	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+	aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+
+	// Every other setting above is already stored. These two are the governance switches, and a
+	// save that reports success while one of them silently kept its old value is exactly the
+	// failure seen live behind a host Redis drop-in. Say what happened instead.
+	if ( ! $high_risk_persisted ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The high-risk abilities switch', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! $read_only_persisted ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
+	}
 
 	wp_send_json_success(
 		array(
@@ -189,15 +195,28 @@ function aafm_ajax_save_settings(): void {
  * treatment as an ability toggle, for the same reason, so an incident timeline shows who opened
  * the category and when, not only which call fired afterwards.
  *
- * @param bool $before Previous value.
- * @param bool $after  New value.
+ * @param bool $before    Previous value.
+ * @param bool $after     New value.
+ * @param bool $persisted Whether the write actually took (aafm_persist_operator_switch()).
  * @return void
  */
-function aafm_log_high_risk_switch_change( bool $before, bool $after ): void {
-	if ( $before === $after ) {
+function aafm_log_high_risk_switch_change( bool $before, bool $after, bool $persisted = true ): void {
+	if ( $before === $after && $persisted ) {
 		return;
 	}
 	$user = wp_get_current_user();
+	if ( $persisted ) {
+		$detail = $after
+			? __( 'High-risk abilities unlocked', 'agent-abilities-for-mcp' )
+			: __( 'High-risk abilities locked', 'agent-abilities-for-mcp' );
+	} else {
+		// The write did not take (a stale persistent object cache, see
+		// aafm_persist_operator_switch()). A "locked" row over a category that is still open would
+		// be the worst possible lie in this log, so the row says what actually happened.
+		$detail = $after
+			? __( 'High-risk abilities could not be unlocked: object cache stale', 'agent-abilities-for-mcp' )
+			: __( 'High-risk abilities could not be locked: object cache stale', 'agent-abilities-for-mcp' );
+	}
 	aafm_log_activity(
 		array(
 			// Both the admin table (page.php's Event column) and the AJAX-paginated re-render put
@@ -209,11 +228,9 @@ function aafm_log_high_risk_switch_change( bool $before, bool $after ): void {
 			'ability'           => 'aafm/high-risk-abilities-unlocked',
 			'principal_user_id' => (int) $user->ID,
 			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
-			'status'            => 'success',
+			'status'            => $persisted ? 'success' : 'error',
 			'event_type'        => 'setting_changed',
-			'detail'            => $after
-				? __( 'High-risk abilities unlocked', 'agent-abilities-for-mcp' )
-				: __( 'High-risk abilities locked', 'agent-abilities-for-mcp' ),
+			'detail'            => $detail,
 		)
 	);
 }

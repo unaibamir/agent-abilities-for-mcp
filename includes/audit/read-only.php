@@ -187,25 +187,36 @@ function aafm_exposure_posture(): array {
  * name because both the admin table and its AJAX re-render put that value straight into the Event
  * cell, so a blank one renders as a blank row.
  *
- * @param bool $before Previous value.
- * @param bool $after  New value.
+ * @param bool $before    Previous value.
+ * @param bool $after     New value.
+ * @param bool $persisted Whether the write actually took (aafm_persist_operator_switch()).
  * @return void
  */
-function aafm_log_read_only_switch_change( bool $before, bool $after ): void {
-	if ( $before === $after ) {
+function aafm_log_read_only_switch_change( bool $before, bool $after, bool $persisted = true ): void {
+	if ( $before === $after && $persisted ) {
 		return;
 	}
 	$user = wp_get_current_user();
+	if ( $persisted ) {
+		$detail = $after
+			? __( 'Read-only mode turned on', 'agent-abilities-for-mcp' )
+			: __( 'Read-only mode turned off', 'agent-abilities-for-mcp' );
+	} else {
+		// The write did not take (a stale persistent object cache, see
+		// aafm_persist_operator_switch()). Recording "turned off" here would be the silent wrong
+		// answer this log exists to prevent, so the row says what actually happened.
+		$detail = $after
+			? __( 'Read-only mode could not be turned on: object cache stale', 'agent-abilities-for-mcp' )
+			: __( 'Read-only mode could not be turned off: object cache stale', 'agent-abilities-for-mcp' );
+	}
 	aafm_log_activity(
 		array(
 			'ability'           => 'aafm/read-only-mode',
 			'principal_user_id' => (int) $user->ID,
 			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
-			'status'            => 'success',
+			'status'            => $persisted ? 'success' : 'error',
 			'event_type'        => 'setting_changed',
-			'detail'            => $after
-				? __( 'Read-only mode turned on', 'agent-abilities-for-mcp' )
-				: __( 'Read-only mode turned off', 'agent-abilities-for-mcp' ),
+			'detail'            => $detail,
 		)
 	);
 }
@@ -215,15 +226,12 @@ function aafm_log_read_only_switch_change( bool $before, bool $after ): void {
  *
  * Off deletes the row rather than storing a falsy value: off is the option's out-of-the-box state,
  * and an explicit false is a state a fresh install can never be in. Same reasoning, and the same
- * fix, as the high-risk switch in 1.5.0.
+ * fix, as the high-risk switch in 1.5.0. The write goes through aafm_persist_operator_switch(), which
+ * also clears any stale persistent-cache copy and reads the value back.
  *
  * @param bool $on Whether read-only mode should be on.
- * @return void
+ * @return bool True when the mode now reads back as $on.
  */
-function aafm_set_read_only_mode( bool $on ): void {
-	if ( $on ) {
-		update_option( 'aafm_read_only_mode', true );
-		return;
-	}
-	delete_option( 'aafm_read_only_mode' );
+function aafm_set_read_only_mode( bool $on ): bool {
+	return aafm_persist_operator_switch( 'aafm_read_only_mode', $on );
 }

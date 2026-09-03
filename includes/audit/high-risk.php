@@ -71,6 +71,21 @@ function aafm_high_risk_abilities(): array {
 }
 
 /**
+ * Persist the high-risk unlock switch.
+ *
+ * Off deletes the row rather than storing a falsy value: locked is the option's out-of-the-box
+ * (row-absent) state, and an explicit false is a state a fresh install can never be in. The write
+ * goes through aafm_persist_operator_switch(), which also clears any stale persistent-cache copy
+ * and reads the value back, so a lock that a stale cache would otherwise swallow is caught.
+ *
+ * @param bool $unlocked Whether the category should be unlocked.
+ * @return bool True when the switch now reads back as $unlocked.
+ */
+function aafm_set_high_risk_unlocked( bool $unlocked ): bool {
+	return aafm_persist_operator_switch( 'aafm_high_risk_abilities_unlocked', $unlocked );
+}
+
+/**
  * Whether the operator has unlocked the high-risk category.
  *
  * The code filter is checked AFTER the option and can only force the floor shut, never open it:

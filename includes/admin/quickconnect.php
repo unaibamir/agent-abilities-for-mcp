@@ -229,8 +229,8 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
 	$write_set = aafm_quickconnect_write_abilities();
 
 	$read_only_before = (bool) get_option( 'aafm_read_only_mode', false );
-	aafm_set_read_only_mode( ! $write );
-	aafm_log_read_only_switch_change( $read_only_before, ! $write );
+	$persisted        = aafm_set_read_only_mode( ! $write );
+	aafm_log_read_only_switch_change( $read_only_before, ! $write, $persisted );
 
 	// The RAW stored list, not aafm_get_enabled_abilities(): with read-only mode already on from a
 	// previous run, the floored reader would hand back reads only and every write the operator had

@@ -33,6 +33,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		remove_all_filters( 'wp_die_handler' );
 		remove_filter( 'wp_doing_ajax', '__return_true' );
 		remove_all_filters( 'pre_option_aafm_read_only_mode' );
+		remove_all_filters( 'pre_option_aafm_high_risk_abilities_unlocked' );
 		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['aafm_read_only_mode'], $_POST['aafm_high_risk_abilities_unlocked'] );
 		wp_cache_delete( 'alloptions', 'options' );
 		delete_option( 'aafm_read_only_mode' );
@@ -172,6 +173,39 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->assertFalse( aafm_read_only_mode() );
 		$row = $this->latest_log_row( 'aafm/read-only-mode' );
 		$this->assertSame( 'success', $row['status'] ?? null );
+	}
+
+	/**
+	 * HIGH (Codex hotfix review, finding 2): the settings save used to write both governance
+	 * switches unconditionally before checking either result, so a save that asked to lock
+	 * high-risk abilities AND turn read-only mode off in the same request could fail to persist the
+	 * lock (a stale cache) while still turning read-only mode off - leaving every high-risk ability
+	 * reachable (nothing left holding writes down) even though the response reported an error.
+	 *
+	 * Plants a cache that blocks ONLY the high-risk lock from persisting, then asks for both the
+	 * lock (restrictive) and read-only-off (permissive) in one save, and asserts the permissive
+	 * change never landed: read-only mode is still on, so nothing is reachable regardless of what
+	 * the high-risk switch itself ended up saying.
+	 */
+	public function test_a_failed_restrictive_change_blocks_the_paired_permissive_change_in_the_same_save(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		update_option( 'aafm_read_only_mode', true );
+		// A cache the plugin cannot repair for this one option: whatever is written, the read keeps
+		// coming back unlocked, so the requested LOCK can never actually persist.
+		add_filter( 'pre_option_aafm_high_risk_abilities_unlocked', static fn() => '1' );
+
+		// Both checkboxes absent from $_POST: the operator asks to lock high-risk abilities
+		// (restrictive) and to turn read-only mode off (permissive) in the same save.
+		$json = $this->post_settings_save();
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the requested lock did not persist.' );
+		$this->assertTrue( aafm_high_risk_unlocked(), 'Precondition check: the lock genuinely could not persist.' );
+		$this->assertTrue(
+			aafm_read_only_mode(),
+			'Read-only mode must NOT have been turned off: the paired restrictive change failed first, so the permissive change must never have been attempted.'
+		);
+		$this->assertTrue( (bool) get_option( 'aafm_read_only_mode', false ), 'The read-only-mode row itself must be untouched, not merely the floored reader.' );
 	}
 
 	public function test_a_switch_that_will_not_persist_is_reported_as_an_error_not_success(): void {

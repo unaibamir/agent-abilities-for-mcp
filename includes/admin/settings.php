@@ -165,9 +165,29 @@ function aafm_ajax_save_settings(): void {
 	// itself cannot restore to once the switch has been touched once. Deleting on "off" keeps a
 	// site that never unlocks the category, or that unlocks then re-locks it, in the same absent
 	// row either way.
-	$high_risk_persisted = aafm_set_high_risk_unlocked( $clean['aafm_high_risk_abilities_unlocked'] );
-	// Off deletes the row here too, for the reason spelled out above the high-risk branch.
-	$read_only_persisted = aafm_set_read_only_mode( $clean['aafm_read_only_mode'] );
+	//
+	// The two switches are applied restrictive direction first: locking high-risk abilities and
+	// turning read-only mode on both narrow what an agent can reach, so either one that was
+	// requested persists before the other switch is allowed to widen anything. If a requested
+	// restrictive change fails to persist, the permissive step below is skipped entirely rather
+	// than attempted anyway - continuing on could otherwise leave the site more open than either
+	// its prior state or what the operator actually asked for, which a mid-save failure must never
+	// do. A switch whose requested direction is itself restrictive, or that was not touched by this
+	// save at all, has nothing to defer and is simply left at $high_risk_persisted / a bool true.
+	$high_risk_persisted = $clean['aafm_high_risk_abilities_unlocked'] ? true : aafm_set_high_risk_unlocked( false );
+	$read_only_persisted = $clean['aafm_read_only_mode'] ? aafm_set_read_only_mode( true ) : true;
+
+	if ( $high_risk_persisted && $read_only_persisted ) {
+		// Every requested restrictive change is safely in place (or none was requested); only now
+		// is either switch allowed to move in the permissive direction.
+		if ( $clean['aafm_high_risk_abilities_unlocked'] ) {
+			$high_risk_persisted = aafm_set_high_risk_unlocked( true );
+		}
+		if ( ! $clean['aafm_read_only_mode'] ) {
+			// Off deletes the row here too, for the reason spelled out above the high-risk branch.
+			$read_only_persisted = aafm_set_read_only_mode( false );
+		}
+	}
 
 	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
 	aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );

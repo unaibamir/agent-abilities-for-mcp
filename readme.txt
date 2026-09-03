@@ -235,6 +235,14 @@ Apache usually works as-is, because the WordPress .htaccess sends anything that 
 
 To check, request https://your-site/.well-known/oauth-protected-resource. A working setup returns a JSON document instead of a 403 or 404.
 
+= My agent can't connect and my site is behind Cloudflare or another CDN. =
+
+A CDN or firewall in front of WordPress can stop the agent before its request reaches your site. The common culprit is Cloudflare's "Block AI Bots" setting (and Super Bot Fight Mode): the agent finishes signing in, but its MCP request is blocked at the edge because it comes from the AI client's servers with an AI User-Agent. The sign-in shows up in the Activity Log, and no ability calls follow it.
+
+To confirm, open your CDN's firewall or security event log and look for a blocked request to the plugin's MCP endpoint (its path ends in /mcp) from the AI client's IP range, around the time you tried to connect. The entry names the rule that blocked it.
+
+The fix is to let that endpoint through. On Cloudflare, either turn off "Block AI Bots" under Security, Bots, or add a rule that skips bot protection for the /mcp path so the rest of your site stays covered. Other CDNs and security plugins have the same kind of allowlist or exception.
+
 = Is there rate limiting? =
 
 Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each connection can make that many agent calls a minute, counted per agent user; 0 turns the limit off. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.

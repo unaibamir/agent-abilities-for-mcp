@@ -9,7 +9,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.7.2 |
+| **Stable tag** | 1.7.3 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -271,6 +271,11 @@ This plugin does not contact any external or third-party service. It registers a
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+### 1.7.3
+
+* **Fix:** On sites with a persistent object cache (Redis, Memcached, or a host's own drop-in), read-only mode and the high-risk abilities switch could refuse to turn off. The cache kept serving the old value after the setting was removed, and the Activity Log still recorded the change as done. Both switches now clear their own cache entries, read the stored value back, and report an error that names the cache when the change did not take.
+* **Fix:** Reset to defaults and delete-on-uninstall clear the plugin's own option cache entries too, so a stale cache cannot bring a setting back after a reset.
+
 ### 1.7.2
 
 * **Feature:** The consent screen an agent sees at sign-in was rebuilt. It carries a real brand mark, your Site Icon, and the connector's own icon when the plugin recognizes it by its verified redirect host.

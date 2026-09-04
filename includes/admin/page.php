@@ -710,6 +710,25 @@ function aafm_ajax_save_meta_keys(): void {
 }
 
 /**
+ * AJAX: save the denied-post-meta list on its own.
+ *
+ * Retained for the registered aafm_save_denied_meta_keys action and any external caller; the
+ * admin UI now sends the deny list together with the exposed list through aafm_save_meta_keys
+ * (see aafm_ajax_save_meta_keys), so this handler is no longer exercised by the bundled JS.
+ *
+ * @return void
+ */
+function aafm_ajax_save_denied_meta_keys(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	update_option( 'aafm_denied_meta_keys', $keys );
+	wp_send_json_success( array( 'deny_meta_keys' => $keys ) );
+}
+
+/**
  * AJAX: save BOTH the exposed and denied user-meta lists in one request.
  *
  * @return void

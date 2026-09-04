@@ -1934,26 +1934,42 @@ function aafm_paginate_args( array $input, int $max = 50 ): array {
  * per page..." vs "Number of coupons per page..."), so this only centralizes the
  * `type`/`minimum`/`maximum` shape every call site repeated identically.
  *
- * @param int    $max                 Maximum allowed per_page for this ability.
+ * `$per_page_first` preserves each ability's original property order in the JSON schema
+ * a client sees over `tools/list`: most abilities declared `page` first, but get-comments,
+ * get-pending-comments, get-media, get-users, and wc-list-coupons declared `per_page`
+ * first, so this refactor must not silently reorder those five.
+ *
+ * @param int    $max                  Maximum allowed per_page for this ability.
  * @param string $per_page_description Translated description for the per_page property.
  * @param string $page_description     Translated description for the page property.
+ * @param bool   $per_page_first       Whether to emit `per_page` before `page`, matching
+ *                                     that ability's original property order.
  * @return array{page:array<string,mixed>,per_page:array<string,mixed>}
  */
-function aafm_pagination_schema_props( int $max, string $per_page_description, string $page_description ): array {
-	return array(
-		'page'     => array(
-			'type'        => 'integer',
-			'minimum'     => 1,
-			'maximum'     => AAFM_LIST_PAGE_MAX,
-			'description' => $page_description,
-		),
-		'per_page' => array(
-			'type'        => 'integer',
-			'minimum'     => 1,
-			'maximum'     => $max,
-			'description' => $per_page_description,
-		),
+function aafm_pagination_schema_props( int $max, string $per_page_description, string $page_description, bool $per_page_first = false ): array {
+	$page = array(
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'maximum'     => AAFM_LIST_PAGE_MAX,
+		'description' => $page_description,
 	);
+
+	$per_page = array(
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'maximum'     => $max,
+		'description' => $per_page_description,
+	);
+
+	return $per_page_first
+		? array(
+			'per_page' => $per_page,
+			'page'     => $page,
+		)
+		: array(
+			'page'     => $page,
+			'per_page' => $per_page,
+		);
 }
 
 /**

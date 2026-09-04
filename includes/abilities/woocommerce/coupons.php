@@ -508,7 +508,8 @@ function aafm_args_wc_list_coupons(): array {
 			'properties'           => aafm_pagination_schema_props(
 				100,
 				__( 'Number of coupons per page, 1 to 100. Defaults to 10.', 'agent-abilities-for-mcp' ),
-				__( 'Page number of coupons to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' )
+				__( 'Page number of coupons to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' ),
+				true
 			),
 		),
 		'output_schema'       => array(

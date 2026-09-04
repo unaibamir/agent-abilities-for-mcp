@@ -793,7 +793,14 @@
 	}
 
 	/* Size modifier for the Quick Connect wizard, which draws a slightly larger switch
-	   with its own easing curve; everything else about .aafm-switch is unchanged. */
+	   with its own easing curve; everything else about .aafm-switch is unchanged.
+
+	   The thumb is pinned with physical `left`, not the base component's logical
+	   `inset-inline-start`, because the checked-state transform below is a physical
+	   `translateX()` that never flips for RTL. Mixing a logical inset with a physical
+	   transform pushes the thumb outside the track in RTL; matching the old, pre-shared
+	   Quick Connect toggle's `left: 3px` keeps this variant's own positioning
+	   direction-agnostic like it always was. */
 	.aafm-switch--lg {
 		inline-size: 42px;
 		block-size: 24px;
@@ -804,7 +811,7 @@
 
 			&::before {
 				inset-block-start: 3px;
-				inset-inline-start: 3px;
+				left: 3px;
 				transition: transform 0.22s var(--qc-ease);
 			}
 		}

@@ -176,6 +176,139 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 }
 
 /**
+ * Shared engine behind aafm_allowed_meta_keys(), aafm_allowed_term_meta_keys(), and
+ * aafm_allowed_user_meta_keys(). The three scopes share the read/floor/strip/dedupe shape but
+ * differ in two DELIBERATE, security-relevant ways this function keeps as explicit parameters
+ * rather than flattening:
+ *
+ * - $pre_filter_floor: post-meta hard-block-floors the option value BEFORE handing it to the
+ *   filter as the filter's own default (so a filter reading its $default argument never sees a
+ *   blocked key); term-meta and user-meta skip this pre-floor and pass the raw option straight
+ *   through, because their filter result is unioned with the option afterward anyway (see next
+ *   point), making a pre-floor on the base redundant rather than protective for them.
+ * - $filter_replaces: post-meta's filter result REPLACES the base outright, so a legacy or
+ *   rogue filter that returns an unrelated array (or empty) can shrink or clear the whole
+ *   allowlist. Term-meta and user-meta instead UNION the filter result with the option base
+ *   (`array_merge($base, $filtered)`), so their filter can only ADD keys - a filter returning
+ *   [] is a no-op, option ∪ [] = option, and the admin's list can never be shrunk by a filter.
+ *
+ * Every caller passes exactly what its own current behavior is; this function does not pick a
+ * "more correct" default for either flag.
+ *
+ * @param string           $option_name       The exposed/allowed option name for this scope.
+ * @param non-empty-string $filter_tag The apply_filters() tag for this scope.
+ * @param callable         $hard_block        The scope's hard-block checker, string $key -> bool.
+ * @param bool             $pre_filter_floor  Whether to hard-block-floor the option value before it is
+ *                                            passed to the filter as the filter's default.
+ * @param bool             $filter_replaces   True: the filter's return value replaces the base
+ *                                            (post-meta's shape). False: the filter's return value is
+ *                                            UNIONed with the base (term-meta/user-meta's shape).
+ * @return list<string>
+ */
+function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag, callable $hard_block, bool $pre_filter_floor, bool $filter_replaces ): array {
+	$stored = get_option( $option_name, array() );
+	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+
+	if ( $pre_filter_floor ) {
+		$stored = array_values(
+			array_filter(
+				$stored,
+				static function ( string $k ) use ( $hard_block ): bool {
+					return ! $hard_block( $k );
+				}
+			)
+		);
+	}
+
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- $filter_tag is always one of the three fixed, already-prefixed, already-documented tags each caller below passes literally (aafm_allowed_meta_keys, aafm_allowed_term_meta_keys, aafm_allowed_user_meta_keys); this is parameterization across three known call sites, not a genuinely dynamic hook name.
+	$filtered = (array) apply_filters( $filter_tag, $stored );
+	$filtered = array_map( 'strval', $filtered );
+
+	$merged = $filter_replaces ? $filtered : array_merge( $stored, $filtered );
+
+	return array_values(
+		array_unique(
+			array_filter(
+				array_map( 'strval', $merged ),
+				static function ( string $k ) use ( $hard_block ): bool {
+					return '' !== $k && '*' !== $k && ! $hard_block( $k );
+				}
+			)
+		)
+	);
+}
+
+/**
+ * Shared engine behind aafm_denied_meta_keys(), aafm_denied_term_meta_keys(), and
+ * aafm_denied_user_meta_keys(): read the deny option, string-coerce, strip empties and the
+ * `*` sentinel (surfaced separately by the matching *_deny_has_star() function), de-dupe. No
+ * filter and no hard-block floor here in any scope - denying an already-blocked key is a
+ * harmless no-op, so there is nothing to re-check.
+ *
+ * @param string $option_name The denied-keys option name for this scope.
+ * @return list<string>
+ */
+function aafm_scoped_denied_meta_keys( string $option_name ): array {
+	$stored = get_option( $option_name, array() );
+	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+
+	return array_values(
+		array_unique(
+			array_filter(
+				$stored,
+				static function ( string $k ): bool {
+					return '' !== $k && '*' !== $k;
+				}
+			)
+		)
+	);
+}
+
+/**
+ * Shared engine behind the three *_allow_has_star() functions: whether an option's RAW value
+ * (not the filtered getter, which strips the sentinel) carries the `*` wildcard.
+ *
+ * @param string $option_name The option to read.
+ * @return bool
+ */
+function aafm_scoped_meta_has_star( string $option_name ): bool {
+	$raw = get_option( $option_name, array() );
+	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+}
+
+/**
+ * Shared engine behind aafm_validate_meta_key(), aafm_validate_term_meta_key(), and
+ * aafm_validate_user_meta_key(): the absolute precedence chain hard-block -> deny -> allow/`*`,
+ * identical across all three scopes except which hard-block/deny/allow callables and error
+ * code/message apply. Hard-block is computed FIRST so every reject is the same generic error -
+ * no oracle distinguishing the reject reason.
+ *
+ * @param string   $key           Requested meta key.
+ * @param callable $hard_block    string $key -> bool.
+ * @param callable $deny_has_star (): bool.
+ * @param callable $denied_keys   (): list<string>.
+ * @param callable $allow_has_star (): bool.
+ * @param callable $allowed_keys  (): list<string>.
+ * @param string   $error_code    WP_Error code on rejection.
+ * @param string   $error_message Translated WP_Error message on rejection.
+ * @return string|WP_Error
+ */
+function aafm_validate_scoped_meta_key( string $key, callable $hard_block, callable $deny_has_star, callable $denied_keys, callable $allow_has_star, callable $allowed_keys, string $error_code, string $error_message ) {
+	$key     = trim( (string) $key );
+	$exposed = '' !== $key
+		&& '*' !== $key                             // floor 1: the sentinel is never addressable.
+		&& ! $hard_block( $key )                    // floor 1 (absolute).
+		&& ! $deny_has_star()                       // floor 2: deny-all kill switch.
+		&& ! in_array( $key, $denied_keys(), true ) // floor 2: explicit deny.
+		&& ( $allow_has_star() || in_array( $key, $allowed_keys(), true ) ); // floor 3.
+
+	if ( ! $exposed ) {
+		return new WP_Error( $error_code, $error_message );
+	}
+	return $key;
+}
+
+/**
  * Default-deny meta-key allowlist. Default empty; opt-in via the aafm_allowed_meta_keys
  * option (admin textarea) or the matching filter. Hard-blocked keys are stripped AFTER the
  * option read AND after the filter, so neither a junk write nor a rogue filter exposes one.
@@ -183,26 +316,7 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
  * @return list<string>
  */
 function aafm_allowed_meta_keys(): array {
-	$stored = get_option( 'aafm_allowed_meta_keys', array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
-	$stored = array_values( array_filter( $stored, static fn( $k ) => ! aafm_hard_blocked_meta_key( $k ) ) );
-
-	/**
-	 * Filters the meta keys exposed to AI agents. Re-floored against the hard-block
-	 * after this filter, so adding a blocked key is a no-op.
-	 *
-	 * @param list<string> $stored Allowlisted, non-blocked keys.
-	 */
-	$filtered = (array) apply_filters( 'aafm_allowed_meta_keys', $stored );
-
-	// '*' is a wildcard SENTINEL, never a literal key - strip it here so the literal
-	// enumeration never contains it. The star is surfaced separately via
-	// aafm_meta_allow_has_star(), which the validator reads.
-	return array_values(
-		array_unique(
-			array_filter( array_map( 'strval', $filtered ), static fn( $k ) => '' !== $k && '*' !== $k && ! aafm_hard_blocked_meta_key( $k ) )
-		)
-	);
+	return aafm_scoped_allowed_meta_keys( 'aafm_allowed_meta_keys', 'aafm_allowed_meta_keys', 'aafm_hard_blocked_meta_key', true, true );
 }
 
 /**
@@ -216,14 +330,7 @@ function aafm_allowed_meta_keys(): array {
  * @return list<string>
  */
 function aafm_denied_meta_keys(): array {
-	$stored = get_option( 'aafm_denied_meta_keys', array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
-
-	return array_values(
-		array_unique(
-			array_filter( $stored, static fn( $k ) => '' !== $k && '*' !== $k )
-		)
-	);
+	return aafm_scoped_denied_meta_keys( 'aafm_denied_meta_keys' );
 }
 
 /**
@@ -234,8 +341,7 @@ function aafm_denied_meta_keys(): array {
  * @return bool
  */
 function aafm_meta_allow_has_star(): bool {
-	$raw = get_option( 'aafm_allowed_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_allowed_meta_keys' );
 }
 
 /**
@@ -246,8 +352,7 @@ function aafm_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_meta_deny_has_star(): bool {
-	$raw = get_option( 'aafm_denied_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_denied_meta_keys' );
 }
 
 /**
@@ -263,18 +368,16 @@ function aafm_meta_deny_has_star(): bool {
  * @return string|WP_Error
  */
 function aafm_validate_meta_key( string $key ) {
-	$key     = trim( (string) $key );
-	$exposed = '' !== $key
-		&& '*' !== $key                                         // floor 1: the sentinel is never addressable.
-		&& ! aafm_hard_blocked_meta_key( $key )                 // floor 1 (absolute).
-		&& ! aafm_meta_deny_has_star()                          // floor 2: deny-all kill switch.
-		&& ! in_array( $key, aafm_denied_meta_keys(), true )    // floor 2: explicit deny.
-		&& ( aafm_meta_allow_has_star() || in_array( $key, aafm_allowed_meta_keys(), true ) ); // floor 3.
-
-	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_meta_key_not_allowed', __( 'This meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
-	}
-	return $key;
+	return aafm_validate_scoped_meta_key(
+		$key,
+		'aafm_hard_blocked_meta_key',
+		'aafm_meta_deny_has_star',
+		'aafm_denied_meta_keys',
+		'aafm_meta_allow_has_star',
+		'aafm_allowed_meta_keys',
+		'aafm_meta_key_not_allowed',
+		__( 'This meta key is not available to agents.', 'agent-abilities-for-mcp' )
+	);
 }
 
 /**
@@ -570,26 +673,7 @@ function aafm_sanitize_meta_value( string $key, $value ) {
  * @return list<string>
  */
 function aafm_allowed_term_meta_keys(): array {
-	$base = get_option( 'aafm_exposed_term_meta_keys', array() );
-	$base = is_array( $base ) ? array_map( 'strval', $base ) : array();
-
-	/**
-	 * Filters the term-meta keys exposed to AI agents. UNIONed with the option base (never
-	 * replaces it) and re-floored against the hard-block after, so it can only ADD keys and
-	 * can never re-admit a protected/auth key.
-	 *
-	 * @param array<string> $base Option-backed exposed term-meta keys.
-	 */
-	$filtered = (array) apply_filters( 'aafm_allowed_term_meta_keys', $base );
-	$merged   = array_merge( $base, array_map( 'strval', $filtered ) );
-
-	// '*' is a wildcard SENTINEL, never a literal key - strip it here (surfaced separately via
-	// aafm_term_meta_allow_has_star()), and re-floor the merged set against the hard-block.
-	return array_values(
-		array_unique(
-			array_filter( $merged, static fn( $k ) => '' !== $k && '*' !== $k && ! aafm_hard_blocked_meta_key( $k ) )
-		)
-	);
+	return aafm_scoped_allowed_meta_keys( 'aafm_exposed_term_meta_keys', 'aafm_allowed_term_meta_keys', 'aafm_hard_blocked_meta_key', false, false );
 }
 
 /**
@@ -602,14 +686,7 @@ function aafm_allowed_term_meta_keys(): array {
  * @return list<string>
  */
 function aafm_denied_term_meta_keys(): array {
-	$stored = get_option( 'aafm_denied_term_meta_keys', array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
-
-	return array_values(
-		array_unique(
-			array_filter( $stored, static fn( $k ) => '' !== $k && '*' !== $k )
-		)
-	);
+	return aafm_scoped_denied_meta_keys( 'aafm_denied_term_meta_keys' );
 }
 
 /**
@@ -620,8 +697,7 @@ function aafm_denied_term_meta_keys(): array {
  * @return bool
  */
 function aafm_term_meta_allow_has_star(): bool {
-	$raw = get_option( 'aafm_exposed_term_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_exposed_term_meta_keys' );
 }
 
 /**
@@ -632,8 +708,7 @@ function aafm_term_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_term_meta_deny_has_star(): bool {
-	$raw = get_option( 'aafm_denied_term_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_denied_term_meta_keys' );
 }
 
 /**
@@ -650,18 +725,16 @@ function aafm_term_meta_deny_has_star(): bool {
  * @return string|WP_Error
  */
 function aafm_validate_term_meta_key( string $key ) {
-	$key     = trim( (string) $key );
-	$exposed = '' !== $key
-		&& '*' !== $key                                              // floor 1: the sentinel is never addressable.
-		&& ! aafm_hard_blocked_meta_key( $key )                      // floor 1 (absolute).
-		&& ! aafm_term_meta_deny_has_star()                          // floor 2: deny-all kill switch.
-		&& ! in_array( $key, aafm_denied_term_meta_keys(), true )    // floor 2: explicit deny.
-		&& ( aafm_term_meta_allow_has_star() || in_array( $key, aafm_allowed_term_meta_keys(), true ) ); // floor 3.
-
-	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_term_meta_key_not_allowed', __( 'This term meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
-	}
-	return $key;
+	return aafm_validate_scoped_meta_key(
+		$key,
+		'aafm_hard_blocked_meta_key',
+		'aafm_term_meta_deny_has_star',
+		'aafm_denied_term_meta_keys',
+		'aafm_term_meta_allow_has_star',
+		'aafm_allowed_term_meta_keys',
+		'aafm_term_meta_key_not_allowed',
+		__( 'This term meta key is not available to agents.', 'agent-abilities-for-mcp' )
+	);
 }
 
 /**
@@ -772,26 +845,7 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
  * @return list<string>
  */
 function aafm_allowed_user_meta_keys(): array {
-	$base = get_option( 'aafm_exposed_user_meta_keys', array() );
-	$base = is_array( $base ) ? array_map( 'strval', $base ) : array();
-
-	/**
-	 * Filters the user-meta keys exposed to AI agents. UNIONed with the option base (never
-	 * replaces it) and re-floored against the hard-block after, so it can only ADD keys and
-	 * can never re-admit a protected/auth key.
-	 *
-	 * @param array<string> $base Option-backed exposed user-meta keys.
-	 */
-	$filtered = (array) apply_filters( 'aafm_allowed_user_meta_keys', $base );
-	$merged   = array_merge( $base, array_map( 'strval', $filtered ) );
-
-	// '*' is a wildcard SENTINEL, never a literal key - strip it here (surfaced separately via
-	// aafm_user_meta_allow_has_star()), and re-floor the merged set against the user hard-block.
-	return array_values(
-		array_unique(
-			array_filter( $merged, static fn( $k ) => '' !== $k && '*' !== $k && ! aafm_hard_blocked_user_meta_key( $k ) )
-		)
-	);
+	return aafm_scoped_allowed_meta_keys( 'aafm_exposed_user_meta_keys', 'aafm_allowed_user_meta_keys', 'aafm_hard_blocked_user_meta_key', false, false );
 }
 
 /**
@@ -804,14 +858,7 @@ function aafm_allowed_user_meta_keys(): array {
  * @return list<string>
  */
 function aafm_denied_user_meta_keys(): array {
-	$stored = get_option( 'aafm_denied_user_meta_keys', array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
-
-	return array_values(
-		array_unique(
-			array_filter( $stored, static fn( $k ) => '' !== $k && '*' !== $k )
-		)
-	);
+	return aafm_scoped_denied_meta_keys( 'aafm_denied_user_meta_keys' );
 }
 
 /**
@@ -822,8 +869,7 @@ function aafm_denied_user_meta_keys(): array {
  * @return bool
  */
 function aafm_user_meta_allow_has_star(): bool {
-	$raw = get_option( 'aafm_exposed_user_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_exposed_user_meta_keys' );
 }
 
 /**
@@ -834,8 +880,7 @@ function aafm_user_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_user_meta_deny_has_star(): bool {
-	$raw = get_option( 'aafm_denied_user_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_denied_user_meta_keys' );
 }
 
 /**
@@ -880,18 +925,16 @@ function aafm_allowed_site_settings(): array {
  * @return string|WP_Error
  */
 function aafm_validate_user_meta_key( string $key ) {
-	$key     = trim( (string) $key );
-	$exposed = '' !== $key
-		&& '*' !== $key                                              // floor 1: the sentinel is never addressable.
-		&& ! aafm_hard_blocked_user_meta_key( $key )                 // floor 1 (absolute).
-		&& ! aafm_user_meta_deny_has_star()                          // floor 2: deny-all kill switch.
-		&& ! in_array( $key, aafm_denied_user_meta_keys(), true )    // floor 2: explicit deny.
-		&& ( aafm_user_meta_allow_has_star() || in_array( $key, aafm_allowed_user_meta_keys(), true ) ); // floor 3.
-
-	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_user_meta_key_not_allowed', __( 'This user meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
-	}
-	return $key;
+	return aafm_validate_scoped_meta_key(
+		$key,
+		'aafm_hard_blocked_user_meta_key',
+		'aafm_user_meta_deny_has_star',
+		'aafm_denied_user_meta_keys',
+		'aafm_user_meta_allow_has_star',
+		'aafm_allowed_user_meta_keys',
+		'aafm_user_meta_key_not_allowed',
+		__( 'This user meta key is not available to agents.', 'agent-abilities-for-mcp' )
+	);
 }
 
 /**

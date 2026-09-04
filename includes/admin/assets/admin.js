@@ -1112,25 +1112,13 @@
 				const status = root.querySelector( '.aafm-meta-keys-status' );
 				const textarea = root.querySelector( 'textarea[name="aafm_meta_keys"]' );
 				const deny = root.querySelector( 'textarea[name="aafm_deny_meta_keys"]' );
-				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_meta_keys' );
-				body.append( 'nonce', this.#nonce );
-				body.append( 'aafm_meta_keys', textarea?.value ?? '' );
-				body.append( 'aafm_deny_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = await this.#post( 'aafm_save_meta_keys', {
+					aafm_meta_keys: textarea?.value ?? '',
+					aafm_deny_meta_keys: deny?.value ?? '',
+				} );
 				if ( status ) {
 					status.textContent = json?.success
 						? this.#t( 'saved', 'Saved' )
@@ -1153,25 +1141,13 @@
 				const deny = root.querySelector(
 					'textarea[name="aafm_denied_user_meta_keys"]'
 				);
-				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_user_meta_keys' );
-				body.append( 'nonce', this.#nonce );
-				body.append( 'aafm_exposed_user_meta_keys', exposed?.value ?? '' );
-				body.append( 'aafm_denied_user_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = await this.#post( 'aafm_save_user_meta_keys', {
+					aafm_exposed_user_meta_keys: exposed?.value ?? '',
+					aafm_denied_user_meta_keys: deny?.value ?? '',
+				} );
 				if ( status ) {
 					status.textContent = json?.success
 						? this.#t( 'saved', 'Saved' )
@@ -1194,25 +1170,13 @@
 				const deny = root.querySelector(
 					'textarea[name="aafm_denied_term_meta_keys"]'
 				);
-				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_term_meta_keys' );
-				body.append( 'nonce', this.#nonce );
-				body.append( 'aafm_exposed_term_meta_keys', exposed?.value ?? '' );
-				body.append( 'aafm_denied_term_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = await this.#post( 'aafm_save_term_meta_keys', {
+					aafm_exposed_term_meta_keys: exposed?.value ?? '',
+					aafm_denied_term_meta_keys: deny?.value ?? '',
+				} );
 				if ( status ) {
 					status.textContent = json?.success
 						? this.#t( 'saved', 'Saved' )

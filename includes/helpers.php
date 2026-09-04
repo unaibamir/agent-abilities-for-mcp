@@ -1914,6 +1914,41 @@ function aafm_pagination_schema_props( int $max, string $per_page_description, s
 }
 
 /**
+ * A stable usort(): pairs every item with its original position and tie-breaks on it, so the
+ * result matches what PHP 8's stable usort() would produce even on this plugin's PHP 7.4 floor
+ * (usort() only became stable in PHP 8.0). Without this, a tie on this plugin's floor could
+ * reorder output between requests, or - for a caller that slices the result afterward - return
+ * a genuinely different SET of items, not merely a different order.
+ *
+ * @param array<int|string,mixed> $items      Items to sort. Keys are not preserved.
+ * @param callable                $comparator ( $a, $b ): int, same contract as usort()'s own
+ *                                             comparator. Only called to break non-ties; when it
+ *                                             returns 0 this function tie-breaks on original
+ *                                             position instead of leaving the order to chance.
+ * @return list<mixed>
+ */
+function aafm_stable_sort( array $items, callable $comparator ): array {
+	$paired = array_map(
+		static function ( $item, $index ): array {
+			return array( $item, $index );
+		},
+		$items,
+		array_keys( $items )
+	);
+	usort(
+		$paired,
+		static function ( array $a, array $b ) use ( $comparator ): int {
+			$cmp = $comparator( $a[0], $b[0] );
+			if ( 0 !== $cmp ) {
+				return $cmp;
+			}
+			return $a[1] <=> $b[1];
+		}
+	);
+	return array_column( $paired, 0 );
+}
+
+/**
  * A single generic error returned to callers - never leaks internal detail.
  *
  * @return WP_Error

@@ -348,6 +348,46 @@ final class HelpersTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Aafm_stable_sort() ties break on original position, reproducing PHP 8's stable usort()
+	 * on this plugin's PHP 7.4 floor. This is the failure mode PHP 7.4's unstable usort() has:
+	 * two equal-comparing items must come back in their original relative order, never swapped.
+	 */
+	public function test_stable_sort_ties_break_on_original_position(): void {
+		$items  = array(
+			array(
+				'label' => 'b',
+				'tag'   => 1,
+			),
+			array(
+				'label' => 'a',
+				'tag'   => 2,
+			),
+			array(
+				'label' => 'b',
+				'tag'   => 3,
+			),
+			array(
+				'label' => 'a',
+				'tag'   => 4,
+			),
+		);
+		$sorted = aafm_stable_sort(
+			$items,
+			static function ( array $a, array $b ): int {
+				return strcmp( $a['label'], $b['label'] );
+			}
+		);
+		// Both 'a' rows before both 'b' rows; within each label, original order preserved.
+		$this->assertSame( array( 2, 4, 1, 3 ), array_column( $sorted, 'tag' ) );
+	}
+
+	public function test_stable_sort_keeps_order_when_comparator_never_breaks_a_tie(): void {
+		$items  = array( 'x', 'y', 'z' );
+		$sorted = aafm_stable_sort( $items, static fn( $a, $b ): int => 0 ); // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- comparator signature is usort()'s contract; this test deliberately never breaks a tie.
+		$this->assertSame( array( 'x', 'y', 'z' ), $sorted );
+	}
+
 	public function test_generic_error_leaks_nothing(): void {
 		$err = aafm_generic_error();
 		$this->assertInstanceOf( WP_Error::class, $err );

@@ -679,6 +679,67 @@ function aafm_reserved_post_meta_routes(): array {
 }
 
 /**
+ * Shared engine behind aafm_unreachable_meta_key_error() and
+ * aafm_unreachable_user_meta_key_error(): map the ability name to an operation, read the raw
+ * key the caller named, re-check it against the LIVE hard-block (fail-closed: is_protected_meta()
+ * is a filter, so a site can genuinely unprotect a key, and re-checking keeps this truthful there
+ * instead of refusing a call that would otherwise succeed), and build the "here is the real
+ * route" message. Returns null whenever any of these do not hold, leaving the call on its
+ * normal path unchanged.
+ *
+ * @param string               $name             Ability name.
+ * @param array<string,mixed>  $input            Call arguments.
+ * @param string               $input_field      The $input key holding the raw meta key ('meta_key'
+ *                                                for post-meta abilities, 'key' for user-meta ones).
+ * @param array<string,string> $operations      Ability name => operation ('read'|'write'|'delete').
+ * @param callable             $hard_block       The scope's LIVE hard-block checker, string $key -> bool.
+ * @param callable             $routes_getter    (): array<string, array<string, string>>, the
+ *                                                canonical-key => operation => route-sentence map.
+ * @param string               $message_template Translated sprintf() template with one %s for the
+ *                                                canonical key name.
+ * @param string               $error_code       WP_Error code to use when this fires.
+ * @return \WP_Error|null The refusal, or null to leave the call on its normal path.
+ */
+function aafm_unreachable_scoped_meta_key_error( string $name, array $input, string $input_field, array $operations, callable $hard_block, callable $routes_getter, string $message_template, string $error_code ) {
+	if ( ! isset( $operations[ $name ] ) ) {
+		return null;
+	}
+
+	// Guarded against a non-scalar, because this runs on raw caller input and a meta key sent as
+	// an array would fatal on the cast. Trimmed to match the hard-block checkers, which compare
+	// on a trimmed copy for the PAD SPACE reason documented there.
+	$raw = $input[ $input_field ] ?? null;
+	$key = is_scalar( $raw ) ? trim( (string) $raw ) : '';
+	if ( '' === $key ) {
+		return null;
+	}
+
+	// Matched case-insensitively so a mixed-case spelling gets the same help, but the CANONICAL
+	// spelling from the map is what goes into the message. Caller input never reaches the wire.
+	/**
+	 * Narrow the type so the array_keys()/strcasecmp() calls below type-check.
+	 *
+	 * @var array<string, array<string, string>> $routes
+	 */
+	$routes    = $routes_getter();
+	$canonical = '';
+	foreach ( array_keys( $routes ) as $candidate ) {
+		if ( 0 === strcasecmp( $candidate, $key ) ) {
+			$canonical = $candidate;
+			break;
+		}
+	}
+	if ( '' === $canonical || ! $hard_block( $key ) ) {
+		return null;
+	}
+
+	$route = (string) ( $routes[ $canonical ][ $operations[ $name ] ] ?? '' );
+	$lead  = sprintf( $message_template, $canonical );
+
+	return new WP_Error( $error_code, '' === $route ? $lead : $lead . ' ' . $route );
+}
+
+/**
  * Answer a post-meta call that names a WordPress-reserved key with the route that does the job,
  * rather than letting it fall through to the adapter's bare "Permission denied".
  *
@@ -729,46 +790,21 @@ function aafm_reserved_post_meta_routes(): array {
  * @return \WP_Error|null The refusal, or null to leave the call on its normal path.
  */
 function aafm_unreachable_meta_key_error( string $name, array $input ) {
-	$operations = array(
-		'aafm/get-post-meta'    => 'read',
-		'aafm/update-post-meta' => 'write',
-		'aafm/delete-post-meta' => 'delete',
-	);
-	if ( ! isset( $operations[ $name ] ) ) {
-		return null;
-	}
-
-	// Guarded against a non-scalar, because this runs on raw caller input and a meta_key sent as
-	// an array would fatal on the cast. Trimmed to match aafm_hard_blocked_meta_key(), which
-	// compares on a trimmed copy for the PAD SPACE reason documented there.
-	$raw = $input['meta_key'] ?? null; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- reading a call argument, not a meta query.
-	$key = is_scalar( $raw ) ? trim( (string) $raw ) : '';
-	if ( '' === $key ) {
-		return null;
-	}
-
-	// Matched case-insensitively so a mixed-case spelling gets the same help, but the CANONICAL
-	// spelling from the map is what goes into the message. Caller input never reaches the wire.
-	$routes    = aafm_reserved_post_meta_routes();
-	$canonical = '';
-	foreach ( array_keys( $routes ) as $candidate ) {
-		if ( 0 === strcasecmp( $candidate, $key ) ) {
-			$canonical = $candidate;
-			break;
-		}
-	}
-	if ( '' === $canonical || ! aafm_hard_blocked_meta_key( $key ) ) {
-		return null;
-	}
-
-	$route = (string) ( $routes[ $canonical ][ $operations[ $name ] ] ?? '' );
-	$lead  = sprintf(
+	return aafm_unreachable_scoped_meta_key_error(
+		$name,
+		$input,
+		'meta_key', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- reading a call argument, not a meta query.
+		array(
+			'aafm/get-post-meta'    => 'read',
+			'aafm/update-post-meta' => 'write',
+			'aafm/delete-post-meta' => 'delete',
+		),
+		'aafm_hard_blocked_meta_key',
+		'aafm_reserved_post_meta_routes',
 		/* translators: %s: the WordPress-reserved meta key the call named. */
 		__( 'The meta key "%s" is protected by WordPress, so no user can reach it through this tool.', 'agent-abilities-for-mcp' ),
-		$canonical
+		'aafm_meta_key_unreachable'
 	);
-
-	return new WP_Error( 'aafm_meta_key_unreachable', '' === $route ? $lead : $lead . ' ' . $route );
 }
 
 /**
@@ -802,41 +838,21 @@ function aafm_reserved_user_meta_routes(): array {
  * @return \WP_Error|null The refusal, or null to leave the call on its normal path.
  */
 function aafm_unreachable_user_meta_key_error( string $name, array $input ) {
-	$operations = array(
-		'aafm/get-user-meta'    => 'read',
-		'aafm/update-user-meta' => 'write',
-		'aafm/delete-user-meta' => 'delete',
-	);
-	if ( ! isset( $operations[ $name ] ) ) {
-		return null;
-	}
-
-	$raw = $input['key'] ?? null;
-	$key = is_scalar( $raw ) ? trim( (string) $raw ) : '';
-	if ( '' === $key ) {
-		return null;
-	}
-
-	$routes    = aafm_reserved_user_meta_routes();
-	$canonical = '';
-	foreach ( array_keys( $routes ) as $candidate ) {
-		if ( 0 === strcasecmp( $candidate, $key ) ) {
-			$canonical = $candidate;
-			break;
-		}
-	}
-	if ( '' === $canonical || ! aafm_hard_blocked_user_meta_key( $key ) ) {
-		return null;
-	}
-
-	$route = (string) ( $routes[ $canonical ][ $operations[ $name ] ] ?? '' );
-	$lead  = sprintf(
+	return aafm_unreachable_scoped_meta_key_error(
+		$name,
+		$input,
+		'key',
+		array(
+			'aafm/get-user-meta'    => 'read',
+			'aafm/update-user-meta' => 'write',
+			'aafm/delete-user-meta' => 'delete',
+		),
+		'aafm_hard_blocked_user_meta_key',
+		'aafm_reserved_user_meta_routes',
 		/* translators: %s: the WordPress-reserved user-meta key the call named. */
 		__( 'The user meta key "%s" is protected by WordPress, so no user can reach it through this tool.', 'agent-abilities-for-mcp' ),
-		$canonical
+		'aafm_user_meta_key_unreachable'
 	);
-
-	return new WP_Error( 'aafm_user_meta_key_unreachable', '' === $route ? $lead : $lead . ' ' . $route );
 }
 
 /**

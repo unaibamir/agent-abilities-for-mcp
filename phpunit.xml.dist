@@ -21,6 +21,7 @@
 			<directory>tests/coexistence</directory>
 			<file>tests/WireShapeTest.php</file>
 			<file>tests/BridgeObjectRefusalWireTest.php</file>
+			<file>tests/ServerToolsListExposureTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

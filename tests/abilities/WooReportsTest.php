@@ -27,8 +27,6 @@ final class WooReportsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->unlock_high_risk_abilities();
 		$this->stub_woocommerce();

@@ -157,8 +157,6 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'aafm_admin' ),
 			'i18n'    => array(
-				'quickstartsShow'          => __( 'Show config for a specific client', 'agent-abilities-for-mcp' ),
-				'quickstartsHide'          => __( 'Hide client configs', 'agent-abilities-for-mcp' ),
 				'saving'                   => __( 'Saving…', 'agent-abilities-for-mcp' ),
 				'saved'                    => __( 'Saved', 'agent-abilities-for-mcp' ),
 				'errorSaving'              => __( 'Error saving', 'agent-abilities-for-mcp' ),
@@ -728,25 +726,6 @@ function aafm_ajax_save_meta_keys(): void {
 			'deny_meta_keys' => $denied,
 		)
 	);
-}
-
-/**
- * AJAX: save the denied-post-meta list on its own.
- *
- * Retained for the registered aafm_save_denied_meta_keys action and any external caller; the
- * admin UI now sends the deny list together with the exposed list through aafm_save_meta_keys
- * (see aafm_ajax_save_meta_keys), so this handler is no longer exercised by the bundled JS.
- *
- * @return void
- */
-function aafm_ajax_save_denied_meta_keys(): void {
-	check_ajax_referer( 'aafm_admin', 'nonce' );
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
-	}
-	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	update_option( 'aafm_denied_meta_keys', $keys );
-	wp_send_json_success( array( 'deny_meta_keys' => $keys ) );
 }
 
 /**

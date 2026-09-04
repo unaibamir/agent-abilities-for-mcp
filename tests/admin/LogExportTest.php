@@ -14,12 +14,6 @@ use AAFM\Tests\TestCase;
 
 final class LogExportTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_the_header_row_names_every_exported_column(): void {
 		$csv = $this->capture_export();
 		$this->assertStringStartsWith(

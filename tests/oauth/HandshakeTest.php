@@ -65,8 +65,6 @@ class HandshakeTest extends TestCase {
 
 		// OAuth storage + audit log the registration wrapper writes to.
 		aafm_install_oauth_tables();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		// OAuth is OFF by default now; the full handshake exercises the enabled surface, so turn it
 		// on explicitly. DCR is on by default, so enabling OAuth also enables registration. The
@@ -582,11 +580,11 @@ class HandshakeTest extends TestCase {
 			'an unknown OAuth token resolves no user'
 		);
 
-		// rest_authentication_errors must not become a WP_Error on our account. Core may
-		// legitimately resolve the chain to true ("auth ok, no error") or null ("no
-		// opinion"); what our aafm_oauth_rest_authentication_errors pass-through must
-		// never do is convert "no user resolved" into a hard failure (a WP_Error).
-		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core REST filter, applied to assert our pass-through hook never forces an error.
+		// rest_authentication_errors must not become a WP_Error on our account. We take no
+		// position on this filter (see the comment by the determine_current_user hook), so
+		// core resolves the chain on its own to true ("auth ok, no error") or null ("no
+		// opinion"); a bogus bearer must never turn into a hard failure (a WP_Error) here.
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core REST filter, applied to assert we never force an error on this account.
 		$auth_errors = apply_filters( 'rest_authentication_errors', null );
 		$this->assertNotInstanceOf(
 			\WP_Error::class,

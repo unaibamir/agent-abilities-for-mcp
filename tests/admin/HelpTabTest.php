@@ -13,12 +13,6 @@ use AAFM\Tests\TestCase;
 
 final class HelpTabTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_help_tab_renders_section_headings(): void {
 		$this->acting_as( 'administrator' );
 

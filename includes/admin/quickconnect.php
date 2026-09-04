@@ -464,9 +464,9 @@ function aafm_quickconnect_render(): void {
 					<div class="aafm-qc-job-body"><div><div class="aafm-qc-job-inner">
 
 						<div class="aafm-qc-control">
-							<label class="aafm-qc-toggle">
+							<label class="aafm-switch aafm-switch--lg">
 								<input type="checkbox" data-qc-oauth checked aria-label="<?php esc_attr_e( 'Enable OAuth', 'agent-abilities-for-mcp' ); ?>">
-								<span class="aafm-qc-track"></span>
+								<span class="aafm-switch-track"></span>
 							</label>
 							<div class="cx">
 								<div class="cl"><?php esc_html_e( 'Enable OAuth', 'agent-abilities-for-mcp' ); ?> <span class="soft">(<?php esc_html_e( 'recommended', 'agent-abilities-for-mcp' ); ?>)</span></div>
@@ -585,9 +585,9 @@ function aafm_quickconnect_render(): void {
 					<div class="aafm-qc-job-body" inert><div><div class="aafm-qc-job-inner">
 
 						<div class="aafm-qc-control">
-							<label class="aafm-qc-toggle">
+							<label class="aafm-switch aafm-switch--lg">
 								<input type="checkbox" checked disabled aria-label="<?php esc_attr_e( 'Read content', 'agent-abilities-for-mcp' ); ?>">
-								<span class="aafm-qc-track"></span>
+								<span class="aafm-switch-track"></span>
 							</label>
 							<div class="cx">
 								<div class="cl accent"><?php esc_html_e( 'Read content', 'agent-abilities-for-mcp' ); ?> <span class="soft">&middot; <?php esc_html_e( 'on by default', 'agent-abilities-for-mcp' ); ?></span></div>
@@ -596,9 +596,9 @@ function aafm_quickconnect_render(): void {
 						</div>
 
 						<div class="aafm-qc-control is-write">
-							<label class="aafm-qc-toggle amber">
+							<label class="aafm-switch aafm-switch--lg amber">
 								<input type="checkbox" data-qc-write aria-label="<?php esc_attr_e( 'Create and edit content', 'agent-abilities-for-mcp' ); ?>">
-								<span class="aafm-qc-track"></span>
+								<span class="aafm-switch-track"></span>
 							</label>
 							<div class="cx">
 								<div class="cl"><?php esc_html_e( 'Create and edit content', 'agent-abilities-for-mcp' ); ?> <span class="amber">(<?php esc_html_e( 'write', 'agent-abilities-for-mcp' ); ?>)</span></div>

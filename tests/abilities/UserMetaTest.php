@@ -17,12 +17,6 @@ use AAFM\Tests\TestCase;
 
 final class UserMetaTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_auth_keys_are_hard_blocked_for_everyone(): void {
 		global $wpdb;
 		$keys = array(

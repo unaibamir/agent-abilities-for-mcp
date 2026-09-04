@@ -23,8 +23,6 @@ final class AbilityCrashSafetyTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		// A single variable parent (500); the duplicate-SKU holder is seeded per-test below.
 		$this->stub_woocommerce(

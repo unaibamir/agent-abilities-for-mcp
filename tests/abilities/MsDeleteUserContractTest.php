@@ -35,8 +35,6 @@ final class MsDeleteUserContractTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		$this->skipWithoutMultisite();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		global $wp_current_filter;
 		$wp_current_filter[] = 'wp_abilities_api_categories_init';
 		aafm_register_categories();

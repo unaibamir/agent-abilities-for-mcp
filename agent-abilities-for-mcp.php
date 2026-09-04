@@ -286,11 +286,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/validator.php';
 // Priority 20 runs after cookie auth (10) and alongside core's Application
 // Password resolver. Ordering is not load-bearing for the frozen invariant: the
 // resolver returns early whenever a user is already set, so it can never preempt
-// an App Password (or any other) identity regardless of which runs first.
+// an App Password (or any other) identity regardless of which runs first. We take
+// no position on rest_authentication_errors: a present-but-invalid OAuth token is
+// surfaced only through this resolver returning no user, never by attaching a
+// filter that could turn "no user resolved" into a hard failure on unrelated routes.
 add_filter( 'determine_current_user', 'aafm_oauth_resolve_current_user', 20 );
-// Defensive pass-through so a present-but-invalid OAuth token never gets turned
-// into a hard auth failure on unrelated REST routes.
-add_filter( 'rest_authentication_errors', 'aafm_oauth_rest_authentication_errors', 5 );
 
 // wp_kses allowlist helpers - loaded unconditionally so they are available to the
 // OAuth consent page (rendered on the front end, before aafm_bootstrap()).
@@ -428,7 +428,6 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_save_bridged_abilities', 'aafm_ajax_save_bridged_abilities' );
 		add_action( 'wp_ajax_aafm_save_post_types', 'aafm_ajax_save_post_types' );
 		add_action( 'wp_ajax_aafm_save_meta_keys', 'aafm_ajax_save_meta_keys' );
-		add_action( 'wp_ajax_aafm_save_denied_meta_keys', 'aafm_ajax_save_denied_meta_keys' );
 		add_action( 'wp_ajax_aafm_save_user_meta_keys', 'aafm_ajax_save_user_meta_keys' );
 		add_action( 'wp_ajax_aafm_save_term_meta_keys', 'aafm_ajax_save_term_meta_keys' );
 		add_action( 'wp_ajax_aafm_save_settings', 'aafm_ajax_save_settings' );

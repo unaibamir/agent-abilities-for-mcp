@@ -21,12 +21,6 @@ use WP_Error;
 
 final class SiteSettingsTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	/**
 	 * Enable the whole catalog and register categories + abilities, mirroring the
 	 * idiom the catalog tests use (the Abilities API registry is process-wide).

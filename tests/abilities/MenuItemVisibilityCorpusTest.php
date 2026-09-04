@@ -32,13 +32,6 @@ use AAFM\Tests\TestCase;
 
 final class MenuItemVisibilityCorpusTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		// Executing an ability audits to the activity log; without its table every test here is risky.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	private function register_menus(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/list-menu-items' ) );

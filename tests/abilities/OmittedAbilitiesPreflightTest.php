@@ -40,8 +40,6 @@ final class OmittedAbilitiesPreflightTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		delete_option( AAFM_OMITTED_ABILITIES_OPTION );
 	}
 

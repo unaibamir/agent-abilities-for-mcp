@@ -31,8 +31,6 @@ final class CptWritesTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		// A public, map_meta_cap CPT with its own granular caps so we can prove both
 		// the create cap and the publish cap independently.

@@ -26,8 +26,6 @@ final class WooAttributesTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce(); // also resets + caps admin.
 		$this->seed_wc_attributes(); // seeds id 1 = Color, id 2 = Size.

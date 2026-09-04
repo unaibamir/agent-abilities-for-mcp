@@ -1,8 +1,7 @@
 <?php
 /**
  * Tests for the OAuth bearer-token validator: the determine_current_user
- * resolver, the access-token row resolver, and the rest_authentication_errors
- * pass-through.
+ * resolver and the access-token row resolver.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -12,7 +11,6 @@ declare( strict_types=1 );
 namespace AAFM\Tests\OAuth;
 
 use AAFM\Tests\TestCase;
-use WP_Error;
 
 /**
  * Verifies that a valid `aafm_oat_` bearer resolves to the approving user on the
@@ -70,10 +68,6 @@ class ValidatorTest extends TestCase {
 		// OAuth is OFF by default now; the resolver's happy path requires it on. The
 		// disabled-bearer test sets it back to '0' explicitly.
 		update_option( 'aafm_oauth_enabled', '1' );
-
-		// The failed-bearer audit tests below read the activity log.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 	}
 
 	/**
@@ -639,17 +633,6 @@ class ValidatorTest extends TestCase {
 		$this->assertSame( $uid, (int) $row['wp_user_id'] );
 
 		$this->assertNull( aafm_oauth_get_access_token_row( 'aafm_oat_unknown' ) );
-	}
-
-	/**
-	 * The rest_authentication_errors hook is a pure pass-through: it never turns a
-	 * non-error into an error, and never mutates an existing WP_Error.
-	 */
-	public function test_rest_authentication_errors_passthrough(): void {
-		$this->assertNull( aafm_oauth_rest_authentication_errors( null ) );
-
-		$error = new WP_Error( 'x', 'y' );
-		$this->assertSame( $error, aafm_oauth_rest_authentication_errors( $error ) );
 	}
 
 	/**

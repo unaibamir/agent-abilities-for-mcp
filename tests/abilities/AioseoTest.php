@@ -27,8 +27,6 @@ final class AioseoTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->force_integration( 'aioseo' );
 		$this->stub_aioseo();
 		aafm_registry_cache_should_flush( true );

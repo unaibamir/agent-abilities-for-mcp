@@ -47,9 +47,6 @@ class FailedAppPasswordAuthLogTest extends TestCase {
 		unset( $_GET['rest_route'] );
 		$this->on_mcp_route();
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.5';
-
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 	}
 
 	/**

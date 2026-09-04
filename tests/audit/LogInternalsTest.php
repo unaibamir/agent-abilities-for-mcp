@@ -16,12 +16,6 @@ use AAFM\Tests\TestCase;
 
 final class LogInternalsTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	/**
 	 * B5: the schema self-heal must ride the paths that actually take traffic. admin_init only
 	 * fires on admin requests, so a headless site that auto-updates over cron and serves MCP over

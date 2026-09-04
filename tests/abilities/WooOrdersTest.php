@@ -25,8 +25,6 @@ final class WooOrdersTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->unlock_high_risk_abilities();
 		// stub_woocommerce() adds manage_woocommerce to administrator and defines the base WC classes.

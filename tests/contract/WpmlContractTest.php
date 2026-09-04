@@ -44,11 +44,6 @@ final class WpmlContractTest extends TestCase {
 			$this->markTestSkipped( 'Real WPML not loaded — see tests/contract/bootstrap.php for provisioning.' );
 		}
 
-		// The audited registration wrapper logs every permission check and execute to the custom
-		// table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-
 		// Administrator so count-posts' by_status breakdown is not zeroed for non-public statuses,
 		// keeping the count-vs-list comparison meaningful regardless of what the test core holds.
 		$this->acting_as( 'administrator' );

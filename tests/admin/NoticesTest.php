@@ -56,14 +56,4 @@ final class NoticesTest extends TestCase {
 		$html   = aafm_get_notice_html( 'info', 'x', array( 'icon' => 'shield' ) );
 		$this->assertStringContainsString( $shield, $html );
 	}
-
-	public function test_legacy_dashicon_arg_maps_to_svg(): void {
-		// Back-compat: the old dashicon override name maps to the closest aafm_icon glyph.
-		// The notice embeds the icon through wp_kses() (escape-late), so compare against the
-		// same escaped form - the distinctive shield path survives kses unchanged.
-		$shield = wp_kses( aafm_icon( 'shield' ), aafm_svg_allowed_html() );
-		$html   = aafm_get_notice_html( 'info', 'x', array( 'dashicon' => 'dashicons-shield' ) );
-		$this->assertStringContainsString( $shield, $html );
-		$this->assertStringNotContainsString( 'dashicons', $html );
-	}
 }

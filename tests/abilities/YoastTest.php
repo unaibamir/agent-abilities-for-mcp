@@ -24,8 +24,6 @@ final class YoastTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->force_integration( 'yoast' );
 		$this->stub_yoast();
 		aafm_registry_cache_should_flush( true );

@@ -25,8 +25,6 @@ final class ReviewRequestTest extends TestCase {
 		delete_option( 'aafm_review_request' );
 		delete_option( 'aafm_quickconnect_finished' );
 		delete_option( 'aafm_quickconnect_dismissed' );
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		// The success count is memoized per request. A test process is many logical requests in
 		// one PHP process, so it is recomputed here and after every batch this file logs.
 		aafm_review_request_success_count( true );

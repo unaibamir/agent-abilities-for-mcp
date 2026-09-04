@@ -70,26 +70,8 @@
 			this.#bindClearLog();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
-			this.#bindQuickstarts();
 			this.#bindOauthRevoke();
 			this.#bindQuickConnect();
-		}
-
-		#bindQuickstarts() {
-			const toggle = document.querySelector( '.aafm-quickstart-toggle' );
-			const grid = document.querySelector( '#aafm-quickstart-grid' );
-			if ( ! toggle || ! grid ) {
-				return;
-			}
-			toggle.addEventListener( 'click', () => {
-				const open = grid.hidden;
-				grid.hidden = ! open;
-				toggle.setAttribute( 'aria-expanded', open ? 'true' : 'false' );
-				const i18n = aafmAdmin?.i18n;
-				toggle.textContent = open
-					? i18n?.quickstartsHide ?? 'Hide client configs'
-					: i18n?.quickstartsShow ?? 'Show config for a specific client';
-			} );
 		}
 
 		/**

@@ -51,8 +51,6 @@ final class SecurityRegressionTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		// Wave 4: force all three integrations active (+ the mandatory registry-memo flush)
 		// so test_no_arbitrary_option_or_meta_ability_exists scans a registry that INCLUDES

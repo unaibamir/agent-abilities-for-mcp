@@ -24,12 +24,6 @@ class OauthAuditTest extends TestCase {
 	/**
 	 * The lifecycle rows land in the activity log, so it must exist for the current blog.
 	 */
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	/**
 	 * Fetch the single most recent activity row, or null when the log is empty.
 	 *

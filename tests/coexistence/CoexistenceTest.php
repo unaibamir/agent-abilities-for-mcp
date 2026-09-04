@@ -69,6 +69,35 @@ final class CoexistenceTest extends TestCase {
 		$this->assertSame( '', $html );
 	}
 
+	/**
+	 * Aafm_notice_adapter_too_new() shares its renderer with the outdated notice above
+	 * (aafm_render_adapter_version_notice()); this mirrors the pair of tests above it,
+	 * against the upper bound instead of the floor.
+	 */
+	public function test_too_new_notice_reports_loaded_and_max_versions(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		ob_start();
+		aafm_notice_adapter_too_new();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-warning', $html );
+		$this->assertStringContainsString( AAFM_MAX_ADAPTER_VERSION, $html );
+		$this->assertStringContainsString( (string) ( aafm_loaded_adapter_version() ?? '' ), $html );
+	}
+
+	public function test_too_new_notice_is_silent_for_users_without_activate_plugins(): void {
+		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $subscriber );
+
+		ob_start();
+		aafm_notice_adapter_too_new();
+		$html = (string) ob_get_clean();
+
+		$this->assertSame( '', $html );
+	}
+
 	public function test_adapter_owner_resolver_returns_empty_when_not_under_plugins_dir(): void {
 		// In the unit-test environment the adapter autoloads from the plugin's own vendor/ tree,
 		// which is NOT a distinct plugin folder under WP_PLUGIN_DIR, so the resolver returns '' and

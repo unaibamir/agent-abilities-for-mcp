@@ -196,31 +196,13 @@ function aafm_notice_adapter_missing(): void {
  * @return void
  */
 function aafm_notice_adapter_outdated(): void {
-	if ( ! current_user_can( 'activate_plugins' ) ) {
-		return;
-	}
-
-	$loaded = aafm_loaded_adapter_version() ?? __( 'unknown', 'agent-abilities-for-mcp' );
-	$plugin = aafm_resolve_adapter_owner_plugin();
-
-	echo '<div class="notice notice-warning"><p>';
-	if ( '' !== $plugin ) {
-		printf(
-			/* translators: 1: offending plugin name, 2: loaded adapter version, 3: minimum required adapter version. */
-			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Agent Abilities for MCP requires %3$s or newer. Update or deactivate %1$s to enable agent tools.', 'agent-abilities-for-mcp' ),
-			esc_html( $plugin ),
-			esc_html( $loaded ),
-			esc_html( AAFM_MIN_ADAPTER_VERSION )
-		);
-	} else {
-		printf(
-			/* translators: 1: loaded adapter version, 2: minimum required adapter version. */
-			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools.', 'agent-abilities-for-mcp' ),
-			esc_html( $loaded ),
-			esc_html( AAFM_MIN_ADAPTER_VERSION )
-		);
-	}
-	echo '</p></div>';
+	aafm_render_adapter_version_notice(
+		/* translators: 1: offending plugin name, 2: loaded adapter version, 3: minimum required adapter version. */
+		esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Agent Abilities for MCP requires %3$s or newer. Update or deactivate %1$s to enable agent tools.', 'agent-abilities-for-mcp' ),
+		/* translators: 1: loaded adapter version, 2: minimum required adapter version. */
+		esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools.', 'agent-abilities-for-mcp' ),
+		AAFM_MIN_ADAPTER_VERSION
+	);
 }
 
 /**
@@ -233,6 +215,31 @@ function aafm_notice_adapter_outdated(): void {
  * @return void
  */
 function aafm_notice_adapter_too_new(): void {
+	aafm_render_adapter_version_notice(
+		/* translators: 1: offending plugin name, 2: loaded adapter version, 3: maximum supported adapter version (exclusive). */
+		esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools.', 'agent-abilities-for-mcp' ),
+		/* translators: 1: loaded adapter version, 2: maximum supported adapter version (exclusive). */
+		esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools.', 'agent-abilities-for-mcp' ),
+		AAFM_MAX_ADAPTER_VERSION
+	);
+}
+
+/**
+ * Shared renderer for the two adapter-version compatibility notices. Only the wording and which
+ * version bound gets cited differ between "too old" and "too new"; the capability gate, the
+ * loaded-version/offending-plugin resolution, and the markup are identical either way.
+ *
+ * @param string $with_plugin_message    Pre-escaped printf() template used when the offending
+ *                                        plugin is known, taking %1$s (plugin), %2$s (loaded
+ *                                        version), %3$s (the version bound).
+ * @param string $without_plugin_message Pre-escaped printf() template used when the offending
+ *                                        plugin cannot be resolved, taking %1$s (loaded version),
+ *                                        %2$s (the version bound).
+ * @param string $bound_version          The adapter version bound this message cites
+ *                                        (AAFM_MIN_ADAPTER_VERSION or AAFM_MAX_ADAPTER_VERSION).
+ * @return void
+ */
+function aafm_render_adapter_version_notice( string $with_plugin_message, string $without_plugin_message, string $bound_version ): void {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
@@ -242,20 +249,9 @@ function aafm_notice_adapter_too_new(): void {
 
 	echo '<div class="notice notice-warning"><p>';
 	if ( '' !== $plugin ) {
-		printf(
-			/* translators: 1: offending plugin name, 2: loaded adapter version, 3: maximum supported adapter version (exclusive). */
-			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools.', 'agent-abilities-for-mcp' ),
-			esc_html( $plugin ),
-			esc_html( $loaded ),
-			esc_html( AAFM_MAX_ADAPTER_VERSION )
-		);
+		printf( $with_plugin_message, esc_html( $plugin ), esc_html( $loaded ), esc_html( $bound_version ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $with_plugin_message is the caller's own esc_html__() return value; every interpolated arg is escaped here.
 	} else {
-		printf(
-			/* translators: 1: loaded adapter version, 2: maximum supported adapter version (exclusive). */
-			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools.', 'agent-abilities-for-mcp' ),
-			esc_html( $loaded ),
-			esc_html( AAFM_MAX_ADAPTER_VERSION )
-		);
+		printf( $without_plugin_message, esc_html( $loaded ), esc_html( $bound_version ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $without_plugin_message is the caller's own esc_html__() return value; every interpolated arg is escaped here.
 	}
 	echo '</p></div>';
 }

@@ -16,10 +16,6 @@ final class ServerToolsTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		// The audited registration wrapper logs to the custom table, so it must exist.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-
 		// Contribute registry entries for the fixtures so aafm_get_enabled_abilities()
 		// and the tools/list filter can map tool names back to abilities (the same way
 		// real Phase 3/4 domain files do via the aafm_abilities_registry filter).

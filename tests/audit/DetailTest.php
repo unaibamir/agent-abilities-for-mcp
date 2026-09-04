@@ -19,12 +19,6 @@ final class DetailTest extends TestCase {
 	/**
 	 * Give every case an empty activity log to assert against.
 	 */
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	/**
 	 * Drop the trait's filters and stub stores again after every case.
 	 */

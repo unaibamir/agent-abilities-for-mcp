@@ -21,6 +21,10 @@ abstract class TestCase extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		// The audited registration wrapper logs every permission check and execute to the
+		// custom table, so it must exist before any ability is invoked.
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		delete_option( 'aafm_enabled_abilities' );
 		// The high-risk floor is off-by-default, and a test that finds it already lifted would assert
 		// against a security posture no fresh install has. It needs an explicit reset for the same

@@ -13,12 +13,6 @@ use AAFM\Tests\TestCase;
 
 final class ActivityTabTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_tab_lists_a_denied_row(): void {
 		$this->acting_as( 'administrator' );
 		aafm_log_activity(

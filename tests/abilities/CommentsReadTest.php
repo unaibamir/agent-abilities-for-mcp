@@ -15,10 +15,6 @@ final class CommentsReadTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// The audited registration wrapper logs every permission check and execute to the
-		// custom table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
 		// by pushing the action name onto $wp_current_filter - the idiom WP core's own

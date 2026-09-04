@@ -52,8 +52,6 @@ final class WireShapeTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->acting_as( 'administrator' );
 
 		// The three meta-read abilities default-deny every key; admit the one probe key each

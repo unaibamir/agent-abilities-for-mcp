@@ -29,10 +29,6 @@ final class ReadsCatalogTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// The audited registration wrapper logs every permission check and execute to the
-		// custom table, so it must exist before any ability is registered/invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		// Wave 4: integration abilities only contribute to the registry when their host
 		// plugin is active. Force all three active (+ the mandatory registry-memo flush, the

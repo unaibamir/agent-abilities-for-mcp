@@ -442,16 +442,23 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 		}
 	}
 
-	// Walk DOWN: each id may have one child whose refresh_parent_id points to it.
-	// Use a queue so the cap counts total descendants discovered, not just depth.
-	$queue = $ids;
-	$hops  = 0;
-	while ( ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
+	// Walk DOWN: each id has at MOST one child, never more. aafm_oauth_rotate_refresh()'s
+	// single-winner gate consumes a refresh row's is_active flag with an atomic
+	// `UPDATE ... WHERE id = X AND is_active = 1` and requires exactly one affected row before
+	// minting that row's child, so no id can ever mint two children - a branching lineage is
+	// not reachable through this plugin's own code. A plain index into the growing $ids list
+	// replaces the BFS queue a branching lineage would have needed; $hops still counts every
+	// node visited (ancestors included), matching the original queue's cap accounting.
+	$hops      = 0;
+	$i         = 0;
+	$ids_count = count( $ids );
+	while ( $i < $ids_count && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
 		++$hops;
-		$current = array_shift( $queue );
+		$current = $ids[ $i ];
+		++$i;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$child_ids = $wpdb->get_col(
+		$child_id = $wpdb->get_var(
 			$wpdb->prepare(
 				'SELECT id FROM %i WHERE refresh_parent_id = %d',
 				$table,
@@ -459,17 +466,15 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 			)
 		);
 
-		foreach ( $child_ids as $child_id ) {
-			$child_id = (int) $child_id;
-			if ( $child_id > 0 && ! in_array( $child_id, $ids, true ) ) {
-				$ids[]   = $child_id;
-				$queue[] = $child_id;
-			}
+		$child_id = null === $child_id ? 0 : (int) $child_id;
+		if ( $child_id > 0 && ! in_array( $child_id, $ids, true ) ) {
+			$ids[] = $child_id;
+			++$ids_count;
 		}
 	}
 
-	// The DOWN walk stopped with descendants still queued: the cap truncated the traversal.
-	if ( ! empty( $queue ) ) {
+	// The DOWN walk stopped with known ids still unvisited: the cap truncated the traversal.
+	if ( $i < $ids_count ) {
 		$cap_hit = true;
 	}
 

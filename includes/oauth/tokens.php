@@ -442,23 +442,21 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 		}
 	}
 
-	// Walk DOWN: each id has at MOST one child, never more. aafm_oauth_rotate_refresh()'s
-	// single-winner gate consumes a refresh row's is_active flag with an atomic
-	// `UPDATE ... WHERE id = X AND is_active = 1` and requires exactly one affected row before
-	// minting that row's child, so no id can ever mint two children - a branching lineage is
-	// not reachable through this plugin's own code. A plain index into the growing $ids list
-	// replaces the BFS queue a branching lineage would have needed; $hops still counts every
-	// node visited (ancestors included), matching the original queue's cap accounting.
-	$hops      = 0;
-	$i         = 0;
-	$ids_count = count( $ids );
-	while ( $i < $ids_count && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
+	// Walk DOWN: each id may have one child whose refresh_parent_id points to it.
+	// aafm_oauth_rotate_refresh()'s single-winner gate rules out this plugin's own code ever
+	// minting two children for one row, but the schema itself has no UNIQUE constraint on
+	// refresh_parent_id (see includes/oauth/schema.php), so a manually edited or otherwise
+	// corrupted row CAN branch. A queue keeps the cap counting total descendants discovered
+	// (not just depth) and revokes every branch it finds, not just one arbitrary line of them -
+	// the same defense-in-depth this function's docblock already claims for a corrupt chain.
+	$queue = $ids;
+	$hops  = 0;
+	while ( ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
 		++$hops;
-		$current = $ids[ $i ];
-		++$i;
+		$current = array_shift( $queue );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$child_id = $wpdb->get_var(
+		$child_ids = $wpdb->get_col(
 			$wpdb->prepare(
 				'SELECT id FROM %i WHERE refresh_parent_id = %d',
 				$table,
@@ -466,15 +464,17 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 			)
 		);
 
-		$child_id = null === $child_id ? 0 : (int) $child_id;
-		if ( $child_id > 0 && ! in_array( $child_id, $ids, true ) ) {
-			$ids[] = $child_id;
-			++$ids_count;
+		foreach ( $child_ids as $child_id ) {
+			$child_id = (int) $child_id;
+			if ( $child_id > 0 && ! in_array( $child_id, $ids, true ) ) {
+				$ids[]   = $child_id;
+				$queue[] = $child_id;
+			}
 		}
 	}
 
-	// The DOWN walk stopped with known ids still unvisited: the cap truncated the traversal.
-	if ( $i < $ids_count ) {
+	// The DOWN walk stopped with descendants still queued: the cap truncated the traversal.
+	if ( ! empty( $queue ) ) {
 		$cap_hit = true;
 	}
 

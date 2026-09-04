@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Guard: the committed composer autoloader may reference only the shipped
-# vendor set (vendor/wordpress, vendor/composer). Every other vendor
-# subdirectory is dev-only and excluded from the release zip by .distignore,
-# so any OTHER reference means the autoloader was regenerated with dev
-# dependencies present - the fb9e16f class of bug: a `require` that resolves
-# locally (the dev packages are on disk during a dev commit) but does not
-# exist in the shipped tree, fatalling every install.
+# vendor set (vendor/wordpress, vendor/composer, vendor/automattic - the last
+# added with the mcp-adapter 0.6.1 bump, which pulls in
+# automattic/jetpack-autoloader as a real production dependency, not a dev
+# one; see composer.json's require block). Every other vendor subdirectory is
+# dev-only and excluded from the release zip by .distignore, so any OTHER
+# reference means the autoloader was regenerated with dev dependencies
+# present - the fb9e16f class of bug: a `require` that resolves locally (the
+# dev packages are on disk during a dev commit) but does not exist in the
+# shipped tree, fatalling every install.
 #
 # Two source shapes are checked, because Composer emits vendor paths
 # differently across the generated files:
@@ -73,9 +76,9 @@ check_content() {
 	local label="$1"
 	local content="$2"
 	local bad
-	bad="$(extract_packages "$content" | grep -vE '^(wordpress|composer)$' || true)"
+	bad="$(extract_packages "$content" | grep -vE '^(wordpress|composer|automattic)$' || true)"
 	if [ -n "$bad" ]; then
-		echo "✗ $label references vendor package(s) outside the shipped set (vendor/wordpress, vendor/composer):" >&2
+		echo "✗ $label references vendor package(s) outside the shipped set (vendor/wordpress, vendor/composer, vendor/automattic):" >&2
 		echo "$bad" | sed 's/^/    - vendor\//' >&2
 		return 1
 	fi

@@ -6,10 +6,17 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'AAFM_Rate_Limited_Ability' => $baseDir . '/includes/class-aafm-rate-limited-ability.php',
+    'Automattic\\Jetpack\\Autoloader\\AutoloadFileWriter' => $vendorDir . '/automattic/jetpack-autoloader/src/AutoloadFileWriter.php',
+    'Automattic\\Jetpack\\Autoloader\\AutoloadGenerator' => $vendorDir . '/automattic/jetpack-autoloader/src/AutoloadGenerator.php',
+    'Automattic\\Jetpack\\Autoloader\\AutoloadProcessor' => $vendorDir . '/automattic/jetpack-autoloader/src/AutoloadProcessor.php',
+    'Automattic\\Jetpack\\Autoloader\\CustomAutoloaderPlugin' => $vendorDir . '/automattic/jetpack-autoloader/src/CustomAutoloaderPlugin.php',
+    'Automattic\\Jetpack\\Autoloader\\ManifestGenerator' => $vendorDir . '/automattic/jetpack-autoloader/src/ManifestGenerator.php',
     'Composer\\InstalledVersions' => $vendorDir . '/composer/InstalledVersions.php',
     'WP\\MCP\\Abilities\\DiscoverAbilitiesAbility' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/DiscoverAbilitiesAbility.php',
     'WP\\MCP\\Abilities\\ExecuteAbilityAbility' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/ExecuteAbilityAbility.php',
     'WP\\MCP\\Abilities\\GetAbilityInfoAbility' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/GetAbilityInfoAbility.php',
+    'WP\\MCP\\Abilities\\McpAbilityExposure' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/McpAbilityExposure.php',
     'WP\\MCP\\Abilities\\McpAbilityHelperTrait' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/McpAbilityHelperTrait.php',
     'WP\\MCP\\Autoloader' => $vendorDir . '/wordpress/mcp-adapter/includes/Autoloader.php',
     'WP\\MCP\\Cli\\McpCommand' => $vendorDir . '/wordpress/mcp-adapter/includes/Cli/McpCommand.php',

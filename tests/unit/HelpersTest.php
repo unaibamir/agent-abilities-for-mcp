@@ -320,6 +320,34 @@ final class HelpersTest extends TestCase {
 		$this->assertSame( 1, $args['page'] );
 	}
 
+	/**
+	 * Aafm_pagination_schema_props() centralizes the type/minimum/maximum shape every
+	 * list-shaped ability's page + per_page properties share; the description text stays
+	 * caller-owned. Ceiling and descriptions must come through verbatim.
+	 */
+	public function test_pagination_schema_props_shape(): void {
+		$props = aafm_pagination_schema_props( 25, 'per-page text', 'page text' );
+
+		$this->assertSame(
+			array(
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'maximum'     => AAFM_LIST_PAGE_MAX,
+				'description' => 'page text',
+			),
+			$props['page']
+		);
+		$this->assertSame(
+			array(
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'maximum'     => 25,
+				'description' => 'per-page text',
+			),
+			$props['per_page']
+		);
+	}
+
 	public function test_generic_error_leaks_nothing(): void {
 		$err = aafm_generic_error();
 		$this->assertInstanceOf( WP_Error::class, $err );

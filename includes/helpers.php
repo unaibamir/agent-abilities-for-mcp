@@ -1884,6 +1884,36 @@ function aafm_paginate_args( array $input, int $max = 50 ): array {
 }
 
 /**
+ * The `page` + `per_page` input-schema property pair every list-shaped ability declares
+ * alongside the runtime clamping aafm_paginate_args() already centralizes.
+ *
+ * The description text is call-site-owned (it varies by ability, e.g. "Number of posts
+ * per page..." vs "Number of coupons per page..."), so this only centralizes the
+ * `type`/`minimum`/`maximum` shape every call site repeated identically.
+ *
+ * @param int    $max                 Maximum allowed per_page for this ability.
+ * @param string $per_page_description Translated description for the per_page property.
+ * @param string $page_description     Translated description for the page property.
+ * @return array{page:array<string,mixed>,per_page:array<string,mixed>}
+ */
+function aafm_pagination_schema_props( int $max, string $per_page_description, string $page_description ): array {
+	return array(
+		'page'     => array(
+			'type'        => 'integer',
+			'minimum'     => 1,
+			'maximum'     => AAFM_LIST_PAGE_MAX,
+			'description' => $page_description,
+		),
+		'per_page' => array(
+			'type'        => 'integer',
+			'minimum'     => 1,
+			'maximum'     => $max,
+			'description' => $per_page_description,
+		),
+	);
+}
+
+/**
  * A single generic error returned to callers - never leaks internal detail.
  *
  * @return WP_Error

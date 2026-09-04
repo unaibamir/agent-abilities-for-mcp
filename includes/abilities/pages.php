@@ -83,27 +83,22 @@ function aafm_args_get_pages(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'status'          => array(
+					'status' => array(
 						'type'        => 'string',
 						'default'     => 'publish',
 						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private pages; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'search'          => array(
+					'search' => array(
 						'type'        => 'string',
 						'description' => __( 'Free-text search term matched against the page title and content, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
 					),
-					'page'            => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page'        => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => 50,
-						'description' => __( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-					),
+				),
+				aafm_pagination_schema_props(
+					50,
+					__( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				),
+				array(
 					'content_format'  => array(
 						'type'        => 'string',
 						'enum'        => array( 'rendered', 'raw' ),

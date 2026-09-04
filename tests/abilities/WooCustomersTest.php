@@ -1062,4 +1062,38 @@ final class WooCustomersTest extends TestCase {
 			'update-customer' => array( 'aafm/wc-update-customer', array( 'customer_id' => self::SEEDED_CUSTOMER ), 'editor' ),
 		);
 	}
+
+	/**
+	 * Aafm_wc_address_schema_props() is shared between this file and orders.php: billing
+	 * carries email/phone, shipping does not, and every field is a described string unless
+	 * the caller opts into the plain output shape.
+	 */
+	public function test_wc_address_schema_props_billing_vs_shipping(): void {
+		$billing  = aafm_wc_address_schema_props( 'billing' );
+		$shipping = aafm_wc_address_schema_props( 'shipping' );
+
+		$this->assertArrayHasKey( 'email', $billing );
+		$this->assertArrayHasKey( 'phone', $billing );
+		$this->assertArrayNotHasKey( 'email', $shipping );
+		$this->assertArrayNotHasKey( 'phone', $shipping );
+
+		foreach ( array( 'first_name', 'last_name', 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' ) as $field ) {
+			$this->assertArrayHasKey( $field, $billing );
+			$this->assertArrayHasKey( $field, $shipping );
+			$this->assertSame( 'string', $billing[ $field ]['type'] );
+			$this->assertNotSame( $billing[ $field ]['description'], $shipping[ $field ]['description'], "$field description must name its own address" );
+		}
+	}
+
+	/**
+	 * The undescribed variant (orders.php's output schemas) drops every description but
+	 * keeps the same field set, including the billing-only email/phone.
+	 */
+	public function test_wc_address_schema_props_undescribed_variant_drops_descriptions(): void {
+		$billing = aafm_wc_address_schema_props( 'billing', false );
+
+		$this->assertSame( array( 'type' => 'string' ), $billing['first_name'] );
+		$this->assertSame( array( 'type' => 'string' ), $billing['email'] );
+		$this->assertArrayNotHasKey( 'description', $billing['first_name'] );
+	}
 }

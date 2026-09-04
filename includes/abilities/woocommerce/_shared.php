@@ -77,6 +77,103 @@ function aafm_wc_redacted_fields_schema(): array {
 }
 
 /**
+ * The billing/shipping address schema properties shared by the order and customer read/write
+ * abilities. Shipping never carries email or phone (those are billing-only fields); every other
+ * property is identical in shape between the two, differing only in wording ("billing"/"shipping")
+ * where the description names which address it is.
+ *
+ * @param string $context     'billing' or 'shipping'. Controls the description wording and
+ *                             whether email/phone are included.
+ * @param bool   $description Whether to attach a `description` to each property. False produces
+ *                             the plain `array( 'type' => 'string' )` shape the read-only output
+ *                             schemas use; true (the default) adds the descriptions the writable
+ *                             input schemas carry.
+ * @return array<string,mixed>
+ */
+function aafm_wc_address_schema_props( string $context, bool $description = true ): array {
+	$is_billing = 'billing' === $context;
+
+	if ( ! $description ) {
+		$fields = array( 'first_name', 'last_name', 'company', 'address_1', 'address_2', 'city', 'state', 'postcode', 'country' );
+		if ( $is_billing ) {
+			$fields[] = 'email';
+			$fields[] = 'phone';
+		}
+		return array_fill_keys( $fields, array( 'type' => 'string' ) );
+	}
+
+	$props = array(
+		'first_name' => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'First name for the billing address. Appears on invoices and order emails; does not need to match the account first name.', 'agent-abilities-for-mcp' )
+				: __( 'First name for the shipping address. Appears on packing slips; does not need to match the account first name.', 'agent-abilities-for-mcp' ),
+		),
+		'last_name'  => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'Last name for the billing address. Appears on invoices and order emails.', 'agent-abilities-for-mcp' )
+				: __( 'Last name for the shipping address. Appears on packing slips.', 'agent-abilities-for-mcp' ),
+		),
+		'company'    => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'Company name for the billing address. Optional; leave blank for a personal, non-business address.', 'agent-abilities-for-mcp' )
+				: __( 'Company name for the shipping address. Optional; leave blank for a personal, non-business address.', 'agent-abilities-for-mcp' ),
+		),
+		'address_1'  => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'Primary billing street address (house or building number and street name).', 'agent-abilities-for-mcp' )
+				: __( 'Primary shipping street address (house or building number and street name).', 'agent-abilities-for-mcp' ),
+		),
+		'address_2'  => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'Secondary billing address line for an apartment, suite, or unit number. Optional.', 'agent-abilities-for-mcp' )
+				: __( 'Secondary shipping address line for an apartment, suite, or unit number. Optional.', 'agent-abilities-for-mcp' ),
+		),
+		'city'       => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'City or town for the billing address.', 'agent-abilities-for-mcp' )
+				: __( 'City or town for the shipping address.', 'agent-abilities-for-mcp' ),
+		),
+		'state'      => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'State, county, or province code for the billing address (e.g. "CA", not "California"). Only meaningful for countries WooCommerce tracks states for. Stored exactly as sent with no validation, so a full name will not match WooCommerce\'s state-based tax or shipping rules.', 'agent-abilities-for-mcp' )
+				: __( 'State, county, or province code for the shipping address (e.g. "CA", not "California"). Only meaningful for countries WooCommerce tracks states for. Stored exactly as sent with no validation, so a full name will not match WooCommerce\'s state-based tax or shipping rules.', 'agent-abilities-for-mcp' ),
+		),
+		'postcode'   => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'Postal or ZIP code for the billing address, in the format the destination country expects.', 'agent-abilities-for-mcp' )
+				: __( 'Postal or ZIP code for the shipping address, in the format the destination country expects.', 'agent-abilities-for-mcp' ),
+		),
+		'country'    => array(
+			'type'        => 'string',
+			'description' => $is_billing
+				? __( 'Two-letter ISO country code for the billing address (e.g. "US", not "United States"). Stored exactly as sent with no validation, so an unrecognized value will not match WooCommerce\'s country-based tax rates or shipping zones.', 'agent-abilities-for-mcp' )
+				: __( 'Two-letter ISO country code for the shipping address (e.g. "US", not "United States"). Stored exactly as sent with no validation, so an unrecognized value will not match WooCommerce\'s country-based tax rates or shipping zones.', 'agent-abilities-for-mcp' ),
+		),
+	);
+
+	if ( $is_billing ) {
+		$props['email'] = array(
+			'type'        => 'string',
+			'description' => __( 'Billing email address. Shipping has no email field; the closed shipping schema rejects one if sent there.', 'agent-abilities-for-mcp' ),
+		);
+		$props['phone'] = array(
+			'type'        => 'string',
+			'description' => __( 'Billing phone number. Shipping has no phone field; the closed shipping schema rejects one if sent there.', 'agent-abilities-for-mcp' ),
+		);
+	}
+
+	return $props;
+}
+
+/**
  * Sanitize a price-like string to a bare decimal: strips every character except digits and the
  * decimal point (currency symbols, spaces, thousands separators, and any minus sign all go).
  *

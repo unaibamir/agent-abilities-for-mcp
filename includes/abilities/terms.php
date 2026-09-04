@@ -108,18 +108,11 @@ function aafm_args_get_terms(): array {
 						'type'        => 'string',
 						'description' => __( 'Free-text search term matched against the term name.', 'agent-abilities-for-mcp' ),
 					),
-					'page'     => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page' => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_TERMS_PER_PAGE_MAX,
-						'description' => __( 'Number of terms per page, clamped to the 1-100 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-					),
+				),
+				aafm_pagination_schema_props(
+					AAFM_TERMS_PER_PAGE_MAX,
+					__( 'Number of terms per page, clamped to the 1-100 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
 				),
 				aafm_lang_schema_fragment()
 			),

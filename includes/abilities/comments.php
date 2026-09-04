@@ -90,24 +90,19 @@ function aafm_args_get_comments(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'post_id'  => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'description' => __( 'ID of the post to list comments for. Omit to list approved comments across the whole site, filtered to posts you can read; if given, the post must exist and you must be able to read it.', 'agent-abilities-for-mcp' ),
+			'properties'           => array_merge(
+				array(
+					'post_id' => array(
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of the post to list comments for. Omit to list approved comments across the whole site, filtered to posts you can read; if given, the post must exist and you must be able to read it.', 'agent-abilities-for-mcp' ),
+					),
 				),
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PER_PAGE_MAX,
-					'description' => __( 'Number of comments per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-				),
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-				),
+				aafm_pagination_schema_props(
+					AAFM_LIST_PER_PAGE_MAX,
+					__( 'Number of comments per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
 			),
 			'additionalProperties' => false,
 		),
@@ -557,19 +552,10 @@ function aafm_args_get_pending_comments(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PER_PAGE_MAX,
-					'description' => __( 'Number of comments per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-				),
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-				),
+			'properties'           => aafm_pagination_schema_props(
+				AAFM_LIST_PER_PAGE_MAX,
+				__( 'Number of comments per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+				__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
 			),
 			'additionalProperties' => false,
 		),

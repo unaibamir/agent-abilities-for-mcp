@@ -330,20 +330,13 @@ function aafm_args_wc_list_products(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array_merge(
+				aafm_pagination_schema_props(
+					100,
+					__( 'Number of products per page, 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
+					__( 'Page number of products to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' )
+				),
 				array(
-					'page'     => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( 'Page number of products to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page' => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => 100,
-						'description' => __( 'Number of products per page, 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
-					),
-					'status'   => array(
+					'status' => array(
 						'type'        => 'string',
 						'description' => "Status filter; 'any' returns all states.",
 						'enum'        => array( 'any', 'publish', 'draft', 'pending', 'private' ),

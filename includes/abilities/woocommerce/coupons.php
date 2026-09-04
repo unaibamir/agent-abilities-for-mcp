@@ -505,19 +505,10 @@ function aafm_args_wc_list_coupons(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
-			'properties'           => array(
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => 100,
-					'description' => __( 'Number of coupons per page, 1 to 100. Defaults to 10.', 'agent-abilities-for-mcp' ),
-				),
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( 'Page number of coupons to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' ),
-				),
+			'properties'           => aafm_pagination_schema_props(
+				100,
+				__( 'Number of coupons per page, 1 to 100. Defaults to 10.', 'agent-abilities-for-mcp' ),
+				__( 'Page number of coupons to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' )
 			),
 		),
 		'output_schema'       => array(

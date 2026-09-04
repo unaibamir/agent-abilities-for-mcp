@@ -255,24 +255,19 @@ function aafm_args_wc_list_product_variations(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'product_id' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'description' => 'The parent (variable) product id.',
+			'properties'           => array_merge(
+				array(
+					'product_id' => array(
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => 'The parent (variable) product id.',
+					),
 				),
-				'page'       => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( 'Page number of variations to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' ),
-				),
-				'per_page'   => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => 100,
-					'description' => __( 'Number of variations per page, 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
-				),
+				aafm_pagination_schema_props(
+					100,
+					__( 'Number of variations per page, 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
+					__( 'Page number of variations to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
 			),
 			'required'             => array( 'product_id' ),
 			'additionalProperties' => false,

@@ -48,28 +48,23 @@ function aafm_args_get_activity_log(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'status'   => array(
-					'type'        => 'string',
-					'enum'        => array( 'started', 'success', 'error', 'denied' ),
-					'description' => __( 'Filter to entries with exactly this outcome: started, success, error, or denied. Omit to return every status.', 'agent-abilities-for-mcp' ),
+			'properties'           => array_merge(
+				array(
+					'status'  => array(
+						'type'        => 'string',
+						'enum'        => array( 'started', 'success', 'error', 'denied' ),
+						'description' => __( 'Filter to entries with exactly this outcome: started, success, error, or denied. Omit to return every status.', 'agent-abilities-for-mcp' ),
+					),
+					'ability' => array(
+						'type'        => 'string',
+						'description' => __( 'Filter to entries for exactly this ability name, for example aafm/create-post. Omit to return every ability. The reported total still reflects only the status filter, not this one, and may exceed the number of entries returned.', 'agent-abilities-for-mcp' ),
+					),
 				),
-				'ability'  => array(
-					'type'        => 'string',
-					'description' => __( 'Filter to entries for exactly this ability name, for example aafm/create-post. Omit to return every ability. The reported total still reflects only the status filter, not this one, and may exceed the number of entries returned.', 'agent-abilities-for-mcp' ),
-				),
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-				),
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => 200,
-					'description' => __( 'Number of entries per page, clamped to the 1-200 range regardless of the value requested. Defaults to 50 when omitted.', 'agent-abilities-for-mcp' ),
-				),
+				aafm_pagination_schema_props(
+					200,
+					__( 'Number of entries per page, clamped to the 1-200 range regardless of the value requested. Defaults to 50 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
 			),
 			'additionalProperties' => false,
 		),

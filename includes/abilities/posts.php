@@ -143,32 +143,27 @@ function aafm_args_get_posts(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'post_type'       => array(
+					'post_type' => array(
 						'type'        => 'string',
 						'default'     => 'post',
 						'description' => __( 'Slug of an allowlisted content type to list. Defaults to post. Types outside the operator\'s exposed allowlist are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'status'          => array(
+					'status'    => array(
 						'type'        => 'string',
 						'default'     => 'publish',
 						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private content for this type; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'search'          => array(
+					'search'    => array(
 						'type'        => 'string',
 						'description' => __( 'Free-text search term matched against the post title and content, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
 					),
-					'page'            => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page'        => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PER_PAGE_MAX,
-						'description' => __( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-					),
+				),
+				aafm_pagination_schema_props(
+					AAFM_LIST_PER_PAGE_MAX,
+					__( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				),
+				array(
 					'content_format'  => array(
 						'type'        => 'string',
 						'enum'        => array( 'rendered', 'raw' ),

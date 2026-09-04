@@ -82,24 +82,19 @@ function aafm_args_list_revisions(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'post_id'  => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'description' => __( 'ID of the post whose revision history to list. The caller must be able to edit this post.', 'agent-abilities-for-mcp' ),
+			'properties'           => array_merge(
+				array(
+					'post_id' => array(
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of the post whose revision history to list. The caller must be able to edit this post.', 'agent-abilities-for-mcp' ),
+					),
 				),
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-				),
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PER_PAGE_MAX,
-					'description' => __( 'Number of revisions per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-				),
+				aafm_pagination_schema_props(
+					AAFM_LIST_PER_PAGE_MAX,
+					__( 'Number of revisions per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
 			),
 			'required'             => array( 'post_id' ),
 			'additionalProperties' => false,

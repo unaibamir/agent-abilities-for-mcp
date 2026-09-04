@@ -283,6 +283,29 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertFalse( aafm_is_valid_ip_or_cidr( '' ) );
 	}
 
+	/**
+	 * Aafm_split_and_trim_lines() is the split/sanitize/trim/drop-blank step shared by the
+	 * settings sanitizer and aafm_count_dropped_ip_lines(); each then applies its own
+	 * validity filter. Tested here directly for the shape it returns.
+	 */
+	public function test_split_and_trim_lines_drops_blanks_and_trims(): void {
+		$this->assertSame(
+			array( 'foo', 'bar', 'baz' ),
+			aafm_split_and_trim_lines( "  foo  \n\nbar\n   \nbaz" )
+		);
+		$this->assertSame( array(), aafm_split_and_trim_lines( "\n\n  \n" ) );
+	}
+
+	/**
+	 * A duplicate-but-valid line must not be miscounted as dropped: aafm_count_dropped_ip_lines()
+	 * counts INVALID lines explicitly, never diffs submitted-vs-kept counts, which is exactly
+	 * what would misfire here (3 submitted, 1 kept after dedup, 0 actually invalid).
+	 */
+	public function test_count_dropped_ip_lines_does_not_miscount_duplicates_as_dropped(): void {
+		$this->assertSame( 0, aafm_count_dropped_ip_lines( "203.0.113.1\n203.0.113.1\n203.0.113.1" ) );
+		$this->assertSame( 1, aafm_count_dropped_ip_lines( "203.0.113.1\ngarbage" ) );
+	}
+
 	public function set_up(): void {
 		parent::set_up();
 		// The AJAX handler logs every flip of the high-risk switch (aafm_log_high_risk_switch_change()),

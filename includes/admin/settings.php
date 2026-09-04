@@ -54,14 +54,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	$oauth_dcr = empty( $posted['aafm_oauth_dcr_enabled'] ) ? '0' : '1';
 
 	$raw   = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
-	$lines = array();
-	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$line = trim( sanitize_text_field( (string) $line ) );
-		if ( '' === $line || ! aafm_is_valid_ip_or_cidr( $line ) ) {
-			continue;
-		}
-		$lines[] = $line;
-	}
+	$lines = array_values( array_filter( aafm_split_and_trim_lines( $raw ), 'aafm_is_valid_ip_or_cidr' ) );
 
 	return array(
 		'aafm_rate_limit_per_min'           => $rate,
@@ -92,17 +85,33 @@ function aafm_sanitize_settings_input( array $posted ): array {
  * @return int Number of non-blank lines that are not a valid IP or CIDR range.
  */
 function aafm_count_dropped_ip_lines( string $raw ): int {
-	$dropped = 0;
+	$invalid = array_filter(
+		aafm_split_and_trim_lines( $raw ),
+		static function ( string $line ): bool {
+			return ! aafm_is_valid_ip_or_cidr( $line );
+		}
+	);
+	return count( $invalid );
+}
+
+/**
+ * Split a raw newline-separated textarea value into cleaned, non-blank lines: split on any
+ * line ending, run each through sanitize_text_field(), trim it, and drop anything left blank.
+ * Shared by aafm_sanitize_settings_input() and aafm_count_dropped_ip_lines(), which each then
+ * decide what to do with the result (keep the valid ones vs. count the invalid ones).
+ *
+ * @param string $raw Raw textarea value as posted.
+ * @return list<string> Cleaned, non-blank lines in their original order.
+ */
+function aafm_split_and_trim_lines( string $raw ): array {
+	$lines = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
 		$line = trim( sanitize_text_field( (string) $line ) );
-		if ( '' === $line ) {
-			continue;
-		}
-		if ( ! aafm_is_valid_ip_or_cidr( $line ) ) {
-			++$dropped;
+		if ( '' !== $line ) {
+			$lines[] = $line;
 		}
 	}
-	return $dropped;
+	return $lines;
 }
 
 /**

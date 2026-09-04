@@ -148,6 +148,33 @@ final class SafetyTest extends TestCase {
 		$this->assertFalse( aafm_cidr_match( '2001:db8::1', '192.168.1.0/24' ) ); // Family mismatch v6 vs v4.
 	}
 
+	/**
+	 * Aafm_split_and_validate_cidr() is the split/validate helper shared by aafm_cidr_match()
+	 * and aafm_is_valid_ip_or_cidr(); both are already covered above, this tests the helper
+	 * directly for its own return shape.
+	 */
+	public function test_split_and_validate_cidr_returns_subnet_prefix_and_family_max(): void {
+		$this->assertSame(
+			array(
+				'subnet' => '203.0.113.0',
+				'prefix' => 24,
+				'max'    => 32,
+			),
+			aafm_split_and_validate_cidr( '203.0.113.0/24' )
+		);
+		$this->assertSame(
+			array(
+				'subnet' => '2001:db8::',
+				'prefix' => 32,
+				'max'    => 128,
+			),
+			aafm_split_and_validate_cidr( '2001:db8::/32' )
+		);
+		$this->assertNull( aafm_split_and_validate_cidr( '203.0.113.0/33' ) );
+		$this->assertNull( aafm_split_and_validate_cidr( 'not-an-ip/24' ) );
+		$this->assertNull( aafm_split_and_validate_cidr( '203.0.113.0/abc' ) );
+	}
+
 	public function test_ip_is_allowed_nonempty_all_invalid_blocks_not_allows_all(): void {
 		// CRITICAL fail-closed: a non-empty list that happens to be all-garbage must NOT silently allow everyone.
 		update_option( 'aafm_ip_allowlist', array( 'garbage', 'not-a-cidr' ) );

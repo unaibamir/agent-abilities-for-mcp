@@ -296,28 +296,52 @@ function aafm_client_snippet( string $client, string $username, string $os = 'un
 		$env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 	}
 
-	$package = '@automattic/mcp-wordpress-remote@latest';
-	if ( 'windows' === $os ) {
-		$command = 'cmd';
-		$args    = array( '/c', 'npx', '-y', $package );
-	} else {
-		$command = 'npx';
-		$args    = array( '-y', $package );
-	}
-
 	$server = array(
-		'agent-abilities' => array(
-			'command' => $command,
-			'args'    => $args,
-			'env'     => $env,
+		'agent-abilities' => array_merge(
+			aafm_npx_launch_command( $os, '@automattic/mcp-wordpress-remote@latest' ),
+			array( 'env' => $env )
 		),
 	);
 
-	// VS Code keys the server map as "servers"; every other client uses "mcpServers".
-	$root_key = ( 'vscode' === $client ) ? 'servers' : 'mcpServers';
-	$cfg      = array( $root_key => $server );
+	$cfg = array( aafm_client_config_root_key( $client ) => $server );
 
 	return (string) wp_json_encode( $cfg, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+}
+
+/**
+ * The `command`/`args` pair for launching an npx-distributed proxy package, shaped for the
+ * unix or windows quickstart snippet: `npx -y <package> [...extra]` directly on unix, wrapped
+ * in `cmd /c` on windows because Windows MCP clients cannot spawn the `npx` shim by name.
+ * Shared by {@see aafm_client_snippet()} and {@see aafm_oauth_client_snippet()}, which differ
+ * only in the package name and whether an extra positional arg (the OAuth endpoint URL) follows it.
+ *
+ * @param string   $os         'unix' (default) or 'windows'.
+ * @param string   $package    The npx package spec to run.
+ * @param string[] $extra_args Extra positional args appended after the package name.
+ * @return array{command:string,args:string[]}
+ */
+function aafm_npx_launch_command( string $os, string $package, array $extra_args = array() ): array {
+	if ( 'windows' === $os ) {
+		return array(
+			'command' => 'cmd',
+			'args'    => array_merge( array( '/c', 'npx', '-y', $package ), $extra_args ),
+		);
+	}
+	return array(
+		'command' => 'npx',
+		'args'    => array_merge( array( '-y', $package ), $extra_args ),
+	);
+}
+
+/**
+ * The top-level key a client's MCP config file uses for its server map: VS Code's
+ * `.vscode/mcp.json` uses "servers"; every other client uses "mcpServers".
+ *
+ * @param string $client Client slug.
+ * @return string
+ */
+function aafm_client_config_root_key( string $client ): string {
+	return ( 'vscode' === $client ) ? 'servers' : 'mcpServers';
 }
 
 /**
@@ -396,24 +420,16 @@ function aafm_config_snippet_clients(): array {
  * @return string Localized note, or an empty string for an unknown slug.
  */
 function aafm_quickstart_note( string $client ): string {
-	switch ( $client ) {
-		case 'claude-code':
-			return __( "Add it to your project's .mcp.json, or run claude mcp add.", 'agent-abilities-for-mcp' );
-		case 'cursor':
-			return __( 'Add it to ~/.cursor/mcp.json (or Settings → MCP), then reload.', 'agent-abilities-for-mcp' );
-		case 'vscode':
-			return __( 'Save it as .vscode/mcp.json in your workspace. Note the key is "servers", not "mcpServers".', 'agent-abilities-for-mcp' );
-		case 'windsurf':
-			return __( "Add it under Windsurf's MCP config (mcp_config.json) and refresh the server list.", 'agent-abilities-for-mcp' );
-		case 'gemini-cli':
-			return __( 'Add it to the mcpServers block in your Gemini CLI settings.json.', 'agent-abilities-for-mcp' );
-		case 'manus':
-			return __( "Add it to Manus's MCP server config.", 'agent-abilities-for-mcp' );
-		case 'generic':
-			return __( 'For any client that speaks MCP over the mcp-wordpress-remote proxy, use this block.', 'agent-abilities-for-mcp' );
-		default:
-			return '';
-	}
+	$notes = array(
+		'claude-code' => __( "Add it to your project's .mcp.json, or run claude mcp add.", 'agent-abilities-for-mcp' ),
+		'cursor'      => __( 'Add it to ~/.cursor/mcp.json (or Settings → MCP), then reload.', 'agent-abilities-for-mcp' ),
+		'vscode'      => __( 'Save it as .vscode/mcp.json in your workspace. Note the key is "servers", not "mcpServers".', 'agent-abilities-for-mcp' ),
+		'windsurf'    => __( "Add it under Windsurf's MCP config (mcp_config.json) and refresh the server list.", 'agent-abilities-for-mcp' ),
+		'gemini-cli'  => __( 'Add it to the mcpServers block in your Gemini CLI settings.json.', 'agent-abilities-for-mcp' ),
+		'manus'       => __( "Add it to Manus's MCP server config.", 'agent-abilities-for-mcp' ),
+		'generic'     => __( 'For any client that speaks MCP over the mcp-wordpress-remote proxy, use this block.', 'agent-abilities-for-mcp' ),
+	);
+	return $notes[ $client ] ?? '';
 }
 
 /**
@@ -444,21 +460,7 @@ function aafm_oauth_client_snippet( string $client, string $os = 'unix' ): strin
 		return '';
 	}
 
-	$package = 'mcp-remote';
-	$url     = aafm_endpoint_url();
-
-	if ( 'windows' === $os ) {
-		$command = 'cmd';
-		$args    = array( '/c', 'npx', '-y', $package, $url );
-	} else {
-		$command = 'npx';
-		$args    = array( '-y', $package, $url );
-	}
-
-	$entry = array(
-		'command' => $command,
-		'args'    => $args,
-	);
+	$entry = aafm_npx_launch_command( $os, 'mcp-remote', array( aafm_endpoint_url() ) );
 
 	if ( aafm_site_is_local() ) {
 		// Placeholder path: local TLS certificates (mkcert, DDEV, Valet) are machine-specific.
@@ -466,10 +468,9 @@ function aafm_oauth_client_snippet( string $client, string $os = 'unix' ): strin
 		$entry['env'] = array( 'NODE_EXTRA_CA_CERTS' => 'PATH-TO-YOUR-mkcert-rootCA.pem' );
 	}
 
-	$server   = array( 'agent-abilities' => $entry );
-	$root_key = ( 'vscode' === $client ) ? 'servers' : 'mcpServers';
+	$server = array( 'agent-abilities' => $entry );
 
-	return (string) wp_json_encode( array( $root_key => $server ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+	return (string) wp_json_encode( array( aafm_client_config_root_key( $client ) => $server ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 }
 
 /**
@@ -497,28 +498,18 @@ function aafm_oauth_client_mode( string $client ): string {
  * @return string Localized instruction, or '' for an unknown slug.
  */
 function aafm_oauth_client_note( string $client ): string {
-	switch ( $client ) {
-		case 'chatgpt':
-			return __( 'Turn on Developer mode in ChatGPT settings, then add a custom connector: give it a name, paste the endpoint URL as the MCP server URL, create it, and approve the sign-in. Developer mode needs a paid ChatGPT plan.', 'agent-abilities-for-mcp' );
-		case 'claude':
-			return __( 'Open Settings, then Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' );
-		case 'claude-code':
-			return __( 'Run: claude mcp add --transport http agent-abilities <endpoint-url>', 'agent-abilities-for-mcp' );
-		case 'cursor':
-			return __( 'Add a server to ~/.cursor/mcp.json with a "url" pointing at the endpoint, then reload.', 'agent-abilities-for-mcp' );
-		case 'vscode':
-			return __( 'Add a .vscode/mcp.json server with "type":"http" and the endpoint "url" (key is "servers").', 'agent-abilities-for-mcp' );
-		case 'windsurf':
-			return __( "Add the endpoint URL as a server in Windsurf's MCP config, then refresh.", 'agent-abilities-for-mcp' );
-		case 'gemini-cli':
-			return __( 'Add the endpoint under httpUrl in your Gemini CLI settings.json mcpServers block.', 'agent-abilities-for-mcp' );
-		case 'manus':
-			return __( 'In Manus, add a custom MCP connector, paste the endpoint URL as the server URL, and approve the OAuth sign-in. Manus runs in the cloud, so it connects by URL - there is no local bridge to install.', 'agent-abilities-for-mcp' );
-		case 'generic':
-			return __( 'Use the bridge snippet below with any MCP client that runs a local stdio server.', 'agent-abilities-for-mcp' );
-		default:
-			return '';
-	}
+	$notes = array(
+		'chatgpt'     => __( 'Turn on Developer mode in ChatGPT settings, then add a custom connector: give it a name, paste the endpoint URL as the MCP server URL, create it, and approve the sign-in. Developer mode needs a paid ChatGPT plan.', 'agent-abilities-for-mcp' ),
+		'claude'      => __( 'Open Settings, then Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' ),
+		'claude-code' => __( 'Run: claude mcp add --transport http agent-abilities <endpoint-url>', 'agent-abilities-for-mcp' ),
+		'cursor'      => __( 'Add a server to ~/.cursor/mcp.json with a "url" pointing at the endpoint, then reload.', 'agent-abilities-for-mcp' ),
+		'vscode'      => __( 'Add a .vscode/mcp.json server with "type":"http" and the endpoint "url" (key is "servers").', 'agent-abilities-for-mcp' ),
+		'windsurf'    => __( "Add the endpoint URL as a server in Windsurf's MCP config, then refresh.", 'agent-abilities-for-mcp' ),
+		'gemini-cli'  => __( 'Add the endpoint under httpUrl in your Gemini CLI settings.json mcpServers block.', 'agent-abilities-for-mcp' ),
+		'manus'       => __( 'In Manus, add a custom MCP connector, paste the endpoint URL as the server URL, and approve the OAuth sign-in. Manus runs in the cloud, so it connects by URL - there is no local bridge to install.', 'agent-abilities-for-mcp' ),
+		'generic'     => __( 'Use the bridge snippet below with any MCP client that runs a local stdio server.', 'agent-abilities-for-mcp' ),
+	);
+	return $notes[ $client ] ?? '';
 }
 
 /**

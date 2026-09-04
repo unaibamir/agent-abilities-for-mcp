@@ -203,6 +203,53 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 }
 
 /**
+ * The discovery-time floor shared by every case in aafm_ability_list_permission() below whose
+ * per-object edit gate can resolve to edit_posts, edit_others_posts, OR edit_published_posts
+ * (a role holding ANY one of the three can execute the real per-object check on the right
+ * object) - written out identically eight times below before this existed. True when the
+ * caller holds ANY of the three.
+ *
+ * @return bool
+ */
+function aafm_can_edit_post_family(): bool {
+	return current_user_can( 'edit_posts' )
+		|| current_user_can( 'edit_others_posts' )
+		|| current_user_can( 'edit_published_posts' );
+}
+
+/**
+ * Delete counterpart to aafm_can_edit_post_family(): the discovery-time floor for a per-object
+ * delete gate that can resolve to delete_posts, delete_others_posts, OR
+ * delete_published_posts.
+ *
+ * @return bool
+ */
+function aafm_can_delete_post_family(): bool {
+	return current_user_can( 'delete_posts' )
+		|| current_user_can( 'delete_others_posts' )
+		|| current_user_can( 'delete_published_posts' );
+}
+
+/**
+ * Whether ANY taxonomy matching $tax_args grants the caller $cap_prop (a property name on
+ * WP_Taxonomy::$cap, e.g. 'edit_terms' or 'manage_terms'). Shared by the three
+ * foreach ( get_taxonomies(...) as $tax_object ) loops in aafm_ability_list_permission() below,
+ * which differ only in the taxonomy filter and the capability property they check.
+ *
+ * @param array<string,mixed> $tax_args  get_taxonomies() args, e.g. array() or array('public'=>true).
+ * @param string              $cap_prop  Property name on WP_Taxonomy::$cap to check.
+ * @return bool
+ */
+function aafm_any_taxonomy_grants( array $tax_args, string $cap_prop ): bool {
+	foreach ( get_taxonomies( $tax_args, 'objects' ) as $tax_object ) {
+		if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->{$cap_prop} ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * An object-INDEPENDENT discovery predicate for abilities whose execute-time
  * permission_callback needs a specific object id from the input.
  *
@@ -290,9 +337,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/rankmath-update-schema':
 		case 'aafm/aioseo-get-post':
 		case 'aafm/aioseo-update-post':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// ACF integration, post fields: gates per-object on edit_post($id) (aafm_perm_acf_post ->
 		// aafm_can_edit_post_object), false with empty input - same floor as the SEO family above,
@@ -302,9 +347,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// the correct discovery answer.
 		case 'aafm/acf-get-post-fields':
 		case 'aafm/acf-update-post-fields':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// ACF integration, term fields: gates per-object on edit_term($term_id)
 		// (aafm_perm_acf_term), NOT edit_post - a genuinely different mechanism from the post-fields
@@ -326,14 +369,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// registered taxonomy, public or not, matching aafm_perm_acf_term()'s real, broader floor.
 		case 'aafm/acf-get-term-fields':
 		case 'aafm/acf-update-term-fields':
-			return static function (): bool {
-				foreach ( get_taxonomies( array(), 'objects' ) as $tax_object ) {
-					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->edit_terms ) ) {
-						return true;
-					}
-				}
-				return false;
-			};
+			return static fn(): bool => aafm_any_taxonomy_grants( array(), 'edit_terms' );
 
 		// ACF integration, user fields: gates per-object on edit_user($id) PLUS the object-
 		// independent edit_users floor (aafm_perm_acf_user requires both, mirroring
@@ -372,13 +408,9 @@ function aafm_ability_list_permission( string $name ): ?callable {
 
 		case 'aafm/get-block':
 		case 'aafm/update-block':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 		case 'aafm/delete-block':
-			return static fn(): bool => current_user_can( 'delete_posts' )
-				|| current_user_can( 'delete_others_posts' )
-				|| current_user_can( 'delete_published_posts' );
+			return static fn(): bool => aafm_can_delete_post_family();
 
 		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
 		// which is false with empty input - so the per-object permission_callback would
@@ -404,14 +436,10 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/update-post':
 		case 'aafm/replace-in-post':
 		case 'aafm/set-featured-image':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 		case 'aafm/trash-post':
 		case 'aafm/delete-post':
-			return static fn(): bool => current_user_can( 'delete_posts' )
-				|| current_user_can( 'delete_others_posts' )
-				|| current_user_can( 'delete_published_posts' );
+			return static fn(): bool => aafm_can_delete_post_family();
 
 		// CPT creation: the type isn't known at discovery time (empty input), and
 		// aafm_perm_create_cpt_item checks nothing beyond the type's own bare
@@ -473,9 +501,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/get-all-post-meta':
 		case 'aafm/update-post-meta':
 		case 'aafm/delete-post-meta':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// Governed user-meta (get/update/delete): all gate per-object on edit_user($id) -
 		// reads included, since user meta can hold private data. The user id is unknown at
@@ -587,9 +613,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/get-revision':
 		case 'aafm/restore-revision':
 		case 'aafm/delete-revision':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// Media writes: the attachment id is unknown at discovery (empty input), so use an
 		// object-independent floor. The reads (get-media-item/count-media) need NO case - like
@@ -614,21 +638,15 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// same "standalone arm that can never resolve" defect Finding 1 removed from update-page,
 		// just in a different family. Removed rather than widened.
 		case 'aafm/update-media':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 		case 'aafm/delete-media':
-			return static fn(): bool => current_user_can( 'delete_posts' )
-				|| current_user_can( 'delete_others_posts' )
-				|| current_user_can( 'delete_published_posts' );
+			return static fn(): bool => aafm_can_delete_post_family();
 
 		// add-post-terms gates per-object on edit_post on the target post
 		// (aafm_perm_add_post_terms -> aafm_can_edit_post_object); the post id is unknown at
 		// discovery (empty input), so use the same widened floor as update-post above.
 		case 'aafm/add-post-terms':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// Term writes gate on the TARGET taxonomy's own manage_terms cap (aafm_perm_manage_terms),
 		// and the taxonomy is unknown at discovery: with empty input the callback defaults to
@@ -640,14 +658,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// the execute-time gate.
 		case 'aafm/create-term':
 		case 'aafm/update-term':
-			return static function (): bool {
-				foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax_object ) {
-					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->manage_terms ) ) {
-						return true;
-					}
-				}
-				return false;
-			};
+			return static fn(): bool => aafm_any_taxonomy_grants( array( 'public' => true ), 'manage_terms' );
 
 		// Term-meta read/write/delete gate per-object on the term (edit_term - the read
 		// included, since term meta can hold private data) - the term id is unknown at
@@ -665,14 +676,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/get-term-meta':
 		case 'aafm/update-term-meta':
 		case 'aafm/delete-term-meta':
-			return static function (): bool {
-				foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax_object ) {
-					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->edit_terms ) ) {
-						return true;
-					}
-				}
-				return false;
-			};
+			return static fn(): bool => aafm_any_taxonomy_grants( array( 'public' => true ), 'edit_terms' );
 
 		default:
 			return null;

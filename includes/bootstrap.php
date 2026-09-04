@@ -98,7 +98,7 @@ function aafm_mcp_rest_route(): string {
  * our eager load runs. Bump the bound deliberately after verifying against a new adapter line.
  */
 if ( ! defined( 'AAFM_MAX_ADAPTER_VERSION' ) ) {
-	define( 'AAFM_MAX_ADAPTER_VERSION', '0.6.0' );
+	define( 'AAFM_MAX_ADAPTER_VERSION', '0.7.0' );
 }
 
 /**

@@ -14,24 +14,24 @@ use AAFM\Tests\TestCase;
 final class CoexistenceTest extends TestCase {
 
 	public function test_adapter_within_tested_range_is_compatible(): void {
-		// Compatible == at or above the floor AND below the upper bound (the tested 0.5.x line).
+		// Compatible == at or above the floor AND below the upper bound (the tested 0.6.x line).
 		$this->assertTrue( aafm_adapter_is_compatible( AAFM_MIN_ADAPTER_VERSION ) );
-		$this->assertTrue( aafm_adapter_is_compatible( '0.5.0' ) );
-		$this->assertTrue( aafm_adapter_is_compatible( '0.5.9' ) );
+		$this->assertTrue( aafm_adapter_is_compatible( '0.6.1' ) );
+		$this->assertTrue( aafm_adapter_is_compatible( '0.6.9' ) );
 	}
 
 	public function test_older_adapter_is_incompatible(): void {
-		$this->assertFalse( aafm_adapter_is_compatible( '0.4.0' ) );
-		$this->assertFalse( aafm_adapter_is_compatible( '0.3.9' ) );
-		$this->assertFalse( aafm_adapter_is_too_new( '0.4.0' ) );
+		$this->assertFalse( aafm_adapter_is_compatible( '0.6.0' ) );
+		$this->assertFalse( aafm_adapter_is_compatible( '0.5.0' ) );
+		$this->assertFalse( aafm_adapter_is_too_new( '0.6.0' ) );
 	}
 
 	public function test_too_new_adapter_is_incompatible(): void {
 		// A newer adapter (at or above the upper bound) may have a changed API, so it is rejected.
 		$this->assertFalse( aafm_adapter_is_compatible( AAFM_MAX_ADAPTER_VERSION ) );
-		$this->assertFalse( aafm_adapter_is_compatible( '0.6.0' ) );
+		$this->assertFalse( aafm_adapter_is_compatible( '0.7.0' ) );
 		$this->assertFalse( aafm_adapter_is_compatible( '1.0.0' ) );
-		$this->assertTrue( aafm_adapter_is_too_new( '0.6.0' ) );
+		$this->assertTrue( aafm_adapter_is_too_new( '0.7.0' ) );
 		$this->assertTrue( aafm_adapter_is_too_new( '1.0.0' ) );
 	}
 

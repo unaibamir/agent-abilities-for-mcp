@@ -26,13 +26,13 @@ define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AAFM_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
-define( 'AAFM_MIN_ADAPTER_VERSION', '0.5.0' );
+define( 'AAFM_MIN_ADAPTER_VERSION', '0.6.1' );
 
 // Win the WP\MCP\ class-declaration race. The wordpress/mcp-adapter library is bundled by many
 // plugins under the same WP\MCP\ namespace, but PHP can load only one McpAdapter per request:
 // whichever copy is declared first wins site-wide. A sibling shipping an older copy via a plain
 // Composer autoloader (confirmed: Rank Math SEO 0.4.1) can win that race and trip our floor check,
-// killing our /mcp route. We MUST run our own 0.5.0 (0.4.1 lacks the per-connection capability
+// killing our /mcp route. We MUST run our own 0.6.1 (0.4.1 lacks the per-connection capability
 // gate). A prepended autoloader alone is not enough - later plugins' Composer autoloaders also
 // prepend and leapfrog ours - so we EAGER-LOAD our copy: declare every WP\MCP\ class from our
 // bundle now, during the plugin-include phase. Declaring every class up front beats a sibling's

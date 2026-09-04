@@ -54,7 +54,7 @@ final class AdapterCapabilityGateTest extends TestCase {
 	}
 
 	public function test_real_loaded_adapter_carries_the_gate(): void {
-		// The bundled 0.5.0 ToolsHandler our eager load committed must pass - the assertion must not
+		// The bundled 0.6.1 ToolsHandler our eager load committed must pass - the assertion must not
 		// false-reject the legitimate copy and disable the plugin on a normal install.
 		$this->assertTrue(
 			class_exists( 'WP\\MCP\\Handlers\\Tools\\ToolsHandler', false ),

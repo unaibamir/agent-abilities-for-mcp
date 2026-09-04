@@ -797,10 +797,14 @@
 
 	   The thumb is pinned with physical `left`, not the base component's logical
 	   `inset-inline-start`, because the checked-state transform below is a physical
-	   `translateX()` that never flips for RTL. Mixing a logical inset with a physical
-	   transform pushes the thumb outside the track in RTL; matching the old, pre-shared
-	   Quick Connect toggle's `left: 3px` keeps this variant's own positioning
-	   direction-agnostic like it always was. */
+	   `translateX()` that never flips for RTL. `inset-inline-start` and `left` are
+	   different properties, so setting `left` alone does not clear the base's
+	   inherited `inset-inline-start: 2px` - in RTL that still resolves to a `right`
+	   offset, and with `left`, `right`, and `width` all specified the box model
+	   drops `left` in RTL (CSS 2.1 10.3.7), putting the thumb right back where the
+	   logical inset placed it. Reset `inset-inline-start` to `auto` first so `left`
+	   is the only inline offset in play, matching the old, pre-shared Quick Connect
+	   toggle's direction-agnostic `left: 3px` positioning exactly. */
 	.aafm-switch--lg {
 		inline-size: 42px;
 		block-size: 24px;
@@ -811,6 +815,7 @@
 
 			&::before {
 				inset-block-start: 3px;
+				inset-inline-start: auto;
 				left: 3px;
 				transition: transform 0.22s var(--qc-ease);
 			}

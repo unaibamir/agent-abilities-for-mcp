@@ -48,7 +48,7 @@ WordPress 6.9 ships the Abilities API and the official MCP Adapter. Agent Abilit
 
 = 📦 153 governed abilities =
 
-The plugin ships **156 governed abilities: 84 across WordPress core and 72 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged. Beyond these, it can also bridge abilities declared by your other plugins (see below).
+The plugin ships **171 governed abilities: 85 across WordPress core and 86 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged. Beyond these, it can also bridge abilities declared by your other plugins (see below).
 
 **WordPress core (84 abilities).** Reads plus guarded writes across your whole site:
 

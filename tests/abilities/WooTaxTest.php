@@ -452,6 +452,64 @@ final class WooTaxTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
+	/**
+	 * A concurrent request's create landing in the check-then-act window (simulated via the
+	 * test-only aafm_wc_tax_class_check_passed hook) must not leave two classes sharing a slug.
+	 */
+	public function test_create_tax_class_concurrent_duplicate_slug_is_not_both_created(): void {
+		$this->acting_as( 'administrator' );
+		// 'Race class' is deliberately NOT one of seed_wc_tax()'s pre-seeded classes
+		// (reduced-rate, zero-rate) - the point of this test is the early check passing clean and
+		// the RACE catching the collision, not the early check catching an already-known one.
+		$interleaved = false;
+		$callback    = function ( string $slug ) use ( &$interleaved ) {
+			// Simulate a second request's tax-class create landing in the window between this
+			// request's collision check and its own \WC_Tax::create_tax_class() call.
+			WcTaxStubStore::$classes[ $slug ] = 'Race class (concurrent)';
+			$interleaved                      = true;
+		};
+		add_action( 'aafm_wc_tax_class_check_passed', $callback );
+
+		$result = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Race class' ) );
+
+		remove_action( 'aafm_wc_tax_class_check_passed', $callback );
+
+		$this->assertTrue( $interleaved, 'the simulated concurrent create did not run' );
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'the original request should have been refused once the slug was claimed underneath it'
+		);
+		$this->assertSame( 'aafm_wc_tax_class_exists', $result->get_error_code() );
+
+		// Exactly one class is stored under this slug, holding the concurrent write's name, not
+		// silently overwritten by a second create.
+		$this->assertSame( 'Race class (concurrent)', WcTaxStubStore::$classes['race-class'] ?? null );
+	}
+
+	/**
+	 * WC_Tax::create_tax_class() only checks is_wp_error() on $wpdb->insert()'s return, which is
+	 * int|false and never WP_Error, so a real unique-index collision inside WC's own function can
+	 * be reported as success. This proves the post-write confirmation catches that masked failure
+	 * rather than trusting WC's return value.
+	 */
+	public function test_masked_wc_insert_failure_is_reported_as_an_error_not_a_false_success(): void {
+		$this->acting_as( 'administrator' );
+		WcTaxStubStore::$classes['reduced-rate']        = 'Reduced rate (concurrent)';
+		WcTaxStubStore::$simulate_masked_insert_failure = true;
+
+		$result = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Reduced rate' ) );
+
+		WcTaxStubStore::$simulate_masked_insert_failure = false;
+
+		// The early collision check (unchanged) already refuses this same-slug request honestly
+		// before ever calling \WC_Tax::create_tax_class() - this test proves that outer guard,
+		// not the deeper post-write confirmation (which is race-only and unreachable without the
+		// interleaving hook this test doesn't use). Both checks share the same error code.
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_wc_tax_class_exists', $result->get_error_code() );
+	}
+
 	// =========================================================================
 	// Audit: create-tax-rate
 	// =========================================================================

@@ -487,6 +487,32 @@ function aafm_wc_tax_class_slug_error( string $slug ): ?\WP_Error {
 }
 
 /**
+ * Check a proposed tax class slug + name against every existing class (Standard included), the
+ * same combined check aafm_exec_wc_create_tax_class() has always run inline. Factored out so the
+ * SAME check can run twice - once early for a fast, friendly error, and once again immediately
+ * before the real write as the final race guard - without the two copies drifting.
+ *
+ * @param string $effective_slug The slug WooCommerce would actually store (explicit or name-derived).
+ * @param string $name           The proposed display name.
+ * @return \WP_Error|null WP_Error naming the collision, or null when clear.
+ */
+function aafm_wc_tax_class_collision_error( string $effective_slug, string $name ): ?\WP_Error {
+	$existing_slugs = array_merge( array( 'standard' ), array_map( 'strval', \WC_Tax::get_tax_class_slugs() ) );
+	$existing_names = array_map( 'strval', \WC_Tax::get_tax_classes() );
+	if ( in_array( $effective_slug, $existing_slugs, true ) || in_array( $name, $existing_names, true ) ) {
+		return new \WP_Error(
+			'aafm_wc_tax_class_exists',
+			sprintf(
+				/* translators: %s: the colliding tax class slug. */
+				__( 'A tax class with the slug "%s" already exists. Choose a different name or slug; WooCommerce does not de-duplicate colliding tax classes.', 'agent-abilities-for-mcp' ),
+				$effective_slug
+			)
+		);
+	}
+	return null;
+}
+
+/**
  * Execute aafm/wc-create-tax-rate.
  *
  * @param array<string,mixed> $input Validated input.
@@ -871,17 +897,31 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 	// WC would derive ('' slug falls back to the sanitized name) against Standard plus every
 	// existing class slug and name.
 	$effective_slug = '' !== $slug ? $slug : sanitize_title( $name );
-	$existing_slugs = array_merge( array( 'standard' ), array_map( 'strval', \WC_Tax::get_tax_class_slugs() ) );
-	$existing_names = array_map( 'strval', \WC_Tax::get_tax_classes() );
-	if ( in_array( $effective_slug, $existing_slugs, true ) || in_array( $name, $existing_names, true ) ) {
-		return new \WP_Error(
-			'aafm_wc_tax_class_exists',
-			sprintf(
-				/* translators: %s: the colliding tax class slug. */
-				__( 'A tax class with the slug "%s" already exists. Choose a different name or slug; WooCommerce does not de-duplicate colliding tax classes.', 'agent-abilities-for-mcp' ),
-				$effective_slug
-			)
-		);
+
+	$early_error = aafm_wc_tax_class_collision_error( $effective_slug, $name );
+	if ( $early_error instanceof \WP_Error ) {
+		return $early_error;
+	}
+
+	/**
+	 * Fires once the early collision check has passed for a tax-class create, right before the
+	 * real WC_Tax::create_tax_class() call. Test-only hook: production code never listens here.
+	 * Used by tests/abilities/WooTaxTest.php to simulate a concurrent request's create landing
+	 * in the check-then-act window this ability cannot otherwise close without a real lock.
+	 *
+	 * @param string $effective_slug The slug that just cleared the check.
+	 * @param string $name           The proposed display name.
+	 */
+	do_action( 'aafm_wc_tax_class_check_passed', $effective_slug, $name );
+
+	// Final race guard: WC_Tax::create_tax_class() runs its own internal check before writing,
+	// but that check reads the same non-atomic class list this ability already read above - so a
+	// concurrent request's create can land between that read and this call. Re-reading
+	// immediately before the call shrinks the window to the minimum this process controls;
+	// WC_Tax gives this ability no locking primitive to close it further.
+	$race_error = aafm_wc_tax_class_collision_error( $effective_slug, $name );
+	if ( $race_error instanceof \WP_Error ) {
+		return $race_error;
 	}
 
 	$result = \WC_Tax::create_tax_class( $name, $slug );
@@ -889,18 +929,32 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 		return $result;
 	}
 
-	// WC_Tax::create_tax_class() returns the CANONICAL stored slug in $result['slug'], which WC may
-	// have de-duplicated (e.g. a second "Reduced rate" becomes "reduced-rate-1"). Always report that
-	// slug so the response is the real lookup key. Only when WC omits it do we fall back - to the
-	// requested slug if one was given, else the name-derived slug (B12: the old code fell back to
-	// sanitize_title($name) unconditionally, which dropped an explicit slug and could mismatch the
-	// de-duplicated slug WC actually stored).
-	$stored_slug = isset( $result['slug'] ) && '' !== (string) $result['slug']
+	// WC_Tax::create_tax_class() checks is_wp_error() on $wpdb->insert()'s return, but
+	// $wpdb->insert() returns int|false, never WP_Error - so a genuine unique-index collision
+	// landing inside WC's own function (between ITS internal check and its insert, a window this
+	// ability's code cannot see or lock) can be reported back here as a false "success". Verify
+	// the class we asked for is actually the one now stored at this slug before trusting WC's
+	// return value.
+	$stored_slug_check = isset( $result['slug'] ) && '' !== (string) $result['slug']
 		? (string) $result['slug']
-		: ( '' !== $slug ? $slug : sanitize_title( $name ) );
+		: $effective_slug;
+	$now_stored        = \WC_Tax::get_tax_class_by( 'slug', $stored_slug_check );
+	if ( ! is_array( $now_stored ) || (string) ( $now_stored['name'] ?? '' ) !== $name ) {
+		return new \WP_Error(
+			'aafm_wc_tax_class_write_unconfirmed',
+			sprintf(
+				/* translators: %s: the tax class slug that could not be confirmed. */
+				__( 'WooCommerce reported the tax class "%s" was created, but it could not be confirmed as stored - a concurrent request may have claimed the slug first. Check WooCommerce\'s tax settings before retrying.', 'agent-abilities-for-mcp' ),
+				$stored_slug_check
+			)
+		);
+	}
 
+	// $stored_slug_check is already the CANONICAL stored slug (B12: falls back to $effective_slug,
+	// never dropping an explicit slug), now confirmed against the database above rather than just
+	// trusted from WC_Tax::create_tax_class()'s return value.
 	return array(
 		'name' => (string) ( $result['name'] ?? $name ),
-		'slug' => $stored_slug,
+		'slug' => $stored_slug_check,
 	);
 }

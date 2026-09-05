@@ -1088,6 +1088,15 @@ if ( ! class_exists( 'WC_Tax' ) ) {
 		public static function create_tax_class( string $name, string $slug = '' ) { return array(); }
 
 		/**
+		 * Get an existing tax class by field.
+		 *
+		 * @param string $field Field name (id, name, or slug).
+		 * @param string $item  Field value.
+		 * @return array<string,string>|bool
+		 */
+		public static function get_tax_class_by( string $field, string $item ) { return false; }
+
+		/**
 		 * Delete a tax class by field/value.
 		 *
 		 * @param string $field Field name.

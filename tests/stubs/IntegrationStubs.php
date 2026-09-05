@@ -1790,11 +1790,37 @@ class WC_Tax {
 			return new \WP_Error( 'wc_tax', 'Tax class save failed.' );
 		}
 		$slug = $slug ? $slug : sanitize_title( $name );
+		if ( \AAFM\Tests\WcTaxStubStore::$simulate_masked_insert_failure ) {
+			// Mirrors WC's real bug: a unique-index collision inside this function's own insert
+			// is swallowed because is_wp_error() never matches $wpdb->insert()'s false return, so
+			// WC reports success without actually storing $name.
+			return array( 'name' => $name, 'slug' => $slug );
+		}
 		if ( isset( \AAFM\Tests\WcTaxStubStore::$classes[ $slug ] ) ) {
 			return new \WP_Error( 'wc_tax', 'Tax class already exists.' );
 		}
 		\AAFM\Tests\WcTaxStubStore::$classes[ $slug ] = $name;
 		return array( 'name' => $name, 'slug' => $slug );
+	}
+
+	/**
+	 * Get an existing tax class by field (mirrors real WC_Tax::get_tax_class_by()).
+	 *
+	 * @param string $field Field name (only 'slug' is supported by this stub).
+	 * @param string $item  Field value to look up.
+	 * @return array<string,string>|bool The class as [name, slug], or false when not found.
+	 */
+	public static function get_tax_class_by( string $field, string $item ) {
+		if ( 'slug' !== $field ) {
+			return false;
+		}
+		if ( ! isset( \AAFM\Tests\WcTaxStubStore::$classes[ $item ] ) ) {
+			return false;
+		}
+		return array(
+			'name' => \AAFM\Tests\WcTaxStubStore::$classes[ $item ],
+			'slug' => $item,
+		);
 	}
 
 	/**

@@ -367,8 +367,9 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 
 		// Each card carries a per-card filter: a search input plus the All / Read Only / Write group.
-		// There are five integration cards, so each control appears at least five times.
-		$this->assertSame( 5, substr_count( $html, 'aafm-integration-filter' ) );
+		// There are six integration cards (1.7.4 adds Slim SEO), so each control appears at least
+		// six times.
+		$this->assertSame( 6, substr_count( $html, 'aafm-integration-filter' ) );
 		$this->assertStringContainsString( 'type="search"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="all"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="read"', $html );

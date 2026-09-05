@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
@@ -42,6 +42,9 @@ function aafm_integration_active( string $slug ): bool {
 			break;
 		case 'woocommerce':
 			$active = aafm_woocommerce_active();
+			break;
+		case 'slim_seo':
+			$active = aafm_slim_seo_active();
 			break;
 		default:
 			return false;
@@ -165,6 +168,28 @@ function aafm_aioseo_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_aioseo_active', $active );
+}
+
+/**
+ * Whether Slim SEO is active, behind a filterable seam (see aafm_yoast_active() for the
+ * rationale). No version floor: Slim SEO's single-serialized-meta-key shape
+ * (`slim_seo`, six fields) has shown no breaking-change history worth gating on, unlike AIOSEO's
+ * partial-save fix - a deliberate choice, not an oversight.
+ *
+ * SLIM_SEO_VER (not SLIM_SEO_VERSION) is the constant Slim SEO actually defines, confirmed
+ * 2026-09-03 against plugins.svn.wordpress.org/slim-seo/trunk/slim-seo.php.
+ *
+ * @return bool
+ */
+function aafm_slim_seo_active(): bool {
+	$active = defined( 'SLIM_SEO_VER' );
+
+	/**
+	 * Filters whether Slim SEO is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_slim_seo_active', $active );
 }
 
 /**

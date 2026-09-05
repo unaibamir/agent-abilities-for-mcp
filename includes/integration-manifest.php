@@ -328,6 +328,16 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
+		'slim_seo'    => array(
+			array(
+				'name' => 'aafm/slim-seo-get-post',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/slim-seo-update-post',
+				'risk' => 'write',
+			),
+		),
 	);
 }
 

@@ -174,7 +174,7 @@ class SchemaTest extends TestCase {
 		aafm_install_oauth_tables();
 
 		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
-		$this->assertSame( '7', AAFM_OAUTH_SCHEMA_VERSION );
+		$this->assertSame( '8', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 
 	/**

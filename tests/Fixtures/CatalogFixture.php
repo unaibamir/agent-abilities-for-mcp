@@ -101,6 +101,7 @@ final class CatalogFixture {
 		'aafm/wc-count-products',
 		'aafm/wc-list-payment-gateways',
 		'aafm/wc-get-payment-gateway',
+		'aafm/slim-seo-get-post',
 	);
 
 	/**
@@ -186,6 +187,7 @@ final class CatalogFixture {
 		'aafm/wc-update-tax-rate',
 		'aafm/wc-create-tax-class',
 		'aafm/wc-update-payment-gateway',
+		'aafm/slim-seo-update-post',
 	);
 
 	/**

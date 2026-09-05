@@ -55,6 +55,11 @@ function aafm_integration_cards(): array {
 			'icon'    => 'integrations',
 			'plugins' => array( 'woocommerce/woocommerce.php' ),
 		),
+		'slim_seo'    => array(
+			'label'   => __( 'Slim SEO', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'slim-seo/slim-seo.php' ),
+		),
 	);
 }
 

@@ -190,6 +190,13 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The same client_id lookup on the grant-revocation path.',
 		),
+		'includes/admin/connection.php::aafm_ajax_set_client_agent_identity::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( (string) $_POST[\'client_id\'] ) )',
+				'sanitize_text_field( wp_unslash( (string) $_POST[\'is_agent_identity\'] ) )',
+			),
+			'reason' => 'The same client_id lookup pattern, plus a \'1\'/\'0\' truthy flag read as plain text and never written back as text (it is cast to a bool, then to an int, before the DB write).',
+		),
 		'includes/admin/page.php::aafm_sanitize_enabled_input::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $name )',

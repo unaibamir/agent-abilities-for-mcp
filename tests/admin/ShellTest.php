@@ -36,10 +36,11 @@ final class ShellTest extends TestCase {
 	}
 
 	/**
-	 * The right-aligned group carries three destinations: the plugin's own site, the review form,
-	 * and the support forum. Website leads so the two wordpress.org links stay adjacent. All three
-	 * open in a new tab and say so for a screen reader, which is the whole reason they share one
-	 * loop rather than being hand-rolled per link.
+	 * The right-aligned group carries four destinations: the plugin's own site, the review form,
+	 * the support forum, and (since 1.7.4) the demo video. Website leads so the two
+	 * wordpress.org links stay adjacent. All four open in a new tab and say so for a screen
+	 * reader, which is the whole reason they share one loop rather than being hand-rolled per
+	 * link.
 	 */
 	public function test_the_header_carries_the_website_link_beside_review_and_get_help(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -48,7 +49,7 @@ final class ShellTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		$this->assertStringContainsString( 'https://agentabilitieswp.com', $html, 'The website link is missing from the page header.' );
-		$this->assertSame( 3, substr_count( $html, 'class="aafm-nav-ext"' ), 'The external-link group holds exactly Website, Review and Get Help.' );
+		$this->assertSame( 4, substr_count( $html, 'class="aafm-nav-ext"' ), 'The external-link group holds exactly Website, Review, Get Help, and Watch the demo.' );
 
 		$website_at = strpos( $html, 'https://agentabilitieswp.com' );
 		$review_at  = strpos( $html, '/reviews/#new-post' );

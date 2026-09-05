@@ -48,6 +48,24 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 		parent::tear_down();
 	}
 
+	/**
+	 * Codex round C finding 1: without cURL, WordPress's HTTP API falls back to the Fsockopen
+	 * transport, which performs its OWN unpinned DNS resolution - CURLOPT_RESOLVE pinning inside
+	 * http_api_curl never fires for that path at all, silently reopening the TOCTOU gap this
+	 * whole design exists to close. Refusing outright when cURL is unavailable removes the
+	 * fallback path rather than trying to detect after the fact whether the pin actually applied.
+	 */
+	public function test_refuses_outright_when_curl_is_unavailable(): void {
+		add_filter( 'aafm_curl_available', '__return_false' );
+
+		$out = aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
+
+		remove_all_filters( 'aafm_curl_available' );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_curl_unavailable', $out->get_error_code() );
+	}
+
 	public function test_refuses_a_non_https_scheme(): void {
 		$out = aafm_ssrf_safe_fetch_url( 'http://example.com/x.jpg' );
 		$this->assertInstanceOf( WP_Error::class, $out );

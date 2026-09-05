@@ -92,13 +92,19 @@ function aafm_ajax_save_allowlist(): void {
 		);
 	}
 
+	// Keyed by "scope_type:scope_id" so two rows for the same scope can never both reach
+	// storage: aafm_ability_allowed_for_principal() (includes/allowlist.php) evaluates only the
+	// FIRST matching oauth_client row it finds, which would make one scope's effective allowlist
+	// depend on row order rather than its own content. A later duplicate in the submitted set
+	// wins, matching what the admin UI shows the operator as the current value for that scope.
 	$rows = array();
 	foreach ( $decoded as $row ) {
 		$clean = aafm_allowlist_sanitize_row( $row );
 		if ( null !== $clean ) {
-			$rows[] = $clean;
+			$rows[ $clean['scope_type'] . ':' . $clean['scope_id'] ] = $clean;
 		}
 	}
+	$rows = array_values( $rows );
 
 	if ( ! aafm_update_option_verified( 'aafm_ability_allowlist_overrides', $rows ) ) {
 		wp_send_json_error( array( 'message' => __( 'The allowlist could not be saved. Please try again.', 'agent-abilities-for-mcp' ) ), 500 );

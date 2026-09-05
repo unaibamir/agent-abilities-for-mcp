@@ -41,12 +41,24 @@ defined( 'ABSPATH' ) || exit;
 const AAFM_ALLOWLIST_MAX_ROWS = 200;
 
 /**
- * Read the raw override rows, tolerating a missing/malformed option.
+ * Read the raw override rows straight from the database, tolerating a missing/malformed option.
+ *
+ * This is a permission GATING decision, evaluated on every ability check - per this plan's own
+ * Global Constraints ("any destructive/gating decision that reads the option must read the
+ * database row directly rather than trust a stale cache, per the [1.7.3 hotfix's] own fix
+ * pattern"), it uses aafm_read_option_views() (includes/option-cache.php) rather than
+ * get_option(). A stale-present persistent-object-cache entry could otherwise keep an already-
+ * cleared or already-loosened restriction in effect indefinitely, the same failure class the
+ * 1.7.3 hotfix fixed for the read-only-mode and high-risk switches.
  *
  * @return array<int,array<string,mixed>>
  */
 function aafm_allowlist_overrides(): array {
-	$rows = get_option( 'aafm_ability_allowlist_overrides', array() );
+	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
+	if ( ! $views['db_found'] ) {
+		return array();
+	}
+	$rows = $views['db_value'];
 	return is_array( $rows ) ? $rows : array();
 }
 

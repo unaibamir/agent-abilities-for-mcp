@@ -530,4 +530,91 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $out );
 		$this->assertSame( 'aafm_geodirectory_write_unconfirmed', $out->get_error_code() );
 	}
+
+	/**
+	 * Codex final round 9 MEDIUM: aafm_exec_geodirectory_create_listing() built its own
+	 * wp_insert_post() call instead of routing through aafm_insert_post(), so none of the
+	 * operator's three global content-safety settings ever applied to it.
+	 */
+	public function test_create_listing_honours_force_draft_even_for_an_authorized_publish_request(): void {
+		update_option( 'aafm_force_draft', true );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		$out = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'  => 'Force-drafted listing',
+				'status' => 'publish',
+			)
+		);
+
+		delete_option( 'aafm_force_draft' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'draft', $out['status'] );
+	}
+
+	public function test_create_listing_enforces_the_max_title_length(): void {
+		update_option( 'aafm_max_title_len', 5 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		$out = aafm_exec_geodirectory_create_listing( array( 'title' => 'This title is far too long' ) );
+
+		delete_option( 'aafm_max_title_len' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_title_too_long', $out->get_error_code() );
+	}
+
+	public function test_create_listing_enforces_strict_block_validation(): void {
+		update_option( 'aafm_block_guard_strict', true );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		$out = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'   => 'Bad markup listing',
+				'content' => '<!-- wp:heading --><h2 class="has-text-color">Hi</h2><!-- /wp:heading -->',
+			)
+		);
+
+		delete_option( 'aafm_block_guard_strict' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
+	}
+
+	public function test_update_listing_enforces_the_max_title_length(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$created = aafm_exec_geodirectory_create_listing( array( 'title' => 'Existing listing' ) );
+		$this->assertIsArray( $created );
+
+		update_option( 'aafm_max_title_len', 5 );
+		$out = aafm_exec_geodirectory_update_listing(
+			array(
+				'listing_id' => $created['listing_id'],
+				'title'      => 'This title is far too long',
+			)
+		);
+		delete_option( 'aafm_max_title_len' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_title_too_long', $out->get_error_code() );
+	}
+
+	public function test_update_listing_enforces_strict_block_validation(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$created = aafm_exec_geodirectory_create_listing( array( 'title' => 'Existing listing' ) );
+		$this->assertIsArray( $created );
+
+		update_option( 'aafm_block_guard_strict', true );
+		$out = aafm_exec_geodirectory_update_listing(
+			array(
+				'listing_id' => $created['listing_id'],
+				'content'    => '<!-- wp:heading --><h2 class="has-text-color">Hi</h2><!-- /wp:heading -->',
+			)
+		);
+		delete_option( 'aafm_block_guard_strict' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
+	}
 }

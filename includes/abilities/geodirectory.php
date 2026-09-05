@@ -588,14 +588,35 @@ function aafm_args_geodirectory_create_listing(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_geodirectory_create_listing( array $input ) {
+	// Codex final round 9 MEDIUM: this ability builds its own post array instead of routing
+	// through aafm_insert_post(), so the operator's force-draft, max-title-length, and
+	// strict-block-validation settings never applied to it. aafm_perm_geodirectory_create()
+	// already gates a requested public status on the publish cap; force-draft is a separate,
+	// stronger override on top of that authorization, matching aafm_insert_post()'s own
+	// unconditional create-time rule (it wins even over an authorized 'pending' request).
 	$status = isset( $input['status'] ) ? (string) $input['status'] : 'draft';
+	if ( aafm_force_draft() ) {
+		$status = 'draft';
+	}
+
+	$title    = aafm_sanitize_plain_text( (string) $input['title'] );
+	$title_ok = aafm_enforce_title_limit( $title );
+	if ( is_wp_error( $title_ok ) ) {
+		return $title_ok;
+	}
+
+	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
+	$guard   = aafm_block_guard_evaluate( $content );
+	if ( $guard['error'] instanceof WP_Error ) {
+		return $guard['error'];
+	}
 
 	$post_id = wp_insert_post(
 		wp_slash(
 			array(
 				'post_type'    => 'gd_place',
-				'post_title'   => aafm_sanitize_plain_text( (string) $input['title'] ),
-				'post_content' => isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '',
+				'post_title'   => $title,
+				'post_content' => $content,
 				'post_status'  => $status,
 			)
 		),
@@ -622,7 +643,14 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 	}
 
 	$post = get_post( $post_id );
-	return $post instanceof WP_Post ? aafm_geodirectory_shape_listing( $post ) : aafm_generic_error();
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_geodirectory_shape_listing( $post );
+	if ( ! empty( $guard['warnings'] ) ) {
+		$response['content_warnings'] = $guard['warnings'];
+	}
+	return $response;
 }
 
 /**
@@ -693,12 +721,28 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		return aafm_page_builder_owned_error( $owning_builder );
 	}
 
-	$update = array( 'ID' => $id );
+	// Codex final round 9 MEDIUM: this ability builds its own update array instead of routing
+	// through aafm_exec_update_post(), so the operator's max-title-length and
+	// strict-block-validation settings never applied to it (there is no status field on this
+	// ability, so force-draft has nothing to override here).
+	$warnings = array();
+	$update   = array( 'ID' => $id );
 	if ( array_key_exists( 'title', $input ) ) {
-		$update['post_title'] = aafm_sanitize_plain_text( (string) $input['title'] );
+		$title    = aafm_sanitize_plain_text( (string) $input['title'] );
+		$title_ok = aafm_enforce_title_limit( $title );
+		if ( is_wp_error( $title_ok ) ) {
+			return $title_ok;
+		}
+		$update['post_title'] = $title;
 	}
 	if ( array_key_exists( 'content', $input ) ) {
-		$update['post_content'] = wp_kses_post( (string) $input['content'] );
+		$content = wp_kses_post( (string) $input['content'] );
+		$guard   = aafm_block_guard_evaluate( $content );
+		if ( $guard['error'] instanceof WP_Error ) {
+			return $guard['error'];
+		}
+		$warnings               = $guard['warnings'];
+		$update['post_content'] = $content;
 	}
 	if ( count( $update ) > 1 ) {
 		$updated = wp_update_post( wp_slash( $update ), true );
@@ -715,5 +759,12 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 	}
 
 	$fresh = get_post( $id );
-	return $fresh instanceof WP_Post ? aafm_geodirectory_shape_listing( $fresh ) : aafm_generic_error();
+	if ( ! $fresh instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_geodirectory_shape_listing( $fresh );
+	if ( ! empty( $warnings ) ) {
+		$response['content_warnings'] = $warnings;
+	}
+	return $response;
 }

@@ -311,6 +311,40 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex final round 2 MEDIUM: a legitimate third-party filter on 'geodir_get_post_info' that
+	 * merely reformats the returned value (not GeoDirectory's own default behavior - something
+	 * another active plugin or theme could add) must not make the write-confirmation check see a
+	 * mismatch and wrongly roll back a listing that was actually written correctly.
+	 */
+	public function test_create_survives_a_decorating_geodir_get_post_info_filter(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		add_filter(
+			'geodir_get_post_info',
+			static function ( $row ) {
+				if ( is_object( $row ) && isset( $row->street ) ) {
+					$row->street = strtoupper( (string) $row->street );
+				}
+				return $row;
+			}
+		);
+		$out = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'  => 'Decorated read survives',
+				'street' => '1 main st',
+			)
+		);
+		remove_all_filters( 'geodir_get_post_info' );
+
+		// The create must NOT be rolled back: the confirmation check bypasses the decorating
+		// filter and sees the real stored value matches what was written. The RETURNED shape,
+		// by contrast, still goes through the normal (filtered) read - so it correctly shows the
+		// decorated value, proving the filter genuinely ran and only the confirmation ignored it.
+		$this->assertIsArray( $out );
+		$this->assertSame( '1 MAIN ST', $out['street'] );
+	}
+
+	/**
 	 * Same failure class as the create-path test above, on update: a title change alone must not
 	 * mask a field that failed to save.
 	 */

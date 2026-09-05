@@ -53,7 +53,11 @@ namespace {
 				foreach ( array( 'street', 'street2', 'city', 'region', 'country', 'zip', 'latitude', 'longitude' ) as $field ) {
 					$row[ $field ] = get_post_meta( $post_id, '_aafm_test_gd_' . $field, true );
 				}
-				return (object) $row;
+				// The real function applies this exact filter on its return value
+				// (includes/post-functions.php) - reproduced here so a test can register a
+				// decorating filter and prove aafm_geodirectory_read_fields_unfiltered() genuinely
+				// bypasses it, not merely that no test ever attached one.
+				return apply_filters( 'geodir_get_post_info', (object) $row, $post_id );
 			}
 		}
 

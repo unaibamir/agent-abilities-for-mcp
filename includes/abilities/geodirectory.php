@@ -122,8 +122,35 @@ function aafm_geodirectory_address_fields(): array {
  * @return array<string,mixed>
  */
 function aafm_geodirectory_read_fields( int $post_id ): array {
-	$info = geodir_get_post_info( $post_id, false );
-	$row  = is_object( $info ) ? (array) $info : array();
+	return aafm_geodirectory_shape_row( geodir_get_post_info( $post_id, false ) );
+}
+
+/**
+ * Read a listing's documented custom-table fields WITHOUT any 'geodir_get_post_info' filter a
+ * theme or another plugin might have attached.
+ *
+ * Codex final round 2 MEDIUM: aafm_geodirectory_write_fields()'s own write-confirmation check
+ * (below) used the filtered read, so a legitimate third-party filter that merely reformats the
+ * returned object (e.g. title-cases an address) would make the strict comparison fail even
+ * though the underlying field persisted exactly as written - wrongly rolling back a real,
+ * successful create. The confirmation must compare against the raw stored representation, not
+ * whatever a filter chooses to hand back to a normal read.
+ *
+ * @param int $post_id Listing (gd_place) post id.
+ * @return array<string,mixed>
+ */
+function aafm_geodirectory_read_fields_unfiltered( int $post_id ): array {
+	return aafm_geodirectory_shape_row( aafm_call_without_filter( 'geodir_get_post_info', static fn() => geodir_get_post_info( $post_id, false ) ) );
+}
+
+/**
+ * Shape a raw GeoDirectory post-info row (or non-object) into the documented field map.
+ *
+ * @param mixed $info Whatever geodir_get_post_info() returned.
+ * @return array<string,mixed>
+ */
+function aafm_geodirectory_shape_row( $info ): array {
+	$row = is_object( $info ) ? (array) $info : array();
 
 	$out = array();
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
@@ -133,6 +160,36 @@ function aafm_geodirectory_read_fields( int $post_id ): array {
 	$out['longitude'] = isset( $row['longitude'] ) && is_scalar( $row['longitude'] ) ? (float) $row['longitude'] : 0.0;
 
 	return $out;
+}
+
+/**
+ * Run a callback with every callback on one filter hook temporarily removed, restored
+ * afterward regardless of how the callback returns (including via exception).
+ *
+ * WordPress has no built-in "suppress this one filter for one call" primitive; this is the
+ * standard technique (snapshot the hook's WP_Hook object, unset it, restore it in a finally).
+ * Scoped to exactly the named hook - every other filter on any other hook is untouched.
+ *
+ * @param string   $hook     Filter/action hook name.
+ * @param callable $callback Zero-argument callback to run with that hook suppressed.
+ * @return mixed Whatever $callback returns.
+ */
+function aafm_call_without_filter( string $hook, callable $callback ) {
+	global $wp_filter;
+	$saved = $wp_filter[ $hook ] ?? null;
+	unset( $wp_filter[ $hook ] );
+	try {
+		return $callback();
+	} finally {
+		if ( null !== $saved ) {
+			// Restoring the exact WP_Hook object this same function unset a moment ago, inside a
+			// try/finally that runs on every exit path (including an exception) - a scoped,
+			// guaranteed-restored suppression of ONE named hook, not a persistent override of
+			// WordPress's filter state. See this function's own docblock: WP has no built-in
+			// "suppress one filter for one call" primitive, and this is the standard technique.
+			$wp_filter[ $hook ] = $saved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		}
+	}
 }
 
 /**
@@ -165,7 +222,7 @@ function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
 		geodir_save_post_meta( $post_id, 'longitude', (float) $input['longitude'] );
 	}
 
-	$stored = aafm_geodirectory_read_fields( $post_id );
+	$stored = aafm_geodirectory_read_fields_unfiltered( $post_id );
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
 		if ( array_key_exists( $field, $input )
 			&& aafm_sanitize_plain_text( (string) $input[ $field ] ) !== $stored[ $field ] ) {
@@ -515,10 +572,15 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 		// The core post exists, but the caller's address/location fields could not be confirmed
 		// as saved - a partially-created listing under a "success" report would be exactly the
 		// silent-wrong-answer shape this release exists to stop, so remove it and say so instead.
-		wp_delete_post( (int) $post_id, true );
+		// Codex final round 2 MEDIUM: wp_delete_post()'s own return was never checked, so a
+		// pre_delete_post filter refusing the deletion (any plugin can register one) would leave
+		// the half-written post behind while this message claimed nothing remained.
+		$removed = wp_delete_post( (int) $post_id, true );
 		return new WP_Error(
 			'aafm_geodirectory_write_unconfirmed',
-			__( 'The listing could not be created: its address or location fields did not save. Nothing was created.', 'agent-abilities-for-mcp' )
+			$removed instanceof WP_Post
+				? __( 'The listing could not be created: its address or location fields did not save. Nothing was created.', 'agent-abilities-for-mcp' )
+				: __( 'The listing could not be created: its address or location fields did not save, and the incomplete listing could not be removed automatically. Delete it manually.', 'agent-abilities-for-mcp' )
 		);
 	}
 

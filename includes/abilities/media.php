@@ -1161,6 +1161,19 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 		curl_setopt( $handle, CURLOPT_RESOLVE, array( "{$host}:{$port}:{$ip}" ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- pinning a WP_Http_Curl handle to the pre-validated IP; this is the transport hook the SSRF design names, not a bypass of it.
 	};
 
+	// ponytail: the 10-second timeout below is the bound on this known, accepted residual risk,
+	// not a full fix. Codex final round 2 MEDIUM: Requests' byte-limit callback (Curl::
+	// stream_body()) truncates what it BUFFERS at $max_bytes+1 but keeps telling cURL every
+	// chunk was fully consumed, so the real network transfer runs to completion (or this timeout)
+	// rather than aborting the moment the limit is hit - a hostile server can occupy this PHP
+	// worker and this site's bandwidth for up to 10 seconds even though the oversized result is
+	// still correctly rejected once the transfer ends. Aborting mid-transfer needs cURL's own
+	// header/write callbacks, and this function already found once (live-network gate finding,
+	// see this function's own docblock above) that installing callbacks on this handle silently
+	// starves WP_Http_Curl's OWN callbacks, breaking every real fetch - not a mistake worth
+	// risking twice for a bounded-duration DoS this timeout already caps. Upgrade path if the
+	// bound is ever too generous: lower 'timeout', or move to a transport this plugin owns
+	// outright instead of sharing WP_Http_Curl's handle.
 	add_action( 'http_api_curl', $pin );
 	$response = wp_safe_remote_get(
 		$url,

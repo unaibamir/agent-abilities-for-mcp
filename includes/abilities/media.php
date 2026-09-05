@@ -1066,6 +1066,30 @@ function aafm_curl_available(): bool {
 }
 
 /**
+ * Whether WordPress would send a request to this URL through an outbound HTTP proxy.
+ *
+ * Codex final round 2 HIGH: CURLOPT_RESOLVE only pins a DIRECT connection. When an outbound proxy
+ * is configured (WP_PROXY_HOST/WP_PROXY_PORT), libcurl hands the hostname to the proxy and the
+ * proxy resolves it independently - the pin never applies, so a hostname that resolves publicly
+ * here and privately at the proxy would bypass every check in aafm_ssrf_safe_fetch_url(). Uses
+ * WP_HTTP_Proxy's own decision (it exempts localhost and the site's own host) rather than a
+ * blanket "a proxy is configured" refusal. Filterable, matching aafm_curl_available()'s own
+ * pattern, since the real decision depends on PHP constants a test cannot safely define without
+ * leaking into every other test in the process.
+ *
+ * @param string $url The URL that would be fetched.
+ * @return bool
+ */
+function aafm_url_would_use_proxy( string $url ): bool {
+	$proxy = new WP_HTTP_Proxy();
+	return (bool) apply_filters(
+		'aafm_url_would_use_proxy',
+		$proxy->is_enabled() && $proxy->send_through_proxy( $url ),
+		$url
+	);
+}
+
+/**
  * SSRF-hardened fetch for aafm/upload-media-from-url, implementing every control decided in
  * 228-url-upload-ssrf-design.md: https-only, no bare IP-literal host, resolve-once-then-pin via
  * CURLOPT_RESOLVE (so the connection cannot re-resolve to a different address than the one this
@@ -1098,6 +1122,10 @@ function aafm_curl_available(): bool {
 function aafm_ssrf_safe_fetch_url( string $url ) {
 	if ( ! aafm_curl_available() ) {
 		return new WP_Error( 'aafm_curl_unavailable', __( 'This server cannot safely fetch a remote URL for upload.', 'agent-abilities-for-mcp' ) );
+	}
+
+	if ( aafm_url_would_use_proxy( $url ) ) {
+		return new WP_Error( 'aafm_proxy_unsupported', __( 'This server routes outbound requests through a proxy, which this ability cannot safely pin to a validated address. Refusing.', 'agent-abilities-for-mcp' ) );
 	}
 
 	$parts = wp_parse_url( $url );
@@ -1140,6 +1168,12 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 			'timeout'             => 10,
 			'redirection'         => 0,
 			'reject_unsafe_urls'  => true,
+			// Codex final round 2 HIGH: WP core's default User-Agent ('WordPress/{version};
+			// {site url}', class-wp-http.php) discloses the site's own URL to whatever host the
+			// caller supplied - not a leak of post content, but not "sends nothing of yours"
+			// either. A neutral, non-identifying string removes the disclosure at its source
+			// rather than merely documenting it.
+			'user-agent'          => 'Agent Abilities for MCP (media fetch)',
 			// Codex final round HIGH: Requests' own byte-limit callback
 			// (Transport\Curl::stream_body()) truncates the buffered body at the limit but keeps
 			// reporting the ORIGINAL chunk length to cURL, so the transfer runs to completion

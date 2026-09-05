@@ -77,6 +77,29 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 		$this->assertTrue( aafm_curl_available() );
 	}
 
+	/**
+	 * Codex final round 2 HIGH: CURLOPT_RESOLVE pinning never applies once WordPress routes the
+	 * request through an outbound HTTP proxy - the proxy, not this server, resolves the hostname.
+	 * No real WP_PROXY_HOST/WP_PROXY_PORT constants are defined here (defining them would leak
+	 * into every later test in this process); the filter mirrors what WP_HTTP_Proxy would decide.
+	 */
+	public function test_refuses_a_url_that_would_go_through_an_outbound_proxy(): void {
+		add_filter( 'aafm_url_would_use_proxy', '__return_true' );
+
+		$out = aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
+
+		remove_all_filters( 'aafm_url_would_use_proxy' );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_proxy_unsupported', $out->get_error_code() );
+	}
+
+	public function test_aafm_url_would_use_proxy_is_false_with_no_proxy_configured(): void {
+		// No WP_PROXY_HOST/WP_PROXY_PORT defined in this environment - confirms the real
+		// WP_HTTP_Proxy integration does not block an ordinary fetch by default.
+		$this->assertFalse( aafm_url_would_use_proxy( 'https://example.test/pixel.png' ) );
+	}
+
 	public function test_refuses_a_non_https_scheme(): void {
 		$out = aafm_ssrf_safe_fetch_url( 'http://example.com/x.jpg' );
 		$this->assertInstanceOf( WP_Error::class, $out );
@@ -204,6 +227,11 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 
 		$this->assertIsArray( $captured_args );
 		$this->assertSame( (int) wp_max_upload_size() + 1, $captured_args['limit_response_size'] );
+
+		// Codex final round 2 HIGH: WP core's default User-Agent discloses the site's own URL to
+		// the caller-supplied host. The request must carry a neutral, non-identifying one instead.
+		$this->assertSame( 'Agent Abilities for MCP (media fetch)', $captured_args['user-agent'] );
+		$this->assertStringNotContainsString( home_url(), (string) $captured_args['user-agent'] );
 	}
 
 	public function test_a_non_image_response_is_refused_by_the_existing_byte_sniff(): void {

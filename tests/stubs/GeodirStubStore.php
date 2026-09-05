@@ -48,25 +48,33 @@ namespace {
 			);
 		}
 
-		if ( ! function_exists( 'geodir_get_post_info' ) ) {
-			global $wpdb;
-			$table = $wpdb->prefix . 'geodir_gd_place_detail';
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange -- test-only fixture table, mirrors the installed plugin's own real schema (class-geodir-admin-install.php).
-			$wpdb->query(
-				"CREATE TABLE IF NOT EXISTS {$table} (
-					post_id BIGINT(20) NOT NULL,
-					street VARCHAR(254) NULL,
-					street2 VARCHAR(254) NULL,
-					city VARCHAR(50) NULL,
-					region VARCHAR(50) NULL,
-					country VARCHAR(50) NULL,
-					zip VARCHAR(50) NULL,
-					latitude VARCHAR(22) NULL,
-					longitude VARCHAR(22) NULL,
-					PRIMARY KEY (post_id)
-				)"
-			);
+		// Re-created (idempotent, IF NOT EXISTS) on every call, unlike the function
+		// definitions below - WP's PHPUnit suite rewrites CREATE TABLE to CREATE TEMPORARY
+		// TABLE, and MySQL does not implicit-commit that statement, so the table lives
+		// inside the per-test transaction/savepoint and disappears again at that test's
+		// tear_down rollback. The PHP function definitions are process-level and never get
+		// rolled back, so gating the CREATE behind the same function_exists() guard meant
+		// only the FIRST test to call this ever got a real table; every later test hit a
+		// "table doesn't exist" error despite the guard reporting the stub as already active.
+		global $wpdb;
+		$table = $wpdb->prefix . 'geodir_gd_place_detail';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange -- test-only fixture table, mirrors the installed plugin's own real schema (class-geodir-admin-install.php).
+		$wpdb->query(
+			"CREATE TABLE IF NOT EXISTS {$table} (
+				post_id BIGINT(20) NOT NULL,
+				street VARCHAR(254) NULL,
+				street2 VARCHAR(254) NULL,
+				city VARCHAR(50) NULL,
+				region VARCHAR(50) NULL,
+				country VARCHAR(50) NULL,
+				zip VARCHAR(50) NULL,
+				latitude VARCHAR(22) NULL,
+				longitude VARCHAR(22) NULL,
+				PRIMARY KEY (post_id)
+			)"
+		);
 
+		if ( ! function_exists( 'geodir_get_post_info' ) ) {
 			// phpcs:ignore Squiz.Functions.MultiLineFunctionDeclaration.NewlineBeforeOpenBrace, WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid -- mirrors GeoDirectory's own real function name/signature so the plugin under test calls a real, matching stand-in.
 			function geodir_get_post_info( $post_id = '', $cached = true ) {
 				global $wpdb;

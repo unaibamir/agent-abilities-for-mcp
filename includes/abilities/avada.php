@@ -203,18 +203,26 @@ function aafm_args_avada_replace_text(): array {
 }
 
 /**
- * The Fusion shortcode tags this guard recognizes, confirmed against a real installed copy
- * (Fusion Builder 3.16.1) via its own add_shortcode() call sites (inc/class-fusion-row-element.php,
- * inc/class-fusion-column-element.php). Nested rows/columns use their own distinct "_inner" tag
- * names rather than nesting the SAME tag inside itself - this is deliberate on ThemeFusion's part,
- * since WordPress's shortcode regex cannot reliably resolve a shortcode nested inside another
- * instance of the identical tag (see aafm_fusion_shortcode_walk()'s docblock). Extend this list as
- * new fixture content is encountered, per 228-avada-guard-design.md's own "not a closed list" note.
+ * The Fusion shortcode tags this guard recognizes.
+ *
+ * Codex round C finding 2: a fixed 7-tag list misses every OTHER real Fusion Builder element
+ * (fusion_button, fusion_alert, fusion_imageframe, the awb_* family, and dozens more) - an edit
+ * inside an unrecognized shortcode is invisible to this guard entirely, since only recognized
+ * tags contribute a tuple to the signature at all. Fixed by reading the REAL, complete set of
+ * registered shortcodes off WordPress core's own global registry (populated by Fusion Builder's
+ * own add_shortcode() calls when the theme/plugin is active) and filtering to the fusion_ and
+ * awb_ prefixed families - self-updating against whatever this specific site's Fusion Builder version actually
+ * registered, rather than a hand-maintained snapshot. The small hardcoded baseline stays as a
+ * fallback merged in: PHPUnit never loads the real plugin, so $shortcode_tags carries none of
+ * these names in tests, and a genuinely blank registry (e.g. Fusion Builder not yet fully loaded)
+ * must not silently reduce this guard's own test coverage to zero.
  *
  * @return string[]
  */
 function aafm_fusion_shortcode_tags(): array {
-	return array(
+	global $shortcode_tags;
+
+	$baseline = array(
 		'fusion_builder_container',
 		'fusion_builder_row',
 		'fusion_builder_row_inner',
@@ -223,6 +231,15 @@ function aafm_fusion_shortcode_tags(): array {
 		'fusion_separator',
 		'fusion_text',
 	);
+
+	$discovered = array();
+	foreach ( array_keys( (array) $shortcode_tags ) as $tag ) {
+		if ( 0 === strpos( (string) $tag, 'fusion_' ) || 0 === strpos( (string) $tag, 'awb_' ) ) {
+			$discovered[] = (string) $tag;
+		}
+	}
+
+	return array_values( array_unique( array_merge( $baseline, $discovered ) ) );
 }
 
 /**
@@ -239,9 +256,24 @@ function aafm_fusion_shortcode_tags(): array {
  * aafm_fusion_shortcode_tags()); this walk inherits that same substrate limitation, the same
  * limitation do_shortcode() itself has, rather than introducing a new one.
  *
+ * Codex round C finding 2 (bullets 2 and 3), both closed here:
+ * - A tuple now records whether a real closing tag was actually matched (`has_closer`), not just
+ *   the tag/self_closing/atts/depth. Without it, `[fusion_text]Hello[/fusion_text]` and a version
+ *   with the closing tag stripped produce IDENTICAL tuples - the "content+closer" span in
+ *   get_shortcode_regex() is entirely OPTIONAL, so an absent closer still yields a match, just
+ *   with an empty (rather than genuinely absent) inner-content capture, and nothing before this
+ *   fix distinguished the two.
+ * - An attribute string whose quote count is unbalanced (an odd number of `"` or `'`) means
+ *   WordPress's own regex mis-parsed the match - the classic trap is a literal `]` inside a
+ *   quoted attribute value, which truncates the captured attribute span mid-quote (confirmed:
+ *   `content="a[1]"` captures only `content="a[1`, an unterminated quote). This function does not
+ *   attempt to recover the real boundary; it fails closed (null) instead, per the design's own
+ *   fail-closed rule, rather than silently exposing a "safe-looking" span that Codex proved is not
+ *   actually protecting the real boundary WordPress's own parser lost track of.
+ *
  * @param string $content Content to scan at this nesting level.
  * @param int    $depth   Current nesting depth (0 = top level).
- * @return array<int,array{tag:string,self_closing:bool,atts:array<string,mixed>,depth:int}>|null Null means "could not be parsed" - the caller must refuse rather than assume safety.
+ * @return array<int,array{tag:string,self_closing:bool,has_closer:bool,atts:array<string,mixed>,depth:int}>|null Null means "could not be parsed" - the caller must refuse rather than assume safety.
  */
 function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
 	$pattern = '/' . get_shortcode_regex( aafm_fusion_shortcode_tags() ) . '/';
@@ -257,12 +289,22 @@ function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
 		$self_closing  = '/' === ( $match[4] ?? '' );
 		$inner         = (string) ( $match[5] ?? '' );
 
+		// An unbalanced quote count means get_shortcode_regex()'s attribute-span capture ran off
+		// the rails (the literal-']'-in-a-quoted-value trap) - refuse rather than trust a span
+		// that does not cover what it looks like it covers.
+		if ( 1 === ( substr_count( $attribute_str, '"' ) % 2 ) || 1 === ( substr_count( $attribute_str, "'" ) % 2 ) ) {
+			return null;
+		}
+
 		$atts = shortcode_parse_atts( $attribute_str );
 		$atts = is_array( $atts ) ? $atts : array();
+
+		$has_closer = $self_closing || (bool) preg_match( '/\[\/' . preg_quote( $tag, '/' ) . '\]$/', $match[0] );
 
 		$signature[] = array(
 			'tag'          => $tag,
 			'self_closing' => $self_closing,
+			'has_closer'   => $has_closer,
 			'atts'         => $atts,
 			'depth'        => $depth,
 		);
@@ -312,6 +354,20 @@ function aafm_exec_avada_replace_text( array $input ) {
 	$post = get_post( $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
+	}
+
+	// Codex round C finding 3: this ability's whole reason to exist is a FINER write path for
+	// Avada-owned content specifically - without this check it could edit an Elementor/Divi/
+	// Beaver-Builder-owned post (which carries no Fusion shortcodes at all, so both structural
+	// signatures come back empty and equal) even though the generic write path
+	// (aafm_exec_replace_in_post()) explicitly refuses those same posts. Require genuine,
+	// verified Avada ownership, not merely "no foreign builder marker at all".
+	if ( 'avada' !== aafm_post_has_foreign_builder_ownership( $id ) ) {
+		return new WP_Error(
+			'aafm_not_avada_owned',
+			__( 'This post is not owned by Avada/Fusion Builder.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
 	}
 
 	$search  = (string) $input['search'];

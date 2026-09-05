@@ -62,6 +62,44 @@ final class AvadaTest extends TestCase {
 		$this->assertFalse( $out['is_avada_owned'] );
 	}
 
+	/**
+	 * Avada-replace-text must refuse a post that is not genuinely Avada-owned - including one
+	 * owned by a DIFFERENT foreign builder, which carries no Fusion shortcodes at all and would
+	 * otherwise pass the structural-signature check trivially (Codex round C finding 3).
+	 */
+	public function test_replace_text_refuses_a_post_owned_by_a_different_foreign_builder(): void {
+		$id = self::factory()->post->create( array( 'post_content' => 'Elementor-owned body text' ) );
+		update_post_meta( $id, '_elementor_data', '[]' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'body',
+				'replace' => 'BODY',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_not_avada_owned', $out->get_error_code() );
+	}
+
+	public function test_replace_text_refuses_a_plain_unowned_post(): void {
+		$id = self::factory()->post->create( array( 'post_content' => 'plain body text' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'plain',
+				'replace' => 'PLAIN',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_not_avada_owned', $out->get_error_code() );
+	}
+
 	public function test_perm_requires_edit_access(): void {
 		$id = $this->make_avada_post( self::NESTED_COLUMNS );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
@@ -114,7 +152,14 @@ final class AvadaTest extends TestCase {
 	 * shortcode must still be allowed; the guard's job is to not silently corrupt anything, not to
 	 * perfectly parse a construct WordPress's own shortcode API cannot parse either.
 	 */
-	public function test_a_literal_bracket_in_an_attribute_value_does_not_block_an_unrelated_edit(): void {
+	/**
+	 * A literal ']' inside a quoted attribute value truncates get_shortcode_regex()'s own
+	 * attribute-span capture mid-quote (content="a[1]" captures only content="a[1, an
+	 * unterminated quote) - WordPress's own parser has lost track of the real boundary at that
+	 * point, so this guard fails closed on the WHOLE post rather than trust a span it cannot
+	 * verify, even for an edit that only touches unrelated plain text elsewhere in the document.
+	 */
+	public function test_a_literal_bracket_in_an_attribute_value_fails_closed_on_the_whole_post(): void {
 		$content = '[fusion_text content="a[1]"]Some other plain text[/fusion_text]';
 		$id      = $this->make_avada_post( $content );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
@@ -127,7 +172,61 @@ final class AvadaTest extends TestCase {
 			)
 		);
 
-		$this->assertIsArray( $out );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_replace_inside_shortcode', $out->get_error_code() );
+	}
+
+	/**
+	 * Removing a closing tag changes the shortcode's real structure (its content is no longer
+	 * INSIDE the element), and must be refused - even though the tag/self_closing/atts/depth
+	 * tuple alone cannot tell the difference (Codex round C finding 2, bullet 2).
+	 */
+	public function test_replacing_away_a_closing_tag_is_refused(): void {
+		$content = '[fusion_text]Hello[/fusion_text]';
+		$id      = $this->make_avada_post( $content );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$before = get_post_field( 'post_content', $id, 'raw' );
+		$out    = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => '[/fusion_text]',
+				'replace' => '',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_replace_inside_shortcode', $out->get_error_code() );
+		$this->assertSame( $before, get_post_field( 'post_content', $id, 'raw' ) );
+	}
+
+	/**
+	 * A Fusion shortcode NOT in the hardcoded baseline list (fusion_button) must still be
+	 * protected when the site's real shortcode registry (WordPress's $shortcode_tags global,
+	 * populated by Fusion Builder's own add_shortcode() calls) carries it - the dynamic-discovery
+	 * fix for Codex round C finding 2, bullet 1.
+	 */
+	public function test_an_unlisted_but_registered_fusion_tag_is_still_protected(): void {
+		add_shortcode( 'fusion_button', '__return_empty_string' );
+
+		$content = '[fusion_button text="Click me"]Body[/fusion_button]';
+		$id      = $this->make_avada_post( $content );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$before = get_post_field( 'post_content', $id, 'raw' );
+		$out    = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'text="Click me"',
+				'replace' => 'text="Different"',
+			)
+		);
+
+		remove_shortcode( 'fusion_button' );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_replace_inside_shortcode', $out->get_error_code() );
+		$this->assertSame( $before, get_post_field( 'post_content', $id, 'raw' ) );
 	}
 
 	public function test_nested_columns_with_distinct_inner_tags_are_a_stable_signature(): void {

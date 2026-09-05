@@ -146,7 +146,7 @@ function aafm_args_tec_get_events(): array {
 					),
 					'status' => array(
 						'type'        => 'string',
-						'description' => __( 'Post status to filter by. Defaults to "publish"; draft/pending/future/private require edit access to events.', 'agent-abilities-for-mcp' ),
+						'description' => __( 'Post status to filter by. Defaults to "publish"; draft/pending/future require edit access to events (scoped to your own unless you can edit others\' events); private requires read-private access.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_pagination_schema_props(
@@ -186,11 +186,11 @@ function aafm_args_tec_get_events(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_get_events( array $input ) {
-	$type_object  = get_post_type_object( Tribe__Events__Main::POSTTYPE );
-	$private_cap  = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_tribe_events';
-	$edit_cap     = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_posts : 'edit_tribe_events';
-	$edit_others  = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_others_posts : 'edit_others_tribe_events';
-	$requested    = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'publish';
+	$type_object    = get_post_type_object( Tribe__Events__Main::POSTTYPE );
+	$private_cap    = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_tribe_events';
+	$edit_cap       = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_posts : 'edit_tribe_events';
+	$edit_others    = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_others_posts : 'edit_others_tribe_events';
+	$requested      = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'publish';
 	$own_draft_only = false;
 
 	// 'private' keeps the strict read_private_tribe_events gate (aafm_validate_post_status()'s

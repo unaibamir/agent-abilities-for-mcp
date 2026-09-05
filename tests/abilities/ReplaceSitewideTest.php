@@ -241,4 +241,46 @@ final class ReplaceSitewideTest extends TestCase {
 		$this->assertSame( 1, $out['updated_posts'] );
 		$this->assertSame( 'shared x here', get_post( $own_post->ID )->post_content );
 	}
+
+	/**
+	 * Codex final round 3 MEDIUM: the candidate scan had no ceiling of its own, so a search term
+	 * matching an enormous number of non-editable posts could force scanning all of them before
+	 * giving up. Forces a tiny scan budget so a handful of non-editable posts (rather than
+	 * thousands) proves the scan genuinely stops instead of continuing to the caller's own
+	 * editable match sitting just past it.
+	 */
+	public function test_scan_stops_at_the_configured_ceiling_before_reaching_an_editable_match(): void {
+		add_filter( 'aafm_replace_sitewide_max_scan', static fn() => 3 );
+
+		$other_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create_many(
+			5,
+			array(
+				'post_content' => 'shared needleterm here',
+				'post_author'  => $other_id,
+			)
+		);
+		$caller_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create(
+			array(
+				'post_content' => 'shared needleterm here',
+				'post_author'  => $caller_id,
+			)
+		);
+		wp_set_current_user( $caller_id );
+
+		$out = aafm_exec_replace_sitewide(
+			array(
+				'search'  => 'needleterm',
+				'replace' => 'x',
+			)
+		);
+
+		remove_all_filters( 'aafm_replace_sitewide_max_scan' );
+
+		// The scan stopped after 3 non-editable posts, never reaching the caller's own editable
+		// 6th match - proving the ceiling actually bounds the scan rather than being decorative.
+		$this->assertSame( 3, $out['skipped_no_permission'] );
+		$this->assertSame( 0, $out['matched_posts'] );
+	}
 }

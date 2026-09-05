@@ -1629,6 +1629,20 @@ function aafm_exec_replace_in_post( array $input ) {
 const AAFM_REPLACE_SITEWIDE_MAX_POSTS = 50;
 
 /**
+ * The upper bound on how many raw SQL matches a single call will examine (get_post() + a
+ * permission/ownership check each) while filling AAFM_REPLACE_SITEWIDE_MAX_POSTS's editable-
+ * candidate budget. Codex final round 3 MEDIUM: without a ceiling here, a search term matching
+ * an enormous number of posts the caller cannot edit (all owned by someone else, all sitting
+ * before the caller's own editable match in ID order) would scan every one of them looking for
+ * 50 it could act on - unbounded work driven entirely by how the matches happen to be
+ * distributed, not by anything the caller controls. This does not add pagination or a
+ * continuation cursor (the locked contract for this ability deliberately has neither); it only
+ * bounds the worst case to a fixed amount of scanning per call, same as the editable-candidate
+ * cap already bounds the worst case of actual writing.
+ */
+const AAFM_REPLACE_SITEWIDE_MAX_SCAN = 5000;
+
+/**
  * Args for aafm/replace-sitewide.
  *
  * @return array<string,mixed>
@@ -1775,13 +1789,25 @@ function aafm_exec_replace_sitewide( array $input ) {
 	// unreachable window every time. Scan the full (already-fetched, already unpaginated) id list
 	// in ID order and fill the cap with EDITABLE, non-builder-owned candidates only; a skipped
 	// post costs nothing against the cap.
+	//
+	// Codex final round 3 MEDIUM: that scan had no ceiling of its own, so a search term matching
+	// an enormous number of non-editable posts could force scanning all of them (get_post() plus
+	// two checks each) looking for AAFM_REPLACE_SITEWIDE_MAX_POSTS editable ones -
+	// AAFM_REPLACE_SITEWIDE_MAX_SCAN bounds that worst case; see its own docblock for why this is
+	// not the continuation cursor the locked contract deliberately omits.
+	// Filterable so a test can prove the scan actually stops without creating thousands of posts
+	// to reach the real default - the same pattern already used for the GeoDirectory list batch
+	// size.
+	$max_scan      = max( 1, (int) apply_filters( 'aafm_replace_sitewide_max_scan', AAFM_REPLACE_SITEWIDE_MAX_SCAN ) );
 	$candidates    = array();
 	$no_perm       = 0;
 	$builder_owned = 0;
+	$scanned       = 0;
 	foreach ( $count_query->posts as $post_id ) {
-		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS ) {
+		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS || $scanned >= $max_scan ) {
 			break;
 		}
+		++$scanned;
 		$post = get_post( (int) $post_id ); // @phpstan-ignore-line cast.int (fields=>ids means $post_id is really an int; the WP_Query stub types ->posts as WP_Post[] unconditionally).
 		if ( ! $post instanceof WP_Post ) {
 			continue;

@@ -32,8 +32,8 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( $this->plugin_headers()['Version'], AAFM_VERSION );
 	}
 
-	public function test_release_version_is_one_seven_three(): void {
-		$this->assertSame( '1.7.3', AAFM_VERSION );
+	public function test_release_version_is_one_seven_four(): void {
+		$this->assertSame( '1.7.4', AAFM_VERSION );
 	}
 
 	public function test_readme_stable_tag_matches_version(): void {

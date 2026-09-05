@@ -22,6 +22,7 @@
 			<file>tests/WireShapeTest.php</file>
 			<file>tests/BridgeObjectRefusalWireTest.php</file>
 			<file>tests/ServerToolsListExposureTest.php</file>
+			<file>tests/BridgeToolCallResultWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

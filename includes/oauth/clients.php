@@ -158,7 +158,9 @@ function aafm_oauth_get_client( string $client_id ): ?array {
  *
  * @param string $client_id The public client identifier.
  * @param bool   $flag      True to flag the client as an agent identity, false to clear it.
- * @return bool True when a client row was found and updated.
+ * @return bool True when the client row exists and now carries this flag value (whether or not
+ *              the row's value actually changed). False only when no such client exists, or a
+ *              real database error occurred.
  */
 function aafm_oauth_set_client_agent_identity( string $client_id, bool $flag ): bool {
 	if ( '' === $client_id ) {
@@ -175,7 +177,18 @@ function aafm_oauth_set_client_agent_identity( string $client_id, bool $flag ): 
 		array( '%s' )
 	);
 
-	return false !== $updated && (int) $updated > 0;
+	if ( false === $updated ) {
+		return false; // A real database error.
+	}
+	if ( (int) $updated > 0 ) {
+		return true; // The row existed and its value changed.
+	}
+
+	// $wpdb->update() also returns 0 when the row exists but already holds this exact value - not
+	// a failure, and must not be reported as "client not found" to a caller retrying a toggle or
+	// re-submitting a stale tab.
+	$existing = aafm_oauth_get_client( $client_id );
+	return is_array( $existing );
 }
 
 /**
@@ -185,6 +198,11 @@ function aafm_oauth_set_client_agent_identity( string $client_id, bool $flag ): 
  * {@see aafm_agent_user_marker_meta_key()} this plugin already stamps on a user it created via
  * the dedicated-agent-user flow, and the OAuth client's own {@see aafm_oauth_set_client_agent_identity()}
  * flag. A user id of 0 or an empty/null client id is simply not checked on that side.
+ *
+ * A request-local static cache keys the client-row lookup by client_id: a caller such as
+ * aafm/get-activity-log resolves this per row for up to 200 rows a page, and most of those rows
+ * share a handful of client_ids, so this avoids one uncached query per row for the same client.
+ * get_user_meta() needs no equivalent cache - core's own object-cache layer already dedupes it.
  *
  * @param int         $user_id         Acting WordPress user id, or 0 when unresolved.
  * @param string|null $oauth_client_id OAuth client id the call is attributed to, or null/'' for none.
@@ -196,7 +214,11 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
 	}
 
 	if ( null !== $oauth_client_id && '' !== $oauth_client_id ) {
-		$client = aafm_oauth_get_client( $oauth_client_id );
+		static $client_cache = array();
+		if ( ! array_key_exists( $oauth_client_id, $client_cache ) ) {
+			$client_cache[ $oauth_client_id ] = aafm_oauth_get_client( $oauth_client_id );
+		}
+		$client = $client_cache[ $oauth_client_id ];
 		if ( is_array( $client ) && ! empty( $client['is_agent_identity'] ) ) {
 			return true;
 		}

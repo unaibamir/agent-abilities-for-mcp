@@ -133,4 +133,21 @@ final class ActivityLogAgentIdentityTest extends TestCase {
 		aafm_install_oauth_tables();
 		$this->assertFalse( aafm_oauth_set_client_agent_identity( 'not-a-real-client-id', true ) );
 	}
+
+	/**
+	 * $wpdb->update() returns 0 both when a row does not exist AND when it exists but already
+	 * holds this exact value - only the first case is a real failure.
+	 */
+	public function test_setting_an_already_correct_flag_value_is_not_reported_as_failure(): void {
+		aafm_install_oauth_tables();
+		$client = aafm_oauth_register_client(
+			array( 'redirect_uris' => array( 'https://example.com/callback' ) )
+		);
+		$this->assertIsArray( $client );
+		$client_id = $client['client_id'];
+
+		$this->assertTrue( aafm_oauth_set_client_agent_identity( $client_id, true ) );
+		// Setting it to the SAME value again must still report success, not "client not found".
+		$this->assertTrue( aafm_oauth_set_client_agent_identity( $client_id, true ) );
+	}
 }

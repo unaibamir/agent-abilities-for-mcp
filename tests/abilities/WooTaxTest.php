@@ -488,6 +488,39 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
+	 * WC_Tax::get_tax_class_slugs()/get_tax_classes() cache their result under
+	 * ['tax-rate-classes', 'taxes'] for the life of the request (class-wc-tax.php:818-833). A
+	 * second call to aafm_wc_tax_class_collision_error() would silently reuse that cached
+	 * snapshot instead of re-reading live state unless something explicitly evicts it first -
+	 * proves the wp_cache_delete() call aafm_exec_wc_create_tax_class() makes immediately before
+	 * its final guard actually does something, isolated from WC_Tax::create_tax_class()'s own
+	 * (uncached, in this stub) duplicate check so this test can't pass by coincidence off a
+	 * different layer catching the race instead (Codex review, 2026-09-05).
+	 */
+	public function test_tax_class_collision_check_forces_a_fresh_read_before_the_final_guard(): void {
+		// First read (models the early check): the slug is free, populates the request cache.
+		$this->assertNull( aafm_wc_tax_class_collision_error( 'cache-check', 'Cache check' ) );
+
+		// A concurrent write lands directly in the backing store, the way another PHP-FPM
+		// worker's own WC_Tax::create_tax_class() call would - it does not evict THIS process's
+		// already-loaded runtime cache entry, only the shared store underneath it.
+		WcTaxStubStore::$classes['cache-check'] = 'Cache check (concurrent)';
+
+		// Without evicting the cache, a second read still returns the stale, pre-race snapshot.
+		$this->assertNull(
+			aafm_wc_tax_class_collision_error( 'cache-check', 'Cache check' ),
+			'a cached read must not see the interleaved write - this documents why the fix is needed'
+		);
+
+		// The exact call aafm_exec_wc_create_tax_class() makes immediately before its final
+		// guard. Once it runs, the next read reflects live state.
+		wp_cache_delete( 'tax-rate-classes', 'taxes' );
+		$fresh = aafm_wc_tax_class_collision_error( 'cache-check', 'Cache check' );
+		$this->assertInstanceOf( WP_Error::class, $fresh );
+		$this->assertSame( 'aafm_wc_tax_class_exists', $fresh->get_error_code() );
+	}
+
+	/**
 	 * WC_Tax::create_tax_class() only checks is_wp_error() on $wpdb->insert()'s return, which is
 	 * int|false and never WP_Error, so a real unique-index collision inside WC's own function can
 	 * be reported as success. This proves the post-write confirmation catches that masked failure
@@ -495,19 +528,25 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_masked_wc_insert_failure_is_reported_as_an_error_not_a_false_success(): void {
 		$this->acting_as( 'administrator' );
-		WcTaxStubStore::$classes['reduced-rate']        = 'Reduced rate (concurrent)';
+		// A genuinely free name/slug, not one of seed_wc_tax()'s pre-seeded classes - the point
+		// of this test is the DEEPER post-write confirmation, which only ever runs once both the
+		// early AND final collision checks (correctly) find nothing wrong. A colliding name here
+		// (Codex review, 2026-09-05: the original draft used the pre-seeded "Reduced rate", which
+		// let the early check refuse it before create_tax_class() was ever reached, leaving the
+		// post-write confirmation this test claims to prove completely unexercised) would prove
+		// nothing about that deeper path.
 		WcTaxStubStore::$simulate_masked_insert_failure = true;
 
-		$result = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Reduced rate' ) );
+		$result = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Fresh class' ) );
 
 		WcTaxStubStore::$simulate_masked_insert_failure = false;
 
-		// The early collision check (unchanged) already refuses this same-slug request honestly
-		// before ever calling \WC_Tax::create_tax_class() - this test proves that outer guard,
-		// not the deeper post-write confirmation (which is race-only and unreachable without the
-		// interleaving hook this test doesn't use). Both checks share the same error code.
+		// Both collision checks pass clean (the slug was genuinely free), so WC_Tax::create_tax_class()
+		// is reached and reports its masked "success" - name never actually stored. The post-write
+		// confirmation (aafm_wc_tax_class_write_unconfirmed) is what catches it here, not either
+		// collision check.
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'aafm_wc_tax_class_exists', $result->get_error_code() );
+		$this->assertSame( 'aafm_wc_tax_class_write_unconfirmed', $result->get_error_code() );
 	}
 
 	// =========================================================================

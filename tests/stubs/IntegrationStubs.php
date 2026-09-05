@@ -1761,12 +1761,36 @@ PHP;
 		return <<<'PHP'
 class WC_Tax {
 	/**
+	 * Mirrors real WC_Tax::get_tax_rate_classes(): caches the class list under
+	 * ['tax-rate-classes', 'taxes'] for the life of the request, exactly like
+	 * class-wc-tax.php:818-833. A caller must wp_cache_delete() that key to force a live
+	 * re-read - the same requirement this stub exists to let a test prove or disprove.
+	 *
+	 * @return array<int,object>
+	 */
+	private static function get_tax_rate_classes(): array {
+		$cached = wp_cache_get( 'tax-rate-classes', 'taxes' );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		$rows = array();
+		foreach ( \AAFM\Tests\WcTaxStubStore::$classes as $slug => $name ) {
+			$rows[] = (object) array(
+				'name' => $name,
+				'slug' => $slug,
+			);
+		}
+		wp_cache_set( 'tax-rate-classes', $rows, 'taxes' );
+		return $rows;
+	}
+
+	/**
 	 * Return all custom tax class NAMES (standard is NOT included, mirroring real WC).
 	 *
 	 * @return string[]
 	 */
 	public static function get_tax_classes(): array {
-		return array_values( \AAFM\Tests\WcTaxStubStore::$classes );
+		return wp_list_pluck( self::get_tax_rate_classes(), 'name' );
 	}
 
 	/**
@@ -1775,7 +1799,7 @@ class WC_Tax {
 	 * @return string[]
 	 */
 	public static function get_tax_class_slugs(): array {
-		return array_keys( \AAFM\Tests\WcTaxStubStore::$classes );
+		return wp_list_pluck( self::get_tax_rate_classes(), 'slug' );
 	}
 
 	/**
@@ -1800,6 +1824,7 @@ class WC_Tax {
 			return new \WP_Error( 'wc_tax', 'Tax class already exists.' );
 		}
 		\AAFM\Tests\WcTaxStubStore::$classes[ $slug ] = $name;
+		wp_cache_delete( 'tax-rate-classes', 'taxes' );
 		return array( 'name' => $name, 'slug' => $slug );
 	}
 

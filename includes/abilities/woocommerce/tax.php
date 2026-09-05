@@ -919,6 +919,13 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 	// concurrent request's create can land between that read and this call. Re-reading
 	// immediately before the call shrinks the window to the minimum this process controls;
 	// WC_Tax gives this ability no locking primitive to close it further.
+	//
+	// WC_Tax::get_tax_rate_classes() caches its result under ['tax-rate-classes', 'taxes'] for
+	// the life of the request (class-wc-tax.php:818-833). Without forcing that cache out first,
+	// this "final" check would silently re-read the SAME snapshot the early check already
+	// warmed a few lines above, making it a no-op duplicate of the early check rather than a
+	// genuine live re-check (Codex review, 2026-09-05).
+	wp_cache_delete( 'tax-rate-classes', 'taxes' );
 	$race_error = aafm_wc_tax_class_collision_error( $effective_slug, $name );
 	if ( $race_error instanceof \WP_Error ) {
 		return $race_error;

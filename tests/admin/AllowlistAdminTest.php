@@ -126,6 +126,44 @@ final class AllowlistAdminTest extends TestCase {
 		$this->assertSame( 'all', $stored[1]['allowed_abilities'] );
 	}
 
+	/**
+	 * Codex round-b finding 8: two submitted rows for the same scope used to both reach storage,
+	 * and aafm_ability_allowed_for_principal() only ever checks the first match - so an earlier
+	 * permissive "all" row would silently defeat a later restrictive one, regardless of which one
+	 * the operator actually meant to keep. Saving now keys rows by scope_type:scope_id so only
+	 * the LAST submitted row for a given scope survives.
+	 */
+	public function test_a_duplicate_client_scope_keeps_only_the_last_row(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['allowlist_json'] = wp_json_encode(
+			array(
+				array(
+					'scope_type'        => 'oauth_client',
+					'scope_id'          => 'client-9',
+					'allowed_abilities' => 'all',
+				),
+				array(
+					'scope_type'        => 'oauth_client',
+					'scope_id'          => 'client-9',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+
+		$this->intercept_die();
+		$json = $this->run_handler();
+
+		$this->assertTrue( $json['success'] ?? false );
+		$stored = aafm_allowlist_overrides();
+		$this->assertCount( 1, $stored, 'Only one row may survive for a single scope.' );
+		$this->assertSame( array( 'aafm/get-posts' ), $stored[0]['allowed_abilities'] );
+	}
+
 	public function test_a_row_with_an_unknown_role_is_dropped(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );

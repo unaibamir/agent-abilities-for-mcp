@@ -377,44 +377,76 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	// batch comes back short, so every candidate is genuinely examined regardless of directory
 	// size - the filterable batch size lets a test prove multi-batch iteration without creating
 	// thousands of posts.
-	$batch_size   = max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) );
-	$public_stati = get_post_stati( array( 'public' => true ) );
-	$visible      = array();
-	$batch_page   = 1;
-	do {
-		$query = new WP_Query(
-			array(
-				'post_type'      => 'gd_place',
-				'post_status'    => 'any',
-				// 'readable' narrows the SQL for the 'private' status specifically - WP_Query's
-				// own 'perm' handling (wp-includes/class-wp-query.php) only ever special-cases
-				// 'private', never 'draft'/'pending', so it alone is not sufficient (see the
-				// PHP-level filter below, which covers every non-public status uniformly).
-				'perm'           => 'readable',
-				'posts_per_page' => $batch_size,
-				'paged'          => $batch_page,
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
-				'no_found_rows'  => true,
-			)
-		);
-		// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at all
-		// (only 'private'), so an Author could still see another user's draft listing through the
-		// SQL layer alone. Filter every result through the SAME public-status-or-per-object-edit
-		// rule aafm_perm_geodirectory_get() already uses, so no non-public listing the caller
-		// cannot edit ever reaches the response regardless of which status 'perm' missed.
-		foreach ( $query->posts as $post ) {
-			if ( ! $post instanceof WP_Post ) {
-				continue;
-			}
-			if ( ! in_array( $post->post_status, $public_stati, true ) && ! current_user_can( 'edit_post', $post->ID ) ) {
-				continue;
-			}
-			$visible[] = $post;
+	//
+	// Codex final round 3 MEDIUM: the first fix advanced with 'paged', an OFFSET into whatever
+	// currently matches - if a row is trashed/deleted between batches, every row after it shifts
+	// down by one and the next offset-based batch skips one real row; the reverse (a row becoming
+	// newly eligible) can duplicate one instead. Keyset pagination (WHERE ID > last-seen-ID, no
+	// offset at all) is immune to both: a row's own position never depends on how many OTHER rows
+	// currently exist before it, only on IDs already fully processed. An iteration cap guards
+	// against a pathological host filter that always returns a full batch.
+	$batch_size    = max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) );
+	$public_stati  = get_post_stati( array( 'public' => true ) );
+	$visible       = array();
+	$last_id       = 0;
+	$keyset_filter = static function ( string $where ) use ( &$last_id ): string {
+		global $wpdb;
+		if ( $last_id > 0 ) { // @phpstan-ignore-line greater.alwaysFalse ($last_id is mutated by reference between calls; phpstan analyses this closure body in isolation)
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant ($wpdb->posts).
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $last_id );
 		}
-		$fetched = count( $query->posts );
-		++$batch_page;
-	} while ( $fetched === $batch_size );
+		return $where;
+	};
+
+	add_filter( 'posts_where', $keyset_filter );
+	try {
+		$iterations = 0;
+		do {
+			// ponytail: 1000 batches at the default size of 500 covers 500,000 listings - a
+			// pathological host filter that always returns a full batch stops here instead of
+			// looping forever; raise the multiplier if a real directory ever legitimately exceeds it.
+			if ( ++$iterations > 1000 ) {
+				break;
+			}
+			$query = new WP_Query(
+				array(
+					'post_type'      => 'gd_place',
+					'post_status'    => 'any',
+					// 'readable' narrows the SQL for the 'private' status specifically -
+					// WP_Query's own 'perm' handling (wp-includes/class-wp-query.php) only ever
+					// special-cases 'private', never 'draft'/'pending', so it alone is not
+					// sufficient (see the PHP-level filter below, which covers every non-public
+					// status uniformly).
+					'perm'           => 'readable',
+					'posts_per_page' => $batch_size,
+					'orderby'        => 'ID',
+					'order'          => 'ASC',
+					'no_found_rows'  => true,
+				)
+			);
+			// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at
+			// all (only 'private'), so an Author could still see another user's draft listing
+			// through the SQL layer alone. Filter every result through the SAME
+			// public-status-or-per-object-edit rule aafm_perm_geodirectory_get() already uses, so
+			// no non-public listing the caller cannot edit ever reaches the response regardless
+			// of which status 'perm' missed.
+			foreach ( $query->posts as $post ) {
+				if ( ! $post instanceof WP_Post ) {
+					continue;
+				}
+				if ( $post->ID > $last_id ) {
+					$last_id = $post->ID;
+				}
+				if ( ! in_array( $post->post_status, $public_stati, true ) && ! current_user_can( 'edit_post', $post->ID ) ) {
+					continue;
+				}
+				$visible[] = $post;
+			}
+			$fetched = count( $query->posts );
+		} while ( $fetched === $batch_size );
+	} finally {
+		remove_filter( 'posts_where', $keyset_filter );
+	}
 
 	$total      = count( $visible );
 	$page_posts = array_slice( $visible, ( $page - 1 ) * $per_page, $per_page );

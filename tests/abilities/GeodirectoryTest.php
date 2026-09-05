@@ -237,6 +237,50 @@ final class GeodirectoryTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Codex final round 3 MEDIUM: an OFFSET-based batch loop is unstable under mutation - trashing
+	 * a row from an earlier batch shifts every later OFFSET window down by one, so the next batch
+	 * skips exactly one real row. Keyset pagination (WHERE ID > last-seen-ID, no offset at all)
+	 * must not exhibit this: the 4th listing by ID is exactly the row an offset-based scan would
+	 * have skipped after a row from the first batch is trashed mid-scan.
+	 */
+	public function test_get_listings_does_not_skip_a_row_when_an_earlier_one_is_removed_mid_scan(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 3 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$ids = self::factory()->post->create_many(
+			5,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+		sort( $ids );
+
+		$batches  = 0;
+		$callback = function ( $query ) use ( &$batches, $ids ) {
+			if ( 'gd_place' !== $query->get( 'post_type' ) ) {
+				return;
+			}
+			++$batches;
+			if ( 2 === $batches ) {
+				wp_trash_post( $ids[0] );
+			}
+		};
+		add_action( 'pre_get_posts', $callback );
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_action( 'pre_get_posts', $callback );
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+
+		$listed_ids = wp_list_pluck( $out['listings'], 'listing_id' );
+		$this->assertContains(
+			$ids[3],
+			$listed_ids,
+			'A row must not be skipped when an earlier row is removed mid-scan.'
+		);
+	}
+
 	public function test_update_listing_leaves_omitted_fields_untouched(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 

@@ -259,7 +259,7 @@ function aafm_args_tec_get_venue(): array {
 			'properties' => array( 'venue' => array( 'type' => 'object' ) ),
 		),
 		'execute_callback'    => 'aafm_exec_tec_get_venue',
-		'permission_callback' => 'aafm_perm_read',
+		'permission_callback' => 'aafm_tec_perm_read_venue',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,

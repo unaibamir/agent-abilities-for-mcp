@@ -210,7 +210,7 @@ function aafm_args_tec_get_organizer(): array {
 			'properties' => array( 'organizer' => array( 'type' => 'object' ) ),
 		),
 		'execute_callback'    => 'aafm_exec_tec_get_organizer',
-		'permission_callback' => 'aafm_perm_read',
+		'permission_callback' => 'aafm_tec_perm_read_organizer',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,

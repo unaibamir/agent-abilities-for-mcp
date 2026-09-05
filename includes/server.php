@@ -358,11 +358,13 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// (tec-get-events/-venues/-organizers, tec-create-event/-venue/-organizer) are
 		// object-independent and need no case here - each falls through to its real
 		// permission_callback with empty input, the correct discovery answer.
-		case 'aafm/tec-get-event':
-		case 'aafm/tec-update-event':
 		case 'aafm/tec-get-tickets':
 		case 'aafm/tec-get-ticket':
 		case 'aafm/tec-get-attendees':
+			return static fn(): bool => current_user_can( 'edit_tribe_events' )
+				|| current_user_can( 'edit_others_tribe_events' )
+				|| current_user_can( 'edit_published_tribe_events' );
+		case 'aafm/tec-update-event':
 			return static fn(): bool => current_user_can( 'edit_tribe_events' )
 				|| current_user_can( 'edit_others_tribe_events' )
 				|| current_user_can( 'edit_published_tribe_events' );
@@ -370,16 +372,27 @@ function aafm_ability_list_permission( string $name ): ?callable {
 			return static fn(): bool => current_user_can( 'delete_tribe_events' )
 				|| current_user_can( 'delete_others_tribe_events' )
 				|| current_user_can( 'delete_published_tribe_events' );
-		case 'aafm/tec-get-venue':
 		case 'aafm/tec-update-venue':
 			return static fn(): bool => current_user_can( 'edit_tribe_venues' )
 				|| current_user_can( 'edit_others_tribe_venues' )
 				|| current_user_can( 'edit_published_tribe_venues' );
-		case 'aafm/tec-get-organizer':
 		case 'aafm/tec-update-organizer':
 			return static fn(): bool => current_user_can( 'edit_tribe_organizers' )
 				|| current_user_can( 'edit_others_tribe_organizers' )
 				|| current_user_can( 'edit_published_tribe_organizers' );
+
+		// tec-get-event/-venue/-organizer's real gate (aafm_tec_perm_read_*()) allows anyone who
+		// clears the object-independent 'read' floor to read a PUBLISHED object, falling back to
+		// the edit family only for a non-published one - mirroring aafm_perm_get_post()'s own
+		// aafm_can_read_post_object() convention for core content. The coarse 'read' floor is the
+		// correct discovery answer here (same as the core aafm/get-post and aafm/get-page cases
+		// above), not the edit family: gating discovery on edit access would hide the tool from a
+		// caller who can read every published event/venue/organizer but holds no edit capability
+		// at all.
+		case 'aafm/tec-get-event':
+		case 'aafm/tec-get-venue':
+		case 'aafm/tec-get-organizer':
+			return static fn(): bool => current_user_can( 'read' );
 
 		// ACF integration, post fields: gates per-object on edit_post($id) (aafm_perm_acf_post ->
 		// aafm_can_edit_post_object), false with empty input - same floor as the SEO family above,

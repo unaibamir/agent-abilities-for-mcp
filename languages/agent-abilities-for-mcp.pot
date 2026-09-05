@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-05T22:59:55+05:00\n"
+"POT-Creation-Date: 2026-09-05T23:18:22+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -193,8 +193,8 @@ msgstr ""
 #: includes/abilities/revisions.php:96
 #: includes/abilities/search.php:65
 #: includes/abilities/tec/events.php:155
-#: includes/abilities/tec/organizers.php:144
-#: includes/abilities/tec/venues.php:193
+#: includes/abilities/tec/organizers.php:152
+#: includes/abilities/tec/venues.php:207
 #: includes/abilities/terms.php:115
 #: includes/abilities/users.php:113
 msgid "1-based page number for pagination. Defaults to 1."
@@ -1257,6 +1257,7 @@ msgstr ""
 
 #: includes/abilities/posts.php:798
 #: includes/abilities/tec/events.php:208
+#: includes/abilities/tec/_shared.php:245
 #: includes/helpers.php:1321
 msgid "Unsupported or unauthorized post status."
 msgstr ""
@@ -1751,7 +1752,7 @@ msgid "Create organizer"
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:72
-msgid "Create an organizer via the Events Calendar ORM. Requires the edit_tribe_organizers capability."
+msgid "Create an organizer via the Events Calendar ORM. Requires the edit_tribe_organizers capability. Defaults to draft; publish requires the publish_tribe_organizers capability."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:79
@@ -1759,41 +1760,53 @@ msgid "Update organizer"
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:80
-msgid "Update an organizer by ID via the Events Calendar ORM. Requires edit access to that organizer."
+msgid "Update an organizer by ID via the Events Calendar ORM. Requires edit access to that organizer. Setting status to publish requires the publish_tribe_organizers capability."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:143
+#: includes/abilities/tec/organizers.php:146
+msgid "Post status to filter by. Defaults to whatever the caller can already see (publish, plus private with read-private access); draft/pending/future require edit access to organizers (scoped to your own unless you can edit others' organizers)."
+msgstr ""
+
+#: includes/abilities/tec/organizers.php:151
 msgid "Number of organizers per page, clamped to the 1-50 range. Defaults to 10 when omitted."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:205
+#: includes/abilities/tec/organizers.php:222
 msgid "ID of the organizer to read."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:258
-#: includes/abilities/tec/organizers.php:327
+#: includes/abilities/tec/organizers.php:275
+#: includes/abilities/tec/organizers.php:357
 msgid "Organizer name."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:263
-#: includes/abilities/tec/organizers.php:332
+#: includes/abilities/tec/organizers.php:280
+#: includes/abilities/tec/organizers.php:362
 msgid "Contact email."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:267
-#: includes/abilities/tec/organizers.php:336
-#: includes/abilities/tec/venues.php:143
+#: includes/abilities/tec/organizers.php:284
+#: includes/abilities/tec/organizers.php:366
+#: includes/abilities/tec/venues.php:144
 msgid "Phone number."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:272
-#: includes/abilities/tec/organizers.php:341
-#: includes/abilities/tec/venues.php:148
+#: includes/abilities/tec/organizers.php:289
+#: includes/abilities/tec/organizers.php:371
+#: includes/abilities/tec/venues.php:149
 msgid "Website URL."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:323
+#: includes/abilities/tec/organizers.php:295
+msgid "Publication status. Defaults to draft. Setting publish requires the publish_tribe_organizers capability."
+msgstr ""
+
+#: includes/abilities/tec/organizers.php:353
 msgid "ID of the organizer to update."
+msgstr ""
+
+#: includes/abilities/tec/organizers.php:376
+msgid "Publication status. Setting publish requires the publish_tribe_organizers capability."
 msgstr ""
 
 #: includes/abilities/tec/tickets.php:74
@@ -1850,7 +1863,7 @@ msgid "Create venue"
 msgstr ""
 
 #: includes/abilities/tec/venues.php:71
-msgid "Create a venue via the Events Calendar ORM. Requires the edit_tribe_venues capability."
+msgid "Create a venue via the Events Calendar ORM. Requires the edit_tribe_venues capability. Defaults to draft; publish requires the publish_tribe_venues capability."
 msgstr ""
 
 #: includes/abilities/tec/venues.php:78
@@ -1858,46 +1871,54 @@ msgid "Update venue"
 msgstr ""
 
 #: includes/abilities/tec/venues.php:79
-msgid "Update a venue by ID via the Events Calendar ORM. Requires edit access to that venue."
+msgid "Update a venue by ID via the Events Calendar ORM. Requires edit access to that venue. Setting status to publish requires the publish_tribe_venues capability."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:119
+#: includes/abilities/tec/venues.php:120
 msgid "Venue name."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:123
+#: includes/abilities/tec/venues.php:124
 msgid "Street address."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:127
+#: includes/abilities/tec/venues.php:128
 msgid "City."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:131
+#: includes/abilities/tec/venues.php:132
 msgid "State or province."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:135
+#: includes/abilities/tec/venues.php:136
 msgid "Postal/zip code."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:139
+#: includes/abilities/tec/venues.php:140
 msgid "Country."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:192
+#: includes/abilities/tec/venues.php:155
+msgid "Publication status. Defaults to draft. Setting publish requires the publish_tribe_venues capability."
+msgstr ""
+
+#: includes/abilities/tec/venues.php:201
+msgid "Post status to filter by. Defaults to whatever the caller can already see (publish, plus private with read-private access); draft/pending/future require edit access to venues (scoped to your own unless you can edit others' venues)."
+msgstr ""
+
+#: includes/abilities/tec/venues.php:206
 msgid "Number of venues per page, clamped to the 1-50 range. Defaults to 10 when omitted."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:254
+#: includes/abilities/tec/venues.php:277
 msgid "ID of the venue to read."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:345
+#: includes/abilities/tec/venues.php:375
 msgid "Venue name. Optional on update, required only on create."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:350
+#: includes/abilities/tec/venues.php:380
 msgid "ID of the venue to update."
 msgstr ""
 

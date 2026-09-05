@@ -88,7 +88,7 @@ function aafm_tec_events_registry_definitions(): array {
 		),
 		'aafm/tec-update-event' => array(
 			'label'        => __( 'Update event', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Update an event by ID via the Events Calendar ORM. Requires edit access to that event.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Update an event by ID via the Events Calendar ORM. Requires edit access to that event. Refuses when the event is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'tec',
@@ -469,11 +469,24 @@ function aafm_args_tec_update_event(): array {
 /**
  * Execute aafm/tec-update-event.
  *
+ * Codex final round 8 HIGH: this maps 'content' straight to post_content and persists it through
+ * the ORM (aafm_tec_event_orm_args()) with no page-builder ownership check anywhere in the
+ * function - the same corruption risk aafm_exec_update_post() guards against, just at a
+ * chokepoint the generic guard's own coverage sweep (tests/PageBuilderGuardSweepTest.php) never
+ * enumerated. Checked unconditionally, before any field is even read, matching every other
+ * content-write execute callback's own placement.
+ *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_update_event( array $input ) {
-	$id   = absint( $input['event_id'] ?? 0 );
+	$id = absint( $input['event_id'] ?? 0 );
+
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
 	$args = aafm_tec_event_orm_args( $input );
 	if ( isset( $input['status'] ) ) {
 		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_event_publish_cap() );

@@ -7,6 +7,16 @@
  * aafm_exec_update_post() covers all three - this sweep proves that delegation actually carries
  * the guard through, rather than trusting the delegation claim.
  *
+ * Codex final round 8 HIGH: tec-update-event and geodirectory-update-listing both wrote
+ * post_content with no ownership check at all, and this file's own hand-written list of write
+ * callbacks never enumerated either one - the sweep's coverage was itself the gap, not just the
+ * two missing checks. test_every_post_content_write_site_is_guarded_or_explicitly_exempt() below
+ * is the structural fix for THAT: it scans every includes/abilities/**\/*.php file for a
+ * post_content write and asserts the enclosing function either calls the ownership check itself
+ * or is named in an explicit, reasoned exemption list, so a FUTURE write path that skips the
+ * guard fails this test by construction rather than needing a human to remember to add a row
+ * above.
+ *
  * @package AgentAbilitiesForMCP
  */
 
@@ -15,6 +25,180 @@ declare( strict_types=1 );
 namespace AAFM\Tests;
 
 final class PageBuilderGuardSweepTest extends TestCase {
+
+	use \AAFM\Tests\IntegrationStubs;
+
+	public function set_up(): void {
+		parent::set_up();
+		// Needed only by the TEC/GeoDirectory rows in provide_write_execute_callbacks() below -
+		// harmless for the plain 'post'/'page' rows, which never touch either post type.
+		$this->stub_tec();
+		aafm_geodir_stub_activate();
+		add_filter( 'aafm_integration_active_tec', '__return_true' );
+		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
+	}
+
+	public function tear_down(): void {
+		remove_filter( 'aafm_integration_active_tec', '__return_true' );
+		remove_filter( 'aafm_integration_active_geodirectory', '__return_true' );
+		parent::tear_down();
+	}
+
+	/**
+	 * Every function, anywhere under includes/abilities/, that assigns a 'post_content' array
+	 * key, calls wp_update_post(), or calls a repository ->save() (outside woocommerce/ - see
+	 * find_ability_php_files()'s own scoping) must either call
+	 * aafm_post_has_foreign_builder_ownership() in its own body, or be listed here with a reason.
+	 * This is the mechanical half of the sweep: it does not run any PHP, it only reads source
+	 * text, so it catches a future write path the moment it's written, before any test author has
+	 * to remember to add a data-provider row for it.
+	 *
+	 * @return array<string,string> Function name => reason it does not need the ownership check.
+	 */
+	private function exempt_post_content_writers(): array {
+		return array(
+			// Creates a brand-new post/block/listing; there is no PRE-EXISTING content a
+			// foreign builder could already own, which is the entire threat this guard exists
+			// to stop.
+			'aafm_insert_post'                      => 'Creates a brand-new post (shared by create-post and friends) - nothing pre-existing to protect.',
+			'aafm_exec_create_block'                => 'Creates a brand-new wp_block - nothing pre-existing to protect.',
+			'aafm_exec_geodirectory_create_listing' => 'Creates a brand-new gd_place listing - nothing pre-existing to protect.',
+			'aafm_finish_media_upload'              => 'Rewrites post_content on an attachment THIS SAME CALL just sideloaded a moment earlier - nothing pre-existing to protect.',
+			// Post types no classic page builder (Elementor, Divi, Beaver Builder, Avada - the
+			// ones this guard's marker map covers) ever attaches ownership to.
+			'aafm_exec_update_media'                => 'Attachment post type - never a front-end page a classic page builder renders or owns.',
+			'aafm_exec_update_template'             => 'wp_template/wp_template_part - a block-theme Site Editor mechanism, mutually exclusive with the classic page builders this guard covers.',
+			'aafm_exec_update_block'                => 'wp_block (reusable block) - a Gutenberg-internal mechanism, mutually exclusive with the classic page builders this guard covers.',
+			// A pure args-builder helper, not itself a write site - both its callers
+			// (aafm_exec_tec_create_event, which needs no guard, and aafm_exec_tec_update_event,
+			// which now has one) are checked at their own chokepoint.
+			'aafm_tec_event_orm_args'               => 'Builds an args array only; the actual write (and its own ownership check) happens in the calling create/update function.',
+			// Structured contact-info entities, not rendered page content: neither accepts a
+			// content field at all (confirmed: neither venues.php nor organizers.php contains the
+			// literal 'post_content' anywhere), so there is nothing here a page builder could ever
+			// own or corrupt.
+			'aafm_exec_tec_update_venue'            => 'Venues store only structured address/contact fields via ->save() - no content field exists to protect.',
+			'aafm_exec_tec_update_organizer'        => 'Organizers store only structured contact fields via ->save() - no content field exists to protect.',
+			// nav_menu_item: an internal menu-structure record, never a front-end page a classic
+			// page builder renders or owns - even though wp_update_post() is genuinely called here
+			// (to restore menu order after core resets it) and menu-item-description does map to
+			// post_content.
+			'aafm_exec_update_menu_item'            => 'nav_menu_item post type - an internal menu-structure record, not a page a classic page builder ever owns.',
+			// Known false positives from the mechanical scan matching TEXT, not code: a
+			// translatable description string and a comment, not an actual write call.
+			'aafm_args_replace_sitewide'            => 'Args/schema builder only, no write - matches only because its own output_schema description mentions "wp_update_post()" in prose.',
+			'aafm_exec_aioseo_update_post'          => 'Matches only because of comment prose explaining why this does NOT call ->save() directly (it uses AIOSEO\'s own savePost() instead); AIOSEO\'s data lives in its own tables, never post_content.',
+		);
+	}
+
+	/**
+	 * Extract every top-level `function aafm_...(` body from a file's source, keyed by name.
+	 * A plain brace-depth counter, not a real parser - correct for this codebase's consistent
+	 * style (array() literals, no nested top-level functions, no short array syntax), which is
+	 * all a completeness sweep needs.
+	 *
+	 * @param string $source Full file contents.
+	 * @return array<string,string> Function name => full source text of its body.
+	 */
+	private function extract_function_bodies( string $source ): array {
+		$functions = array();
+		$name      = null;
+		$buffer    = '';
+		$depth     = 0;
+		foreach ( explode( "\n", $source ) as $line ) {
+			if ( null === $name ) {
+				if ( preg_match( '/^function\s+(aafm_[A-Za-z0-9_]+)\s*\(/', $line, $matches ) ) {
+					$name   = $matches[1];
+					$buffer = '';
+					$depth  = 0;
+				} else {
+					continue;
+				}
+			}
+			$buffer .= $line . "\n";
+			$depth  += substr_count( $line, '{' ) - substr_count( $line, '}' );
+			if ( $depth <= 0 && str_contains( $buffer, '{' ) ) {
+				$functions[ $name ] = $buffer;
+				$name               = null;
+			}
+		}
+		return $functions;
+	}
+
+	/**
+	 * Every .php file under $dir, at any depth - PHP's glob() does not actually recurse on `**`,
+	 * so this uses a real recursive directory walk instead of a glob pattern that would silently
+	 * only ever scan the top level.
+	 *
+	 * @param string $dir Root directory to scan.
+	 * @return list<string> Absolute file paths.
+	 */
+	private function find_ability_php_files( string $dir ): array {
+		$files    = array();
+		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir, \FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $iterator as $file_info ) {
+			if ( $file_info->isFile() && 'php' === $file_info->getExtension() ) {
+				$files[] = $file_info->getPathname();
+			}
+		}
+		return $files;
+	}
+
+	/**
+	 * The mechanical sweep itself: no PHP execution, just source scanning.
+	 */
+	public function test_every_post_content_write_site_is_guarded_or_explicitly_exempt(): void {
+		$exempt = $this->exempt_post_content_writers();
+		foreach ( $exempt as $function_name => $reason ) {
+			$this->assertNotSame( '', trim( $reason ), "The exemption for $function_name must state a reason." );
+		}
+
+		$files = $this->find_ability_php_files( AAFM_PLUGIN_DIR . 'includes/abilities' );
+		$this->assertNotEmpty( $files, 'The recursive scan must actually find ability files - an empty list would make this test pass by finding nothing.' );
+
+		$unguarded = array();
+		$seen_any  = false;
+		foreach ( $files as $file ) {
+			// Signal B (wp_update_post()/repository ->save()) is scoped OUT of woocommerce/:
+			// every ->save() there is a WC_Order/WC_Product/WC_Coupon/etc CRUD-object save, never
+			// a write to post_content - WooCommerce entities are not content pages a classic page
+			// builder renders or owns. Signal A ('post_content' literal) still applies everywhere;
+			// it simply never matches inside woocommerce/ in practice.
+			$is_woocommerce = false !== strpos( $file, DIRECTORY_SEPARATOR . 'woocommerce' . DIRECTORY_SEPARATOR );
+
+			$source    = (string) file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading this plugin's own local source files to scan them, not a remote URL.
+			$functions = $this->extract_function_bodies( $source );
+			foreach ( $functions as $function_name => $body ) {
+				// Signal A: a direct 'post_content' key assignment in this function's own body.
+				$writes_content_directly = (bool) preg_match( "/'post_content'\\s*=>/", $body );
+				// Signal B: commits an update to an EXISTING post (wp_update_post() always
+				// requires an ID; a repository ->save() call, in this codebase's ORM usage, is
+				// exclusively the update verb - ->create() is the create verb) - catches a write
+				// whose content came from a shared args-builder helper called earlier, rather
+				// than assigned inline (e.g. aafm_exec_tec_update_event()).
+				$commits_an_existing_post_update = ! $is_woocommerce
+					&& ( false !== strpos( $body, 'wp_update_post(' ) || false !== strpos( $body, '->save(' ) );
+
+				if ( ! $writes_content_directly && ! $commits_an_existing_post_update ) {
+					continue;
+				}
+				$seen_any = true;
+				if ( isset( $exempt[ $function_name ] ) ) {
+					continue;
+				}
+				if ( false === strpos( $body, 'aafm_post_has_foreign_builder_ownership(' ) ) {
+					$unguarded[] = $function_name . ' (' . basename( $file ) . ')';
+				}
+			}
+		}
+
+		$this->assertTrue( $seen_any, 'The sweep found zero post_content writers at all - it is almost certainly broken, not proving the codebase is clean.' );
+		$this->assertSame(
+			array(),
+			$unguarded,
+			'Every function that writes post_content must call aafm_post_has_foreign_builder_ownership() itself, or be added to exempt_post_content_writers() with a reason: ' . implode( ', ', $unguarded )
+		);
+	}
 
 	/**
 	 * Every wired write execute callback refuses a post the guard flags as builder-owned.
@@ -44,8 +228,8 @@ final class PageBuilderGuardSweepTest extends TestCase {
 	 */
 	public function provide_write_execute_callbacks(): array {
 		return array(
-			'update-post'     => array( 'aafm_exec_update_post', array( 'title' => 'x' ), 'post_id', 'post' ),
-			'replace-in-post' => array(
+			'update-post'                 => array( 'aafm_exec_update_post', array( 'title' => 'x' ), 'post_id', 'post' ),
+			'replace-in-post'             => array(
 				'aafm_exec_replace_in_post',
 				array(
 					'search'  => 'x',
@@ -54,8 +238,14 @@ final class PageBuilderGuardSweepTest extends TestCase {
 				'post_id',
 				'post',
 			),
-			'update-page'     => array( 'aafm_exec_update_page', array( 'title' => 'x' ), 'page_id', 'page' ),
-			'update-cpt-item' => array( 'aafm_exec_update_cpt_item', array( 'title' => 'x' ), 'post_id', 'post' ),
+			'update-page'                 => array( 'aafm_exec_update_page', array( 'title' => 'x' ), 'page_id', 'page' ),
+			'update-cpt-item'             => array( 'aafm_exec_update_cpt_item', array( 'title' => 'x' ), 'post_id', 'post' ),
+			// Codex final round 8 HIGH: both added after the earlier rows above were the ONLY
+			// ones this sweep enumerated, which is exactly why they were missed the first time.
+			// Literal 'tribe_events', not Tribe__Events__Main::POSTTYPE - that stub class is only
+			// declared inside stub_tec() (set_up()), which PHPUnit runs AFTER this data provider.
+			'tec-update-event'            => array( 'aafm_exec_tec_update_event', array( 'title' => 'x' ), 'event_id', 'tribe_events' ),
+			'geodirectory-update-listing' => array( 'aafm_exec_geodirectory_update_listing', array( 'title' => 'x' ), 'listing_id', 'gd_place' ),
 		);
 	}
 

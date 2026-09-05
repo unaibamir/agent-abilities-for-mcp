@@ -96,7 +96,7 @@ function aafm_geodirectory_registry_definitions(): array {
 		),
 		'aafm/geodirectory-update-listing' => array(
 			'label'        => __( 'Update a GeoDirectory listing', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration. Refuses when the listing is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'geodirectory',
@@ -672,6 +672,12 @@ function aafm_args_geodirectory_update_listing(): array {
 /**
  * Execute aafm/geodirectory-update-listing. A field omitted from $input is left untouched.
  *
+ * Codex final round 8 HIGH: this built and called wp_update_post() directly with no page-builder
+ * ownership check anywhere in the function - the same corruption risk aafm_exec_update_post()
+ * guards against, just at a chokepoint the generic guard's own coverage sweep
+ * (tests/PageBuilderGuardSweepTest.php) never enumerated. Checked unconditionally, right after
+ * the post-type validation every other check in this function already depends on.
+ *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
@@ -680,6 +686,11 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 	$post = get_post( $id );
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return aafm_generic_error();
+	}
+
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
 	}
 
 	$update = array( 'ID' => $id );

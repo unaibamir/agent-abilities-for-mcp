@@ -17,6 +17,23 @@ namespace AAFM\Tests;
 
 final class PageBuilderGuardWireTest extends TestCase {
 
+	use IntegrationStubs;
+
+	public function set_up(): void {
+		parent::set_up();
+		// Needed only by the TEC/GeoDirectory wire tests below - harmless for the generic tests.
+		$this->stub_tec();
+		aafm_geodir_stub_activate();
+		add_filter( 'aafm_integration_active_tec', '__return_true' );
+		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
+	}
+
+	public function tear_down(): void {
+		remove_filter( 'aafm_integration_active_tec', '__return_true' );
+		remove_filter( 'aafm_integration_active_geodirectory', '__return_true' );
+		parent::tear_down();
+	}
+
 	/**
 	 * Builds a throwaway single-ability MCP server carrying only aafm/update-post, mirroring
 	 * AllowlistWireTest::build_single_ability_server().
@@ -143,5 +160,79 @@ final class PageBuilderGuardWireTest extends TestCase {
 		$this->assertTrue( $update->getIsError(), 'The content write must still be refused after the failed clear attempt.' );
 		$this->assertStringContainsString( 'Avada', $update->getContent()[0]->getText() );
 		$this->assertSame( $original_title, get_post( $post_id )->post_title, 'The post must be untouched end to end.' );
+	}
+
+	/**
+	 * Codex final round 8 HIGH: tec-update-event wrote post_content through the ORM with no
+	 * ownership check at all - a real tools/call, not just the direct-PHP proof in
+	 * PageBuilderGuardSweepTest.php, since a guard wired into the wrong seam could still pass
+	 * a direct call.
+	 */
+	public function test_tec_update_event_refuses_an_avada_owned_event_over_a_real_tools_call(): void {
+		$this->register_enabled( array( 'aafm/tec-update-event' ) );
+		$event_id = self::factory()->post->create(
+			array(
+				'post_type'    => \Tribe__Events__Main::POSTTYPE,
+				'post_content' => '[fusion_text]Original[/fusion_text]',
+			)
+		);
+		update_post_meta( $event_id, 'fusion_builder_status', 'active' );
+		$original_content = get_post( $event_id )->post_content;
+		$this->acting_as( 'administrator' );
+
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$server  = $this->build_single_ability_server( $adapter, array( 'aafm/tec-update-event' ) );
+		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+
+		$result = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/tec-update-event' ),
+				'arguments' => array(
+					'event_id' => $event_id,
+					'content'  => 'Should be refused',
+				),
+			),
+			'req-page-builder-wire-tec-1'
+		);
+
+		$this->assertTrue( $result->getIsError(), 'An Avada-owned event must be refused on a real tools/call.' );
+		$this->assertStringContainsString( 'Avada', $result->getContent()[0]->getText() );
+		$this->assertSame( $original_content, get_post( $event_id )->post_content, 'The event must be left byte-identical.' );
+	}
+
+	/**
+	 * Codex final round 8 HIGH: geodirectory-update-listing called wp_update_post() directly
+	 * with no ownership check at all - same real-tools/call proof as the TEC test above.
+	 */
+	public function test_geodirectory_update_listing_refuses_an_avada_owned_listing_over_a_real_tools_call(): void {
+		$this->register_enabled( array( 'aafm/geodirectory-update-listing' ) );
+		$listing_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'gd_place',
+				'post_content' => '[fusion_text]Original[/fusion_text]',
+			)
+		);
+		update_post_meta( $listing_id, 'fusion_builder_status', 'active' );
+		$original_content = get_post( $listing_id )->post_content;
+		$this->acting_as( 'administrator' );
+
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$server  = $this->build_single_ability_server( $adapter, array( 'aafm/geodirectory-update-listing' ) );
+		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+
+		$result = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/geodirectory-update-listing' ),
+				'arguments' => array(
+					'listing_id' => $listing_id,
+					'content'    => 'Should be refused',
+				),
+			),
+			'req-page-builder-wire-geodir-1'
+		);
+
+		$this->assertTrue( $result->getIsError(), 'An Avada-owned listing must be refused on a real tools/call.' );
+		$this->assertStringContainsString( 'Avada', $result->getContent()[0]->getText() );
+		$this->assertSame( $original_content, get_post( $listing_id )->post_content, 'The listing must be left byte-identical.' );
 	}
 }

@@ -169,6 +169,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: number of allowlist lines that were dropped as invalid. */
 				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist.', 'agent-abilities-for-mcp' ),
+				/* translators: %d: number of ability-allowlist rows named a role or OAuth client that does not exist. */
+				'allowlistRowsDropped'     => __( 'Saved. %d row(s) named a role or client that does not exist and were dropped.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: the new agent user's numeric ID. */
 				'userCreated'              => __( 'Created user #%d. Now create its Application Password under Users → Profile.', 'agent-abilities-for-mcp' ),
 				'editUser'                 => __( 'Edit user', 'agent-abilities-for-mcp' ),

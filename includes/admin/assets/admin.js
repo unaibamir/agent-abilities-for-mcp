@@ -1909,10 +1909,40 @@
 				} );
 				saveBtn.disabled = false;
 
-				if ( status ) {
-					status.textContent = json?.success
-						? this.#t( 'allowlistSaved', 'Saved.' )
-						: ( json?.data?.message ?? this.#t( 'allowlistSaveFailed', 'Could not save. Please try again.' ) );
+				if ( json?.success ) {
+					// A row naming an unknown role or OAuth client is dropped server-side (it
+					// restricts nothing real), so remove it here too rather than leaving it
+					// visible as if it were still in effect - mirrors the IP-allowlist save
+					// handler reflecting its own cleaned value a few hundred lines up.
+					const kept = new Set(
+						( Array.isArray( json.data?.rows ) ? json.data.rows : [] ).map(
+							( r ) => `${ r.scope_type }:${ r.scope_id }`
+						)
+					);
+					Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).forEach(
+						( row ) => {
+							if ( ! kept.has( `${ row.dataset.scopeType }:${ row.dataset.scopeId }` ) ) {
+								row.remove();
+							}
+						}
+					);
+
+					const dropped = Number( json.data?.dropped ?? 0 );
+					if ( status ) {
+						status.textContent =
+							dropped > 0
+								? this.#format(
+										this.#t(
+											'allowlistRowsDropped',
+											'Saved. %d row(s) named a role or client that does not exist and were dropped.'
+										),
+										dropped
+									)
+								: this.#t( 'allowlistSaved', 'Saved.' );
+					}
+				} else if ( status ) {
+					status.textContent =
+						json?.data?.message ?? this.#t( 'allowlistSaveFailed', 'Could not save. Please try again.' );
 				}
 			} );
 		}

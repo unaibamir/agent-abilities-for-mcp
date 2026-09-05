@@ -105,11 +105,14 @@ function aafm_ajax_save_allowlist(): void {
 	// FIRST matching oauth_client row it finds, which would make one scope's effective allowlist
 	// depend on row order rather than its own content. A later duplicate in the submitted set
 	// wins, matching what the admin UI shows the operator as the current value for that scope.
-	$rows = array();
+	$rows    = array();
+	$dropped = 0;
 	foreach ( $decoded as $row ) {
 		$clean = aafm_allowlist_sanitize_row( $row );
 		if ( null !== $clean ) {
 			$rows[ $clean['scope_type'] . ':' . $clean['scope_id'] ] = $clean;
+		} else {
+			++$dropped;
 		}
 	}
 	$rows = array_values( $rows );
@@ -118,7 +121,18 @@ function aafm_ajax_save_allowlist(): void {
 		wp_send_json_error( array( 'message' => __( 'The allowlist could not be saved. Please try again.', 'agent-abilities-for-mcp' ) ), 500 );
 	}
 
-	wp_send_json_success( array( 'rows' => $rows ) );
+	// Codex final round 3 MEDIUM: a dropped row (an unknown role or, since the previous fix, an
+	// unknown OAuth client) used to be indistinguishable from a fully successful save - the
+	// response carried no count, so the admin UI always said a flat "Saved." even when a row the
+	// operator meant to restrict never took effect. Mirrors the IP-allowlist save handler's own
+	// 3-branch messaging a few hundred lines up in this same file: report how many rows were
+	// dropped so the operator can tell "saved as intended" from "saved, but not what you typed".
+	wp_send_json_success(
+		array(
+			'rows'    => $rows,
+			'dropped' => $dropped,
+		)
+	);
 }
 
 /**

@@ -206,6 +206,9 @@ final class AllowlistAdminTest extends TestCase {
 
 		$this->assertTrue( $json['success'] ?? false );
 		$this->assertSame( array(), aafm_allowlist_overrides() );
+		// Codex final round 3 MEDIUM: a dropped row must be reported, not indistinguishable from
+		// a fully successful save.
+		$this->assertSame( 1, $json['data']['dropped'] ?? null );
 	}
 
 	/**
@@ -240,6 +243,36 @@ final class AllowlistAdminTest extends TestCase {
 
 		$this->assertTrue( $json['success'] ?? false );
 		$this->assertSame( array(), aafm_allowlist_overrides() );
+		$this->assertSame( 1, $json['data']['dropped'] ?? null );
+	}
+
+	/**
+	 * Codex final round 3 MEDIUM: a save that dropped a row and one that kept every row both
+	 * used to report a flat "success" with no way to tell them apart. A save with nothing
+	 * dropped must report a zero count, not merely omit it.
+	 */
+	public function test_a_fully_valid_save_reports_zero_dropped(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['allowlist_json'] = wp_json_encode(
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'editor',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+
+		$this->intercept_die();
+		$json = $this->run_handler();
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertSame( 0, $json['data']['dropped'] ?? null );
 	}
 
 	public function test_more_than_the_row_cap_is_refused(): void {

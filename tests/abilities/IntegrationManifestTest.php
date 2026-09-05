@@ -60,6 +60,8 @@ final class IntegrationManifestTest extends TestCase {
 		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
 		add_filter( 'aafm_integration_active_tec', '__return_true' );
 		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
 		aafm_registry_cache_should_flush( true );
 
 		$registry      = aafm_get_abilities_registry();
@@ -84,7 +86,7 @@ final class IntegrationManifestTest extends TestCase {
 			$core + $manifest_total,
 			'Manifest integration totals plus the core count must equal the live catalog total - drift detected.'
 		);
-		$this->assertSame( 172, $core + $manifest_total );
+		$this->assertSame( 179, $core + $manifest_total );
 
 		aafm_registry_cache_should_flush( true );
 	}
@@ -93,7 +95,7 @@ final class IntegrationManifestTest extends TestCase {
 		// The Dashboard and Abilities "available/total" both read this one function, so they
 		// can never disagree. It equals core + every integration manifest total.
 		$available = aafm_available_ability_count();
-		$this->assertSame( 172, $available );
+		$this->assertSame( 179, $available );
 	}
 
 	public function test_descriptor_counts_drive_the_manifest(): void {
@@ -140,6 +142,8 @@ final class IntegrationManifestTest extends TestCase {
 		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
 		add_filter( 'aafm_integration_active_tec', '__return_true' );
 		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
 		aafm_registry_cache_should_flush( true );
 
 		$registry   = aafm_get_abilities_registry();

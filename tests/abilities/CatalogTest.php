@@ -52,8 +52,10 @@ final class CatalogTest extends TestCase {
 		// MANDATORY - a force filter added without it is a no-op against the cached
 		// host-inactive registry. After the Wave 5 Slice D WooCommerce cut (15 abilities removed),
 		// the count was 153; 1.7.4 adds the native Slim SEO integration (2 abilities),
-		// aafm/replace-sitewide (1 write), and the native TEC/Event Tickets integration
-		// (16 abilities), making 172.
+		// aafm/replace-sitewide (1 write), the native TEC/Event Tickets integration
+		// (16 abilities), aafm/upload-media-from-url (1 write), the native Avada integration
+		// (2 abilities), and the native GeoDirectory integration (4 abilities, default-off),
+		// making 179.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
@@ -62,11 +64,13 @@ final class CatalogTest extends TestCase {
 		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
 		add_filter( 'aafm_integration_active_tec', '__return_true' );
 		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
 		aafm_registry_cache_should_flush( true );
 	}
 
 	/**
-	 * Enable the entire catalog (all 172) and register categories + abilities.
+	 * Enable the entire catalog (all 179) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -90,14 +94,16 @@ final class CatalogTest extends TestCase {
 		$this->assertTrue( aafm_integration_active( 'slim_seo' ) );
 		$this->assertTrue( aafm_integration_active( 'tec' ) );
 		$this->assertTrue( aafm_integration_active( 'event_tickets' ) );
+		$this->assertTrue( aafm_integration_active( 'avada' ) );
+		$this->assertTrue( aafm_integration_active( 'geodirectory' ) );
 	}
 
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			172,
+			179,
 			$registry,
-			'The catalog must contain exactly 172 abilities - 86 reads + 86 writes.'
+			'The catalog must contain exactly 179 abilities - 89 reads + 90 writes.'
 		);
 	}
 
@@ -137,7 +143,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names - no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 172 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 179 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -151,9 +157,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			172,
+			179,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(86) + writes(86) must equal the full catalog (172).'
+			'reads(89) + writes(90) must equal the full catalog (179).'
 		);
 	}
 

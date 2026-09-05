@@ -111,6 +111,9 @@ final class CatalogFixture {
 		'aafm/tec-get-tickets',
 		'aafm/tec-get-ticket',
 		'aafm/tec-get-attendees',
+		'aafm/avada-get-page-content',
+		'aafm/geodirectory-get-listings',
+		'aafm/geodirectory-get-listing',
 	);
 
 	/**
@@ -205,6 +208,10 @@ final class CatalogFixture {
 		'aafm/tec-update-venue',
 		'aafm/tec-create-organizer',
 		'aafm/tec-update-organizer',
+		'aafm/upload-media-from-url',
+		'aafm/avada-replace-text',
+		'aafm/geodirectory-create-listing',
+		'aafm/geodirectory-update-listing',
 	);
 
 	/**

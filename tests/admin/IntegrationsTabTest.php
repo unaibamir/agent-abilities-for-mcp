@@ -326,6 +326,12 @@ final class IntegrationsTabTest extends TestCase {
 	 * and its checkboxes must render disabled ($disabled derives directly from status !== 'active').
 	 */
 	public function test_event_tickets_reports_missing_dependency_without_tec(): void {
+		// Force TEC off explicitly rather than assuming it's off by default: once any
+		// earlier test in this process stubs Tribe__Events__Main, class_exists() (and so
+		// aafm_tec_active()) stays true for the rest of the run - classes can't be
+		// undefined. The filter override is the only way to get a genuine "TEC absent"
+		// read in a shared process, matching the sibling test's symmetric "force it on".
+		add_filter( 'aafm_integration_active_tec', '__return_false' );
 		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
 		$this->assertSame( 'missing_dependency', aafm_integration_status( 'event_tickets' ) );
 
@@ -333,6 +339,7 @@ final class IntegrationsTabTest extends TestCase {
 		$this->assertStringContainsString( 'The Events Calendar', $note );
 
 		remove_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		remove_filter( 'aafm_integration_active_tec', '__return_false' );
 	}
 
 	public function test_event_tickets_reports_active_with_tec_also_active(): void {

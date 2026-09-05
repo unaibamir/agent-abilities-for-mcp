@@ -18,7 +18,9 @@ defined( 'ABSPATH' ) || exit;
  *
  * @param string              $variant warning|info|success|error (unknown → info).
  * @param string              $message Plain text (escaped), or HTML run through wp_kses_post() when $args['html'].
- * @param array<string,mixed> $args    icon (override aafm_icon name), inline (bool), html (bool).
+ * @param array<string,mixed> $args    icon (override aafm_icon name), inline (bool), html (bool),
+ *                                     class (extra CSS class appended to the wrapper, sanitized
+ *                                     with sanitize_html_class()).
  * @return string
  */
 function aafm_get_notice_html( string $variant, string $message, array $args = array() ): string {
@@ -35,14 +37,16 @@ function aafm_get_notice_html( string $variant, string $message, array $args = a
 	$icon_name = isset( $args['icon'] ) ? (string) $args['icon'] : $icons[ $variant ];
 
 	$inline = empty( $args['inline'] ) ? '' : ' aafm-notice-inline';
+	$extra  = empty( $args['class'] ) ? '' : ' ' . sanitize_html_class( (string) $args['class'] );
 	$body   = empty( $args['html'] ) ? esc_html( $message ) : wp_kses_post( $message );
 
 	return sprintf(
-		'<div class="aafm-notice aafm-notice-%1$s%2$s"><span class="aafm-notice-ic">%3$s</span><div class="aafm-notice-body">%4$s</div></div>',
+		'<div class="aafm-notice aafm-notice-%1$s%2$s%5$s"><span class="aafm-notice-ic">%3$s</span><div class="aafm-notice-body">%4$s</div></div>',
 		esc_attr( $variant ),
 		esc_attr( $inline ),
 		wp_kses( aafm_icon( $icon_name ), aafm_svg_allowed_html() ),
-		$body
+		$body,
+		esc_attr( $extra )
 	);
 }
 

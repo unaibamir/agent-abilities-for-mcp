@@ -477,6 +477,10 @@
 	.aafm-os-note {
 		max-inline-size: 760px;
 
+		.aafm-os-note-row + .aafm-os-note-row {
+			margin-block-start: 6px;
+		}
+
 		code {
 			font-size: 12px;
 		}

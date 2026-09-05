@@ -1321,12 +1321,28 @@ function aafm_render_connection_tab(): void {
 		$cert_note .= ' ' . __( 'This site looks local, so that line is already included above.', 'agent-abilities-for-mcp' );
 	}
 
-	// Bespoke notice chrome on purpose: this callout needs two labelled rows (Windows, Certificate),
-	// which aafm_render_notice()'s single dashicon + single body block cannot express.
-	echo '<div class="aafm-os-note notice notice-info inline">';
-	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Windows', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $windows_note, $kses_code ) . '</span></p>';
-	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Certificate', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $cert_note, $kses_code ) . '</span></p>';
-	echo '</div>';
+	// Two labelled rows (Windows, Certificate) built as one HTML body and routed through the
+	// shared notice component, so this callout carries the same icon + tinted chrome as every
+	// other notice on this tab instead of a bespoke wp-admin-native box.
+	$os_note_body  = sprintf(
+		'<p class="aafm-os-note-row"><span class="aafm-os-note-label">%1$s</span> <span class="aafm-os-note-text">%2$s</span></p>',
+		esc_html__( 'Windows', 'agent-abilities-for-mcp' ),
+		wp_kses( $windows_note, $kses_code )
+	);
+	$os_note_body .= sprintf(
+		'<p class="aafm-os-note-row"><span class="aafm-os-note-label">%1$s</span> <span class="aafm-os-note-text">%2$s</span></p>',
+		esc_html__( 'Certificate', 'agent-abilities-for-mcp' ),
+		wp_kses( $cert_note, $kses_code )
+	);
+	aafm_render_notice(
+		'info',
+		$os_note_body,
+		array(
+			'html'   => true,
+			'inline' => true,
+			'class'  => 'aafm-os-note',
+		)
+	);
 
 	// Per-client quickstarts: the JS-toggled grid of ready-to-paste configs, one per client.
 	// Each client's exact snippet stays present here so the picker can surface any of them.

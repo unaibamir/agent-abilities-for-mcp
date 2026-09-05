@@ -17,14 +17,20 @@ final class AbilitiesDisclosureTest extends TestCase {
 		parent::set_up();
 
 		// Wave 4: the no-orphan check would fail if a disclosed integration ability were
-		// absent from the registry (host inactive). Force all three integrations active
-		// (+ the mandatory registry-memo flush) so disclosure ↔ registry stays 1:1 once the
-		// SEO/ACF/WC slices add both ends. No integration ability exists yet in this slice.
+		// absent from the registry (host inactive). Force every integration active
+		// (+ the mandatory registry-memo flush) so disclosure ↔ registry stays 1:1. 1.7.4
+		// adds Slim SEO, TEC, Event Tickets, Avada, and GeoDirectory - each needs the same
+		// treatment or their disclosure keys read as orphans in this isolated environment.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
+		add_filter( 'aafm_integration_active_tec', '__return_true' );
+		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
 		aafm_registry_cache_should_flush( true );
 	}
 

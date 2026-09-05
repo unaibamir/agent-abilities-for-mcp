@@ -207,6 +207,10 @@ Any MCP client that can reach your site's endpoint. With OAuth you paste the end
 
 Yes. In ChatGPT, turn on developer mode, then add your site as a custom connector using your MCP endpoint URL and approve the connection once over OAuth. This needs a ChatGPT plan that allows custom connectors. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI also work, some directly and some through the mcp-remote bridge that runs on your own machine.
 
+= Do I need to expose my computer to connect a remote site? =
+
+No. Your WordPress site is the MCP server, so the endpoint is already public over HTTPS on the site itself, not on your computer. Connecting a hosted client like ChatGPT or Claude to a remote WordPress install means pasting that endpoint URL into the client and approving one OAuth sign-in in the browser. No tunnel, no reverse proxy, no local bridge process to keep running. A bridge is only needed for a client that can't open a remote MCP connection on its own, covered above.
+
 = Can ChatGPT edit my WordPress site? =
 
 Only the parts you allow. ChatGPT reaches your site through a custom connector you add yourself, it acts as the WordPress user that approved the connection, and it sees nothing beyond the abilities you switched on. Every write is capability-checked before it runs and recorded in the audit log, and you can stop all writes at once with read-only mode.

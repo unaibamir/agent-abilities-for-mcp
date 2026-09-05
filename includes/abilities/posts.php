@@ -756,19 +756,24 @@ function aafm_perm_create_draft( array $input ): bool {
  * once edit_posts is cleared, while future/private must only be allowed once $publish_cap is
  * held, and a single boolean cannot express both at once.
  *
- * @param string $requested   Raw requested status.
- * @param string $publish_cap Capability required to request a publish-equivalent status.
+ * @param string        $requested       Raw requested status.
+ * @param string        $publish_cap     Capability required to request a publish-equivalent status.
+ * @param string[]|null $public_statuses The caller's already-computed public-status list, when
+ *                                       it has one. Passed through to both internal checks
+ *                                       below so this function computes get_post_stati() at
+ *                                       most once per call instead of twice. Null (the
+ *                                       default) computes it here, unchanged from before.
  * @return string|WP_Error Sanitized status, or WP_Error when unauthorized/unrecognized.
  */
-function aafm_authorize_post_status( string $requested, string $publish_cap ) {
+function aafm_authorize_post_status( string $requested, string $publish_cap, ?array $public_statuses = null ) {
 	$status = sanitize_key( $requested );
-	if ( aafm_status_requires_publish_cap( $status ) && ! current_user_can( $publish_cap ) ) {
+	if ( null === $public_statuses ) {
+		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
+	}
+	if ( aafm_status_requires_publish_cap( $status, $public_statuses ) && ! current_user_can( $publish_cap ) ) {
 		return new WP_Error( 'aafm_status_forbidden', __( 'You do not have permission to set that status.', 'agent-abilities-for-mcp' ) );
 	}
-	$recognized = array_merge(
-		array_values( get_post_stati( array( 'public' => true ) ) ),
-		array( 'draft', 'pending', 'future', 'private' )
-	);
+	$recognized = array_merge( $public_statuses, array( 'draft', 'pending', 'future', 'private' ) );
 	if ( ! in_array( $status, $recognized, true ) ) {
 		return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
 	}
@@ -1152,9 +1157,10 @@ function aafm_exec_update_post( array $input ) {
 		// Previously this used the type's edit_others cap, which is the wrong question (can this
 		// caller edit someone else's post) and wrongly refused an Author - holds publish_posts
 		// but not edit_others_posts - trying to schedule or privatize their OWN post.
-		$type_object = get_post_type_object( $post->post_type );
-		$publish_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->publish_posts : 'publish_posts';
-		$status      = aafm_authorize_post_status( (string) $input['status'], $publish_cap );
+		$type_object     = get_post_type_object( $post->post_type );
+		$publish_cap     = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->publish_posts : 'publish_posts';
+		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
+		$status          = aafm_authorize_post_status( (string) $input['status'], $publish_cap, $public_statuses );
 		if ( is_wp_error( $status ) ) {
 			return $status;
 		}
@@ -1163,7 +1169,7 @@ function aafm_exec_update_post( array $input ) {
 		// is coerced to 'draft'. This only fires on such an explicit request - an edit-only
 		// update with no 'status' field never reaches here, so force-draft can never
 		// retro-unpublish an already-published post.
-		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status ) ) {
+		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status, $public_statuses ) ) {
 			$status = 'draft';
 		}
 		$postarr['post_status'] = $status;

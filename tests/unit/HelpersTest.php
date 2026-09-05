@@ -578,4 +578,43 @@ final class HelpersTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_revision( $a, $a ) );               // not a revision.
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_revision( 0, $a ) );                // missing.
 	}
+
+	public function test_status_requires_publish_cap_uses_a_supplied_public_status_list_instead_of_recomputing(): void {
+		// A synthetic list that shares NOTHING with the real get_post_stati() output. The old
+		// (pre-fix) implementation ignores any second argument and always recomputes its own
+		// real list internally, so passing this synthetic list and asserting on ITS contents -
+		// not on a real status - is what actually distinguishes old behavior from new. A test
+		// using only 'publish'/'future'/'draft' (real statuses) would pass unchanged on the old
+		// code too, since the real list already contains them regardless of what's passed in.
+		$synthetic_list = array( 'synthetic-public-status' );
+
+		// A status NOT in the real get_post_stati() output, but present in the synthetic list:
+		// only true if the supplied list was actually used instead of a fresh real one.
+		$this->assertTrue( aafm_status_requires_publish_cap( 'synthetic-public-status', $synthetic_list ) );
+
+		// A real public status ('publish') that is NOT in the synthetic list: false only if the
+		// supplied list was used instead of falling back to the real, always-'publish'-containing
+		// list computed internally.
+		$this->assertFalse( aafm_status_requires_publish_cap( 'publish', $synthetic_list ) );
+
+		// The null-default path is unchanged: still computes the real list itself.
+		$this->assertTrue( aafm_status_requires_publish_cap( 'publish' ) );
+		$this->assertTrue( aafm_status_requires_publish_cap( 'future' ) ); // 'future' branches before the list check either way.
+	}
+
+	public function test_authorize_post_status_uses_a_supplied_public_status_list_instead_of_recomputing(): void {
+		$synthetic_list = array( 'synthetic-public-status' );
+
+		// With the synthetic list, 'synthetic-public-status' is now publish-equivalent (would
+		// require $publish_cap) AND recognized (passes the allow-list) - both only true if
+		// aafm_authorize_post_status() actually used the supplied list for both checks instead
+		// of computing its own real one twice internally.
+		$result = aafm_authorize_post_status( 'synthetic-public-status', 'manage_options', $synthetic_list );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_status_forbidden', $result->get_error_code() ); // current user lacks manage_options.
+
+		// 'draft' still authorizes fine regardless of the supplied list - it's in the hardcoded
+		// private-status set, never gated on the public-status list.
+		$this->assertSame( 'draft', aafm_authorize_post_status( 'draft', 'manage_options', $synthetic_list ) );
+	}
 }

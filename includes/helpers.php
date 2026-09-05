@@ -1323,19 +1323,23 @@ function aafm_validate_post_status( string $status, bool $can_read_private ) {
  * deliberate strengthening, not a widening. 'draft' and 'pending' need no extra authority:
  * every caller reaching this function already cleared at least edit_posts.
  *
- * @param string $status Requested status (raw; sanitized here).
+ * @param string        $status          Requested status (raw; sanitized here).
+ * @param string[]|null $public_statuses The caller's already-computed public-status list
+ *                                       (from get_post_stati(array('public'=>true))), when it
+ *                                       has one. Pass it through to avoid recomputing the same
+ *                                       core lookup more than once in the same request. Null
+ *                                       (the default) computes it here, unchanged from before.
  * @return bool True when the status requires the type's publish capability.
  */
-function aafm_status_requires_publish_cap( string $status ): bool {
+function aafm_status_requires_publish_cap( string $status, ?array $public_statuses = null ): bool {
 	$status = sanitize_key( $status );
 	if ( in_array( $status, array( 'future', 'private' ), true ) ) {
 		return true;
 	}
-	return in_array(
-		$status,
-		array_values( get_post_stati( array( 'public' => true ) ) ),
-		true
-	);
+	if ( null === $public_statuses ) {
+		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
+	}
+	return in_array( $status, $public_statuses, true );
 }
 
 /**

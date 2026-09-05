@@ -417,6 +417,43 @@ final class IntegrationsTabTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Codex final round 4 MEDIUM: the below-floor status note hardcoded WooCommerce's own
+	 * constant and version-reader function for EVERY integration, so a TEC site below its real
+	 * floor was told to install a WooCommerce version it likely already had. Must resolve the
+	 * minimum and installed version from TEC's own pair instead.
+	 */
+	public function test_tec_card_shows_its_own_below_floor_reason_not_woocommerces(): void {
+		$this->acting_as( 'administrator' );
+		if ( ! class_exists( 'Tribe__Events__Main' ) ) {
+			eval( 'class Tribe__Events__Main {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- class-only marker stub for the floor test, never shipped.
+		}
+		add_filter(
+			'aafm_tec_version',
+			static function () {
+				return '6.0.0';
+			}
+		);
+		add_filter( 'aafm_yoast_active', '__return_false', 99 );
+		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
+
+		try {
+			$this->assertSame( 'below_floor', aafm_integration_status( 'tec' ) );
+
+			$note = aafm_integration_status_note( 'tec', 'below_floor' );
+
+			$this->assertStringContainsString( AAFM_TEC_MIN_VERSION, $note );
+			$this->assertStringContainsString( '6.0.0', $note );
+			$this->assertStringNotContainsString( AAFM_WOOCOMMERCE_MIN_VERSION, $note );
+		} finally {
+			remove_filter( 'aafm_aioseo_active', '__return_false', 99 );
+			remove_filter( 'aafm_rankmath_active', '__return_false', 99 );
+			remove_filter( 'aafm_yoast_active', '__return_false', 99 );
+			remove_all_filters( 'aafm_tec_version' );
+		}
+	}
+
 	public function test_tab_has_exactly_one_form_and_no_nested_form(): void {
 		// The Wave-0 lesson: never nest a <form>. The tab renders one outer form for the
 		// per-ability toggles; any secondary control is a <div> + type="button".

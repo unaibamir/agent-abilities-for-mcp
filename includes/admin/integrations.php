@@ -406,12 +406,24 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 		case 'active':
 			return __( 'Active. Turn on the abilities you want this agent to use.', 'agent-abilities-for-mcp' );
 		case 'below_floor':
+			// Codex final round 4 MEDIUM: this used to hardcode WooCommerce's own constant and
+			// version function for EVERY integration's below-floor notice, so a TEC or Event
+			// Tickets site below its real floor was told to install a WooCommerce version it
+			// likely already had. Each versioned integration's own minimum-version constant and
+			// version-reader function, matching the exact pair aafm_{slug}_below_version_floor()
+			// already checks against for that slug.
+			$version_floor                    = array(
+				'woocommerce'   => array( AAFM_WOOCOMMERCE_MIN_VERSION, 'aafm_woocommerce_version' ),
+				'tec'           => array( AAFM_TEC_MIN_VERSION, 'aafm_tec_version' ),
+				'event_tickets' => array( AAFM_EVENT_TICKETS_MIN_VERSION, 'aafm_event_tickets_version' ),
+			);
+			[ $min_version, $version_reader ] = $version_floor[ $slug ] ?? array( '', '__return_null' );
 			return sprintf(
 				/* translators: 1: the integration plugin name, e.g. WooCommerce. 2: the minimum required version. 3: the version installed on this site. */
 				__( '%1$s %2$s or newer is required for these abilities; this site is running %3$s.', 'agent-abilities-for-mcp' ),
 				$label,
-				AAFM_WOOCOMMERCE_MIN_VERSION,
-				(string) aafm_woocommerce_version()
+				$min_version,
+				(string) $version_reader()
 			);
 		case 'installed_inactive':
 			return sprintf(

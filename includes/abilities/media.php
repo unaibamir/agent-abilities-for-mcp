@@ -1157,7 +1157,16 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 	// Scoped to this one request only: pin the cURL handle to the validated IP. SNI/cert
 	// verification still uses $host - CURLOPT_RESOLVE's whole purpose is to change only where the
 	// TCP connection goes, not what the TLS handshake presents or verifies.
+	//
+	// Codex final round 3 HIGH: aafm_url_would_use_proxy() above only refuses a proxy WordPress
+	// itself is configured to use (WP_PROXY_HOST/WP_PROXY_PORT). libcurl separately, and by
+	// default, honors the process environment's HTTPS_PROXY/ALL_PROXY/https_proxy variables -
+	// neither WordPress nor Requests ever clears those, and CURLOPT_RESOLVE does nothing once a
+	// proxy is in play (the proxy resolves the target, not this handle). Force no proxy at all on
+	// this one handle regardless of environment, so there is no path left where this fetch is
+	// proxied without this function's own knowledge.
 	$pin = static function ( $handle ) use ( $host, $port, $ip ): void {
+		curl_setopt( $handle, CURLOPT_PROXY, '' ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- disables any environment-configured proxy for this one handle; see the comment above.
 		curl_setopt( $handle, CURLOPT_RESOLVE, array( "{$host}:{$port}:{$ip}" ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- pinning a WP_Http_Curl handle to the pre-validated IP; this is the transport hook the SSRF design names, not a bypass of it.
 	};
 

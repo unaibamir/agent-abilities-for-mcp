@@ -80,7 +80,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-post']      = array(
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -88,7 +88,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-in-post']  = array(
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -120,7 +120,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-cpt-item']  = array(
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (Elementor, Divi, Beaver Builder), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -1679,7 +1679,7 @@ function aafm_args_replace_sitewide(): array {
 				'skipped_structure_guard' => array( 'type' => 'integer' ),
 				'skipped_builder_owned'   => array(
 					'type'        => 'integer',
-					'description' => __( 'Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder) owns their content.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content.', 'agent-abilities-for-mcp' ),
 				),
 				'failed_updates'          => array(
 					'type'        => 'integer',

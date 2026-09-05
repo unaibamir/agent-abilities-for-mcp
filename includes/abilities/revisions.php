@@ -41,7 +41,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
 	);
 	$registry['aafm/restore-revision'] = array(
 		'label'        => __( 'Restore revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible, or when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since the restore would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',

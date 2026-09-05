@@ -610,6 +610,28 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
+	 * The race guard only re-checks when the request touches `code`. Two coupons that already
+	 * share a code for reasons unrelated to this request (a pre-existing duplicate) must not
+	 * block an update to an unrelated field - there is no check-then-act window to close on a
+	 * field this request never touches.
+	 */
+	public function test_update_coupon_untouched_code_collision_does_not_block_an_unrelated_field_update(): void {
+		$this->acting_as( 'administrator' );
+		WcCouponStubStore::seed( 701, array( 'code' => 'SHARED' ) );
+		WcCouponStubStore::seed( 702, array( 'code' => 'SHARED' ) );
+
+		$result = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
+			array(
+				'coupon_id' => 702,
+				'amount'    => '9.99',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $result );
+		$this->assertSame( '9.99', $result['amount'] );
+	}
+
+	/**
 	 * Create→update→get round-trip: a created coupon can be updated and the change is visible.
 	 */
 	public function test_create_update_get_round_trip(): void {

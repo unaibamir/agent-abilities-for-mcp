@@ -818,9 +818,17 @@ function aafm_exec_wc_update_coupon( array $input ) {
 		return $error;
 	}
 
-	$race_error = aafm_wc_coupon_code_race_error( $coupon );
-	if ( null !== $race_error ) {
-		return $race_error;
+	// Only re-check when this request actually touches the code: aafm_wc_apply_coupon_input()
+	// never opens a check-then-act window on the code field unless 'code' is in $fields, so an
+	// id-only no-op or an update to an unrelated field (amount, description, ...) has nothing to
+	// re-verify here - running the guard unconditionally would refuse such an update whenever the
+	// coupon's UNCHANGED existing code happens to collide with an unrelated coupon for reasons
+	// that predate this request entirely.
+	if ( array_key_exists( 'code', $fields ) ) {
+		$race_error = aafm_wc_coupon_code_race_error( $coupon );
+		if ( null !== $race_error ) {
+			return $race_error;
+		}
 	}
 
 	$saved_id = (int) $coupon->save();

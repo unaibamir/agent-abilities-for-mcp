@@ -144,6 +144,10 @@ function aafm_args_tec_get_events(): array {
 						'type'        => 'string',
 						'description' => __( 'Free-text search term matched against the event title.', 'agent-abilities-for-mcp' ),
 					),
+					'status' => array(
+						'type'        => 'string',
+						'description' => __( 'Post status to filter by. Defaults to "publish"; draft/pending/future/private require edit access to events.', 'agent-abilities-for-mcp' ),
+					),
 				),
 				aafm_pagination_schema_props(
 					AAFM_LIST_PER_PAGE_MAX,
@@ -179,11 +183,18 @@ function aafm_args_tec_get_events(): array {
  * Execute aafm/tec-get-events.
  *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_get_events( array $input ) {
+	$type_object = get_post_type_object( Tribe__Events__Main::POSTTYPE );
+	$private_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_tribe_events';
+	$status      = aafm_validate_post_status( isset( $input['status'] ) ? (string) $input['status'] : 'publish', current_user_can( $private_cap ) );
+	if ( is_wp_error( $status ) ) {
+		return $status;
+	}
+
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
-	$repo   = tribe_events()->page( $paging['page'] )->per_page( $paging['per_page'] );
+	$repo   = tribe_events()->where( 'post_status', $status )->page( $paging['page'] )->per_page( $paging['per_page'] );
 	if ( ! empty( $input['search'] ) ) {
 		$repo = $repo->search( sanitize_text_field( (string) $input['search'] ) );
 	}
@@ -221,7 +232,7 @@ function aafm_args_tec_get_event(): array {
 			'properties' => array( 'event' => array( 'type' => 'object' ) ),
 		),
 		'execute_callback'    => 'aafm_exec_tec_get_event',
-		'permission_callback' => 'aafm_perm_read',
+		'permission_callback' => 'aafm_tec_perm_read_event',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -256,12 +267,21 @@ function aafm_exec_tec_get_event( array $input ) {
  * title-case shape the legacy tribe_create_event()/tribe_update_event() wrappers translate
  * internally (EventStartDate/EventEndDate/EventAllDay/Venue) - the two are genuinely different
  * key sets and only the lowercase ones are understood by set_args() on the repository.
- * organizer_ids is handled separately (aafm_tec_set_event_organizers()): _EventOrganizerID is a
- * MULTI-row meta key (confirmed via tribe_get_organizer_ids()'s own
- * tribe_get_event_meta($id, '_EventOrganizerID', false) read), and the repository's generic
- * meta_input path (WP core's wp_insert_post()) writes an array value as ONE serialized row, not
- * one row per organizer - so it is written with add_post_meta() directly instead, the confirmed
- * inverse of the read.
+ * organizer_ids maps to the repository's own 'organizers' alias (-> _EventOrganizerID), NOT a
+ * manual delete_post_meta()/add_post_meta() pair: the repository's own update_organizers()
+ * (Repositories/Event.php) already validates every id with tribe_is_organizer(), unpacks the
+ * multi-row meta correctly on save, and - critically - treats an explicitly empty array as
+ * "clear every organizer", which a manual meta rewrite driven by `!empty($input['organizer_ids'])`
+ * could never express (an empty array reads as "not supplied"). Uses array_key_exists(), not
+ * isset()/!empty(), for the same reason: a caller-supplied `[]` must still reach the ORM.
+ *
+ * Deliberately does NOT handle `status`: that field can only be set through the shared
+ * aafm_authorize_post_status()/aafm_resolve_create_status() chokepoint every other create/update
+ * ability routes through (posts.php), which whitelists exactly
+ * {draft,pending,future,private} + the site's real public statuses - a bare sanitize_key() would
+ * let a status like "trash" or "auto-draft" through this ability's own update path, bypassing
+ * tec-delete-event's own delete capability and this plugin's destructive-ability classification
+ * entirely.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
@@ -273,9 +293,6 @@ function aafm_tec_event_orm_args( array $input ): array {
 	}
 	if ( isset( $input['content'] ) ) {
 		$args['post_content'] = wp_kses_post( (string) $input['content'] );
-	}
-	if ( isset( $input['status'] ) ) {
-		$args['post_status'] = sanitize_key( (string) $input['status'] );
 	}
 	if ( isset( $input['start_date'] ) ) {
 		$args['start_date'] = aafm_sanitize_plain_text( (string) $input['start_date'] );
@@ -289,27 +306,10 @@ function aafm_tec_event_orm_args( array $input ): array {
 	if ( ! empty( $input['venue_id'] ) ) {
 		$args['venue'] = absint( $input['venue_id'] );
 	}
-	return $args;
-}
-
-/**
- * Replace an event's organizers with exactly the given set of ids.
- *
- * _EventOrganizerID is a multi-row meta key (one row per organizer), so this deletes every
- * existing row before adding the requested ones - the confirmed inverse of
- * tribe_get_organizer_ids()'s tribe_get_event_meta($id, '_EventOrganizerID', false) read.
- *
- * @param int          $event_id      Event id.
- * @param array<mixed> $organizer_ids Organizer post ids.
- * @return void
- */
-function aafm_tec_set_event_organizers( int $event_id, array $organizer_ids ): void {
-	delete_post_meta( $event_id, '_EventOrganizerID' );
-	foreach ( array_unique( array_map( 'absint', $organizer_ids ) ) as $organizer_id ) {
-		if ( $organizer_id > 0 ) {
-			add_post_meta( $event_id, '_EventOrganizerID', $organizer_id );
-		}
+	if ( array_key_exists( 'organizer_ids', $input ) && is_array( $input['organizer_ids'] ) ) {
+		$args['organizers'] = array_values( array_unique( array_map( 'absint', $input['organizer_ids'] ) ) );
 	}
+	return $args;
 }
 
 /**
@@ -389,21 +389,17 @@ function aafm_args_tec_create_event(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_create_event( array $input ) {
-	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( sanitize_key( (string) $input['status'] ) ) && ! aafm_tec_perm_publish_event() ) {
-		return new WP_Error( 'aafm_status_forbidden', __( 'You do not have permission to set that status.', 'agent-abilities-for-mcp' ) );
+	$status = aafm_resolve_create_status( $input, 'draft', aafm_tec_event_publish_cap() );
+	if ( is_wp_error( $status ) ) {
+		return $status;
 	}
 
-	$args = aafm_tec_event_orm_args( $input );
-	if ( ! isset( $args['post_status'] ) ) {
-		$args['post_status'] = 'draft';
-	}
+	$args                = aafm_tec_event_orm_args( $input );
+	$args['post_status'] = $status;
 
 	$created = tribe_events()->set_args( $args )->create();
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
-	}
-	if ( ! empty( $input['organizer_ids'] ) && is_array( $input['organizer_ids'] ) ) {
-		aafm_tec_set_event_organizers( (int) $created->ID, $input['organizer_ids'] );
 	}
 	return array( 'event' => aafm_tec_event_shape( (int) $created->ID ) );
 }
@@ -451,28 +447,33 @@ function aafm_args_tec_update_event(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_update_event( array $input ) {
-	$id = absint( $input['event_id'] ?? 0 );
-	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( sanitize_key( (string) $input['status'] ) ) && ! aafm_tec_perm_publish_event() ) {
-		return new WP_Error( 'aafm_status_forbidden', __( 'You do not have permission to set that status.', 'agent-abilities-for-mcp' ) );
+	$id   = absint( $input['event_id'] ?? 0 );
+	$args = aafm_tec_event_orm_args( $input );
+	if ( isset( $input['status'] ) ) {
+		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_event_publish_cap() );
+		if ( is_wp_error( $status ) ) {
+			return $status;
+		}
+		$args['post_status'] = $status;
 	}
-
-	$args             = aafm_tec_event_orm_args( $input );
-	$organizers_given = ! empty( $input['organizer_ids'] ) && is_array( $input['organizer_ids'] );
-	if ( array() === $args && ! $organizers_given ) {
+	if ( array() === $args ) {
 		return array( 'event' => aafm_tec_event_shape( $id ) ); // Nothing to change; no-op success.
 	}
 
-	if ( array() !== $args ) {
-		$result = aafm_tec_force_sync_save(
-			'events',
-			static fn() => tribe_events()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
-		);
-		if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
-			return aafm_generic_error();
-		}
+	$result = aafm_tec_force_sync_save(
+		'events',
+		static fn() => tribe_events()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
+	);
+	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
+		return aafm_generic_error();
 	}
-	if ( $organizers_given ) {
-		aafm_tec_set_event_organizers( $id, $input['organizer_ids'] );
+	// The repository's own date-meta update step (Repositories/Event.php) unsets the all-day meta
+	// input rather than writing a falsy value whenever the requested all_day is falsy, so the
+	// underlying post update never touches the existing meta row - a real event that was already
+	// all-day stays all-day. Clear the meta directly here instead, the confirmed inverse of the
+	// boolean cast this file's own read applies when shaping an event for the wire.
+	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
+		delete_post_meta( $id, '_EventAllDay' );
 	}
 	return array( 'event' => aafm_tec_event_shape( $id ) );
 }

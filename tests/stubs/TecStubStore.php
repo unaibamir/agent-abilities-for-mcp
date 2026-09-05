@@ -141,6 +141,30 @@ namespace AAFM\Tests {
 			);
 		}
 
+		/**
+		 * Write a split meta map, special-casing _EventOrganizerID: the real repository's
+		 * update_organizers() (Repositories/Event.php) stores it as one row per id, not one
+		 * update_post_meta() call with an array value - a plain foreach would silently store an
+		 * unreadable serialized array instead, since tribe_get_organizer_ids() reads every row of
+		 * that key back individually.
+		 *
+		 * @param int                  $id   Post id.
+		 * @param array<string,mixed>  $meta Meta key => value map, from split_args().
+		 * @return void
+		 */
+		private function write_meta( int $id, array $meta ): void {
+			foreach ( $meta as $key => $value ) {
+				if ( '_EventOrganizerID' === $key ) {
+					delete_post_meta( $id, $key );
+					foreach ( (array) $value as $organizer_id ) {
+						add_post_meta( $id, $key, (int) $organizer_id );
+					}
+					continue;
+				}
+				update_post_meta( $id, $key, $value );
+			}
+		}
+
 		public function set_args( array $args ): self {
 			$clone               = clone $this;
 			$clone->pending_args = $args;
@@ -162,9 +186,7 @@ namespace AAFM\Tests {
 			if ( is_wp_error( $id ) ) {
 				return false;
 			}
-			foreach ( $split['meta'] as $key => $value ) {
-				update_post_meta( $id, $key, $value );
-			}
+			$this->write_meta( $id, $split['meta'] );
 			$post = get_post( $id );
 			return $post instanceof \WP_Post ? $post : false;
 		}
@@ -186,9 +208,7 @@ namespace AAFM\Tests {
 					return array( $this->where_id => $result );
 				}
 			}
-			foreach ( $split['meta'] as $key => $value ) {
-				update_post_meta( $this->where_id, $key, $value );
-			}
+			$this->write_meta( $this->where_id, $split['meta'] );
 			return array( $this->where_id => true );
 		}
 
@@ -321,6 +341,8 @@ namespace {
 						'end_date'   => '_EventEndDate',
 						'all_day'    => '_EventAllDay',
 						'venue'      => '_EventVenueID',
+						'organizer'  => '_EventOrganizerID',
+						'organizers' => '_EventOrganizerID',
 					)
 				);
 			}

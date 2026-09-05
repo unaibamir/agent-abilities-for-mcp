@@ -508,6 +508,14 @@ function aafm_exec_tec_update_event( array $input ) {
 		return array( 'event' => aafm_tec_event_shape( $id ) ); // Nothing to change; no-op success.
 	}
 
+	// Codex final round 10 MEDIUM: round 9's content-safety fix wired this call into event
+	// create and both venue/organizer paths, but missed this one - the fifth-of-six call sites
+	// that got left out.
+	$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
+	if ( is_wp_error( $safety ) ) {
+		return $safety;
+	}
+
 	$result = aafm_tec_force_sync_save(
 		'events',
 		static fn() => tribe_events()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
@@ -530,7 +538,11 @@ function aafm_exec_tec_update_event( array $input ) {
 	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
 		delete_post_meta( $id, '_EventAllDay' );
 	}
-	return array( 'event' => aafm_tec_event_shape( $id ) );
+	$response = array( 'event' => aafm_tec_event_shape( $id ) );
+	if ( ! empty( $safety['warnings'] ) ) {
+		$response['content_warnings'] = $safety['warnings'];
+	}
+	return $response;
 }
 
 /**

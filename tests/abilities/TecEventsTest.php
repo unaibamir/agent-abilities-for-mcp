@@ -221,6 +221,46 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
+	 * Codex final round 10 MEDIUM: round 9's content-safety fix wired aafm_tec_enforce_content_safety()
+	 * into event creation and both venue/organizer paths, but missed this one - the update path is
+	 * a separate execute function that builds and saves its own ORM args, so the check has to be
+	 * called here too, not inherited from the create-side fix.
+	 */
+	public function test_update_event_enforces_the_max_title_length(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+
+		update_option( 'aafm_max_title_len', 5 );
+		$out = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $event_id,
+				'title'    => 'This title is far too long',
+			)
+		);
+		delete_option( 'aafm_max_title_len' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_title_too_long', $out->get_error_code() );
+	}
+
+	public function test_update_event_enforces_strict_block_validation(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+
+		update_option( 'aafm_block_guard_strict', true );
+		$out = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $event_id,
+				'content'  => '<!-- wp:heading --><h2 class="has-text-color">Hi</h2><!-- /wp:heading -->',
+			)
+		);
+		delete_option( 'aafm_block_guard_strict' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
+	}
+
+	/**
 	 * Codex final round MEDIUM: TEC's own repository unsets a falsy all_day meta_input entirely
 	 * rather than writing it, so the ORM save alone never clears an existing 'yes' - proven here
 	 * against a stub that reproduces that exact quirk (TecStubStore.php's write_meta()), not one

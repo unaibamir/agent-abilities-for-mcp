@@ -196,8 +196,11 @@ final class TecEventsTest extends TestCase {
 	/**
 	 * Codex round-b finding 6: tec-get-events defaulted to the repository's own published-only
 	 * query, so a draft event a caller had just created (tec-create-event defaults to draft) was
-	 * invisible to the matching list ability. Also proves the status filter itself is authorized:
-	 * a caller without read_private_tribe_events cannot request draft/private.
+	 * invisible to the matching list ability. This admin fixture holds every TEC capability
+	 * (stub_tec()), so it does not by itself distinguish which capability actually authorizes
+	 * status=draft - that split (edit_tribe_events for draft/pending/future, read_private_
+	 * tribe_events for private) is proven by the dedicated tests below, added by the final Codex
+	 * round that gave draft/pending/future their own editable-events gate.
 	 */
 	public function test_get_events_can_list_drafts_with_read_private_capability(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -217,7 +220,15 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( 'Draft Event', $drafts['events'][0]['title'] );
 	}
 
-	public function test_get_events_refuses_a_private_status_without_read_private_capability(): void {
+	/**
+	 * Codex final round 7 LOW: this test's name and its original docblock (now above, on the
+	 * previous test) both attributed this refusal to a missing read_private_tribe_events
+	 * capability, but a bare 'author' fixture is refused because it has neither edit_tribe_events
+	 * NOR read_private_tribe_events - the real read_private-specific gate is now proven by
+	 * test_get_events_private_status_still_requires_read_private_capability() below, which uses
+	 * status=private and a fixture that DOES hold edit_tribe_events.
+	 */
+	public function test_get_events_refuses_a_draft_status_without_edit_capability(): void {
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $author );
 

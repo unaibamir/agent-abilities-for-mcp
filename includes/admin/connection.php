@@ -1460,5 +1460,7 @@ function aafm_render_connection_tab(): void {
 
 	echo '</details>'; // .aafm-app-password-fallback
 
+	aafm_render_allowlist_section();
+
 	echo '</div>'; // .aafm-connection
 }

@@ -345,6 +345,42 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/slim-seo-update-post':
 			return static fn(): bool => aafm_can_edit_post_family();
 
+		// The Events Calendar (added 1.7.4): events/venues/organizers each register with their
+		// OWN capability_type (tribe_event(s) / tribe_venue(s) / tribe_organizer(s)) and
+		// map_meta_cap true, so the per-object edit_tribe_event($id)/edit_tribe_venue($id)/
+		// edit_tribe_organizer($id) checks are false with empty input - the same shape as the
+		// core update-post case below, just against a different capability family per object
+		// type. Each floor is the OR of that type's own edit_{plural}/edit_others_{plural}/
+		// edit_published_{plural} caps, mirroring aafm_can_edit_post_family()'s shape exactly.
+		// Reads of tickets/attendees for one event (tec-get-tickets, tec-get-ticket,
+		// tec-get-attendees) are gated on the PARENT EVENT's per-object cap (Amendment 16), so
+		// they share the event floor, not a bare Event Tickets cap. Lists and creates
+		// (tec-get-events/-venues/-organizers, tec-create-event/-venue/-organizer) are
+		// object-independent and need no case here - each falls through to its real
+		// permission_callback with empty input, the correct discovery answer.
+		case 'aafm/tec-get-event':
+		case 'aafm/tec-update-event':
+		case 'aafm/tec-get-tickets':
+		case 'aafm/tec-get-ticket':
+		case 'aafm/tec-get-attendees':
+			return static fn(): bool => current_user_can( 'edit_tribe_events' )
+				|| current_user_can( 'edit_others_tribe_events' )
+				|| current_user_can( 'edit_published_tribe_events' );
+		case 'aafm/tec-delete-event':
+			return static fn(): bool => current_user_can( 'delete_tribe_events' )
+				|| current_user_can( 'delete_others_tribe_events' )
+				|| current_user_can( 'delete_published_tribe_events' );
+		case 'aafm/tec-get-venue':
+		case 'aafm/tec-update-venue':
+			return static fn(): bool => current_user_can( 'edit_tribe_venues' )
+				|| current_user_can( 'edit_others_tribe_venues' )
+				|| current_user_can( 'edit_published_tribe_venues' );
+		case 'aafm/tec-get-organizer':
+		case 'aafm/tec-update-organizer':
+			return static fn(): bool => current_user_can( 'edit_tribe_organizers' )
+				|| current_user_can( 'edit_others_tribe_organizers' )
+				|| current_user_can( 'edit_published_tribe_organizers' );
+
 		// ACF integration, post fields: gates per-object on edit_post($id) (aafm_perm_acf_post ->
 		// aafm_can_edit_post_object), false with empty input - same floor as the SEO family above,
 		// for the same reason (both delegate to the identical shared content-edit gate).
@@ -706,6 +742,18 @@ function aafm_ability_list_permission( string $name ): ?callable {
  * @throws \Throwable When the aafm_rethrow_ability_exceptions filter is on.
  */
 function aafm_user_can_discover_ability( string $ability_name ): bool {
+	// Allowlist scope check FIRST, before either branch below (228-allowlist-design.md,
+	// "Discovery-time chokepoint"): aafm_ability_list_permission() short-circuits past
+	// aafm_user_can_call_ability() for every ability with a per-object permission branch
+	// (update-post, trash-post, delete-post, and by the same shape most of this plan's own new
+	// mapped abilities), so a check placed only inside that function would never run for them.
+	// A principal who fails this layer can never discover the tool at all, regardless of which
+	// branch would otherwise decide visibility - no audit row, matching the raw-path,
+	// no-audit rationale a few lines below for the equivalent bridged-ability case.
+	if ( ! aafm_ability_allowed_for_principal( $ability_name, get_current_user_id(), aafm_oauth_current_client_id() ) ) {
+		return false;
+	}
+
 	$list_permission = aafm_ability_list_permission( $ability_name );
 	if ( null !== $list_permission ) {
 		// The short-circuit branch needs the same Throwable floor as the fallthrough, and for a

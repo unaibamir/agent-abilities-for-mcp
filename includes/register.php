@@ -1075,6 +1075,15 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			}
 		}
 
+		// Allowlist scope check: an ADDITIONAL AND condition, never a replacement of the
+		// capability check above - it can only narrow what the underlying WordPress capability
+		// already permits, never widen it. Only runs when the capability check itself already
+		// passed, so a denial from either layer reaches the SAME audit block below and is written
+		// as exactly one 'denied' row, not two.
+		if ( true === $allowed ) {
+			$allowed = aafm_ability_allowed_for_principal( $name, get_current_user_id(), aafm_oauth_current_client_id() );
+		}
+
 		// The WP Abilities API admits ONLY a strict true; every other return (false, WP_Error,
 		// null, 0, '') is a denial. Audit any non-true result so a malformed or future permission
 		// callback's denial is never silently unlogged.

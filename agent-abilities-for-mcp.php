@@ -314,6 +314,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/safety.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/block-guard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/page-builder-guard.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/allowlist.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/class-aafm-rate-limited-ability.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
@@ -413,6 +414,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/allowlist.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-request.php';
@@ -443,6 +445,7 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
 		add_action( 'wp_ajax_aafm_set_client_agent_identity', 'aafm_ajax_set_client_agent_identity' );
+		add_action( 'wp_ajax_aafm_save_allowlist', 'aafm_ajax_save_allowlist' );
 		add_action( 'wp_ajax_aafm_quickconnect_oauth', 'aafm_ajax_quickconnect_oauth' );
 		add_action( 'wp_ajax_aafm_quickconnect_finish', 'aafm_ajax_quickconnect_finish' );
 		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );

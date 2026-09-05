@@ -75,6 +75,7 @@
 			this.#bindResetPlugin();
 			this.#bindOauthRevoke();
 			this.#bindClientAgentToggle();
+			this.#bindAllowlist();
 			this.#bindQuickConnect();
 		}
 
@@ -1818,6 +1819,100 @@
 						json?.data?.message ??
 							this.#t( 'agentToggleFailed', 'Could not save. Please try again.' )
 					);
+				}
+			} );
+		}
+
+		/**
+		 * Wire the Connections tab's "Ability allowlist" card: add a scope row, remove a row,
+		 * and save the whole set as one AJAX call. Every dynamically-created cell is built with
+		 * DOM APIs (createElement/textContent/value), never innerHTML with interpolated input,
+		 * so no separate escaping helper is needed for the values this card handles.
+		 */
+		#bindAllowlist() {
+			const table = document.getElementById( 'aafm-allowlist-table' );
+			const saveBtn = document.getElementById( 'aafm-allowlist-save' );
+			const addBtn = document.getElementById( 'aafm-allowlist-add-row' );
+			if ( ! table || ! saveBtn || ! addBtn ) {
+				return;
+			}
+			const status = document.getElementById( 'aafm-allowlist-status' );
+			const body = table.querySelector( 'tbody' );
+
+			addBtn.addEventListener( 'click', () => {
+				const typeSelect = document.getElementById( 'aafm-allowlist-new-scope-type' );
+				const idInput = document.getElementById( 'aafm-allowlist-new-scope-id' );
+				const scopeId = idInput?.value.trim() ?? '';
+				if ( ! scopeId ) {
+					idInput?.focus();
+					return;
+				}
+
+				const row = document.createElement( 'tr' );
+				row.dataset.allowlistRow = '';
+				row.dataset.scopeType = typeSelect?.value ?? 'role';
+				row.dataset.scopeId = scopeId;
+
+				const labelCell = document.createElement( 'td' );
+				labelCell.textContent =
+					( typeSelect?.value ?? 'role' ) === 'role' ? `Role: ${ scopeId }` : `Connection: ${ scopeId }`;
+
+				const allowedCell = document.createElement( 'td' );
+				const textarea = document.createElement( 'textarea' );
+				textarea.className = 'aafm-allowlist-allowed';
+				textarea.rows = 2;
+				textarea.value = 'all'; // Unrestricted until the operator narrows it - never starts as "deny everything".
+				allowedCell.append( textarea );
+
+				const removeCell = document.createElement( 'td' );
+				const removeBtn = document.createElement( 'button' );
+				removeBtn.type = 'button';
+				removeBtn.className = 'aafm-btn aafm-btn-secondary aafm-allowlist-remove';
+				removeBtn.textContent = this.#t( 'allowlistRemove', 'Remove' );
+				removeCell.append( removeBtn );
+
+				row.append( labelCell, allowedCell, removeCell );
+				body?.append( row );
+				if ( idInput ) {
+					idInput.value = '';
+				}
+			} );
+
+			table.addEventListener( 'click', ( e ) => {
+				const btn = e.target.closest( '.aafm-allowlist-remove' );
+				if ( btn ) {
+					btn.closest( 'tr' )?.remove();
+				}
+			} );
+
+			saveBtn.addEventListener( 'click', async () => {
+				const rows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).map( ( row ) => {
+					const raw = row.querySelector( '.aafm-allowlist-allowed' )?.value ?? '';
+					const trimmed = raw.trim();
+					const allowedAbilities =
+						trimmed.toLowerCase() === 'all'
+							? 'all'
+							: trimmed
+									.split( /[\n,]/ )
+									.map( ( name ) => name.trim() )
+									.filter( Boolean );
+					return {
+						scope_type: row.dataset.scopeType,
+						scope_id: row.dataset.scopeId,
+						allowed_abilities: allowedAbilities,
+					};
+				} );
+
+				saveBtn.disabled = true;
+				const json = await this.#post( 'aafm_save_allowlist', {
+					allowlist_json: JSON.stringify( rows ),
+				} );
+				saveBtn.disabled = false;
+
+				if ( status ) {
+					status.textContent = json?.success
+						? this.#t( 'allowlistSaved', 'Saved.' )
+						: ( json?.data?.message ?? this.#t( 'allowlistSaveFailed', 'Could not save. Please try again.' ) );
 				}
 			} );
 		}

@@ -187,6 +187,79 @@ function aafm_tec_event_publish_cap(): string {
 }
 
 /**
+ * The capability required to set a publish-equivalent status on a venue, same convention as
+ * aafm_tec_event_publish_cap() above.
+ *
+ * @return string
+ */
+function aafm_tec_venue_publish_cap(): string {
+	return 'publish_tribe_venues';
+}
+
+/**
+ * The capability required to set a publish-equivalent status on an organizer, same convention
+ * as aafm_tec_event_publish_cap() above.
+ *
+ * @return string
+ */
+function aafm_tec_organizer_publish_cap(): string {
+	return 'publish_tribe_organizers';
+}
+
+/**
+ * Resolve a caller-requested `status` filter for a TEC list ability (venues, organizers - NOT
+ * events, which has its own inline logic already reviewed and tested separately), and whether
+ * the resulting query must be contained to the caller's own objects.
+ *
+ * Silent-wrong-answer fix (sim coverage lane, 2026-09): tribe_venues()->create()/
+ * tribe_organizers()->create() default a new object to 'draft', but aafm_tec_visible_statuses()
+ * (this file) never included 'draft' in a list query - a caller could create a venue/organizer,
+ * get a success response, and then never see it again through tec-get-venues/tec-get-organizers,
+ * even as its own author. Mirrors aafm_exec_tec_get_events()'s already-reviewed split: 'private'
+ * keeps the existing read_private_* gate (aafm_tec_visible_statuses(), unchanged, used when
+ * $requested is '' or 'private'); 'draft'/'pending'/'future' require the edit capability instead,
+ * and the caller is contained to their own objects unless they also hold the type's
+ * edit_others_* capability. All three capabilities are resolved from the post type's own
+ * capability map (map_meta_cap: true for venues/organizers, same as events), not hardcoded
+ * literals - mirrors aafm_exec_tec_get_events()'s own derivation exactly.
+ *
+ * @param string $requested Raw requested status ('' when the caller omitted it).
+ * @param string $post_type Venue or organizer post type constant.
+ * @return array{status:string|array<string>,own_only:bool}|WP_Error
+ */
+function aafm_tec_resolve_list_status( string $requested, string $post_type ) {
+	if ( '' === $requested ) {
+		return array(
+			'status'   => aafm_tec_visible_statuses( $post_type ),
+			'own_only' => false,
+		);
+	}
+
+	$type_object = get_post_type_object( $post_type );
+	$private_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_posts';
+	$edit_cap    = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_posts : 'edit_posts';
+	$edit_others = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_others_posts : 'edit_others_posts';
+
+	if ( in_array( $requested, array( 'draft', 'pending', 'future' ), true ) ) {
+		if ( ! current_user_can( $edit_cap ) ) {
+			return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
+		}
+		return array(
+			'status'   => $requested,
+			'own_only' => ! current_user_can( $edit_others ),
+		);
+	}
+	$status = aafm_validate_post_status( $requested, current_user_can( $private_cap ) );
+	if ( is_wp_error( $status ) ) {
+		return $status;
+	}
+	return array(
+		'status'   => $status,
+		'own_only' => false,
+	);
+}
+
+/**
  * Per-object edit permission for a single venue.
  *
  * @param array<string,mixed> $input Input carrying venue_id.

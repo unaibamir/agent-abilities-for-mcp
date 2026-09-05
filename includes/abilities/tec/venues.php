@@ -68,7 +68,7 @@ function aafm_tec_venues_registry_definitions(): array {
 		),
 		'aafm/tec-create-venue' => array(
 			'label'        => __( 'Create venue', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Create a venue via the Events Calendar ORM. Requires the edit_tribe_venues capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Create a venue via the Events Calendar ORM. Requires the edit_tribe_venues capability. Defaults to draft; publish requires the publish_tribe_venues capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'tec',
@@ -76,7 +76,7 @@ function aafm_tec_venues_registry_definitions(): array {
 		),
 		'aafm/tec-update-venue' => array(
 			'label'        => __( 'Update venue', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Update a venue by ID via the Events Calendar ORM. Requires edit access to that venue.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Update a venue by ID via the Events Calendar ORM. Requires edit access to that venue. Setting status to publish requires the publish_tribe_venues capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'tec',
@@ -96,6 +96,7 @@ function aafm_tec_venue_shape( int $id ): array {
 	return array(
 		'id'      => $id,
 		'title'   => $post instanceof WP_Post ? get_the_title( $post ) : '',
+		'status'  => $post instanceof WP_Post ? (string) $post->post_status : '',
 		'address' => (string) get_post_meta( $id, '_VenueAddress', true ),
 		'city'    => (string) get_post_meta( $id, '_VenueCity', true ),
 		'state'   => (string) get_post_meta( $id, '_VenueStateProvince', true ),
@@ -147,6 +148,12 @@ function aafm_tec_venue_input_properties(): array {
 			'format'      => 'uri',
 			'description' => __( 'Website URL.', 'agent-abilities-for-mcp' ),
 		),
+		'status'  => array(
+			'type'        => 'string',
+			'enum'        => array( 'draft', 'publish' ),
+			'default'     => 'draft',
+			'description' => __( 'Publication status. Defaults to draft. Setting publish requires the publish_tribe_venues capability.', 'agent-abilities-for-mcp' ),
+		),
 	);
 }
 
@@ -187,10 +194,18 @@ function aafm_args_tec_get_venues(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => aafm_pagination_schema_props(
-				AAFM_LIST_PER_PAGE_MAX,
-				__( 'Number of venues per page, clamped to the 1-50 range. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-				__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+			'properties'           => array_merge(
+				array(
+					'status' => array(
+						'type'        => 'string',
+						'description' => __( 'Post status to filter by. Defaults to whatever the caller can already see (publish, plus private with read-private access); draft/pending/future require edit access to venues (scoped to your own unless you can edit others\' venues).', 'agent-abilities-for-mcp' ),
+					),
+				),
+				aafm_pagination_schema_props(
+					AAFM_LIST_PER_PAGE_MAX,
+					__( 'Number of venues per page, clamped to the 1-50 range. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
 			),
 			'additionalProperties' => false,
 		),
@@ -220,15 +235,23 @@ function aafm_args_tec_get_venues(): array {
  * Execute aafm/tec-get-venues.
  *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_get_venues( array $input ) {
+	$resolved = aafm_tec_resolve_list_status( isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : '', Tribe__Events__Venue::POSTTYPE );
+	if ( is_wp_error( $resolved ) ) {
+		return $resolved;
+	}
+
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$repo   = tribe_venues()
-		->where( 'post_status', aafm_tec_visible_statuses( Tribe__Events__Venue::POSTTYPE ) )
+		->where( 'post_status', $resolved['status'] )
 		->page( $paging['page'] )
 		->per_page( $paging['per_page'] );
-	$ids    = $repo->get_ids();
+	if ( $resolved['own_only'] ) {
+		$repo = $repo->where( 'author', get_current_user_id() );
+	}
+	$ids = $repo->get_ids();
 	return array(
 		'venues' => array_map( 'aafm_tec_venue_shape', array_map( 'intval', $ids ) ),
 		'total'  => (int) $repo->found(),
@@ -326,7 +349,14 @@ function aafm_args_tec_create_venue(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_create_venue( array $input ) {
-	$created = tribe_venues()->set_args( aafm_tec_venue_orm_args( $input ) )->create();
+	$status = aafm_resolve_create_status( $input, 'draft', aafm_tec_venue_publish_cap() );
+	if ( is_wp_error( $status ) ) {
+		return $status;
+	}
+	$args                = aafm_tec_venue_orm_args( $input );
+	$args['post_status'] = $status;
+
+	$created = tribe_venues()->set_args( $args )->create();
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -384,6 +414,13 @@ function aafm_args_tec_update_venue(): array {
 function aafm_exec_tec_update_venue( array $input ) {
 	$id   = absint( $input['venue_id'] ?? 0 );
 	$args = aafm_tec_venue_orm_args( $input );
+	if ( isset( $input['status'] ) ) {
+		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_venue_publish_cap() );
+		if ( is_wp_error( $status ) ) {
+			return $status;
+		}
+		$args['post_status'] = $status;
+	}
 	if ( array() === $args ) {
 		return array( 'venue' => aafm_tec_venue_shape( $id ) );
 	}

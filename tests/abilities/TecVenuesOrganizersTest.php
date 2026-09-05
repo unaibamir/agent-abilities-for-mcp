@@ -261,4 +261,110 @@ final class TecVenuesOrganizersTest extends TestCase {
 		remove_role( $role_name );
 		$this->assertSame( 0, $out['total'] );
 	}
+
+	/**
+	 * Sim coverage lane finding: tribe_venues()->create()/tribe_organizers()->create() default a
+	 * new object to 'draft', which aafm_tec_visible_statuses() has never included in a list
+	 * query - a caller created a venue/organizer, got a success response, and could never see it
+	 * again. Fixed by routing through aafm_resolve_create_status()/aafm_authorize_post_status(),
+	 * the same shared chokepoint aafm/tec-create-event already uses, and giving tec-get-venues/
+	 * tec-get-organizers a status filter that can request 'draft' back (aafm_tec_resolve_list_status()).
+	 */
+	public function test_create_venue_with_publish_and_the_cap_succeeds_and_is_listed(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		get_userdata( $editor )->add_cap( 'edit_tribe_venues' );
+		get_userdata( $editor )->add_cap( 'publish_tribe_venues' );
+		wp_set_current_user( $editor );
+
+		$out = aafm_exec_tec_create_venue(
+			array(
+				'title'  => 'Published Hall',
+				'status' => 'publish',
+			)
+		);
+
+		$this->assertSame( 'publish', $out['venue']['status'] );
+
+		$listed = aafm_exec_tec_get_venues( array() );
+		$this->assertSame( 1, $listed['total'] );
+		$this->assertSame( 'Published Hall', $listed['venues'][0]['title'] );
+	}
+
+	public function test_create_venue_with_publish_without_the_cap_is_refused(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		get_userdata( $editor )->add_cap( 'edit_tribe_venues' );
+		wp_set_current_user( $editor );
+
+		$out = aafm_exec_tec_create_venue(
+			array(
+				'title'  => 'Should Be Refused',
+				'status' => 'publish',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_status_forbidden', $out->get_error_code() );
+	}
+
+	public function test_create_venue_defaults_to_draft_and_is_listed_for_its_author(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		get_userdata( $editor )->add_cap( 'edit_tribe_venues' );
+		wp_set_current_user( $editor );
+
+		$created = aafm_exec_tec_create_venue( array( 'title' => 'Draft Hall' ) );
+		$this->assertSame( 'draft', $created['venue']['status'] );
+
+		$listed = aafm_exec_tec_get_venues( array( 'status' => 'draft' ) );
+		$this->assertSame( 1, $listed['total'] );
+		$this->assertSame( 'Draft Hall', $listed['venues'][0]['title'] );
+	}
+
+	public function test_create_organizer_with_publish_and_the_cap_succeeds_and_is_listed(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		get_userdata( $editor )->add_cap( 'edit_tribe_organizers' );
+		get_userdata( $editor )->add_cap( 'publish_tribe_organizers' );
+		wp_set_current_user( $editor );
+
+		$out = aafm_exec_tec_create_organizer(
+			array(
+				'title'  => 'Published Organizer',
+				'status' => 'publish',
+			)
+		);
+
+		$this->assertSame( 'publish', $out['organizer']['status'] );
+
+		$listed = aafm_exec_tec_get_organizers( array() );
+		$this->assertSame( 1, $listed['total'] );
+		$this->assertSame( 'Published Organizer', $listed['organizers'][0]['title'] );
+	}
+
+	public function test_create_organizer_with_publish_without_the_cap_is_refused(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		get_userdata( $editor )->add_cap( 'edit_tribe_organizers' );
+		wp_set_current_user( $editor );
+
+		$out = aafm_exec_tec_create_organizer(
+			array(
+				'title'  => 'Should Be Refused',
+				'status' => 'publish',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_status_forbidden', $out->get_error_code() );
+	}
+
+	public function test_create_organizer_defaults_to_draft_and_is_listed_for_its_author(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		get_userdata( $editor )->add_cap( 'edit_tribe_organizers' );
+		wp_set_current_user( $editor );
+
+		$created = aafm_exec_tec_create_organizer( array( 'title' => 'Draft Organizer' ) );
+		$this->assertSame( 'draft', $created['organizer']['status'] );
+
+		$listed = aafm_exec_tec_get_organizers( array( 'status' => 'draft' ) );
+		$this->assertSame( 1, $listed['total'] );
+		$this->assertSame( 'Draft Organizer', $listed['organizers'][0]['title'] );
+	}
 }

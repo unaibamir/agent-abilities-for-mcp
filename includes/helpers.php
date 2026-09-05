@@ -1438,6 +1438,10 @@ function aafm_rich_post_output_properties(): array {
 			'type'        => 'string',
 			'description' => __( 'Present on single-post reads and when include_content=true; omitted for password-protected posts.', 'agent-abilities-for-mcp' ),
 		),
+		'content_length' => array(
+			'type'        => 'integer',
+			'description' => __( 'Byte length of the raw stored content (strlen of post_content), present even when include_content is false so a caller can preflight size before a full fetch. Reported as 0 for a password-protected post, regardless of its real length.', 'agent-abilities-for-mcp' ),
+		),
 		'excerpt'        => array( 'type' => 'string' ),
 		'terms'          => array(
 			'type'                 => 'object',
@@ -1504,6 +1508,12 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// post without inspecting post_password, so this is the only place the body is
 	// withheld. Mirrors the precedent in comments.php (gate on empty password).
 	$is_protected = '' !== (string) $post->post_password;
+
+	// Computed unconditionally, independent of include_content/content_format, so a caller can
+	// preflight size before a full fetch even when include_content=false - the whole point of
+	// this field. Reports 0 for a protected post rather than the real length, so it can never
+	// become a side channel that leaks how much content a caller who cannot read it holds.
+	$shape['content_length'] = $is_protected ? 0 : strlen( (string) $post->post_content );
 
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter, applied so blocks/shortcodes render.
 	$rendered = $is_protected ? '' : (string) apply_filters( 'the_content', $post->post_content );

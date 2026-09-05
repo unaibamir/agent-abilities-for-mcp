@@ -450,16 +450,21 @@ function aafm_args_get_post(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'post_id'        => array(
+					'post_id'         => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
 						'description' => __( 'ID of the post to retrieve.', 'agent-abilities-for-mcp' ),
 					),
-					'content_format' => array(
+					'content_format'  => array(
 						'type'        => 'string',
 						'enum'        => array( 'rendered', 'raw' ),
 						'default'     => 'rendered',
 						'description' => __( 'Format for the returned content: rendered HTML (default) or raw block markup.', 'agent-abilities-for-mcp' ),
+					),
+					'include_content' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => __( 'Whether to include the post content. Defaults to true; pass false to omit it, for example when only content_length is needed to preflight size.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -558,7 +563,8 @@ function aafm_exec_get_post( array $input ) {
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	$include_content = ! array_key_exists( 'include_content', $input ) || (bool) $input['include_content'];
 	// Branch review fix (lang scope and result shaping): shape under the CORRECT language,
 	// never ambient. An explicit requested language shapes under that language, matching the
 	// translation aafm_get_post_lang_resolved_id() already resolved above. "all" or no lang at
@@ -571,7 +577,13 @@ function aafm_exec_get_post( array $input ) {
 	return array(
 		'post' => aafm_with_language(
 			$shape_lang,
-			static fn(): array => aafm_rich_post( $post, array( 'content_format' => $format ) )
+			static fn(): array => aafm_rich_post(
+				$post,
+				array(
+					'content_format'  => $format,
+					'include_content' => $include_content,
+				)
+			)
 		),
 	);
 }

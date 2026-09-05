@@ -255,7 +255,7 @@ Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". E
 
 ### Does it send my content to OpenAI, Anthropic, or Google?
 
-No. The plugin connects to no AI provider and makes no requests to any external or third-party service. Your own AI client connects in to your site and calls the abilities you have enabled. Whatever your AI client does with the results afterward is between you and whoever makes that client.
+No. The plugin connects to no AI provider and makes no requests of its own to any external service. Your own AI client connects in to your site and calls the abilities you have enabled. Whatever your AI client does with the results afterward is between you and whoever makes that client.
 
 ### Does it send data anywhere?
 

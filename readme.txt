@@ -16,7 +16,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 
 Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 179 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
-Nothing is exposed until you turn it on. Permission controls are the point: the agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities before it runs. The audit log covers the rest. Every call is written down before it runs, denied attempts included, so you can see both what the agent did and what it was stopped from doing. You add reach as you build trust, not all at once. Your own AI client connects in to your site; Agent Abilities for MCP makes no requests to any external or third-party service and has no telemetry.
+Nothing is exposed until you turn it on. Permission controls are the point: the agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities before it runs. The audit log covers the rest. Every call is written down before it runs, denied attempts included, so you can see both what the agent did and what it was stopped from doing. You add reach as you build trust, not all at once. Your own AI client connects in to your site; Agent Abilities for MCP contacts no AI provider and has no telemetry. The one ability that reaches an external address, upload-media-from-url, is off by default, fetches only a URL you explicitly give it, and is SSRF-hardened.
 
 Prefer to watch first? Here is a short walkthrough of the plugin in action.
 
@@ -39,7 +39,7 @@ An MCP server hands a language model the ability to change your live site, so ho
 * **Honest audit log.** Every call is recorded, denied attempts included, with the principal, the argument keys, and a short identifier-only note of what it touched. Free-text argument content is never stored. It lives in your own database and clears from the admin.
 * **Bounded by construction.** No arbitrary option or meta access, no code execution. Uploads are decoded from inline data or fetched from an HTTPS URL, then checked by their real bytes against an image allow-list either way; a URL upload is refused if it targets a private, loopback, or link-local address, and redirects are never followed. A created user gets the site default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated, and deletes go to Trash where the ability supports it.
 * **Optional safety controls.** Switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
-* **No data leaves your site.** The plugin contacts no AI provider and no external service. Your AI client connects in; the plugin never reaches out.
+* **No data leaves your site.** The plugin contacts no AI provider and has no telemetry. Your AI client connects in; the only outbound requests the plugin itself can make are the Connection tab's own reachability check and, only when you turn it on, the upload-media-from-url ability fetching the URL your AI client gives it.
 * **Two ways to connect.** Approve an agent in the browser over OAuth, with no secret to put in your config file, or point a dedicated low-privilege user at an Application Password. A guided screen builds the client config and checks the endpoint for you. An Application Password is a whole-site WordPress credential bounded only by that user's role, not something this plugin can scope down, so the allowlist, the high-risk floor, and the audit log below apply to calls made through this plugin's MCP endpoint only. OAuth does not have that limit, since a token this plugin issues only ever authenticates this one endpoint.
 
 = 🤖 Built on the WordPress Abilities API and MCP Adapter =
@@ -262,7 +262,7 @@ No. The plugin connects to no AI provider and makes no requests of its own to an
 
 = Does it send data anywhere? =
 
-No. The plugin contacts no external service and has no telemetry. Your agent talks directly to your site.
+No AI provider and no telemetry. Your agent talks directly to your site. The one exception is the off-by-default upload-media-from-url ability: if you turn it on, it fetches the URL your AI client gives it (HTTPS only, private and reserved addresses refused, no redirects followed) so that file can be added to your media library. It sends nothing of yours anywhere; it only pulls in what you asked it to fetch.
 
 = What does the audit log record? =
 
@@ -278,7 +278,7 @@ Please report security issues privately rather than in the support forum, so a f
 
 == External Services ==
 
-This plugin does not contact any external or third-party service. It registers abilities on your own site and answers the requests your AI client sends to it. The one HTTP request it can make on its own is the Connection tab's reachability check, a same-origin call to your own site's MCP endpoint used to confirm it answers - never a request to anywhere else. It includes no analytics or telemetry.
+This plugin contacts no AI provider and includes no analytics or telemetry. It registers abilities on your own site and answers the requests your AI client sends to it. It can make two kinds of outbound HTTP request on its own: the Connection tab's reachability check, a same-origin call to your own site's MCP endpoint used only to confirm it answers, and, only when you enable the off-by-default upload-media-from-url ability, a fetch of the exact HTTPS URL your AI client supplies for that one call, so the file at that URL can be added to your media library. That fetch is SSRF-hardened (HTTPS only, no bare IP-literal host, private and reserved addresses refused, no redirects followed) and sends nothing of yours to the destination; it only reads what is already public at the URL you gave it.
 
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source `mcp-remote` tool or `@automattic/mcp-wordpress-remote`. Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client. Their terms are on their own pages:
 

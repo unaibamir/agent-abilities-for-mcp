@@ -2855,7 +2855,7 @@ function aafm_render_help_tab(): void {
 		wp_kses(
 			'<p>' . esc_html__( 'The plugin is built to be safe by default. In plain terms:', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<ul>'
-			. '<li><strong>' . esc_html__( 'No external calls.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never phones home. Your credentials and your content never leave the site - the AI client connects in to you, not the other way round.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'No phoning home.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never contacts an AI provider or a telemetry service, and your credentials never leave the site - the AI client connects in to you, not the other way round. The one exception is the off-by-default "Upload media from URL" ability: turn it on and it will fetch the exact URL your AI client gives it so that file can be added to your media library.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
@@ -2870,7 +2870,7 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'What does the plugin log, and does it call out to anything?', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'The plugin makes no external calls - nothing about your site or its content is sent anywhere.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'The plugin sends nothing about your site or its content anywhere. It can make two outbound requests of its own: the Connection tab\'s same-origin reachability check, and, only if you turn on the "Upload media from URL" ability, a fetch of the URL your AI client supplies so that file can be added to your media library.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'The activity log records only the argument KEYS of each call (never the values) plus the source IP address of the request. You can clear it any time from the Activity Log tab.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)

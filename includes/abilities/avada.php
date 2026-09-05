@@ -292,7 +292,10 @@ function aafm_fusion_attribute_quotes_balanced( string $attribute_str ): bool {
  *   get_shortcode_regex() is entirely OPTIONAL, so an absent closer still yields a match, just
  *   with an empty (rather than genuinely absent) inner-content capture, and nothing before this
  *   fix distinguished the two.
- * - An attribute string whose quote count is unbalanced (an odd number of `"` or `'`) means
+ * - An attribute string with an unclosed quoted value (tracked by
+ *   aafm_fusion_attribute_quotes_balanced(), which follows which quote character is actually the
+ *   ACTIVE delimiter rather than counting `"` and `'` independently - a plain apostrophe inside a
+ *   double-quoted value, title="Bob's title", is ordinary content, not a second delimiter) means
  *   WordPress's own regex mis-parsed the match - the classic trap is a literal `]` inside a
  *   quoted attribute value, which truncates the captured attribute span mid-quote (confirmed:
  *   `content="a[1]"` captures only `content="a[1`, an unterminated quote). This function does not

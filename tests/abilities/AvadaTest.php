@@ -173,12 +173,6 @@ final class AvadaTest extends TestCase {
 	}
 
 	/**
-	 * Fixture per the Codex-review amendment: an attribute value containing a literal ']' - a
-	 * known trap for a regex-based shortcode extractor. A plain-text edit OUTSIDE the affected
-	 * shortcode must still be allowed; the guard's job is to not silently corrupt anything, not to
-	 * perfectly parse a construct WordPress's own shortcode API cannot parse either.
-	 */
-	/**
 	 * A literal ']' inside a quoted attribute value truncates get_shortcode_regex()'s own
 	 * attribute-span capture mid-quote (content="a[1]" captures only content="a[1, an
 	 * unterminated quote) - WordPress's own parser has lost track of the real boundary at that

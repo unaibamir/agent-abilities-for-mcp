@@ -283,4 +283,47 @@ final class ReplaceSitewideTest extends TestCase {
 		$this->assertSame( 3, $out['skipped_no_permission'] );
 		$this->assertSame( 0, $out['matched_posts'] );
 	}
+
+	/**
+	 * Codex final round 4 MEDIUM: the LIKE-clause filter ran against EVERY WP_Query built while
+	 * it was attached, not only this function's own count/scan queries - an unrelated nested
+	 * query (fired from any hook during either query) would silently receive the same
+	 * post_content LIKE clause even though it has nothing to do with the search.
+	 */
+	public function test_does_not_contaminate_an_unrelated_nested_query(): void {
+		$other_post = self::factory()->post->create( array( 'post_content' => 'nothing to do with the search term' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$nested_result = null;
+		$callback      = function ( $query ) use ( &$nested_result, $other_post ) {
+			if ( 'post' !== $query->get( 'post_type' ) || ! $query->get( 'aafm_query_marker' ) ) {
+				return;
+			}
+			// An unrelated nested query for a post that does NOT contain the search term at all -
+			// if the LIKE filter leaked onto it, it would come back empty. Fires on both the
+			// count and the scan query; either overwrite of $nested_result proves the same point.
+			$nested        = new \WP_Query(
+				array(
+					'post_type' => 'post',
+					'post__in'  => array( $other_post ),
+				)
+			);
+			$nested_result = $nested->posts;
+		};
+		add_action( 'pre_get_posts', $callback );
+
+		aafm_exec_replace_sitewide(
+			array(
+				'search'  => 'needletermxyz',
+				'replace' => 'x',
+			)
+		);
+
+		remove_action( 'pre_get_posts', $callback );
+
+		$this->assertNotEmpty(
+			$nested_result,
+			'An unrelated nested query must not be contaminated by the LIKE-clause filter.'
+		);
+	}
 }

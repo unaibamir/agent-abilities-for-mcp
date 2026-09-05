@@ -1744,7 +1744,17 @@ function aafm_exec_replace_sitewide( array $input ) {
 	$replace = (string) $input['replace'];
 	$dry_run = ! array_key_exists( 'dry_run', $input ) || (bool) $input['dry_run'];
 
-	$like_filter = static function ( string $where ) use ( $search ): string {
+	// Codex final round 4 MEDIUM: an unscoped 'posts_where' filter runs against EVERY WP_Query
+	// built while it's attached, not only this function's own two queries below - an unrelated
+	// nested query (fired from any hook during either query) would silently receive this same
+	// LIKE clause. A private, per-call marker in the query args (harmless to core - unrecognized
+	// keys are ignored when building SQL, but still readable via $query->get()) scopes the filter
+	// to this function's own queries only.
+	$query_marker = 'aafm_replace_sitewide_' . wp_generate_password( 12, false, false );
+	$like_filter  = static function ( string $where, WP_Query $query ) use ( $search, $query_marker ): string {
+		if ( $query_marker !== $query->get( 'aafm_query_marker' ) ) {
+			return $where;
+		}
 		global $wpdb;
 		// BINARY forces a byte-exact, case- and accent-sensitive comparison, matching PHP's
 		// str_replace() semantics exactly. Without it MySQL's default collation makes LIKE
@@ -1759,55 +1769,70 @@ function aafm_exec_replace_sitewide( array $input ) {
 		);
 	};
 
-	add_filter( 'posts_where', $like_filter );
+	// Codex final round 3 MEDIUM: that scan had no ceiling of its own, so a search term matching
+	// an enormous number of non-editable posts could force scanning all of them (get_post() plus
+	// two checks each) looking for AAFM_REPLACE_SITEWIDE_MAX_POSTS editable ones -
+	// AAFM_REPLACE_SITEWIDE_MAX_SCAN bounds that worst case; see its own docblock for why this is
+	// not the continuation cursor the locked contract deliberately omits. Filterable so a test can
+	// prove the scan actually stops without creating thousands of posts to reach the real default
+	// - the same pattern already used for the GeoDirectory list batch size.
+	$max_scan = max( 1, (int) apply_filters( 'aafm_replace_sitewide_max_scan', AAFM_REPLACE_SITEWIDE_MAX_SCAN ) );
+
+	add_filter( 'posts_where', $like_filter, 10, 2 );
 	try {
-		// Unpaginated ids first, so total_matches/truncated reflect every SQL-side match, not
-		// only the ones this call goes on to examine - and so the SAME id list can be scanned in
-		// PHP below for the page of candidates to actually process (see the comment there for why
-		// a second, SQL-side-capped query is exactly the bug this fix closes).
-		$count_query   = new WP_Query(
+		// Codex final round 4 MEDIUM: the real total used to come from fetching EVERY matching id
+		// unpaginated (posts_per_page => -1) - for a search term matching an enormous number of
+		// posts, that alone materializes an enormous id array before any scanning even starts.
+		// WP_Query computes an exact row count via its own single SELECT COUNT(*) whenever
+		// no_found_rows is false, regardless of posts_per_page, so a 1-row probe query gets the
+		// real total without ever fetching the matching ids themselves.
+		$count_probe   = new WP_Query(
 			array(
-				'post_type'      => $type,
-				'post_status'    => $status,
-				'fields'         => 'ids',
-				'posts_per_page' => -1,
-				'orderby'        => 'ID',
-				'order'          => 'ASC',
-				'no_found_rows'  => true,
+				'post_type'         => $type,
+				'post_status'       => $status,
+				'fields'            => 'ids',
+				'posts_per_page'    => 1,
+				'no_found_rows'     => false,
+				'aafm_query_marker' => $query_marker,
 			)
 		);
-		$total_matches = count( $count_query->posts );
+		$total_matches = (int) $count_probe->found_posts;
 		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
+
+		// The actual candidate-scanning fetch is bounded to $max_scan ids by the query itself -
+		// Codex final round 2 MEDIUM's own fix (scan in ID order, fill the cap with EDITABLE,
+		// non-builder-owned candidates only; a skipped post costs nothing against the cap) still
+		// applies to this bounded list, it just no longer needs an enormous unbounded one to work
+		// from.
+		$scan_query = new WP_Query(
+			array(
+				'post_type'         => $type,
+				'post_status'       => $status,
+				'fields'            => 'ids',
+				'posts_per_page'    => $max_scan,
+				'orderby'           => 'ID',
+				'order'             => 'ASC',
+				'no_found_rows'     => true,
+				'aafm_query_marker' => $query_marker,
+			)
+		);
 	} finally {
-		remove_filter( 'posts_where', $like_filter );
+		remove_filter( 'posts_where', $like_filter, 10 );
 	}
 
 	// Codex final round 2 MEDIUM: an SQL-side `LIMIT AAFM_REPLACE_SITEWIDE_MAX_POSTS` applied
 	// BEFORE permission/builder-ownership filtering meant that enough non-editable matching posts
 	// sitting earlier in ID order could occupy the entire cap, so the caller's own editable match
 	// was never even fetched, let alone processed - repeating the call selected the exact same
-	// unreachable window every time. Scan the full (already-fetched, already unpaginated) id list
-	// in ID order and fill the cap with EDITABLE, non-builder-owned candidates only; a skipped
-	// post costs nothing against the cap.
-	//
-	// Codex final round 3 MEDIUM: that scan had no ceiling of its own, so a search term matching
-	// an enormous number of non-editable posts could force scanning all of them (get_post() plus
-	// two checks each) looking for AAFM_REPLACE_SITEWIDE_MAX_POSTS editable ones -
-	// AAFM_REPLACE_SITEWIDE_MAX_SCAN bounds that worst case; see its own docblock for why this is
-	// not the continuation cursor the locked contract deliberately omits.
-	// Filterable so a test can prove the scan actually stops without creating thousands of posts
-	// to reach the real default - the same pattern already used for the GeoDirectory list batch
-	// size.
-	$max_scan      = max( 1, (int) apply_filters( 'aafm_replace_sitewide_max_scan', AAFM_REPLACE_SITEWIDE_MAX_SCAN ) );
+	// unreachable window every time. Scan the bounded id list above in ID order and fill the cap
+	// with EDITABLE, non-builder-owned candidates only; a skipped post costs nothing against it.
 	$candidates    = array();
 	$no_perm       = 0;
 	$builder_owned = 0;
-	$scanned       = 0;
-	foreach ( $count_query->posts as $post_id ) {
-		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS || $scanned >= $max_scan ) {
+	foreach ( $scan_query->posts as $post_id ) {
+		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS ) {
 			break;
 		}
-		++$scanned;
 		$post = get_post( (int) $post_id ); // @phpstan-ignore-line cast.int (fields=>ids means $post_id is really an int; the WP_Query stub types ->posts as WP_Post[] unconditionally).
 		if ( ! $post instanceof WP_Post ) {
 			continue;

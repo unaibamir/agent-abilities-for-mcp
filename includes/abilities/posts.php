@@ -797,6 +797,19 @@ function aafm_authorize_post_status( string $requested, string $publish_cap, ?ar
 	if ( ! in_array( $status, $recognized, true ) ) {
 		return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
 	}
+	// Codex final round 9 MEDIUM: the TEC create/update chokepoints route status entirely
+	// through this function (and aafm_resolve_create_status(), which delegates to it), but the
+	// operator's force-draft override was only ever applied by aafm_insert_post()'s own
+	// duplicate of this same coercion - TEC's writers never called that function, so an explicit
+	// publish/future/private request against an event, venue, or organizer bypassed force-draft
+	// entirely. Moving the coercion into this single shared chokepoint closes it for every
+	// caller at once, TEC included, rather than adding a fourth copy of the same three-line
+	// check. Applying it here is behaviourally identical to aafm_insert_post()'s existing
+	// separate call for its own callers (same condition, same outcome), so that call is left in
+	// place rather than removed for a fix that does not need it touched.
+	if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status, $public_statuses ) ) {
+		$status = 'draft';
+	}
 	return $status;
 }
 
@@ -817,7 +830,18 @@ function aafm_resolve_create_status( array $input, string $fallback_status, stri
 	if ( ! isset( $input['status'] ) ) {
 		return $fallback_status;
 	}
-	return aafm_authorize_post_status( (string) $input['status'], $publish_cap );
+	$status = aafm_authorize_post_status( (string) $input['status'], $publish_cap );
+	if ( is_wp_error( $status ) ) {
+		return $status;
+	}
+	// aafm_authorize_post_status() only forces draft for a status it recognizes as
+	// publish-equivalent (mirroring the narrower rule an UPDATE needs, so it never touches
+	// pending or retro-unpublishes). A CREATE is held to aafm_insert_post()'s own stricter,
+	// unconditional rule instead - force-draft always wins on create, even for a requested
+	// 'pending' - so this delegating chokepoint applies that second, stronger pass for every
+	// caller that routes through it (TEC events/venues/organizers included), matching what
+	// aafm_insert_post() has always done for its own callers.
+	return aafm_force_draft() ? 'draft' : $status;
 }
 
 /**

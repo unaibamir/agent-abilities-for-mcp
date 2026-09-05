@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-05T21:54:07+05:00\n"
+"POT-Creation-Date: 2026-09-05T22:59:55+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -544,7 +544,7 @@ msgid "Update a GeoDirectory listing"
 msgstr ""
 
 #: includes/abilities/geodirectory.php:99
-msgid "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration."
+msgid "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration. Refuses when the listing is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/geodirectory.php:619
@@ -555,7 +555,7 @@ msgstr ""
 msgid "The listing could not be created: its address or location fields did not save, and the incomplete listing could not be removed automatically. Delete it manually."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:702
+#: includes/abilities/geodirectory.php:713
 msgid "The listing was updated, but its address or location fields did not save."
 msgstr ""
 
@@ -680,8 +680,8 @@ msgid "Invalid base64 payload."
 msgstr ""
 
 #: includes/abilities/media.php:818
-#: includes/abilities/media.php:1231
-#: includes/abilities/media.php:1236
+#: includes/abilities/media.php:1214
+#: includes/abilities/media.php:1219
 msgid "File exceeds the maximum upload size."
 msgstr ""
 
@@ -697,68 +697,70 @@ msgstr ""
 msgid "HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either."
 msgstr ""
 
-#: includes/abilities/media.php:1124
+#: includes/abilities/media.php:1133
 msgid "This server cannot safely fetch a remote URL for upload."
 msgstr ""
 
-#: includes/abilities/media.php:1128
+#: includes/abilities/media.php:1137
 msgid "This server routes outbound requests through a proxy, which this ability cannot safely pin to a validated address. Refusing."
 msgstr ""
 
-#: includes/abilities/media.php:1133
+#: includes/abilities/media.php:1142
 msgid "That is not a valid URL."
 msgstr ""
 
-#: includes/abilities/media.php:1136
+#: includes/abilities/media.php:1145
 msgid "Only https:// URLs may be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1141
+#: includes/abilities/media.php:1150
 msgid "A bare IP address may not be used as the upload URL host."
 msgstr ""
 
-#: includes/abilities/media.php:1148
+#: includes/abilities/media.php:1157
 msgid "The host could not be resolved."
 msgstr ""
 
-#: includes/abilities/media.php:1151
+#: includes/abilities/media.php:1160
 msgid "The host resolves to a private or reserved IP address."
 msgstr ""
 
-#: includes/abilities/media.php:1216
-#: includes/abilities/media.php:1223
+#: includes/abilities/media.php:1196
+#: includes/abilities/media.php:1203
+#: includes/abilities/media.php:1262
+#: includes/abilities/media.php:1341
 msgid "The URL could not be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1239
+#: includes/abilities/media.php:1222
 msgid "The URL returned no data."
 msgstr ""
 
-#: includes/abilities/media.php:1264
+#: includes/abilities/media.php:1373
 msgid "ID of the attachment to update."
 msgstr ""
 
-#: includes/abilities/media.php:1268
+#: includes/abilities/media.php:1377
 msgid "New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given."
 msgstr ""
 
-#: includes/abilities/media.php:1272
+#: includes/abilities/media.php:1381
 msgid "New alt text for the image, sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/media.php:1276
+#: includes/abilities/media.php:1385
 msgid "New caption, sanitized as plain text with no HTML."
 msgstr ""
 
-#: includes/abilities/media.php:1280
+#: includes/abilities/media.php:1389
 msgid "New description. Basic HTML is allowed and sanitized."
 msgstr ""
 
-#: includes/abilities/media.php:1346
+#: includes/abilities/media.php:1455
 msgid "Provide at least one field to update."
 msgstr ""
 
-#: includes/abilities/media.php:1402
+#: includes/abilities/media.php:1511
 msgid "ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo."
 msgstr ""
 
@@ -1661,7 +1663,7 @@ msgid "Update event"
 msgstr ""
 
 #: includes/abilities/tec/events.php:91
-msgid "Update an event by ID via the Events Calendar ORM. Requires edit access to that event."
+msgid "Update an event by ID via the Events Calendar ORM. Requires edit access to that event. Refuses when the event is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/tec/events.php:98
@@ -1724,7 +1726,7 @@ msgstr ""
 msgid "ID of the event to update."
 msgstr ""
 
-#: includes/abilities/tec/events.php:530
+#: includes/abilities/tec/events.php:543
 msgid "ID of the event to trash."
 msgstr ""
 

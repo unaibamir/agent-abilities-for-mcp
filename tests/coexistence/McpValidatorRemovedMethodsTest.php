@@ -11,16 +11,21 @@
  * validate_icon_mime_type(), get_icon_validation_errors(), and validate_icons_array() - sourced
  * from the adapter's own PR changelog prose, not independently verified against the vendored
  * source at plan-writing time (the network fetch that would have confirmed it directly failed).
- * Checked directly against the just-bumped bundle, only THREE are actually gone:
- * validate_image_mime_type(), validate_audio_mime_type(), and validate_icon_mime_type() (the raw
- * MIME-string checkers). get_icon_validation_errors() and validate_icons_array() still exist -
- * they now validate icon structure through validate_icon_src()/validate_icon_size()/
- * validate_icon_theme() instead of a MIME string. This test checks the real bundle directly
- * instead of trusting the changelog prose, and separately proves what a caller actually
- * experiences if it calls one of the genuinely-removed methods anyway: a catchable PHP \Error
- * (PHP 7+ turns "call to undefined method" into a catchable Error, not an uncatchable fatal),
- * which is a real - but non-fatal-to-the-whole-request-if-caught - risk, not the site-wide
- * white-screen the Rank Math 0.4.1 McpAdapter-class-collision case would be.
+ * Checked directly against the just-bumped bundle: of those five, three are actually gone
+ * (validate_image_mime_type(), validate_audio_mime_type(), validate_icon_mime_type() - the raw
+ * MIME-string checkers), and two are not (get_icon_validation_errors() and validate_icons_array()
+ * still exist, now validating icon structure through validate_icon_src()/validate_icon_size()/
+ * validate_icon_theme() instead of a MIME string). A full method-by-method diff of the 0.5.0 and
+ * 0.6.1 vendored classes (caught by an independent review, not the original research) found a
+ * FOURTH real removal outside the original five-name list: the general-purpose
+ * validate_mime_type() (0.5.0 line 528), which nothing in this plugin's own code called but which
+ * carries the identical sibling-plugin risk as the other three. This test checks the real bundle
+ * directly instead of trusting either the changelog prose or the original plan's shortlist, and
+ * separately proves what a caller actually experiences if it calls any of the four genuinely-
+ * removed methods anyway: a catchable PHP \Error (PHP 7+ turns "call to undefined method" into a
+ * catchable Error, not an uncatchable fatal), which is a real - but non-fatal-to-the-whole-
+ * request-if-caught - risk, not the site-wide white-screen the Rank Math 0.4.1
+ * McpAdapter-class-collision case would be.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -47,6 +52,7 @@ final class McpValidatorRemovedMethodsTest extends TestCase {
 			'validate_image_mime_type',
 			'validate_audio_mime_type',
 			'validate_icon_mime_type',
+			'validate_mime_type',
 		);
 	}
 
@@ -99,9 +105,10 @@ final class McpValidatorRemovedMethodsTest extends TestCase {
 	 * with a class-not-found-style message, not a white-screen the site cannot recover from if the
 	 * caller (or a global error handler) wraps the call.
 	 *
-	 * Uses the first entry in removed_methods() - a method confirmed genuinely absent at 0.6.1
-	 * above, unlike the two originally-claimed names in retained_icon_methods() that turned out
-	 * to still exist.
+	 * Exercises EVERY entry in removed_methods(), not just the first - an earlier draft only
+	 * tested one, which is exactly how a genuine fourth removed method (validate_mime_type(), see
+	 * the class docblock) stayed unverified even after this test existed. Looping over the whole
+	 * list closes that gap for any future removal too.
 	 */
 	public function test_calling_a_removed_method_after_eager_load_throws_a_catchable_error(): void {
 		$this->assertTrue(
@@ -109,23 +116,28 @@ final class McpValidatorRemovedMethodsTest extends TestCase {
 			'McpValidator must already be declared by this point in the suite (eager-loaded at plugin bootstrap).'
 		);
 
-		$method  = self::removed_methods()[0];
-		$caught  = null;
 		$reflect = new \ReflectionClass( \WP\MCP\Domain\Utils\McpValidator::class );
+		$checked = 0;
 
-		if ( $reflect->hasMethod( $method ) ) {
-			$this->markTestSkipped( sprintf( 'McpValidator::%s() still exists at this bundled version - nothing to prove a sibling-call failure mode against.', $method ) );
+		foreach ( self::removed_methods() as $method ) {
+			if ( $reflect->hasMethod( $method ) ) {
+				continue; // Covered by the "still exists" failure path in the test above instead.
+			}
+
+			$caught = null;
+			try {
+				// @phpstan-ignore-next-line -- deliberately calling a method proven absent above.
+				\WP\MCP\Domain\Utils\McpValidator::$method( 'image/png' );
+			} catch ( \Throwable $e ) {
+				$caught = $e;
+			}
+
+			$this->assertNotNull( $caught, sprintf( 'Calling removed static method %s() must throw something catchable, not fatal uncatchably.', $method ) );
+			$this->assertInstanceOf( \Error::class, $caught );
+			$this->assertStringContainsStringIgnoringCase( 'undefined method', $caught->getMessage() );
+			++$checked;
 		}
 
-		try {
-			// @phpstan-ignore-next-line -- deliberately calling a method proven absent above.
-			\WP\MCP\Domain\Utils\McpValidator::$method( 'image/png' );
-		} catch ( \Throwable $e ) {
-			$caught = $e;
-		}
-
-		$this->assertNotNull( $caught, 'Calling a removed static method must throw something catchable, not fatal uncatchably.' );
-		$this->assertInstanceOf( \Error::class, $caught );
-		$this->assertStringContainsStringIgnoringCase( 'undefined method', $caught->getMessage() );
+		$this->assertGreaterThan( 0, $checked, 'No removed methods were available to check - the fixture or removed_methods() list is broken.' );
 	}
 }

@@ -1603,11 +1603,25 @@ function aafm_mcp_guard_unpersisted_session( $response, $server, $request ) {
 	}
 
 	// Read the adapter's own session store. The meta key mirrors
-	// WP\MCP\Transport\Infrastructure\SessionManager::SESSION_META_KEY, which is a private const
-	// and cannot be read from here; the literal is verified against the bundled adapter copy.
-	// MAINTENANCE: re-verify this key against SessionManager.php whenever the bundled adapter is
-	// updated (same maintenance surface as aafm_adapter_namespace_map()).
-	$sessions = get_user_meta( $user_id, 'mcp_adapter_sessions', true );
+	// WP\MCP\Transport\Infrastructure\SessionManager::session_meta_key(), which is private and
+	// cannot be called from here; the shape is verified against the bundled adapter copy.
+	// Single-site keeps the unsuffixed legacy key. On multisite (0.6.0+), user meta is
+	// network-global, so the adapter suffixes the key with the current blog ID
+	// ("mcp_adapter_sessions_{blog_id}") to scope a session to the site it was created on -
+	// falling back to the unsuffixed key when no positive blog ID is available yet, exactly
+	// mirroring SessionManager::session_meta_key_for_blog(). Getting this wrong in the OTHER
+	// direction (reading the unsuffixed key on multisite) is the false-positive mirror image of
+	// the bug this guard exists to catch: a genuinely persisted session gets reported as failed.
+	// MAINTENANCE: re-verify this key shape against SessionManager.php whenever the bundled
+	// adapter is updated (same maintenance surface as aafm_adapter_namespace_map()).
+	$session_meta_key = 'mcp_adapter_sessions';
+	if ( is_multisite() ) {
+		$current_blog_id = (int) get_current_blog_id();
+		if ( $current_blog_id >= 1 ) {
+			$session_meta_key .= '_' . $current_blog_id;
+		}
+	}
+	$sessions = get_user_meta( $user_id, $session_meta_key, true );
 	if ( is_array( $sessions ) && isset( $sessions[ $session_id ] ) ) {
 		return $response; // Persisted: the normal path. Byte-identical pass-through.
 	}

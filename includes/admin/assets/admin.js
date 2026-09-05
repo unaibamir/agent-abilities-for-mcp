@@ -36,7 +36,10 @@
 		 */
 		#format( template, ...args ) {
 			let auto = 0;
-			return template.replace( /%(\d+\$)?[sd]/g, ( match, pos ) => {
+			return template.replace( /%%|%(\d+\$)?[sd]/g, ( match, pos ) => {
+				if ( '%%' === match ) {
+					return '%';
+				}
 				const index = pos ? Number( pos.slice( 0, -1 ) ) - 1 : auto++;
 				return String( args[ index ] ?? '' );
 			} );

@@ -45,6 +45,7 @@ namespace AAFM\Tests {
 		private int $where_id         = 0;
 		/** @var string|string[] */
 		private $where_status         = '';
+		private int $where_author     = 0;
 		private int $found_count      = 0;
 
 		/** @var array<string,mixed> */
@@ -78,9 +79,12 @@ namespace AAFM\Tests {
 		}
 
 		/**
-		 * @param string $key   'id' (target a single post for save()/delete()) or 'post_status'
-		 *                      (scope a list query, or 'any' to target any status for save()).
-		 * @param mixed  $value The id or status.
+		 * @param string $key   'id' (target a single post for save()/delete()), 'post_status'
+		 *                      (scope a list query, or 'any' to target any status for save()),
+		 *                      or 'author' (mirrors the real Tribe__Repository's default
+		 *                      'author' => 'post_author' modifier, used by tec-get-events to
+		 *                      contain a draft/pending/future listing to the caller's own posts).
+		 * @param mixed  $value The id, status, or author id.
 		 */
 		public function where( string $key, $value ): self {
 			$clone = clone $this;
@@ -88,6 +92,8 @@ namespace AAFM\Tests {
 				$clone->where_id = (int) $value;
 			} elseif ( 'post_status' === $key ) {
 				$clone->where_status = is_array( $value ) ? array_map( 'strval', $value ) : (string) $value;
+			} elseif ( 'author' === $key ) {
+				$clone->where_author = (int) $value;
 			}
 			return $clone;
 		}
@@ -105,6 +111,9 @@ namespace AAFM\Tests {
 			);
 			if ( '' !== $this->search ) {
 				$args['s'] = $this->search;
+			}
+			if ( 0 !== $this->where_author ) {
+				$args['author'] = $this->where_author;
 			}
 			return $args;
 		}

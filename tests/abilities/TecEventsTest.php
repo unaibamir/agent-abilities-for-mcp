@@ -228,6 +228,101 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
+	 * Final Codex round MEDIUM: 'draft'/'pending'/'future' must be gated on the EDIT capability,
+	 * not the private-read one - a caller who only holds edit_tribe_events (TEC's stock
+	 * Author/Contributor shape) can create a draft via aafm_tec_perm_create_event()'s own gate,
+	 * and must be able to list it back, without ever holding read_private_tribe_events.
+	 */
+	public function test_a_role_with_only_edit_capability_lists_its_own_draft(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		get_userdata( $author )->add_cap( 'edit_tribe_events' );
+		wp_set_current_user( $author );
+
+		$created = aafm_exec_tec_create_event(
+			array(
+				'title'      => 'My Own Draft',
+				'start_date' => '2027-04-01 09:00:00',
+				'end_date'   => '2027-04-01 12:00:00',
+			)
+		);
+		$this->assertArrayHasKey( 'event', $created, 'Setup: creating an event with only edit_tribe_events must succeed and default to draft.' );
+
+		// A second author's own draft must stay invisible - the containment this MEDIUM fixed.
+		$other_author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->create_event(
+			array(
+				'post_author' => $other_author,
+				'post_status' => 'draft',
+				'post_title'  => 'Someone Elses Draft',
+			)
+		);
+
+		$out = aafm_exec_tec_get_events( array( 'status' => 'draft' ) );
+
+		$this->assertIsArray( $out, 'A caller with only edit_tribe_events must be allowed to request status=draft.' );
+		$this->assertSame( 1, $out['total'] );
+		$this->assertSame( 'My Own Draft', $out['events'][0]['title'] );
+	}
+
+	/**
+	 * Final Codex round MEDIUM: read_private_tribe_events alone must not widen a draft/pending/
+	 * future listing to every author's events - a role with the private-read cap but not
+	 * edit_others_tribe_events is still contained to its own.
+	 */
+	public function test_a_role_with_read_private_but_not_edit_others_cannot_see_another_authors_draft(): void {
+		$viewer = self::factory()->user->create( array( 'role' => 'author' ) );
+		get_userdata( $viewer )->add_cap( 'edit_tribe_events' );
+		get_userdata( $viewer )->add_cap( 'read_private_tribe_events' );
+
+		$other_author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->create_event(
+			array(
+				'post_author' => $other_author,
+				'post_status' => 'draft',
+				'post_title'  => 'Someone Elses Draft',
+			)
+		);
+		$this->create_event(
+			array(
+				'post_author' => $viewer,
+				'post_status' => 'draft',
+				'post_title'  => 'My Own Draft',
+			)
+		);
+
+		wp_set_current_user( $viewer );
+		$out = aafm_exec_tec_get_events( array( 'status' => 'draft' ) );
+
+		$this->assertSame( 1, $out['total'], 'read_private_tribe_events must not widen visibility beyond the caller\'s own drafts without edit_others_tribe_events.' );
+		$this->assertSame( 'My Own Draft', $out['events'][0]['title'] );
+	}
+
+	/**
+	 * 'private' keeps its own, unchanged gate: read_private_tribe_events, not edit_tribe_events.
+	 */
+	public function test_get_events_private_status_still_requires_read_private_capability(): void {
+		$this->create_event(
+			array(
+				'post_status' => 'private',
+				'post_title'  => 'A Private Event',
+			)
+		);
+
+		$editor_only = self::factory()->user->create( array( 'role' => 'author' ) );
+		get_userdata( $editor_only )->add_cap( 'edit_tribe_events' );
+		wp_set_current_user( $editor_only );
+		$refused = aafm_exec_tec_get_events( array( 'status' => 'private' ) );
+		$this->assertInstanceOf( \WP_Error::class, $refused, 'edit_tribe_events alone must not unlock the private status.' );
+		$this->assertSame( 'aafm_invalid_status', $refused->get_error_code() );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$allowed = aafm_exec_tec_get_events( array( 'status' => 'private' ) );
+		$this->assertSame( 1, $allowed['total'] );
+		// get_the_title() prefixes a private post's title with "Private: " (core behavior).
+		$this->assertSame( 'Private: A Private Event', $allowed['events'][0]['title'] );
+	}
+
+	/**
 	 * Helper: create a venue post directly (bypassing the ability) for use as a fixture.
 	 */
 	private function create_venue_for_test(): int {

@@ -186,15 +186,41 @@ function aafm_args_tec_get_events(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_get_events( array $input ) {
-	$type_object = get_post_type_object( Tribe__Events__Main::POSTTYPE );
-	$private_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_tribe_events';
-	$status      = aafm_validate_post_status( isset( $input['status'] ) ? (string) $input['status'] : 'publish', current_user_can( $private_cap ) );
-	if ( is_wp_error( $status ) ) {
-		return $status;
+	$type_object  = get_post_type_object( Tribe__Events__Main::POSTTYPE );
+	$private_cap  = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_tribe_events';
+	$edit_cap     = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_posts : 'edit_tribe_events';
+	$edit_others  = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_others_posts : 'edit_others_tribe_events';
+	$requested    = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'publish';
+	$own_draft_only = false;
+
+	// 'private' keeps the strict read_private_tribe_events gate (aafm_validate_post_status()'s
+	// existing behavior, unchanged). 'draft'/'pending'/'future' are edit-in-progress statuses,
+	// not private-read statuses: TEC's stock Author/Contributor roles have edit_tribe_events
+	// without read_private_tribe_events, so gating them on the private-read cap meant an
+	// Author could create their own draft (aafm_tec_perm_create_event() only requires
+	// edit_tribe_events) and then be refused when listing it back. Gate these three on the
+	// edit capability instead, and - since that capability is coarser than "your own posts" -
+	// contain the query to the caller's own events unless they also hold
+	// edit_others_tribe_events, so a role with edit_tribe_events but not edit-others never
+	// receives another author's draft/pending/future event.
+	if ( in_array( $requested, array( 'draft', 'pending', 'future' ), true ) ) {
+		if ( ! current_user_can( $edit_cap ) ) {
+			return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
+		}
+		$status         = $requested;
+		$own_draft_only = ! current_user_can( $edit_others );
+	} else {
+		$status = aafm_validate_post_status( $requested, current_user_can( $private_cap ) );
+		if ( is_wp_error( $status ) ) {
+			return $status;
+		}
 	}
 
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$repo   = tribe_events()->where( 'post_status', $status )->page( $paging['page'] )->per_page( $paging['per_page'] );
+	if ( $own_draft_only ) {
+		$repo = $repo->where( 'author', get_current_user_id() );
+	}
 	if ( ! empty( $input['search'] ) ) {
 		$repo = $repo->search( sanitize_text_field( (string) $input['search'] ) );
 	}

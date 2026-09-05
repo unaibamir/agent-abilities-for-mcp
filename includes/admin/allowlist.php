@@ -100,20 +100,34 @@ function aafm_ajax_save_allowlist(): void {
 		);
 	}
 
+	// Codex final round 3 MEDIUM: a row naming an unknown role or OAuth client used to be
+	// silently dropped while the save still reported success, so the operator could believe a
+	// restriction had taken effect when the row that was meant to apply it never reached
+	// storage. Reject the WHOLE save with a row-specific error instead, and leave the
+	// previously-stored option untouched - a half-applied allowlist under a "saved" report is
+	// exactly the silent-wrong-answer shape this project treats as a release blocker.
+	//
 	// Keyed by "scope_type:scope_id" so two rows for the same scope can never both reach
 	// storage: aafm_ability_allowed_for_principal() (includes/allowlist.php) evaluates only the
 	// FIRST matching oauth_client row it finds, which would make one scope's effective allowlist
 	// depend on row order rather than its own content. A later duplicate in the submitted set
 	// wins, matching what the admin UI shows the operator as the current value for that scope.
-	$rows    = array();
-	$dropped = 0;
-	foreach ( $decoded as $row ) {
+	$rows = array();
+	foreach ( $decoded as $index => $row ) {
 		$clean = aafm_allowlist_sanitize_row( $row );
-		if ( null !== $clean ) {
-			$rows[ $clean['scope_type'] . ':' . $clean['scope_id'] ] = $clean;
-		} else {
-			++$dropped;
+		if ( null === $clean ) {
+			wp_send_json_error(
+				array(
+					'message' => sprintf(
+						/* translators: %d: 1-based row number in the submitted allowlist. */
+						__( 'Row %d names a role or OAuth client that does not exist. Nothing was saved - fix that row and try again.', 'agent-abilities-for-mcp' ),
+						(int) $index + 1
+					),
+				),
+				400
+			);
 		}
+		$rows[ $clean['scope_type'] . ':' . $clean['scope_id'] ] = $clean;
 	}
 	$rows = array_values( $rows );
 
@@ -121,18 +135,7 @@ function aafm_ajax_save_allowlist(): void {
 		wp_send_json_error( array( 'message' => __( 'The allowlist could not be saved. Please try again.', 'agent-abilities-for-mcp' ) ), 500 );
 	}
 
-	// Codex final round 3 MEDIUM: a dropped row (an unknown role or, since the previous fix, an
-	// unknown OAuth client) used to be indistinguishable from a fully successful save - the
-	// response carried no count, so the admin UI always said a flat "Saved." even when a row the
-	// operator meant to restrict never took effect. Mirrors the IP-allowlist save handler's own
-	// 3-branch messaging a few hundred lines up in this same file: report how many rows were
-	// dropped so the operator can tell "saved as intended" from "saved, but not what you typed".
-	wp_send_json_success(
-		array(
-			'rows'    => $rows,
-			'dropped' => $dropped,
-		)
-	);
+	wp_send_json_success( array( 'rows' => $rows ) );
 }
 
 /**

@@ -1910,21 +1910,19 @@
 				saveBtn.disabled = false;
 
 				if ( json?.success ) {
-					// A row naming an unknown role or OAuth client is dropped server-side (it
-					// restricts nothing real), so remove it here too rather than leaving it
-					// visible as if it were still in effect - mirrors the IP-allowlist save
-					// handler reflecting its own cleaned value a few hundred lines up.
+					// A row naming an unknown role or OAuth client now rejects the WHOLE save
+					// server-side (see aafm_ajax_save_allowlist()'s own comment), so a successful
+					// response never carries a row like that - but two DOM rows can still share
+					// the same scope (the operator added the same role or client twice), and the
+					// server canonicalizes that down to whichever row was submitted LAST. Track
+					// the last DOM row seen for each key so every earlier duplicate is removed,
+					// matching what was actually stored.
 					const keptKeys = new Set(
 						( Array.isArray( json.data?.rows ) ? json.data.rows : [] ).map(
 							( r ) => `${ r.scope_type }:${ r.scope_id }`
 						)
 					);
 					const domRows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] );
-					// Two DOM rows can share the same scope (the operator added the same role or
-					// client twice); the server already canonicalized that scope down to whichever
-					// row was submitted LAST (this file's own PHP-side comment: "a later duplicate
-					// wins"). Track the last DOM row seen for each key so every earlier duplicate
-					// is removed too, not just rows the server dropped outright.
 					const lastRowForKey = new Map();
 					domRows.forEach( ( row ) => {
 						lastRowForKey.set( `${ row.dataset.scopeType }:${ row.dataset.scopeId }`, row );
@@ -1936,20 +1934,13 @@
 						}
 					} );
 
-					const dropped = Number( json.data?.dropped ?? 0 );
 					if ( status ) {
-						status.textContent =
-							dropped > 0
-								? this.#format(
-										this.#t(
-											'allowlistRowsDropped',
-											'Saved. %d row(s) named a role or client that does not exist and were dropped.'
-										),
-										dropped
-									)
-								: this.#t( 'allowlistSaved', 'Saved.' );
+						status.textContent = this.#t( 'allowlistSaved', 'Saved.' );
 					}
 				} else if ( status ) {
+					// A row naming an unknown role or OAuth client rejects the whole save with a
+					// row-specific message (aafm_ajax_save_allowlist()) - surfaced here verbatim
+					// rather than a generic "Saved" the operator would have to disbelieve.
 					status.textContent =
 						json?.data?.message ?? this.#t( 'allowlistSaveFailed', 'Could not save. Please try again.' );
 				}

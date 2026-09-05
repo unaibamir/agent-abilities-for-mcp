@@ -184,9 +184,24 @@ final class AllowlistAdminTest extends TestCase {
 		$this->assertSame( array( 'aafm/get-posts' ), $stored[0]['allowed_abilities'] );
 	}
 
-	public function test_a_row_with_an_unknown_role_is_dropped(): void {
+	/**
+	 * Codex final round 3 MEDIUM (per the team lead's explicit fix, superseding an earlier
+	 * drop-and-report design this lane had shipped first): a row naming an unknown role used to
+	 * be silently dropped while the save still reported success, so a restriction the operator
+	 * thought they'd applied never actually took effect. The whole save must be rejected instead,
+	 * with the PREVIOUSLY stored option left untouched.
+	 */
+	public function test_a_row_with_an_unknown_role_rejects_the_whole_save(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );
+		$previous = array(
+			array(
+				'scope_type'        => 'role',
+				'scope_id'          => 'editor',
+				'allowed_abilities' => array( 'aafm/get-posts' ),
+			),
+		);
+		update_option( 'aafm_ability_allowlist_overrides', $previous );
 
 		$nonce                   = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']          = $nonce;
@@ -204,26 +219,32 @@ final class AllowlistAdminTest extends TestCase {
 		$this->intercept_die();
 		$json = $this->run_handler();
 
-		$this->assertTrue( $json['success'] ?? false );
-		$this->assertSame( array(), aafm_allowlist_overrides() );
-		// Codex final round 3 MEDIUM: a dropped row must be reported, not indistinguishable from
-		// a fully successful save.
-		$this->assertSame( 1, $json['data']['dropped'] ?? null );
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertStringContainsString( 'Row 1', (string) ( $json['data']['message'] ?? '' ) );
+		$this->assertSame( $previous, aafm_allowlist_overrides(), 'The previous option value must survive untouched.' );
 	}
 
 	/**
-	 * Codex final round 2 MEDIUM: a client id was accepted as arbitrary free text with no check
-	 * that it named a real client. A mistyped id (a real client's id off by one character, the
-	 * exact reproduction Codex gave) matched no OAuth client row, so it added no restriction at
-	 * all for that client - and per the allowlist's own intersection precedence, an unmatched
-	 * client is unrestricted, i.e. the row silently failed open rather than merely failing to
-	 * apply. It must be dropped the same way an unknown role slug already is.
+	 * Codex final round 2 MEDIUM, tightened per the team lead in round 3: a client id was
+	 * accepted as arbitrary free text with no check that it named a real client. A mistyped id
+	 * (a real client's id off by one character) matched no OAuth client row, so it added no
+	 * restriction at all for that client - and per the allowlist's own intersection precedence,
+	 * an unmatched client is unrestricted, i.e. the row silently failed open. The whole save must
+	 * be rejected, not merely that one row dropped.
 	 */
-	public function test_a_row_with_a_mistyped_client_id_is_dropped(): void {
+	public function test_a_row_with_a_mistyped_client_id_rejects_the_whole_save(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );
 		$client_id = $this->register_real_oauth_client();
 		$mistyped  = substr( $client_id, 0, -1 ); // Off by one character - names no real client.
+		$previous  = array(
+			array(
+				'scope_type'        => 'oauth_client',
+				'scope_id'          => $client_id,
+				'allowed_abilities' => 'all',
+			),
+		);
+		update_option( 'aafm_ability_allowlist_overrides', $previous );
 
 		$nonce                   = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']          = $nonce;
@@ -241,17 +262,16 @@ final class AllowlistAdminTest extends TestCase {
 		$this->intercept_die();
 		$json = $this->run_handler();
 
-		$this->assertTrue( $json['success'] ?? false );
-		$this->assertSame( array(), aafm_allowlist_overrides() );
-		$this->assertSame( 1, $json['data']['dropped'] ?? null );
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertStringContainsString( 'Row 1', (string) ( $json['data']['message'] ?? '' ) );
+		$this->assertSame( $previous, aafm_allowlist_overrides(), 'The previous option value must survive untouched.' );
 	}
 
 	/**
-	 * Codex final round 3 MEDIUM: a save that dropped a row and one that kept every row both
-	 * used to report a flat "success" with no way to tell them apart. A save with nothing
-	 * dropped must report a zero count, not merely omit it.
+	 * A LATER row's error must not be masked by earlier valid rows - the message names the real
+	 * offending row, not always "row 1".
 	 */
-	public function test_a_fully_valid_save_reports_zero_dropped(): void {
+	public function test_the_rejection_names_the_actual_offending_row(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );
 
@@ -265,14 +285,19 @@ final class AllowlistAdminTest extends TestCase {
 					'scope_id'          => 'editor',
 					'allowed_abilities' => array( 'aafm/get-posts' ),
 				),
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'not-a-real-role',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
 			)
 		);
 
 		$this->intercept_die();
 		$json = $this->run_handler();
 
-		$this->assertTrue( $json['success'] ?? false );
-		$this->assertSame( 0, $json['data']['dropped'] ?? null );
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertStringContainsString( 'Row 2', (string) ( $json['data']['message'] ?? '' ) );
 	}
 
 	public function test_more_than_the_row_cap_is_refused(): void {

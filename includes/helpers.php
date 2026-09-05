@@ -143,19 +143,32 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	if ( is_protected_meta( $key, 'post' ) ) {
 		return true;
 	}
-	$builtin = array(
-		'session_tokens',
-		'_application_passwords',
-		'wp_capabilities',
-		'wp_user_level',
-		'wp_user-settings',
-		'wp_user-settings-time',
-		'default_password_nonce',
-		'_password_reset_key',
-		'community-events-location',
-		'_new_email',
-		$wpdb->prefix . 'capabilities',
-		$wpdb->prefix . 'user_level',
+	$builtin = array_merge(
+		array(
+			'session_tokens',
+			'_application_passwords',
+			'wp_capabilities',
+			'wp_user_level',
+			'wp_user-settings',
+			'wp_user-settings-time',
+			'default_password_nonce',
+			'_password_reset_key',
+			'community-events-location',
+			'_new_email',
+			$wpdb->prefix . 'capabilities',
+			$wpdb->prefix . 'user_level',
+		),
+		// Codex final round 7 HIGH: every page-builder ownership marker (includes/page-
+		// builder-guard.php) must be absolutely blocked from the generic meta abilities, not
+		// merely left off the operator's allowlist - a caller who cleared a marker via
+		// update-post-meta/delete-post-meta made aafm_exec_update_post()'s ownership check pass
+		// on the next call, writing straight through the refusal guard. `_elementor_data` and
+		// `_fl_builder_data` were already covered by is_protected_meta()'s leading-underscore
+		// rule above; `et_pb_use_builder`, `fusion_builder_status`, and `fusion_builder_converted`
+		// were not, and neither list is scoped to post meta only, so pulling the whole marker map
+		// in here (harmless for term/user meta, where these names never legitimately occur) keeps
+		// this correct for any marker added later through the aafm_page_builder_markers filter.
+		array_keys( aafm_page_builder_markers() )
 	);
 	/**
 	 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this

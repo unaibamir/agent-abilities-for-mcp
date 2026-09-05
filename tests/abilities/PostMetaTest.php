@@ -294,4 +294,50 @@ final class PostMetaTest extends TestCase {
 		$this->assertArrayHasKey( 'aafm/update-post-meta', $reg );
 		$this->assertArrayHasKey( 'aafm/delete-post-meta', $reg );
 	}
+
+	/**
+	 * Codex final round 7 HIGH: every page-builder ownership marker (includes/page-builder-
+	 * guard.php) must be absolutely blocked from update-post-meta/delete-post-meta, even when the
+	 * operator has exposed every other meta key via `*` - clearing a marker (e.g.
+	 * fusion_builder_status) let aafm_exec_update_post()'s ownership check pass on the very next
+	 * call and write through the refusal guard entirely.
+	 */
+	public function test_page_builder_marker_keys_are_hard_blocked_even_with_star_exposed(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		$id = self::factory()->post->create();
+		update_post_meta( $id, 'fusion_builder_status', 'active' );
+
+		foreach ( array_keys( aafm_page_builder_markers() ) as $marker_key ) {
+			$this->assertFalse(
+				aafm_perm_update_post_meta(
+					array(
+						'post_id'  => $id,
+						'meta_key' => $marker_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					)
+				),
+				"$marker_key must be hard-blocked from update-post-meta even with * exposed."
+			);
+			$this->assertFalse(
+				aafm_perm_delete_post_meta(
+					array(
+						'post_id'  => $id,
+						'meta_key' => $marker_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					)
+				),
+				"$marker_key must be hard-blocked from delete-post-meta even with * exposed."
+			);
+		}
+
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'fusion_builder_status', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => '',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'active', get_post_meta( $id, 'fusion_builder_status', true ), 'The marker must survive an attempted clear untouched.' );
+	}
 }

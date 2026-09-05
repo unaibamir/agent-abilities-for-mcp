@@ -1038,16 +1038,31 @@ function aafm_ip_is_private_or_reserved( string $ip ): bool {
 }
 
 /**
- * Whether the cURL extension is available - and therefore, per WordPress's own transport
- * priority (WpOrg\Requests\Requests::DEFAULT_TRANSPORTS lists Curl before Fsockopen, and Curl's
- * own test() checks exactly this), whether a real fetch will actually go through the transport
- * this ability's pinning depends on. Filterable so a test can force the "no cURL" refusal path
+ * Whether the cURL transport is available for an HTTPS fetch - and therefore, per WordPress's
+ * own transport priority (WpOrg\Requests\Requests::DEFAULT_TRANSPORTS lists Curl before
+ * Fsockopen), whether a real fetch will actually go through the transport this ability's
+ * CURLOPT_RESOLVE pinning depends on. Filterable so a test can force the "no cURL" refusal path
  * without uninstalling the extension.
+ *
+ * Codex final round HIGH: checking only function_exists('curl_init') is not the same test
+ * Requests itself runs before picking Curl over Fsockopen. \WpOrg\Requests\Transport\Curl::test()
+ * additionally requires curl_exec() to exist and, for an HTTPS request specifically, that the
+ * installed libcurl was built with SSL support (Requests::request() passes
+ * [Capability::SSL => true] for every https:// URL). A server with curl_init() present but
+ * curl_exec() disabled via disable_functions, or a non-SSL libcurl build, fails Requests' own
+ * test, falls through to Fsockopen, and Fsockopen does its OWN unpinned DNS resolution - the
+ * exact DNS-rebinding gap CURLOPT_RESOLVE exists to close. Mirror Requests' real test instead of
+ * a weaker approximation of it.
  *
  * @return bool
  */
 function aafm_curl_available(): bool {
-	return (bool) apply_filters( 'aafm_curl_available', function_exists( 'curl_init' ) );
+	$has_curl = function_exists( 'curl_init' ) && function_exists( 'curl_exec' ) && function_exists( 'curl_version' );
+	if ( $has_curl ) {
+		$version  = curl_version();
+		$has_curl = is_array( $version ) && ( CURL_VERSION_SSL & (int) ( $version['features'] ?? 0 ) );
+	}
+	return (bool) apply_filters( 'aafm_curl_available', $has_curl );
 }
 
 /**
@@ -1125,7 +1140,17 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 			'timeout'             => 10,
 			'redirection'         => 0,
 			'reject_unsafe_urls'  => true,
-			'limit_response_size' => $max_bytes,
+			// Codex final round HIGH: Requests' own byte-limit callback
+			// (Transport\Curl::stream_body()) truncates the buffered body at the limit but keeps
+			// reporting the ORIGINAL chunk length to cURL, so the transfer runs to completion
+			// instead of aborting. A response with no Content-Length header (chunked encoding)
+			// or a false one therefore comes back exactly $max_bytes bytes long regardless of how
+			// much larger the real file was, and the strlen() check below could never see past
+			// that cap to tell "truncated oversized file" apart from "a file exactly this size".
+			// Requesting one byte more than the real cap means any oversized transfer is
+			// truncated to $max_bytes + 1, which the unchanged strlen() > $max_bytes check below
+			// still correctly rejects, while a file at or under the real cap is never affected.
+			'limit_response_size' => $max_bytes + 1,
 		)
 	);
 	remove_action( 'http_api_curl', $pin );

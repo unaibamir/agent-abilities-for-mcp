@@ -66,6 +66,17 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 		$this->assertSame( 'aafm_curl_unavailable', $out->get_error_code() );
 	}
 
+	/**
+	 * Codex final round HIGH: function_exists('curl_init') is not the test Requests itself runs
+	 * before selecting the Curl transport over Fsockopen for an https:// request - Requests also
+	 * requires curl_exec() to exist and the installed libcurl to have SSL support. This CI/dev
+	 * container has a real, SSL-capable cURL build, so the true default (with no filter override)
+	 * must be true - guards the common path against the stricter check regressing to false.
+	 */
+	public function test_curl_available_is_true_on_a_real_ssl_capable_curl_build(): void {
+		$this->assertTrue( aafm_curl_available() );
+	}
+
 	public function test_refuses_a_non_https_scheme(): void {
 		$out = aafm_ssrf_safe_fetch_url( 'http://example.com/x.jpg' );
 		$this->assertInstanceOf( WP_Error::class, $out );
@@ -159,6 +170,40 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 
 		$this->assertInstanceOf( WP_Error::class, $out );
 		$this->assertSame( 'aafm_too_large', $out->get_error_code() );
+	}
+
+	/**
+	 * Codex final round HIGH: pre_http_request short-circuits before Requests' own byte-limit
+	 * transport code ever runs, so the test above never exercises the real truncate-without-
+	 * aborting behavior that let an oversized chunked-encoding response come back exactly
+	 * $max_bytes long (i.e. "accepted", not "too large"). Requesting the real request args this
+	 * function passes to wp_safe_remote_get() proves the actual fix: one byte of headroom is
+	 * requested above the true cap, so a real truncation still lands over $max_bytes and the
+	 * unchanged strlen() check catches it.
+	 */
+	public function test_requests_one_byte_of_headroom_above_the_real_size_cap(): void {
+		$captured_args = null;
+		add_filter(
+			'pre_http_request',
+			static function ( $preempt, $args ) use ( &$captured_args ) {
+				$captured_args = $args;
+				return array(
+					'headers'  => array(),
+					'body'     => '',
+					'response' => array( 'code' => 500 ),
+					'cookies'  => array(),
+				);
+			},
+			10,
+			2
+		);
+
+		aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
+
+		remove_all_filters( 'pre_http_request' );
+
+		$this->assertIsArray( $captured_args );
+		$this->assertSame( (int) wp_max_upload_size() + 1, $captured_args['limit_response_size'] );
 	}
 
 	public function test_a_non_image_response_is_refused_by_the_existing_byte_sniff(): void {

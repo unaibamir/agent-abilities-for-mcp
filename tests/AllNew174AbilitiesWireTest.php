@@ -373,22 +373,25 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 		remove_all_filters( 'pre_http_request' );
 		remove_all_filters( 'aafm_resolve_hostname_to_ip' );
 
-		// A JSON-RPC "method not found" is the specific failure this sweep exists to catch - a
-		// registered-but-undiscoverable/uncallable tool. Any OTHER structured refusal (a domain
-		// permission or validation error) is a legitimate, domain-appropriate outcome and passes.
-		if ( $result instanceof \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse ) {
-			$this->assertNotSame(
-				-32601,
-				$result->getError()->getCode(),
-				"{$tool_name} was not found on the server - registered but unreachable over the real wire."
-			);
-			return; // A domain-level refusal is an acceptable outcome for this sweep's purpose.
-		}
+		// Codex round C finding 6: every fixture in this sweep is deliberately success-shaped
+		// (a valid role, valid input, a real target object) - accepting ANY non-(-32601) error as
+		// "a legitimate domain refusal" let a genuinely broken ability (an internal error, a bad
+		// permission bypass symptom, an unexpected validation failure) pass silently, since
+		// nothing distinguished "expected refusal" from "actually broken". Require success here;
+		// a refusal-path test belongs in that ability's own dedicated test file instead.
+		$failure_detail = $result instanceof \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse
+			? "{$result->getError()->getCode()} {$result->getError()->getMessage()}"
+			: '';
+		$this->assertNotInstanceOf(
+			\WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class,
+			$result,
+			"{$tool_name} returned an error instead of succeeding on a valid fixture: {$failure_detail}"
+		);
 
 		$this->assertIsArray( $result->getStructuredContent(), "{$tool_name} returned no structured content." );
 
 		if ( $this->is_write( $short_name ) ) {
-			$this->assert_write_persisted( $short_name );
+			$this->assert_write_persisted( $short_name, $result->getStructuredContent() );
 		}
 	}
 
@@ -397,10 +400,11 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 	 * landed - "persisted or refused" per amendment 17, and the refused half is already covered
 	 * by the JSONRPCErrorResponse branch above returning early.
 	 *
-	 * @param string $short_name Ability short name.
+	 * @param string              $short_name Ability short name.
+	 * @param array<string,mixed> $structured The tool call's structured content.
 	 * @return void
 	 */
-	private function assert_write_persisted( string $short_name ): void {
+	private function assert_write_persisted( string $short_name, array $structured ): void {
 		switch ( $short_name ) {
 			case 'tec-create-event':
 				$this->assertNotEmpty(
@@ -473,9 +477,13 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 				$this->assertStringContainsString( 'sweep replaced', (string) get_post_field( 'post_content', $this->ordinary_post_id, 'raw' ) );
 				break;
 			case 'upload-media-from-url':
-				// Verified structurally above (structured content present); the fetch/upload
-				// mechanics have their own dedicated persistence assertions in
-				// tests/abilities/UploadMediaFromUrlTest.php and the SSRF test file.
+				// Codex round C finding 6: this case had no real persistence check at all - the
+				// fetch/upload MECHANICS have their own dedicated coverage elsewhere
+				// (tests/abilities/UploadMediaFromUrlTest.php, the SSRF test file), but THIS
+				// sweep's own job is proving the wire call actually created a real attachment.
+				$attachment_id = (int) ( $structured['attachment_id'] ?? 0 );
+				$this->assertGreaterThan( 0, $attachment_id, 'upload-media-from-url did not return a real attachment id.' );
+				$this->assertSame( 'attachment', get_post_type( $attachment_id ) );
 				break;
 			default:
 				$this->fail( "No persistence assertion defined for the write {$short_name} - the sweep's own coverage is incomplete." );

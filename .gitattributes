@@ -43,3 +43,12 @@ composer.lock   export-ignore
 /vendor/yoast            export-ignore
 /vendor/wordpress/mcp-adapter/package.json      export-ignore
 /vendor/wordpress/mcp-adapter/package-lock.json export-ignore
+# Codex final round 9 LOW: a dependency's own readme.txt/CHANGELOG.md is not README.md (already
+# unanchored above, on purpose - see .distignore's own note on anchoring), so it slipped through
+# uncaught (vendor/wordpress/mcp-adapter/readme.txt, vendor/wordpress/php-mcp-schema/CHANGELOG.md,
+# vendor/automattic/jetpack-autoloader/CHANGELOG.md, found by `git archive` diffing against this
+# file). vendor/**/ anchors to the one directory nothing here ships from on purpose, while ** still
+# matches a dependency's own readme/changelog at any depth under it - the next Composer update that
+# adds one is caught the same way, not by adding its exact path here after the fact.
+vendor/**/readme.txt   export-ignore
+vendor/**/CHANGELOG.md export-ignore

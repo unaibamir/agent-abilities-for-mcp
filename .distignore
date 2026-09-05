@@ -72,6 +72,13 @@ phpunit-contract.xml.dist
 /vendor/wordpress/mcp-adapter/package.json
 /vendor/wordpress/mcp-adapter/package-lock.json
 
+# Codex final round 9 LOW: a dependency's own readme.txt/CHANGELOG.md is not README.md (already
+# unanchored above), so three of them (mcp-adapter's readme.txt, php-mcp-schema's and
+# jetpack-autoloader's CHANGELOG.md) shipped uncaught. Mirrors the same vendor/**/ fix in
+# .gitattributes rather than listing each dependency's exact path.
+vendor/**/readme.txt
+vendor/**/CHANGELOG.md
+
 # Pattern anchoring, and why several entries above have no leading slash. rsync reads a
 # leading slash as anchored to the transfer root and a bare filename as matching at any
 # depth. .gitattributes draws the same distinction, and it writes README.md, composer.lock

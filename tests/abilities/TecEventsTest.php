@@ -105,6 +105,77 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( 'aafm_status_forbidden', $out->get_error_code() );
 	}
 
+	/**
+	 * Codex final round 9 MEDIUM: aafm_exec_tec_create_event() never called aafm_force_draft(),
+	 * so the operator's force-draft-on-create setting silently never applied to events - fixed at
+	 * the shared aafm_resolve_create_status()/aafm_authorize_post_status() chokepoint (posts.php)
+	 * that this ability, like every other create ability, routes status through.
+	 */
+	public function test_create_event_honours_force_draft_even_for_an_authorized_publish_request(): void {
+		update_option( 'aafm_force_draft', true );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$out = aafm_exec_tec_create_event(
+			array(
+				'title'      => 'Force-drafted event',
+				'start_date' => '2027-01-01 09:00:00',
+				'end_date'   => '2027-01-01 12:00:00',
+				'status'     => 'publish',
+			)
+		);
+
+		delete_option( 'aafm_force_draft' );
+
+		$this->assertArrayHasKey( 'event', $out );
+		$this->assertSame( 'draft', $out['event']['status'] );
+	}
+
+	/**
+	 * Codex final round 9 MEDIUM: aafm_exec_tec_create_event() built its own ORM args array
+	 * instead of routing through aafm_insert_post(), so the max-title-length setting never
+	 * applied to it - fixed via aafm_tec_enforce_content_safety() (tec/_shared.php).
+	 */
+	public function test_create_event_enforces_the_max_title_length(): void {
+		update_option( 'aafm_max_title_len', 5 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$out = aafm_exec_tec_create_event(
+			array(
+				'title'      => 'This title is far too long',
+				'start_date' => '2027-01-01 09:00:00',
+				'end_date'   => '2027-01-01 12:00:00',
+			)
+		);
+
+		delete_option( 'aafm_max_title_len' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_title_too_long', $out->get_error_code() );
+	}
+
+	/**
+	 * Codex final round 9 MEDIUM: same gap as the title-length case above, for strict block
+	 * validation - fixed via the same aafm_tec_enforce_content_safety() call.
+	 */
+	public function test_create_event_enforces_strict_block_validation(): void {
+		update_option( 'aafm_block_guard_strict', true );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$out = aafm_exec_tec_create_event(
+			array(
+				'title'      => 'Bad markup event',
+				'content'    => '<!-- wp:heading --><h2 class="has-text-color">Hi</h2><!-- /wp:heading -->',
+				'start_date' => '2027-01-01 09:00:00',
+				'end_date'   => '2027-01-01 12:00:00',
+			)
+		);
+
+		delete_option( 'aafm_block_guard_strict' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
+	}
+
 	public function test_get_event_returns_null_error_for_a_non_event_post(): void {
 		$post = self::factory()->post->create(); // ordinary post, not an event.
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );

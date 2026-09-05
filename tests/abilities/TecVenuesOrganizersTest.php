@@ -367,4 +367,56 @@ final class TecVenuesOrganizersTest extends TestCase {
 		$this->assertSame( 1, $listed['total'] );
 		$this->assertSame( 'Draft Organizer', $listed['organizers'][0]['title'] );
 	}
+
+	/**
+	 * Codex final round 9 MEDIUM: aafm_exec_tec_create_venue()/aafm_exec_tec_create_organizer()
+	 * built their own ORM args arrays instead of routing through aafm_insert_post(), so the
+	 * max-title-length setting never applied to venues/organizers - fixed via
+	 * aafm_tec_enforce_content_safety() (tec/_shared.php), shared with events.
+	 */
+	public function test_create_venue_enforces_the_max_title_length(): void {
+		update_option( 'aafm_max_title_len', 5 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$out = aafm_exec_tec_create_venue( array( 'title' => 'This title is far too long' ) );
+
+		delete_option( 'aafm_max_title_len' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_title_too_long', $out->get_error_code() );
+	}
+
+	public function test_create_organizer_enforces_the_max_title_length(): void {
+		update_option( 'aafm_max_title_len', 5 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$out = aafm_exec_tec_create_organizer( array( 'title' => 'This title is far too long' ) );
+
+		delete_option( 'aafm_max_title_len' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_title_too_long', $out->get_error_code() );
+	}
+
+	/**
+	 * Codex final round 9 MEDIUM: force-draft never applied to venues/organizers either - fixed
+	 * at the shared aafm_resolve_create_status() chokepoint (posts.php), same as events.
+	 */
+	public function test_create_venue_honours_force_draft_even_for_an_authorized_publish_request(): void {
+		update_option( 'aafm_force_draft', true );
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		get_userdata( $editor )->add_cap( 'publish_tribe_venues' );
+		wp_set_current_user( $editor );
+
+		$out = aafm_exec_tec_create_venue(
+			array(
+				'title'  => 'Force-drafted venue',
+				'status' => 'publish',
+			)
+		);
+
+		delete_option( 'aafm_force_draft' );
+
+		$this->assertSame( 'draft', $out['venue']['status'] );
+	}
 }

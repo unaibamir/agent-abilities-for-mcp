@@ -356,6 +356,11 @@ function aafm_exec_tec_create_venue( array $input ) {
 	$args                = aafm_tec_venue_orm_args( $input );
 	$args['post_status'] = $status;
 
+	$safety = aafm_tec_enforce_content_safety( $args, 'venue' );
+	if ( is_wp_error( $safety ) ) {
+		return $safety;
+	}
+
 	$created = tribe_venues()->set_args( $args )->create();
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
@@ -423,6 +428,10 @@ function aafm_exec_tec_update_venue( array $input ) {
 	}
 	if ( array() === $args ) {
 		return array( 'venue' => aafm_tec_venue_shape( $id ) );
+	}
+	$safety = aafm_tec_enforce_content_safety( $args, 'venue' );
+	if ( is_wp_error( $safety ) ) {
+		return $safety;
 	}
 	$result = aafm_tec_force_sync_save(
 		'venues',

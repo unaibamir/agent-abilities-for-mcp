@@ -423,11 +423,20 @@ function aafm_exec_tec_create_event( array $input ) {
 	$args                = aafm_tec_event_orm_args( $input );
 	$args['post_status'] = $status;
 
+	$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
+	if ( is_wp_error( $safety ) ) {
+		return $safety;
+	}
+
 	$created = tribe_events()->set_args( $args )->create();
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return array( 'event' => aafm_tec_event_shape( (int) $created->ID ) );
+	$response = array( 'event' => aafm_tec_event_shape( (int) $created->ID ) );
+	if ( ! empty( $safety['warnings'] ) ) {
+		$response['content_warnings'] = $safety['warnings'];
+	}
+	return $response;
 }
 
 /**

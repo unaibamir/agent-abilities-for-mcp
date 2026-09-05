@@ -327,6 +327,11 @@ function aafm_exec_tec_create_organizer( array $input ) {
 	$args                = aafm_tec_organizer_orm_args( $input );
 	$args['post_status'] = $status;
 
+	$safety = aafm_tec_enforce_content_safety( $args, 'organizer' );
+	if ( is_wp_error( $safety ) ) {
+		return $safety;
+	}
+
 	$created = tribe_organizers()->set_args( $args )->create();
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
@@ -412,6 +417,10 @@ function aafm_exec_tec_update_organizer( array $input ) {
 	}
 	if ( array() === $args ) {
 		return array( 'organizer' => aafm_tec_organizer_shape( $id ) );
+	}
+	$safety = aafm_tec_enforce_content_safety( $args, 'organizer' );
+	if ( is_wp_error( $safety ) ) {
+		return $safety;
 	}
 	$result = aafm_tec_force_sync_save(
 		'organizers',

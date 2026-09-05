@@ -118,12 +118,14 @@ function aafm_tec_perm_read_organizer( array $input ): bool {
 }
 
 /**
- * Post statuses a caller may see in a TEC venue/organizer LIST query.
+ * Post statuses a caller may see in a TEC venue/organizer LIST query when no `status` filter is
+ * given.
  *
- * Neither list ability exposes a `status` input (unlike aafm/tec-get-events, which validates a
- * caller-requested status against that type's own private-read cap via
- * aafm_validate_post_status()), so an unscoped `where('post_status', ...)` call would leave TEC's
- * own repository to pick a default - and that default is generous: Tribe__Repository's
+ * Both list abilities now also accept an explicit `status` filter (aafm_tec_resolve_list_status()
+ * below, added alongside draft-default venue/organizer creation) that validates a caller-requested
+ * status against that type's own capabilities, mirroring aafm/tec-get-events. This function is
+ * still what a caller who omits `status` entirely sees - and TEC's own repository default there
+ * is generous: Tribe__Repository's
  * build_query_internally() adds 'private' to the query whenever current_user_can(
  * 'read_private_posts' ) is true, using WordPress's GENERIC core capability rather than the
  * venue/organizer type's own mapped read_private_tribe_venues/read_private_tribe_organizers cap
@@ -299,4 +301,40 @@ function aafm_tec_perm_edit_organizer( array $input ): bool {
  */
 function aafm_tec_perm_create_organizer(): bool {
 	return current_user_can( 'edit_tribe_organizers' );
+}
+
+/**
+ * Enforce the operator's max-title-length and strict-block-validation settings against a TEC
+ * ORM args array before it is persisted.
+ *
+ * Codex final round 9 MEDIUM: TEC events/venues/organizers build their own ORM args array
+ * (aafm_tec_event_orm_args()/aafm_tec_venue_orm_args()/aafm_tec_organizer_orm_args()) instead of
+ * routing through aafm_insert_post()/aafm_exec_update_post(), so neither setting ever applied to
+ * them. Force-draft is fixed at its own shared chokepoint
+ * (aafm_authorize_post_status()/aafm_resolve_create_status(), both in includes/abilities/posts.php)
+ * since every TEC create/update already calls one of those for status; title length and block
+ * validation have no equivalent shared call for TEC to hook into, so this is that hook.
+ *
+ * @param array<string,mixed> $args        ORM args about to be persisted.
+ * @param string              $title_key   Key in $args holding the sanitized title, e.g. 'post_title'.
+ * @param string              $content_key Key in $args holding the kses'd content, or '' when this
+ *                                         object type has no content field (venues, organizers).
+ * @return array{warnings: list<array{block:string,code:string,message:string}>}|WP_Error
+ */
+function aafm_tec_enforce_content_safety( array $args, string $title_key, string $content_key = '' ) {
+	if ( isset( $args[ $title_key ] ) ) {
+		$title_ok = aafm_enforce_title_limit( (string) $args[ $title_key ] );
+		if ( is_wp_error( $title_ok ) ) {
+			return $title_ok;
+		}
+	}
+	$warnings = array();
+	if ( '' !== $content_key && isset( $args[ $content_key ] ) ) {
+		$guard = aafm_block_guard_evaluate( (string) $args[ $content_key ] );
+		if ( $guard['error'] instanceof WP_Error ) {
+			return $guard['error'];
+		}
+		$warnings = $guard['warnings'];
+	}
+	return array( 'warnings' => $warnings );
 }

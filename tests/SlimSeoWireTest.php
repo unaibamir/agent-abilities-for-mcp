@@ -15,10 +15,16 @@ final class SlimSeoWireTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
+		// The registry is memoized (includes/registry.php static $cache); without this flush a
+		// prior test's slim-seo-inactive registry snapshot survives and the ability never
+		// actually registers here, so a real tools/call reports "tool not found" even though
+		// the direct-call SlimSeoTest suite (which never touches the registry cache) passes.
+		aafm_registry_cache_should_flush( true );
 	}
 
 	public function tear_down(): void {
 		remove_filter( 'aafm_integration_active_slim_seo', '__return_true' );
+		aafm_registry_cache_should_flush( true );
 		parent::tear_down();
 	}
 
@@ -71,6 +77,10 @@ final class SlimSeoWireTest extends TestCase {
 		$post = self::factory()->post->create_and_get();
 		update_post_meta( $post->ID, 'slim_seo', array( 'title' => 'Old title' ) );
 
+		// wp_register_ability() silently no-ops (via _doing_it_wrong()) unless the ability's
+		// declared category is already registered - explicit here so this test does not depend
+		// on some earlier test in the process having registered it as a side effect.
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		$this->register_enabled( array( 'aafm/slim-seo-get-post', 'aafm/slim-seo-update-post' ) );
 		$this->acting_as( 'editor' );
 

@@ -337,6 +337,12 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/rankmath-update-schema':
 		case 'aafm/aioseo-get-post':
 		case 'aafm/aioseo-update-post':
+			// Slim SEO gates per-object on the SAME shared aafm_perm_seo_post_object() as the three
+			// SEO integrations above (edit_post($id), false with empty input), so it needs the
+			// identical discovery floor - added 1.7.4, missed here would leave the ability
+			// registered and enabled but silently undiscoverable/uncallable over the real wire.
+		case 'aafm/slim-seo-get-post':
+		case 'aafm/slim-seo-update-post':
 			return static fn(): bool => aafm_can_edit_post_family();
 
 		// ACF integration, post fields: gates per-object on edit_post($id) (aafm_perm_acf_post ->

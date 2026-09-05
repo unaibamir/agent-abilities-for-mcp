@@ -1747,54 +1747,62 @@ function aafm_exec_replace_sitewide( array $input ) {
 
 	add_filter( 'posts_where', $like_filter );
 	try {
-		// Unpaginated count first, so total_matches/truncated reflect every SQL-side match, not
-		// only the first page this call will actually process.
+		// Unpaginated ids first, so total_matches/truncated reflect every SQL-side match, not
+		// only the ones this call goes on to examine - and so the SAME id list can be scanned in
+		// PHP below for the page of candidates to actually process (see the comment there for why
+		// a second, SQL-side-capped query is exactly the bug this fix closes).
 		$count_query   = new WP_Query(
 			array(
 				'post_type'      => $type,
 				'post_status'    => $status,
 				'fields'         => 'ids',
 				'posts_per_page' => -1,
-				'no_found_rows'  => true,
-			)
-		);
-		$total_matches = count( $count_query->posts );
-		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
-
-		$page_query = new WP_Query(
-			array(
-				'post_type'      => $type,
-				'post_status'    => $status,
-				'posts_per_page' => AAFM_REPLACE_SITEWIDE_MAX_POSTS,
 				'orderby'        => 'ID',
 				'order'          => 'ASC',
 				'no_found_rows'  => true,
 			)
 		);
+		$total_matches = count( $count_query->posts );
+		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
 	} finally {
 		remove_filter( 'posts_where', $like_filter );
 	}
 
-	$candidates = array_values( array_filter( $page_query->posts, static fn( $p ): bool => $p instanceof WP_Post ) );
-
-	$updated       = 0;
+	// Codex final round 2 MEDIUM: an SQL-side `LIMIT AAFM_REPLACE_SITEWIDE_MAX_POSTS` applied
+	// BEFORE permission/builder-ownership filtering meant that enough non-editable matching posts
+	// sitting earlier in ID order could occupy the entire cap, so the caller's own editable match
+	// was never even fetched, let alone processed - repeating the call selected the exact same
+	// unreachable window every time. Scan the full (already-fetched, already unpaginated) id list
+	// in ID order and fill the cap with EDITABLE, non-builder-owned candidates only; a skipped
+	// post costs nothing against the cap.
+	$candidates    = array();
 	$no_perm       = 0;
-	$guarded       = 0;
-	$failed        = 0;
 	$builder_owned = 0;
-
-	foreach ( $candidates as $post ) {
+	foreach ( $count_query->posts as $post_id ) {
+		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS ) {
+			break;
+		}
+		$post = get_post( (int) $post_id ); // @phpstan-ignore-line cast.int (fields=>ids means $post_id is really an int; the WP_Query stub types ->posts as WP_Post[] unconditionally).
+		if ( ! $post instanceof WP_Post ) {
+			continue;
+		}
 		if ( ! aafm_can_edit_post_object( $post ) ) {
 			++$no_perm;
 			continue;
 		}
-
 		$owning_builder = aafm_post_has_foreign_builder_ownership( $post->ID );
 		if ( false !== $owning_builder ) {
 			++$builder_owned;
 			continue;
 		}
+		$candidates[] = $post;
+	}
 
+	$updated = 0;
+	$guarded = 0;
+	$failed  = 0;
+
+	foreach ( $candidates as $post ) {
 		// Guards run identically in dry-run and a real apply, so a preview's counters are an
 		// honest forecast of what applying would do - only the actual write is skipped below.
 		$inserted = wp_kses_post( $replace );

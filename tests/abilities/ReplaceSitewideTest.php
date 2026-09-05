@@ -201,4 +201,44 @@ final class ReplaceSitewideTest extends TestCase {
 		$this->assertTrue( $out['truncated'] );
 		$this->assertSame( 50, $out['matched_posts'] );
 	}
+
+	/**
+	 * Codex final round 2 MEDIUM: the SQL-side cap applied before permission filtering, so 50
+	 * matching posts the caller cannot edit could occupy the entire cap and the caller's own
+	 * editable match (a later ID) was never even fetched. Repeating the call selected the exact
+	 * same unreachable window every time. The caller's own post must be found and processed
+	 * regardless of how many non-editable matches sit earlier in ID order.
+	 */
+	public function test_reaches_an_editable_match_past_50_non_editable_ones(): void {
+		$other_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create_many(
+			50,
+			array(
+				'post_content' => 'shared needleterm here',
+				'post_author'  => $other_id,
+			)
+		);
+
+		$caller_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		$own_post  = self::factory()->post->create_and_get(
+			array(
+				'post_content' => 'shared needleterm here',
+				'post_author'  => $caller_id,
+			)
+		);
+		wp_set_current_user( $caller_id );
+
+		$out = aafm_exec_replace_sitewide(
+			array(
+				'search'  => 'needleterm',
+				'replace' => 'x',
+				'dry_run' => false,
+			)
+		);
+
+		$this->assertSame( 51, $out['total_matches'] );
+		$this->assertSame( 50, $out['skipped_no_permission'] );
+		$this->assertSame( 1, $out['updated_posts'] );
+		$this->assertSame( 'shared x here', get_post( $own_post->ID )->post_content );
+	}
 }

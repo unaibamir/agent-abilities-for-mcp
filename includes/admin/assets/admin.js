@@ -1914,18 +1914,27 @@
 					// restricts nothing real), so remove it here too rather than leaving it
 					// visible as if it were still in effect - mirrors the IP-allowlist save
 					// handler reflecting its own cleaned value a few hundred lines up.
-					const kept = new Set(
+					const keptKeys = new Set(
 						( Array.isArray( json.data?.rows ) ? json.data.rows : [] ).map(
 							( r ) => `${ r.scope_type }:${ r.scope_id }`
 						)
 					);
-					Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).forEach(
-						( row ) => {
-							if ( ! kept.has( `${ row.dataset.scopeType }:${ row.dataset.scopeId }` ) ) {
-								row.remove();
-							}
+					const domRows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] );
+					// Two DOM rows can share the same scope (the operator added the same role or
+					// client twice); the server already canonicalized that scope down to whichever
+					// row was submitted LAST (this file's own PHP-side comment: "a later duplicate
+					// wins"). Track the last DOM row seen for each key so every earlier duplicate
+					// is removed too, not just rows the server dropped outright.
+					const lastRowForKey = new Map();
+					domRows.forEach( ( row ) => {
+						lastRowForKey.set( `${ row.dataset.scopeType }:${ row.dataset.scopeId }`, row );
+					} );
+					domRows.forEach( ( row ) => {
+						const key = `${ row.dataset.scopeType }:${ row.dataset.scopeId }`;
+						if ( ! keptKeys.has( key ) || lastRowForKey.get( key ) !== row ) {
+							row.remove();
 						}
-					);
+					} );
 
 					const dropped = Number( json.data?.dropped ?? 0 );
 					if ( status ) {

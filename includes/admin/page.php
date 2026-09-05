@@ -1275,6 +1275,11 @@ function aafm_render_admin_page(): void {
 			'icon'  => 'lifebuoy',
 			'label' => __( 'Get Help', 'agent-abilities-for-mcp' ),
 		),
+		array(
+			'href'  => 'https://www.youtube.com/watch?v=Raih7X4QgP0',
+			'icon'  => 'play',
+			'label' => __( 'Watch the demo', 'agent-abilities-for-mcp' ),
+		),
 	);
 	echo '<span class="aafm-nav-ext-group">';
 	foreach ( $ext_links as $ext ) {

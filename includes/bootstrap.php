@@ -81,7 +81,7 @@ function aafm_mcp_rest_route(): string {
 /**
  * Upper bound (exclusive) for a compatible MCP adapter version.
  *
- * The plugin is built against the adapter's 0.5.x contract (create_server() signature,
+ * The plugin is built against the adapter's 0.6.x contract (create_server() signature,
  * initialize-response shape, tools-list filter), so it gates the loaded copy to the tested
  * range [floor, next-minor) and warns the operator otherwise.
  *
@@ -208,7 +208,7 @@ function aafm_notice_adapter_outdated(): void {
 /**
  * Admin notice: another plugin loaded an adapter NEWER than our tested upper bound.
  *
- * A 0.6+ adapter may have changed the create_server() signature or response shape the plugin is
+ * A 0.7+ adapter may have changed the create_server() signature or response shape the plugin is
  * built against, so it is disabled rather than risking a runtime break. Names the offending plugin
  * when it can be resolved, and reports the loaded vs maximum-supported versions. All output escaped.
  *

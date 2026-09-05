@@ -603,6 +603,41 @@ function aafm_ajax_oauth_revoke_client(): void {
 }
 
 /**
+ * AJAX: flag or unflag a registered OAuth client as an agent-identity connection.
+ *
+ * Nonce + manage_options gated, mirroring aafm_ajax_oauth_revoke_client()'s shape. The
+ * client_id is the only client-supplied identifier; is_agent_identity is read as a simple
+ * truthy/falsy flag, not a scalar that needs further sanitizing.
+ *
+ * @return void
+ */
+function aafm_ajax_set_client_agent_identity(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['client_id'] ) ) : '';
+	if ( '' === $client_id ) {
+		wp_send_json_error( array( 'message' => __( 'Missing client.', 'agent-abilities-for-mcp' ) ) );
+	}
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$flag_raw = isset( $_POST['is_agent_identity'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['is_agent_identity'] ) ) : '';
+	$flag     = '' !== $flag_raw && '0' !== $flag_raw;
+
+	if ( ! aafm_oauth_set_client_agent_identity( $client_id, $flag ) ) {
+		wp_send_json_error( array( 'message' => __( 'Client not found.', 'agent-abilities-for-mcp' ) ) );
+	}
+
+	wp_send_json_success(
+		array(
+			'client_id'         => $client_id,
+			'is_agent_identity' => $flag,
+		)
+	);
+}
+
+/**
  * AJAX: revoke an OAuth grant (user consent) from the Connections management table.
  *
  * Deletes the user's consent for the client and revokes that user+client's active
@@ -770,6 +805,11 @@ function aafm_render_oauth_management(): void {
 		echo '<th>' . esc_html__( 'Created', 'agent-abilities-for-mcp' ) . '</th>';
 		echo '<th>' . esc_html__( 'Active tokens', 'agent-abilities-for-mcp' ) . '</th>';
 		echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
+		printf(
+			'<th><span title="%1$s">%2$s</span></th>',
+			esc_attr__( 'Marks this client as an AI agent connection rather than an ordinary human client, surfaced on the activity log.', 'agent-abilities-for-mcp' ),
+			esc_html__( 'Agent', 'agent-abilities-for-mcp' )
+		);
 		echo '<th>' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
 		echo '</tr></thead><tbody>';
 
@@ -804,6 +844,13 @@ function aafm_render_oauth_management(): void {
 				echo '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Revoked', 'agent-abilities-for-mcp' ) . '</span>';
 			}
 			echo '</td>';
+
+			printf(
+				'<td><label class="aafm-switch"><input type="checkbox" class="aafm-client-agent-toggle" data-client-id="%1$s" aria-label="%3$s"%2$s><span class="aafm-switch-track"></span></label></td>',
+				esc_attr( $full_id ),
+				checked( ! empty( $client['is_agent_identity'] ), true, false ),
+				esc_attr__( 'Agent identity', 'agent-abilities-for-mcp' )
+			);
 
 			echo '<td>';
 			if ( $client['is_active'] ) {

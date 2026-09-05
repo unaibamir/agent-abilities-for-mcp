@@ -27,7 +27,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_activity_log_definitions' 
 function aafm_register_activity_log_definitions( array $registry ): array {
 	$registry['aafm/get-activity-log'] = array(
 		'label'        => __( 'Get activity log', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, the argument keys passed, the timestamp, and a short identifier-only detail (an object id or slug, a WP_Error code, or a crashed call's exception class and throw site). Most recent first. Response includes total (the count for the status filter). Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, whether the caller is flagged as an agent identity, the argument keys passed, the timestamp, and a short identifier-only detail (an object id or slug, a WP_Error code, or a crashed call's exception class and throw site). Most recent first. Response includes total (the count for the status filter). Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -83,6 +83,10 @@ function aafm_args_get_activity_log(): array {
 							'principal_login'   => array( 'type' => 'string' ),
 							'arg_keys'          => array( 'type' => 'string' ),
 							'created_at'        => array( 'type' => 'string' ),
+							'is_agent_identity' => array(
+								'type'        => 'boolean',
+								'description' => __( 'Whether the acting user or the OAuth client this call is attributed to is flagged as an agent identity, distinct from an ordinary human connection.', 'agent-abilities-for-mcp' ),
+							),
 							'detail'            => array(
 								'type'        => array( 'string', 'null' ),
 								'description' => __( 'Identifier-only note about what the call touched or why it failed, or null when the call recorded none. It is one of an allowlisted identifier (an object id or slug), a WP_Error code, or a crash\'s exception class and throw site, for example "WC_Data_Exception at abstract-wc-data.php:1001". It never contains argument values, free text, or file paths.', 'agent-abilities-for-mcp' ),
@@ -140,6 +144,10 @@ function aafm_exec_get_activity_log( array $input ): array {
 			'principal_login'   => isset( $row['principal_login'] ) ? (string) $row['principal_login'] : '',
 			'arg_keys'          => isset( $row['arg_keys'] ) ? (string) $row['arg_keys'] : '',
 			'created_at'        => isset( $row['created_at'] ) ? (string) $row['created_at'] : '',
+			'is_agent_identity' => aafm_principal_is_agent_identity(
+				isset( $row['principal_user_id'] ) ? (int) $row['principal_user_id'] : 0,
+				! empty( $row['client_id'] ) ? (string) $row['client_id'] : null
+			),
 			// Null rather than '' for an unset detail, so the wire carries "detail":null and a
 			// consumer can tell "this call recorded nothing" from "this call recorded an empty
 			// string". Safe to expose only because includes/audit/detail.php constrains every

@@ -33,7 +33,11 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// CREATE; dbDelta never changes an existing table's engine, so the bump re-runs the installer
 	// once, which converts a pre-existing MyISAM lifecycle table with a guarded one-time ALTER
 	// (aafm_oauth_enforce_lifecycle_engine()). The stored charset/collation is unchanged.
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '7' );
+	// v8 adds an `is_agent_identity` column to the clients table: an operator-settable flag,
+	// distinct from the existing user-level aafm_agent_user_marker_meta_key() marker, that marks
+	// an OAuth client itself as an agent connection. Defaults to 0 for every existing row, so a
+	// bump changes no client's flagged state. Additive, no data migration.
+	define( 'AAFM_OAUTH_SCHEMA_VERSION', '8' );
 }
 
 /**
@@ -75,6 +79,7 @@ function aafm_install_oauth_tables(): void {
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		created_by_ip VARCHAR(45) NOT NULL DEFAULT '',
 		is_active TINYINT(1) NOT NULL DEFAULT 1,
+		is_agent_identity TINYINT(1) NOT NULL DEFAULT 0,
 		PRIMARY KEY  (id),
 		UNIQUE KEY client_id (client_id),
 		KEY created_at (created_at)
@@ -311,9 +316,10 @@ function aafm_oauth_finalize_schema( bool $engine_ok ): void {
 /**
  * Whether the OAuth schema is actually present: all four tables plus the latest columns.
  *
- * Verifies table presence and the v6 `scope` column on codes + access-tokens - the most recent
- * migration, so its absence is the signal a dbDelta run did not fully land. Gates the version
- * stamp in aafm_oauth_finalize_schema().
+ * Verifies table presence, the v6 `scope` column on codes + access-tokens, and the v8
+ * `is_agent_identity` column on clients - the most recent migration, so its absence is the
+ * signal a dbDelta run did not fully land. Gates the version stamp in
+ * aafm_oauth_finalize_schema().
  *
  * @return bool
  */
@@ -327,7 +333,8 @@ function aafm_oauth_schema_verify(): bool {
 	}
 
 	return aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_codes', 'scope' )
-		&& aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_access_tokens', 'scope' );
+		&& aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_access_tokens', 'scope' )
+		&& aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_clients', 'is_agent_identity' );
 }
 
 /**

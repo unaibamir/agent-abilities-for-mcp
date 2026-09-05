@@ -115,6 +115,97 @@ function aafm_oauth_register_client( array $req ) {
 }
 
 /**
+ * Fetch a single OAuth client row by its public client_id.
+ *
+ * @param string $client_id The public client identifier.
+ * @return array{client_id:string,client_name:string,is_active:bool,is_agent_identity:bool}|null
+ *               Null when no row exists.
+ */
+function aafm_oauth_get_client( string $client_id ): ?array {
+	if ( '' === $client_id ) {
+		return null;
+	}
+
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$row = $wpdb->get_row(
+		$wpdb->prepare(
+			'SELECT client_id, client_name, is_active, is_agent_identity FROM %i WHERE client_id = %s',
+			$wpdb->prefix . 'aafm_oauth_clients',
+			$client_id
+		),
+		ARRAY_A
+	);
+
+	if ( ! is_array( $row ) ) {
+		return null;
+	}
+
+	return array(
+		'client_id'         => (string) $row['client_id'],
+		'client_name'       => (string) $row['client_name'],
+		'is_active'         => 1 === (int) $row['is_active'],
+		'is_agent_identity' => 1 === (int) $row['is_agent_identity'],
+	);
+}
+
+/**
+ * Flag (or unflag) an OAuth client as an agent-identity connection.
+ *
+ * Distinct from the existing user-level {@see aafm_agent_user_marker_meta_key()} marker: this is
+ * an operator-settable flag on the OAuth client row itself, surfaced on the activity log via
+ * {@see aafm_principal_is_agent_identity()}.
+ *
+ * @param string $client_id The public client identifier.
+ * @param bool   $flag      True to flag the client as an agent identity, false to clear it.
+ * @return bool True when a client row was found and updated.
+ */
+function aafm_oauth_set_client_agent_identity( string $client_id, bool $flag ): bool {
+	if ( '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$updated = $wpdb->update(
+		$wpdb->prefix . 'aafm_oauth_clients',
+		array( 'is_agent_identity' => $flag ? 1 : 0 ),
+		array( 'client_id' => $client_id ),
+		array( '%d' ),
+		array( '%s' )
+	);
+
+	return false !== $updated && (int) $updated > 0;
+}
+
+/**
+ * Whether a principal (an acting user, an OAuth client, or both) is marked as an agent identity.
+ *
+ * Two independent sources, either of which is enough: the app-password-user marker
+ * {@see aafm_agent_user_marker_meta_key()} this plugin already stamps on a user it created via
+ * the dedicated-agent-user flow, and the OAuth client's own {@see aafm_oauth_set_client_agent_identity()}
+ * flag. A user id of 0 or an empty/null client id is simply not checked on that side.
+ *
+ * @param int         $user_id         Acting WordPress user id, or 0 when unresolved.
+ * @param string|null $oauth_client_id OAuth client id the call is attributed to, or null/'' for none.
+ * @return bool
+ */
+function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_id ): bool {
+	if ( $user_id > 0 && get_user_meta( $user_id, aafm_agent_user_marker_meta_key(), true ) ) {
+		return true;
+	}
+
+	if ( null !== $oauth_client_id && '' !== $oauth_client_id ) {
+		$client = aafm_oauth_get_client( $oauth_client_id );
+		if ( is_array( $client ) && ! empty( $client['is_agent_identity'] ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
  * Whether a client row exists for this id but has been deactivated (is_active = 0).
  *
  * Used to re-enforce a client deactivation AFTER authorize-time, at code redemption, refresh
@@ -235,7 +326,7 @@ function aafm_oauth_validate_redirect_uri( string $uri ): bool {
  * non-array value decodes to an empty array so the caller never has to guard it.
  * Ordered newest first. Read-only, prepared queries against the plugin's own tables.
  *
- * @return array<int,array{client_id:string,client_name:string,redirect_uris:string[],created_at:string,is_active:bool,active_tokens:int}>
+ * @return array<int,array{client_id:string,client_name:string,redirect_uris:string[],created_at:string,is_active:bool,active_tokens:int,is_agent_identity:bool}>
  */
 function aafm_oauth_list_clients(): array {
 	global $wpdb;
@@ -248,7 +339,7 @@ function aafm_oauth_list_clients(): array {
 	// instead of surfacing a DB error.
 	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT client_id, client_name, redirect_uris, created_at, is_active FROM %i ORDER BY created_at DESC, id DESC', $clients_table ), ARRAY_A );
+	$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT client_id, client_name, redirect_uris, created_at, is_active, is_agent_identity FROM %i ORDER BY created_at DESC, id DESC', $clients_table ), ARRAY_A );
 	$wpdb->suppress_errors( $suppressed );
 
 	if ( ! is_array( $rows ) ) {
@@ -282,12 +373,13 @@ function aafm_oauth_list_clients(): array {
 		$uris    = is_array( $decoded ) ? array_values( array_filter( $decoded, 'is_string' ) ) : array();
 
 		$out[] = array(
-			'client_id'     => (string) $row['client_id'],
-			'client_name'   => (string) $row['client_name'],
-			'redirect_uris' => $uris,
-			'created_at'    => (string) $row['created_at'],
-			'is_active'     => 1 === (int) $row['is_active'],
-			'active_tokens' => $counts[ (string) $row['client_id'] ] ?? 0,
+			'client_id'         => (string) $row['client_id'],
+			'client_name'       => (string) $row['client_name'],
+			'redirect_uris'     => $uris,
+			'created_at'        => (string) $row['created_at'],
+			'is_active'         => 1 === (int) $row['is_active'],
+			'active_tokens'     => $counts[ (string) $row['client_id'] ] ?? 0,
+			'is_agent_identity' => 1 === (int) $row['is_agent_identity'],
 		);
 	}
 

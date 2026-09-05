@@ -74,6 +74,7 @@
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
 			this.#bindOauthRevoke();
+			this.#bindClientAgentToggle();
 			this.#bindQuickConnect();
 		}
 
@@ -1779,6 +1780,44 @@
 						note.textContent = this.#t( 'statusRevoked', 'Revoked' );
 						cell.append( note );
 					}
+				}
+			} );
+		}
+
+		/**
+		 * Wire the Registered-clients table's per-row "Agent" toggle: on change, POST the
+		 * nonce-checked AJAX action that flags/unflags that client as an agent identity. On
+		 * failure the checkbox reverts to its prior state so the UI never shows a state the
+		 * server did not actually persist.
+		 */
+		#bindClientAgentToggle() {
+			const root = document.querySelector( '.aafm-oauth-manage' );
+			if ( ! root ) {
+				return;
+			}
+			root.addEventListener( 'change', async ( e ) => {
+				const toggle = e.target.closest( '.aafm-client-agent-toggle' );
+				if ( ! toggle || ! root.contains( toggle ) ) {
+					return;
+				}
+
+				const clientId = toggle.dataset.clientId ?? '';
+				const desired = toggle.checked;
+				toggle.disabled = true;
+
+				const json = await this.#post( 'aafm_set_client_agent_identity', {
+					client_id: clientId,
+					is_agent_identity: desired ? '1' : '0',
+				} );
+
+				toggle.disabled = false;
+
+				if ( ! json?.success ) {
+					toggle.checked = ! desired;
+					window.alert(
+						json?.data?.message ??
+							this.#t( 'agentToggleFailed', 'Could not save. Please try again.' )
+					);
 				}
 			} );
 		}

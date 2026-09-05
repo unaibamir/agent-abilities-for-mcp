@@ -188,6 +188,7 @@ final class CatalogFixture {
 		'aafm/wc-create-tax-class',
 		'aafm/wc-update-payment-gateway',
 		'aafm/slim-seo-update-post',
+		'aafm/replace-sitewide',
 	);
 
 	/**

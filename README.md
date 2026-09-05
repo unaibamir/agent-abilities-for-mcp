@@ -52,9 +52,9 @@ WordPress 6.9 ships the Abilities API and the official MCP Adapter. Agent Abilit
 
 ### 📦 153 governed abilities
 
-The plugin ships **153 governed abilities: 83 across WordPress core and 70 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged. Beyond these, it can also bridge abilities declared by your other plugins (see below).
+The plugin ships **156 governed abilities: 84 across WordPress core and 72 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged. Beyond these, it can also bridge abilities declared by your other plugins (see below).
 
-**WordPress core (83 abilities).** Reads plus guarded writes across your whole site:
+**WordPress core (84 abilities).** Reads plus guarded writes across your whole site:
 
 * **📝 Posts & Pages:** list, read, create, update, and delete posts and pages, with destructive actions off by default and deletes routed to Trash.
 * **🏷️ Terms & Taxonomies:** manage categories, tags, and custom taxonomy terms.
@@ -68,7 +68,7 @@ The plugin ships **153 governed abilities: 83 across WordPress core and 70 from 
 * **⚙️ Limited settings & site health:** a tightly scoped set of settings, plus read-only site health and plugin status.
 * **🔍 Site-wide search:** one search that spans every post type at once.
 
-**Integrations (70 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, and logged. Each appears only while its host plugin is active:
+**Integrations (72 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, and logged. Each appears only while its host plugin is active:
 
 * **🛒 WooCommerce MCP (52 abilities):** read and write products, orders, and customers so an AI agent can help run your store. These touch real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear admin notice and stay off until you switch them on.
 * **🧩 Advanced Custom Fields (7 abilities):** read and write ACF field data. Like WooCommerce, these can reach real personal data and sit behind the same clear notice.

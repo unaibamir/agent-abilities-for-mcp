@@ -38,7 +38,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_posts_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_posts_definitions( array $registry ): array {
-	$registry['aafm/get-posts']       = array(
+	$registry['aafm/get-posts']        = array(
 		'label'        => __( 'Get posts', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -46,7 +46,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_posts',
 	);
-	$registry['aafm/count-posts']     = array(
+	$registry['aafm/count-posts']      = array(
 		'label'        => __( 'Count posts', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Count posts of an allowlisted post type: a total of active (non-trashed) items, plus a breakdown by status (publish, draft, pending, private, future, trash). Trash and auto-draft are shown in the breakdown but excluded from total. When the caller cannot edit this post type, non-public status counts (draft, pending, private, future, trash) are reported as zero and only public statuses are counted.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -54,7 +54,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_count_posts',
 	);
-	$registry['aafm/get-post']        = array(
+	$registry['aafm/get-post']         = array(
 		'label'        => __( 'Get post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Retrieve a single post by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected posts), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -62,7 +62,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_post',
 	);
-	$registry['aafm/create-draft']    = array(
+	$registry['aafm/create-draft']     = array(
 		'label'        => __( 'Create draft', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create a new post, draft by default. An explicit status is honored, but publish, future, private, or any other publicly-visible status requires this content type\'s publish capability. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -70,7 +70,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_draft',
 	);
-	$registry['aafm/create-post']     = array(
+	$registry['aafm/create-post']      = array(
 		'label'        => __( 'Create post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create a new post, published by default (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -78,7 +78,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_post',
 	);
-	$registry['aafm/update-post']     = array(
+	$registry['aafm/update-post']      = array(
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -86,7 +86,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_post',
 	);
-	$registry['aafm/replace-in-post'] = array(
+	$registry['aafm/replace-in-post']  = array(
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -94,7 +94,15 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_replace_in_post',
 	);
-	$registry['aafm/trash-post']      = array(
+	$registry['aafm/replace-sitewide'] = array(
+		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. Bounded to 50 posts per call; a larger match set reports truncated:true with the real total.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_replace_sitewide',
+	);
+	$registry['aafm/trash-post']       = array(
 		'label'        => __( 'Trash post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -102,7 +110,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_trash_post',
 	);
-	$registry['aafm/create-cpt-item'] = array(
+	$registry['aafm/create-cpt-item']  = array(
 		'label'        => __( 'Create content item', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create an item of an allowlisted custom content type (post_type), draft by default. An explicit status is honored, but publish, future, private, or any other publicly-visible status requires that type\'s publish capability. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -110,7 +118,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_cpt_item',
 	);
-	$registry['aafm/update-cpt-item'] = array(
+	$registry['aafm/update-cpt-item']  = array(
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -118,7 +126,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_cpt_item',
 	);
-	$registry['aafm/delete-post']     = array(
+	$registry['aafm/delete-post']      = array(
 		'label'        => __( 'Delete post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -1602,6 +1610,203 @@ function aafm_exec_replace_in_post( array $input ) {
 		$response['content_warnings'] = $guard['warnings'];
 	}
 	return $response;
+}
+
+/**
+ * The upper bound on how many posts a single aafm/replace-sitewide call touches (or
+ * previews, in dry-run). Mirrors AAFM_LIST_PER_PAGE_MAX's role for list abilities.
+ */
+const AAFM_REPLACE_SITEWIDE_MAX_POSTS = 50;
+
+/**
+ * Args for aafm/replace-sitewide.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_replace_sitewide(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/replace-sitewide' ),
+		'description'         => aafm_ability_description( 'aafm/replace-sitewide' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'search'    => array(
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Literal text to find. Matched as-is, not as a regular expression.', 'agent-abilities-for-mcp' ),
+				),
+				'replace'   => array(
+					'type'        => 'string',
+					'description' => __( 'Literal text to substitute for every match.', 'agent-abilities-for-mcp' ),
+				),
+				'post_type' => array(
+					'type'        => 'string',
+					'default'     => 'post',
+					'description' => __( 'Slug of an allowlisted content type to scope the replace to. Defaults to post.', 'agent-abilities-for-mcp' ),
+				),
+				'status'    => array(
+					'type'        => 'string',
+					'default'     => 'publish',
+					'description' => __( 'Post status to scope the replace to. Defaults to publish.', 'agent-abilities-for-mcp' ),
+				),
+				'dry_run'   => array(
+					'type'        => 'boolean',
+					'default'     => true,
+					'description' => __( 'When true (the default), previews the match without writing anything. Pass false to apply the change.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'search', 'replace' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'dry_run'                 => array( 'type' => 'boolean' ),
+				'matched_posts'           => array( 'type' => 'integer' ),
+				'updated_posts'           => array( 'type' => 'integer' ),
+				'skipped_no_permission'   => array( 'type' => 'integer' ),
+				'skipped_structure_guard' => array( 'type' => 'integer' ),
+				'failed_updates'          => array(
+					'type'        => 'integer',
+					'description' => __( 'Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal.', 'agent-abilities-for-mcp' ),
+				),
+				'truncated'               => array( 'type' => 'boolean' ),
+				'total_matches'           => array( 'type' => 'integer' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_replace_sitewide',
+		'permission_callback' => 'aafm_perm_edit_posts',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/replace-sitewide.
+ *
+ * The literal-substring match is done in SQL (a posts_where LIKE clause, mirroring the
+ * get-media search pattern in includes/abilities/media.php) rather than fetched-page-then-
+ * filtered-in-PHP: an SQL-side match means pagination and matching happen in the same query, so
+ * a match sitting outside the first AAFM_REPLACE_SITEWIDE_MAX_POSTS rows by ID is never silently
+ * missed from the total - the exact "reported total doesn't match reality" bug class this
+ * release exists to stop repeating. total_matches and truncated are computed from an
+ * unpaginated count of the same WHERE-scoped query before the bounded page is fetched.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_replace_sitewide( array $input ) {
+	$type = aafm_validate_post_type( isset( $input['post_type'] ) ? (string) $input['post_type'] : 'post' );
+	if ( is_wp_error( $type ) ) {
+		return $type;
+	}
+	$type_object = get_post_type_object( $type );
+	$can_private = $type_object instanceof WP_Post_Type && current_user_can( (string) $type_object->cap->read_private_posts );
+	$status      = aafm_validate_post_status( isset( $input['status'] ) ? (string) $input['status'] : 'publish', $can_private );
+	if ( is_wp_error( $status ) ) {
+		return $status;
+	}
+
+	$search  = (string) $input['search'];
+	$replace = (string) $input['replace'];
+	$dry_run = ! array_key_exists( 'dry_run', $input ) || (bool) $input['dry_run'];
+
+	$like_filter = static function ( string $where ) use ( $search ): string {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant ($wpdb->posts).
+		return $where . $wpdb->prepare(
+			" AND {$wpdb->posts}.post_content LIKE %s",
+			'%' . $wpdb->esc_like( $search ) . '%'
+		);
+	};
+
+	add_filter( 'posts_where', $like_filter );
+	try {
+		// Unpaginated count first, so total_matches/truncated reflect every SQL-side match, not
+		// only the first page this call will actually process.
+		$count_query   = new WP_Query(
+			array(
+				'post_type'      => $type,
+				'post_status'    => $status,
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+				'no_found_rows'  => true,
+			)
+		);
+		$total_matches = count( $count_query->posts );
+		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
+
+		$page_query = new WP_Query(
+			array(
+				'post_type'      => $type,
+				'post_status'    => $status,
+				'posts_per_page' => AAFM_REPLACE_SITEWIDE_MAX_POSTS,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'no_found_rows'  => true,
+			)
+		);
+	} finally {
+		remove_filter( 'posts_where', $like_filter );
+	}
+
+	$candidates = array_values( array_filter( $page_query->posts, static fn( $p ): bool => $p instanceof WP_Post ) );
+
+	$updated = 0;
+	$no_perm = 0;
+	$guarded = 0;
+	$failed  = 0;
+
+	foreach ( $candidates as $post ) {
+		if ( ! aafm_can_edit_post_object( $post ) ) {
+			++$no_perm;
+			continue;
+		}
+		if ( $dry_run ) {
+			continue; // Counted in matched_posts below; nothing written.
+		}
+		$inserted = wp_kses_post( $replace );
+		$new      = str_replace( $search, $inserted, (string) $post->post_content );
+		if ( ! aafm_replacement_preserves_structure( (string) $post->post_content, $new ) ) {
+			++$guarded;
+			continue;
+		}
+		$guard = aafm_block_guard_evaluate( $new );
+		if ( $guard['error'] instanceof WP_Error ) {
+			++$guarded;
+			continue;
+		}
+		$result = wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => $new,
+				)
+			),
+			true
+		);
+		if ( is_wp_error( $result ) ) {
+			++$failed;
+			continue;
+		}
+		++$updated;
+	}
+
+	return array(
+		'dry_run'                 => $dry_run,
+		'matched_posts'           => count( $candidates ),
+		'updated_posts'           => $updated,
+		'skipped_no_permission'   => $no_perm,
+		'skipped_structure_guard' => $guarded,
+		'failed_updates'          => $failed,
+		'truncated'               => $truncated,
+		'total_matches'           => $total_matches,
+	);
 }
 
 /**

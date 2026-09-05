@@ -414,7 +414,14 @@ final class SecurityRegressionTest extends TestCase {
 		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir ) );
 
 		// Code-exec primitives must NEVER appear anywhere in our source.
-		$banned_exec = '/\b(eval|create_function|assert|download_url|curl_exec)\s*\(/';
+		$banned_exec = '/\b(eval|create_function|assert|download_url)\s*\(/';
+		// curl_exec() is banned everywhere except aafm_ssrf_owned_curl_fetch()'s single call
+		// site in media.php: a handle this function owns outright (never shared with
+		// WP_Http_Curl's), pinned via CURLOPT_RESOLVE, proxy disabled, no redirects, TLS
+		// verified, size-capped, reachable only through aafm_ssrf_safe_fetch_url()'s SSRF
+		// gate - covered by SsrfOwnedCurlFetchTest and UploadMediaFromUrlSsrfTest.
+		$banned_curl_exec  = '/\bcurl_exec\s*\(/';
+		$curl_exec_allowed = 'includes/abilities/media.php';
 		// Remote-fetch primitives must never appear in the agent-exposed surface (an
 		// agent could otherwise be steered into SSRF). They are permitted ONLY in the
 		// admin Connection tab's reachability probe, which is gated behind manage_options +
@@ -436,6 +443,14 @@ final class SecurityRegressionTest extends TestCase {
 				$src,
 				'Code-exec primitive in ' . $file->getFilename()
 			);
+
+			if ( ! str_ends_with( $path, $curl_exec_allowed ) ) {
+				$this->assertDoesNotMatchRegularExpression(
+					$banned_curl_exec,
+					$src,
+					'curl_exec primitive in ' . $file->getFilename() . ' (only the SSRF-owned media fetch may use one)'
+				);
+			}
 
 			if ( ! str_ends_with( $path, $fetch_allowed ) ) {
 				$this->assertDoesNotMatchRegularExpression(

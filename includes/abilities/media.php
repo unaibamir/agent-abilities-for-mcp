@@ -1281,7 +1281,7 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
  *   the instant the running byte count exceeds $max_bytes, not by requesting a truncated buffer
  *   and letting the real network transfer run to completion or the timeout regardless.
  *
- * Builds and returns a plain array in the same shape wp_remote_get() itself returns (a
+ * Builds and returns a plain array in the same shape a real WP HTTP transport returns (a
  * `pre_http_request` filter returning this shape short-circuits WP_Http::request() with it
  * untouched - see wp-includes/class-wp-http.php), so every existing wp_remote_retrieve_*() call
  * in aafm_ssrf_safe_fetch_url() keeps working unchanged, and the SAME 'aafm_too_large' error code

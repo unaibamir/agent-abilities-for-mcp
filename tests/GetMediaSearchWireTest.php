@@ -71,7 +71,10 @@ final class GetMediaSearchWireTest extends TestCase {
 		update_post_meta( $id, '_wp_attached_file', 'sunset-photo.jpg' );
 
 		$this->register_enabled( array( 'aafm/get-media' ) );
-		$this->acting_as( 'author' );
+		// edit_others_posts (editor, not author) so the media-scoping-by-uploader rule
+		// (aafm_media_scope_author_id()) never excludes this fixture attachment regardless of
+		// which user id the factory happened to stamp as its author.
+		$this->acting_as( 'editor' );
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter );

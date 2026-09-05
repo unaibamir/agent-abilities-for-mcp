@@ -81,7 +81,13 @@ final class GetActivityLogWireTest extends TestCase {
 		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
 
 		$result = $handler->call_tool(
-			array( 'name' => aafm_mcp_tool_name( 'aafm/get-activity-log' ) ),
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/get-activity-log' ),
+				// Filtered by ability, not assumed to be entry 0: the production wrapper logs
+				// its own row for THIS call before the callback runs, so the inserted fixture
+				// row is not reliably the most recent one.
+				'arguments' => array( 'ability' => 'aafm/get-posts' ),
+			),
 			'req-activity-log-agent-identity-1'
 		);
 

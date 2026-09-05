@@ -23,6 +23,11 @@
 			<file>tests/BridgeObjectRefusalWireTest.php</file>
 			<file>tests/ServerToolsListExposureTest.php</file>
 			<file>tests/BridgeToolCallResultWireTest.php</file>
+			<file>tests/GetActivityLogWireTest.php</file>
+			<file>tests/GetMediaSearchWireTest.php</file>
+			<file>tests/GetPostContentLengthWireTest.php</file>
+			<file>tests/SlimSeoWireTest.php</file>
+			<file>tests/ReplaceSitewideWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

@@ -335,6 +335,15 @@ function aafm_exec_restore_revision( array $input ) {
 	if ( is_wp_error( aafm_validate_revision( $revision_id, $post_id ) ) ) {
 		return aafm_generic_error();
 	}
+	// Restoring a revision rewrites title/content/excerpt exactly like aafm/update-post, so it
+	// is a page-builder write too: a builder-owned post's rendered output is driven by the
+	// builder's own meta (_elementor_data, et_pb_use_builder, _fl_builder_data), not post_content,
+	// so a "successful" restore here would silently do nothing visible while still reporting
+	// success.
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $post_id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
+	}
 	// Reversibility guard (B49): the fresh pre-restore snapshot is taken by core's
 	// wp_save_post_revision() hook, which bails when revisions are disabled for this post
 	// (WP_POST_REVISIONS false / the wp_revisions_to_keep filter returning 0) or the type

@@ -30,6 +30,7 @@
 			<file>tests/ReplaceSitewideWireTest.php</file>
 			<file>tests/PageBuilderGuardTest.php</file>
 			<file>tests/PageBuilderGuardSweepTest.php</file>
+			<file>tests/PageBuilderGuardWireTest.php</file>
 			<file>tests/AllowlistTest.php</file>
 			<file>tests/AllowlistWireTest.php</file>
 			<file>tests/AllowlistSweepTest.php</file>

@@ -295,6 +295,14 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.7.4 =
+
+* **Feature:** A page-builder write guard now refuses an edit that would silently do nothing on a page owned by Elementor, Divi, Beaver Builder, or Avada, and a new per-role and per-connection allowlist narrows what each role or OAuth client can reach on top of the existing global list. Native abilities also cover The Events Calendar, Event Tickets, Slim SEO, and Avada, plus GeoDirectory, off by default until you turn it on.
+* **Feature:** A new SSRF-hardened ability uploads media straight from a URL, get-media can search by filename and alt text, and get-post/get-page can now skip returning the full body while still reporting its length, so an agent can judge a large page before fetching it. An OAuth connection can also be marked as an agent identity in the activity log.
+* **Fix:** The bump to mcp-adapter 0.6.1 closes a multisite bug where a genuinely persisted session on a network site could be rejected as unpersisted, and every ability was re-audited against the adapter's new default-exposure behavior so nothing became reachable that the operator never turned on.
+* **Fix:** A checkout-time race between a coupon and its tax class, a stale allowlist read, and a batch of smaller correctness fixes across the admin screens and connection tab are also in this release.
+* **Chore:** The admin dashboard now links to the demo video, the readme's guidance on connecting a remote site through ChatGPT's OAuth flow was updated, and an internal audit removed a batch of unused and duplicated code.
+
 = 1.7.3 =
 
 * **Fix:** The plugin is now fully compatible with a persistent WordPress object cache (Redis, Memcached, or a host's own drop-in): a switch you turn off stays off, and a change that did not take is reported instead of logged as done.
@@ -470,6 +478,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.7.4 =
+
+Every new ability in this release, including The Events Calendar, Slim SEO, Avada, GeoDirectory, and URL-based media upload, stays off until you turn it on, so nothing changes automatically. If you use Elementor, Divi, Beaver Builder, or Avada, a write that would land on a page one of them owns is now refused instead of silently doing nothing.
 
 = 1.7.3 =
 

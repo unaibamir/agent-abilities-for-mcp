@@ -58,6 +58,24 @@ final class AllowlistAdminTest extends TestCase {
 		return is_array( $json ) ? $json : array();
 	}
 
+	/**
+	 * Register a real OAuth client (its id is an auto-generated 32-hex string, never a
+	 * human-chosen one) so a test can submit an allowlist row that names an actual client.
+	 *
+	 * @return string The real client_id.
+	 */
+	private function register_real_oauth_client(): string {
+		aafm_install_oauth_tables();
+		$res = aafm_oauth_register_client(
+			array(
+				'redirect_uris' => array( 'https://app.example/cb' ),
+				'client_name'   => 'Test Client',
+			)
+		);
+		$this->assertIsArray( $res );
+		return (string) $res['client_id'];
+	}
+
 	public function test_a_subscriber_is_refused(): void {
 		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		wp_set_current_user( $subscriber );
@@ -97,6 +115,7 @@ final class AllowlistAdminTest extends TestCase {
 	public function test_an_admin_can_save_a_valid_role_and_client_row(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );
+		$client_id = $this->register_real_oauth_client();
 
 		$nonce                   = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']          = $nonce;
@@ -110,7 +129,7 @@ final class AllowlistAdminTest extends TestCase {
 				),
 				array(
 					'scope_type'        => 'oauth_client',
-					'scope_id'          => 'client-9',
+					'scope_id'          => $client_id,
 					'allowed_abilities' => 'all',
 				),
 			)
@@ -136,6 +155,7 @@ final class AllowlistAdminTest extends TestCase {
 	public function test_a_duplicate_client_scope_keeps_only_the_last_row(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );
+		$client_id = $this->register_real_oauth_client();
 
 		$nonce                   = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']          = $nonce;
@@ -144,12 +164,12 @@ final class AllowlistAdminTest extends TestCase {
 			array(
 				array(
 					'scope_type'        => 'oauth_client',
-					'scope_id'          => 'client-9',
+					'scope_id'          => $client_id,
 					'allowed_abilities' => 'all',
 				),
 				array(
 					'scope_type'        => 'oauth_client',
-					'scope_id'          => 'client-9',
+					'scope_id'          => $client_id,
 					'allowed_abilities' => array( 'aafm/get-posts' ),
 				),
 			)
@@ -176,6 +196,40 @@ final class AllowlistAdminTest extends TestCase {
 				array(
 					'scope_type'        => 'role',
 					'scope_id'          => 'not-a-real-role',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+
+		$this->intercept_die();
+		$json = $this->run_handler();
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertSame( array(), aafm_allowlist_overrides() );
+	}
+
+	/**
+	 * Codex final round 2 MEDIUM: a client id was accepted as arbitrary free text with no check
+	 * that it named a real client. A mistyped id (a real client's id off by one character, the
+	 * exact reproduction Codex gave) matched no OAuth client row, so it added no restriction at
+	 * all for that client - and per the allowlist's own intersection precedence, an unmatched
+	 * client is unrestricted, i.e. the row silently failed open rather than merely failing to
+	 * apply. It must be dropped the same way an unknown role slug already is.
+	 */
+	public function test_a_row_with_a_mistyped_client_id_is_dropped(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		$client_id = $this->register_real_oauth_client();
+		$mistyped  = substr( $client_id, 0, -1 ); // Off by one character - names no real client.
+
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['allowlist_json'] = wp_json_encode(
+			array(
+				array(
+					'scope_type'        => 'oauth_client',
+					'scope_id'          => $mistyped,
 					'allowed_abilities' => array( 'aafm/get-posts' ),
 				),
 			)

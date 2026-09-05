@@ -36,6 +36,14 @@ function aafm_allowlist_sanitize_row( $row ) {
 	if ( 'role' === $scope_type && ! array_key_exists( $scope_id, wp_roles()->roles ) ) {
 		return null; // Refuse a role slug that does not exist on this site.
 	}
+	// Codex final round 2 MEDIUM: an OAuth client id was accepted as arbitrary free text, so a
+	// mistyped id saved successfully but matched no real client - the allowlist has no override
+	// for that client at all, and per the design's own intersection precedence (global list only,
+	// no narrowing), an unmatched client is UNRESTRICTED. Reject an id that names no real client,
+	// the same way a nonexistent role slug is already refused above.
+	if ( 'oauth_client' === $scope_type && null === aafm_oauth_get_client( $scope_id ) ) {
+		return null;
+	}
 
 	$raw_allowed = $row['allowed_abilities'] ?? null;
 	if ( 'all' === $raw_allowed ) {

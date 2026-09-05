@@ -171,6 +171,40 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
+	 * Codex round-b finding 6: tec-get-events defaulted to the repository's own published-only
+	 * query, so a draft event a caller had just created (tec-create-event defaults to draft) was
+	 * invisible to the matching list ability. Also proves the status filter itself is authorized:
+	 * a caller without read_private_tribe_events cannot request draft/private.
+	 */
+	public function test_get_events_can_list_drafts_with_read_private_capability(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->create_event( array( 'post_title' => 'Published Event' ) );
+		$this->create_event(
+			array(
+				'post_title'  => 'Draft Event',
+				'post_status' => 'draft',
+			)
+		);
+
+		$default = aafm_exec_tec_get_events( array() );
+		$this->assertSame( 1, $default['total'], 'The default status filter must stay published-only.' );
+
+		$drafts = aafm_exec_tec_get_events( array( 'status' => 'draft' ) );
+		$this->assertSame( 1, $drafts['total'] );
+		$this->assertSame( 'Draft Event', $drafts['events'][0]['title'] );
+	}
+
+	public function test_get_events_refuses_a_private_status_without_read_private_capability(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+
+		$out = aafm_exec_tec_get_events( array( 'status' => 'draft' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_invalid_status', $out->get_error_code() );
+	}
+
+	/**
 	 * Helper: create a venue post directly (bypassing the ability) for use as a fixture.
 	 */
 	private function create_venue_for_test(): int {

@@ -1747,6 +1747,7 @@ PHP;
 					'edit_tribe_event',
 					'delete_tribe_event',
 					'read_tribe_event',
+					'read_private_tribe_events',
 					'edit_tribe_venues',
 					'edit_others_tribe_venues',
 					'edit_published_tribe_venues',

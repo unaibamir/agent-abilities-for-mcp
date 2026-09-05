@@ -39,11 +39,12 @@ namespace AAFM\Tests {
 		/** @var array<string,string> Lowercase alias => real post field or meta key. */
 		private array $aliases;
 
-		private int $page        = 1;
-		private int $per_page    = 10;
-		private string $search   = '';
-		private int $where_id    = 0;
-		private int $found_count = 0;
+		private int $page             = 1;
+		private int $per_page         = 10;
+		private string $search        = '';
+		private int $where_id         = 0;
+		private string $where_status  = '';
+		private int $found_count      = 0;
 
 		/** @var array<string,mixed> */
 		private array $pending_args = array();
@@ -76,13 +77,16 @@ namespace AAFM\Tests {
 		}
 
 		/**
-		 * @param string $key   Only 'id' is supported (the only key this plugin's code calls).
-		 * @param mixed  $value The id.
+		 * @param string $key   'id' (target a single post for save()/delete()) or 'post_status'
+		 *                      (scope a list query, or 'any' to target any status for save()).
+		 * @param mixed  $value The id or status.
 		 */
 		public function where( string $key, $value ): self {
 			$clone = clone $this;
 			if ( 'id' === $key ) {
 				$clone->where_id = (int) $value;
+			} elseif ( 'post_status' === $key ) {
+				$clone->where_status = (string) $value;
 			}
 			return $clone;
 		}
@@ -93,7 +97,7 @@ namespace AAFM\Tests {
 		private function query_args(): array {
 			$args = array(
 				'post_type'      => $this->post_type,
-				'post_status'    => 'any',
+				'post_status'    => '' !== $this->where_status ? $this->where_status : 'any',
 				'posts_per_page' => $this->per_page,
 				'paged'          => $this->page,
 				'fields'         => 'ids',

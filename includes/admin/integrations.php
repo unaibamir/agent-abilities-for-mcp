@@ -96,13 +96,28 @@ function aafm_integration_cards(): array {
  *                         abilities do not register. Checked before the file-presence probe so a
  *                         genuinely-active-but-outdated store gets the accurate reason, not the
  *                         generic "Not installed"/"Inactive" copy.
+ * 'missing_dependency' - Event Tickets only: the plugin is active but The Events Calendar is
+ *                         not, so its ticket abilities do not register (they are gated on a
+ *                         parent TEC event - see includes/abilities/tec/tickets.php). Checked
+ *                         before the generic 'active' report so the card never claims a
+ *                         readiness the runtime registration gate does not actually grant.
  * 'installed_inactive' - a candidate host plugin file is present but not active.
  * 'not_installed'      - no candidate host plugin file is present.
  *
  * @param string $slug Integration slug.
- * @return string One of 'active' | 'below_floor' | 'installed_inactive' | 'not_installed'.
+ * @return string One of 'active' | 'below_floor' | 'missing_dependency' | 'installed_inactive' |
+ *                'not_installed'.
  */
 function aafm_integration_status( string $slug ): string {
+	// Codex final round 4 MEDIUM: registering Event Tickets' abilities already requires TEC too
+	// (includes/abilities/tec/tickets.php), but this card reported a bare 'active' from Event
+	// Tickets alone, so the card said "Active" and let the operator enable abilities that would
+	// never actually register or appear in tools/list. Checked before the general 'active' report
+	// below, the same way 'below_floor' is checked before it for a version mismatch.
+	if ( 'event_tickets' === $slug && aafm_integration_active( 'event_tickets' ) && ! aafm_integration_active( 'tec' ) ) {
+		return 'missing_dependency';
+	}
+
 	if ( aafm_integration_active( $slug ) ) {
 		return 'active';
 	}
@@ -373,13 +388,15 @@ function aafm_render_integrations_tab(): void {
 /**
  * The status pill markup for an integration card head.
  *
- * @param string $status One of 'active' | 'below_floor' | 'installed_inactive' | 'not_installed'.
+ * @param string $status One of 'active' | 'below_floor' | 'missing_dependency' |
+ *                        'installed_inactive' | 'not_installed'.
  * @return string Escaped HTML.
  */
 function aafm_integration_status_pill( string $status ): string {
 	$map                   = array(
 		'active'             => array( 'aafm-pill-success', __( 'Active', 'agent-abilities-for-mcp' ) ),
 		'below_floor'        => array( 'aafm-pill-warn', __( 'Update required', 'agent-abilities-for-mcp' ) ),
+		'missing_dependency' => array( 'aafm-pill-warn', __( 'Requires The Events Calendar', 'agent-abilities-for-mcp' ) ),
 		'installed_inactive' => array( 'aafm-pill-warn', __( 'Inactive', 'agent-abilities-for-mcp' ) ),
 		'not_installed'      => array( 'aafm-pill-neutral', __( 'Not installed', 'agent-abilities-for-mcp' ) ),
 	);
@@ -425,6 +442,10 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 				$min_version,
 				(string) $version_reader()
 			);
+		case 'missing_dependency':
+			// Event Tickets only, currently: every ticket ability is gated on a parent TEC event
+			// (includes/abilities/tec/tickets.php), so Event Tickets alone cannot register them.
+			return __( 'Event Tickets is active, but its ticket abilities are gated on a parent event and need The Events Calendar active too. Install and activate The Events Calendar to use these abilities.', 'agent-abilities-for-mcp' );
 		case 'installed_inactive':
 			return sprintf(
 				/* translators: %s: the integration plugin name, e.g. WooCommerce. */

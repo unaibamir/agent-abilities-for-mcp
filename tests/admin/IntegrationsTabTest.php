@@ -318,6 +318,31 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 	}
 
+	/**
+	 * Codex final round 4 MEDIUM: Event Tickets abilities require TEC active too (they're gated
+	 * on a parent event), but the card reported a bare 'active' from Event Tickets alone - the
+	 * operator could enable abilities that would never actually register. The card must report a
+	 * distinct status instead of claiming a readiness the runtime registration gate doesn't grant,
+	 * and its checkboxes must render disabled ($disabled derives directly from status !== 'active').
+	 */
+	public function test_event_tickets_reports_missing_dependency_without_tec(): void {
+		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		$this->assertSame( 'missing_dependency', aafm_integration_status( 'event_tickets' ) );
+
+		$note = aafm_integration_status_note( 'event_tickets', 'missing_dependency' );
+		$this->assertStringContainsString( 'The Events Calendar', $note );
+
+		remove_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+	}
+
+	public function test_event_tickets_reports_active_with_tec_also_active(): void {
+		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		add_filter( 'aafm_integration_active_tec', '__return_true' );
+		$this->assertSame( 'active', aafm_integration_status( 'event_tickets' ) );
+		remove_filter( 'aafm_integration_active_tec', '__return_true' );
+		remove_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+	}
+
 	public function test_each_card_is_a_collapsed_details_accordion(): void {
 		$this->acting_as( 'administrator' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );

@@ -175,6 +175,21 @@ final class BridgeToolCallResultWireTest extends TestCase {
 
 		$this->assertInstanceOf( CallToolResult::class, $response );
 		$this->assertTrue( $response->getIsError(), 'A WP_Error execute() result must surface as a tool-call error on the real wire.' );
+
+		// "Passes through untouched" means the ORIGINAL vendor message survives, not merely that
+		// some error surfaces - a bridge filter that swapped it for a generic message would still
+		// pass the two assertions above (Codex review, plan 226 round 1).
+		$content = $response->getContent();
+		$this->assertNotEmpty( $content, 'An error result must still carry explanatory content.' );
+		$this->assertStringContainsString(
+			'A real vendor failure.',
+			$content[0]->getText(),
+			'The original WP_Error message must reach the wire untouched, not be replaced by the bridge filter.'
+		);
+		$this->assertNull(
+			$response->getStructuredContent(),
+			'A WP_Error result must never carry structuredContent on the real wire.'
+		);
 	}
 
 	/**

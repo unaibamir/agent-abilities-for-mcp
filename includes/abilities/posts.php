@@ -1718,9 +1718,15 @@ function aafm_exec_replace_sitewide( array $input ) {
 
 	$like_filter = static function ( string $where ) use ( $search ): string {
 		global $wpdb;
+		// BINARY forces a byte-exact, case- and accent-sensitive comparison, matching PHP's
+		// str_replace() semantics exactly. Without it MySQL's default collation makes LIKE
+		// case-insensitive, so a search for "quick" would SQL-match "Quick", get selected and
+		// counted as a match, str_replace() would then leave it byte-for-byte unchanged, and
+		// wp_update_post() would still run and be counted as an update - a silent no-op inflating
+		// updated_posts and total_matches alike.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant ($wpdb->posts).
 		return $where . $wpdb->prepare(
-			" AND {$wpdb->posts}.post_content LIKE %s",
+			" AND {$wpdb->posts}.post_content LIKE BINARY %s",
 			'%' . $wpdb->esc_like( $search ) . '%'
 		);
 	};
@@ -1767,11 +1773,18 @@ function aafm_exec_replace_sitewide( array $input ) {
 			++$no_perm;
 			continue;
 		}
-		if ( $dry_run ) {
-			continue; // Counted in matched_posts below; nothing written.
-		}
+
+		// Guards run identically in dry-run and a real apply, so a preview's counters are an
+		// honest forecast of what applying would do - only the actual write is skipped below.
 		$inserted = wp_kses_post( $replace );
 		$new      = str_replace( $search, $inserted, (string) $post->post_content );
+		if ( $new === (string) $post->post_content ) {
+			// Defensive: the SQL-side LIKE BINARY match and str_replace() should always agree,
+			// but if a match somehow produces no actual byte change, treat it as guarded rather
+			// than silently reporting a successful update that touched nothing.
+			++$guarded;
+			continue;
+		}
 		if ( ! aafm_replacement_preserves_structure( (string) $post->post_content, $new ) ) {
 			++$guarded;
 			continue;
@@ -1781,6 +1794,11 @@ function aafm_exec_replace_sitewide( array $input ) {
 			++$guarded;
 			continue;
 		}
+
+		if ( $dry_run ) {
+			continue; // Counted in matched_posts below; nothing written.
+		}
+
 		$result = wp_update_post(
 			wp_slash(
 				array(

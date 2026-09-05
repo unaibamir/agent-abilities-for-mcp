@@ -119,6 +119,48 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
+	 * Codex-review finding: dry-run must run the same guards a real apply would, so its preview
+	 * is an honest forecast - previously the guard checks sat AFTER the dry-run early return, so
+	 * a dry-run always reported skipped_structure_guard:0 even for a post the real write would
+	 * refuse.
+	 */
+	public function test_dry_run_still_reports_a_structure_guard_refusal(): void {
+		self::factory()->post->create_and_get( array( 'post_content' => '<img src="quick.jpg">' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = aafm_exec_replace_sitewide(
+			array(
+				'search'  => 'quick',
+				'replace' => 'slow',
+			)
+		);
+
+		$this->assertTrue( $out['dry_run'] );
+		$this->assertSame( 1, $out['skipped_structure_guard'] );
+	}
+
+	/**
+	 * Codex-review finding: MySQL's default collation makes LIKE case-insensitive, so a naive
+	 * SQL match for "quick" would also select a post containing only "Quick" - but str_replace()
+	 * is case-sensitive and would leave it byte-for-byte unchanged, silently inflating
+	 * total_matches/updated_posts for a write that touched nothing.
+	 */
+	public function test_search_is_case_sensitive_and_does_not_match_a_different_case(): void {
+		self::factory()->post->create_and_get( array( 'post_content' => 'the Quick fox' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = aafm_exec_replace_sitewide(
+			array(
+				'search'  => 'quick',
+				'replace' => 'slow',
+			)
+		);
+
+		$this->assertSame( 0, $out['total_matches'] );
+		$this->assertSame( 0, $out['matched_posts'] );
+	}
+
+	/**
 	 * Codex-review amendment 19: the SQL-side match must find a real match even when it sits
 	 * well past the first AAFM_REPLACE_SITEWIDE_MAX_POSTS posts by ascending ID - the exact case
 	 * the plan's original fetched-page-then-filtered-in-PHP draft would have silently missed

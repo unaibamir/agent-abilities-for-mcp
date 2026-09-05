@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-05T23:18:22+05:00\n"
+"POT-Creation-Date: 2026-09-06T00:09:28+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -318,17 +318,17 @@ msgid "ID of the post/page to read. The current user must have edit access to it
 msgstr ""
 
 #: includes/abilities/avada.php:172
-#: includes/abilities/posts.php:1241
+#: includes/abilities/posts.php:1265
 msgid "ID of the post to edit."
 msgstr ""
 
 #: includes/abilities/avada.php:177
-#: includes/abilities/posts.php:1246
+#: includes/abilities/posts.php:1270
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
 #: includes/abilities/avada.php:181
-#: includes/abilities/posts.php:1250
+#: includes/abilities/posts.php:1274
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
@@ -547,15 +547,15 @@ msgstr ""
 msgid "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration. Refuses when the listing is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:619
+#: includes/abilities/geodirectory.php:640
 msgid "The listing could not be created: its address or location fields did not save. Nothing was created."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:620
+#: includes/abilities/geodirectory.php:641
 msgid "The listing could not be created: its address or location fields did not save, and the incomplete listing could not be removed automatically. Delete it manually."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:713
+#: includes/abilities/geodirectory.php:757
 msgid "The listing was updated, but its address or location fields did not save."
 msgstr ""
 
@@ -680,8 +680,8 @@ msgid "Invalid base64 payload."
 msgstr ""
 
 #: includes/abilities/media.php:818
-#: includes/abilities/media.php:1214
-#: includes/abilities/media.php:1219
+#: includes/abilities/media.php:1255
+#: includes/abilities/media.php:1260
 msgid "File exceeds the maximum upload size."
 msgstr ""
 
@@ -697,70 +697,74 @@ msgstr ""
 msgid "HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either."
 msgstr ""
 
-#: includes/abilities/media.php:1133
+#: includes/abilities/media.php:1143
 msgid "This server cannot safely fetch a remote URL for upload."
 msgstr ""
 
-#: includes/abilities/media.php:1137
+#: includes/abilities/media.php:1147
 msgid "This server routes outbound requests through a proxy, which this ability cannot safely pin to a validated address. Refusing."
 msgstr ""
 
-#: includes/abilities/media.php:1142
+#: includes/abilities/media.php:1152
 msgid "That is not a valid URL."
 msgstr ""
 
-#: includes/abilities/media.php:1145
+#: includes/abilities/media.php:1155
 msgid "Only https:// URLs may be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1150
+#: includes/abilities/media.php:1160
 msgid "A bare IP address may not be used as the upload URL host."
 msgstr ""
 
-#: includes/abilities/media.php:1157
+#: includes/abilities/media.php:1167
 msgid "The host could not be resolved."
 msgstr ""
 
-#: includes/abilities/media.php:1160
+#: includes/abilities/media.php:1170
 msgid "The host resolves to a private or reserved IP address."
 msgstr ""
 
-#: includes/abilities/media.php:1196
-#: includes/abilities/media.php:1203
-#: includes/abilities/media.php:1262
-#: includes/abilities/media.php:1341
+#: includes/abilities/media.php:1186
+msgid "That port is not allowed for a remote fetch."
+msgstr ""
+
+#: includes/abilities/media.php:1237
+#: includes/abilities/media.php:1244
+#: includes/abilities/media.php:1303
+#: includes/abilities/media.php:1382
 msgid "The URL could not be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1222
+#: includes/abilities/media.php:1263
 msgid "The URL returned no data."
 msgstr ""
 
-#: includes/abilities/media.php:1373
+#: includes/abilities/media.php:1414
 msgid "ID of the attachment to update."
 msgstr ""
 
-#: includes/abilities/media.php:1377
+#: includes/abilities/media.php:1418
 msgid "New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given."
 msgstr ""
 
-#: includes/abilities/media.php:1381
+#: includes/abilities/media.php:1422
 msgid "New alt text for the image, sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/media.php:1385
+#: includes/abilities/media.php:1426
 msgid "New caption, sanitized as plain text with no HTML."
 msgstr ""
 
-#: includes/abilities/media.php:1389
+#: includes/abilities/media.php:1430
 msgid "New description. Basic HTML is allowed and sanitized."
 msgstr ""
 
-#: includes/abilities/media.php:1455
+#: includes/abilities/media.php:1496
 msgid "Provide at least one field to update."
 msgstr ""
 
-#: includes/abilities/media.php:1511
+#: includes/abilities/media.php:1552
 msgid "ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo."
 msgstr ""
 
@@ -1257,61 +1261,62 @@ msgstr ""
 
 #: includes/abilities/posts.php:798
 #: includes/abilities/tec/events.php:208
-#: includes/abilities/tec/_shared.php:245
+#: includes/abilities/tec/_shared.php:247
 #: includes/helpers.php:1321
 msgid "Unsupported or unauthorized post status."
 msgstr ""
 
-#: includes/abilities/posts.php:866
-#: includes/abilities/posts.php:1154
+#: includes/abilities/posts.php:890
+#: includes/abilities/posts.php:1178
+#: includes/safety.php:343
 msgid "The title exceeds the maximum allowed length."
 msgstr ""
 
-#: includes/abilities/posts.php:1073
+#: includes/abilities/posts.php:1097
 msgid "ID of the post to update."
 msgstr ""
 
-#: includes/abilities/posts.php:1586
+#: includes/abilities/posts.php:1610
 msgid "That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly."
 msgstr ""
 
-#: includes/abilities/posts.php:1661
+#: includes/abilities/posts.php:1685
 msgid "Literal text to find. Matched as-is, not as a regular expression."
 msgstr ""
 
-#: includes/abilities/posts.php:1665
+#: includes/abilities/posts.php:1689
 msgid "Literal text to substitute for every match."
 msgstr ""
 
-#: includes/abilities/posts.php:1670
+#: includes/abilities/posts.php:1694
 msgid "Slug of an allowlisted content type to scope the replace to. Defaults to post."
 msgstr ""
 
-#: includes/abilities/posts.php:1675
+#: includes/abilities/posts.php:1699
 msgid "Post status to scope the replace to. Defaults to publish."
 msgstr ""
 
-#: includes/abilities/posts.php:1680
+#: includes/abilities/posts.php:1704
 msgid "When true (the default), previews the match without writing anything. Pass false to apply the change."
 msgstr ""
 
-#: includes/abilities/posts.php:1696
+#: includes/abilities/posts.php:1720
 msgid "Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content."
 msgstr ""
 
-#: includes/abilities/posts.php:1700
+#: includes/abilities/posts.php:1724
 msgid "Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal."
 msgstr ""
 
-#: includes/abilities/posts.php:1921
+#: includes/abilities/posts.php:1945
 msgid "ID of the content item to update."
 msgstr ""
 
-#: includes/abilities/posts.php:2006
+#: includes/abilities/posts.php:2030
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2073
+#: includes/abilities/posts.php:2097
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -1723,11 +1728,11 @@ msgstr ""
 msgid "Post status, e.g. draft or publish. Defaults to draft."
 msgstr ""
 
-#: includes/abilities/tec/events.php:444
+#: includes/abilities/tec/events.php:453
 msgid "ID of the event to update."
 msgstr ""
 
-#: includes/abilities/tec/events.php:543
+#: includes/abilities/tec/events.php:552
 msgid "ID of the event to trash."
 msgstr ""
 
@@ -1776,23 +1781,23 @@ msgid "ID of the organizer to read."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:275
-#: includes/abilities/tec/organizers.php:357
+#: includes/abilities/tec/organizers.php:362
 msgid "Organizer name."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:280
-#: includes/abilities/tec/organizers.php:362
+#: includes/abilities/tec/organizers.php:367
 msgid "Contact email."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:284
-#: includes/abilities/tec/organizers.php:366
+#: includes/abilities/tec/organizers.php:371
 #: includes/abilities/tec/venues.php:144
 msgid "Phone number."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:289
-#: includes/abilities/tec/organizers.php:371
+#: includes/abilities/tec/organizers.php:376
 #: includes/abilities/tec/venues.php:149
 msgid "Website URL."
 msgstr ""
@@ -1801,11 +1806,11 @@ msgstr ""
 msgid "Publication status. Defaults to draft. Setting publish requires the publish_tribe_organizers capability."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:353
+#: includes/abilities/tec/organizers.php:358
 msgid "ID of the organizer to update."
 msgstr ""
 
-#: includes/abilities/tec/organizers.php:376
+#: includes/abilities/tec/organizers.php:381
 msgid "Publication status. Setting publish requires the publish_tribe_organizers capability."
 msgstr ""
 
@@ -1914,11 +1919,11 @@ msgstr ""
 msgid "ID of the venue to read."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:375
+#: includes/abilities/tec/venues.php:380
 msgid "Venue name. Optional on update, required only on create."
 msgstr ""
 
-#: includes/abilities/tec/venues.php:380
+#: includes/abilities/tec/venues.php:385
 msgid "ID of the venue to update."
 msgstr ""
 
@@ -5129,7 +5134,7 @@ msgid "Trashes an event by id (always recoverable via Trash, never a permanent d
 msgstr ""
 
 #: includes/admin/disclosures.php:193
-msgid "Lists venues via the Events Calendar."
+msgid "Lists venues via the Events Calendar. An optional status filter can include draft/pending/future venues you can edit, or private venues if you have that access."
 msgstr ""
 
 #: includes/admin/disclosures.php:194
@@ -5137,15 +5142,15 @@ msgid "Reads a single venue by id."
 msgstr ""
 
 #: includes/admin/disclosures.php:195
-msgid "Creates a venue. Requires the edit-venues capability."
+msgid "Creates a venue. Defaults to draft; a publicly-visible status additionally requires the publish-venues capability. Requires the edit-venues capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:196
-msgid "Updates a venue by id. Requires edit access to that venue."
+msgid "Updates a venue by id. A publicly-visible status additionally requires the publish-venues capability. Requires edit access to that venue."
 msgstr ""
 
 #: includes/admin/disclosures.php:197
-msgid "Lists organizers via the Events Calendar."
+msgid "Lists organizers via the Events Calendar. An optional status filter can include draft/pending/future organizers you can edit, or private organizers if you have that access."
 msgstr ""
 
 #: includes/admin/disclosures.php:198
@@ -5153,11 +5158,11 @@ msgid "Reads a single organizer by id."
 msgstr ""
 
 #: includes/admin/disclosures.php:199
-msgid "Creates an organizer. Requires the edit-organizers capability."
+msgid "Creates an organizer. Defaults to draft; a publicly-visible status additionally requires the publish-organizers capability. Requires the edit-organizers capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:200
-msgid "Updates an organizer by id. Requires edit access to that organizer."
+msgid "Updates an organizer by id. A publicly-visible status additionally requires the publish-organizers capability. Requires edit access to that organizer."
 msgstr ""
 
 #: includes/admin/disclosures.php:201

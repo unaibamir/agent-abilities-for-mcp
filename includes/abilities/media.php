@@ -94,7 +94,7 @@ function aafm_args_get_media(): array {
 				array(
 					'search' => array(
 						'type'        => 'string',
-						'description' => __( 'Free-text search term matched against the media item\'s title, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
+						'description' => __( 'Free-text search term matched against the media item\'s title, content, caption, filename, and alt text.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_pagination_schema_props(
@@ -176,16 +176,16 @@ function aafm_media_scope_author_id(): ?int {
 function aafm_exec_get_media( array $input ) {
 	$paging    = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$author_id = aafm_media_scope_author_id();
+	$search    = isset( $input['search'] ) ? trim( sanitize_text_field( (string) $input['search'] ) ) : '';
 
 	$lang = aafm_resolve_lang( $input );
 	if ( is_wp_error( $lang ) ) {
 		return $lang;
 	}
-	$build_query = static function () use ( $input, $paging, $author_id ): WP_Query {
+	$build_query = static function () use ( $paging, $author_id, $search ): WP_Query {
 		$args = array(
 			'post_type'        => 'attachment',
 			'post_status'      => 'inherit',
-			's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
 			'posts_per_page'   => $paging['per_page'],
 			'paged'            => $paging['page'],
 			'no_found_rows'    => false,
@@ -194,7 +194,45 @@ function aafm_exec_get_media( array $input ) {
 		if ( null !== $author_id ) {
 			$args['author'] = $author_id;
 		}
-		return new WP_Query( $args );
+
+		if ( '' === $search ) {
+			$args['s'] = '';
+			return new WP_Query( $args );
+		}
+
+		// Core 's' search and meta_query combine with implicit AND, so an OR across title,
+		// content, excerpt, filename, and alt text needs a scoped posts_where filter instead of
+		// 's'/meta_query. Dropping core 's' entirely would also drop the content/excerpt match
+		// it used to provide, so both are folded into the same OR group here. Added immediately
+		// before the query and removed in a finally block, so a throw inside WP_Query can never
+		// leave the filter attached to a later, unrelated query in the same request.
+		$where_filter = static function ( string $where ) use ( $search ): string {
+			global $wpdb;
+			$like = '%' . $wpdb->esc_like( $search ) . '%';
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names are internal constants ($wpdb->posts, $wpdb->postmeta).
+			return $where . $wpdb->prepare(
+				" AND ( {$wpdb->posts}.post_title LIKE %s
+					OR {$wpdb->posts}.post_content LIKE %s
+					OR {$wpdb->posts}.post_excerpt LIKE %s
+					OR EXISTS (
+						SELECT 1 FROM {$wpdb->postmeta} pm
+						WHERE pm.post_id = {$wpdb->posts}.ID
+						AND pm.meta_key IN ( '_wp_attached_file', '_wp_attachment_image_alt' )
+						AND pm.meta_value LIKE %s
+					) )",
+				$like,
+				$like,
+				$like,
+				$like
+			);
+		};
+
+		add_filter( 'posts_where', $where_filter );
+		try {
+			return new WP_Query( $args );
+		} finally {
+			remove_filter( 'posts_where', $where_filter );
+		}
 	};
 
 	// Branch review fix (lang scope and result shaping, round 3): aafm_redact_media() must run

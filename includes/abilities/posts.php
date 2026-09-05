@@ -80,7 +80,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-post']      = array(
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -88,7 +88,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-in-post']  = array(
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -96,7 +96,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-sitewide'] = array(
 		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. Bounded to 50 posts per call; a larger match set reports truncated:true with the real total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. Bounded to 50 posts per call; a larger match set reports truncated:true with the real total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -120,7 +120,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-cpt-item']  = array(
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (Elementor, Divi, Beaver Builder), since a write here would appear to succeed but have no visible effect.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -1131,6 +1131,11 @@ function aafm_exec_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
 	// Validate enrichment BEFORE wp_update_post so a bad term/attachment/meta aborts
 	// with the post left exactly as it was (no half-applied update).
 	$enrichment = aafm_validate_write_enrichment( $input );
@@ -1549,6 +1554,11 @@ function aafm_exec_replace_in_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
 	$search  = (string) $input['search'];
 	$replace = (string) $input['replace'];
 	$content = (string) $post->post_content;
@@ -1667,6 +1677,10 @@ function aafm_args_replace_sitewide(): array {
 				'updated_posts'           => array( 'type' => 'integer' ),
 				'skipped_no_permission'   => array( 'type' => 'integer' ),
 				'skipped_structure_guard' => array( 'type' => 'integer' ),
+				'skipped_builder_owned'   => array(
+					'type'        => 'integer',
+					'description' => __( 'Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder) owns their content.', 'agent-abilities-for-mcp' ),
+				),
 				'failed_updates'          => array(
 					'type'        => 'integer',
 					'description' => __( 'Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal.', 'agent-abilities-for-mcp' ),
@@ -1763,14 +1777,21 @@ function aafm_exec_replace_sitewide( array $input ) {
 
 	$candidates = array_values( array_filter( $page_query->posts, static fn( $p ): bool => $p instanceof WP_Post ) );
 
-	$updated = 0;
-	$no_perm = 0;
-	$guarded = 0;
-	$failed  = 0;
+	$updated       = 0;
+	$no_perm       = 0;
+	$guarded       = 0;
+	$failed        = 0;
+	$builder_owned = 0;
 
 	foreach ( $candidates as $post ) {
 		if ( ! aafm_can_edit_post_object( $post ) ) {
 			++$no_perm;
+			continue;
+		}
+
+		$owning_builder = aafm_post_has_foreign_builder_ownership( $post->ID );
+		if ( false !== $owning_builder ) {
+			++$builder_owned;
 			continue;
 		}
 
@@ -1821,6 +1842,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 		'updated_posts'           => $updated,
 		'skipped_no_permission'   => $no_perm,
 		'skipped_structure_guard' => $guarded,
+		'skipped_builder_owned'   => $builder_owned,
 		'failed_updates'          => $failed,
 		'truncated'               => $truncated,
 		'total_matches'           => $total_matches,

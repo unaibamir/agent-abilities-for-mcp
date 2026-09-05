@@ -28,6 +28,8 @@
 			<file>tests/GetPostContentLengthWireTest.php</file>
 			<file>tests/SlimSeoWireTest.php</file>
 			<file>tests/ReplaceSitewideWireTest.php</file>
+			<file>tests/PageBuilderGuardTest.php</file>
+			<file>tests/PageBuilderGuardSweepTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

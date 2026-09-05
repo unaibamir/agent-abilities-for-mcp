@@ -1167,6 +1167,7 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 	// proxied without this function's own knowledge.
 	$pin = static function ( $handle ) use ( $host, $port, $ip ): void {
 		curl_setopt( $handle, CURLOPT_PROXY, '' ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- disables any environment-configured proxy for this one handle; see the comment above.
+		curl_setopt( $handle, CURLOPT_NOPROXY, '*' ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- belt-and-suspenders alongside CURLOPT_PROXY above: '*' means "never proxy any host" for this handle, closing the same gap even if a NO_PROXY/CURLOPT_PROXY interaction in a given libcurl build behaved differently than expected.
 		curl_setopt( $handle, CURLOPT_RESOLVE, array( "{$host}:{$port}:{$ip}" ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- pinning a WP_Http_Curl handle to the pre-validated IP; this is the transport hook the SSRF design names, not a bypass of it.
 	};
 

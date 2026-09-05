@@ -16,7 +16,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 
 ### WordPress MCP server for AI agents, governed and off by default
 
-Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
+Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 179 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
 Nothing is exposed until you turn it on. Permission controls are the point: the agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities before it runs. The audit log covers the rest. Every call is written down before it runs, denied attempts included, so you can see both what the agent did and what it was stopped from doing. You add reach as you build trust, not all at once. Your own AI client connects in to your site; Agent Abilities for MCP makes no requests to any external or third-party service and has no telemetry.
 
@@ -50,11 +50,11 @@ An MCP server hands a language model the ability to change your live site, so ho
 
 WordPress 6.9 ships the Abilities API and the official MCP Adapter. Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. It builds on the official MCP Adapter library (`wordpress/mcp-adapter`) rather than a custom server, so there is no bespoke server to trust and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log for running the Model Context Protocol on WordPress.
 
-### 📦 153 governed abilities
+### 📦 179 governed abilities
 
-The plugin ships **171 governed abilities: 85 across WordPress core and 86 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged. Beyond these, it can also bridge abilities declared by your other plugins (see below).
+The plugin ships **179 governed abilities: 85 across WordPress core and 94 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged. Beyond these, it can also bridge abilities declared by your other plugins (see below).
 
-**WordPress core (84 abilities).** Reads plus guarded writes across your whole site:
+**WordPress core (85 abilities).** Reads plus guarded writes across your whole site:
 
 * **📝 Posts & Pages:** list, read, create, update, and delete posts and pages, with destructive actions off by default and deletes routed to Trash.
 * **🏷️ Terms & Taxonomies:** manage categories, tags, and custom taxonomy terms.
@@ -68,13 +68,18 @@ The plugin ships **171 governed abilities: 85 across WordPress core and 86 from 
 * **⚙️ Limited settings & site health:** a tightly scoped set of settings, plus read-only site health and plugin status.
 * **🔍 Site-wide search:** one search that spans every post type at once.
 
-**Integrations (72 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, and logged. Each appears only while its host plugin is active:
+**Integrations (94 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, and logged. Each appears only while its host plugin is active:
 
 * **🛒 WooCommerce MCP (52 abilities):** read and write products, orders, and customers so an AI agent can help run your store. These touch real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear admin notice and stay off until you switch them on.
 * **🧩 Advanced Custom Fields (7 abilities):** read and write ACF field data. Like WooCommerce, these can reach real personal data and sit behind the same clear notice.
 * **📈 Rank Math SEO (5 abilities):** read and manage Rank Math SEO data.
 * **📈 Yoast SEO (3 abilities):** read and manage Yoast SEO data.
 * **📈 All in One SEO (3 abilities):** read and manage AIOSEO data.
+* **📅 The Events Calendar (13 abilities):** read and manage events, venues, and organizers, built on the plugin's own ORM.
+* **🎫 Event Tickets (3 abilities):** read tickets and attendees for an event. No ticket-purchase write is exposed.
+* **📈 Slim SEO (2 abilities):** read and manage Slim SEO data.
+* **🎨 Avada / Fusion Builder (2 abilities):** read a page's raw Fusion Builder markup and replace text in it without disturbing the shortcode layout.
+* **📍 GeoDirectory (4 abilities, off by default):** read and manage business and place listings. Stays off even when GeoDirectory is active; turn it on in the Integrations tab.
 
 More integrations are planned.
 

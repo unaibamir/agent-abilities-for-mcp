@@ -467,11 +467,18 @@ function aafm_exec_tec_update_event( array $input ) {
 	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}
-	// The repository's own date-meta update step (Repositories/Event.php) unsets the all-day meta
-	// input rather than writing a falsy value whenever the requested all_day is falsy, so the
-	// underlying post update never touches the existing meta row - a real event that was already
-	// all-day stays all-day. Clear the meta directly here instead, the confirmed inverse of the
-	// boolean cast this file's own read applies when shaping an event for the wire.
+	// Documented contract exception to "every event write goes through the ORM" (Codex final
+	// round MEDIUM, re-verified against the installed plugin): TEC's own repository save step
+	// (Repositories/Event.php) unsets the all-day meta input rather than writing a falsy value
+	// whenever the requested all_day is falsy, so the ORM's own update never touches the existing
+	// meta row - a real event that was already all-day stays all-day, silently, under a
+	// successful save() response. TEC's repository offers no supported way to clear this key
+	// (confirmed by reading the actual save path, not assumed), so this direct delete_post_meta()
+	// call - core's own meta API, not a raw query, so cache invalidation is unaffected - is the
+	// only mechanism that exists, runs strictly AFTER the ORM save above (never interleaved with
+	// or in place of it), and is the confirmed inverse of the boolean cast this file's own read
+	// applies when shaping an event for the wire. Proven against a stub that reproduces this exact
+	// TEC quirk (see TecStubStore.php's write_meta()), not one that would pass regardless.
 	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
 		delete_post_meta( $id, '_EventAllDay' );
 	}

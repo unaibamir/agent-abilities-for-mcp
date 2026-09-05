@@ -149,6 +149,29 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( '2027-03-01 10:00:00', $out['event']['start_date'] );
 	}
 
+	/**
+	 * Codex final round MEDIUM: TEC's own repository unsets a falsy all_day meta_input entirely
+	 * rather than writing it, so the ORM save alone never clears an existing 'yes' - proven here
+	 * against a stub that reproduces that exact quirk (TecStubStore.php's write_meta()), not one
+	 * that would pass this assertion regardless of whether the separate delete_post_meta() call
+	 * in aafm_exec_tec_update_event() actually runs.
+	 */
+	public function test_update_event_all_day_false_actually_clears_a_real_all_day_event(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+		update_post_meta( $event_id, '_EventAllDay', 'yes' );
+
+		$out = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $event_id,
+				'all_day'  => false,
+			)
+		);
+
+		$this->assertFalse( $out['event']['all_day'] );
+		$this->assertSame( '', get_post_meta( $event_id, '_EventAllDay', true ) );
+	}
+
 	public function test_delete_event_trashes_not_permanently_deletes(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$event_id = $this->create_event();

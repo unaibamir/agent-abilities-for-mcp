@@ -147,11 +147,19 @@ namespace AAFM\Tests {
 		}
 
 		/**
-		 * Write a split meta map, special-casing _EventOrganizerID: the real repository's
-		 * update_organizers() (Repositories/Event.php) stores it as one row per id, not one
-		 * update_post_meta() call with an array value - a plain foreach would silently store an
-		 * unreadable serialized array instead, since tribe_get_organizer_ids() reads every row of
-		 * that key back individually.
+		 * Write a split meta map, special-casing two keys the real repository handles outside a
+		 * plain update_post_meta() call:
+		 *
+		 * - _EventOrganizerID: the real repository's update_organizers() (Repositories/Event.php)
+		 *   stores it as one row per id, not one update_post_meta() call with an array value - a
+		 *   plain foreach would silently store an unreadable serialized array instead, since
+		 *   tribe_get_organizer_ids() reads every row of that key back individually.
+		 * - _EventAllDay: the real repository (Repositories/Event.php, save_dates()) unsets this
+		 *   key from $postarr['meta_input'] entirely whenever the requested value is falsy,
+		 *   rather than writing a falsy value - it never clears an existing 'yes'. Mirroring that
+		 *   quirk here (rather than just writing the value like every other key) is what makes
+		 *   aafm_exec_tec_update_event()'s own separate delete_post_meta() call for this case
+		 *   provably necessary against this stub, not merely redundant.
 		 *
 		 * @param int                  $id   Post id.
 		 * @param array<string,mixed>  $meta Meta key => value map, from split_args().
@@ -164,6 +172,9 @@ namespace AAFM\Tests {
 					foreach ( (array) $value as $organizer_id ) {
 						add_post_meta( $id, $key, (int) $organizer_id );
 					}
+					continue;
+				}
+				if ( '_EventAllDay' === $key && ! $value ) {
 					continue;
 				}
 				update_post_meta( $id, $key, $value );

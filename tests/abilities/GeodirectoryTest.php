@@ -100,6 +100,78 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertNotContains( $ordinary, $ids );
 	}
 
+	/**
+	 * An Author must not be able to read another user's draft/private listing via
+	 * aafm/geodirectory-get-listing - only edit_posts plus a post-type check was checked before
+	 * this fix, with no per-object ownership gate for a non-public listing (Codex round C
+	 * finding 4).
+	 */
+	public function test_get_listing_denies_a_non_public_listing_the_caller_cannot_edit(): void {
+		$owner_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $owner_id );
+		$private_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $owner_id,
+			)
+		);
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+		$this->assertFalse( aafm_perm_geodirectory_get( array( 'listing_id' => $private_id ) ) );
+
+		// The owner, and an administrator, may still read it.
+		wp_set_current_user( $owner_id );
+		$this->assertTrue( aafm_perm_geodirectory_get( array( 'listing_id' => $private_id ) ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertTrue( aafm_perm_geodirectory_get( array( 'listing_id' => $private_id ) ) );
+	}
+
+	public function test_get_listing_allows_a_public_listing_for_any_edit_posts_holder(): void {
+		$place_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		$this->assertTrue( aafm_perm_geodirectory_get( array( 'listing_id' => $place_id ) ) );
+	}
+
+	/**
+	 * The list query must not disclose another user's draft/private listing either - 'any'
+	 * status with no 'perm' argument returns every listing regardless of ownership (Codex round C
+	 * finding 4, second half).
+	 */
+	public function test_get_listings_excludes_a_private_listing_the_caller_cannot_edit(): void {
+		$owner_id   = self::factory()->user->create( array( 'role' => 'author' ) );
+		$private_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $owner_id,
+			)
+		);
+		$public_id  = self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+		$out = aafm_exec_geodirectory_get_listings( array() );
+		$ids = wp_list_pluck( $out['listings'], 'listing_id' );
+
+		$this->assertNotContains( $private_id, $ids );
+		$this->assertContains( $public_id, $ids );
+
+		wp_set_current_user( $owner_id );
+		$out_owner = aafm_exec_geodirectory_get_listings( array() );
+		$this->assertContains( $private_id, wp_list_pluck( $out_owner['listings'], 'listing_id' ) );
+	}
+
 	public function test_update_listing_leaves_omitted_fields_untouched(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 

@@ -202,7 +202,16 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 	}
 	$id   = isset( $input['listing_id'] ) ? absint( $input['listing_id'] ) : 0;
 	$post = $id ? get_post( $id ) : null;
-	return $post instanceof WP_Post && 'gd_place' === $post->post_type;
+	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
+		return false;
+	}
+	// Codex round C finding 4: the object-independent edit_posts floor alone let an Author read
+	// another user's draft/private listing (raw content and coordinates included). Mirrors
+	// aafm_can_read_post_object()'s own public-status-or-per-object-edit rule.
+	if ( in_array( $post->post_status, get_post_stati( array( 'public' => true ) ), true ) ) {
+		return true;
+	}
+	return current_user_can( 'edit_post', $post->ID );
 }
 
 /**
@@ -296,21 +305,36 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 		array(
 			'post_type'      => 'gd_place',
 			'post_status'    => 'any',
+			// 'readable' narrows the SQL for the 'private' status specifically - WP_Query's own
+			// 'perm' handling (wp-includes/class-wp-query.php) only ever special-cases 'private',
+			// never 'draft'/'pending', so it alone is not sufficient (see the PHP-level filter
+			// below, which covers every non-public status uniformly).
+			'perm'           => 'readable',
 			'posts_per_page' => $per_page,
 			'paged'          => $page,
 		)
 	);
 
-	$listings = array();
+	// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at all (only
+	// 'private'), so an Author could still see another user's draft listing through the SQL layer
+	// alone. Filter every result through the SAME public-status-or-per-object-edit rule
+	// aafm_perm_geodirectory_get() already uses, so no non-public listing the caller cannot edit
+	// ever reaches the response regardless of which status WP_Query's own 'perm' shorthand missed.
+	$public_stati = get_post_stati( array( 'public' => true ) );
+	$listings     = array();
 	foreach ( $query->posts as $post ) {
-		if ( $post instanceof WP_Post ) {
-			$listings[] = array(
-				'listing_id' => $post->ID,
-				'title'      => get_the_title( $post ),
-				'status'     => $post->post_status,
-				'link'       => (string) get_permalink( $post ),
-			);
+		if ( ! $post instanceof WP_Post ) {
+			continue;
 		}
+		if ( ! in_array( $post->post_status, $public_stati, true ) && ! current_user_can( 'edit_post', $post->ID ) ) {
+			continue;
+		}
+		$listings[] = array(
+			'listing_id' => $post->ID,
+			'title'      => get_the_title( $post ),
+			'status'     => $post->post_status,
+			'link'       => (string) get_permalink( $post ),
+		);
 	}
 
 	return array(

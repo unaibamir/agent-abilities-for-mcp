@@ -140,11 +140,18 @@ function aafm_geodirectory_read_fields( int $post_id ): array {
  * value first - that function concatenates $meta_value directly into raw SQL rather than
  * preparing it (see this file's own docblock), so this plugin must never hand it a raw string.
  *
+ * Codex final round MEDIUM: geodir_save_post_meta() returns false only when the detail table or
+ * column is missing; on the actual write path it runs $wpdb->query() and returns nothing at all,
+ * regardless of whether that query succeeded. This plugin has no way to see a failed
+ * UPDATE/INSERT through its return value, so the only way to know a supplied field actually
+ * persisted is to read every one of them back and compare - the same "certify against the real
+ * row" principle this codebase already applies to its own option writes.
+ *
  * @param int                 $post_id Listing post id.
  * @param array<string,mixed> $input Validated ability input.
- * @return void
+ * @return bool True when every field the caller supplied reads back with the value written.
  */
-function aafm_geodirectory_write_fields( int $post_id, array $input ): void {
+function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
@@ -157,6 +164,23 @@ function aafm_geodirectory_write_fields( int $post_id, array $input ): void {
 	if ( array_key_exists( 'longitude', $input ) ) {
 		geodir_save_post_meta( $post_id, 'longitude', (float) $input['longitude'] );
 	}
+
+	$stored = aafm_geodirectory_read_fields( $post_id );
+	foreach ( aafm_geodirectory_address_fields() as $field ) {
+		if ( array_key_exists( $field, $input )
+			&& aafm_sanitize_plain_text( (string) $input[ $field ] ) !== $stored[ $field ] ) {
+			return false;
+		}
+	}
+	if ( array_key_exists( 'latitude', $input )
+		&& abs( $stored['latitude'] - (float) $input['latitude'] ) > 0.0000001 ) {
+		return false;
+	}
+	if ( array_key_exists( 'longitude', $input )
+		&& abs( $stored['longitude'] - (float) $input['longitude'] ) > 0.0000001 ) {
+		return false;
+	}
+	return true;
 }
 
 /**
@@ -302,6 +326,16 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, absint( $input['per_page'] ) ) ) : 20;
 	$page     = isset( $input['page'] ) ? min( AAFM_LIST_PAGE_MAX, max( 1, absint( $input['page'] ) ) ) : 1;
 
+	// Codex final round MEDIUM: filtering AFTER WP_Query had already paginated and counted meant
+	// an inaccessible listing could displace an accessible one to a later page while `total` still
+	// counted it - the same "reported total doesn't match what was actually returned" shape this
+	// release exists to stop. Fetch every candidate unpaginated, apply the per-object
+	// authorization filter first, then paginate and count the AUTHORIZED set.
+	//
+	// ponytail: 2000 is a generous ceiling for a single directory's listings, not a hard limit on
+	// GeoDirectory itself; if a real site legitimately exceeds it, replace this with a SQL-level
+	// author-ownership filter for the 'draft'/'pending' statuses (mirroring 'perm' => 'readable's
+	// own 'private' handling) instead of raising the number.
 	$query = new WP_Query(
 		array(
 			'post_type'      => 'gd_place',
@@ -311,8 +345,7 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 			// never 'draft'/'pending', so it alone is not sufficient (see the PHP-level filter
 			// below, which covers every non-public status uniformly).
 			'perm'           => 'readable',
-			'posts_per_page' => $per_page,
-			'paged'          => $page,
+			'posts_per_page' => 2000, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- filtered/paginated in PHP below so authorization runs before pagination; see the ponytail note above this query.
 		)
 	);
 
@@ -322,7 +355,7 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	// aafm_perm_geodirectory_get() already uses, so no non-public listing the caller cannot edit
 	// ever reaches the response regardless of which status WP_Query's own 'perm' shorthand missed.
 	$public_stati = get_post_stati( array( 'public' => true ) );
-	$listings     = array();
+	$visible      = array();
 	foreach ( $query->posts as $post ) {
 		if ( ! $post instanceof WP_Post ) {
 			continue;
@@ -330,6 +363,14 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 		if ( ! in_array( $post->post_status, $public_stati, true ) && ! current_user_can( 'edit_post', $post->ID ) ) {
 			continue;
 		}
+		$visible[] = $post;
+	}
+
+	$total      = count( $visible );
+	$page_posts = array_slice( $visible, ( $page - 1 ) * $per_page, $per_page );
+
+	$listings = array();
+	foreach ( $page_posts as $post ) {
 		$listings[] = array(
 			'listing_id' => $post->ID,
 			'title'      => get_the_title( $post ),
@@ -340,7 +381,7 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 
 	return array(
 		'listings' => $listings,
-		'total'    => (int) $query->found_posts,
+		'total'    => $total,
 	);
 }
 
@@ -470,7 +511,16 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 		return aafm_generic_error();
 	}
 
-	aafm_geodirectory_write_fields( (int) $post_id, $input );
+	if ( ! aafm_geodirectory_write_fields( (int) $post_id, $input ) ) {
+		// The core post exists, but the caller's address/location fields could not be confirmed
+		// as saved - a partially-created listing under a "success" report would be exactly the
+		// silent-wrong-answer shape this release exists to stop, so remove it and say so instead.
+		wp_delete_post( (int) $post_id, true );
+		return new WP_Error(
+			'aafm_geodirectory_write_unconfirmed',
+			__( 'The listing could not be created: its address or location fields did not save. Nothing was created.', 'agent-abilities-for-mcp' )
+		);
+	}
 
 	$post = get_post( $post_id );
 	return $post instanceof WP_Post ? aafm_geodirectory_shape_listing( $post ) : aafm_generic_error();
@@ -547,7 +597,12 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		}
 	}
 
-	aafm_geodirectory_write_fields( $id, $input );
+	if ( ! aafm_geodirectory_write_fields( $id, $input ) ) {
+		return new WP_Error(
+			'aafm_geodirectory_write_unconfirmed',
+			__( 'The listing was updated, but its address or location fields did not save.', 'agent-abilities-for-mcp' )
+		);
+	}
 
 	$fresh = get_post( $id );
 	return $fresh instanceof WP_Post ? aafm_geodirectory_shape_listing( $fresh ) : aafm_generic_error();

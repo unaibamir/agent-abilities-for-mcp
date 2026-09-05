@@ -67,6 +67,14 @@ namespace {
 				// only this raw-argument capture, not the round-tripped value, can prove what this
 				// plugin's own code actually handed to the function.
 				aafm_geodir_stub_last_call( (int) $post_id, (string) $postmeta, $meta_value );
+				// A test can force this ONE field to silently fail to persist, mirroring the real
+				// function's own documented failure mode: its $wpdb->query() result is discarded,
+				// so a genuine write failure returns nothing rather than false - proving that
+				// aafm_geodirectory_write_fields()'s own read-back check is what actually catches
+				// this, not geodir_save_post_meta()'s return value.
+				if ( apply_filters( 'aafm_geodir_stub_simulate_write_failure', false, $postmeta ) ) {
+					return null;
+				}
 				update_post_meta( (int) $post_id, '_aafm_test_gd_' . $postmeta, $meta_value );
 				return true;
 			}

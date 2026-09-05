@@ -385,11 +385,22 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	// offset at all) is immune to both: a row's own position never depends on how many OTHER rows
 	// currently exist before it, only on IDs already fully processed. An iteration cap guards
 	// against a pathological host filter that always returns a full batch.
-	$batch_size    = max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) );
+	$batch_size = max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) );
+	// Codex final round 4 MEDIUM: an unscoped 'posts_where' filter runs against EVERY WP_Query
+	// built while it's attached, not just this function's own - a plugin or theme hook fired
+	// from inside this loop (e.g. its own nested WP_Query in a 'the_posts' callback) would
+	// silently get this same "ID > last-seen" clause appended to an unrelated query. A private,
+	// per-call marker in the query args (harmless to core - an unrecognized key is simply
+	// ignored when building SQL, but still readable back via $query->get()) lets the filter
+	// check "is this actually my query?" before touching $where.
+	$query_marker  = 'aafm_geodirectory_list_' . wp_generate_password( 12, false, false );
 	$public_stati  = get_post_stati( array( 'public' => true ) );
 	$visible       = array();
 	$last_id       = 0;
-	$keyset_filter = static function ( string $where ) use ( &$last_id ): string {
+	$keyset_filter = static function ( string $where, WP_Query $query ) use ( &$last_id, $query_marker ): string {
+		if ( $query_marker !== $query->get( 'aafm_query_marker' ) ) {
+			return $where;
+		}
 		global $wpdb;
 		if ( $last_id > 0 ) { // @phpstan-ignore-line greater.alwaysFalse ($last_id is mutated by reference between calls; phpstan analyses this closure body in isolation)
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant ($wpdb->posts).
@@ -398,7 +409,7 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 		return $where;
 	};
 
-	add_filter( 'posts_where', $keyset_filter );
+	add_filter( 'posts_where', $keyset_filter, 10, 2 );
 	try {
 		$iterations = 0;
 		do {
@@ -410,18 +421,19 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 			}
 			$query = new WP_Query(
 				array(
-					'post_type'      => 'gd_place',
-					'post_status'    => 'any',
+					'post_type'         => 'gd_place',
+					'post_status'       => 'any',
 					// 'readable' narrows the SQL for the 'private' status specifically -
 					// WP_Query's own 'perm' handling (wp-includes/class-wp-query.php) only ever
 					// special-cases 'private', never 'draft'/'pending', so it alone is not
 					// sufficient (see the PHP-level filter below, which covers every non-public
 					// status uniformly).
-					'perm'           => 'readable',
-					'posts_per_page' => $batch_size,
-					'orderby'        => 'ID',
-					'order'          => 'ASC',
-					'no_found_rows'  => true,
+					'perm'              => 'readable',
+					'posts_per_page'    => $batch_size,
+					'orderby'           => 'ID',
+					'order'             => 'ASC',
+					'no_found_rows'     => true,
+					'aafm_query_marker' => $query_marker,
 				)
 			);
 			// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at

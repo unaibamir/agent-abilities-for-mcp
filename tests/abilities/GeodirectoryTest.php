@@ -281,6 +281,61 @@ final class GeodirectoryTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Codex final round 4 MEDIUM: the keyset filter was attached to 'posts_where' unscoped, so it
+	 * ran against EVERY WP_Query built while it was active, not only this function's own batch
+	 * queries - an unrelated nested WP_Query (fired from any hook during the scan) for an
+	 * already-passed ID would incorrectly receive the same "ID > last-seen" clause and come back
+	 * empty. A private per-call marker in the query args must keep the filter scoped to its own
+	 * queries only.
+	 */
+	public function test_get_listings_does_not_contaminate_an_unrelated_nested_query(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$ids = self::factory()->post->create_many(
+			4,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+		sort( $ids );
+
+		$batches       = 0;
+		$nested_result = null;
+		$callback      = function ( $query ) use ( &$batches, &$nested_result, $ids ) {
+			// Only count OUR OWN marked batch queries; an unmarked query (including the nested
+			// probe fired below) must fall through untouched.
+			if ( 'gd_place' !== $query->get( 'post_type' ) || ! $query->get( 'aafm_query_marker' ) ) {
+				return;
+			}
+			++$batches;
+			if ( 2 === $batches ) {
+				// An unrelated nested query, fired mid-scan, for a post ID from the FIRST batch -
+				// exactly the id our own keyset cursor has already advanced past.
+				$nested        = new \WP_Query(
+					array(
+						'post_type'   => 'gd_place',
+						'post__in'    => array( $ids[0] ),
+						'post_status' => 'any',
+					)
+				);
+				$nested_result = $nested->posts;
+			}
+		};
+		add_action( 'pre_get_posts', $callback );
+
+		aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_action( 'pre_get_posts', $callback );
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+
+		$this->assertNotEmpty(
+			$nested_result,
+			'An unrelated nested query must not be contaminated by our own keyset filter.'
+		);
+	}
+
 	public function test_update_listing_leaves_omitted_fields_untouched(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 

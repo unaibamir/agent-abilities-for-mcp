@@ -207,6 +207,36 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertContains( $own_listing_id, wp_list_pluck( $out['listings'], 'listing_id' ) );
 	}
 
+	/**
+	 * Codex final round 2 MEDIUM: an earlier fix capped the underlying fetch at a single
+	 * 2000-row batch, silently dropping every listing past it with no truncation signal -
+	 * reproducing the exact same undercount bug the fix above was meant to close, just at a
+	 * larger scale. Forces a tiny batch size so 7 real listings require 3 batches (3+3+1) to
+	 * prove the loop actually exhausts the table instead of stopping after one page.
+	 */
+	public function test_get_listings_exhausts_every_batch_not_just_the_first(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 3 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$ids = self::factory()->post->create_many(
+			7,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+
+		$this->assertSame( 7, $out['total'] );
+		$this->assertCount( 7, $out['listings'] );
+		$listed_ids = wp_list_pluck( $out['listings'], 'listing_id' );
+		foreach ( $ids as $id ) {
+			$this->assertContains( $id, $listed_ids );
+		}
+	}
+
 	public function test_update_listing_leaves_omitted_fields_untouched(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 

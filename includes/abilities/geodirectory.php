@@ -386,42 +386,53 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	// Codex final round MEDIUM: filtering AFTER WP_Query had already paginated and counted meant
 	// an inaccessible listing could displace an accessible one to a later page while `total` still
 	// counted it - the same "reported total doesn't match what was actually returned" shape this
-	// release exists to stop. Fetch every candidate unpaginated, apply the per-object
-	// authorization filter first, then paginate and count the AUTHORIZED set.
+	// release exists to stop. Fetch every candidate, apply the per-object authorization filter
+	// first, then paginate and count the AUTHORIZED set.
 	//
-	// ponytail: 2000 is a generous ceiling for a single directory's listings, not a hard limit on
-	// GeoDirectory itself; if a real site legitimately exceeds it, replace this with a SQL-level
-	// author-ownership filter for the 'draft'/'pending' statuses (mirroring 'perm' => 'readable's
-	// own 'private' handling) instead of raising the number.
-	$query = new WP_Query(
-		array(
-			'post_type'      => 'gd_place',
-			'post_status'    => 'any',
-			// 'readable' narrows the SQL for the 'private' status specifically - WP_Query's own
-			// 'perm' handling (wp-includes/class-wp-query.php) only ever special-cases 'private',
-			// never 'draft'/'pending', so it alone is not sufficient (see the PHP-level filter
-			// below, which covers every non-public status uniformly).
-			'perm'           => 'readable',
-			'posts_per_page' => 2000, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page -- filtered/paginated in PHP below so authorization runs before pagination; see the ponytail note above this query.
-		)
-	);
-
-	// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at all (only
-	// 'private'), so an Author could still see another user's draft listing through the SQL layer
-	// alone. Filter every result through the SAME public-status-or-per-object-edit rule
-	// aafm_perm_geodirectory_get() already uses, so no non-public listing the caller cannot edit
-	// ever reaches the response regardless of which status WP_Query's own 'perm' shorthand missed.
+	// Codex final round 2 MEDIUM: an earlier fix capped this fetch at a single 2000-row batch,
+	// which reproduces the exact same bug at a larger scale (a directory with 2000+ listings would
+	// silently drop everything past the cap, with no truncation signal). Loop in batches until a
+	// batch comes back short, so every candidate is genuinely examined regardless of directory
+	// size - the filterable batch size lets a test prove multi-batch iteration without creating
+	// thousands of posts.
+	$batch_size   = max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) );
 	$public_stati = get_post_stati( array( 'public' => true ) );
 	$visible      = array();
-	foreach ( $query->posts as $post ) {
-		if ( ! $post instanceof WP_Post ) {
-			continue;
+	$batch_page   = 1;
+	do {
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'gd_place',
+				'post_status'    => 'any',
+				// 'readable' narrows the SQL for the 'private' status specifically - WP_Query's
+				// own 'perm' handling (wp-includes/class-wp-query.php) only ever special-cases
+				// 'private', never 'draft'/'pending', so it alone is not sufficient (see the
+				// PHP-level filter below, which covers every non-public status uniformly).
+				'perm'           => 'readable',
+				'posts_per_page' => $batch_size,
+				'paged'          => $batch_page,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'no_found_rows'  => true,
+			)
+		);
+		// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at all
+		// (only 'private'), so an Author could still see another user's draft listing through the
+		// SQL layer alone. Filter every result through the SAME public-status-or-per-object-edit
+		// rule aafm_perm_geodirectory_get() already uses, so no non-public listing the caller
+		// cannot edit ever reaches the response regardless of which status 'perm' missed.
+		foreach ( $query->posts as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+			if ( ! in_array( $post->post_status, $public_stati, true ) && ! current_user_can( 'edit_post', $post->ID ) ) {
+				continue;
+			}
+			$visible[] = $post;
 		}
-		if ( ! in_array( $post->post_status, $public_stati, true ) && ! current_user_can( 'edit_post', $post->ID ) ) {
-			continue;
-		}
-		$visible[] = $post;
-	}
+		$fetched = count( $query->posts );
+		++$batch_page;
+	} while ( $fetched === $batch_size );
 
 	$total      = count( $visible );
 	$page_posts = array_slice( $visible, ( $page - 1 ) * $per_page, $per_page );

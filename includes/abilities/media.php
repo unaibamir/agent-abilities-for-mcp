@@ -1054,9 +1054,8 @@ function aafm_curl_available(): bool {
  * SSRF-hardened fetch for aafm/upload-media-from-url, implementing every control decided in
  * 228-url-upload-ssrf-design.md: https-only, no bare IP-literal host, resolve-once-then-pin via
  * CURLOPT_RESOLVE (so the connection cannot re-resolve to a different address than the one this
- * function validated), no redirects, a header-stage Content-Length pre-check before any body
- * bytes are read, a streamed size-cap abort, and a final size re-check so a mocked/short-circuited
- * HTTP layer (as this ability's own test suite uses) is covered too.
+ * function validated), no redirects, and a size cap enforced through WP core's own
+ * 'limit_response_size' request argument plus a final Content-Length/body-length check.
  *
  * Codex round C finding 1: WordPress's HTTP API can fall back from cURL to the Fsockopen
  * transport (that fallback does its OWN, unpinned DNS resolution), and CURLOPT_RESOLVE pinning
@@ -1064,6 +1063,19 @@ function aafm_curl_available(): bool {
  * TOCTOU reopening. Since Requests checks cURL's availability before Fsockopen's and picks cURL
  * whenever it can, refusing outright when cURL is unavailable removes the fallback path entirely
  * rather than trying to detect after the fact whether the pin actually applied.
+ *
+ * Live-network finding, full gate (2026-09-05): an earlier version of this function also set
+ * CURLOPT_HEADERFUNCTION/CURLOPT_WRITEFUNCTION on the same handle to stream and cap bytes itself.
+ * WP_Http_Curl::request() (wp-includes/class-wp-http-curl.php) sets its OWN header/write
+ * callbacks on the handle BEFORE firing the http_api_curl action this function hooks, and
+ * curl_setopt() for the same option simply replaces the previous callback - so this function's
+ * callbacks silently starved WP_Http_Curl's internal body/header buffers, which it then reads as
+ * "no response" and reports as a curl error regardless of the real transfer having succeeded.
+ * Every real (non-mocked) fetch was broken; only the PHPUnit suite's mocked HTTP layer, which
+ * never invokes http_api_curl at all, ever exercised the working fallback path below. Fixed by
+ * not touching those two options and letting WP's own 'limit_response_size' arg bound the
+ * transfer instead - it is core's own supported mechanism for exactly this and does not collide
+ * with WP_Http_Curl's internal callbacks.
  *
  * @param string $url Caller-supplied URL.
  * @return string|WP_Error Fetched bytes, or a WP_Error naming which control refused the request.
@@ -1098,59 +1110,27 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 
 	$port      = isset( $parts['port'] ) ? (int) $parts['port'] : 443;
 	$max_bytes = (int) wp_max_upload_size();
-	$streamed  = '';
-	$too_large = false;
 
-	// Scoped to this one request only: pin the cURL handle to the validated IP (SNI/cert
-	// verification still uses $host, CURLOPT_RESOLVE's whole purpose), refuse via the HEADER
-	// callback the instant a claimed Content-Length exceeds the cap (before any body byte is
-	// read - the design's own "no bytes read past the headers" requirement), and abort
-	// mid-transfer past the cap regardless of what Content-Length claimed (a byte count is truth;
-	// a header is a claim).
-	$pin = static function ( $handle ) use ( $host, $port, $ip, $max_bytes, &$streamed, &$too_large ): void {
+	// Scoped to this one request only: pin the cURL handle to the validated IP. SNI/cert
+	// verification still uses $host - CURLOPT_RESOLVE's whole purpose is to change only where the
+	// TCP connection goes, not what the TLS handshake presents or verifies.
+	$pin = static function ( $handle ) use ( $host, $port, $ip ): void {
 		curl_setopt( $handle, CURLOPT_RESOLVE, array( "{$host}:{$port}:{$ip}" ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- pinning a WP_Http_Curl handle to the pre-validated IP; this is the transport hook the SSRF design names, not a bypass of it.
-		curl_setopt( // phpcs:ignore WordPress.WP.AlternativeFunctions
-			$handle,
-			CURLOPT_HEADERFUNCTION,
-			static function ( $curl_handle, $header_line ) use ( $max_bytes, &$too_large ) {
-				if ( 0 === stripos( $header_line, 'content-length:' ) ) {
-					$claimed = trim( substr( $header_line, strlen( 'content-length:' ) ) );
-					if ( is_numeric( $claimed ) && (int) $claimed > $max_bytes ) {
-						$too_large = true;
-						return -1; // Abort before any body byte is read.
-					}
-				}
-				return strlen( $header_line );
-			}
-		);
-		curl_setopt( // phpcs:ignore WordPress.WP.AlternativeFunctions
-			$handle,
-			CURLOPT_WRITEFUNCTION,
-			static function ( $curl_handle, $chunk ) use ( $max_bytes, &$streamed ) {
-				$streamed .= $chunk;
-				if ( strlen( $streamed ) > $max_bytes ) {
-					return 0; // Any return other than the chunk length aborts the transfer.
-				}
-				return strlen( $chunk );
-			}
-		);
 	};
 
 	add_action( 'http_api_curl', $pin );
 	$response = wp_safe_remote_get(
 		$url,
 		array(
-			'timeout'            => 10,
-			'redirection'        => 0,
-			'reject_unsafe_urls' => true,
+			'timeout'             => 10,
+			'redirection'         => 0,
+			'reject_unsafe_urls'  => true,
+			'limit_response_size' => $max_bytes,
 		)
 	);
 	remove_action( 'http_api_curl', $pin );
 
 	if ( is_wp_error( $response ) ) {
-		if ( $too_large || strlen( $streamed ) > $max_bytes ) {
-			return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
-		}
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
 	}
 
@@ -1161,16 +1141,15 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
 	}
 
-	// Header-stage pre-check for a mocked/short-circuited HTTP layer, which never invokes the
-	// http_api_curl callback (and therefore the CURLOPT_HEADERFUNCTION check) above.
+	// A hostile server can claim any Content-Length it likes, so this is a courtesy early
+	// rejection with a precise message - 'limit_response_size' above, and the byte-length check
+	// below, are what actually bound how much gets read and kept regardless of this header.
 	$content_length = wp_remote_retrieve_header( $response, 'content-length' );
 	if ( is_numeric( $content_length ) && (int) $content_length > $max_bytes ) {
 		return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
 	}
 
-	// Prefer the streamed bytes (the real-transport path); fall back to the response body for a
-	// mocked/short-circuited HTTP layer, which never invokes the http_api_curl callback above.
-	$body = '' !== $streamed ? $streamed : (string) wp_remote_retrieve_body( $response );
+	$body = (string) wp_remote_retrieve_body( $response );
 	if ( strlen( $body ) > $max_bytes ) {
 		return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
 	}

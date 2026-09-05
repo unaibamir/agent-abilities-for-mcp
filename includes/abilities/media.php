@@ -952,11 +952,13 @@ function aafm_args_upload_media_from_url(): array {
 					'description' => __( 'HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either.', 'agent-abilities-for-mcp' ),
 				),
 				'filename' => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Filename to base the stored file\'s name on. Only the basename is kept and sanitized, and the extension is replaced with the one matching the file\'s actual detected type, not the extension supplied here.', 'agent-abilities-for-mcp' ),
 				),
 				'alt'      => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'Alt text to set on the uploaded image.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'url', 'filename' ),

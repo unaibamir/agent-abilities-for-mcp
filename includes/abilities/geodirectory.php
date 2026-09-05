@@ -266,6 +266,7 @@ function aafm_args_geodirectory_get_listings(): array {
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 					'default' => 1,
 				),
 			),
@@ -299,7 +300,7 @@ function aafm_args_geodirectory_get_listings(): array {
  */
 function aafm_exec_geodirectory_get_listings( array $input ) {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, absint( $input['per_page'] ) ) ) : 20;
-	$page     = isset( $input['page'] ) ? max( 1, absint( $input['page'] ) ) : 1;
+	$page     = isset( $input['page'] ) ? min( AAFM_LIST_PAGE_MAX, max( 1, absint( $input['page'] ) ) ) : 1;
 
 	$query = new WP_Query(
 		array(

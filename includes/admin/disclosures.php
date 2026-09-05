@@ -103,6 +103,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/update-user-meta'            => __( 'Writes one allowlisted scalar user meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright.', 'agent-abilities-for-mcp' ),
 		'aafm/set-featured-image'          => __( "Sets a post's featured image to an existing attachment id. It does not upload anything.", 'agent-abilities-for-mcp' ),
 		'aafm/upload-media'                => __( 'Uploads an image from base64 data (jpg, png, gif, webp; SVG is rejected) and adds it to the media library.', 'agent-abilities-for-mcp' ),
+		'aafm/upload-media-from-url'       => __( 'Fetches an image from an HTTPS URL and adds it to the media library. The URL is resolved and validated before any bytes are fetched, private/loopback/link-local targets are refused, and redirects are not followed into them either.', 'agent-abilities-for-mcp' ),
 		'aafm/update-media'                => __( "Updates an attachment's title, alt text, caption, or description. Requires edit access to that attachment.", 'agent-abilities-for-mcp' ),
 		'aafm/moderate-comment'            => __( 'Approves, unapproves, spams, or trashes a comment. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
 		'aafm/create-comment'              => __( 'Adds a comment to a post as the agent user. It is held for moderation, never auto-published, and the author is always the agent, not free-form input. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
@@ -200,5 +201,19 @@ function aafm_ability_disclosures(): array {
 		'aafm/tec-get-tickets'             => __( 'Lists every ticket for one event, across every ticketing provider. Requires edit access to that event. Read-only - no ticket write ability is offered, since ticket creation and RSVP processing are commerce flows this plugin does not touch.', 'agent-abilities-for-mcp' ),
 		'aafm/tec-get-ticket'              => __( 'Reads a single ticket by id. Requires edit access to its parent event.', 'agent-abilities-for-mcp' ),
 		'aafm/tec-get-attendees'           => __( 'Lists attendees and RSVPs for one event. Requires edit access to that event. Read-only.', 'agent-abilities-for-mcp' ),
+
+		// Slim SEO.
+		'aafm/slim-seo-get-post'           => __( "Reads a post's Slim SEO fields (title, description, canonical, social images, and the noindex flag). Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'aafm/slim-seo-update-post'        => __( "Writes a post's Slim SEO fields. A field omitted from the call is left untouched. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+
+		// Avada / Fusion Builder.
+		'aafm/avada-get-page-content'      => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+		'aafm/avada-replace-text'          => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode tree to stay byte-identical before and after - a replacement that would touch a shortcode tag or its attributes is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+
+		// GeoDirectory (default-off).
+		'aafm/geodirectory-get-listings'   => __( 'Lists GeoDirectory business/place listings (title, status, link).', 'agent-abilities-for-mcp' ),
+		'aafm/geodirectory-get-listing'    => __( 'Reads one GeoDirectory listing by id, including its address and coordinates.', 'agent-abilities-for-mcp' ),
+		'aafm/geodirectory-create-listing' => __( 'Creates a GeoDirectory business/place listing with a title, content, and optional address/coordinates.', 'agent-abilities-for-mcp' ),
+		'aafm/geodirectory-update-listing' => __( "Updates an existing GeoDirectory listing's title, content, or address/coordinates. Fields omitted from the call are left untouched.", 'agent-abilities-for-mcp' ),
 	);
 }

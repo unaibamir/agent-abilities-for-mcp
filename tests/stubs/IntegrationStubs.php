@@ -1413,7 +1413,7 @@ class WC_Coupon {
 	public function set_product_ids( $v ) { $this->data['product_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_excluded_product_ids( $v ) { $this->data['excluded_product_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_email_restrictions( $v ) { $this->data['email_restrictions'] = array_map( 'strval', (array) $v ); }
-	public function save() { $id = \AAFM\Tests\WcCouponStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
+	public function save() { do_action( 'woocommerce_before_coupon_object_save', $this ); $id = \AAFM\Tests\WcCouponStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 	public function delete( $force = false ) { return \AAFM\Tests\WcCouponStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;

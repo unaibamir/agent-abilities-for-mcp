@@ -389,6 +389,99 @@ final class WooCouponsTest extends TestCase {
 		WcCouponStubStore::$force_save_failure = false;
 	}
 
+	/**
+	 * No existing test asserted the duplicate-code error code at all - this is the missing
+	 * baseline the race test below contrasts against.
+	 */
+	public function test_create_coupon_duplicate_code_is_refused(): void {
+		$this->acting_as( 'administrator' );
+		WcCouponStubStore::seed( 501, array( 'code' => 'SAVE10' ) );
+
+		$res = wp_get_ability( 'aafm/wc-create-coupon' )->execute( array( 'code' => 'save10' ) );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_duplicate_coupon_code', $res->get_error_code() );
+	}
+
+	/**
+	 * A concurrent request's write landing in the check-then-act window (simulated via the
+	 * test-only aafm_wc_coupon_code_check_passed hook) must not leave two coupons sharing a
+	 * code. This proves the final re-check added in coupons.php, not the earlier duplicate-code
+	 * guard (which never sees the interleaved write).
+	 */
+	public function test_create_coupon_concurrent_duplicate_code_is_not_both_saved(): void {
+		$this->acting_as( 'administrator' );
+		$interleaved_id = 0;
+		$callback       = function ( string $code ) use ( &$interleaved_id ) {
+			// Simulate a second request's coupon-code save landing in the window between
+			// this request's duplicate-code check and its own save() call, the exact
+			// interleaving a real concurrent request would produce.
+			$interleaved_id = WcCouponStubStore::save(
+				array(
+					'id'   => 0,
+					'code' => $code,
+				)
+			);
+		};
+		add_action( 'aafm_wc_coupon_code_check_passed', $callback );
+
+		$result = wp_get_ability( 'aafm/wc-create-coupon' )->execute( array( 'code' => 'RACE10' ) );
+
+		remove_action( 'aafm_wc_coupon_code_check_passed', $callback );
+
+		$this->assertGreaterThan( 0, $interleaved_id, 'the simulated concurrent save did not run' );
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'the original request should have been refused once the code was claimed underneath it'
+		);
+		$this->assertSame( 'aafm_wc_duplicate_coupon_code', $result->get_error_code() );
+
+		// Exactly one coupon exists with this code, not two.
+		$matches = 0;
+		foreach ( WcCouponStubStore::$coupons as $row ) {
+			if ( 'race10' === strtolower( (string) ( $row['code'] ?? '' ) ) ) {
+				++$matches;
+			}
+		}
+		$this->assertSame( 1, $matches );
+	}
+
+	/**
+	 * Documents the residual window this fix cannot close: WooCommerce fires
+	 * woocommerce_before_coupon_object_save() INSIDE WC_Data::save(), after this ability's own
+	 * final re-check has already passed. A concurrent write landing exactly there still produces
+	 * two coupons sharing a code, because the coupon post type carries no unique DB constraint on
+	 * its code (unlike WC_Tax's slug-unique table - see WooTaxTest). Closing this fully needs a
+	 * cross-request lock WooCommerce's coupon API gives this ability no primitive for. This test
+	 * exists so that gap stays documented and visible, not silently reintroduced as a false
+	 * "fully closed" claim.
+	 */
+	public function test_a_race_landing_inside_save_itself_is_a_known_uncloseable_gap(): void {
+		$this->acting_as( 'administrator' );
+		$interleaved_id = 0;
+		$callback       = function () use ( &$interleaved_id ) {
+			$interleaved_id = WcCouponStubStore::save(
+				array(
+					'id'   => 0,
+					'code' => 'RACE30',
+				)
+			);
+		};
+		add_action( 'woocommerce_before_coupon_object_save', $callback );
+
+		$result = wp_get_ability( 'aafm/wc-create-coupon' )->execute( array( 'code' => 'RACE30' ) );
+
+		remove_action( 'woocommerce_before_coupon_object_save', $callback );
+
+		$this->assertGreaterThan( 0, $interleaved_id, 'the simulated concurrent save did not run' );
+		// Known limitation, asserted honestly: the original request's own save still succeeds
+		// here too, so two coupons end up sharing the code. If a future change (e.g. a real
+		// lock) closes this, this assertion should start failing - update it to
+		// $this->assertInstanceOf( WP_Error::class, $result ) at that point, not before.
+		$this->assertIsArray( $result );
+	}
+
 	// =========================================================================
 	// aafm/wc-update-coupon
 	// =========================================================================
@@ -470,6 +563,50 @@ final class WooCouponsTest extends TestCase {
 		WcCouponStubStore::$force_save_failure = false;
 
 		$this->assertInstanceOf( \WP_Error::class, $res, 'Save failure on update must not lie success.' );
+	}
+
+	/**
+	 * The same final re-check guards the update path, via the shared
+	 * aafm_wc_apply_coupon_input()/aafm_wc_coupon_code_race_error() pair - not just create.
+	 */
+	public function test_update_coupon_concurrent_duplicate_code_is_not_both_saved(): void {
+		$this->acting_as( 'administrator' );
+		WcCouponStubStore::seed( 601, array( 'code' => 'ORIGINAL' ) );
+		WcCouponStubStore::seed( 602, array( 'code' => 'OTHERCODE' ) );
+
+		$interleaved_id = 0;
+		$callback       = function ( string $code ) use ( &$interleaved_id ) {
+			// A second request claims RACE20 for a different coupon in the window between
+			// this update's check and its own save() call.
+			$interleaved_id = WcCouponStubStore::save(
+				array(
+					'id'   => 0,
+					'code' => $code,
+				)
+			);
+		};
+		add_action( 'aafm_wc_coupon_code_check_passed', $callback );
+
+		$result = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
+			array(
+				'coupon_id' => 602,
+				'code'      => 'RACE20',
+			)
+		);
+
+		remove_action( 'aafm_wc_coupon_code_check_passed', $callback );
+
+		$this->assertGreaterThan( 0, $interleaved_id, 'the simulated concurrent save did not run' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_wc_duplicate_coupon_code', $result->get_error_code() );
+
+		$matches = 0;
+		foreach ( WcCouponStubStore::$coupons as $row ) {
+			if ( 'race20' === strtolower( (string) ( $row['code'] ?? '' ) ) ) {
+				++$matches;
+			}
+		}
+		$this->assertSame( 1, $matches );
 	}
 
 	/**

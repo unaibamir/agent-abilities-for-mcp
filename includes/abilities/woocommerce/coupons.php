@@ -298,6 +298,17 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 				)
 			);
 		}
+		/**
+		 * Fires once the duplicate-code check has passed for a coupon create/update, right
+		 * before the code is applied to the in-memory object. Test-only hook: production code
+		 * never listens here. Used by tests/abilities/WooCouponsTest.php to simulate a
+		 * concurrent request's write landing in the check-then-act window this ability cannot
+		 * otherwise close without a real lock.
+		 *
+		 * @param string     $code   The coupon code that just cleared the check.
+		 * @param \WC_Coupon $coupon The coupon object being built.
+		 */
+		do_action( 'aafm_wc_coupon_code_check_passed', $code, $coupon );
 		$coupon->set_code( $code );
 	}
 	if ( array_key_exists( 'discount_type', $input ) ) {
@@ -486,6 +497,35 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 	}
 
 	return null;
+}
+
+/**
+ * Final race guard: a concurrent request could have claimed this exact code in the window
+ * between the check inside aafm_wc_apply_coupon_input() and the caller's own save() call (every
+ * other field application in between widens that window). Re-checking immediately before the
+ * write shrinks it to the minimum this single PHP-FPM worker can control - WooCommerce's
+ * WC_Coupon/wc_get_coupon_id_by_code() gives us no locking primitive to close it further. This
+ * does NOT close the whole race: WooCommerce fires woocommerce_before_coupon_object_save() from
+ * inside WC_Data::save(), after this re-check runs, and a coupon carries no unique DB constraint
+ * on its code - a request landing in that specific gap still slips through (documented, not
+ * hidden, by test_a_race_landing_inside_save_itself_is_a_known_uncloseable_gap()).
+ *
+ * @param \WC_Coupon $coupon Coupon object about to be saved.
+ * @return \WP_Error|null Null on success, or a WP_Error naming the conflicting code.
+ */
+function aafm_wc_coupon_code_race_error( \WC_Coupon $coupon ): ?\WP_Error {
+	$conflicting_id = wc_get_coupon_id_by_code( $coupon->get_code(), $coupon->get_id() );
+	if ( ! $conflicting_id ) {
+		return null;
+	}
+	return new \WP_Error(
+		'aafm_wc_duplicate_coupon_code',
+		sprintf(
+			/* translators: %s: the conflicting coupon code. */
+			__( 'The coupon code "%s" was just claimed by another request. Try a different code.', 'agent-abilities-for-mcp' ),
+			$coupon->get_code()
+		)
+	);
 }
 
 // =============================================================================
@@ -697,6 +737,11 @@ function aafm_exec_wc_create_coupon( array $input ) {
 		return $error;
 	}
 
+	$race_error = aafm_wc_coupon_code_race_error( $coupon );
+	if ( null !== $race_error ) {
+		return $race_error;
+	}
+
 	$id = $coupon->save();
 	if ( ! $id ) {
 		return aafm_generic_error();
@@ -772,6 +817,12 @@ function aafm_exec_wc_update_coupon( array $input ) {
 	if ( null !== $error ) {
 		return $error;
 	}
+
+	$race_error = aafm_wc_coupon_code_race_error( $coupon );
+	if ( null !== $race_error ) {
+		return $race_error;
+	}
+
 	$saved_id = (int) $coupon->save();
 	if ( $saved_id < 1 ) {
 		return aafm_generic_error();

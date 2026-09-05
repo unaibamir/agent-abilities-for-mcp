@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-05T21:21:20+05:00\n"
+"POT-Creation-Date: 2026-09-05T21:54:07+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1026,7 +1026,7 @@ msgid "Update page"
 msgstr ""
 
 #: includes/abilities/pages.php:47
-msgid "Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the page is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would appear to succeed but have no visible effect."
+msgid "Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the page is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/pages.php:54
@@ -1142,7 +1142,7 @@ msgid "Update post"
 msgstr ""
 
 #: includes/abilities/posts.php:83
-msgid "Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would appear to succeed but have no visible effect."
+msgid "Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:90
@@ -1150,7 +1150,7 @@ msgid "Replace in post"
 msgstr ""
 
 #: includes/abilities/posts.php:91
-msgid "Literal find-and-replace inside a post's content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would appear to succeed but have no visible effect."
+msgid "Literal find-and-replace inside a post's content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:98
@@ -1182,7 +1182,7 @@ msgid "Update content item"
 msgstr ""
 
 #: includes/abilities/posts.php:123
-msgid "Update an item of an allowlisted custom content type by ID (publishing requires that type's publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would appear to succeed but have no visible effect."
+msgid "Update an item of an allowlisted custom content type by ID (publishing requires that type's publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:130
@@ -1255,7 +1255,7 @@ msgstr ""
 
 #: includes/abilities/posts.php:798
 #: includes/abilities/tec/events.php:208
-#: includes/helpers.php:1308
+#: includes/helpers.php:1321
 msgid "Unsupported or unauthorized post status."
 msgstr ""
 
@@ -1452,7 +1452,7 @@ msgid "Restore revision"
 msgstr ""
 
 #: includes/abilities/revisions.php:44
-msgid "Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible, or when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since the restore would appear to succeed but have no visible effect."
+msgid "Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible, or when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since the restore would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/revisions.php:51
@@ -3701,7 +3701,7 @@ msgstr ""
 msgid "Agent Abilities for MCP is disabled: another active plugin is loading an MCP Adapter copy that is missing the per-connection capability gate, so agent tools cannot be served safely. Update or deactivate that plugin to enable agent tools."
 msgstr ""
 
-#: includes/admin/allowlist.php:82
+#: includes/admin/allowlist.php:97
 #: includes/admin/bridge-directory.php:793
 #: includes/admin/connection.php:583
 #: includes/admin/connection.php:617
@@ -3726,76 +3726,76 @@ msgstr ""
 msgid "You are not allowed to do this."
 msgstr ""
 
-#: includes/admin/allowlist.php:90
+#: includes/admin/allowlist.php:105
 msgid "Could not read the submitted allowlist."
 msgstr ""
 
 #. translators: %d: the maximum number of allowlist override rows.
-#: includes/admin/allowlist.php:97
+#: includes/admin/allowlist.php:112
 #, php-format
 msgid "An allowlist can hold at most %d rows."
 msgstr ""
 
 #. translators: %d: 1-based row number in the submitted allowlist.
-#: includes/admin/allowlist.php:123
+#: includes/admin/allowlist.php:138
 #, php-format
-msgid "Row %d names a role or OAuth client that does not exist. Nothing was saved - fix that row and try again."
+msgid "Row %d names a role, OAuth client, or ability that does not exist. Nothing was saved - fix that row and try again."
 msgstr ""
 
-#: includes/admin/allowlist.php:135
+#: includes/admin/allowlist.php:150
 msgid "The allowlist could not be saved. Please try again."
 msgstr ""
 
-#: includes/admin/allowlist.php:158
+#: includes/admin/allowlist.php:173
 msgid "Ability allowlist"
 msgstr ""
 
-#: includes/admin/allowlist.php:159
+#: includes/admin/allowlist.php:174
 msgid "Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted."
 msgstr ""
 
-#: includes/admin/allowlist.php:163
+#: includes/admin/allowlist.php:178
 #: includes/admin/connection.php:896
 msgid "Scope"
 msgstr ""
 
-#: includes/admin/allowlist.php:164
+#: includes/admin/allowlist.php:179
 msgid "Allowed abilities"
 msgstr ""
 
 #. translators: %s: role display name.
-#: includes/admin/allowlist.php:173
+#: includes/admin/allowlist.php:188
 #, php-format
 msgid "Role: %s"
 msgstr ""
 
 #. translators: %s: OAuth client id.
-#: includes/admin/allowlist.php:174
+#: includes/admin/allowlist.php:189
 #, php-format
 msgid "Connection: %s"
 msgstr ""
 
-#: includes/admin/allowlist.php:178
+#: includes/admin/allowlist.php:193
 msgid "Remove"
 msgstr ""
 
-#: includes/admin/allowlist.php:185
+#: includes/admin/allowlist.php:200
 msgid "Role"
 msgstr ""
 
-#: includes/admin/allowlist.php:186
+#: includes/admin/allowlist.php:201
 msgid "OAuth connection"
 msgstr ""
 
-#: includes/admin/allowlist.php:188
+#: includes/admin/allowlist.php:203
 msgid "Role slug or client id"
 msgstr ""
 
-#: includes/admin/allowlist.php:189
+#: includes/admin/allowlist.php:204
 msgid "Add scope"
 msgstr ""
 
-#: includes/admin/allowlist.php:192
+#: includes/admin/allowlist.php:207
 msgid "Save allowlist"
 msgstr ""
 
@@ -7225,83 +7225,83 @@ msgstr ""
 msgid "This content type is not exposed to agents."
 msgstr ""
 
-#: includes/helpers.php:379
+#: includes/helpers.php:392
 msgid "This meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:622
+#: includes/helpers.php:635
 msgid "Some removals are permanent."
 msgstr ""
 
-#: includes/helpers.php:623
+#: includes/helpers.php:636
 msgid "Abilities that bypass the Trash say so in their own description."
 msgstr ""
 
-#: includes/helpers.php:624
+#: includes/helpers.php:637
 msgid "Some removals are permanent"
 msgstr ""
 
-#: includes/helpers.php:629
+#: includes/helpers.php:642
 msgid "Deletes go to Trash."
 msgstr ""
 
-#: includes/helpers.php:630
+#: includes/helpers.php:643
 msgid "Removals are recoverable, not permanent."
 msgstr ""
 
-#: includes/helpers.php:631
+#: includes/helpers.php:644
 msgid "Deletes go to Trash"
 msgstr ""
 
-#: includes/helpers.php:651
-#: includes/helpers.php:658
+#: includes/helpers.php:664
+#: includes/helpers.php:671
 msgid "Only text, number, or boolean meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:737
+#: includes/helpers.php:750
 msgid "This term meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:753
-#: includes/helpers.php:760
+#: includes/helpers.php:766
+#: includes/helpers.php:773
 msgid "Only text, number, or boolean term meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:937
+#: includes/helpers.php:950
 msgid "This user meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:956
-#: includes/helpers.php:963
+#: includes/helpers.php:969
+#: includes/helpers.php:976
 msgid "Only text, number, or boolean user meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:1095
+#: includes/helpers.php:1108
 msgid "Unsupported taxonomy."
 msgstr ""
 
-#: includes/helpers.php:1425
+#: includes/helpers.php:1438
 msgid "WPML language code of this item. Present only when WPML is active."
 msgstr ""
 
-#: includes/helpers.php:1440
+#: includes/helpers.php:1453
 msgid "Present on single-post reads and when include_content=true; omitted for password-protected posts."
 msgstr ""
 
-#: includes/helpers.php:1444
+#: includes/helpers.php:1457
 msgid "Byte length of the raw stored content (strlen of post_content), present even when include_content is false so a caller can preflight size before a full fetch. Reported as 0 for a password-protected post, regardless of its real length."
 msgstr ""
 
-#: includes/helpers.php:2031
+#: includes/helpers.php:2044
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:2063
+#: includes/helpers.php:2076
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
 #. translators: %s: the name of the setting, for example "Read-only mode".
-#: includes/helpers.php:2266
+#: includes/helpers.php:2279
 #, php-format
 msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7552,9 +7552,9 @@ msgid "Bearer token presented over insecure HTTP"
 msgstr ""
 
 #. translators: 1: detected page builder name, e.g. Elementor. 2: same name, repeated for readability. 3: same name, repeated for readability.
-#: includes/page-builder-guard.php:87
+#: includes/page-builder-guard.php:111
 #, php-format
-msgid "This content is owned by %1$s. Writing to it through this ability would appear to succeed but have no visible effect, because %2$s renders from its own stored data rather than the post content field. Edit it in %3$s directly."
+msgid "This content is owned by %1$s. Writing to it through this ability would either have no visible effect or corrupt %2$s's own stored markup, because %3$s renders from its own stored data rather than (or in addition to) the post content field. Edit it there directly."
 msgstr ""
 
 #: includes/register.php:25

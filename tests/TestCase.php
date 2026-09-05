@@ -54,7 +54,14 @@ abstract class TestCase extends WP_UnitTestCase {
 	 */
 	public function tear_down(): void {
 		foreach ( array_keys( get_post_types() ) as $type ) {
-			if ( 0 === strncmp( $type, 'aafm_', 5 ) ) {
+			// aafm_*: this plugin's own throwaway CPT test fixtures. tribe_*: the real TEC post
+			// types TecStubStore::aafm_tec_stub_register_post_types() registers for real (so
+			// current_user_can()/map_meta_cap() behavior is genuinely exercised) - without this,
+			// a public CPT registered once (register_post_type() cannot be "unregistered" between
+			// PHP-process-wide class/function definitions) leaks into aafm_eligible_post_types()
+			// for every later test in the same process, breaking tests that assume no eligible
+			// custom post type is registered.
+			if ( 0 === strncmp( $type, 'aafm_', 5 ) || 0 === strncmp( $type, 'tribe_', 6 ) ) {
 				unregister_post_type( $type );
 			}
 		}

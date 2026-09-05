@@ -30,35 +30,45 @@ function aafm_integration_cards(): array {
 	// integration" - not classify it. Deliberately NOT the 'abilities'/'bolt' glyph, which means
 	// "enabled" elsewhere in this UI; reusing it here would imply a state the icon doesn't track.
 	return array(
-		'yoast'       => array(
+		'yoast'         => array(
 			'label'   => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'wordpress-seo/wp-seo.php' ),
 		),
-		'rankmath'    => array(
+		'rankmath'      => array(
 			'label'   => __( 'Rank Math', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'seo-by-rank-math/rank-math.php' ),
 		),
-		'aioseo'      => array(
+		'aioseo'        => array(
 			'label'   => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ),
 		),
-		'acf'         => array(
+		'acf'           => array(
 			'label'   => __( 'ACF', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'advanced-custom-fields/acf.php', 'advanced-custom-fields-pro/acf.php', 'secure-custom-fields/secure-custom-fields.php' ),
 		),
-		'woocommerce' => array(
+		'woocommerce'   => array(
 			'label'   => __( 'WooCommerce', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'woocommerce/woocommerce.php' ),
 		),
-		'slim_seo'    => array(
+		'slim_seo'      => array(
 			'label'   => __( 'Slim SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'slim-seo/slim-seo.php' ),
+		),
+		'tec'           => array(
+			'label'   => __( 'The Events Calendar', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'the-events-calendar/the-events-calendar.php' ),
+		),
+		'event_tickets' => array(
+			'label'   => __( 'Event Tickets', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'event-tickets/event-tickets.php' ),
 		),
 	);
 }
@@ -84,6 +94,12 @@ function aafm_integration_status( string $slug ): string {
 	}
 
 	if ( 'woocommerce' === $slug && aafm_woocommerce_below_version_floor() ) {
+		return 'below_floor';
+	}
+	if ( 'tec' === $slug && aafm_tec_below_version_floor() ) {
+		return 'below_floor';
+	}
+	if ( 'event_tickets' === $slug && aafm_event_tickets_below_version_floor() ) {
 		return 'below_floor';
 	}
 
@@ -116,6 +132,33 @@ function aafm_woocommerce_below_version_floor(): bool {
 	}
 	$version = aafm_woocommerce_version();
 	return null !== $version && ! version_compare( $version, AAFM_WOOCOMMERCE_MIN_VERSION, '>=' );
+}
+
+/**
+ * Whether The Events Calendar is installed and active, but below AAFM_TEC_MIN_VERSION.
+ * Mirrors aafm_woocommerce_below_version_floor()'s shape exactly.
+ *
+ * @return bool
+ */
+function aafm_tec_below_version_floor(): bool {
+	if ( ! class_exists( 'Tribe__Events__Main' ) ) {
+		return false;
+	}
+	$version = aafm_tec_version();
+	return null !== $version && ! version_compare( $version, AAFM_TEC_MIN_VERSION, '>=' );
+}
+
+/**
+ * Whether Event Tickets is installed and active, but below AAFM_EVENT_TICKETS_MIN_VERSION.
+ *
+ * @return bool
+ */
+function aafm_event_tickets_below_version_floor(): bool {
+	if ( ! class_exists( 'Tribe__Tickets__Main' ) ) {
+		return false;
+	}
+	$version = aafm_event_tickets_version();
+	return null !== $version && ! version_compare( $version, AAFM_EVENT_TICKETS_MIN_VERSION, '>=' );
 }
 
 /**

@@ -182,5 +182,23 @@ function aafm_ability_disclosures(): array {
 		'aafm/wc-list-payment-gateways'    => __( 'Lists all registered WooCommerce payment gateways with id, title, and enabled state. Credential and secret settings are never returned. Read-only. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-get-payment-gateway'      => __( 'Reads one payment gateway by id: title, description, enabled state, order, and non-secret settings. Fields whose names contain key, secret, token, password, api, or private are always stripped before the response is sent. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-update-payment-gateway'   => __( 'Updates a payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Credential and secret fields can never be written through this ability. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+
+		// The Events Calendar / Event Tickets.
+		'aafm/tec-get-events'              => __( 'Lists events via the Events Calendar, filtered by an optional search term.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-event'               => __( 'Reads a single event by id, including its dates, venue, and organizers.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-create-event'            => __( 'Creates an event. Requires the edit-events capability; a publicly-visible status additionally requires the publish-events capability.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-update-event'            => __( 'Updates an event by id. Requires edit access to that event.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-delete-event'            => __( 'Trashes an event by id (always recoverable via Trash, never a permanent delete). Requires delete access to that event.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-venues'              => __( 'Lists venues via the Events Calendar.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-venue'               => __( 'Reads a single venue by id.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-create-venue'            => __( 'Creates a venue. Requires the edit-venues capability.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-update-venue'            => __( 'Updates a venue by id. Requires edit access to that venue.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-organizers'          => __( 'Lists organizers via the Events Calendar.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-organizer'           => __( 'Reads a single organizer by id.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-create-organizer'        => __( 'Creates an organizer. Requires the edit-organizers capability.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-update-organizer'        => __( 'Updates an organizer by id. Requires edit access to that organizer.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-tickets'             => __( 'Lists every ticket for one event, across every ticketing provider. Requires edit access to that event. Read-only - no ticket write ability is offered, since ticket creation and RSVP processing are commerce flows this plugin does not touch.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-ticket'              => __( 'Reads a single ticket by id. Requires edit access to its parent event.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-attendees'           => __( 'Lists attendees and RSVPs for one event. Requires edit access to that event. Read-only.', 'agent-abilities-for-mcp' ),
 	);
 }

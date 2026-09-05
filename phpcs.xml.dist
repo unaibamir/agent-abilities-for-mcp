@@ -28,6 +28,13 @@
 	     namespace (some intentionally duplicated) to reproduce the standalone mcp-adapter plugin's
 	     unguarded shell-class declaration in both load orders. Throwaway fixtures, never shipped. -->
 	<exclude-pattern>*/tests/Fixtures/AdapterShell/*</exclude-pattern>
+	<!-- The TEC/Event Tickets stub declares the THIRD-PARTY globals (Tribe__Events__Main,
+	     tribe_events(), Tribe__Tickets__Tickets, etc.) this plugin's own TEC integration calls -
+	     names it cannot prefix without breaking the very calls it stands in for, and functions
+	     PHP requires in the global namespace so unqualified production calls resolve to them.
+	     A throwaway test fixture, never shipped, same class as the AdapterEager/AdapterShell
+	     exclusions above. -->
+	<exclude-pattern>*/tests/stubs/TecStubStore.php</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="basepath" value="."/>
@@ -53,6 +60,26 @@
 			<property name="custom_capabilities" type="array">
 				<element value="read_private_books"/>
 				<element value="manage_woocommerce"/>
+				<!-- The Events Calendar's own mapped capability family, confirmed against the
+				     installed plugin's capability_type registration for events, venues, and
+				     organizers (src/Tribe/Main.php, Venue.php, Organizer.php). -->
+				<element value="edit_tribe_event"/>
+				<element value="edit_tribe_events"/>
+				<element value="edit_others_tribe_events"/>
+				<element value="edit_published_tribe_events"/>
+				<element value="publish_tribe_events"/>
+				<element value="delete_tribe_event"/>
+				<element value="delete_tribe_events"/>
+				<element value="delete_others_tribe_events"/>
+				<element value="delete_published_tribe_events"/>
+				<element value="edit_tribe_venue"/>
+				<element value="edit_tribe_venues"/>
+				<element value="edit_others_tribe_venues"/>
+				<element value="edit_published_tribe_venues"/>
+				<element value="edit_tribe_organizer"/>
+				<element value="edit_tribe_organizers"/>
+				<element value="edit_others_tribe_organizers"/>
+				<element value="edit_published_tribe_organizers"/>
 			</property>
 		</properties>
 	</rule>
@@ -86,6 +113,9 @@
 		     cross-cutting helpers exist before any domain file references them. The
 		     intentional underscore is what the hyphenated-lowercase sniff objects to. -->
 		<exclude-pattern>*/includes/abilities/woocommerce/_shared\.php</exclude-pattern>
+		<!-- Same reasoning, same convention: the TEC domain files share a _shared.php helper
+		     loaded first for the same cross-cutting-helpers-before-siblings guarantee. -->
+		<exclude-pattern>*/includes/abilities/tec/_shared\.php</exclude-pattern>
 	</rule>
 	<rule ref="Squiz.Commenting.ClassComment.Missing">
 		<exclude-pattern>*/tests/*</exclude-pattern>

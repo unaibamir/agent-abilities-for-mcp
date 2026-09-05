@@ -1717,6 +1717,90 @@ PHP;
 		WcShippingStubStore::reset();
 		WcTaxStubStore::reset();
 		WcGatewayStubStore::reset();
+		TecTicketsStubStore::reset();
+	}
+
+	/**
+	 * Register the three real TEC custom post types (with their real capability_type/
+	 * map_meta_cap args) and grant the administrator role every mapped TEC capability, so a
+	 * test can exercise real current_user_can()/map_meta_cap() behavior instead of a second,
+	 * hand-rolled permission model. Idempotent across the process, mirroring stub_woocommerce()'s
+	 * class_exists()-guarded shape.
+	 *
+	 * @return void
+	 */
+	protected function stub_tec(): void {
+		aafm_tec_stub_define_globals();
+		aafm_tec_stub_register_post_types();
+
+		$admin = get_role( 'administrator' );
+		if ( null !== $admin ) {
+			foreach (
+				array(
+					'edit_tribe_events',
+					'edit_others_tribe_events',
+					'edit_published_tribe_events',
+					'publish_tribe_events',
+					'delete_tribe_events',
+					'delete_others_tribe_events',
+					'delete_published_tribe_events',
+					'edit_tribe_event',
+					'delete_tribe_event',
+					'read_tribe_event',
+					'edit_tribe_venues',
+					'edit_others_tribe_venues',
+					'edit_published_tribe_venues',
+					'edit_tribe_venue',
+					'edit_tribe_organizers',
+					'edit_others_tribe_organizers',
+					'edit_published_tribe_organizers',
+					'edit_tribe_organizer',
+				) as $cap
+			) {
+				if ( ! $admin->has_cap( $cap ) ) {
+					$admin->add_cap( $cap );
+				}
+			}
+		}
+	}
+
+	/**
+	 * Define the Event Tickets global stubs without needing the full TEC post-type/capability
+	 * setup - used by tests that only exercise Event Tickets' own detection or ticket/attendee
+	 * surface. stub_tec() also calls the same underlying define step, so calling both is a no-op
+	 * on the second call.
+	 *
+	 * @return void
+	 */
+	protected function stub_event_tickets(): void {
+		aafm_tec_stub_define_globals();
+	}
+
+	/**
+	 * Seed one stub ticket for an event. Call after stub_tec() (the event must already exist).
+	 *
+	 * @param int    $event_id Parent event id.
+	 * @param string $name     Ticket name.
+	 * @param float  $price    Ticket price.
+	 * @param int    $capacity Ticket capacity.
+	 * @return int The stub ticket's id.
+	 */
+	protected function stub_add_ticket( int $event_id, string $name = 'Test ticket', float $price = 10.0, int $capacity = 100 ): int {
+		static $next_id                      = 9000;
+		$id                                  = ++$next_id;
+		TecTicketsStubStore::$tickets[ $id ] = new \Tribe__Tickets__Ticket_Object( $id, $event_id, $name, $price, $capacity );
+		return $id;
+	}
+
+	/**
+	 * Seed one stub attendee row for an event. Call after stub_tec().
+	 *
+	 * @param int                 $event_id Parent event id.
+	 * @param array<string,mixed> $data     Attendee data (purchaser_name, purchaser_email, product_id, etc).
+	 * @return void
+	 */
+	protected function stub_add_attendee( int $event_id, array $data ): void {
+		TecTicketsStubStore::$attendees[ $event_id ][] = $data;
 	}
 
 	/**

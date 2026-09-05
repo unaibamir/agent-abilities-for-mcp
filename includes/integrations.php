@@ -46,6 +46,12 @@ function aafm_integration_active( string $slug ): bool {
 		case 'slim_seo':
 			$active = aafm_slim_seo_active();
 			break;
+		case 'tec':
+			$active = aafm_tec_active();
+			break;
+		case 'event_tickets':
+			$active = aafm_event_tickets_active();
+			break;
 		default:
 			return false;
 	}
@@ -190,6 +196,108 @@ function aafm_slim_seo_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_slim_seo_active', $active );
+}
+
+/**
+ * The Events Calendar's minimum required version.
+ *
+ * Pinned to the version verified locally when this integration was built
+ * (wp/wp-content/plugins/the-events-calendar/src/Tribe/Main.php:43); raise only with a stated
+ * reason.
+ */
+if ( ! defined( 'AAFM_TEC_MIN_VERSION' ) ) {
+	define( 'AAFM_TEC_MIN_VERSION', '6.17.3.1' );
+}
+
+/**
+ * The TEC version this site reports, or null when undetectable. Filterable, mirroring
+ * aafm_aioseo_version() so the test suite can pin an arbitrary version without defining the real
+ * Tribe__Events__Main::VERSION constant.
+ *
+ * @return string|null
+ */
+function aafm_tec_version(): ?string {
+	$version = class_exists( 'Tribe__Events__Main' ) && defined( 'Tribe__Events__Main::VERSION' )
+		? (string) Tribe__Events__Main::VERSION
+		: null;
+
+	/**
+	 * Filters the TEC version reported for the ability floor check.
+	 *
+	 * @param string|null $version Detected version, or null when undetectable.
+	 */
+	return apply_filters( 'aafm_tec_version', $version );
+}
+
+/**
+ * Whether The Events Calendar is active AND at or above AAFM_TEC_MIN_VERSION, behind a
+ * filterable seam.
+ *
+ * @return bool
+ */
+function aafm_tec_active(): bool {
+	$active = class_exists( 'Tribe__Events__Main' ) && function_exists( 'tribe_events' );
+	if ( $active ) {
+		$version = aafm_tec_version();
+		$active  = null !== $version && version_compare( $version, AAFM_TEC_MIN_VERSION, '>=' );
+	}
+
+	/**
+	 * Filters whether TEC is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_tec_active', $active );
+}
+
+/**
+ * Event Tickets' minimum required version.
+ *
+ * Pinned to the version verified locally when this integration was built
+ * (wp/wp-content/plugins/event-tickets/src/Tribe/Main.php:21); raise only with a stated reason.
+ */
+if ( ! defined( 'AAFM_EVENT_TICKETS_MIN_VERSION' ) ) {
+	define( 'AAFM_EVENT_TICKETS_MIN_VERSION', '5.29.3.1' );
+}
+
+/**
+ * The Event Tickets version this site reports, or null when undetectable.
+ *
+ * @return string|null
+ */
+function aafm_event_tickets_version(): ?string {
+	$version = class_exists( 'Tribe__Tickets__Main' ) && defined( 'Tribe__Tickets__Main::VERSION' )
+		? (string) Tribe__Tickets__Main::VERSION
+		: null;
+
+	/**
+	 * Filters the Event Tickets version reported for the ability floor check.
+	 *
+	 * @param string|null $version Detected version, or null when undetectable.
+	 */
+	return apply_filters( 'aafm_event_tickets_version', $version );
+}
+
+/**
+ * Whether Event Tickets is active AND at or above AAFM_EVENT_TICKETS_MIN_VERSION, behind a
+ * filterable seam. A distinct slug from 'tec': Event Tickets is a separate plugin that can
+ * theoretically be absent while The Events Calendar is present.
+ *
+ * @return bool
+ */
+function aafm_event_tickets_active(): bool {
+	$active = class_exists( 'Tribe__Tickets__Main' ) && function_exists( 'tribe_tickets' );
+	if ( $active ) {
+		$version = aafm_event_tickets_version();
+		$active  = null !== $version && version_compare( $version, AAFM_EVENT_TICKETS_MIN_VERSION, '>=' );
+	}
+
+	/**
+	 * Filters whether Event Tickets is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_event_tickets_active', $active );
 }
 
 /**

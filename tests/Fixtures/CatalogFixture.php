@@ -102,6 +102,15 @@ final class CatalogFixture {
 		'aafm/wc-list-payment-gateways',
 		'aafm/wc-get-payment-gateway',
 		'aafm/slim-seo-get-post',
+		'aafm/tec-get-events',
+		'aafm/tec-get-event',
+		'aafm/tec-get-venues',
+		'aafm/tec-get-venue',
+		'aafm/tec-get-organizers',
+		'aafm/tec-get-organizer',
+		'aafm/tec-get-tickets',
+		'aafm/tec-get-ticket',
+		'aafm/tec-get-attendees',
 	);
 
 	/**
@@ -189,6 +198,13 @@ final class CatalogFixture {
 		'aafm/wc-update-payment-gateway',
 		'aafm/slim-seo-update-post',
 		'aafm/replace-sitewide',
+		'aafm/tec-create-event',
+		'aafm/tec-update-event',
+		'aafm/tec-delete-event',
+		'aafm/tec-create-venue',
+		'aafm/tec-update-venue',
+		'aafm/tec-create-organizer',
+		'aafm/tec-update-organizer',
 	);
 
 	/**
@@ -241,5 +257,6 @@ final class CatalogFixture {
 		'aafm/delete-menu-item',
 		'aafm/wc-delete-product',
 		'aafm/wc-delete-product-variation',
+		'aafm/tec-delete-event',
 	);
 }

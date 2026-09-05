@@ -1236,6 +1236,216 @@ if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 	class_alias( 'Aafm_Phpstan_Aioseo_Post_Model', 'AIOSEO\\Plugin\\Common\\Models\\Post' );
 }
 
+if ( ! class_exists( 'Tribe__Events__Main' ) ) {
+	/**
+	 * Minimal The Events Calendar main-class signature for static analysis only.
+	 */
+	class Tribe__Events__Main {
+		const POSTTYPE = 'tribe_events';
+		const VERSION  = '6.17.3.1';
+	}
+}
+
+if ( ! class_exists( 'Tribe__Events__Venue' ) ) {
+	class Tribe__Events__Venue {
+		const POSTTYPE = 'tribe_venue';
+	}
+}
+
+if ( ! class_exists( 'Tribe__Events__Organizer' ) ) {
+	class Tribe__Events__Organizer {
+		const POSTTYPE = 'tribe_organizer';
+	}
+}
+
+if ( ! class_exists( 'Tribe__Tickets__Main' ) ) {
+	class Tribe__Tickets__Main {
+		const VERSION = '5.29.3.1';
+	}
+}
+
+if ( ! class_exists( 'Aafm_Phpstan_Tec_Repository' ) ) {
+	/**
+	 * Minimal fluent repository signature (Tribe__Repository__Interface) for static analysis
+	 * only - covers exactly the chain this plugin's TEC ability files call.
+	 */
+	class Aafm_Phpstan_Tec_Repository {
+		/** @return self */
+		public function page( int $page ) {
+			return $this;
+		}
+		/** @return self */
+		public function per_page( int $per_page ) {
+			return $this;
+		}
+		/** @return self */
+		public function search( string $term ) {
+			return $this;
+		}
+		/**
+		 * @param mixed $value
+		 * @return self
+		 */
+		public function where( string $key, $value = null ) {
+			return $this;
+		}
+		/**
+		 * @param array<string,mixed> $args
+		 * @return self
+		 */
+		public function set_args( array $args ) {
+			return $this;
+		}
+		/** @return int[] */
+		public function get_ids() {
+			return array();
+		}
+		public function found(): int {
+			return 0;
+		}
+		/** @return \WP_Post|false */
+		public function create() {
+			return false;
+		}
+		/** @return array<int|string,mixed> */
+		public function save() {
+			return array();
+		}
+		/** @return int[] */
+		public function delete() {
+			return array();
+		}
+	}
+}
+
+if ( ! function_exists( 'tribe_events' ) ) {
+	function tribe_events( string $repository = 'default' ): Aafm_Phpstan_Tec_Repository {
+		return new Aafm_Phpstan_Tec_Repository();
+	}
+}
+
+if ( ! function_exists( 'tribe_venues' ) ) {
+	function tribe_venues( string $repository = 'default' ): Aafm_Phpstan_Tec_Repository {
+		return new Aafm_Phpstan_Tec_Repository();
+	}
+}
+
+if ( ! function_exists( 'tribe_organizers' ) ) {
+	function tribe_organizers( string $repository = 'default' ): Aafm_Phpstan_Tec_Repository {
+		return new Aafm_Phpstan_Tec_Repository();
+	}
+}
+
+if ( ! function_exists( 'tribe_tickets' ) ) {
+	/** @return mixed */
+	function tribe_tickets( string $repository = 'default' ) {
+		return null;
+	}
+}
+
+if ( ! function_exists( 'tribe_get_start_date' ) ) {
+	/**
+	 * @param int|null    $event_id
+	 * @param bool        $create_date
+	 * @param string      $format
+	 * @return string
+	 */
+	function tribe_get_start_date( $event_id = null, $create_date = true, $format = '' ) {
+		return '';
+	}
+}
+
+if ( ! function_exists( 'tribe_get_end_date' ) ) {
+	/**
+	 * @param int|null    $event_id
+	 * @param bool        $create_date
+	 * @param string      $format
+	 * @return string
+	 */
+	function tribe_get_end_date( $event_id = null, $create_date = true, $format = '' ) {
+		return '';
+	}
+}
+
+if ( ! function_exists( 'tribe_event_is_all_day' ) ) {
+	/** @param int|null $event_id */
+	function tribe_event_is_all_day( $event_id = null ): bool {
+		return false;
+	}
+}
+
+if ( ! function_exists( 'tribe_get_venue_id' ) ) {
+	/** @param int|null $event_id */
+	function tribe_get_venue_id( $event_id = null ): int {
+		return 0;
+	}
+}
+
+if ( ! function_exists( 'tribe_get_organizer_ids' ) ) {
+	/**
+	 * @param int|null $event_id
+	 * @return int[]
+	 */
+	function tribe_get_organizer_ids( $event_id = null ) {
+		return array();
+	}
+}
+
+if ( ! class_exists( 'Tribe__Tickets__Ticket_Object' ) ) {
+	/**
+	 * Minimal Event Tickets ticket-object signature for static analysis only.
+	 */
+	class Tribe__Tickets__Ticket_Object {
+		/** @var int */
+		public $ID = 0;
+		/** @var string */
+		public $name = '';
+		/** @var string */
+		public $description = '';
+		/** @var float */
+		public $price = 0.0;
+		/** @var int */
+		public $capacity = 0;
+		/** @var bool */
+		public $on_sale = false;
+		/** @return \WP_Post|null */
+		public function get_event() {
+			return null;
+		}
+	}
+}
+
+if ( ! class_exists( 'Tribe__Tickets__Tickets' ) ) {
+	/**
+	 * Minimal Event Tickets aggregation-class signature for static analysis only.
+	 */
+	class Tribe__Tickets__Tickets {
+		/**
+		 * @param int $post_id
+		 * @param string|null $context
+		 * @return Tribe__Tickets__Ticket_Object[]
+		 */
+		public static function get_all_event_tickets( $post_id, $context = null ) {
+			return array();
+		}
+		/**
+		 * @param int $ticket_id
+		 * @return Tribe__Tickets__Ticket_Object|null
+		 */
+		public static function load_ticket_object( $ticket_id ) {
+			return null;
+		}
+		/**
+		 * @param int $post_id
+		 * @param array<string,mixed> $args
+		 * @return array<int,array<string,mixed>>
+		 */
+		public static function get_event_attendees( $post_id, $args = array() ) {
+			return array();
+		}
+	}
+}
+
 if ( ! class_exists( 'WP_CLI' ) ) {
 	/**
 	 * Minimal WP-CLI signature for static analysis only. Real WP_CLI is provided by the

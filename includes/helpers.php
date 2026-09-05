@@ -433,6 +433,7 @@ function aafm_recoverable_delete_abilities(): array {
 		'aafm/trash-post',
 		'aafm/trash-page',
 		'aafm/delete-block',
+		'aafm/tec-delete-event',
 	);
 
 	/**

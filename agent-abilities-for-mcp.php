@@ -381,6 +381,11 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/tax.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/reports.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/gateways.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/_shared.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/events.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/venues.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/organizers.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/tickets.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );

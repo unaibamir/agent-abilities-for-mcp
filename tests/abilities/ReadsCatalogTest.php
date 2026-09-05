@@ -39,6 +39,8 @@ final class ReadsCatalogTest extends TestCase {
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
+		add_filter( 'aafm_integration_active_tec', '__return_true' );
+		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
 		aafm_registry_cache_should_flush( true );
 	}
 
@@ -68,9 +70,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 77 reads - no more, no fewer.'
+			'The read group must be exactly the 86 reads - no more, no fewer.'
 		);
-		$this->assertCount( count( self::READS ), $reads, 'The read catalog ships exactly 77 read abilities.' );
+		$this->assertCount( count( self::READS ), $reads, 'The read catalog ships exactly 86 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

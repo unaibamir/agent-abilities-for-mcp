@@ -33,6 +33,9 @@
 			<file>tests/AllowlistTest.php</file>
 			<file>tests/AllowlistWireTest.php</file>
 			<file>tests/AllowlistSweepTest.php</file>
+			<file>tests/TecEventsWireTest.php</file>
+			<file>tests/TecVenuesOrganizersWireTest.php</file>
+			<file>tests/TecTicketsWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

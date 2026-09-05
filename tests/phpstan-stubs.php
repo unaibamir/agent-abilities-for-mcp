@@ -1307,8 +1307,11 @@ if ( ! class_exists( 'Aafm_Phpstan_Tec_Repository' ) ) {
 		public function create() {
 			return false;
 		}
-		/** @return array<int|string,mixed> */
-		public function save() {
+		/**
+		 * @param bool $return_promise
+		 * @return array<int|string,mixed>
+		 */
+		public function save( $return_promise = false ) {
 			return array();
 		}
 		/** @return int[] */

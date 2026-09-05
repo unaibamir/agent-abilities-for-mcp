@@ -463,8 +463,11 @@ function aafm_exec_tec_update_event( array $input ) {
 	}
 
 	if ( array() !== $args ) {
-		$result = tribe_events()->where( 'id', $id )->set_args( $args )->save();
-		if ( ! is_array( $result ) || empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
+		$result = aafm_tec_force_sync_save(
+			'events',
+			static fn() => tribe_events()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
+		);
+		if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 			return aafm_generic_error();
 		}
 	}

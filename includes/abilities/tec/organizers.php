@@ -368,8 +368,11 @@ function aafm_exec_tec_update_organizer( array $input ) {
 	if ( array() === $args ) {
 		return array( 'organizer' => aafm_tec_organizer_shape( $id ) );
 	}
-	$result = tribe_organizers()->where( 'id', $id )->set_args( $args )->save();
-	if ( ! is_array( $result ) || empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
+	$result = aafm_tec_force_sync_save(
+		'organizers',
+		static fn() => tribe_organizers()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
+	);
+	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}
 	return array( 'organizer' => aafm_tec_organizer_shape( $id ) );

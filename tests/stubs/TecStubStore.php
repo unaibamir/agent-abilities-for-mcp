@@ -170,9 +170,10 @@ namespace AAFM\Tests {
 		}
 
 		/**
+		 * @param bool $return_promise Ignored - the stub never queues, it always saves synchronously.
 		 * @return array<int,mixed>
 		 */
-		public function save() {
+		public function save( bool $return_promise = false ) {
 			if ( ! $this->where_id ) {
 				return array();
 			}

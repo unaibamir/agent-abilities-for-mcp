@@ -19,6 +19,36 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * Run a repository ->save() call with the repository's own background-update queueing forced
+ * off, and normalize its return value to a plain array.
+ *
+ * Tribe__Repository::save() returns Tribe__Promise (not the documented per-id array) whenever
+ * is_background_update_active() is true AND the batch size exceeds
+ * get_background_update_threshold() (default 20, filterable per repository via
+ * tribe_repository_{filter_name}_update_background_threshold). Found live against a real TEC
+ * install whose threshold filter was tuned down: a single-event update went async, the write
+ * itself succeeded, but this plugin read the Promise as "not an array" and reported failure for
+ * a call that had, in fact, worked - the exact silent-wrong-answer shape this release exists to
+ * catch, just inverted (false failure rather than false success). An MCP tool call promises the
+ * caller a synchronous, verifiable answer; a queued background job cannot honor that contract,
+ * so this always forces the synchronous path for the duration of the call rather than trying to
+ * interpret a Promise.
+ *
+ * @param string   $filter_name Repository filter_name ('events' | 'venues' | 'organizers').
+ * @param callable $save_call  Closure that performs and returns the ->save() call.
+ * @return array<int|string,mixed> The save() result, normalized to an array.
+ */
+function aafm_tec_force_sync_save( string $filter_name, callable $save_call ): array {
+	add_filter( "tribe_repository_{$filter_name}_update_background_activated", '__return_false' );
+	try {
+		$result = $save_call();
+	} finally {
+		remove_filter( "tribe_repository_{$filter_name}_update_background_activated", '__return_false' );
+	}
+	return is_array( $result ) ? $result : array();
+}
+
+/**
  * Per-object edit permission for a single event.
  *
  * @param array<string,mixed> $input Input carrying event_id.

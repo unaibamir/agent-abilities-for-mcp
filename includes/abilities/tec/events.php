@@ -278,10 +278,10 @@ function aafm_tec_event_orm_args( array $input ): array {
 		$args['post_status'] = sanitize_key( (string) $input['status'] );
 	}
 	if ( isset( $input['start_date'] ) ) {
-		$args['start_date'] = sanitize_text_field( (string) $input['start_date'] );
+		$args['start_date'] = aafm_sanitize_plain_text( (string) $input['start_date'] );
 	}
 	if ( isset( $input['end_date'] ) ) {
-		$args['end_date'] = sanitize_text_field( (string) $input['end_date'] );
+		$args['end_date'] = aafm_sanitize_plain_text( (string) $input['end_date'] );
 	}
 	if ( array_key_exists( 'all_day', $input ) ) {
 		$args['all_day'] = ! empty( $input['all_day'] );

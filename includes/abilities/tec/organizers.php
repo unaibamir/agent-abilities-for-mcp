@@ -118,7 +118,7 @@ function aafm_tec_organizer_orm_args( array $input ): array {
 		$args['email'] = sanitize_email( (string) $input['email'] );
 	}
 	if ( isset( $input['phone'] ) ) {
-		$args['phone'] = sanitize_text_field( (string) $input['phone'] );
+		$args['phone'] = aafm_sanitize_plain_text( (string) $input['phone'] );
 	}
 	if ( isset( $input['website'] ) ) {
 		$args['website'] = esc_url_raw( (string) $input['website'] );

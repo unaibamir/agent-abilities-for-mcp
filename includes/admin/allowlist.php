@@ -29,7 +29,7 @@ function aafm_allowlist_sanitize_row( $row ) {
 	if ( ! in_array( $scope_type, array( 'role', 'oauth_client' ), true ) ) {
 		return null;
 	}
-	$scope_id = isset( $row['scope_id'] ) ? sanitize_text_field( (string) $row['scope_id'] ) : '';
+	$scope_id = isset( $row['scope_id'] ) ? aafm_sanitize_plain_text( (string) $row['scope_id'] ) : '';
 	if ( '' === $scope_id ) {
 		return null;
 	}
@@ -41,7 +41,12 @@ function aafm_allowlist_sanitize_row( $row ) {
 	if ( 'all' === $raw_allowed ) {
 		$allowed = 'all';
 	} elseif ( is_array( $raw_allowed ) ) {
-		$names   = array_filter( array_map( 'sanitize_text_field', $raw_allowed ) );
+		$names   = array_filter(
+			array_map(
+				static fn( $name ): string => aafm_sanitize_plain_text( (string) $name ),
+				$raw_allowed
+			)
+		);
 		$allowed = array_values( array_unique( $names ) );
 	} else {
 		return null;

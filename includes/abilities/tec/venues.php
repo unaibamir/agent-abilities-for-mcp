@@ -163,11 +163,11 @@ function aafm_tec_venue_orm_args( array $input ): array {
 	}
 	foreach ( array( 'address', 'city', 'zip', 'country', 'phone' ) as $field ) {
 		if ( isset( $input[ $field ] ) ) {
-			$args[ $field ] = sanitize_text_field( (string) $input[ $field ] );
+			$args[ $field ] = aafm_sanitize_plain_text( (string) $input[ $field ] );
 		}
 	}
 	if ( isset( $input['state'] ) ) {
-		$args['state_province'] = sanitize_text_field( (string) $input['state'] );
+		$args['state_province'] = aafm_sanitize_plain_text( (string) $input['state'] );
 	}
 	if ( isset( $input['website'] ) ) {
 		$args['website'] = esc_url_raw( (string) $input['website'] );

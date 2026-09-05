@@ -83,6 +83,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The get-posts search term, passed as WP_Query\'s `s`. Query input only.',
 		),
+		'includes/abilities/tec/events.php::aafm_exec_tec_get_events::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
+			'reason' => 'The tec-get-events search term, passed to the Events Calendar ORM\'s ->search(). Query input only.',
+		),
 		'includes/abilities/search.php::aafm_exec_search_content::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) ( $input[\'search\'] ?? \'\' ) )',

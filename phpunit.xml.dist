@@ -40,6 +40,7 @@
 			<file>tests/UploadMediaFromUrlWireTest.php</file>
 			<file>tests/AvadaWireTest.php</file>
 			<file>tests/GeodirectoryWireTest.php</file>
+			<file>tests/AllNew174AbilitiesWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

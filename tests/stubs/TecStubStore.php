@@ -43,7 +43,8 @@ namespace AAFM\Tests {
 		private int $per_page         = 10;
 		private string $search        = '';
 		private int $where_id         = 0;
-		private string $where_status  = '';
+		/** @var string|string[] */
+		private $where_status         = '';
 		private int $found_count      = 0;
 
 		/** @var array<string,mixed> */
@@ -86,7 +87,7 @@ namespace AAFM\Tests {
 			if ( 'id' === $key ) {
 				$clone->where_id = (int) $value;
 			} elseif ( 'post_status' === $key ) {
-				$clone->where_status = (string) $value;
+				$clone->where_status = is_array( $value ) ? array_map( 'strval', $value ) : (string) $value;
 			}
 			return $clone;
 		}

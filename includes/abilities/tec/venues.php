@@ -224,7 +224,10 @@ function aafm_args_tec_get_venues(): array {
  */
 function aafm_exec_tec_get_venues( array $input ) {
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
-	$repo   = tribe_venues()->page( $paging['page'] )->per_page( $paging['per_page'] );
+	$repo   = tribe_venues()
+		->where( 'post_status', aafm_tec_visible_statuses( Tribe__Events__Venue::POSTTYPE ) )
+		->page( $paging['page'] )
+		->per_page( $paging['per_page'] );
 	$ids    = $repo->get_ids();
 	return array(
 		'venues' => array_map( 'aafm_tec_venue_shape', array_map( 'intval', $ids ) ),

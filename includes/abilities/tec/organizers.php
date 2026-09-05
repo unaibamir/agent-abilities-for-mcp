@@ -175,7 +175,10 @@ function aafm_args_tec_get_organizers(): array {
  */
 function aafm_exec_tec_get_organizers( array $input ) {
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
-	$repo   = tribe_organizers()->page( $paging['page'] )->per_page( $paging['per_page'] );
+	$repo   = tribe_organizers()
+		->where( 'post_status', aafm_tec_visible_statuses( Tribe__Events__Organizer::POSTTYPE ) )
+		->page( $paging['page'] )
+		->per_page( $paging['per_page'] );
 	$ids    = $repo->get_ids();
 	return array(
 		'organizers' => array_map( 'aafm_tec_organizer_shape', array_map( 'intval', $ids ) ),

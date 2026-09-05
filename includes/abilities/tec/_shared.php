@@ -118,6 +118,30 @@ function aafm_tec_perm_read_organizer( array $input ): bool {
 }
 
 /**
+ * Post statuses a caller may see in a TEC venue/organizer LIST query.
+ *
+ * Neither list ability exposes a `status` input (unlike aafm/tec-get-events, which validates a
+ * caller-requested status against that type's own private-read cap via
+ * aafm_validate_post_status()), so an unscoped `where('post_status', ...)` call would leave TEC's
+ * own repository to pick a default - and that default is generous: Tribe__Repository's
+ * build_query_internally() adds 'private' to the query whenever current_user_can(
+ * 'read_private_posts' ) is true, using WordPress's GENERIC core capability rather than the
+ * venue/organizer type's own mapped read_private_tribe_venues/read_private_tribe_organizers cap
+ * (verified directly against the installed plugin, common/src/Tribe/Repository.php). A role that
+ * carries the generic cap without the type-specific one would otherwise see private venues'
+ * addresses/phone numbers or organizers' emails/phone numbers it cannot edit. Gate on the type's
+ * own private cap instead of trusting the repository's default.
+ *
+ * @param string $post_type Venue or organizer post type constant.
+ * @return string[]
+ */
+function aafm_tec_visible_statuses( string $post_type ): array {
+	$type_object = get_post_type_object( $post_type );
+	$private_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_posts';
+	return current_user_can( $private_cap ) ? array( 'publish', 'private' ) : array( 'publish' );
+}
+
+/**
  * Per-object edit permission for a single event.
  *
  * @param array<string,mixed> $input Input carrying event_id.

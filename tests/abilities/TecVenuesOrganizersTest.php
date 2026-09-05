@@ -182,4 +182,83 @@ final class TecVenuesOrganizersTest extends TestCase {
 
 		$this->assertSame( 2, $out['total'] );
 	}
+
+	public function test_get_venues_hides_a_private_venue_from_a_caller_with_only_the_generic_private_read_cap(): void {
+		self::factory()->post->create(
+			array(
+				'post_type'   => \Tribe__Events__Venue::POSTTYPE,
+				'post_status' => 'private',
+			)
+		);
+
+		// A role that carries WordPress's GENERIC read_private_posts cap (as Editor does) but not
+		// the venue type's own mapped read_private_tribe_venues cap - Codex final round HIGH:
+		// TEC's own repository defaults to the generic cap when no post_status is supplied, which
+		// would otherwise leak a private venue's address/phone to a caller who cannot edit it.
+		$role_name = 'aafm_generic_private_reader';
+		add_role(
+			$role_name,
+			'AAFM Generic Private Reader',
+			array(
+				'read'               => true,
+				'read_private_posts' => true,
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => $role_name ) ) );
+
+		$out = aafm_exec_tec_get_venues( array() );
+
+		remove_role( $role_name );
+		$this->assertSame( 0, $out['total'] );
+	}
+
+	public function test_get_venues_includes_a_private_venue_for_a_caller_with_the_venue_specific_private_read_cap(): void {
+		self::factory()->post->create(
+			array(
+				'post_type'   => \Tribe__Events__Venue::POSTTYPE,
+				'post_status' => 'private',
+			)
+		);
+
+		$role_name = 'aafm_venue_private_reader';
+		add_role(
+			$role_name,
+			'AAFM Venue Private Reader',
+			array(
+				'read'                      => true,
+				'read_private_tribe_venues' => true,
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => $role_name ) ) );
+
+		$out = aafm_exec_tec_get_venues( array() );
+
+		remove_role( $role_name );
+		$this->assertSame( 1, $out['total'] );
+	}
+
+	public function test_get_organizers_hides_a_private_organizer_from_a_caller_with_only_the_generic_private_read_cap(): void {
+		self::factory()->post->create(
+			array(
+				'post_type'   => \Tribe__Events__Organizer::POSTTYPE,
+				'post_status' => 'private',
+			)
+		);
+
+		$role_name = 'aafm_generic_private_reader_org';
+		add_role(
+			$role_name,
+			'AAFM Generic Private Reader Org',
+			array(
+				'read'               => true,
+				'read_private_posts' => true,
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => $role_name ) ) );
+
+		$out = aafm_exec_tec_get_organizers( array() );
+
+		remove_role( $role_name );
+		$this->assertSame( 0, $out['total'] );
+	}
 }

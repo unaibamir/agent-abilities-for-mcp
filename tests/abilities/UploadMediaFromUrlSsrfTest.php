@@ -196,15 +196,17 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round HIGH: pre_http_request short-circuits before Requests' own byte-limit
-	 * transport code ever runs, so the test above never exercises the real truncate-without-
-	 * aborting behavior that let an oversized chunked-encoding response come back exactly
-	 * $max_bytes long (i.e. "accepted", not "too large"). Requesting the real request args this
-	 * function passes to wp_safe_remote_get() proves the actual fix: one byte of headroom is
-	 * requested above the true cap, so a real truncation still lands over $max_bytes and the
-	 * unchanged strlen() check catches it.
+	 * Codex final round 7/8 MEDIUM (fix): the byte cap is no longer enforced via WP's own
+	 * 'limit_response_size' request arg (that mechanism could only reject AFTER a bounded
+	 * download completed, never before). This test's own mock deliberately runs at the SAME
+	 * priority as, but registered BEFORE, aafm_ssrf_safe_fetch_url()'s own pre_http_request
+	 * intercept - proving the production intercept correctly treats an earlier filter's non-false
+	 * return as already-decided and passes it straight through untouched, exactly the convention
+	 * every pre_http_request filter (including a test's own mock) depends on. The request args
+	 * that DO still reach wp_safe_remote_get() (as a fallback default, should the intercept ever
+	 * not fire) still carry the neutral User-Agent and the no-redirect/reject-unsafe-urls floor.
 	 */
-	public function test_requests_one_byte_of_headroom_above_the_real_size_cap(): void {
+	public function test_an_earlier_pre_http_request_filter_is_never_overridden(): void {
 		$captured_args = null;
 		add_filter(
 			'pre_http_request',
@@ -221,15 +223,16 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 			2
 		);
 
-		aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
+		$out = aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
 
 		remove_all_filters( 'pre_http_request' );
 
+		$this->assertInstanceOf( WP_Error::class, $out, "The test's own mock (a 500 response) must be the result used, not silently replaced by the production intercept." );
 		$this->assertIsArray( $captured_args );
-		$this->assertSame( (int) wp_max_upload_size() + 1, $captured_args['limit_response_size'] );
+		$this->assertNull( $captured_args['limit_response_size'], 'The size cap is enforced by the owned-handle fetch now (WP core defaults this arg to null when unset), not this now-obsolete request arg.' );
 
 		// Codex final round 2 HIGH: WP core's default User-Agent discloses the site's own URL to
-		// the caller-supplied host. The request must carry a neutral, non-identifying one instead.
+		// the caller-supplied host. The fallback request must still carry a neutral one instead.
 		$this->assertSame( 'Agent Abilities for MCP (media fetch)', $captured_args['user-agent'] );
 		$this->assertStringNotContainsString( home_url(), (string) $captured_args['user-agent'] );
 	}

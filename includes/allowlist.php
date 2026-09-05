@@ -69,6 +69,17 @@ function aafm_allowlist_overrides(): array {
  * Returns null for a malformed allowed_abilities value, so the caller can skip the row entirely
  * (fail-closed: a bad row is treated as absent, never as all-permissive).
  *
+ * Codex final round 7 LOW, per 228-allowlist-design.md section 6's own fail-closed statement:
+ * "an override row that references an ability slug no longer in the registry ... is never
+ * interpreted as allow everything. The exact fallback: skip the row entirely." A row whose
+ * allowed_abilities lists ONLY a stale or mistyped name (the admin save no longer accepts one at
+ * write time - see aafm_allowlist_sanitize_row() - but an ability can still be renamed/removed by
+ * a later plugin upgrade after the row was saved) matched no real ability name, so
+ * aafm_allowlist_set_permits() denied every call for that scope instead of degrading to
+ * unrestricted. Checked against aafm_get_abilities_registry_full() (every registered ability,
+ * including an inactive integration's) rather than the live registry, so a row saved while an
+ * integration was active does not spuriously look stale the moment that host is deactivated.
+ *
  * @param mixed $allowed_abilities Raw value from a stored row.
  * @return array<int,string>|string|null
  */
@@ -77,7 +88,14 @@ function aafm_allowlist_normalize_allowed( $allowed_abilities ) {
 		return 'all';
 	}
 	if ( is_array( $allowed_abilities ) ) {
-		return array_values( array_map( 'strval', $allowed_abilities ) );
+		$names    = array_values( array_map( 'strval', $allowed_abilities ) );
+		$registry = aafm_get_abilities_registry_full();
+		foreach ( $names as $name ) {
+			if ( ! array_key_exists( $name, $registry ) ) {
+				return null; // Row references an unknown ability: skip the whole row, per design.
+			}
+		}
+		return $names;
 	}
 	return null;
 }

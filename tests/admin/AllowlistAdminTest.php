@@ -268,6 +268,45 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
+	 * Codex final round 7 LOW: a row naming an ability slug not in the registry (typo, or a name
+	 * from a removed integration) used to save successfully and then deny every real ability for
+	 * that role at read time - the opposite of 228-allowlist-design.md section 6's own fail-closed
+	 * statement. Reject the whole save, the same way an unknown role/client already is above.
+	 */
+	public function test_a_row_with_an_unknown_ability_slug_rejects_the_whole_save(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		$previous = array(
+			array(
+				'scope_type'        => 'role',
+				'scope_id'          => 'editor',
+				'allowed_abilities' => array( 'aafm/get-posts' ),
+			),
+		);
+		update_option( 'aafm_ability_allowlist_overrides', $previous );
+
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['allowlist_json'] = wp_json_encode(
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'author',
+					'allowed_abilities' => array( 'aafm/get-postz-typo' ),
+				),
+			)
+		);
+
+		$this->intercept_die();
+		$json = $this->run_handler();
+
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertStringContainsString( 'Row 1', (string) ( $json['data']['message'] ?? '' ) );
+		$this->assertSame( $previous, aafm_allowlist_overrides(), 'The previous option value must survive untouched.' );
+	}
+
+	/**
 	 * A LATER row's error must not be masked by earlier valid rows - the message names the real
 	 * offending row, not always "row 1".
 	 */

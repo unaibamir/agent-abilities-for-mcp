@@ -56,6 +56,21 @@ function aafm_allowlist_sanitize_row( $row ) {
 			)
 		);
 		$allowed = array_values( array_unique( $names ) );
+		// Codex final round 7 LOW: a row naming an ability slug absent from the registry (typo,
+		// or a name from a since-removed integration) used to save successfully and then, at
+		// read time, deny EVERY real ability for that scope - the row matched no real name, so
+		// aafm_allowlist_set_permits() refused everything rather than degrading to unrestricted,
+		// the opposite of 228-allowlist-design.md section 6's fail-closed statement. Reject the
+		// save the same way an unknown role/client is already rejected below, rather than let a
+		// typo silently lock out a role. Checked against the FULL registry (every registered
+		// ability, including an inactive integration's) so a name is not refused merely because
+		// its host plugin happens to be off right now.
+		$registry = aafm_get_abilities_registry_full();
+		foreach ( $allowed as $name ) {
+			if ( ! array_key_exists( $name, $registry ) ) {
+				return null;
+			}
+		}
 	} else {
 		return null;
 	}
@@ -120,7 +135,7 @@ function aafm_ajax_save_allowlist(): void {
 				array(
 					'message' => sprintf(
 						/* translators: %d: 1-based row number in the submitted allowlist. */
-						__( 'Row %d names a role or OAuth client that does not exist. Nothing was saved - fix that row and try again.', 'agent-abilities-for-mcp' ),
+						__( 'Row %d names a role, OAuth client, or ability that does not exist. Nothing was saved - fix that row and try again.', 'agent-abilities-for-mcp' ),
 						(int) $index + 1
 					),
 				),

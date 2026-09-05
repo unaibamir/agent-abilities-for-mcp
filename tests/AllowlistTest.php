@@ -152,4 +152,28 @@ final class AllowlistTest extends TestCase {
 		);
 		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/delete-post', 0, 'trusted-client' ) );
 	}
+
+	/**
+	 * Codex final round 7 LOW, per 228-allowlist-design.md section 6: a row naming an ability
+	 * slug absent from the registry (a name from a since-removed/renamed integration - the admin
+	 * save no longer accepts one, see AllowlistAdminTest) must skip the whole row, degrading to
+	 * unrestricted, never to deny-everything. Before this fix aafm_allowlist_set_permits() denied
+	 * every real ability for the role, because the stale name matched none of them.
+	 */
+	public function test_a_row_referencing_an_ability_absent_from_the_registry_is_skipped(): void {
+		update_option(
+			'aafm_ability_allowlist_overrides',
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'author',
+					'allowed_abilities' => array( 'aafm/get-postz-typo' ),
+				),
+			)
+		);
+		$user_id = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/delete-post', $user_id, null ) );
+		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/get-posts', $user_id, null ) );
+	}
 }

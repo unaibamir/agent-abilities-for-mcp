@@ -375,6 +375,37 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex final round 3 MEDIUM: geodir_get_post_info() has a SECOND filter point the round-2
+	 * fix missed - 'geodir_post_info_query' reshapes the SQL query itself, before either the
+	 * database read or the round-2 filter ever run. Reproduces Codex's own repro: a filter that
+	 * rewrites the query to return an uppercased street column. The confirmation must not go
+	 * through geodir_get_post_info() at all (query filter included), only a direct table read.
+	 */
+	public function test_create_survives_a_decorating_geodir_post_info_query_filter(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		add_filter(
+			'geodir_post_info_query',
+			static function ( $query ) {
+				return preg_replace( '/SELECT \*/', 'SELECT post_id, UPPER(street) AS street, street2, city, region, country, zip, latitude, longitude', (string) $query );
+			}
+		);
+		$out = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'  => 'Query-filter decoration survives',
+				'street' => '1 main st',
+			)
+		);
+		remove_all_filters( 'geodir_post_info_query' );
+
+		// Must NOT be rolled back: the confirmation's direct table read never runs this query at
+		// all, so it sees the real lowercase stored value. The returned shape, still going
+		// through the normal (filtered) read, correctly shows the query-decorated uppercase value.
+		$this->assertIsArray( $out );
+		$this->assertSame( '1 MAIN ST', $out['street'] );
+	}
+
+	/**
 	 * Same failure class as the create-path test above, on update: a title change alone must not
 	 * mask a field that failed to save.
 	 */

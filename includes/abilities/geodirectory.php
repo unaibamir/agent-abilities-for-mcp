@@ -126,21 +126,33 @@ function aafm_geodirectory_read_fields( int $post_id ): array {
 }
 
 /**
- * Read a listing's documented custom-table fields WITHOUT any 'geodir_get_post_info' filter a
- * theme or another plugin might have attached.
+ * Read a listing's documented custom-table fields with a direct, prepared database read of
+ * GeoDirectory's own detail table - no GeoDirectory function, and therefore neither of its two
+ * public filters, involved at all.
  *
- * Codex final round 2 MEDIUM: aafm_geodirectory_write_fields()'s own write-confirmation check
- * (below) used the filtered read, so a legitimate third-party filter that merely reformats the
- * returned object (e.g. title-cases an address) would make the strict comparison fail even
- * though the underlying field persisted exactly as written - wrongly rolling back a real,
- * successful create. The confirmation must compare against the raw stored representation, not
- * whatever a filter chooses to hand back to a normal read.
+ * Codex final round 2 MEDIUM, then round 3 MEDIUM: aafm_geodirectory_write_fields()'s own
+ * write-confirmation check first went through geodir_get_post_info()'s RETURN-value filter
+ * ('geodir_get_post_info'), then, once that was suppressed, round 3 found the SAME function's
+ * QUERY-building filter ('geodir_post_info_query', post-functions.php:61) still reached the
+ * confirmation read - either one could make a legitimate third-party filter that merely
+ * reformats a value (or the query that fetches it) look like a mismatch even though the field
+ * persisted exactly as written, wrongly rolling back a real, successful create. Round 3 also
+ * found the filter-suppression helper this fix used (aafm_call_without_filter(), removed here)
+ * was not WP_Hook-lifecycle-safe: a callback added to the hook WHILE it was suppressed would be
+ * silently discarded on restore. A direct read of GeoDirectory's own table - the exact query
+ * geodir_get_post_info() would run before either filter touches it - has neither problem.
  *
  * @param int $post_id Listing (gd_place) post id.
  * @return array<string,mixed>
  */
 function aafm_geodirectory_read_fields_unfiltered( int $post_id ): array {
-	return aafm_geodirectory_shape_row( aafm_call_without_filter( 'geodir_get_post_info', static fn() => geodir_get_post_info( $post_id, false ) ) );
+	global $wpdb, $plugin_prefix;
+	// Same table-name computation geodir_save_post_meta() itself uses (this file's own docblock);
+	// %i is this codebase's own convention for an identifier placeholder in $wpdb->prepare().
+	$table = ( is_string( $plugin_prefix ) ? $plugin_prefix : $wpdb->prefix . 'geodir_' ) . 'gd_place_detail';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a fresh, uncached, unfiltered read is the entire point (see docblock above).
+	$row = $wpdb->get_row( $wpdb->prepare( 'SELECT street, street2, city, region, country, zip, latitude, longitude FROM %i WHERE post_id = %d', $table, $post_id ), ARRAY_A );
+	return aafm_geodirectory_shape_row( is_array( $row ) ? (object) $row : null );
 }
 
 /**
@@ -160,36 +172,6 @@ function aafm_geodirectory_shape_row( $info ): array {
 	$out['longitude'] = isset( $row['longitude'] ) && is_scalar( $row['longitude'] ) ? (float) $row['longitude'] : 0.0;
 
 	return $out;
-}
-
-/**
- * Run a callback with every callback on one filter hook temporarily removed, restored
- * afterward regardless of how the callback returns (including via exception).
- *
- * WordPress has no built-in "suppress this one filter for one call" primitive; this is the
- * standard technique (snapshot the hook's WP_Hook object, unset it, restore it in a finally).
- * Scoped to exactly the named hook - every other filter on any other hook is untouched.
- *
- * @param string   $hook     Filter/action hook name.
- * @param callable $callback Zero-argument callback to run with that hook suppressed.
- * @return mixed Whatever $callback returns.
- */
-function aafm_call_without_filter( string $hook, callable $callback ) {
-	global $wp_filter;
-	$saved = $wp_filter[ $hook ] ?? null;
-	unset( $wp_filter[ $hook ] );
-	try {
-		return $callback();
-	} finally {
-		if ( null !== $saved ) {
-			// Restoring the exact WP_Hook object this same function unset a moment ago, inside a
-			// try/finally that runs on every exit path (including an exception) - a scoped,
-			// guaranteed-restored suppression of ONE named hook, not a persistent override of
-			// WordPress's filter state. See this function's own docblock: WP has no built-in
-			// "suppress one filter for one call" primitive, and this is the standard technique.
-			$wp_filter[ $hook ] = $saved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-		}
-	}
 }
 
 /**

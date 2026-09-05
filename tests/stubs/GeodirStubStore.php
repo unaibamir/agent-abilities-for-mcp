@@ -7,10 +7,15 @@
  * TecStubStore.php's own "not unconditionally at bootstrap" discipline, since defining a global
  * function is a one-way, process-wide operation that would otherwise leak into every later test.
  *
- * The real geodir_get_post_info()/geodir_save_post_meta() read/write a per-post-type custom
- * database table (see includes/abilities/geodirectory.php's own docblock); this stub uses
- * ordinary post meta instead, since the abilities under test only depend on the documented
- * field set round-tripping, not on the real plugin's table layout.
+ * Codex final round 3 MEDIUM: this stub used to store fields as ordinary post meta, which meant
+ * neither of the real geodir_get_post_info()'s two filter points ('geodir_post_info_query' on
+ * the SQL, 'geodir_get_post_info' on the returned object - see includes/abilities/
+ * geodirectory.php's own docblock) could be genuinely exercised against it, and a raw direct-DB
+ * confirmation read (this plugin's own fix for the false-negative-rollback finding) had nothing
+ * real to read. This stub now creates and uses the REAL detail table
+ * ({$wpdb->prefix}geodir_gd_place_detail, same columns as the installed plugin's own schema-
+ * creation code) and reproduces geodir_save_post_meta()'s exact raw-SQL-concatenation write and
+ * geodir_get_post_info()'s exact two-filter read, so a test can exercise either filter for real.
  *
  * gd_place is registered with the SAME capability_type/map_meta_cap args the installed plugin
  * itself uses (verified 2026-09-05, includes/class-geodir-post-types.php:150,154), so
@@ -24,8 +29,9 @@ declare( strict_types=1 );
 namespace {
 
 	/**
-	 * Registers gd_place and defines the two GeoDirectory functions this plugin's ability file
-	 * calls. Idempotent - safe to call from every GeoDirectory test's set_up().
+	 * Registers gd_place, creates the real detail table, and defines the two GeoDirectory
+	 * functions this plugin's ability file calls. Idempotent - safe to call from every
+	 * GeoDirectory test's set_up().
 	 *
 	 * @return void
 	 */
@@ -43,20 +49,41 @@ namespace {
 		}
 
 		if ( ! function_exists( 'geodir_get_post_info' ) ) {
+			global $wpdb;
+			$table = $wpdb->prefix . 'geodir_gd_place_detail';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange -- test-only fixture table, mirrors the installed plugin's own real schema (class-geodir-admin-install.php).
+			$wpdb->query(
+				"CREATE TABLE IF NOT EXISTS {$table} (
+					post_id BIGINT(20) NOT NULL,
+					street VARCHAR(254) NULL,
+					street2 VARCHAR(254) NULL,
+					city VARCHAR(50) NULL,
+					region VARCHAR(50) NULL,
+					country VARCHAR(50) NULL,
+					zip VARCHAR(50) NULL,
+					latitude VARCHAR(22) NULL,
+					longitude VARCHAR(22) NULL,
+					PRIMARY KEY (post_id)
+				)"
+			);
+
 			// phpcs:ignore Squiz.Functions.MultiLineFunctionDeclaration.NewlineBeforeOpenBrace, WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid -- mirrors GeoDirectory's own real function name/signature so the plugin under test calls a real, matching stand-in.
 			function geodir_get_post_info( $post_id = '', $cached = true ) {
+				global $wpdb;
 				$post_id = (int) $post_id;
 				if ( $post_id <= 0 ) {
 					return false;
 				}
-				$row = array();
-				foreach ( array( 'street', 'street2', 'city', 'region', 'country', 'zip', 'latitude', 'longitude' ) as $field ) {
-					$row[ $field ] = get_post_meta( $post_id, '_aafm_test_gd_' . $field, true );
-				}
-				// The real function applies this exact filter on its return value
-				// (includes/post-functions.php) - reproduced here so a test can register a
-				// decorating filter and prove aafm_geodirectory_read_fields_unfiltered() genuinely
-				// bypasses it, not merely that no test ever attached one.
+				$table = $wpdb->prefix . 'geodir_gd_place_detail';
+				// The real function applies these exact two filters (includes/post-functions.php)
+				// - one on the QUERY before it runs, one on the returned object after - reproduced
+				// here so a test can register either kind and prove
+				// aafm_geodirectory_read_fields_unfiltered()'s direct table read genuinely bypasses
+				// both, not merely that no test ever attached one.
+				$query = apply_filters( 'geodir_post_info_query', $wpdb->prepare( "SELECT * FROM {$table} WHERE post_id = %d", $post_id ) );
+				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $query was already built through $wpdb->prepare() above; the filter may only reshape it, matching the real function.
+				$row = $wpdb->get_row( $query, ARRAY_A );
+				$row = is_array( $row ) ? $row : array();
 				return apply_filters( 'geodir_get_post_info', (object) $row, $post_id );
 			}
 		}
@@ -64,12 +91,8 @@ namespace {
 		if ( ! function_exists( 'geodir_save_post_meta' ) ) {
 			// phpcs:ignore Squiz.Functions.MultiLineFunctionDeclaration.NewlineBeforeOpenBrace, WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid -- mirrors GeoDirectory's own real function name/signature.
 			function geodir_save_post_meta( $post_id, $postmeta = '', $meta_value = '' ) {
-				// Captured BEFORE update_post_meta() runs: that function calls wp_unslash() on
-				// $meta_value internally (wp-includes/meta.php), which would strip a caller's own
-				// esc_sql() backslash before this stub's round trip ever reaches the DB - the real
-				// geodir_save_post_meta() has no such unslashing (it concatenates raw into SQL), so
-				// only this raw-argument capture, not the round-tripped value, can prove what this
-				// plugin's own code actually handed to the function.
+				// Captured BEFORE the write below runs, so a test can inspect exactly what this
+				// plugin's own code handed to the function - independent of how storage happens.
 				aafm_geodir_stub_last_call( (int) $post_id, (string) $postmeta, $meta_value );
 				// A test can force this ONE field to silently fail to persist, mirroring the real
 				// function's own documented failure mode: its $wpdb->query() result is discarded,
@@ -79,7 +102,26 @@ namespace {
 				if ( apply_filters( 'aafm_geodir_stub_simulate_write_failure', false, $postmeta ) ) {
 					return null;
 				}
-				update_post_meta( (int) $post_id, '_aafm_test_gd_' . $postmeta, $meta_value );
+
+				global $wpdb;
+				$table   = $wpdb->prefix . 'geodir_gd_place_detail';
+				$post_id = (int) $post_id;
+				$column  = (string) $postmeta;
+				$exists  = $wpdb->get_var( $wpdb->prepare( "SELECT post_id FROM {$table} WHERE post_id = %d", $post_id ) );
+				// Mirrors the real function's own raw-SQL-concatenation write EXACTLY
+				// (post-functions.php): only post_id is prepared, $meta_value is concatenated
+				// directly into the SQL string. A safer, auto-escaping $wpdb->update()/insert()
+				// call here would double-escape a value this plugin's own code has already run
+				// through esc_sql() - reproducing the real function's insecurity is the point,
+				// since that is exactly the contract aafm_geodirectory_write_fields() is built
+				// around (see this file's own docblock).
+				if ( $exists ) {
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- deliberately mirrors the real vendor function's own raw concatenation; see the comment above.
+					$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET `{$column}` = '{$meta_value}' WHERE post_id = %d", $post_id ) );
+				} else {
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- deliberately mirrors the real vendor function's own raw concatenation; see the comment above.
+					$wpdb->query( $wpdb->prepare( "INSERT INTO {$table} SET post_id = %d, `{$column}` = '{$meta_value}'", $post_id ) );
+				}
 				return true;
 			}
 		}
@@ -88,8 +130,7 @@ namespace {
 			/**
 			 * Records (or, with no arguments, returns) the most recent geodir_save_post_meta()
 			 * call's raw arguments, so a test can inspect exactly what this plugin's own code
-			 * passed in before the stub's own storage mechanism (ordinary post meta, unslashed by
-			 * update_post_meta()) had a chance to alter it.
+			 * passed in before the stub's own storage mechanism had a chance to alter it.
 			 *
 			 * @param int|null    $post_id  Listing post id, or null to read the last call.
 			 * @param string|null $postmeta Column name.

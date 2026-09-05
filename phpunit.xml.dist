@@ -37,6 +37,7 @@
 			<file>tests/TecEventsWireTest.php</file>
 			<file>tests/TecVenuesOrganizersWireTest.php</file>
 			<file>tests/TecTicketsWireTest.php</file>
+			<file>tests/UploadMediaFromUrlWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

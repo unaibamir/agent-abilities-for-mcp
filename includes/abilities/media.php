@@ -19,7 +19,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_media_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_media_definitions( array $registry ): array {
-	$registry['aafm/get-media']          = array(
+	$registry['aafm/get-media']             = array(
 		'label'        => __( 'Get media', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'List media library items (URL, alt, mime, dimensions). Response includes total (the full match count).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -27,7 +27,7 @@ function aafm_register_media_definitions( array $registry ): array {
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_get_media',
 	);
-	$registry['aafm/get-media-item']     = array(
+	$registry['aafm/get-media-item']        = array(
 		'label'        => __( 'Get media item', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Read one media item by id: caption, description, date, filesize, parent, and all image sizes.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -35,7 +35,7 @@ function aafm_register_media_definitions( array $registry ): array {
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_get_media_item',
 	);
-	$registry['aafm/count-media']        = array(
+	$registry['aafm/count-media']           = array(
 		'label'        => __( 'Count media', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Count media library items, total and broken down by mime type.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -43,7 +43,7 @@ function aafm_register_media_definitions( array $registry ): array {
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_count_media',
 	);
-	$registry['aafm/set-featured-image'] = array(
+	$registry['aafm/set-featured-image']    = array(
 		'label'        => __( 'Set featured image', 'agent-abilities-for-mcp' ),
 		'description'  => __( "Set a post's featured image to an existing image attachment ID.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -51,7 +51,7 @@ function aafm_register_media_definitions( array $registry ): array {
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_set_featured_image',
 	);
-	$registry['aafm/upload-media']       = array(
+	$registry['aafm/upload-media']          = array(
 		'label'        => __( 'Upload media', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Upload an image from base64 data (jpg, png, gif, webp; SVG rejected).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -59,7 +59,15 @@ function aafm_register_media_definitions( array $registry ): array {
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_upload_media',
 	);
-	$registry['aafm/update-media']       = array(
+	$registry['aafm/upload-media-from-url'] = array(
+		'label'        => __( 'Upload media from URL', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Fetch an image over HTTPS and upload it (jpg, png, gif, webp; SVG rejected). The URL must resolve to a public host; private/loopback/link-local addresses and redirects are refused.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'media',
+		'args_builder' => 'aafm_args_upload_media_from_url',
+	);
+	$registry['aafm/update-media']          = array(
 		'label'        => __( 'Update media', 'agent-abilities-for-mcp' ),
 		'description'  => __( "Update an attachment's title, alt text, caption, or description.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -67,7 +75,7 @@ function aafm_register_media_definitions( array $registry ): array {
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_update_media',
 	);
-	$registry['aafm/delete-media']       = array(
+	$registry['aafm/delete-media']          = array(
 		'label'        => __( 'Delete media', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Permanently delete an attachment - the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -775,6 +783,33 @@ function aafm_exec_upload_media( array $input ) {
 		return new WP_Error( 'aafm_bad_base64', __( 'Invalid base64 payload.', 'agent-abilities-for-mcp' ) );
 	}
 
+	return aafm_finish_media_upload(
+		$decoded,
+		(string) ( $input['filename'] ?? '' ),
+		isset( $input['alt'] ) ? (string) $input['alt'] : null
+	);
+}
+
+/**
+ * Shared post-decode upload tail: byte-sniff, allow-list, filename sanitize, sideload, kses
+ * re-check, alt text, redacted return shape. Both aafm/upload-media (base64) and
+ * aafm/upload-media-from-url (fetched bytes) call this so the two entry points share one
+ * single-audited pipeline instead of drifting apart (228-url-upload-ssrf-design.md §4,
+ * Codex-review amendment item 9).
+ *
+ * ACCEPTED RISK, operator decision (208 fix round 1, carried forward unchanged). There is no
+ * pre-decode pixel/dimension cap: media_handle_sideload() decodes through the exact same
+ * wp_generate_attachment_metadata() path wp-admin's own uploader uses, so the OOM exposure here
+ * matches core's authenticated upload UI rather than being safer than it. Do not re-open this as
+ * a new finding without a fresh operator decision (228-url-upload-ssrf-design.md §4 explicitly
+ * says not to silently reintroduce one for the URL path either).
+ *
+ * @param string      $decoded            Already-fetched/decoded raw file bytes.
+ * @param string      $requested_filename Caller-supplied filename hint; only the sanitized basename is kept.
+ * @param string|null $alt                Alt text to set on the attachment, or null to leave it untouched.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_finish_media_upload( string $decoded, string $requested_filename, ?string $alt ) {
 	// Size cap from WordPress, enforced before anything is written. wp_handle_sideload() re-checks
 	// this too once media_handle_sideload() runs below (it is the same check a site owner's own
 	// wp_handle_sideload_overrides filter can tighten), so this early check is purely a cheap
@@ -809,7 +844,7 @@ function aafm_exec_upload_media( array $input ) {
 	// nothing can reintroduce a bidi override after it, and the path guarantee does
 	// not weaken, because wp_handle_sideload() -> wp_unique_filename() re-applies
 	// sanitize_file_name() to the name that actually reaches disk.
-	$base      = aafm_sanitize_plain_text( sanitize_file_name( wp_basename( (string) ( $input['filename'] ?? '' ), '.' . pathinfo( (string) ( $input['filename'] ?? '' ), PATHINFO_EXTENSION ) ) ) );
+	$base      = aafm_sanitize_plain_text( sanitize_file_name( wp_basename( $requested_filename, '.' . pathinfo( $requested_filename, PATHINFO_EXTENSION ) ) ) );
 	$base      = '' !== $base ? $base : 'upload';
 	$safe_name = $base . '.' . $allow[ $real_mime ];
 
@@ -882,8 +917,8 @@ function aafm_exec_upload_media( array $input ) {
 	// from the image's own EXIF/IPTC metadata. update_post_meta() unslashes the value, so a
 	// backslash in the alt text is stripped unless it is slashed first, exactly like the sibling
 	// meta writers.
-	if ( isset( $input['alt'] ) ) {
-		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( aafm_sanitize_plain_text( (string) $input['alt'] ) ) );
+	if ( null !== $alt ) {
+		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( aafm_sanitize_plain_text( $alt ) ) );
 	}
 
 	$attachment = get_post( $attachment_id );
@@ -896,6 +931,208 @@ function aafm_exec_upload_media( array $input ) {
 		'attachment_id' => (int) $attachment_id,
 		'media'         => aafm_redact_media( $attachment ),
 	);
+}
+
+/**
+ * Args for aafm/upload-media-from-url.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_upload_media_from_url(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/upload-media-from-url' ),
+		'description'         => aafm_ability_description( 'aafm/upload-media-from-url' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'url'      => array(
+					'type'        => 'string',
+					'format'      => 'uri',
+					'description' => __( 'HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either.', 'agent-abilities-for-mcp' ),
+				),
+				'filename' => array(
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+				'alt'      => array(
+					'type' => 'string',
+				),
+			),
+			'required'             => array( 'url', 'filename' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'attachment_id' => array( 'type' => 'integer' ),
+				'media'         => array( 'type' => 'object' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_upload_media_from_url',
+		'permission_callback' => 'aafm_perm_upload_media',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/upload-media-from-url: SSRF-hardened fetch, then the same post-decode pipeline
+ * aafm/upload-media already uses.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_upload_media_from_url( array $input ) {
+	$fetched = aafm_ssrf_safe_fetch_url( (string) $input['url'] );
+	if ( is_wp_error( $fetched ) ) {
+		return $fetched;
+	}
+
+	return aafm_finish_media_upload(
+		$fetched,
+		(string) ( $input['filename'] ?? '' ),
+		isset( $input['alt'] ) ? (string) $input['alt'] : null
+	);
+}
+
+/**
+ * Resolve a hostname to an IPv4 address, behind a filter so a test can inject a resolver double
+ * and count invocations (proving the real fetch path resolves exactly once - Codex-review
+ * amendment 20 - rather than re-resolving between validation and connection).
+ *
+ * IPv4 only (ponytail: gethostbyname() is a one-line stdlib resolver; a dual-stack resolver adds
+ * real complexity for a feature whose only public exposure is fetching a caller-given image URL,
+ * and 228-url-upload-ssrf-design.md's own "what was not independently re-verified" section leaves
+ * this as an open, explicitly-stated restriction rather than a silent gap - add IPv6 support if a
+ * real need for it turns up).
+ *
+ * @param string $host Hostname to resolve.
+ * @return string|false Dotted-quad IPv4 address, or false on failure.
+ */
+function aafm_resolve_hostname_to_ip( string $host ) {
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.network_functions -- deliberate: this is the pre-flight resolve-and-validate step Task 20's SSRF design pins via CURLOPT_RESOLVE, not a substitute for the fetch itself.
+	return apply_filters( 'aafm_resolve_hostname_to_ip', gethostbyname( $host ), $host );
+}
+
+/**
+ * Whether an IP address falls in a private or reserved range (RFC 1918, loopback, link-local,
+ * and the other IANA special-use ranges, IPv4 and IPv6 alike) - the denylist
+ * 228-url-upload-ssrf-design.md §2 requires on top of wp_http_validate_url()'s own separate check.
+ *
+ * Ponytail: PHP's own filter_var() flags already encode this range list; no hand-rolled CIDR
+ * table to keep in sync. If a specific gap is ever found unguarded, add it as a follow-up filter
+ * rather than replacing this with a hand-rolled list.
+ *
+ * @param string $ip IP address (already confirmed valid by the caller).
+ * @return bool
+ */
+function aafm_ip_is_private_or_reserved( string $ip ): bool {
+	return false === filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE );
+}
+
+/**
+ * SSRF-hardened fetch for aafm/upload-media-from-url, implementing every control decided in
+ * 228-url-upload-ssrf-design.md: https-only, no bare IP-literal host, resolve-once-then-pin via
+ * CURLOPT_RESOLVE (so the connection cannot re-resolve to a different address than the one this
+ * function validated), no redirects, a streamed size-cap abort, and a final size re-check so a
+ * mocked/short-circuited HTTP layer (as this ability's own test suite uses) is covered too.
+ *
+ * @param string $url Caller-supplied URL.
+ * @return string|WP_Error Fetched bytes, or a WP_Error naming which control refused the request.
+ */
+function aafm_ssrf_safe_fetch_url( string $url ) {
+	$parts = wp_parse_url( $url );
+	if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+		return new WP_Error( 'aafm_bad_url', __( 'That is not a valid URL.', 'agent-abilities-for-mcp' ) );
+	}
+	if ( 'https' !== ( $parts['scheme'] ?? '' ) ) {
+		return new WP_Error( 'aafm_bad_scheme', __( 'Only https:// URLs may be fetched.', 'agent-abilities-for-mcp' ) );
+	}
+
+	$host = (string) $parts['host'];
+	if ( false !== filter_var( $host, FILTER_VALIDATE_IP ) ) {
+		return new WP_Error( 'aafm_ip_literal_refused', __( 'A bare IP address may not be used as the upload URL host.', 'agent-abilities-for-mcp' ) );
+	}
+
+	// Resolve ONCE, validate the resolved IP, then pin the connection to it below - never let the
+	// transport re-resolve the hostname on its own between this check and the actual connection.
+	$ip = aafm_resolve_hostname_to_ip( $host );
+	if ( ! is_string( $ip ) || '' === $ip || false === filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+		return new WP_Error( 'aafm_resolve_failed', __( 'The host could not be resolved.', 'agent-abilities-for-mcp' ) );
+	}
+	if ( aafm_ip_is_private_or_reserved( $ip ) ) {
+		return new WP_Error( 'aafm_private_range_refused', __( 'The host resolves to a private or reserved IP address.', 'agent-abilities-for-mcp' ) );
+	}
+
+	$port      = isset( $parts['port'] ) ? (int) $parts['port'] : 443;
+	$max_bytes = (int) wp_max_upload_size();
+	$streamed  = '';
+
+	// Scoped to this one request only: pin the cURL handle to the validated IP (SNI/cert
+	// verification still uses $host, CURLOPT_RESOLVE's whole purpose) and abort mid-transfer the
+	// instant the accumulated byte count exceeds the cap, regardless of what Content-Length
+	// claimed.
+	$pin = static function ( $handle ) use ( $host, $port, $ip, $max_bytes, &$streamed ): void {
+		curl_setopt( $handle, CURLOPT_RESOLVE, array( "{$host}:{$port}:{$ip}" ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions -- pinning a WP_Http_Curl handle to the pre-validated IP; this is the transport hook the SSRF design names, not a bypass of it.
+		curl_setopt( // phpcs:ignore WordPress.WP.AlternativeFunctions
+			$handle,
+			CURLOPT_WRITEFUNCTION,
+			static function ( $curl_handle, $chunk ) use ( $max_bytes, &$streamed ) {
+				$streamed .= $chunk;
+				if ( strlen( $streamed ) > $max_bytes ) {
+					return 0; // Any return other than the chunk length aborts the transfer.
+				}
+				return strlen( $chunk );
+			}
+		);
+	};
+
+	add_action( 'http_api_curl', $pin );
+	$response = wp_safe_remote_get(
+		$url,
+		array(
+			'timeout'            => 10,
+			'redirection'        => 0,
+			'reject_unsafe_urls' => true,
+		)
+	);
+	remove_action( 'http_api_curl', $pin );
+
+	if ( is_wp_error( $response ) ) {
+		if ( strlen( $streamed ) > $max_bytes ) {
+			return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
+		}
+		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
+	}
+
+	$status = (int) wp_remote_retrieve_response_code( $response );
+	if ( $status < 200 || $status >= 300 ) {
+		// Covers redirects too: redirection => 0 means a 3xx is returned as-is rather than
+		// followed, so it lands here as a plain failure instead of a fetched file.
+		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
+	}
+
+	$content_length = wp_remote_retrieve_header( $response, 'content-length' );
+	if ( is_numeric( $content_length ) && (int) $content_length > $max_bytes ) {
+		return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
+	}
+
+	// Prefer the streamed bytes (the real-transport path); fall back to the response body for a
+	// mocked/short-circuited HTTP layer, which never invokes the http_api_curl callback above.
+	$body = '' !== $streamed ? $streamed : (string) wp_remote_retrieve_body( $response );
+	if ( strlen( $body ) > $max_bytes ) {
+		return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
+	}
+	if ( '' === $body ) {
+		return new WP_Error( 'aafm_fetch_failed', __( 'The URL returned no data.', 'agent-abilities-for-mcp' ) );
+	}
+
+	return $body;
 }
 
 /**

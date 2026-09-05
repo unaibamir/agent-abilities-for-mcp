@@ -243,6 +243,35 @@ function aafm_fusion_shortcode_tags(): array {
 }
 
 /**
+ * Whether every quote character in a shortcode's raw attribute string that actually opens a
+ * quoted value also closes it - tracking which quote character is the ACTIVE delimiter, not
+ * just counting '"' and "'" independently.
+ *
+ * A quote of the OTHER kind encountered while already inside a quoted value (title="Bob's
+ * title") is ordinary content, not a second delimiter, and must not count against the balance -
+ * see aafm_fusion_shortcode_walk()'s own docblock for why an unclosed delimiter (the literal-']'
+ * trap) must still fail closed.
+ *
+ * @param string $attribute_str Raw attribute string as captured by get_shortcode_regex().
+ * @return bool True when no quoted value was left open at the end of the string.
+ */
+function aafm_fusion_attribute_quotes_balanced( string $attribute_str ): bool {
+	$active_delimiter = null;
+	$length           = strlen( $attribute_str );
+	for ( $i = 0; $i < $length; $i++ ) {
+		$char = $attribute_str[ $i ];
+		if ( null === $active_delimiter ) {
+			if ( '"' === $char || "'" === $char ) {
+				$active_delimiter = $char;
+			}
+		} elseif ( $char === $active_delimiter ) {
+			$active_delimiter = null;
+		}
+	}
+	return null === $active_delimiter;
+}
+
+/**
  * Build a structural signature of every Fusion shortcode in $content: an ordered list of
  * (tag, self_closing, atts, depth) tuples, walked recursively.
  *
@@ -289,10 +318,18 @@ function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
 		$self_closing  = '/' === ( $match[4] ?? '' );
 		$inner         = (string) ( $match[5] ?? '' );
 
-		// An unbalanced quote count means get_shortcode_regex()'s attribute-span capture ran off
-		// the rails (the literal-']'-in-a-quoted-value trap) - refuse rather than trust a span
-		// that does not cover what it looks like it covers.
-		if ( 1 === ( substr_count( $attribute_str, '"' ) % 2 ) || 1 === ( substr_count( $attribute_str, "'" ) % 2 ) ) {
+		// A quote that opens but never closes means get_shortcode_regex()'s attribute-span
+		// capture ran off the rails (the literal-']'-in-a-quoted-value trap) - refuse rather than
+		// trust a span that does not cover what it looks like it covers.
+		//
+		// Codex final round 5 MEDIUM: counting each quote character independently (an odd count
+		// of '"' OR an odd count of "'") false-positives on a perfectly ordinary attribute like
+		// title="Bob's title" - one apostrophe INSIDE a double-quoted value is not a delimiter at
+		// all, just a literal character, but the old count-parity check could not tell the two
+		// apart. Track which quote character is actually the ACTIVE delimiter instead: a quote of
+		// the other kind encountered while already inside a quoted value is ordinary content, not
+		// a second delimiter.
+		if ( ! aafm_fusion_attribute_quotes_balanced( $attribute_str ) ) {
 			return null;
 		}
 

@@ -127,6 +127,32 @@ final class AvadaTest extends TestCase {
 		$this->assertStringContainsString( '[fusion_separator /]', $post->post_content );
 	}
 
+	/**
+	 * Codex final round 5 MEDIUM: counting each quote character independently (odd '"' OR odd
+	 * "'") false-positived on a perfectly ordinary attribute value containing an apostrophe
+	 * INSIDE a double-quoted value - not a second delimiter, just a literal character. A safe,
+	 * unrelated plain-text edit must not be refused because of it.
+	 */
+	public function test_replace_text_allows_an_apostrophe_inside_a_double_quoted_attribute(): void {
+		$content = '[fusion_text title="Bob\'s title"]Hello[/fusion_text]';
+		$id      = $this->make_avada_post( $content );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'Hello',
+				'replace' => 'Hi',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['replacements'] );
+		$post = get_post( $id );
+		$this->assertStringContainsString( 'Hi', $post->post_content );
+		$this->assertStringContainsString( 'title="Bob\'s title"', $post->post_content );
+	}
+
 	public function test_replace_text_refuses_an_edit_that_would_alter_a_self_closing_element(): void {
 		$content = '[fusion_builder_container]Text[fusion_separator /]More[/fusion_builder_container]';
 		$id      = $this->make_avada_post( $content );

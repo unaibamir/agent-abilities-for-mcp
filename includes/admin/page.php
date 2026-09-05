@@ -2872,7 +2872,7 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'What does the plugin log, and does it call out to anything?', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'The plugin sends nothing about your site or its content anywhere. It can make two outbound requests of its own: the Connection tab\'s same-origin reachability check, and, only if you turn on the "Upload media from URL" ability, a fetch of the URL your AI client supplies so that file can be added to your media library.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab\'s same-origin reachability check, and, only if you turn on the "Upload media from URL" ability, a fetch of the URL your AI client supplies so that file can be added to your media library - like any HTTP request, that fetch reveals the URL, your site\'s IP, and its timing to whatever server answers it.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'The activity log records only the argument KEYS of each call (never the values) plus the source IP address of the request. You can clear it any time from the Activity Log tab.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)

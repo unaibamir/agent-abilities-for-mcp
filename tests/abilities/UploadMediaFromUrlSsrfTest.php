@@ -124,6 +124,48 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
+	 * Codex final round 9 MEDIUM: this function short-circuits WP's HTTP transport via
+	 * 'pre_http_request', which runs BEFORE 'reject_unsafe_urls' is ever acted on inside
+	 * WP_Http::request() - so passing that request arg gave no actual port protection, and an
+	 * otherwise-valid public host on an arbitrary port (a probe of any open TLS service on the
+	 * public internet, not just image hosts) sailed through. Fixed by re-deriving the same
+	 * 80/443/8080 default allowlist wp_http_validate_url() itself uses.
+	 */
+	public function test_refuses_a_port_outside_the_safe_allowlist(): void {
+		$out = aafm_ssrf_safe_fetch_url( 'https://example.test:8443/pixel.png' );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_unsafe_port', $out->get_error_code() );
+	}
+
+	/**
+	 * The 'http_allowed_safe_ports' filter is WP core's own mechanism for a site to widen that
+	 * default allowlist; a site that already uses it for its other HTTP calls should not need a
+	 * second, plugin-specific setting for this ability to respect the same policy.
+	 */
+	public function test_a_port_added_via_the_core_safe_ports_filter_is_allowed(): void {
+		add_filter(
+			'http_allowed_safe_ports',
+			static fn( array $ports ): array => array_merge( $ports, array( 8443 ) )
+		);
+		add_filter(
+			'pre_http_request',
+			static fn() => array(
+				'headers'  => array( 'content-type' => 'image/png' ),
+				'body'     => base64_decode( self::PNG_B64 ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding a fixture constant, not obfuscating anything.
+				'response' => array( 'code' => 200 ),
+				'cookies'  => array(),
+			)
+		);
+
+		$out = aafm_ssrf_safe_fetch_url( 'https://example.test:8443/pixel.png' );
+
+		remove_all_filters( 'http_allowed_safe_ports' );
+		remove_all_filters( 'pre_http_request' );
+
+		$this->assertIsString( $out );
+	}
+
+	/**
 	 * The call-count proof Codex-review amendment 20 requires: a resolver double that fails the
 	 * test if invoked more than once for a single fetch. A naive re-resolution bug passes a plain
 	 * "is refused" test (the first, validated resolution is what a refusal test checks) - only a
@@ -198,13 +240,15 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	/**
 	 * Codex final round 7/8 MEDIUM (fix): the byte cap is no longer enforced via WP's own
 	 * 'limit_response_size' request arg (that mechanism could only reject AFTER a bounded
-	 * download completed, never before). This test's own mock deliberately runs at the SAME
-	 * priority as, but registered BEFORE, aafm_ssrf_safe_fetch_url()'s own pre_http_request
-	 * intercept - proving the production intercept correctly treats an earlier filter's non-false
-	 * return as already-decided and passes it straight through untouched, exactly the convention
-	 * every pre_http_request filter (including a test's own mock) depends on. The request args
-	 * that DO still reach wp_safe_remote_get() (as a fallback default, should the intercept ever
-	 * not fire) still carry the neutral User-Agent and the no-redirect/reject-unsafe-urls floor.
+	 * download completed, never before). This test's own mock deliberately runs at a LOWER
+	 * priority than aafm_ssrf_safe_fetch_url()'s own pre_http_request intercept (which registers
+	 * at PHP_INT_MAX as of round 9, so any earlier-registered callback, at any priority, still
+	 * runs first) - proving the production intercept correctly treats an earlier filter's
+	 * non-false return as already-decided and passes it straight through untouched, exactly the
+	 * convention every pre_http_request filter (including a test's own mock) depends on. The
+	 * request args that DO still reach wp_safe_remote_get() (as a fallback default, should the
+	 * intercept ever not fire) still carry the neutral User-Agent and the
+	 * no-redirect/reject-unsafe-urls floor.
 	 */
 	public function test_an_earlier_pre_http_request_filter_is_never_overridden(): void {
 		$captured_args = null;
@@ -235,6 +279,52 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 		// the caller-supplied host. The fallback request must still carry a neutral one instead.
 		$this->assertSame( 'Agent Abilities for MCP (media fetch)', $captured_args['user-agent'] );
 		$this->assertStringNotContainsString( home_url(), (string) $captured_args['user-agent'] );
+	}
+
+	/**
+	 * Codex final round 9 MEDIUM (fix): before this round, the intercept registered at the
+	 * default priority 10, so a LATER, permanently-registered 'pre_http_request' callback (e.g.
+	 * from another plugin) could discard the pinned response this function already produced and
+	 * force WordPress to fall through to its own unpinned transport - reopening exactly the
+	 * DNS/proxy path this whole design exists to close. Registering at PHP_INT_MAX instead means
+	 * nothing can ever run after this intercept (it is the highest priority PHP can represent),
+	 * closing the override by construction rather than by hoping every third-party callback
+	 * happens to use a lower number. Proven here by inspecting WP's own filter registry from
+	 * inside an even-lower-priority spy - which also short-circuits with a non-false mock so
+	 * this test never lets the real owned-handle fetch touch the network.
+	 */
+	public function test_the_intercept_registers_at_the_maximum_priority_so_nothing_can_run_after_it(): void {
+		$observed_priority = null;
+		add_filter(
+			'pre_http_request',
+			static function () use ( &$observed_priority ) {
+				global $wp_filter;
+				if ( isset( $wp_filter['pre_http_request'] ) ) {
+					$priorities        = array_keys( $wp_filter['pre_http_request']->callbacks );
+					$observed_priority = empty( $priorities ) ? null : max( $priorities );
+				}
+				// Non-false: short-circuits before the production intercept's own body ever runs,
+				// so this test never performs a real network fetch.
+				return array(
+					'headers'  => array(),
+					'body'     => '',
+					'response' => array( 'code' => 500 ),
+					'cookies'  => array(),
+				);
+			},
+			1,
+			1
+		);
+
+		aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
+
+		remove_all_filters( 'pre_http_request' );
+
+		$this->assertSame(
+			PHP_INT_MAX,
+			$observed_priority,
+			"aafm_ssrf_safe_fetch_url()'s own pre_http_request intercept must register at PHP_INT_MAX so no later-registered callback can discard its pinned response."
+		);
 	}
 
 	public function test_a_non_image_response_is_refused_by_the_existing_byte_sniff(): void {

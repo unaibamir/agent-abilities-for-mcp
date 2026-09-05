@@ -1125,6 +1125,16 @@ function aafm_url_would_use_proxy( string $url ): bool {
  * handle, so its own HEADERFUNCTION/WRITEFUNCTION callbacks can safely abort the transfer, and
  * there is no shared http_api_curl hook left for a later-priority callback to race.
  *
+ * Codex final round 9 MEDIUM: moving off http_api_curl closed that race but opened a new one one
+ * level up - the `pre_http_request` short-circuit itself ran at the default priority, so any
+ * OTHER, permanently-registered callback on that same hook at a later priority could discard this
+ * function's pinned response and let WP fall through to its own unpinned transport. Fixed by
+ * registering at PHP_INT_MAX (nothing runs after it) with a `finally` guaranteeing the transient
+ * hook is removed even if an earlier callback throws; see the comment at the add_filter() call
+ * below for the mechanics. Also found in the same round: the resolved port was never checked
+ * against WP's own safe-port allowlist (80/443/8080 by default), because this short-circuit
+ * bypasses 'reject_unsafe_urls' entirely - fixed just above by re-deriving that same check.
+ *
  * @param string $url Caller-supplied URL.
  * @return string|WP_Error Fetched bytes, or a WP_Error naming which control refused the request.
  */
@@ -1163,34 +1173,65 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 	$port      = isset( $parts['port'] ) ? (int) $parts['port'] : 443;
 	$max_bytes = (int) wp_max_upload_size();
 
+	// Codex final round 9 MEDIUM: 'reject_unsafe_urls' below is passed to wp_safe_remote_get(),
+	// but WP_Http::request() only acts on it AFTER firing 'pre_http_request' - the short-circuit
+	// this function installs runs first and returns before that safe-port check ever executes, so
+	// it never actually applied here despite being requested. Re-derive the same allowlist
+	// wp_http_validate_url() itself uses (default 80/443/8080, still filterable by
+	// 'http_allowed_safe_ports' so a site customizing that filter for its other HTTP calls gets
+	// the same behaviour here) rather than calling that function directly, which would perform its
+	// own unmocked gethostbyname() lookup on top of aafm_resolve_hostname_to_ip() above.
+	$allowed_ports = apply_filters( 'http_allowed_safe_ports', array( 80, 443, 8080 ), $host, $url ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- mirroring core's own hook (wp-includes/http.php), not a hook this plugin defines.
+	if ( ! is_array( $allowed_ports ) || ! in_array( $port, $allowed_ports, true ) ) {
+		return new WP_Error( 'aafm_unsafe_port', __( 'That port is not allowed for a remote fetch.', 'agent-abilities-for-mcp' ) );
+	}
+
 	// Short-circuit WP's HTTP transport for THIS url only, on a handle this function owns
 	// outright (aafm_ssrf_owned_curl_fetch()) - see this function's docblock for why. A
 	// well-behaved pre_http_request filter never overrides an earlier one's short-circuit (the
 	// convention every core and third-party filter on this hook follows, and the one a test's own
 	// mock relies on): pass a non-false $preempt straight through untouched, and never touch a
 	// request for a different URL that happens to run in the same PHP process.
+	//
+	// Codex final round 9 MEDIUM: registering at the default priority 10 let any OTHER,
+	// permanently-registered 'pre_http_request' callback at a later priority run AFTER this one
+	// and discard its return value - a badly-behaved callback that unconditionally returns false
+	// regardless of the $preempt it was handed would silently undo the pin and send the request
+	// through WP's ordinary, unpinned transport instead. Registering at PHP_INT_MAX instead makes
+	// this callback the last one WordPress runs on this hook, so nothing can act after it: any
+	// earlier-registered callback still runs first (as it always would have), but whatever it
+	// leaves in $preempt is what THIS callback inspects and has the final say over, closing the
+	// override this finding demonstrated. remove_filter() must use the identical priority
+	// argument or it is a silent no-op that would leave this closure registered indefinitely.
 	$intercept = static function ( $preempt, $parsed_args, $request_url ) use ( $url, $host, $port, $ip, $max_bytes ) {
 		if ( false !== $preempt || $request_url !== $url ) {
 			return $preempt;
 		}
 		return aafm_ssrf_owned_curl_fetch( $url, $host, $port, $ip, $max_bytes );
 	};
-	add_filter( 'pre_http_request', $intercept, 10, 3 );
-	$response = wp_safe_remote_get(
-		$url,
-		array(
-			'timeout'            => 10,
-			'redirection'        => 0,
-			'reject_unsafe_urls' => true,
-			// Codex final round 2 HIGH: WP core's default User-Agent ('WordPress/{version};
-			// {site url}', class-wp-http.php) discloses the site's own URL to whatever host the
-			// caller supplied - not a leak of post content, but not "sends nothing of yours"
-			// either. A neutral, non-identifying string removes the disclosure at its source
-			// rather than merely documenting it.
-			'user-agent'         => 'Agent Abilities for MCP (media fetch)',
-		)
-	);
-	remove_filter( 'pre_http_request', $intercept, 10 );
+	add_filter( 'pre_http_request', $intercept, PHP_INT_MAX, 3 );
+	try {
+		$response = wp_safe_remote_get(
+			$url,
+			array(
+				'timeout'            => 10,
+				'redirection'        => 0,
+				'reject_unsafe_urls' => true,
+				// Codex final round 2 HIGH: WP core's default User-Agent ('WordPress/{version};
+				// {site url}', class-wp-http.php) discloses the site's own URL to whatever host
+				// the caller supplied - not a leak of post content, but not "sends nothing of
+				// yours" either. A neutral, non-identifying string removes the disclosure at its
+				// source rather than merely documenting it.
+				'user-agent'         => 'Agent Abilities for MCP (media fetch)',
+			)
+		);
+	} finally {
+		// Codex final round 9 LOW: a `finally` guarantees this scoped hook is always removed,
+		// even if some OTHER 'pre_http_request' callback ahead of it in the chain throws - without
+		// it, this closure (and the $ip/$max_bytes it closes over) would stay registered for every
+		// later request in the same PHP process.
+		remove_filter( 'pre_http_request', $intercept, PHP_INT_MAX );
+	}
 
 	if ( is_wp_error( $response ) ) {
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );

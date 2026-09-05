@@ -1449,6 +1449,34 @@ if ( ! class_exists( 'Tribe__Tickets__Tickets' ) ) {
 	}
 }
 
+if ( ! function_exists( 'geodir_get_post_info' ) ) {
+	/**
+	 * Minimal GeoDirectory signature for static analysis only. Real GeoDirectory (or the test
+	 * stub, tests/stubs/GeodirStubStore.php) supplies the real function at runtime.
+	 *
+	 * @param int|string $post_id Listing post id.
+	 * @param bool       $cached  Whether to read the cached copy.
+	 * @return object|false
+	 */
+	function geodir_get_post_info( $post_id = '', $cached = true ) {
+		return false;
+	}
+}
+
+if ( ! function_exists( 'geodir_save_post_meta' ) ) {
+	/**
+	 * Minimal GeoDirectory signature for static analysis only.
+	 *
+	 * @param int    $post_id    Listing post id.
+	 * @param string $postmeta   Column name.
+	 * @param mixed  $meta_value Value to store.
+	 * @return bool
+	 */
+	function geodir_save_post_meta( $post_id, $postmeta = '', $meta_value = '' ) {
+		return true;
+	}
+}
+
 if ( ! class_exists( 'WP_CLI' ) ) {
 	/**
 	 * Minimal WP-CLI signature for static analysis only. Real WP_CLI is provided by the

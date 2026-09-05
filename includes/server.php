@@ -394,6 +394,26 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/tec-get-organizer':
 			return static fn(): bool => current_user_can( 'read' );
 
+		// Avada (added 1.7.4): both abilities gate per-object on aafm_can_edit_post_object() via
+		// aafm_perm_avada_post_object() (includes/abilities/avada.php) - false with empty input,
+		// the same shape as update-post/replace-in-post, so both need the identical
+		// aafm_can_edit_post_family() floor.
+		case 'aafm/avada-get-page-content':
+		case 'aafm/avada-replace-text':
+			return static fn(): bool => aafm_can_edit_post_family();
+
+		// GeoDirectory (added 1.7.4, default-off): gd_place registers with the literal
+		// 'capability_type' => 'post', so its mapped caps are the SAME primitive names as the
+		// built-in post type - aafm_can_edit_post_family() applies unchanged. Both abilities gate
+		// per-object (aafm_perm_geodirectory_get()/aafm_perm_geodirectory_update(), both check
+		// edit_posts first and are false with empty input once a real listing_id is required).
+		// geodirectory-get-listings (list) and geodirectory-create-listing (create) are
+		// object-independent and need no case here - each falls through to its real
+		// permission_callback with empty input, the correct discovery answer.
+		case 'aafm/geodirectory-get-listing':
+		case 'aafm/geodirectory-update-listing':
+			return static fn(): bool => aafm_can_edit_post_family();
+
 		// ACF integration, post fields: gates per-object on edit_post($id) (aafm_perm_acf_post ->
 		// aafm_can_edit_post_object), false with empty input - same floor as the SEO family above,
 		// for the same reason (both delegate to the identical shared content-edit gate).

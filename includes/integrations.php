@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'geodirectory'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
@@ -51,6 +51,12 @@ function aafm_integration_active( string $slug ): bool {
 			break;
 		case 'event_tickets':
 			$active = aafm_event_tickets_active();
+			break;
+		case 'avada':
+			$active = aafm_avada_active();
+			break;
+		case 'geodirectory':
+			$active = aafm_geodirectory_active();
 			break;
 		default:
 			return false;
@@ -298,6 +304,50 @@ function aafm_event_tickets_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_event_tickets_active', $active );
+}
+
+/**
+ * Whether Avada/Fusion Builder is active, behind a filterable seam.
+ *
+ * Avada is a theme, not a plugin, and Fusion Builder ships as the bundled
+ * fusion-builder plugin - detection keys on the plugin's own runtime, confirmed
+ * (2026-09-05) against a real installed copy (Fusion Builder 3.16.1): the class
+ * FusionBuilder always exists once the plugin has loaded, and fusion_builder_map()
+ * is one of its own core registration functions. No version floor is imposed - unlike
+ * TEC/Event Tickets, this plan pins no minimum Avada/Fusion Builder version.
+ *
+ * @return bool
+ */
+function aafm_avada_active(): bool {
+	$active = class_exists( 'FusionBuilder' ) && function_exists( 'fusion_builder_map' );
+
+	/**
+	 * Filters whether Avada/Fusion Builder is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_avada_active', $active );
+}
+
+/**
+ * Whether GeoDirectory is active, behind a filterable seam.
+ *
+ * Real detection is the same pairing Task 22's own research used to confirm the plugin's
+ * runtime: the geodir_get_post_info() function (includes/post-functions.php) plus the gd_place
+ * post type it registers (includes/class-geodir-post-types.php) both being present, so a partial
+ * or mid-activation state does not falsely report active.
+ *
+ * @return bool
+ */
+function aafm_geodirectory_active(): bool {
+	$active = function_exists( 'geodir_get_post_info' ) && post_type_exists( 'gd_place' );
+
+	/**
+	 * Filters whether GeoDirectory is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_geodirectory_active', $active );
 }
 
 /**

@@ -29,6 +29,18 @@ final class PageBuilderGuardTest extends TestCase {
 		$this->assertSame( 'beaver-builder', aafm_post_has_foreign_builder_ownership( $id ) );
 	}
 
+	public function test_avada_marker_is_detected(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, 'fusion_builder_status', 'active' );
+		$this->assertSame( 'avada', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
+	public function test_avada_converted_marker_is_detected(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, 'fusion_builder_converted', 'yes' );
+		$this->assertSame( 'avada', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
 	public function test_a_plain_post_has_no_builder_ownership(): void {
 		$id = self::factory()->post->create();
 		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );

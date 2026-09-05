@@ -16,6 +16,18 @@
  * available in this repo) - see 228-plan-1-7-4-features.md Amendment 22. This is recorded as an
  * open scope gap below, not shipped as a guessed marker.
  *
+ * Avada/Fusion Builder's marker WAS confirmed (2026-09-05) against a real installed copy (Avada
+ * 7.16.1 theme, Fusion Builder 3.16.1 plugin): `fusion_builder_status` post meta set to 'active'
+ * (inc/class-fusion-builder.php:1736, read back at :1751/:2723/:2732 to decide whether a page is
+ * builder-owned) and `fusion_builder_converted` set to 'yes' for content migrated to the modern
+ * builder (same file, same read sites). 228-avada-guard-design.md, written without a live install,
+ * had assumed no such key existed and scoped its own guard to post_content alone - this is the
+ * "new information" it said would require a follow-up, not a gap in that design. Both keys are
+ * added below so the GENERIC guard also refuses a write on an Avada-owned post, exactly like
+ * Elementor/Divi/Beaver Builder; aafm/avada-replace-text (includes/abilities/avada.php) is the one
+ * exception that allows a text-only edit, via its own shortcode-tree signature check rather than
+ * this blanket refusal.
+ *
  * @package AgentAbilitiesForMCP
  */
 
@@ -40,9 +52,11 @@ function aafm_post_has_foreign_builder_ownership( int $post_id ) {
 	$markers = apply_filters(
 		'aafm_page_builder_markers',
 		array(
-			'_elementor_data'   => 'elementor',
-			'et_pb_use_builder' => 'divi',
-			'_fl_builder_data'  => 'beaver-builder',
+			'_elementor_data'          => 'elementor',
+			'et_pb_use_builder'        => 'divi',
+			'_fl_builder_data'         => 'beaver-builder',
+			'fusion_builder_status'    => 'avada',
+			'fusion_builder_converted' => 'avada',
 		)
 	);
 

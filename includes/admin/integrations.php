@@ -70,6 +70,20 @@ function aafm_integration_cards(): array {
 			'icon'    => 'integrations',
 			'plugins' => array( 'event-tickets/event-tickets.php' ),
 		),
+		'avada'         => array(
+			'label'   => __( 'Avada / Fusion Builder', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			// Avada is a theme, not a plugin - there is no plugin file to probe for an
+			// "installed but inactive" state, so this deliberately stays empty and
+			// aafm_integration_status() falls through to 'not_installed' whenever inactive
+			// (Task 21 Step 7: active/not_installed only, no installed_inactive for this card).
+			'plugins' => array(),
+		),
+		'geodirectory'  => array(
+			'label'   => __( 'GeoDirectory', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'geodirectory/geodirectory.php' ),
+		),
 	);
 }
 

@@ -406,6 +406,34 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
+		'avada'         => array(
+			array(
+				'name' => 'aafm/avada-get-page-content',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/avada-replace-text',
+				'risk' => 'write',
+			),
+		),
+		'geodirectory'  => array(
+			array(
+				'name' => 'aafm/geodirectory-get-listings',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/geodirectory-get-listing',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/geodirectory-create-listing',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/geodirectory-update-listing',
+				'risk' => 'write',
+			),
+		),
 	);
 }
 

@@ -38,6 +38,8 @@
 			<file>tests/TecVenuesOrganizersWireTest.php</file>
 			<file>tests/TecTicketsWireTest.php</file>
 			<file>tests/UploadMediaFromUrlWireTest.php</file>
+			<file>tests/AvadaWireTest.php</file>
+			<file>tests/GeodirectoryWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

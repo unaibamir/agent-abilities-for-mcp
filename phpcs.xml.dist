@@ -35,6 +35,11 @@
 	     A throwaway test fixture, never shipped, same class as the AdapterEager/AdapterShell
 	     exclusions above. -->
 	<exclude-pattern>*/tests/stubs/TecStubStore.php</exclude-pattern>
+	<!-- Same reasoning as TecStubStore.php above: the GeoDirectory stub declares the THIRD-PARTY
+	     globals (geodir_get_post_info(), geodir_save_post_meta()) this plugin's own GeoDirectory
+	     integration calls - names it cannot prefix without breaking the calls it stands in for.
+	     A throwaway test fixture, never shipped. -->
+	<exclude-pattern>*/tests/stubs/GeodirStubStore.php</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="basepath" value="."/>

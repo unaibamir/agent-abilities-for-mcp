@@ -128,4 +128,28 @@ final class TecTicketsTest extends TestCase {
 		wp_set_current_user( $other_id );
 		$this->assertFalse( aafm_tec_perm_edit_event( array( 'event_id' => $event_id ) ) );
 	}
+
+	/**
+	 * Codex final round 3 MEDIUM: Event Tickets can run standalone, with no Events Calendar
+	 * installed at all - attaching tickets to an ordinary post or page. Every ticket ability here
+	 * is gated on the ticket's PARENT EVENT via Tribe__Events__Main::POSTTYPE/edit_tribe_event,
+	 * both defined by TEC itself, so registering these abilities without TEC active would expose
+	 * a tool that fatals or misbehaves the moment it's actually called. They must not register at
+	 * all when Event Tickets is active but TEC is not.
+	 */
+	public function test_ticket_abilities_do_not_register_without_tec_even_if_event_tickets_is_active(): void {
+		remove_filter( 'aafm_integration_active_tec', '__return_true' );
+		add_filter( 'aafm_integration_active_tec', '__return_false' );
+		aafm_flush_registry_cache();
+
+		$registry = aafm_get_abilities_registry();
+
+		remove_filter( 'aafm_integration_active_tec', '__return_false' );
+		add_filter( 'aafm_integration_active_tec', '__return_true' ); // Restore for tear_down()'s own removal.
+		aafm_flush_registry_cache();
+
+		$this->assertArrayNotHasKey( 'aafm/tec-get-tickets', $registry );
+		$this->assertArrayNotHasKey( 'aafm/tec-get-ticket', $registry );
+		$this->assertArrayNotHasKey( 'aafm/tec-get-attendees', $registry );
+	}
 }

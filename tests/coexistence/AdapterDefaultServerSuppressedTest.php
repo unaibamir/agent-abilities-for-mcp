@@ -2,7 +2,7 @@
 /**
  * Coexistence: the adapter's automatic "default MCP server" must stay disabled.
  *
- * wordpress/mcp-adapter auto-registers a server (server_id
+ * Wordpress/mcp-adapter auto-registers a server (server_id
  * 'mcp-adapter-default-server') that discovers and exposes ANY ability across ANY plugin
  * carrying meta.mcp.public=true, unless a consumer returns false on the
  * mcp_adapter_create_default_server filter (WP\MCP\Core\McpAdapter::maybe_create_default_server(),
@@ -30,7 +30,7 @@ final class AdapterDefaultServerSuppressedTest extends TestCase {
 		);
 
 		$this->assertFalse(
-			apply_filters( 'mcp_adapter_create_default_server', true ),
+			apply_filters( 'mcp_adapter_create_default_server', true ), // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
 			'The mcp_adapter_create_default_server filter chain must resolve to false on this site.'
 		);
 	}
@@ -44,7 +44,7 @@ final class AdapterDefaultServerSuppressedTest extends TestCase {
 	 * maybe_create_default_server() entirely and would pass even if the suppression filter were
 	 * silently removed. Firing the real rest_api_init action is what actually exercises it.
 	 *
-	 * init() also guards itself with a static $initialized flag, so if some earlier test in this
+	 * Init() also guards itself with a static $initialized flag, so if some earlier test in this
 	 * same PHPUnit process already triggered rest_api_init (several do:
 	 * tests/oauth/SchemaTest.php, tests/oauth/HandshakeTest.php, tests/audit/LogInternalsTest.php
 	 * among others), this call is a no-op - but that is fine here: maybe_create_default_server()
@@ -56,7 +56,7 @@ final class AdapterDefaultServerSuppressedTest extends TestCase {
 	public function test_default_server_is_never_created(): void {
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 
-		do_action( 'rest_api_init' );
+		do_action( 'rest_api_init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WP core hook, fired for real (not simulated) so McpAdapter::init()'s own hooked callback actually runs.
 
 		$this->assertNull(
 			$adapter->get_server( 'mcp-adapter-default-server' ),

@@ -32,7 +32,9 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 			$_POST['aafm_exposed_user_meta_keys'],
 			$_POST['aafm_denied_user_meta_keys'],
 			$_POST['aafm_exposed_term_meta_keys'],
-			$_POST['aafm_denied_term_meta_keys']
+			$_POST['aafm_denied_term_meta_keys'],
+			$_POST['aafm_oauth_enabled'],
+			$_POST['aafm_ip_allowlist']
 		);
 		wp_cache_delete( 'alloptions', 'options' );
 		delete_option( 'aafm_allowed_meta_keys' );
@@ -41,6 +43,9 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		delete_option( 'aafm_denied_user_meta_keys' );
 		delete_option( 'aafm_exposed_term_meta_keys' );
 		delete_option( 'aafm_denied_term_meta_keys' );
+		delete_option( 'aafm_oauth_enabled' );
+		delete_option( 'aafm_oauth_dcr_enabled' );
+		delete_option( 'aafm_ip_allowlist' );
 		parent::tear_down();
 	}
 
@@ -212,5 +217,101 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the exposed write did not persist.' );
 		$this->assertSame( array( 'secret' ), get_option( 'aafm_denied_meta_keys' ), 'The new, more restrictive deny list must have landed even though the paired exposed write failed.' );
 		$this->assertSame( array(), get_option( 'aafm_allowed_meta_keys' ), 'The exposed list must stay at its old (narrower) value, not the requested one.' );
+	}
+
+	/**
+	 * Codex round 6, B6-1: a single request that removes a key from BOTH the deny list and the
+	 * exposed list at once (the bundled UI can post both fields together). The simple round-5
+	 * "deny before exposed" order is not direction-aware here: the deny write below drops
+	 * 'secret' immediately, so if the exposed write (which still lists 'secret') then fails, the
+	 * key would end up neither denied nor freshly un-exposed - still reachable through the old
+	 * exposed list. The three-stage write must instead land the deny option at
+	 * union(old deny, new deny) first, so 'secret' is never briefly undenied even though the
+	 * request asked to remove it from deny.
+	 */
+	public function test_post_meta_mixed_direction_stage_two_failure_keeps_union_deny(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_allowed_meta_keys', array( 'secret' ) );
+		update_option( 'aafm_denied_meta_keys', array( 'secret' ) );
+		// The exposed write can never persist; it snaps back to the old (still 'secret') list.
+		$this->make_option_write_unpersistable( 'aafm_allowed_meta_keys', serialize( array( 'secret' ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- raw row value for a direct REPLACE, mirrors PersistentObjectCacheSwitchTest.
+
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		// Both fields drop 'secret': the request asks to remove it from deny AND from exposed.
+		unset( $_POST['aafm_meta_keys'], $_POST['aafm_deny_meta_keys'] );
+
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the exposed write did not persist.' );
+		$this->assertSame(
+			array( 'secret' ),
+			get_option( 'aafm_denied_meta_keys' ),
+			'The deny option must land at the union of the old and new deny lists, not the bare new (empty) one, so the key stays denied while the exposed write is still unresolved.'
+		);
+		$this->assertSame( array( 'secret' ), get_option( 'aafm_allowed_meta_keys' ), 'The exposed list must stay at its old value: the write failed and was never applied.' );
+		$this->assertStringContainsString( 'stricter than requested', (string) ( $json['data']['message'] ?? '' ), 'The message is honest here: deny is still broader than the empty list that was requested.' );
+	}
+
+	/**
+	 * Codex round 6, B6-1, the other failure point in the same mixed-direction request: the
+	 * union write (stage 1) and the exposed write (stage 2) both land, but narrowing deny down
+	 * from the union to the final requested (empty) list (stage 3) fails. The key stays denied
+	 * (deny remains at the old, broader value), which is still at least as strict as requested,
+	 * never wider.
+	 */
+	public function test_post_meta_mixed_direction_stage_three_failure_leaves_deny_at_union(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_allowed_meta_keys', array( 'secret' ) );
+		update_option( 'aafm_denied_meta_keys', array( 'secret' ) );
+		// Any write to the deny option snaps back to the old ('secret') value. Stage 1 writes the
+		// union, which for this scenario equals the old value, so it certifies as a no-op success;
+		// stage 3's narrower (empty) write is the one that then fails to persist.
+		$this->make_option_write_unpersistable( 'aafm_denied_meta_keys', serialize( array( 'secret' ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- raw row value for a direct REPLACE, mirrors PersistentObjectCacheSwitchTest.
+
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		unset( $_POST['aafm_meta_keys'], $_POST['aafm_deny_meta_keys'] );
+
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: narrowing deny to the final requested list did not persist.' );
+		$this->assertSame( array(), get_option( 'aafm_allowed_meta_keys' ), 'The exposed write succeeded and must hold the newly requested (empty) value.' );
+		$this->assertSame(
+			array( 'secret' ),
+			get_option( 'aafm_denied_meta_keys' ),
+			'Deny must stay at the union, not fall through to the requested empty list, since the narrowing write never persisted.'
+		);
+		$this->assertStringContainsString( 'stricter than requested', (string) ( $json['data']['message'] ?? '' ), 'Exposed genuinely saved as requested; deny is the half that could not reach its final, narrower value - the message must say so honestly.' );
+	}
+
+	/**
+	 * Codex round 6, B6-1's settings.php half: the IP allowlist write already runs before any
+	 * OAuth-on write in aafm_ajax_save_settings(), so if the allowlist write fails, OAuth must
+	 * never be turned on in the same request - even when the request explicitly asked for it.
+	 */
+	public function test_settings_allowlist_failure_blocks_oauth_from_turning_on(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_oauth_enabled', '0' );
+		update_option( 'aafm_ip_allowlist', array( '10.0.0.1' ) );
+		// The allowlist write can never persist; it snaps back to the old list.
+		$this->make_option_write_unpersistable( 'aafm_ip_allowlist', serialize( array( '10.0.0.1' ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- raw row value for a direct REPLACE, mirrors PersistentObjectCacheSwitchTest.
+
+		$nonce                       = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']              = $nonce;
+		$_REQUEST['nonce']           = $nonce;
+		$_POST['aafm_oauth_enabled'] = '1';
+		$_POST['aafm_ip_allowlist']  = '10.0.0.2';
+
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_save_settings' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the allowlist write did not persist.' );
+		$this->assertSame( '0', get_option( 'aafm_oauth_enabled' ), 'OAuth must stay off: it must never turn on in a request whose allowlist write failed.' );
+		$this->assertSame( array( '10.0.0.1' ), get_option( 'aafm_ip_allowlist' ), 'The allowlist must stay at its old value: the write failed and was never applied.' );
 	}
 }

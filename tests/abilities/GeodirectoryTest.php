@@ -402,6 +402,49 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 5, R5-6: the test above only proves aafm_geodirectory_listing_batch_cap()
+	 * itself clamps correctly - it says nothing about whether the executor's own loop actually
+	 * calls that helper rather than reading the raw filter value. A 'the_posts' filter that keeps
+	 * padding every batch back up to full size, the way a pathological host filter would, means
+	 * the ONLY thing that can stop this loop is the executor honoring the clamped 1000-iteration
+	 * ceiling, not the two real posts it is fed.
+	 */
+	public function test_get_listings_executor_honours_the_batch_cap_ceiling_even_when_the_filter_tries_to_raise_it(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => PHP_INT_MAX );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$ids = self::factory()->post->create_many(
+			2,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+
+		$pad = static function ( $posts, $query ) use ( $ids ) {
+			if ( ! $query->get( 'aafm_query_marker' ) ) {
+				return $posts;
+			}
+			// Always report a full batch of the same two real posts, exactly what a host filter
+			// that never runs dry would do - so only the executor's own clamp of the cap filter
+			// down to 1000 can end this loop.
+			return array( get_post( $ids[0] ), get_post( $ids[1] ) );
+		};
+		add_filter( 'the_posts', $pad, 10, 2 );
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_filter( 'the_posts', $pad );
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+		remove_all_filters( 'aafm_geodirectory_list_batch_cap' );
+
+		$this->assertTrue(
+			$out['truncated'],
+			'The executor must stop at the hard 1000-iteration ceiling even when the cap filter tries to raise it past that.'
+		);
+	}
+
+	/**
 	 * Codex final round 3 MEDIUM: an OFFSET-based batch loop is unstable under mutation - trashing
 	 * a row from an earlier batch shifts every later OFFSET window down by one, so the next batch
 	 * skips exactly one real row. Keyset pagination (WHERE ID > last-seen-ID, no offset at all)

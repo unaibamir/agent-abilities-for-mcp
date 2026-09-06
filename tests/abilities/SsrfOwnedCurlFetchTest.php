@@ -146,17 +146,46 @@ final class SsrfOwnedCurlFetchTest extends TestCase {
 	/**
 	 * Codex hunt H2: aafm_ssrf_safe_fetch_url() now composes aafm_ssrf_owned_curl_fetch() and
 	 * aafm_ssrf_process_fetch_response() directly, with no pre_http_request mock possible or
-	 * needed in between. This is the one test that proves that composition against a REAL fetch
-	 * result rather than a synthetic array - UploadMediaFromUrlSsrfTest.php covers
-	 * aafm_ssrf_process_fetch_response() against synthetic responses, and the tests above cover
-	 * aafm_ssrf_owned_curl_fetch() against a real socket; this proves the two functions actually
-	 * fit together.
+	 * needed in between. This proves the SECOND half of that pipe - a REAL fetch result feeding
+	 * cleanly into aafm_ssrf_process_fetch_response() - against a real fetch result rather than a
+	 * synthetic array. It does NOT call aafm_ssrf_safe_fetch_url() itself, so it cannot prove the
+	 * wrapper actually calls either function; see the composition test below for that.
 	 */
 	public function test_process_fetch_response_accepts_a_real_local_fetch_result(): void {
 		$this->start_local_server();
 
 		$raw = aafm_ssrf_owned_curl_fetch( "{$this->base_url}/?mode=small-ok", '127.0.0.1', 0, '127.0.0.1', 1000 );
 		$out = aafm_ssrf_process_fetch_response( $raw, 1000 );
+
+		$this->assertSame( 'ok', $out );
+	}
+
+	/**
+	 * Codex round 5, R5-6: the test above calls aafm_ssrf_owned_curl_fetch() and
+	 * aafm_ssrf_process_fetch_response() by hand - it never calls aafm_ssrf_safe_fetch_url()
+	 * itself, so a wrapper regression that reaches the owned fetch but skips response processing
+	 * (or the reverse) would leave this file green despite the misleading claim above.
+	 *
+	 * The aafm_ssrf_validate_fetch_target() function refuses 127.0.0.1 outright as a
+	 * private/reserved address (by design), so the wrapper cannot be pointed at this test's own
+	 * local server directly.
+	 * Instead: fetch the REAL local-server response first, over the same real socket the tests
+	 * above use, then feed that exact raw array back through the test-only
+	 * 'aafm_media_fetch_pre_fetch_result' seam while calling the real wrapper with a URL that
+	 * passes validation (https, non-IP-literal host, pinned to a resolvable non-private IP the
+	 * same way UploadMediaFromUrlSsrfTest.php does). A pass here proves the wrapper's own
+	 * validation half ran AND that it handed the seam's real payload to
+	 * aafm_ssrf_process_fetch_response(), not just that a test can call the two by hand.
+	 */
+	public function test_safe_fetch_url_composes_validation_and_response_processing_around_a_real_fetch_result(): void {
+		$this->start_local_server();
+		$raw = aafm_ssrf_owned_curl_fetch( "{$this->base_url}/?mode=small-ok", '127.0.0.1', 0, '127.0.0.1', 1000 );
+
+		add_filter( 'aafm_resolve_hostname_to_ip', static fn(): string => '203.0.113.10' );
+		add_filter( 'aafm_media_fetch_pre_fetch_result', static fn() => $raw );
+		$out = aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
+		remove_all_filters( 'aafm_media_fetch_pre_fetch_result' );
+		remove_all_filters( 'aafm_resolve_hostname_to_ip' );
 
 		$this->assertSame( 'ok', $out );
 	}

@@ -757,6 +757,7 @@ final class SecurityRegressionTest extends TestCase {
 			// Reading our own bundled source for a static scan - not a remote fetch.
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$src  = (string) file_get_contents( $file->getPathname() );
+			$src  = $this->resolve_use_function_aliases( $src );
 			$path = str_replace( '\\', '/', $file->getPathname() );
 
 			$post_delete_src = $src;
@@ -797,35 +798,123 @@ final class SecurityRegressionTest extends TestCase {
 
 	/**
 	 * Strip one named top-level function's body out of source, so a sanctioned call site inside
-	 * it does not mask a real violation added anywhere else in the same file. A plain
-	 * brace-depth counter, the same technique tests/PageBuilderGuardSweepTest.php uses for its
-	 * own function-body extraction - correct for this codebase's consistent style (no nested
-	 * top-level functions), which is all a scoped exemption needs.
+	 * it does not mask a real violation added anywhere else in the same file.
+	 *
+	 * A real token walk, not a line-based brace-depth counter (Codex round 7, R7-7): the prior
+	 * regex-and-line-count version matched the exempt function's declaration line (which also
+	 * carries the opening `{`) without ever counting that brace, so a bare `}` closing line made
+	 * the depth counter go negative without ever satisfying its own "line contains `{`" exit
+	 * condition. Stripping then continued past the function's real end through every following
+	 * top-level line - silently deleting a force-delete call placed anywhere after the exempt
+	 * function, all the way to the next function declaration that happened to contain a `{`.
+	 * Walking `token_get_all()`'s tokens instead finds the true opening brace after the matched
+	 * T_FUNCTION + T_STRING pair and counts every brace token (including the T_CURLY_OPEN/
+	 * T_DOLLAR_OPEN_CURLY_BRACES tokens PHP emits for `"{$var}"`/`"${var}"` interpolation) to its
+	 * exact matching close, so only that one function's real body is ever removed.
 	 *
 	 * @param string $source        Full file contents.
 	 * @param string $function_name Function name to strip, without parentheses.
 	 * @return string The same source with that one function's body removed.
 	 */
 	private function strip_function_body( string $source, string $function_name ): string {
-		$out    = array();
-		$inside = false;
-		$depth  = 0;
-		foreach ( explode( "\n", $source ) as $line ) {
-			if ( ! $inside ) {
-				if ( preg_match( '/^function\s+' . preg_quote( $function_name, '/' ) . '\s*\(/', $line ) ) {
-					$inside = true;
-					$depth  = 0;
+		$tokens = token_get_all( $source );
+		$count  = count( $tokens );
+		$out    = '';
+		$i      = 0;
+		while ( $i < $count ) {
+			$token = $tokens[ $i ];
+			if ( is_array( $token ) && T_FUNCTION === $token[0] ) {
+				$j = $i + 1;
+				while ( $j < $count && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+					++$j;
+				}
+				$is_target = $j < $count && is_array( $tokens[ $j ] ) && T_STRING === $tokens[ $j ][0] && $function_name === $tokens[ $j ][1];
+				if ( $is_target ) {
+					$k = $j + 1;
+					while ( $k < $count && '{' !== $tokens[ $k ] ) {
+						++$k;
+					}
+					$depth = 0;
+					while ( $k < $count ) {
+						$brace_token = $tokens[ $k ];
+						if ( '{' === $brace_token || ( is_array( $brace_token ) && in_array( $brace_token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+							++$depth;
+						} elseif ( '}' === $brace_token ) {
+							--$depth;
+							if ( 0 === $depth ) {
+								++$k; // Consume the real closing brace, then stop: the body is fully accounted for.
+								break;
+							}
+						}
+						++$k;
+					}
+					$i = $k; // Resume scanning immediately after the function actually ends.
 					continue;
 				}
-				$out[] = $line;
-				continue;
 			}
-			$depth += substr_count( $line, '{' ) - substr_count( $line, '}' );
-			if ( $depth <= 0 && str_contains( $line, '{' ) ) {
-				$inside = false;
-			}
+			$out .= is_array( $token ) ? $token[1] : $token;
+			++$i;
 		}
-		return implode( "\n", $out );
+		return $out;
+	}
+
+	/**
+	 * Resolve `use function <name> as <alias>;` imports so the force-delete scan also catches a
+	 * call made through its alias (Codex round 7, R7-7): an aliased `wp_delete_post` would
+	 * otherwise never match a regex anchored on the literal name. Rewrites every aliased call
+	 * site back to the imported name; a plain `use function <name>;` with no `as` needs no
+	 * rewrite, since its call sites already use the real name.
+	 *
+	 * @param string $source Full file contents.
+	 * @return string The same source with every aliased call site rewritten to its real name.
+	 */
+	private function resolve_use_function_aliases( string $source ): string {
+		if ( ! preg_match_all( '/use\s+function\s+\\\\?([A-Za-z_][A-Za-z0-9_]*)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/', $source, $import_matches, PREG_SET_ORDER ) ) {
+			return $source;
+		}
+		foreach ( $import_matches as $import_match ) {
+			list( , $real_name, $alias ) = $import_match;
+			$source                      = (string) preg_replace( '/\b' . preg_quote( $alias, '/' ) . '(\s*\()/', $real_name . '$1', $source );
+		}
+		return $source;
+	}
+
+	/**
+	 * Codex round 7, R7-7: a force-delete call placed immediately after the exempt GeoDirectory
+	 * rollback function's real closing brace must survive the strip. Before the token-based
+	 * rewrite, the line-based counter's depth went negative on the exempt function's own closing
+	 * `}` without ever satisfying its "line contains `{`" exit condition, so stripping ran on past
+	 * the function's true end and silently deleted a force-delete call sitting right after it.
+	 */
+	public function test_strip_function_body_does_not_leak_into_following_source(): void {
+		$source = "<?php\nfunction aafm_geodirectory_rollback_unconfirmed_create( int \$post_id ): void {\n\twp_delete_post( \$post_id, true );\n}\n\nwp_delete_post( \$other_id, true );\n\nfunction aafm_other(): void {\n\techo 'hi';\n}\n";
+
+		$stripped = $this->strip_function_body( $source, 'aafm_geodirectory_rollback_unconfirmed_create' );
+
+		$this->assertStringNotContainsString( '$post_id, true', $stripped, 'The exempt function\'s own body must still be removed.' );
+		$this->assertStringContainsString(
+			'$other_id, true',
+			$stripped,
+			'A force-delete placed immediately after the exempt function must survive the strip, not be silently swallowed along with it.'
+		);
+		$this->assertStringContainsString( 'aafm_other', $stripped, 'A later, unrelated function must also survive the strip.' );
+	}
+
+	/**
+	 * Codex round 7, R7-7: a force-delete made through a `use function ... as` alias must still
+	 * be caught. Before this fix, `use function wp_delete_post as remove; remove($id, true)`
+	 * never matched the sweep's regex, which is anchored on the literal name `wp_delete_post`.
+	 */
+	public function test_resolve_use_function_aliases_rewrites_an_aliased_force_delete(): void {
+		$source = "<?php\nuse function wp_delete_post as remove;\nremove( \$post_id, true );\n";
+
+		$resolved = $this->resolve_use_function_aliases( $source );
+
+		$this->assertMatchesRegularExpression(
+			'/\bwp_delete_post\s*\(\s*\$post_id\s*,\s*true\s*\)/',
+			$resolved,
+			'An aliased call must be rewritten back to its real name so the force-delete regex can catch it.'
+		);
 	}
 
 	/**

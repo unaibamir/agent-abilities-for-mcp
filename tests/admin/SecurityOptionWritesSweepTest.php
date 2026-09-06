@@ -81,36 +81,126 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * Strips one named function's body out of source text, mirrors
-	 * SecurityRegressionTest::strip_function_body(): a plain brace-depth counter, correct for this
-	 * codebase's consistent style (no nested top-level functions). Used below to scope the
-	 * discovery.php exemption to the seed function alone rather than the whole file (Codex round
-	 * 6, B6-7).
+	 * Strips one named top-level function's body out of source text, mirrors
+	 * SecurityRegressionTest::strip_function_body(). Used below to scope the discovery.php
+	 * exemption to the seed function alone rather than the whole file (Codex round 6, B6-7).
+	 *
+	 * A real token walk, not a line-based brace-depth counter (Codex round 7, R7-7): the prior
+	 * regex-and-line-count version matched the exempt function's declaration line (which also
+	 * carries the opening `{`) without ever counting that brace, so a bare `}` closing line made
+	 * the depth counter go negative without ever satisfying its own "line contains `{`" exit
+	 * condition. Stripping then continued past the function's real end through every following
+	 * top-level line - silently deleting a violation placed anywhere after the exempt function,
+	 * all the way to the next function declaration that happened to contain a `{`. Walking
+	 * `token_get_all()`'s tokens instead finds the true opening brace after the matched T_FUNCTION
+	 * + T_STRING pair and counts every brace token (including the T_CURLY_OPEN/
+	 * T_DOLLAR_OPEN_CURLY_BRACES tokens PHP emits for `"{$var}"`/`"${var}"` interpolation) to its
+	 * exact matching close, so only that one function's real body is ever removed.
 	 *
 	 * @param string $source        Full file contents.
 	 * @param string $function_name Function name to strip, without parentheses.
 	 * @return string The same source with that one function's body removed.
 	 */
 	private function strip_function_body( string $source, string $function_name ): string {
-		$out    = array();
-		$inside = false;
-		$depth  = 0;
-		foreach ( explode( "\n", $source ) as $line ) {
-			if ( ! $inside ) {
-				if ( preg_match( '/^function\s+' . preg_quote( $function_name, '/' ) . '\s*\(/', $line ) ) {
-					$inside = true;
-					$depth  = 0;
+		$tokens = token_get_all( $source );
+		$count  = count( $tokens );
+		$out    = '';
+		$i      = 0;
+		while ( $i < $count ) {
+			$token = $tokens[ $i ];
+			if ( is_array( $token ) && T_FUNCTION === $token[0] ) {
+				$j = $i + 1;
+				while ( $j < $count && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+					++$j;
+				}
+				$is_target = $j < $count && is_array( $tokens[ $j ] ) && T_STRING === $tokens[ $j ][0] && $function_name === $tokens[ $j ][1];
+				if ( $is_target ) {
+					$k = $j + 1;
+					while ( $k < $count && '{' !== $tokens[ $k ] ) {
+						++$k;
+					}
+					$depth = 0;
+					while ( $k < $count ) {
+						$brace_token = $tokens[ $k ];
+						if ( '{' === $brace_token || ( is_array( $brace_token ) && in_array( $brace_token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+							++$depth;
+						} elseif ( '}' === $brace_token ) {
+							--$depth;
+							if ( 0 === $depth ) {
+								++$k; // Consume the real closing brace, then stop: the body is fully accounted for.
+								break;
+							}
+						}
+						++$k;
+					}
+					$i = $k; // Resume scanning immediately after the function actually ends.
 					continue;
 				}
-				$out[] = $line;
-				continue;
 			}
-			$depth += substr_count( $line, '{' ) - substr_count( $line, '}' );
-			if ( $depth <= 0 && str_contains( $line, '{' ) ) {
-				$inside = false;
-			}
+			$out .= is_array( $token ) ? $token[1] : $token;
+			++$i;
 		}
-		return implode( "\n", $out );
+		return $out;
+	}
+
+	/**
+	 * Resolve `use function <name> as <alias>;` imports so the option-write scan also catches a
+	 * call made through its alias (Codex round 7, R7-7): `use function update_option as persist;
+	 * persist('aafm_oauth_enabled', '1')` would otherwise never match a regex anchored on the
+	 * literal name `update_option`. Rewrites every aliased call site back to the imported name; a
+	 * plain `use function <name>;` with no `as` needs no rewrite, since its call sites already use
+	 * the real name.
+	 *
+	 * @param string $source Full file contents.
+	 * @return string The same source with every aliased call site rewritten to its real name.
+	 */
+	private function resolve_use_function_aliases( string $source ): string {
+		if ( ! preg_match_all( '/use\s+function\s+\\\\?([A-Za-z_][A-Za-z0-9_]*)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/', $source, $import_matches, PREG_SET_ORDER ) ) {
+			return $source;
+		}
+		foreach ( $import_matches as $import_match ) {
+			list( , $real_name, $alias ) = $import_match;
+			$source                      = (string) preg_replace( '/\b' . preg_quote( $alias, '/' ) . '(\s*\()/', $real_name . '$1', $source );
+		}
+		return $source;
+	}
+
+	/**
+	 * Codex round 7, R7-7: a violation placed immediately after the exempt function's real
+	 * closing brace must survive the strip. Before the token-based rewrite, the line-based
+	 * counter's depth went negative on the exempt function's own closing `}` without ever
+	 * satisfying its "line contains `{`" exit condition, so stripping ran on past the function's
+	 * true end and silently deleted a bare update_option() sitting right after it.
+	 */
+	public function test_strip_function_body_does_not_leak_into_following_source(): void {
+		$source = "<?php\nfunction aafm_oauth_seed_default_options(): void {\n\tadd_option( 'aafm_oauth_enabled', '0' );\n}\n\nupdate_option( 'aafm_denied_meta_keys', array() );\n\nfunction aafm_other(): void {\n\techo 'hi';\n}\n";
+
+		$stripped = $this->strip_function_body( $source, 'aafm_oauth_seed_default_options' );
+
+		$this->assertStringNotContainsString( "add_option( 'aafm_oauth_enabled'", $stripped, 'The exempt function\'s own body must still be removed.' );
+		$this->assertStringContainsString(
+			"update_option( 'aafm_denied_meta_keys'",
+			$stripped,
+			'A violation placed immediately after the exempt function must survive the strip, not be silently swallowed along with it.'
+		);
+		$this->assertStringContainsString( 'aafm_other', $stripped, 'A later, unrelated function must also survive the strip.' );
+	}
+
+	/**
+	 * Codex round 7, R7-7: an option write made through a `use function ... as` alias must still
+	 * be caught. Before this fix, `use function update_option as persist; persist(...)` never
+	 * matched the sweep's regex, which is anchored on the literal name `update_option`.
+	 */
+	public function test_resolve_use_function_aliases_rewrites_an_aliased_option_write(): void {
+		$source = "<?php\nuse function update_option as persist;\npersist( 'aafm_oauth_enabled', '1' );\n";
+
+		$resolved = $this->resolve_use_function_aliases( $source );
+
+		$this->assertMatchesRegularExpression(
+			'/\bupdate_option\s*\(\s*[\'"]aafm_oauth_enabled[\'"]/',
+			$resolved,
+			'An aliased call must be rewritten back to its real name so the option-write regex can catch it.'
+		);
 	}
 
 	/**
@@ -160,6 +250,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			$this->assertNotSame( '', $source, "The sweep must actually read {$relative} - an empty read would make this test pass by finding nothing." );
 			++$scanned;
 
+			$source      = $this->resolve_use_function_aliases( $source );
 			$scan_source = $oauth_seed_scoped === $relative
 				? $this->strip_function_body( $source, $oauth_seed_function )
 				: $source;

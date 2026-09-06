@@ -893,6 +893,9 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	// Validate enrichment BEFORE inserting so a bad term/attachment/meta aborts with nothing written.
 	// Codex round 7 R7-3: pass the real target post type ($type), not the default 'post', so the
 	// meta probe is not blind to a sanitize_callback registered for this create's actual type.
+	// Codex round 8 R8-2: unlike the update path, there is no post id yet at this point, so
+	// get_object_subtype( 'post', $id ) cannot be resolved here - $type (the intended post type
+	// this create will be assigned) is the closest available proxy for it.
 	$enrichment = aafm_validate_write_enrichment( $input, $type );
 	if ( is_wp_error( $enrichment ) ) {
 		return $enrichment;
@@ -1164,8 +1167,11 @@ function aafm_exec_update_post( array $input ) {
 
 	// Validate enrichment BEFORE wp_update_post so a bad term/attachment/meta aborts
 	// with the post left exactly as it was (no half-applied update). Codex round 7 R7-3: pass the
-	// post's real, existing type, not the default 'post'.
-	$enrichment = aafm_validate_write_enrichment( $input, $post->post_type );
+	// post's real, existing type, not the default 'post'. Codex round 8 R8-2: the id already
+	// exists here, so resolve the same filterable get_object_subtype( 'post', $id ) call core
+	// itself makes at write time, rather than the raw $post->post_type, so a get_object_subtype_post
+	// filter is honoured the same way it is at write time.
+	$enrichment = aafm_validate_write_enrichment( $input, (string) get_object_subtype( 'post', $id ) );
 	if ( is_wp_error( $enrichment ) ) {
 		return $enrichment;
 	}

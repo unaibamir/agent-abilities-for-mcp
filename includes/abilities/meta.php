@@ -346,7 +346,11 @@ function aafm_exec_update_post_meta( array $input ) {
 	}
 	// Codex round 7 R7-3: pass the post's real type, not the default 'post', so a
 	// sanitize_callback registered for a page or a custom post type is not invisible to the probe.
-	$value = aafm_sanitize_meta_value( $key, $input['value'] ?? '', (string) get_post_type( $id ) );
+	// Codex round 8 R8-2: resolve it through get_object_subtype(), the same filterable call core
+	// itself makes at write time, rather than the raw get_post_type() - a get_object_subtype_post
+	// filter remapping the subtype is honoured here the same way it is at write time.
+	$subtype = (string) get_object_subtype( 'post', $id );
+	$value   = aafm_sanitize_meta_value( $key, $input['value'] ?? '', $subtype );
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
@@ -358,7 +362,7 @@ function aafm_exec_update_post_meta( array $input ) {
 	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
 	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'post', (string) get_post_type( $id ) ) ) {
+	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'post', $subtype ) ) {
 		return aafm_generic_error();
 	}
 	return array(

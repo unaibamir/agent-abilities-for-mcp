@@ -497,4 +497,48 @@ final class PostMetaTest extends TestCase {
 			'A page-registered sanitizer that coerces the value to an array must be caught, not silently allowed through because the preliminary probe checked the wrong post type.'
 		);
 	}
+
+	/**
+	 * Codex round 8 R8-2: the probe and the confirmation guard used to resolve the object
+	 * subtype from get_post_type( $id ) directly, bypassing core's own get_object_subtype()
+	 * and the get_object_subtype_post filter it runs through. A site remapping a post's write-
+	 * time subtype (a multi-tenant plugin scoping meta by a virtual subtype, for example) was
+	 * invisible to both, so a sanitize_callback registered for the REMAPPED subtype could coerce
+	 * a scalar into an array while this plugin's own boundary still checked the wrong subtype.
+	 */
+	public function test_update_post_meta_honours_a_get_object_subtype_post_filter(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		// A regular 'post' whose write-time subtype a site remaps to 'tenant' - never a real
+		// registered post type, so this can only be caught by following the filter, not by
+		// reading get_post_type() directly.
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		$remap = static fn() => 'tenant';
+		add_filter( 'get_object_subtype_post', $remap );
+		register_post_meta(
+			'tenant',
+			'aafm_note',
+			array(
+				'single'            => true,
+				'sanitize_callback' => static fn() => array( 'evil' => 1 ),
+			)
+		);
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		unregister_post_meta( 'tenant', 'aafm_note' );
+		remove_filter( 'get_object_subtype_post', $remap );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A sanitize_callback registered for a get_object_subtype_post-remapped subtype must be caught, not missed because the probe read get_post_type() instead of following the filter.'
+		);
+	}
 }

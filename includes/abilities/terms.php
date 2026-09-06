@@ -622,8 +622,12 @@ function aafm_exec_update_term_meta( array $input ) {
 	$key     = (string) $input['meta_key'];
 	// Codex round 7 R7-3: pass the term's real taxonomy, not the empty default, so a
 	// sanitize_callback registered via register_term_meta() for that taxonomy is not invisible
-	// to the probe.
-	$value = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '', $taxonomy );
+	// to the probe. Codex round 8 R8-2: resolve it through get_object_subtype(), the same
+	// filterable call core itself makes at write time, rather than the raw requested taxonomy - a
+	// get_object_subtype_term filter remapping the subtype is honoured here the same way it is
+	// at write time.
+	$subtype = (string) get_object_subtype( 'term', $term_id );
+	$value   = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '', $subtype );
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
@@ -635,7 +639,7 @@ function aafm_exec_update_term_meta( array $input ) {
 	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
 	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'term', $taxonomy ) ) {
+	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'term', $subtype ) ) {
 		return aafm_generic_error();
 	}
 	return array(

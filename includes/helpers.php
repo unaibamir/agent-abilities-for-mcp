@@ -648,12 +648,16 @@ function aafm_delete_guarantee(): array {
 /**
  * Coerce + sanitize a meta value for writing. Scalar-only: arrays/objects are refused so
  * the agent can never store a serialized structure. Strings are plain-text sanitized (meta
- * is not rendered as post content); the result is then run through sanitize_meta so any
- * registered sanitize_callback still applies. The object subtype ('post') is passed so the
- * per-key sanitize_post_meta_{$key} callback actually fires - the 3-arg form skips it.
- * Whatever the callback returns is re-asserted as scalar before it can be stored or returned,
- * so a callback that coerces the value into an array/object is refused (defence in depth,
- * symmetric with the scalar-only read path).
+ * is not rendered as post content). The plain-text-sanitized value is then run through
+ * sanitize_meta() ONCE as a PROBE, purely to check that a registered sanitize_post_meta_{$key}
+ * callback cannot coerce a scalar into an array/object; the probe's return value is discarded,
+ * never stored or forwarded. WordPress's own update_metadata() (the shared engine behind
+ * update_post_meta(), wp-includes/meta.php) already runs sanitize_meta( $meta_key, $meta_value,
+ * 'post', $subtype ) on the value again at write time - that write-time call is the only one
+ * whose output is ever stored, so a cumulative or non-idempotent callback still runs exactly
+ * once against the stored value. Running the probe re-invokes the callback an extra time but
+ * cannot double-apply it to what gets written. aafm_meta_write_confirmed() independently
+ * recomputes the same canonical form afterward to confirm the write landed.
  *
  * @param string $key   Meta key (already validated/allowlisted by the caller).
  * @param mixed  $value Raw value from input.
@@ -666,8 +670,8 @@ function aafm_sanitize_meta_value( string $key, $value ) {
 	if ( is_string( $value ) ) {
 		$value = aafm_sanitize_plain_text( $value );
 	}
-	$value = sanitize_meta( $key, $value, 'post', 'post' );
-	if ( ! is_scalar( $value ) ) {
+	$probe = sanitize_meta( $key, $value, 'post', 'post' );
+	if ( ! is_scalar( $probe ) ) {
 		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	return $value;
@@ -753,9 +757,12 @@ function aafm_validate_term_meta_key( string $key ) {
 
 /**
  * Coerce + sanitize a term-meta value for writing. Scalar-only: arrays/objects are refused
- * so the agent can never store a serialized structure. Strings are plain-text sanitized,
- * then run through sanitize_meta() with the 'term' object type so any registered
- * sanitize_term_meta_{$key} callback fires; the result is re-asserted as scalar.
+ * so the agent can never store a serialized structure. Strings are plain-text sanitized. The
+ * plain-text-sanitized value is then run through sanitize_meta() ONCE as a PROBE, purely to
+ * check that a registered sanitize_term_meta_{$key} callback cannot coerce a scalar into an
+ * array/object; the probe's return value is discarded, never stored or forwarded - see
+ * aafm_sanitize_meta_value()'s docblock for why the actual write-time sanitize_meta() call
+ * inside update_metadata() must remain the only one whose output is ever stored.
  *
  * @param string $key   Term-meta key (already validated/allowlisted by the caller).
  * @param mixed  $value Raw value from input.
@@ -768,8 +775,8 @@ function aafm_sanitize_term_meta_value( string $key, $value ) {
 	if ( is_string( $value ) ) {
 		$value = aafm_sanitize_plain_text( $value );
 	}
-	$value = sanitize_meta( $key, $value, 'term', 'term' );
-	if ( ! is_scalar( $value ) ) {
+	$probe = sanitize_meta( $key, $value, 'term', 'term' );
+	if ( ! is_scalar( $probe ) ) {
 		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	return $value;
@@ -953,12 +960,14 @@ function aafm_validate_user_meta_key( string $key ) {
 
 /**
  * Coerce + sanitize a user-meta value for writing. Scalar-only: arrays/objects are refused
- * so the agent can never store a serialized structure. Strings are plain-text sanitized,
- * then run through sanitize_meta() with the 'user' object type so any registered
- * sanitize_user_meta_{$key} callback fires; the result is re-asserted as scalar.
+ * so the agent can never store a serialized structure. Strings are plain-text sanitized. The
+ * plain-text-sanitized value is then run through sanitize_meta() ONCE as a PROBE, purely to
+ * check that a registered sanitize_user_meta_{$key} callback cannot coerce a scalar into an
+ * array/object; the probe's return value is discarded, never stored or forwarded - see
+ * aafm_sanitize_meta_value()'s docblock for why the actual write-time sanitize_meta() call
+ * inside update_metadata() must remain the only one whose output is ever stored.
  *
- * Mirrors aafm_sanitize_term_meta_value() but is user-scoped - the live
- * aafm_sanitize_meta_value() hardwires the 'post' subtype and CANNOT be reused here.
+ * Mirrors aafm_sanitize_term_meta_value() but is user-scoped.
  *
  * @param string $key   User-meta key (already validated/allowlisted by the caller).
  * @param mixed  $value Raw value from input.
@@ -971,8 +980,8 @@ function aafm_sanitize_user_meta_value( string $key, $value ) {
 	if ( is_string( $value ) ) {
 		$value = aafm_sanitize_plain_text( $value );
 	}
-	$value = sanitize_meta( $key, $value, 'user', 'user' );
-	if ( ! is_scalar( $value ) ) {
+	$probe = sanitize_meta( $key, $value, 'user', 'user' );
+	if ( ! is_scalar( $probe ) ) {
 		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	return $value;

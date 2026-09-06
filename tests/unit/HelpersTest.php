@@ -538,6 +538,22 @@ final class HelpersTest extends TestCase {
 		unregister_post_meta( 'post', 'aafm_array_coercer' );
 	}
 
+	public function test_term_meta_value_sanitizer_refuses_callback_that_returns_non_scalar(): void {
+		$coerce = static fn() => array( 'evil' => 1 );
+		add_filter( 'sanitize_term_meta_aafm_array_coercer', $coerce );
+		$result = aafm_sanitize_term_meta_value( 'aafm_array_coercer', 'plain' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		remove_filter( 'sanitize_term_meta_aafm_array_coercer', $coerce );
+	}
+
+	public function test_user_meta_value_sanitizer_refuses_callback_that_returns_non_scalar(): void {
+		$coerce = static fn() => array( 'evil' => 1 );
+		add_filter( 'sanitize_user_meta_aafm_array_coercer', $coerce );
+		$result = aafm_sanitize_user_meta_value( 'aafm_array_coercer', 'plain' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		remove_filter( 'sanitize_user_meta_aafm_array_coercer', $coerce );
+	}
+
 	public function test_redact_revision_is_metadata_only(): void {
 		$pid = self::factory()->post->create(
 			array(

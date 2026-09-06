@@ -246,4 +246,88 @@ class UpgradeMigrationTest extends TestCase {
 		$this->assertFalse( get_option( 'aafm_oauth_enabled' ) );
 		$this->assertFalse( aafm_oauth_enabled() );
 	}
+
+	/**
+	 * Codex round 8, R8-3: the migration-marker write's return value used to be discarded, so a
+	 * certification failure on the guard itself (not the preceding preservation write, which was
+	 * already checked) was indistinguishable from success. The guard must stay unset - so the
+	 * migration is retried rather than recorded as done when it was not - and the failure must be
+	 * logged rather than silent.
+	 */
+	public function test_toggle_migration_marker_failure_is_logged_and_leaves_the_guard_unset(): void {
+		delete_option( 'aafm_oauth_toggle_migrated' );
+		update_option( 'aafm_oauth_enabled', '1' );
+
+		$this->make_option_write_unpersistable( 'aafm_oauth_toggle_migrated', '0' );
+		aafm_oauth_preserve_toggle_on_upgrade();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_toggle_migrated', '0' ),
+			'A certification failure on the marker write must leave the guard unset, not silently record completion.'
+		);
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm_oauth_toggle_migrated', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-array key, not a meta query.
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A failed marker write must be logged, not silently retried forever with no trace.' );
+	}
+
+	/**
+	 * Codex round 8, R8-3, the DCR sibling: same failure, same requirement - the guard stays
+	 * unset and the failure is logged.
+	 */
+	public function test_dcr_adoption_marker_failure_is_logged_and_leaves_the_guard_unset(): void {
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		$this->make_option_write_unpersistable( 'aafm_oauth_dcr_default_on_migrated', '0' );
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ), 'The DCR enable write is unaffected by the marker write failing.' );
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_default_on_migrated', '0' ),
+			'A certification failure on the marker write must leave the guard unset, not silently record completion.'
+		);
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm_oauth_dcr_default_on_migrated', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-array key, not a meta query.
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A failed marker write must be logged, not silently retried forever with no trace.' );
+	}
+
+	/**
+	 * Makes a single option write to $option uncertifiable by reverting the row back to
+	 * $stuck_raw_value immediately after WordPress writes it, so aafm_update_option_verified()'s
+	 * post-write database read never matches what was intended and the write is reported as
+	 * failed. Mirrors SettingsSaveTest's helper of the same name.
+	 *
+	 * @param string $option          Option name to sabotage.
+	 * @param string $stuck_raw_value The value the row is forced back to after every write.
+	 * @return void
+	 */
+	private function make_option_write_unpersistable( string $option, string $stuck_raw_value ): void {
+		$revert = static function () use ( $option, $stuck_raw_value ): void {
+			global $wpdb;
+			$wpdb->query(
+				$wpdb->prepare(
+					"REPLACE INTO $wpdb->options (option_name, option_value, autoload) VALUES (%s, %s, 'yes')",
+					$option,
+					$stuck_raw_value
+				)
+			);
+		};
+		$guard  = static function ( $changed ) use ( $option, $revert ): void {
+			if ( $changed === $option ) {
+				$revert();
+			}
+		};
+		add_action( 'added_option', $guard );
+		add_action( 'updated_option', $guard );
+	}
 }

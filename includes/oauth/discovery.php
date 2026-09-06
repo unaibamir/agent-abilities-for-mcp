@@ -185,7 +185,15 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
 		}
 	}
 
-	aafm_update_option_verified( 'aafm_oauth_toggle_migrated', '1' );
+	if ( ! aafm_update_option_verified( 'aafm_oauth_toggle_migrated', '1' ) ) {
+		// Codex round 8 R8-3: this return value used to be discarded. Left uncaught, the guard
+		// would silently never record completion, so a later request retries the whole migration -
+		// including the "absent row" branch above, which by then may see a database row again (a
+		// stale cache having recovered) and skip straight to here, forever failing to record a
+		// migration that keeps re-running. Log it so a persistently failing write is visible
+		// rather than silently retried on every request.
+		aafm_log_ability_persist_failure( 'aafm_oauth_toggle_migrated', __( 'The OAuth toggle migration marker', 'agent-abilities-for-mcp' ) );
+	}
 }
 
 /**
@@ -231,7 +239,15 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 		}
 	}
 
-	aafm_update_option_verified( 'aafm_oauth_dcr_default_on_migrated', '1' );
+	if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_default_on_migrated', '1' ) ) {
+		// Codex round 8 R8-3: this return value used to be discarded. A failed marker write left
+		// the migration to retry on the next request - concretely, if an operator turns DCR back
+		// off in the window before that retry, the retry reads the same "off, looks like the old
+		// default" state this function already flips on above, re-enabling DCR over the
+		// operator's deliberate opt-out and contradicting this function's own documented promise
+		// that a later opt-out is respected. Log the failure so it is visible instead of silent.
+		aafm_log_ability_persist_failure( 'aafm_oauth_dcr_default_on_migrated', __( 'The DCR default-on migration marker', 'agent-abilities-for-mcp' ) );
+	}
 }
 
 /**

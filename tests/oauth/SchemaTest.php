@@ -301,6 +301,69 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 8, R8-3: the version-stamp write's return value used to be discarded. A schema
+	 * that is genuinely healthy but whose stamp write fails to persist must not be allowed to look
+	 * settled - the version must stay behind (so the self-heal keeps retrying) and the error
+	 * transient, already cleared on the strength of the schema check alone, must be re-set so the
+	 * admin notice reflects reality.
+	 */
+	public function test_finalize_reflags_the_error_and_logs_when_the_stamp_write_fails_to_persist(): void {
+		aafm_install_oauth_tables();
+		update_option( 'aafm_oauth_schema_version', '1' );
+		delete_transient( 'aafm_oauth_schema_error' );
+
+		$this->make_option_write_unpersistable( 'aafm_oauth_schema_version', '1' );
+		aafm_oauth_finalize_schema( true );
+
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_schema_version' ),
+			'A certification failure on the version stamp must leave the prior version in place.'
+		);
+		$this->assertNotFalse(
+			get_transient( 'aafm_oauth_schema_error' ),
+			'The error flag must be re-set when the schema is healthy but the stamp write itself failed to persist.'
+		);
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm_oauth_schema_version', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-array key, not a meta query.
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A failed version-stamp write must be logged, not silently retried forever with no trace.' );
+	}
+
+	/**
+	 * Makes a single option write to $option uncertifiable by reverting the row back to
+	 * $stuck_raw_value immediately after WordPress writes it, so aafm_update_option_verified()'s
+	 * post-write database read never matches what was intended and the write is reported as
+	 * failed. Mirrors SettingsSaveTest's helper of the same name.
+	 *
+	 * @param string $option          Option name to sabotage.
+	 * @param string $stuck_raw_value The value the row is forced back to after every write.
+	 * @return void
+	 */
+	private function make_option_write_unpersistable( string $option, string $stuck_raw_value ): void {
+		$revert = static function () use ( $option, $stuck_raw_value ): void {
+			global $wpdb;
+			$wpdb->query(
+				$wpdb->prepare(
+					"REPLACE INTO $wpdb->options (option_name, option_value, autoload) VALUES (%s, %s, 'yes')",
+					$option,
+					$stuck_raw_value
+				)
+			);
+		};
+		$guard  = static function ( $changed ) use ( $option, $revert ): void {
+			if ( $changed === $option ) {
+				$revert();
+			}
+		};
+		add_action( 'added_option', $guard );
+		add_action( 'updated_option', $guard );
+	}
+
+	/**
 	 * The verify predicate reports the real state of the tables.
 	 */
 	public function test_schema_verify_true_when_installed_false_when_a_table_is_missing(): void {

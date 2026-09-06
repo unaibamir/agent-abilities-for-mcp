@@ -133,7 +133,16 @@ function aafm_activity_log_finalize_schema(): void {
 		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_activity_log()
 		// below trusts this stamp to decide whether the installer needs to run again, so a write
 		// that a persistent cache silently no-ops must not be allowed to look like it landed.
-		aafm_update_option_verified( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
+		if ( ! aafm_update_option_verified( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION ) ) {
+			// Codex round 8 R8-3: this return value used to be discarded. The table itself is
+			// genuinely fine, but with the version left un-stamped, aafm_maybe_upgrade_activity_log()
+			// reruns dbDelta() every request instead of settling - and the error transient above
+			// was already cleared on the strength of the schema check alone, hiding the persist
+			// failure from the admin notice. Re-set the transient and log the failure so it is
+			// visible instead of silent.
+			set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
+			aafm_log_ability_persist_failure( 'aafm_activity_log_schema_version', __( 'The activity-log schema version', 'agent-abilities-for-mcp' ) );
+		}
 		return;
 	}
 

@@ -464,6 +464,156 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7, R7-6: on PHP 8, `\wp_safe_remote_get` tokenizes as ONE T_NAME_FULLY_QUALIFIED
+	 * token (never a bare T_STRING), and `Foo\Bar` as ONE T_NAME_QUALIFIED token; on PHP 7.4 the
+	 * same source is a T_NS_SEPARATOR/T_STRING run instead. Either way it is still a call to the
+	 * same primitive under a qualifier, not a different function. Collapse every such run - on
+	 * either PHP version - into a single T_STRING-shaped token carrying the full qualified text,
+	 * so every helper below can keep matching by bare name regardless of how the caller qualified
+	 * it or which PHP version tokenized the file.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @return array<int,array{0:int,1:string,2:int}|string>
+	 */
+	private function collapse_qualified_names( array $tokens ): array {
+		$name_ids = array( T_STRING, T_NS_SEPARATOR );
+		foreach ( array( 'T_NAME_QUALIFIED', 'T_NAME_FULLY_QUALIFIED', 'T_NAME_RELATIVE' ) as $const ) {
+			if ( defined( $const ) ) {
+				$name_ids[] = constant( $const );
+			}
+		}
+
+		$collapsed = array();
+		$total     = count( $tokens );
+		$i         = 0;
+		while ( $i < $total ) {
+			$token = $tokens[ $i ];
+			if ( ! is_array( $token ) || ! in_array( $token[0], $name_ids, true ) ) {
+				$collapsed[] = $token;
+				++$i;
+				continue;
+			}
+			$text = '';
+			$line = $token[2];
+			while ( $i < $total && is_array( $tokens[ $i ] ) && in_array( $tokens[ $i ][0], $name_ids, true ) ) {
+				$text .= $tokens[ $i ][1];
+				++$i;
+			}
+			$collapsed[] = array( T_STRING, $text, $line );
+		}
+		return $collapsed;
+	}
+
+	/**
+	 * The bare, unqualified segment of a (possibly qualified) name token's text - `Requests` from
+	 * `\WpOrg\Requests\Requests`, or the name unchanged when it was never qualified at all. Every
+	 * matcher below compares against this, so a qualifier never hides nor spoofs the real name.
+	 *
+	 * @param string $text Token text, e.g. from a token collapse_qualified_names() produced.
+	 * @return string
+	 */
+	private function trailing_name_segment( string $text ): string {
+		$pos = strrpos( $text, '\\' );
+		return false === $pos ? $text : substr( $text, $pos + 1 );
+	}
+
+	/**
+	 * Codex round 7, R7-6: `use function wp_safe_remote_get as fetch;` or
+	 * `use WpOrg\Requests\Requests as Net;` lets code call the exact same primitive under a name
+	 * that no longer matches any literal target this scan looks for. Map every imported alias
+	 * back to the real bare name it imports (function and class imports tracked separately, since
+	 * PHP resolves them in separate namespaces), so a call to the alias still counts as a call to
+	 * the primitive it actually resolves to. Only the single, non-grouped and simple grouped
+	 * `use ... {A, B as C};` forms are handled - this file does not use any other form today.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens (see
+	 *                                                               collapse_qualified_names()).
+	 * @return array{function:array<string,string>,class:array<string,string>}
+	 */
+	private function parse_use_aliases( array $tokens ): array {
+		$aliases = array(
+			'function' => array(),
+			'class'    => array(),
+		);
+		$total   = count( $tokens );
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || T_USE !== $token[0] ) {
+				continue;
+			}
+			$next = $this->significant_token( $tokens, $i, 1 );
+			if ( is_string( $next ) && '(' === $next ) {
+				continue; // A closure's `use (&$x)` capture, not an import.
+			}
+
+			$kind = 'class';
+			$j    = $i + 1;
+			while ( $j < $total && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				++$j;
+			}
+			if ( $j < $total && is_array( $tokens[ $j ] ) && T_FUNCTION === $tokens[ $j ][0] ) {
+				$kind = 'function';
+				++$j;
+			} elseif ( $j < $total && is_array( $tokens[ $j ] ) && T_CONST === $tokens[ $j ][0] ) {
+				++$j; // `use const X;` never matches a primitive name - skip past it harmlessly.
+			}
+
+			$entry = '';
+			while ( $j < $total && ';' !== $tokens[ $j ] ) {
+				$t = $tokens[ $j ];
+				if ( ',' === $t || '}' === $t ) {
+					$this->record_use_alias( $aliases[ $kind ], $entry );
+					$entry = '';
+					++$j;
+					continue;
+				}
+				if ( '{' === $t ) {
+					++$j;
+					continue;
+				}
+				$entry .= is_array( $t ) ? $t[1] : $t;
+				++$j;
+			}
+			$this->record_use_alias( $aliases[ $kind ], $entry );
+		}
+		return $aliases;
+	}
+
+	/**
+	 * Records one parsed `use` alias into the given map.
+	 *
+	 * @param array<string,string> $map Alias => real bare name, mutated in place.
+	 * @param string               $entry Raw "Qualified\Name" or "Qualified\Name as Alias" text.
+	 */
+	private function record_use_alias( array &$map, string $entry ): void {
+		$entry = trim( $entry );
+		if ( '' === $entry ) {
+			return;
+		}
+		if ( preg_match( '/^(.*?)\s+as\s+(\w+)$/i', $entry, $m ) ) {
+			$map[ $m[2] ] = $this->trailing_name_segment( trim( $m[1] ) );
+			return;
+		}
+		$real         = $this->trailing_name_segment( $entry );
+		$map[ $real ] = $real;
+	}
+
+	/**
+	 * Whether a collapsed name token's bare segment resolves - directly, or through an imported
+	 * alias - to the given target name.
+	 *
+	 * @param string               $token_text Collapsed token text.
+	 * @param string               $target Bare target name to match.
+	 * @param array<string,string> $aliases Alias => real bare name, from parse_use_aliases().
+	 * @param bool                 $case_sensitive True for class names, false for function names.
+	 * @return bool
+	 */
+	private function resolves_to( string $token_text, string $target, array $aliases, bool $case_sensitive ): bool {
+		$bare     = $this->trailing_name_segment( $token_text );
+		$resolved = $aliases[ $bare ] ?? $bare;
+		return $case_sensitive ? $target === $resolved : 0 === strcasecmp( $target, $resolved );
+	}
+
+	/**
 	 * Codex round 6, B6-6: the retired scan stripped comments and then ran regexes against the
 	 * reconstructed source text - so a string literal such as "wp_safe_remote_get(" or a method
 	 * named the same as a primitive, like $client->curl_exec(), still counted as a hit. Tokens
@@ -472,14 +622,19 @@ final class SecurityRegressionTest extends TestCase {
 	 * (a method call), '::' (a static call), nor the `function` keyword (a declaration) as the
 	 * token right before it.
 	 *
-	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * Codex round 7, R7-6: matches through resolves_to() now, so a fully-qualified call
+	 * (`\wp_safe_remote_get(...)`) or an imported alias (`use function ... as fetch; fetch(...)`)
+	 * counts exactly the same as the bare, unaliased call.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
 	 * @param string                                        $name Bare function name to count real calls of.
+	 * @param array<string,string>                          $aliases Function alias => real bare name.
 	 * @return int
 	 */
-	private function count_function_call_tokens( array $tokens, string $name ): int {
+	private function count_function_call_tokens( array $tokens, string $name, array $aliases = array() ): int {
 		$count = 0;
 		foreach ( $tokens as $i => $token ) {
-			if ( ! is_array( $token ) || T_STRING !== $token[0] || 0 !== strcasecmp( $token[1], $name ) ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], $name, $aliases, false ) ) {
 				continue;
 			}
 			$next = $this->significant_token( $tokens, $i, 1 );
@@ -500,14 +655,18 @@ final class SecurityRegressionTest extends TestCase {
 	 * immediately followed by `::` - the one primitive in this suite where a preceding `::` is
 	 * exactly the pattern being looked for, not something to exclude.
 	 *
-	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * Codex round 7, R7-6: matches through resolves_to() now, so `\WpOrg\Requests\Requests::` and
+	 * an imported `use WpOrg\Requests\Requests as Net; Net::` both count.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
 	 * @param string                                        $class_name Exact class name, case-sensitive.
+	 * @param array<string,string>                          $aliases Class alias => real bare name.
 	 * @return int
 	 */
-	private function count_static_class_prefix_tokens( array $tokens, string $class_name ): int {
+	private function count_static_class_prefix_tokens( array $tokens, string $class_name, array $aliases = array() ): int {
 		$count = 0;
 		foreach ( $tokens as $i => $token ) {
-			if ( ! is_array( $token ) || T_STRING !== $token[0] || $class_name !== $token[1] ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], $class_name, $aliases, true ) ) {
 				continue;
 			}
 			$next = $this->significant_token( $tokens, $i, 1 );
@@ -524,14 +683,18 @@ final class SecurityRegressionTest extends TestCase {
 	 * the name. Only a real identifier token counts; the class name sitting inside a string
 	 * literal (e.g. `class_exists( 'WP_Http' )`) never tokenizes as T_STRING at all.
 	 *
-	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * Codex round 7, R7-6: matches through resolves_to() now, so `\WP_Http` and an imported
+	 * `use WP_Http as Http;` alias both count as a reference to WP_Http.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
 	 * @param string                                        $name Exact identifier name, case-sensitive.
+	 * @param array<string,string>                          $aliases Class alias => real bare name.
 	 * @return int
 	 */
-	private function count_identifier_tokens( array $tokens, string $name ): int {
+	private function count_identifier_tokens( array $tokens, string $name, array $aliases = array() ): int {
 		$count = 0;
 		foreach ( $tokens as $token ) {
-			if ( is_array( $token ) && T_STRING === $token[0] && $name === $token[1] ) {
+			if ( is_array( $token ) && T_STRING === $token[0] && $this->resolves_to( $token[1], $name, $aliases, true ) ) {
 				++$count;
 			}
 		}
@@ -545,14 +708,21 @@ final class SecurityRegressionTest extends TestCase {
 	 * the balanced parens collecting the raw argument text and look for 'http' in THAT text only,
 	 * rather than in the whole comment-stripped file the retired regex scanned.
 	 *
-	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * Codex round 7, R7-6: a runtime URL held in a variable never contains the literal text
+	 * 'http' in the SOURCE, so `file_get_contents( $url )` passed the old text search regardless
+	 * of what $url holds at runtime. The first argument is only "safe to text-match" when it is a
+	 * single plain string literal - anything else (a variable, concatenation, constant, or nested
+	 * call) is not statically known, so it counts as outbound unconditionally.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
+	 * @param array<string,string>                          $aliases Function alias => real bare name.
 	 * @return int
 	 */
-	private function count_file_get_contents_http_calls( array $tokens ): int {
+	private function count_file_get_contents_http_calls( array $tokens, array $aliases = array() ): int {
 		$count = 0;
 		$total = count( $tokens );
 		foreach ( $tokens as $i => $token ) {
-			if ( ! is_array( $token ) || T_STRING !== $token[0] || 0 !== strcasecmp( $token[1], 'file_get_contents' ) ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], 'file_get_contents', $aliases, false ) ) {
 				continue;
 			}
 			$next = $this->significant_token( $tokens, $i, 1 );
@@ -568,21 +738,36 @@ final class SecurityRegressionTest extends TestCase {
 			while ( $open_index < $total && '(' !== $tokens[ $open_index ] ) {
 				++$open_index;
 			}
-			$depth = 0;
-			$args  = '';
+			$depth            = 0;
+			$first_arg_tokens = array();
 			for ( $j = $open_index; $j < $total; $j++ ) {
 				$t = $tokens[ $j ];
 				if ( '(' === $t ) {
 					++$depth;
-				} elseif ( ')' === $t ) {
+					continue;
+				}
+				if ( ')' === $t ) {
 					--$depth;
 					if ( 0 === $depth ) {
 						break;
 					}
+					$first_arg_tokens[] = $t;
+					continue;
 				}
-				$args .= is_array( $t ) ? $t[1] : $t;
+				if ( ',' === $t && 1 === $depth ) {
+					break; // End of the first argument - the rest doesn't change this check.
+				}
+				if ( is_array( $t ) && in_array( $t[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+					continue;
+				}
+				$first_arg_tokens[] = $t;
 			}
-			if ( false !== stripos( $args, 'http' ) ) {
+
+			$is_plain_literal = 1 === count( $first_arg_tokens )
+				&& is_array( $first_arg_tokens[0] )
+				&& T_CONSTANT_ENCAPSED_STRING === $first_arg_tokens[0][0];
+
+			if ( ! $is_plain_literal || false !== stripos( $first_arg_tokens[0][1], 'http' ) ) {
 				++$count;
 			}
 		}
@@ -608,6 +793,11 @@ final class SecurityRegressionTest extends TestCase {
 	 * admin-only, manage_options + nonce gated reachability probe never reachable by an MCP
 	 * agent (Codex hunt F3 already covers why its target URL is trusted; see
 	 * aafm_ability_disclosures()'s file docblock in disclosures.php).
+	 *
+	 * Codex round 7, R7-6: tokens are collapsed (collapse_qualified_names()) and each file's own
+	 * `use` imports resolved (parse_use_aliases()) before matching, so a fully-qualified call or
+	 * an imported alias for any of these primitives is caught exactly like the bare, unaliased
+	 * spelling - it does not get a second, unaccounted-for way to reach the network.
 	 */
 	public function test_outbound_network_primitives_match_an_exact_per_file_allowlist(): void {
 		$dir   = dirname( __DIR__, 2 ) . '/includes';
@@ -636,6 +826,14 @@ final class SecurityRegressionTest extends TestCase {
 			'includes/admin/connection.php' => array(
 				'wp_remote_post' => 1,
 			),
+			// Codex round 7, R7-6: aafm_adapter_file_applies_tools_list_filter() reads an
+			// already-loaded, is_readable()-checked local adapter file path, never a URL - but the
+			// path arrives in a variable, so the stricter file_get_contents() check below (a
+			// non-literal first argument is never "statically known" to be safe) now needs this
+			// entry the same way media.php's cURL handle and connection.php's probe are allowed.
+			'includes/adapter-loader.php'   => array(
+				'file_get_contents(http)' => 1,
+			),
 		);
 
 		foreach ( $files as $file ) {
@@ -644,8 +842,9 @@ final class SecurityRegressionTest extends TestCase {
 			}
 			// Reading our own bundled source for a static scan - not a remote fetch.
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-			$tokens = token_get_all( (string) file_get_contents( $file->getPathname() ) );
-			$path   = str_replace( '\\', '/', $file->getPathname() );
+			$tokens  = $this->collapse_qualified_names( token_get_all( (string) file_get_contents( $file->getPathname() ) ) );
+			$path    = str_replace( '\\', '/', $file->getPathname() );
+			$aliases = $this->parse_use_aliases( $tokens );
 
 			$expected = array();
 			foreach ( $allowed as $allowed_suffix => $counts ) {
@@ -658,28 +857,93 @@ final class SecurityRegressionTest extends TestCase {
 			foreach ( $function_primitives as $label ) {
 				$this->assertSame(
 					$expected[ $label ] ?? 0,
-					$this->count_function_call_tokens( $tokens, $label ),
+					$this->count_function_call_tokens( $tokens, $label, $aliases['function'] ),
 					sprintf( '%s call count mismatch in %s', $label, $file->getFilename() )
 				);
 			}
 			$this->assertSame(
 				$expected['Requests::'] ?? 0,
-				$this->count_static_class_prefix_tokens( $tokens, 'Requests' ),
+				$this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ),
 				sprintf( 'Requests:: call count mismatch in %s', $file->getFilename() )
 			);
 			$this->assertSame(
 				$expected['WP_Http'] ?? 0,
-				$this->count_identifier_tokens( $tokens, 'WP_Http' ),
+				$this->count_identifier_tokens( $tokens, 'WP_Http', $aliases['class'] ),
 				sprintf( 'WP_Http reference count mismatch in %s', $file->getFilename() )
 			);
 			$this->assertSame(
 				$expected['file_get_contents(http)'] ?? 0,
-				$this->count_file_get_contents_http_calls( $tokens ),
+				$this->count_file_get_contents_http_calls( $tokens, $aliases['function'] ),
 				sprintf( 'file_get_contents(http) call count mismatch in %s', $file->getFilename() )
 			);
 		}
 	}
 
+	/**
+	 * Codex round 7, R7-6: fixture-based self-tests for the scanner itself. Each one proves a
+	 * specific bypass the finding named is now caught, and that the existing string/method false
+	 * positives round 6 already fixed stay fixed.
+	 *
+	 * @param string $source Bare PHP body (no opening <?php tag - added here).
+	 * @return array<int,array{0:int,1:string,2:int}|string>
+	 */
+	private function collapsed_fixture_tokens( string $source ): array {
+		return $this->collapse_qualified_names( token_get_all( "<?php\n" . $source ) );
+	}
+
+	public function test_scanner_counts_a_fully_qualified_call_as_the_bare_primitive(): void {
+		$tokens = $this->collapsed_fixture_tokens( '\\wp_safe_remote_get( $url );' );
+
+		$this->assertSame( 1, $this->count_function_call_tokens( $tokens, 'wp_safe_remote_get' ) );
+	}
+
+	public function test_scanner_counts_an_imported_function_alias_as_the_real_primitive(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use function wp_safe_remote_get as fetch;\nfetch( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 1, $this->count_function_call_tokens( $tokens, 'wp_safe_remote_get', $aliases['function'] ) );
+	}
+
+	public function test_scanner_counts_an_imported_class_alias_as_the_real_static_prefix(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\Requests as Net;\nNet::request( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+	}
+
+	public function test_scanner_counts_a_fully_qualified_static_prefix(): void {
+		$tokens = $this->collapsed_fixture_tokens( '\\WpOrg\\Requests\\Requests::get( $url );' );
+
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests' ) );
+	}
+
+	public function test_scanner_counts_a_variable_file_get_contents_argument_as_outbound(): void {
+		$tokens = $this->collapsed_fixture_tokens( '$body = file_get_contents( $url );' );
+
+		$this->assertSame( 1, $this->count_file_get_contents_http_calls( $tokens ) );
+	}
+
+	public function test_scanner_still_exempts_a_local_literal_file_get_contents_argument(): void {
+		$tokens = $this->collapsed_fixture_tokens( "file_get_contents( '/tmp/local-cache.json' );" );
+
+		$this->assertSame( 0, $this->count_file_get_contents_http_calls( $tokens ) );
+	}
+
+	public function test_scanner_still_ignores_a_string_literal_that_merely_names_a_primitive(): void {
+		$tokens = $this->collapsed_fixture_tokens( "\$s = 'wp_safe_remote_get(';" );
+
+		$this->assertSame( 0, $this->count_function_call_tokens( $tokens, 'wp_safe_remote_get' ) );
+	}
+
+	public function test_scanner_still_ignores_a_method_call_sharing_a_primitives_name(): void {
+		$tokens = $this->collapsed_fixture_tokens( '$client->curl_exec();' );
+
+		$this->assertSame( 0, $this->count_function_call_tokens( $tokens, 'curl_exec' ) );
+	}
 
 	/**
 	 * CVE class: PERMANENT DELETE.

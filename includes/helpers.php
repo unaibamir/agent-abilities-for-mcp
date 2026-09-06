@@ -2149,14 +2149,31 @@ function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string
  * longer reports as an error; a genuine veto (a filter reverting to the OLD value) still differs
  * from the canonical NEW value and is still caught.
  *
- * @param int    $post_id  Post id, already saved.
- * @param string $field    Post field name (post_title, post_content, post_excerpt, post_status, ...).
- * @param string $intended The unslashed value the write attempted to persist.
+ * Codex round 7 R7-4: on a CREATE, core's own sanitize_post( $postarr, 'db' ) inside
+ * wp_insert_post() runs before the row exists and before an ID is assigned - $postarr['ID'] is
+ * unset, and sanitize_post() defaults that to 0 (wp-includes/post.php) before calling
+ * sanitize_post_field() for every field. Recomputing the expected value with the newly assigned,
+ * positive $post_id instead of the 0 the real write actually sanitized with can disagree with an
+ * ID-sensitive registered filter and falsely reject (and, for GeoDirectory's create path, delete)
+ * an otherwise valid create. $sanitize_context_id lets a create-path caller supply the same
+ * context (0) the real write used; it defaults to $post_id, matching every existing update-path
+ * caller, which already sanitizes with the real, existing id and is unaffected by this parameter.
+ *
+ * @param int      $post_id             Post id, already saved (used for the read-back).
+ * @param string   $field               Post field name (post_title, post_content, post_excerpt,
+ *                                      post_status, ...).
+ * @param string   $intended            The unslashed value the write attempted to persist.
+ * @param int|null $sanitize_context_id The id to recompute the canonical form with. Defaults to
+ *                                      $post_id (an update, where the row already existed at
+ *                                      sanitize time). Pass 0 for a create, matching what core's
+ *                                      own sanitize_post( $postarr, 'db' ) actually used before
+ *                                      the row was inserted.
  * @return bool
  */
-function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended ): bool {
+function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended, ?int $sanitize_context_id = null ): bool {
 	clean_post_cache( $post_id );
-	$sanitized = sanitize_post_field( $field, wp_slash( $intended ), $post_id, 'db' );
+	$context_id = $sanitize_context_id ?? $post_id;
+	$sanitized  = sanitize_post_field( $field, wp_slash( $intended ), $context_id, 'db' );
 	// This helper is only ever called for string post fields (post_title, post_content,
 	// post_excerpt, post_status); sanitize_post_field()'s broader return type (it also handles
 	// int and array-of-int fields) is guarded here rather than widening this function's contract.

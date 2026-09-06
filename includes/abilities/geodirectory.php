@@ -771,12 +771,16 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 	// or status would still report success. Same confirm-by-reread principle, applied here too.
 	// Codex round 6 B6-3: compare against each field's CANONICAL sanitize_post_field() form, not
 	// the pre-write intent - a false mismatch here used to DELETE an otherwise valid listing, so
-	// this is the highest-stakes site for the false-normalization bug this fix closes.
+	// this is the highest-stakes site for the false-normalization bug this fix closes. Codex round
+	// 7 R7-4: this is a CREATE, so the real wp_insert_post() sanitized these fields with id 0
+	// (the row did not exist yet) - recompute the canonical form the same way, not with the id
+	// just assigned, or an id-sensitive registered filter can disagree and this rolls back
+	// (deletes) an otherwise valid listing.
 	$after = get_post( $post_id );
 	if ( ! $after instanceof WP_Post
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title )
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content )
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_status', $status )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title, 0 )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content, 0 )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_status', $status, 0 )
 	) {
 		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title, content, or status could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
 	}

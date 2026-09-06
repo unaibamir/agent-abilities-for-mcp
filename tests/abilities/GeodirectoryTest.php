@@ -822,6 +822,43 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7 R7-4: core's own wp_insert_post() sanitizes a CREATE's fields
+	 * (sanitize_post( $postarr, 'db' ), wp-includes/post.php) BEFORE the row exists and before an
+	 * id is assigned - sanitize_post() defaults the missing id to 0. The confirmation guard used
+	 * to recompute the expected value with the newly assigned, positive id instead, so an
+	 * id-sensitive registered filter could disagree with what core actually did and the guard
+	 * would roll back (delete) an otherwise valid listing.
+	 *
+	 * Pre_post_title/title_save_pre receive only the value, never the post id, as an argument
+	 * (verified by reading sanitize_post_field()'s 'db' branch and by probing it directly against
+	 * this WP install), so this filter reads the id sanitize_post_field() was actually invoked
+	 * with off the call stack - the same fact an id-sensitive vendor filter would ultimately be
+	 * keying off through some other means (a plugin-tracked "is this an update" flag, for
+	 * instance).
+	 */
+	public function test_create_survives_an_id_sensitive_title_filter(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$decorate = static function ( $value ) {
+			foreach ( debug_backtrace( 0 ) as $frame ) { // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- deliberate test-fixture use to detect the id sanitize_post_field() was invoked with, not production debug code.
+				if ( isset( $frame['function'], $frame['args'][2] ) && 'sanitize_post_field' === $frame['function'] ) {
+					return 0 === (int) $frame['args'][2] ? $value : $value . ' (edited)';
+				}
+			}
+			return $value;
+		};
+		add_filter( 'pre_post_title', $decorate );
+		$out = aafm_exec_geodirectory_create_listing( array( 'title' => 'New Listing' ) );
+		remove_filter( 'pre_post_title', $decorate );
+
+		$this->assertIsArray(
+			$out,
+			'A create whose title was sanitized with id 0, exactly as core itself does before the row exists, must not be rolled back because the confirmation recomputed it with the newly assigned id instead.'
+		);
+		$this->assertSame( 'New Listing', get_post( $out['listing_id'] )->post_title );
+	}
+
+	/**
 	 * Codex final round 2 MEDIUM: a legitimate third-party filter on 'geodir_get_post_info' that
 	 * merely reformats the returned value (not GeoDirectory's own default behavior - something
 	 * another active plugin or theme could add) must not make the write-confirmation check see a

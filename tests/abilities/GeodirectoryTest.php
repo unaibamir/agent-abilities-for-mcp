@@ -537,6 +537,58 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7, R7-5: the test above only checks `truncated`, not how many real queries it
+	 * took to get there - it stayed green while the disambiguation probe quietly doubled the
+	 * documented ceiling (1000 for enumeration, then a fresh 1000 more for the probe). Padding
+	 * every batch with drafts the caller cannot edit means the probe can never resolve truncation
+	 * by finding a visible row, so it can only stop by exhausting its own reserve - proving the
+	 * combined total stays near the documented 1000-iteration ceiling instead of doubling it.
+	 */
+	public function test_get_listings_probe_draws_from_a_small_shared_reserve_not_a_second_full_budget(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => PHP_INT_MAX );
+
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		$ids   = self::factory()->post->create_many(
+			2,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $other,
+			)
+		);
+
+		$query_count = 0;
+		$pad         = static function ( $posts, $query ) use ( $ids, &$query_count ) {
+			if ( ! $query->get( 'aafm_query_marker' ) ) {
+				return $posts;
+			}
+			++$query_count;
+			// Always report a full batch of the same two drafts, invisible to the current author -
+			// so neither the enumeration's own cap nor the probe's reserve can ever be ended early
+			// by finding a short batch or a visible row.
+			return array( get_post( $ids[0] ), get_post( $ids[1] ) );
+		};
+		add_filter( 'the_posts', $pad, 10, 2 );
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_filter( 'the_posts', $pad );
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+		remove_all_filters( 'aafm_geodirectory_list_batch_cap' );
+
+		$this->assertTrue( $out['truncated'] );
+		$this->assertLessThanOrEqual(
+			1002,
+			$query_count,
+			'The probe must draw from a small shared reserve instead of its own independent 1000-iteration budget, so the combined total stays near the documented ceiling instead of doubling it.'
+		);
+	}
+
+	/**
 	 * Codex final round 3 MEDIUM: an OFFSET-based batch loop is unstable under mutation - trashing
 	 * a row from an earlier batch shifts every later OFFSET window down by one, so the next batch
 	 * skips exactly one real row. Keyset pagination (WHERE ID > last-seen-ID, no offset at all)

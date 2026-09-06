@@ -363,8 +363,10 @@ function aafm_args_geodirectory_get_listings(): array {
  * pathological host filter that always returns a full batch. The filter may only narrow the cap,
  * never raise it past this hard ceiling.
  *
- * ponytail: 1000 is the hard ceiling this ability will ever examine in one call; raise it here
- * (not just in the filter's return value) if a real directory ever legitimately needs more.
+ * ponytail: 1000 is the hard ceiling on the enumeration loop's own batches; raise it here (not
+ * just in the filter's return value) if a real directory ever legitimately needs more. The
+ * truncation probe in aafm_exec_geodirectory_get_listings() draws on a small fixed reserve on
+ * top of this, not a second copy of it - see the Codex round 7, R7-5 note there for why.
  *
  * @return int
  */
@@ -460,6 +462,9 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 			// ponytail: 1000 batches at the default size of 500 covers 500,000 listings - a
 			// pathological host filter that always returns a full batch stops here instead of
 			// looping forever; raise the multiplier if a real directory ever legitimately exceeds it.
+			// The disambiguation probe below adds a small fixed reserve on top of this cap (see
+			// the Codex round 7, R7-5 note below), so the true worst case for one call is this
+			// cap plus that reserve, not a second full copy of it.
 			if ( ++$iterations > $batch_cap ) {
 				// Codex hunt F8: signal the cap in the response instead of silently
 				// undercounting - a caller past the cap needs to know `total` is a floor, not
@@ -483,16 +488,27 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 				// Codex round 6, B6-5: a single probe batch answered a different question again - if
 				// EVERY row in that one batch is invisible, a later visible row past it was still
 				// missed and `truncated` came back false. Keep advancing the same keyset cursor
-				// through further probe batches (never counted against $iterations, but bounded by
-				// the same $batch_cap) until a visible row turns up or a short batch proves the real
-				// end of the data was reached.
+				// through further probe batches until a visible row turns up or a short batch
+				// proves the real end of the data was reached.
+				//
+				// Codex round 7, R7-5: this probe used to get its OWN fresh $batch_cap iterations
+				// (up to 1000) stacked on top of the 1000 the enumeration above already spent, so
+				// the documented "1000 examined in one call" ceiling could silently double to 2000
+				// real queries. Disambiguating "the last batch happened to land exactly on a batch
+				// boundary" from "there is truly more data" only ever needs a couple of extra
+				// batches in practice, not a second full copy of the main budget. A small, fixed
+				// reserve (never more than $batch_cap itself) keeps the true combined ceiling at
+				// $batch_cap + 2, not 2x $batch_cap.
 				$truncated        = false;
 				$probe_iterations = 0;
+				$probe_cap        = min( 2, $batch_cap );
 				do {
-					if ( ++$probe_iterations > $batch_cap ) {
-						// ponytail: the probe hit the same hard ceiling the enumeration itself obeys
-						// without ever resolving visible-or-not - report truncated rather than assert
-						// a "nothing more" the scan never actually confirmed.
+					if ( ++$probe_iterations > $probe_cap ) {
+						// ponytail: the probe exhausted its small shared reserve without ever
+						// resolving visible-or-not - report truncated rather than assert a "nothing
+						// more" the scan never actually confirmed. Raise the reserve above (still
+						// bounded by $batch_cap) if a real directory legitimately needs to skip past
+						// more than two full invisible batches to disambiguate.
 						$truncated = true;
 						break;
 					}

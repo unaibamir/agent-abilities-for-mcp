@@ -327,6 +327,56 @@ final class MediaReadTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Codex hunt F2: the scoped posts_where filter had no query-identity marker, so it ran
+	 * against EVERY WP_Query built while it was attached, not only its own - an unrelated
+	 * nested WP_Query fired from a hook during the search (e.g. a 'pre_get_posts' callback
+	 * elsewhere in the stack) would incorrectly receive the same title/content/excerpt/meta OR
+	 * clause too. A private per-call marker in the query args must keep the filter scoped to
+	 * its own query only, the same fix already applied to the GeoDirectory listing scan and the
+	 * sitewide replace scan for the identical shape.
+	 */
+	public function test_get_media_search_filter_does_not_contaminate_a_nested_query(): void {
+		$this->acting_as( 'author' );
+		self::factory()->attachment->create_object(
+			'nestedneedle.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_title'     => 'NestedNeedleTitle',
+			)
+		);
+		$other_post = self::factory()->post->create( array( 'post_title' => 'An unrelated published post' ) );
+
+		$nested_result = null;
+		$callback      = function ( $query ) use ( &$nested_result, $other_post ) {
+			// Only react to our own outer media search query; the nested probe below must fall
+			// through untouched (it carries no 'attachment'/'aafm_query_marker' shape).
+			if ( 'attachment' !== $query->get( 'post_type' ) ) {
+				return;
+			}
+			$nested        = new \WP_Query(
+				array(
+					'post_type'   => 'post',
+					'post_status' => 'publish',
+					'p'           => $other_post,
+				)
+			);
+			$nested_result = $nested->posts;
+		};
+		add_action( 'pre_get_posts', $callback );
+
+		wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'NestedNeedleTitle' ) );
+
+		remove_action( 'pre_get_posts', $callback );
+
+		$this->assertNotEmpty(
+			$nested_result,
+			'A nested query fired mid-search must not be contaminated by the media search filter.'
+		);
+	}
+
 	public function test_get_media_item_is_in_registry_as_read(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( 'aafm/get-media-item', $registry );

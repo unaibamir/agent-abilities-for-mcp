@@ -214,7 +214,21 @@ function aafm_exec_get_media( array $input ) {
 		// it used to provide, so both are folded into the same OR group here. Added immediately
 		// before the query and removed in a finally block, so a throw inside WP_Query can never
 		// leave the filter attached to a later, unrelated query in the same request.
-		$where_filter = static function ( string $where ) use ( $search ): string {
+		//
+		// Codex hunt F2: an unscoped 'posts_where' filter runs against EVERY WP_Query built
+		// while it's attached, not only this function's own - a nested WP_Query fired from any
+		// hook during this query (e.g. a 'pre_get_posts'/'the_posts' callback) would silently
+		// receive this same OR clause too. A private, per-call marker in the query args
+		// (harmless to core - an unrecognized key is simply ignored when building SQL, but still
+		// readable via $query->get()) scopes the filter to this function's own query only, the
+		// same pattern already used by aafm_exec_geodirectory_get_listing() and
+		// aafm_exec_replace_in_site() for the identical shape.
+		$query_marker              = 'aafm_get_media_' . wp_generate_password( 12, false, false );
+		$args['aafm_query_marker'] = $query_marker;
+		$where_filter              = static function ( string $where, WP_Query $query ) use ( $search, $query_marker ): string {
+			if ( $query_marker !== $query->get( 'aafm_query_marker' ) ) {
+				return $where;
+			}
 			global $wpdb;
 			$like = '%' . $wpdb->esc_like( $search ) . '%';
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names are internal constants ($wpdb->posts, $wpdb->postmeta).
@@ -235,11 +249,11 @@ function aafm_exec_get_media( array $input ) {
 			);
 		};
 
-		add_filter( 'posts_where', $where_filter );
+		add_filter( 'posts_where', $where_filter, 10, 2 );
 		try {
 			return new WP_Query( $args );
 		} finally {
-			remove_filter( 'posts_where', $where_filter );
+			remove_filter( 'posts_where', $where_filter, 10 );
 		}
 	};
 

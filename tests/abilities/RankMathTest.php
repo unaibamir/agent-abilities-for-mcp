@@ -505,6 +505,34 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 5 R5-2: aafm_exec_rankmath_update_post() discarded every update_post_meta()
+	 * return value and answered with a fresh read that carried no comparison against what was
+	 * requested, unlike its schema sibling above. A filter that vetoes the postmeta write must
+	 * surface as a structured error, not a success response echoing the caller's stale value.
+	 */
+	public function test_update_post_returns_an_error_when_the_write_is_vetoed(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+		update_post_meta( $post_id, 'rank_math_title', 'Old title' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$res  = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'New title',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A vetoed rank_math_title write must return an error, not a success reporting the old value.'
+		);
+	}
+
+	/**
 	 * 1.7.2 bug #6: AAFM_SCHEMA_MAX_DEPTH has two declaration sites that disagree.
 	 * includes/bridge.php:60 declares `const AAFM_SCHEMA_MAX_DEPTH = 30;` (the value that actually
 	 * wins, since it loads first); includes/integrations.php:220 carries a dead

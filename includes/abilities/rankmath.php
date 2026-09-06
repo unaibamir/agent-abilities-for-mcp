@@ -498,6 +498,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	}
 
 	$url_fields = aafm_rankmath_url_fields();
+	$expected   = array();
 	foreach ( aafm_rankmath_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
@@ -508,6 +509,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		// is stripped unless it is slashed first. Every sibling meta writer (meta.php, terms.php,
 		// user-meta.php) slashes; these SEO writers must too.
 		update_post_meta( $id, $key, wp_slash( $clean ) );
+		$expected[ $field ] = $clean;
 	}
 
 	// Persist the attachment-id companion meta the frontend actually renders from. A cleared image (0)
@@ -535,6 +537,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 			)
 		);
 		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
+		$expected['robots'] = implode( ',', $kept );
 
 		// Delegation audit sweep (210-sweep-B5-report.md): rank_math_robots is the exact meta key
 		// Sitemap::is_object_indexable() reads to decide sitemap inclusion, but Cache_Watcher only
@@ -552,7 +555,23 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		}
 	}
 
-	return aafm_rankmath_read_fields( $id );
+	// Codex round 5 R5-2: every update_post_meta() call above discarded its return value, unlike
+	// the schema sibling one call below (aafm_exec_rankmath_update_schema()), which already
+	// rereads and compares. A site-installed update_post_metadata filter vetoing any of these
+	// writes would report success while the response still carried the requested value rather
+	// than what storage actually holds. Confirm every field the caller provided against a fresh
+	// read before reporting success.
+	$confirmed = aafm_rankmath_read_fields( $id );
+	foreach ( $expected as $field => $value ) {
+		if ( $confirmed[ $field ] !== $value ) {
+			return new WP_Error(
+				'aafm_rankmath_write_unconfirmed',
+				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+			);
+		}
+	}
+
+	return $confirmed;
 }
 
 /**

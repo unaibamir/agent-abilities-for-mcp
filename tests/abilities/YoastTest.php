@@ -325,6 +325,34 @@ final class YoastTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'A closed schema rejects a smuggled field.' );
 	}
 
+	/**
+	 * Codex round 5 R5-2: aafm_exec_yoast_update_post() discarded every update_post_meta()
+	 * return value and answered with a fresh read that carried no comparison against what was
+	 * requested. A filter that vetoes the postmeta write must surface as a structured error, not
+	 * a success response echoing the caller's stale value.
+	 */
+	public function test_yoast_update_post_returns_an_error_when_the_write_is_vetoed(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+		update_post_meta( $post_id, '_yoast_wpseo_title', 'Old title' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$res  = wp_get_ability( 'aafm/yoast-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'New title',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A vetoed _yoast_wpseo_title write must return an error, not a success reporting the old value.'
+		);
+	}
+
 	public function test_yoast_get_head_returns_a_head_string(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );

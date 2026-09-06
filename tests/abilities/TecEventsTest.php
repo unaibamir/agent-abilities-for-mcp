@@ -283,6 +283,33 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( '', get_post_meta( $event_id, '_EventAllDay', true ) );
 	}
 
+	/**
+	 * Codex hunt F4: delete_post_meta()'s bool return was discarded here, so a
+	 * delete_post_metadata filter vetoing the delete must surface as a structured error, not a
+	 * success response claiming the all-day flag was cleared while the meta row survives.
+	 */
+	public function test_update_event_returns_an_error_when_the_all_day_clear_is_vetoed(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+		update_post_meta( $event_id, '_EventAllDay', 'yes' );
+
+		$veto = static fn() => false;
+		add_filter( 'delete_post_metadata', $veto, 10, 0 );
+		$out  = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $event_id,
+				'all_day'  => false,
+			)
+		);
+		remove_filter( 'delete_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$out,
+			'A vetoed all-day-clear delete must return an error, not a success claiming it was cleared.'
+		);
+	}
+
 	public function test_delete_event_trashes_not_permanently_deletes(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$event_id = $this->create_event();

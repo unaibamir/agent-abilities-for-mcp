@@ -358,6 +358,38 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertSame( 'Old City', $updated['city'] );
 	}
 
+	/**
+	 * Codex hunt F4: the title/content wp_update_post() call was checked only via
+	 * is_wp_error(), never confirmed by reread - a wp_insert_post_data filter that reverts the
+	 * title back to its old value must surface as a structured error, not a success response
+	 * claiming the requested title landed.
+	 */
+	public function test_update_listing_returns_an_error_when_the_title_write_is_vetoed(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$created = aafm_exec_geodirectory_create_listing( array( 'title' => 'Original' ) );
+		$id      = $created['listing_id'];
+
+		$veto = static function ( $data ) {
+			$data['post_title'] = 'Original';
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $veto );
+		$out = aafm_exec_geodirectory_update_listing(
+			array(
+				'listing_id' => $id,
+				'title'      => 'Renamed',
+			)
+		);
+		remove_filter( 'wp_insert_post_data', $veto );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$out,
+			'A vetoed title write must return an error, not a success claiming the new title was saved.'
+		);
+	}
+
 	public function test_update_denied_for_a_user_without_edit_access(): void {
 		$created = null;
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );

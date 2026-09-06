@@ -537,6 +537,16 @@ function aafm_exec_tec_update_event( array $input ) {
 	// TEC quirk (see TecStubStore.php's write_meta()), not one that would pass regardless.
 	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
 		delete_post_meta( $id, '_EventAllDay' );
+		// Codex hunt F4: delete_post_meta()'s bool return was discarded here, so a
+		// delete_post_metadata filter vetoing the delete would leave the event still marked
+		// all-day while this ability reported an ordinary success. Confirm the key is
+		// actually gone rather than trusting the call didn't error.
+		if ( metadata_exists( 'post', $id, '_EventAllDay' ) ) {
+			return new WP_Error(
+				'aafm_tec_write_unconfirmed',
+				__( 'The event was updated, but its all-day flag could not be confirmed as cleared.', 'agent-abilities-for-mcp' )
+			);
+		}
 	}
 	$response = array( 'event' => aafm_tec_event_shape( $id ) );
 	if ( ! empty( $safety['warnings'] ) ) {

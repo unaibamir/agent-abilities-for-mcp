@@ -262,5 +262,25 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 
 	update_post_meta( $id, 'slim_seo', wp_slash( $stored ) );
 
-	return aafm_slim_seo_read_fields( $id );
+	// Codex hunt F4: update_post_meta()'s return value was discarded and the response was a
+	// fresh read with no comparison to what was requested, so a site-installed
+	// update_post_metadata filter vetoing this write would report success while returning the
+	// OLD values. Confirm every field the caller actually touched against what landed.
+	$confirmed = aafm_slim_seo_read_fields( $id );
+	foreach ( aafm_slim_seo_fields() as $field ) {
+		if ( array_key_exists( $field, $input ) && $confirmed[ $field ] !== $stored[ $field ] ) {
+			return new WP_Error(
+				'aafm_slim_seo_write_unconfirmed',
+				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+			);
+		}
+	}
+	if ( array_key_exists( 'noindex', $input ) && $confirmed['noindex'] !== $stored['noindex'] ) {
+		return new WP_Error(
+			'aafm_slim_seo_write_unconfirmed',
+			__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+		);
+	}
+
+	return $confirmed;
 }

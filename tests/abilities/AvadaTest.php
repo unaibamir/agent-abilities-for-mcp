@@ -128,6 +128,38 @@ final class AvadaTest extends TestCase {
 	}
 
 	/**
+	 * Codex hunt F4: the replacement count was reported straight from the pre-save string
+	 * count, never re-validated against what actually landed - a wp_insert_post_data filter
+	 * that reverts the content back to the original must surface as a structured error, not a
+	 * success response claiming the replacement was saved.
+	 */
+	public function test_replace_text_returns_an_error_when_the_write_is_vetoed(): void {
+		$content = '[fusion_builder_container]Hello world[/fusion_builder_container]';
+		$id      = $this->make_avada_post( $content );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$veto = static function ( $data ) use ( $content ) {
+			$data['post_content'] = $content;
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $veto );
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'Hello world',
+				'replace' => 'Greetings world',
+			)
+		);
+		remove_filter( 'wp_insert_post_data', $veto );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed content write must return an error, not a success claiming the replacement was saved.'
+		);
+	}
+
+	/**
 	 * Codex final round 5 MEDIUM: counting each quote character independently (odd '"' OR odd
 	 * "'") false-positived on a perfectly ordinary attribute value containing an apostrophe
 	 * INSIDE a double-quoted value - not a second delimiter, just a literal character. A safe,

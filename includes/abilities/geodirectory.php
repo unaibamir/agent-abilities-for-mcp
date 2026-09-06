@@ -749,6 +749,21 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		if ( is_wp_error( $updated ) ) {
 			return aafm_generic_error();
 		}
+		// Codex hunt F4: only is_wp_error() was checked here, so a wp_insert_post_data (or
+		// similar) filter silently vetoing or normalizing the title/content would report
+		// success while the stored post kept its old values. Confirm by reread, the same
+		// pattern aafm_geodirectory_write_fields() already applies one call below to the
+		// address/location fields, extended to cover the core post fields too.
+		$after = get_post( $id );
+		if ( ! $after instanceof WP_Post
+			|| ( array_key_exists( 'post_title', $update ) && $after->post_title !== $update['post_title'] )
+			|| ( array_key_exists( 'post_content', $update ) && $after->post_content !== $update['post_content'] )
+		) {
+			return new WP_Error(
+				'aafm_geodirectory_write_unconfirmed',
+				__( 'The listing was updated, but its title or content could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+			);
+		}
 	}
 
 	if ( ! aafm_geodirectory_write_fields( $id, $input ) ) {

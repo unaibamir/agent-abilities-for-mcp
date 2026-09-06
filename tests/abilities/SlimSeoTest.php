@@ -101,6 +101,32 @@ final class SlimSeoTest extends TestCase {
 		$this->assertTrue( $out['noindex'] );
 	}
 
+	/**
+	 * Codex hunt F4: a site-installed update_post_metadata filter that vetoes the write must
+	 * surface as a structured error, not a success response carrying the stale stored value.
+	 */
+	public function test_update_post_returns_an_error_when_the_write_is_vetoed(): void {
+		$post = self::factory()->post->create_and_get();
+		update_post_meta( $post->ID, 'slim_seo', array( 'title' => 'Old title' ) );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$veto = static fn() => false;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$out  = aafm_exec_slim_seo_update_post(
+			array(
+				'post_id' => $post->ID,
+				'title'   => 'New title',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$out,
+			'A vetoed slim_seo meta write must return an error, not a success reporting the old value.'
+		);
+	}
+
 	public function test_update_post_requires_edit_access(): void {
 		$post = self::factory()->post->create();
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );

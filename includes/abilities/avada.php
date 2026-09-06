@@ -447,9 +447,20 @@ function aafm_exec_avada_replace_text( array $input ) {
 	}
 
 	$fresh = get_post( $id );
+	// Codex hunt F4: $replacements was computed from the ORIGINAL content before
+	// wp_update_post() ever ran, and never re-validated against what actually landed in
+	// storage - a wp_insert_post_data (or similar) filter revising the content on save would
+	// report a count and structure that no longer matched what was stored. Confirm the exact
+	// intended content actually landed before reporting success.
+	if ( ! $fresh instanceof WP_Post || $fresh->post_content !== $new ) {
+		return new WP_Error(
+			'aafm_avada_write_unconfirmed',
+			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+		);
+	}
 
 	return array(
-		'post'         => aafm_redact_post( $fresh instanceof WP_Post ? $fresh : $post ),
+		'post'         => aafm_redact_post( $fresh ),
 		'replacements' => $replacements,
 	);
 }

@@ -164,13 +164,23 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
 		return;
 	}
 
-	// A stored toggle is always the string '0' or '1', so get_option() returns false
-	// only when the row is genuinely absent - the signal for a pre-seed in-place upgrade.
-	if ( false === get_option( 'aafm_oauth_enabled', false ) ) {
-		add_option( 'aafm_oauth_enabled', '1', '', true );
+	// The absence check reads the database row directly (aafm_read_option_views(), see
+	// includes/option-cache.php), not get_option()'s cache-trusting view: a stale persistent
+	// cache still serving an old value after the real row has been cleared would make this
+	// migration think a row already exists, skip preserving the pre-upgrade "on" state, and then
+	// mark itself done below - permanently, since the guard is never cleared (Codex round 5,
+	// R5-3). A stored toggle is always the string '0' or '1', so a genuinely absent row is the
+	// only case that needs preserving.
+	if ( ! aafm_read_option_views( 'aafm_oauth_enabled' )['db_found'] ) {
+		if ( ! aafm_update_option_verified( 'aafm_oauth_enabled', '1' ) ) {
+			// The write could not be certified, so the guard below must NOT be set: leave the
+			// migration to try again on the next request rather than record one that never
+			// actually happened.
+			return;
+		}
 	}
 
-	update_option( 'aafm_oauth_toggle_migrated', '1', true );
+	aafm_update_option_verified( 'aafm_oauth_toggle_migrated', '1' );
 }
 
 /**
@@ -200,13 +210,20 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 		return;
 	}
 
-	$stored = get_option( 'aafm_oauth_dcr_enabled', false );
+	// Read the database row directly for the same reason as
+	// aafm_oauth_preserve_toggle_on_upgrade() above: a stale cached '1' over a database '0' (or
+	// a stale cached '0' when the plugin has just written '1') would make this migration decide
+	// from the wrong state and then mark itself done for good (Codex round 5, R5-3).
+	$stored = aafm_read_option_views( 'aafm_oauth_dcr_enabled' )['db_value'];
 	$off    = array( false, 0, '0', '', 'false', 'no', 'off' );
 	if ( in_array( $stored, $off, true ) ) {
-		update_option( 'aafm_oauth_dcr_enabled', '1', true );
+		if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '1' ) ) {
+			// Same reasoning as above: an uncertified write must not be followed by the guard.
+			return;
+		}
 	}
 
-	update_option( 'aafm_oauth_dcr_default_on_migrated', '1', true );
+	aafm_update_option_verified( 'aafm_oauth_dcr_default_on_migrated', '1' );
 }
 
 /**

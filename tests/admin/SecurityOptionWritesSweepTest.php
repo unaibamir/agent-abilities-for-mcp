@@ -6,6 +6,12 @@
  * can otherwise make the write silently no-op while the handler still reports success (the exact
  * shape aafm_update_option_verified() exists to catch - see includes/option-cache.php).
  *
+ * Codex round 5, R5-3 widened this from a fixed scan of includes/admin/page.php alone: the same
+ * risk applies to every security/configuration option this plugin defines, wherever in includes/
+ * it might be written, not only the original seven. The scan now walks the whole includes/ tree
+ * and checks the full guarded list, with an explicit, file-scoped allowlist for the rare bare
+ * write that really is safe.
+ *
  * @package AgentAbilitiesForMCP
  */
 
@@ -38,14 +44,17 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * Static source scan, mirrors PageBuilderGuardSweepTest's mechanical approach: a bare
-	 * update_option()/delete_option()/add_option() call naming one of these six security options
-	 * is a regression, whichever function it appears in. Reading the source text rather than
-	 * running it catches a future edit that reintroduces a bare write even if it moves to a new
-	 * helper function this list has never heard of.
+	 * Every security/configuration option this plugin defines, wherever it might be written.
+	 * Kept as one list (rather than per-file) so a future addition to any of the writers above
+	 * only needs one new line here, not one per file it happens to touch.
+	 *
+	 * @return list<string>
 	 */
-	public function test_no_bare_option_write_names_a_security_allowlist_option(): void {
-		$guarded_options = array(
+	private function guarded_security_options(): array {
+		return array(
+			'aafm_enabled_abilities',
+			'aafm_enabled_bridged_abilities',
+			'aafm_ability_allowlist_overrides',
 			'aafm_allowed_post_types',
 			'aafm_allowed_meta_keys',
 			'aafm_denied_meta_keys',
@@ -53,20 +62,81 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			'aafm_denied_user_meta_keys',
 			'aafm_exposed_term_meta_keys',
 			'aafm_denied_term_meta_keys',
+			'aafm_high_risk_abilities_unlocked',
+			'aafm_read_only_mode',
+			'aafm_oauth_enabled',
+			'aafm_oauth_dcr_enabled',
+			'aafm_oauth_toggle_migrated',
+			'aafm_oauth_dcr_default_on_migrated',
+			'aafm_rate_limit_per_min',
+			'aafm_max_title_len',
+			'aafm_log_retention_days',
+			'aafm_force_draft',
+			'aafm_block_guard_strict',
+			'aafm_delete_data_on_uninstall',
+			'aafm_ip_allowlist',
+		);
+	}
+
+	/**
+	 * Static source scan, mirrors PageBuilderGuardSweepTest's mechanical approach, widened from
+	 * includes/admin/page.php alone to every file under includes/ (Codex round 5, R5-3): a bare
+	 * update_option()/delete_option()/add_option() call naming one of the guarded security
+	 * options is a regression, whichever file or function it appears in. Reading the source text
+	 * rather than running it catches a future edit that reintroduces a bare write even if it
+	 * moves to a new file or helper function this list has never heard of.
+	 *
+	 * A file-scoped allowlist covers the one bare write that really is safe: the two add_option()
+	 * calls in aafm_oauth_seed_default_options() (includes/oauth/discovery.php), which run once
+	 * at activation, never overwrite an existing row by design, and seed both OAuth options to
+	 * their safe default. Every other file still fails the scan for the same two option names.
+	 */
+	public function test_no_bare_option_write_names_a_security_allowlist_option(): void {
+		$guarded_options = $this->guarded_security_options();
+
+		$allowlist = array(
+			'includes/oauth/discovery.php' => array( 'aafm_oauth_enabled', 'aafm_oauth_dcr_enabled' ),
 		);
 
-		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading this plugin's own local source to scan it, not a remote URL.
-		$this->assertNotSame( '', $source, 'The sweep must actually read page.php - an empty read would make this test pass by finding nothing.' );
+		$includes_dir = AAFM_PLUGIN_DIR . 'includes';
+		$files        = new \RecursiveIteratorIterator(
+			new \RecursiveDirectoryIterator( $includes_dir, \FilesystemIterator::SKIP_DOTS )
+		);
 
-		foreach ( $guarded_options as $option ) {
-			foreach ( array( 'update_option', 'delete_option', 'add_option' ) as $bare_call ) {
-				$this->assertDoesNotMatchRegularExpression(
-					'/\b' . $bare_call . '\(\s*\'' . preg_quote( $option, '/' ) . '\'/',
-					$source,
-					"A bare {$bare_call}() naming {$option} was found in page.php - route it through aafm_update_option_verified() instead."
-				);
+		$scanned = 0;
+		foreach ( $files as $file ) {
+			if ( 'php' !== $file->getExtension() ) {
+				continue;
+			}
+			$relative = 'includes/' . ltrim( str_replace( $includes_dir, '', $file->getPathname() ), '/' );
+			if ( 'includes/option-cache.php' === $relative ) {
+				// This file IS the verified-write primitive: its own bare update_option()/
+				// delete_option() calls write through a $variable option name, never a literal
+				// guarded one, and are what every other file's verified helper call routes
+				// through. Scanning it would just be checking the lock against itself.
+				continue;
+			}
+
+			$source = (string) file_get_contents( $file->getPathname() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading this plugin's own local source to scan it, not a remote URL.
+			$this->assertNotSame( '', $source, "The sweep must actually read {$relative} - an empty read would make this test pass by finding nothing." );
+			++$scanned;
+
+			$exempt = $allowlist[ $relative ] ?? array();
+			foreach ( $guarded_options as $option ) {
+				if ( in_array( $option, $exempt, true ) ) {
+					continue;
+				}
+				foreach ( array( 'update_option', 'delete_option', 'add_option' ) as $bare_call ) {
+					$this->assertDoesNotMatchRegularExpression(
+						'/\b' . $bare_call . '\(\s*\'' . preg_quote( $option, '/' ) . '\'/',
+						$source,
+						"A bare {$bare_call}() naming {$option} was found in {$relative} - route it through aafm_update_option_verified() instead."
+					);
+				}
 			}
 		}
+
+		$this->assertGreaterThan( 50, $scanned, 'The sweep must actually walk includes/ - too few files scanned would make this test pass by finding nothing.' );
 	}
 
 	private function intercept_die(): void {

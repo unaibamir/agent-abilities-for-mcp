@@ -127,6 +127,37 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 5, R5-3: the absence check used to read get_option()'s cache-trusting view, so
+	 * a stale persistent object cache still serving an old value after the real row was gone
+	 * would make the migration think a row already existed, skip the preservation write, and then
+	 * mark itself done for good - permanently losing the pre-upgrade "on" state. The row is
+	 * deleted directly (bypassing delete_option(), which would also clear the cache) and a stale
+	 * '0' is planted in the alloptions cache, mirroring PersistentObjectCacheSwitchTest's
+	 * plant_stale_on(), so this proves the migration reads the database, not the cache.
+	 */
+	public function test_absent_row_is_preserved_even_when_a_stale_cache_still_serves_a_value(): void {
+		delete_option( 'aafm_oauth_toggle_migrated' );
+		delete_option( 'aafm_oauth_enabled' );
+
+		global $wpdb;
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_oauth_enabled' ) );
+		$all                       = wp_load_alloptions( true );
+		$all['aafm_oauth_enabled'] = '0';
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame( '0', get_option( 'aafm_oauth_enabled', 'MISSING' ), 'Precondition: the stale cache is what get_option() sees.' );
+		$this->assertNull( $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s", 'aafm_oauth_enabled' ) ), 'Precondition: no DB row.' );
+
+		aafm_oauth_preserve_toggle_on_upgrade();
+
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_enabled' ),
+			'The migration must preserve the pre-upgrade on state from the real database row, even though a stale cache claimed a value was already stored.'
+		);
+		$this->assertTrue( aafm_oauth_enabled() );
+	}
+
+	/**
 	 * The migration runs exactly once. After it has set its guard, a later absence of
 	 * a toggle row (for example a plugin reset returning to the off-by-default state)
 	 * must NOT be silently forced back on.

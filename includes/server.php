@@ -1340,6 +1340,13 @@ function aafm_reconcile_omitted_abilities( array $omitted ): void {
 		return;
 	}
 
+	// Bare update_option() is deliberate here (Codex round 5, R5-3 asked this call site to be
+	// checked against the option-cache rule): this option is not a security or configuration
+	// decision an operator makes, it is a diagnostic snapshot the plugin recomputes fresh on
+	// every registration pass from the real ability set. A stale cache can only make the admin
+	// notice this drives lag by one pass; the very next pass above compares against a fresh
+	// $stored read and corrects it, so nothing an agent can reach depends on this value being
+	// current the instant it is written.
 	update_option( AAFM_OMITTED_ABILITIES_OPTION, $omitted, true );
 
 	foreach ( $omitted as $name => $reason ) {

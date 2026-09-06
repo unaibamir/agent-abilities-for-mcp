@@ -219,6 +219,39 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7, R7-2: the version guard used to read get_option()'s cache-trusting view, so
+	 * a stale persistent cache still claiming the current version was stored, over a database row
+	 * that was actually missing (or behind), would make the guard skip the installer for good.
+	 * Drop a table directly, delete the real version row, and plant a stale cache claiming the
+	 * current version is already stored - the installer must still run from the real row.
+	 */
+	public function test_upgrade_runs_when_a_stale_cache_hides_a_missing_version(): void {
+		global $wpdb;
+
+		aafm_install_oauth_tables();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_oauth_schema_version' ) );
+
+		$all                              = wp_load_alloptions( true );
+		$all['aafm_oauth_schema_version'] = AAFM_OAUTH_SCHEMA_VERSION;
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version', 'MISSING' ),
+			'Precondition: the stale cache is what get_option() sees.'
+		);
+		$this->assertFalse( $this->table_exists( 'aafm_oauth_codes' ), 'Precondition: the table is genuinely gone.' );
+
+		aafm_maybe_upgrade_oauth_tables();
+
+		$this->assertTrue(
+			$this->table_exists( 'aafm_oauth_codes' ),
+			'The installer must still run: the database row was missing even though a stale cache claimed the current version was already stored.'
+		);
+	}
+
+	/**
 	 * B5 sibling: the OAuth schema self-heal is hooked on admin_init only in 1.6.1, so a
 	 * headless site whose plugin auto-updates over cron never upgrades its OAuth tables while
 	 * bearer traffic keeps hitting them. Same cheap option-version gate, hooked on the REST

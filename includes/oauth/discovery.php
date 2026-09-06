@@ -160,7 +160,12 @@ function aafm_oauth_seed_default_options(): void {
  * @return void
  */
 function aafm_oauth_preserve_toggle_on_upgrade(): void {
-	if ( '1' === get_option( 'aafm_oauth_toggle_migrated', '' ) ) {
+	// The guard itself is read from the database row, not get_option()'s cache-trusting view
+	// (Codex round 7, R7-2): a stale cached '1' over an absent or '0' database row would make
+	// this migration think it already ran and skip preserving the pre-upgrade "on" state for
+	// good, while a stale cached '0' over a genuinely completed migration would rerun it and
+	// potentially re-force the toggle on over an operator's later opt-out.
+	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_toggle_migrated' )['db_value'] ) {
 		return;
 	}
 
@@ -206,7 +211,10 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
  * @return void
  */
 function aafm_oauth_dcr_adopt_on_by_default(): void {
-	if ( '1' === get_option( 'aafm_oauth_dcr_default_on_migrated', '' ) ) {
+	// Same reasoning as aafm_oauth_preserve_toggle_on_upgrade() above (Codex round 7, R7-2): the
+	// guard is read from the database row, not a cache-trusting get_option(), so a stale cache in
+	// either direction cannot make this migration decide from the wrong "already ran" state.
+	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_dcr_default_on_migrated' )['db_value'] ) {
 		return;
 	}
 

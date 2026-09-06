@@ -130,7 +130,10 @@ function aafm_install_activity_log(): void {
 function aafm_activity_log_finalize_schema(): void {
 	if ( aafm_activity_log_schema_verify() ) {
 		delete_transient( 'aafm_activity_log_schema_error' );
-		update_option( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
+		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_activity_log()
+		// below trusts this stamp to decide whether the installer needs to run again, so a write
+		// that a persistent cache silently no-ops must not be allowed to look like it landed.
+		aafm_update_option_verified( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
 		return;
 	}
 
@@ -242,10 +245,15 @@ add_action( 'admin_notices', 'aafm_activity_log_schema_admin_notice' );
  * Cheap early return when the option already matches, so this is safe to hook on every admin
  * request. dbDelta() is safe to re-run. Mirrors aafm_maybe_upgrade_oauth_tables().
  *
+ * Reads the database row directly rather than get_option()'s cache-trusting view (Codex round 7,
+ * R7-2): a stale cached current version over an old/absent database row would skip a genuinely
+ * needed repair, and this function's own docblock identifies missing audit rows as the failure
+ * this guard exists to catch.
+ *
  * @return void
  */
 function aafm_maybe_upgrade_activity_log(): void {
-	if ( get_option( 'aafm_activity_log_schema_version' ) === AAFM_ACTIVITY_LOG_SCHEMA_VERSION ) {
+	if ( AAFM_ACTIVITY_LOG_SCHEMA_VERSION === (string) aafm_read_option_views( 'aafm_activity_log_schema_version' )['db_value'] ) {
 		return;
 	}
 

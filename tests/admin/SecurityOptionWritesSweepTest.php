@@ -68,6 +68,8 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			'aafm_oauth_dcr_enabled',
 			'aafm_oauth_toggle_migrated',
 			'aafm_oauth_dcr_default_on_migrated',
+			'aafm_oauth_schema_version',
+			'aafm_activity_log_schema_version',
 			'aafm_rate_limit_per_min',
 			'aafm_max_title_len',
 			'aafm_log_retention_days',

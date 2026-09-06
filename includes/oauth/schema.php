@@ -309,7 +309,10 @@ function aafm_oauth_finalize_schema( bool $engine_ok ): void {
 	}
 
 	if ( $schema_ok && $engine_ok ) {
-		update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_oauth_tables()
+		// below trusts this stamp to decide whether the installer needs to run again, so a write
+		// that a persistent cache silently no-ops must not be allowed to look like it landed.
+		aafm_update_option_verified( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 }
 
@@ -399,10 +402,15 @@ add_action( 'admin_notices', 'aafm_oauth_schema_admin_notice' );
  * every admin request without churn. dbDelta() is safe to re-run and the
  * installer resets the option. Mirrors the audit log's activation wiring.
  *
+ * Reads the database row directly rather than get_option()'s cache-trusting view (Codex round 7,
+ * R7-2): a stale cached current version over an old/absent database row would skip a genuinely
+ * needed install, and this file's own docblocks identify missing tables/columns as the failure
+ * this guard exists to catch.
+ *
  * @return void
  */
 function aafm_maybe_upgrade_oauth_tables(): void {
-	if ( get_option( 'aafm_oauth_schema_version' ) === AAFM_OAUTH_SCHEMA_VERSION ) {
+	if ( AAFM_OAUTH_SCHEMA_VERSION === (string) aafm_read_option_views( 'aafm_oauth_schema_version' )['db_value'] ) {
 		return;
 	}
 

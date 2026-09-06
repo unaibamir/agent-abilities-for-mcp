@@ -97,6 +97,76 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7, R7-2: the guard used to read get_option()'s cache-trusting view. The database
+	 * guard row is genuinely '1' (adoption already ran), but a stale persistent cache still claims
+	 * it is '0' (not yet run) - the exact reproduction from the finding. The old code would rerun
+	 * the migration and re-force DCR back on over the operator's later, deliberate opt-out.
+	 */
+	public function test_dcr_adoption_guard_ignores_a_stale_cache_claiming_not_yet_migrated(): void {
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		aafm_oauth_dcr_adopt_on_by_default();
+		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
+
+		// Operator deliberately turns it back off after the one-time adoption.
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		// A stale cache layer still claims the guard has not run, even though the real row is '1'.
+		$all                                       = wp_load_alloptions( true );
+		$all['aafm_oauth_dcr_default_on_migrated'] = '0';
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_default_on_migrated', 'MISSING' ),
+			'Precondition: the stale cache is what get_option() sees.'
+		);
+
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_enabled' ),
+			'The migration must not rerun from a stale cache claiming it is still pending: a post-adoption opt-out is not clobbered.'
+		);
+	}
+
+	/**
+	 * Codex round 7, R7-2, the other direction: the database guard row is genuinely absent
+	 * (adoption never ran), but a stale persistent cache claims it is already '1'. The old code
+	 * would skip the migration entirely, permanently leaving a legacy install stuck with DCR off
+	 * (the #90 footgun this migration exists to fix).
+	 */
+	public function test_dcr_adoption_runs_when_a_stale_cache_hides_an_absent_guard(): void {
+		global $wpdb;
+
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_oauth_dcr_default_on_migrated' ) );
+
+		$all                                       = wp_load_alloptions( true );
+		$all['aafm_oauth_dcr_default_on_migrated'] = '1';
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_dcr_default_on_migrated', 'MISSING' ),
+			'Precondition: the stale cache is what get_option() sees.'
+		);
+		$this->assertNull(
+			$wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s", 'aafm_oauth_dcr_default_on_migrated' ) ),
+			'Precondition: no DB row.'
+		);
+
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_dcr_enabled' ),
+			'The migration must still run from the real (absent) database row, even though a stale cache claimed it had already completed.'
+		);
+	}
+
+	/**
 	 * A fresh 1.3.0 install seeds an explicit '0' OAuth row at activation before this
 	 * migration ever runs, so the migration must leave it off - the off-by-default
 	 * default is only correct for genuinely new installs.

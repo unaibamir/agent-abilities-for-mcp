@@ -1042,6 +1042,14 @@ final class SecurityRegressionTest extends TestCase {
 	 *
 	 * A force-delete of any of these primitives in any other file, or any other function, is
 	 * still a CVE.
+	 *
+	 * Codex round 8, R8-6: the scan used to run three raw-source regexes, case-sensitive, with no
+	 * tolerance for a comment sitting between the function name and its opening paren, so an
+	 * uppercase call name or a call with an inline comment before the paren evaded every one of
+	 * them. It now tokenizes each file once and reuses resolves_to()'s case-insensitive,
+	 * alias-aware, comment-tolerant call detection - the same rule count_function_call_tokens()
+	 * already proved for R8-5 - then walks each real call's own balanced parens to read its true
+	 * last argument via has_force_delete_call().
 	 */
 	public function test_no_force_delete_in_source(): void {
 		$dir   = dirname( __DIR__, 2 ) . '/includes';
@@ -1059,12 +1067,6 @@ final class SecurityRegressionTest extends TestCase {
 		$geodirectory_force_delete_allowed = 'includes/abilities/geodirectory.php';
 		$geodirectory_rollback_function    = 'aafm_geodirectory_rollback_unconfirmed_create';
 
-		// A balanced-one-level-of-nesting argument list, so a cast like `(int) $post_id` sitting
-		// ahead of the `, true )` cannot break the match the way a bare `[^)]*` did before
-		// (the closing paren of `(int)` ended the character class early and let the real call
-		// slip past the sweep undetected - see the docblock above).
-		$args = '(?:[^()]|\([^()]*\))*';
-
 		foreach ( $files as $file ) {
 			if ( 'php' !== $file->getExtension() ) {
 				continue;
@@ -1072,7 +1074,6 @@ final class SecurityRegressionTest extends TestCase {
 			// Reading our own bundled source for a static scan - not a remote fetch.
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$src  = (string) file_get_contents( $file->getPathname() );
-			$src  = $this->resolve_use_function_aliases( $src );
 			$path = str_replace( '\\', '/', $file->getPathname() );
 
 			$post_delete_src = $src;
@@ -1082,33 +1083,91 @@ final class SecurityRegressionTest extends TestCase {
 
 			// Permanent post/page delete is allowed ONLY in the sanctioned posts file, or inside
 			// GeoDirectory's disclosed rollback function (stripped above before this check runs).
-			// The /s flag makes a multiline call match too, so it can't slip past the sweep.
 			if ( ! str_ends_with( $path, $post_force_delete_allowed ) ) {
-				$this->assertDoesNotMatchRegularExpression(
-					'/wp_delete_post\s*\(' . $args . ',\s*true\s*\)/s',
-					$post_delete_src,
+				$post_delete_tokens  = $this->collapse_qualified_names( token_get_all( $post_delete_src ) );
+				$post_delete_aliases = $this->parse_use_aliases( $post_delete_tokens );
+				$this->assertFalse(
+					$this->has_force_delete_call( $post_delete_tokens, 'wp_delete_post', $post_delete_aliases['function'] ),
 					'Permanent wp_delete_post(...,true) in ' . $file->getFilename() . ' (only the disclosed delete-post ability, or GeoDirectory\'s same-request create-rollback, may force-delete)'
 				);
 			}
 
+			$tokens  = $this->collapse_qualified_names( token_get_all( $src ) );
+			$aliases = $this->parse_use_aliases( $tokens );
+
 			// Permanent comment delete is allowed ONLY in the sanctioned comments file.
 			if ( ! str_ends_with( $path, $comment_force_delete_allowed ) ) {
-				$this->assertDoesNotMatchRegularExpression(
-					'/wp_delete_comment\s*\(' . $args . ',\s*true\s*\)/s',
-					$src,
+				$this->assertFalse(
+					$this->has_force_delete_call( $tokens, 'wp_delete_comment', $aliases['function'] ),
 					'Permanent wp_delete_comment(...,true) in ' . $file->getFilename() . ' (only the disclosed delete-comment ability may force-delete)'
 				);
 			}
 
 			// Permanent attachment delete is allowed ONLY in the sanctioned media file.
 			if ( ! str_ends_with( $path, $media_force_delete_allowed ) ) {
-				$this->assertDoesNotMatchRegularExpression(
-					'/wp_delete_attachment\s*\(' . $args . ',\s*true\s*\)/s',
-					$src,
+				$this->assertFalse(
+					$this->has_force_delete_call( $tokens, 'wp_delete_attachment', $aliases['function'] ),
 					'Permanent wp_delete_attachment(...,true) in ' . $file->getFilename() . ' (only the disclosed delete-media ability may force-delete)'
 				);
 			}
 		}
+	}
+
+	/**
+	 * Codex round 8, R8-6: whether any real call to $name in $tokens has `true` as its own last
+	 * argument. Reuses the exact "is this a real call" rule count_function_call_tokens() already
+	 * applies (case-insensitive name/alias match via resolves_to(), comment-tolerant because
+	 * significant_token() already skips comments, never a method/static/declaration false hit),
+	 * then walks that call's own balanced parens to its matching close, so a cast like
+	 * `(int) $post_id` sitting ahead of `, true )` cannot end the match early - the same class of
+	 * gap a `[^)]*` regex once had (see the docblock above).
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
+	 * @param string                                        $name Bare function name to match.
+	 * @param array<string,string>                          $aliases Function alias => real bare name.
+	 * @return bool
+	 */
+	private function has_force_delete_call( array $tokens, string $name, array $aliases = array() ): bool {
+		$count = count( $tokens );
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], $name, $aliases ) ) {
+				continue;
+			}
+			$open = $this->significant_token( $tokens, $i, 1 );
+			if ( ! is_string( $open ) || '(' !== $open ) {
+				continue;
+			}
+			$prev = $this->significant_token( $tokens, $i, -1 );
+			if ( is_array( $prev ) && in_array( $prev[0], array( T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION ), true ) ) {
+				continue;
+			}
+
+			$open_index = $i + 1;
+			while ( $open_index < $count && '(' !== $tokens[ $open_index ] ) {
+				++$open_index;
+			}
+			$depth = 0;
+			$close = null;
+			for ( $k = $open_index; $k < $count; $k++ ) {
+				if ( '(' === $tokens[ $k ] ) {
+					++$depth;
+				} elseif ( ')' === $tokens[ $k ] ) {
+					--$depth;
+					if ( 0 === $depth ) {
+						$close = $k;
+						break;
+					}
+				}
+			}
+			if ( null === $close ) {
+				continue;
+			}
+			$last = $this->significant_token( $tokens, $close, -1 );
+			if ( is_array( $last ) && T_STRING === $last[0] && 0 === strcasecmp( 'true', $last[1] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -1174,27 +1233,6 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Resolve `use function <name> as <alias>;` imports so the force-delete scan also catches a
-	 * call made through its alias (Codex round 7, R7-7): an aliased `wp_delete_post` would
-	 * otherwise never match a regex anchored on the literal name. Rewrites every aliased call
-	 * site back to the imported name; a plain `use function <name>;` with no `as` needs no
-	 * rewrite, since its call sites already use the real name.
-	 *
-	 * @param string $source Full file contents.
-	 * @return string The same source with every aliased call site rewritten to its real name.
-	 */
-	private function resolve_use_function_aliases( string $source ): string {
-		if ( ! preg_match_all( '/use\s+function\s+\\\\?([A-Za-z_][A-Za-z0-9_]*)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/', $source, $import_matches, PREG_SET_ORDER ) ) {
-			return $source;
-		}
-		foreach ( $import_matches as $import_match ) {
-			list( , $real_name, $alias ) = $import_match;
-			$source                      = (string) preg_replace( '/\b' . preg_quote( $alias, '/' ) . '(\s*\()/', $real_name . '$1', $source );
-		}
-		return $source;
-	}
-
-	/**
 	 * Codex round 7, R7-7: a force-delete call placed immediately after the exempt GeoDirectory
 	 * rollback function's real closing brace must survive the strip. Before the token-based
 	 * rewrite, the line-based counter's depth went negative on the exempt function's own closing
@@ -1220,16 +1258,38 @@ final class SecurityRegressionTest extends TestCase {
 	 * be caught. Before this fix, `use function wp_delete_post as remove; remove($id, true)`
 	 * never matched the sweep's regex, which is anchored on the literal name `wp_delete_post`.
 	 */
-	public function test_resolve_use_function_aliases_rewrites_an_aliased_force_delete(): void {
-		$source = "<?php\nuse function wp_delete_post as remove;\nremove( \$post_id, true );\n";
+	public function test_has_force_delete_call_matches_an_aliased_call(): void {
+		$tokens  = $this->collapsed_fixture_tokens( "use function wp_delete_post as remove;\nremove( \$post_id, true );" );
+		$aliases = $this->parse_use_aliases( $tokens );
 
-		$resolved = $this->resolve_use_function_aliases( $source );
+		$this->assertTrue( $this->has_force_delete_call( $tokens, 'wp_delete_post', $aliases['function'] ) );
+	}
 
-		$this->assertMatchesRegularExpression(
-			'/\bwp_delete_post\s*\(\s*\$post_id\s*,\s*true\s*\)/',
-			$resolved,
-			'An aliased call must be rewritten back to its real name so the force-delete regex can catch it.'
-		);
+	/**
+	 * Codex round 8, R8-6: the retired regex was case-sensitive and required a literal `\s*`
+	 * (not a comment) between the function name and its opening paren, so an uppercase call, or
+	 * one with a comment before the paren, evaded it entirely.
+	 */
+	public function test_has_force_delete_call_matches_an_uppercase_call_with_a_comment_before_the_paren(): void {
+		$tokens = $this->collapsed_fixture_tokens( 'WP_DELETE_POST /* cleanup */ ( $post_id, true );' );
+
+		$this->assertTrue( $this->has_force_delete_call( $tokens, 'wp_delete_post' ) );
+	}
+
+	public function test_has_force_delete_call_is_false_when_the_last_argument_is_not_true(): void {
+		$tokens = $this->collapsed_fixture_tokens( 'wp_delete_post( $post_id, false );' );
+
+		$this->assertFalse( $this->has_force_delete_call( $tokens, 'wp_delete_post' ) );
+	}
+
+	/**
+	 * The exact case the retired `[^)]*` regex mishandled: a cast ahead of `, true )` must not
+	 * end the match at the cast's own closing paren.
+	 */
+	public function test_has_force_delete_call_survives_a_cast_argument(): void {
+		$tokens = $this->collapsed_fixture_tokens( 'wp_delete_post( (int) $post_id, true );' );
+
+		$this->assertTrue( $this->has_force_delete_call( $tokens, 'wp_delete_post' ) );
 	}
 
 	/**

@@ -144,25 +144,124 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * Resolve `use function <name> as <alias>;` imports so the option-write scan also catches a
-	 * call made through its alias (Codex round 7, R7-7): `use function update_option as persist;
-	 * persist('aafm_oauth_enabled', '1')` would otherwise never match a regex anchored on the
-	 * literal name `update_option`. Rewrites every aliased call site back to the imported name; a
-	 * plain `use function <name>;` with no `as` needs no rewrite, since its call sites already use
-	 * the real name.
+	 * Find the next (direction 1) or previous (direction -1) significant token around a given
+	 * index, mirrors SecurityRegressionTest::significant_token(): whitespace, comments, and
+	 * docblocks never count as significant, so a comment sitting between a call's name and its
+	 * opening paren cannot hide the call from the scan (Codex round 8, R8-6).
 	 *
-	 * @param string $source Full file contents.
-	 * @return string The same source with every aliased call site rewritten to its real name.
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param int                                           $index Index to look around.
+	 * @param int                                           $direction 1 for next, -1 for previous.
+	 * @return array{0:int,1:string,2:int}|string|null
 	 */
-	private function resolve_use_function_aliases( string $source ): string {
-		if ( ! preg_match_all( '/use\s+function\s+\\\\?([A-Za-z_][A-Za-z0-9_]*)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/', $source, $import_matches, PREG_SET_ORDER ) ) {
-			return $source;
+	private function significant_token( array $tokens, int $index, int $direction ) {
+		$i     = $index + $direction;
+		$total = count( $tokens );
+		while ( $i >= 0 && $i < $total ) {
+			$token = $tokens[ $i ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				$i += $direction;
+				continue;
+			}
+			return $token;
 		}
-		foreach ( $import_matches as $import_match ) {
-			list( , $real_name, $alias ) = $import_match;
-			$source                      = (string) preg_replace( '/\b' . preg_quote( $alias, '/' ) . '(\s*\()/', $real_name . '$1', $source );
+		return null;
+	}
+
+	/**
+	 * `use function <name> as <alias>;` imports, mapped by lower-cased alias (Codex round 8,
+	 * R8-6: PHP resolves both function names and their aliases case-insensitively, so a call
+	 * through the alias in ANY case must still resolve). Only the single, non-grouped form is
+	 * handled - this codebase does not use the grouped `use function {A, B as C};` form today.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @return array<string,string> Lower-cased alias => real bare name.
+	 */
+	private function parse_use_function_aliases( array $tokens ): array {
+		$aliases = array();
+		$total   = count( $tokens );
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || T_USE !== $token[0] ) {
+				continue;
+			}
+			$j = $i + 1;
+			while ( $j < $total && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				++$j;
+			}
+			if ( ! ( $j < $total && is_array( $tokens[ $j ] ) && T_FUNCTION === $tokens[ $j ][0] ) ) {
+				continue; // Only `use function ...;` imports matter for option-write call names.
+			}
+			$entry = '';
+			$k     = $j + 1;
+			while ( $k < $total && ';' !== $tokens[ $k ] ) {
+				$t      = $tokens[ $k ];
+				$entry .= is_array( $t ) ? $t[1] : $t;
+				++$k;
+			}
+			if ( preg_match( '/^\s*\\\\?([A-Za-z_][A-Za-z0-9_]*)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i', $entry, $m ) ) {
+				$aliases[ strtolower( $m[2] ) ] = $m[1];
+			}
 		}
-		return $source;
+		return $aliases;
+	}
+
+	/**
+	 * Whether a collapsed name token resolves - directly, or through an imported alias - to the
+	 * given target function name. Case-insensitive throughout (Codex round 8, R8-6): PHP resolves
+	 * function names and `use` aliases case-insensitively, so a differently-cased call or alias
+	 * reference is still the same call.
+	 *
+	 * @param string               $token_text Token text.
+	 * @param string               $target Bare target function name.
+	 * @param array<string,string> $aliases Lower-cased alias => real bare name.
+	 * @return bool
+	 */
+	private function resolves_to_option_write_target( string $token_text, string $target, array $aliases ): bool {
+		$resolved = $aliases[ strtolower( $token_text ) ] ?? $token_text;
+		return 0 === strcasecmp( $target, $resolved );
+	}
+
+	/**
+	 * Codex round 8, R8-6: whether $tokens contains a real call to $name whose first argument is
+	 * the literal string $option. Replaces this test's own regex, which was case-sensitive and
+	 * required literal whitespace (never a comment) between the function name and its opening
+	 * paren - an uppercase call name, or a call with an inline comment before the paren, evaded
+	 * it entirely. A real call is identified the same way SecurityRegressionTest's scanner
+	 * already proved for R8-5: the name/alias match is case-insensitive, the gap to the opening
+	 * paren tolerates comments (significant_token() already skips them), and a method call,
+	 * static call, or declaration is never mistaken for a real call.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Tokens from token_get_all().
+	 * @param string                                        $name Bare function name to match.
+	 * @param string                                        $option Literal option name to match as the first argument.
+	 * @param array<string,string>                          $aliases Lower-cased alias => real bare name.
+	 * @return bool
+	 */
+	private function has_bare_option_write( array $tokens, string $name, string $option, array $aliases ): bool {
+		$count = count( $tokens );
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to_option_write_target( $token[1], $name, $aliases ) ) {
+				continue;
+			}
+			$open = $this->significant_token( $tokens, $i, 1 );
+			if ( ! is_string( $open ) || '(' !== $open ) {
+				continue;
+			}
+			$prev = $this->significant_token( $tokens, $i, -1 );
+			if ( is_array( $prev ) && in_array( $prev[0], array( T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION ), true ) ) {
+				continue;
+			}
+
+			$open_index = $i + 1;
+			while ( $open_index < $count && '(' !== $tokens[ $open_index ] ) {
+				++$open_index;
+			}
+			$first_arg = $this->significant_token( $tokens, $open_index, 1 );
+			if ( is_array( $first_arg ) && T_CONSTANT_ENCAPSED_STRING === $first_arg[0] && substr( $first_arg[1], 1, -1 ) === $option ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -191,16 +290,28 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * be caught. Before this fix, `use function update_option as persist; persist(...)` never
 	 * matched the sweep's regex, which is anchored on the literal name `update_option`.
 	 */
-	public function test_resolve_use_function_aliases_rewrites_an_aliased_option_write(): void {
-		$source = "<?php\nuse function update_option as persist;\npersist( 'aafm_oauth_enabled', '1' );\n";
+	public function test_has_bare_option_write_matches_an_aliased_call(): void {
+		$tokens  = token_get_all( "<?php\nuse function update_option as persist;\npersist( 'aafm_oauth_enabled', '1' );\n" );
+		$aliases = $this->parse_use_function_aliases( $tokens );
 
-		$resolved = $this->resolve_use_function_aliases( $source );
+		$this->assertTrue( $this->has_bare_option_write( $tokens, 'update_option', 'aafm_oauth_enabled', $aliases ) );
+	}
 
-		$this->assertMatchesRegularExpression(
-			'/\bupdate_option\s*\(\s*[\'"]aafm_oauth_enabled[\'"]/',
-			$resolved,
-			'An aliased call must be rewritten back to its real name so the option-write regex can catch it.'
-		);
+	/**
+	 * Codex round 8, R8-6: the retired regex was case-sensitive and required literal whitespace
+	 * (not a comment) between the function name and its opening paren, so an uppercase call, or
+	 * one with a comment before the paren, evaded it entirely.
+	 */
+	public function test_has_bare_option_write_matches_an_uppercase_call_with_a_comment_before_the_paren(): void {
+		$tokens = token_get_all( "<?php\nUPDATE_OPTION /* audit */ ( 'aafm_oauth_enabled', '1' );\n" );
+
+		$this->assertTrue( $this->has_bare_option_write( $tokens, 'update_option', 'aafm_oauth_enabled', array() ) );
+	}
+
+	public function test_has_bare_option_write_is_false_for_a_different_option_name(): void {
+		$tokens = token_get_all( "<?php\nupdate_option( 'aafm_unrelated_option', '1' );\n" );
+
+		$this->assertFalse( $this->has_bare_option_write( $tokens, 'update_option', 'aafm_oauth_enabled', array() ) );
 	}
 
 	/**
@@ -219,8 +330,10 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * round 6, B6-7). The seed function's body is stripped out of discovery.php's source before
 	 * the scan runs instead, so the exemption is scoped to the two calls it actually covers, and
 	 * every other line in the file - including both guarded options - is checked like any other
-	 * file. The regex also now tolerates the whitespace and double-quote spellings a bare write
-	 * could otherwise slip past, such as `update_option ( "aafm_oauth_enabled", ...)`.
+	 * file. The scan is now token-based rather than regex-based (Codex round 8, R8-6): the retired
+	 * regex was case-sensitive and required literal whitespace, never a comment, between the
+	 * function name and its opening paren, so `UPDATE_OPTION( ... )` or a call with an inline
+	 * comment before the paren evaded it entirely.
 	 */
 	public function test_no_bare_option_write_names_a_security_allowlist_option(): void {
 		$guarded_options     = $this->guarded_security_options();
@@ -250,16 +363,17 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			$this->assertNotSame( '', $source, "The sweep must actually read {$relative} - an empty read would make this test pass by finding nothing." );
 			++$scanned;
 
-			$source      = $this->resolve_use_function_aliases( $source );
 			$scan_source = $oauth_seed_scoped === $relative
 				? $this->strip_function_body( $source, $oauth_seed_function )
 				: $source;
 
+			$tokens  = token_get_all( $scan_source );
+			$aliases = $this->parse_use_function_aliases( $tokens );
+
 			foreach ( $guarded_options as $option ) {
 				foreach ( array( 'update_option', 'delete_option', 'add_option' ) as $bare_call ) {
-					$this->assertDoesNotMatchRegularExpression(
-						'/\b' . $bare_call . '\s*\(\s*[\'"]' . preg_quote( $option, '/' ) . '[\'"]/',
-						$scan_source,
+					$this->assertFalse(
+						$this->has_bare_option_write( $tokens, $bare_call, $option, $aliases ),
 						"A bare {$bare_call}() naming {$option} was found in {$relative} - route it through aafm_update_option_verified() instead."
 					);
 				}

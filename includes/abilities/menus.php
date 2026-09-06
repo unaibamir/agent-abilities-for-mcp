@@ -707,8 +707,10 @@ function aafm_exec_create_menu_item( array $input ) {
 	// is one wp_get_nav_menu_items() will hide, so reporting it as created would be a lie. Remove
 	// the row we just wrote - it is ours, created in this call, and nothing else can be relying on
 	// it yet - and answer with an error instead of a menu item that does not exist to the site.
+	// A nav_menu_item has no Trash (see aafm_exec_delete_menu_item()'s docblock below), so the
+	// second `true` argument is redundant: a plain wp_delete_post() call deletes it directly.
 	if ( ! empty( $saved->_invalid ) ) {
-		wp_delete_post( (int) $item_id, true );
+		wp_delete_post( (int) $item_id );
 		return new WP_Error(
 			'aafm_invalid_menu_item',
 			__( 'That menu item could not be linked to anything the site can resolve, so it was not created. Check object_id and object against the type you asked for.', 'agent-abilities-for-mcp' ),

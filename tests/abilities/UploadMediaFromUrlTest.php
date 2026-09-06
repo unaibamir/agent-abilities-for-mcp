@@ -125,6 +125,81 @@ final class UploadMediaFromUrlTest extends TestCase {
 		$this->assertStringNotContainsString( ABSPATH, (string) $json );
 	}
 
+	/**
+	 * Codex hunt F9: media_handle_sideload() already commits the attachment before this
+	 * ability re-sanitizes an IPTC/EXIF caption that landed in post_content. If that re-save
+	 * fails, the attachment must not be left behind with its un-renormalized caption.
+	 */
+	public function test_a_failed_caption_resave_deletes_the_orphaned_attachment(): void {
+		$before = $this->count_attachments();
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
+		$png = base64_decode( self::PNG_B64, true );
+		add_filter(
+			'aafm_media_fetch_pre_fetch_result',
+			static fn() => array(
+				'headers'  => array( 'content-type' => 'image/png' ),
+				'body'     => $png,
+				'response' => array(
+					'code'    => 200,
+					'message' => '',
+				),
+			)
+		);
+		add_filter( 'aafm_resolve_hostname_to_ip', static fn(): string => '203.0.113.10' );
+
+		// A caption needing wp_kses_post() normalization, so the post_content re-save
+		// this ability performs after sideload actually has work to do.
+		add_filter(
+			'wp_read_image_metadata',
+			static function ( array $meta ): array {
+				$meta['caption'] = '<script>alert(1)</script>unsafe caption';
+				return $meta;
+			}
+		);
+
+		// Force the re-save's wp_update_post() call to fail, the way a site-installed
+		// wp_insert_attachment_data filter refusing that specific update would. WordPress
+		// fires wp_insert_attachment_data (not wp_insert_post_data) for attachment posts,
+		// both the sideload's initial insert and this ability's caption resave included.
+		add_filter(
+			'wp_insert_attachment_data',
+			static function ( array $data, array $postarr, array $unsanitized_postarr, bool $update ): array {
+				if ( $update && isset( $data['post_content'] ) ) {
+					$data['aafm_test_nonexistent_column'] = 'force a db update error';
+				}
+				return $data;
+			},
+			10,
+			4
+		);
+
+		// unfiltered_html (administrator, not author) so core's own content_save_pre ->
+		// wp_filter_post_kses does not already strip the script tag at sideload insert
+		// time - the resave branch under test needs a real mismatch to fire against.
+		$this->acting_as( 'administrator' );
+
+		// The forced bogus column reaches a real UPDATE and MySQL raises an "Unknown
+		// column" error; suppress wpdb's default HTML output so PHPUnit doesn't flag
+		// this as a risky test for unexpected output.
+		global $wpdb;
+		$suppress = $wpdb->suppress_errors( true );
+		$out      = wp_get_ability( 'aafm/upload-media-from-url' )->execute(
+			array(
+				'url'      => 'https://example.test/pixel.png',
+				'filename' => 'pixel.png',
+			)
+		);
+		$wpdb->suppress_errors( $suppress );
+
+		remove_all_filters( 'wp_read_image_metadata' );
+		remove_all_filters( 'wp_insert_attachment_data' );
+		remove_all_filters( 'aafm_resolve_hostname_to_ip' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( $before, $this->count_attachments() );
+	}
+
 	public function test_a_private_ip_target_is_refused_and_writes_nothing(): void {
 		$before = $this->count_attachments();
 

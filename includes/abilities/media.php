@@ -923,6 +923,11 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 			true
 		);
 		if ( is_wp_error( $updated ) ) {
+			// Codex hunt F9: media_handle_sideload() already committed the attachment and file
+			// to the media library above. Leaving it in place on this failure branch orphans it
+			// with its un-renormalized caption and no ID ever returned to the caller for
+			// cleanup, matching the temp-file cleanup discipline already applied a few lines up.
+			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
 	}
@@ -937,6 +942,9 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 
 	$attachment = get_post( $attachment_id );
 	if ( ! $attachment instanceof WP_Post ) {
+		// Codex hunt F9: same orphan-cleanup discipline as the branch above, for this
+		// early return too.
+		wp_delete_attachment( $attachment_id, true );
 		return aafm_generic_error();
 	}
 

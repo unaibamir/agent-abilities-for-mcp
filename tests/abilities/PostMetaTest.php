@@ -411,4 +411,45 @@ final class PostMetaTest extends TestCase {
 		);
 		$this->assertSame( 'new value-normalized', $out['value'], 'The response must reflect the value actually stored, not the caller\'s pre-normalization intent.' );
 	}
+
+	/**
+	 * Codex round 7 R7-3: aafm_sanitize_meta_value()'s coercion-to-array probe used to always pass
+	 * the literal string 'post' as the object subtype, so a sanitize_callback registered for a
+	 * page (or any other non-'post' type) never reached the subtype-specific hook the probe
+	 * checked - the value's own documented scalar-only guarantee did not actually apply to it.
+	 */
+	public function test_update_post_meta_catches_a_page_specific_array_coercion(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create(
+			array(
+				'post_author' => $author,
+				'post_type'   => 'page',
+			)
+		);
+
+		register_post_meta(
+			'page',
+			'aafm_note',
+			array(
+				'single'            => true,
+				'sanitize_callback' => static fn() => array( 'evil' => 1 ),
+			)
+		);
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		unregister_post_meta( 'page', 'aafm_note' );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A page-registered sanitizer that coerces the value to an array must be caught, not silently allowed through because the preliminary probe checked the wrong post type.'
+		);
+	}
 }

@@ -344,7 +344,9 @@ function aafm_exec_update_post_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$value = aafm_sanitize_meta_value( $key, $input['value'] ?? '' );
+	// Codex round 7 R7-3: pass the post's real type, not the default 'post', so a
+	// sanitize_callback registered for a page or a custom post type is not invisible to the probe.
+	$value = aafm_sanitize_meta_value( $key, $input['value'] ?? '', (string) get_post_type( $id ) );
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}

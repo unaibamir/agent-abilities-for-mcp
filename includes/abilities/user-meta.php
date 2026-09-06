@@ -283,9 +283,13 @@ function aafm_exec_update_user_meta( array $input ) {
 	// write while reporting success, so checking only `false === update_user_meta(...)` never
 	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
-	// sanitize callback's legitimate normalization is not mistaken for a veto. Users carry no
-	// object subtype.
-	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'user' ) ) {
+	// sanitize callback's legitimate normalization is not mistaken for a veto. Codex round 7 R7-3:
+	// this used to omit the object subtype, defaulting to ''. get_userdata() above already
+	// confirmed the target user exists, and core's get_object_subtype( 'user', $id ) resolves to
+	// the literal string 'user' for any user that exists (wp-includes/meta.php) - that is the
+	// subtype update_metadata() itself passed to sanitize_meta() at write time, so the
+	// confirmation must use the same one or it can disagree with a subtype-registered sanitizer.
+	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'user', 'user' ) ) {
 		return aafm_generic_error();
 	}
 	return array(

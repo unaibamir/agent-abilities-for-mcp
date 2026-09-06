@@ -546,6 +546,49 @@ final class HelpersTest extends TestCase {
 		remove_filter( 'sanitize_term_meta_aafm_array_coercer', $coerce );
 	}
 
+	/**
+	 * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
+	 * no matter what post type the meta actually belonged to. register_post_meta() for a
+	 * non-'post' type registers its sanitize_callback on the subtype-specific
+	 * sanitize_post_meta_{key}_for_{subtype} hook (wp-includes/meta.php), which sanitize_meta()
+	 * only consults when given that same subtype - so a coercion callback registered for 'page'
+	 * was invisible to the old hardcoded probe. Passing the real post type must surface it.
+	 */
+	public function test_meta_value_sanitizer_catches_a_page_specific_coercion_callback(): void {
+		register_post_meta(
+			'page',
+			'aafm_page_only_coercer',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'sanitize_callback' => static fn() => array( 'evil' => 1 ),
+			)
+		);
+		$result = aafm_sanitize_meta_value( 'aafm_page_only_coercer', 'plain', 'page' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		unregister_post_meta( 'page', 'aafm_page_only_coercer' );
+	}
+
+	/**
+	 * Codex round 7 R7-3, term-meta sibling: the probe used to pass the literal string 'term',
+	 * which is never a real taxonomy name, so a callback registered via
+	 * register_term_meta( $taxonomy, ... ) for ANY taxonomy was always invisible to it.
+	 */
+	public function test_term_meta_value_sanitizer_catches_a_taxonomy_specific_coercion_callback(): void {
+		register_term_meta(
+			'category',
+			'aafm_category_only_coercer',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'sanitize_callback' => static fn() => array( 'evil' => 1 ),
+			)
+		);
+		$result = aafm_sanitize_term_meta_value( 'aafm_category_only_coercer', 'plain', 'category' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		unregister_term_meta( 'category', 'aafm_category_only_coercer' );
+	}
+
 	public function test_user_meta_value_sanitizer_refuses_callback_that_returns_non_scalar(): void {
 		$coerce = static fn() => array( 'evil' => 1 );
 		add_filter( 'sanitize_user_meta_aafm_array_coercer', $coerce );

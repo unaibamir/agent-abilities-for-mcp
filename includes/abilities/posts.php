@@ -891,7 +891,9 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	}
 
 	// Validate enrichment BEFORE inserting so a bad term/attachment/meta aborts with nothing written.
-	$enrichment = aafm_validate_write_enrichment( $input );
+	// Codex round 7 R7-3: pass the real target post type ($type), not the default 'post', so the
+	// meta probe is not blind to a sanitize_callback registered for this create's actual type.
+	$enrichment = aafm_validate_write_enrichment( $input, $type );
 	if ( is_wp_error( $enrichment ) ) {
 		return $enrichment;
 	}
@@ -1161,8 +1163,9 @@ function aafm_exec_update_post( array $input ) {
 	}
 
 	// Validate enrichment BEFORE wp_update_post so a bad term/attachment/meta aborts
-	// with the post left exactly as it was (no half-applied update).
-	$enrichment = aafm_validate_write_enrichment( $input );
+	// with the post left exactly as it was (no half-applied update). Codex round 7 R7-3: pass the
+	// post's real, existing type, not the default 'post'.
+	$enrichment = aafm_validate_write_enrichment( $input, $post->post_type );
 	if ( is_wp_error( $enrichment ) ) {
 		return $enrichment;
 	}

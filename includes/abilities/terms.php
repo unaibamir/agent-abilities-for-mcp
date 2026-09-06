@@ -620,7 +620,10 @@ function aafm_exec_update_term_meta( array $input ) {
 	}
 	$term_id = absint( $input['term_id'] );
 	$key     = (string) $input['meta_key'];
-	$value   = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '' );
+	// Codex round 7 R7-3: pass the term's real taxonomy, not the empty default, so a
+	// sanitize_callback registered via register_term_meta() for that taxonomy is not invisible
+	// to the probe.
+	$value = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '', $taxonomy );
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}

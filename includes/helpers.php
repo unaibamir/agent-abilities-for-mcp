@@ -659,18 +659,28 @@ function aafm_delete_guarantee(): array {
  * cannot double-apply it to what gets written. aafm_meta_write_confirmed() independently
  * recomputes the same canonical form afterward to confirm the write landed.
  *
- * @param string $key   Meta key (already validated/allowlisted by the caller).
- * @param mixed  $value Raw value from input.
+ * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
+ * regardless of the post's real type. sanitize_meta() only checks the subtype-specific
+ * sanitize_{type}_meta_{key}_for_{subtype} hook when a subtype is given (wp-includes/meta.php),
+ * so a sanitize_callback registered via register_post_meta() for a non-'post' type (a page, a
+ * custom post type) was invisible to this probe - a scalar-to-array coercion registered for that
+ * type would sail through undetected. $post_type is now the caller's real post type, matching
+ * what update_metadata() itself resolves via get_object_subtype() at write time.
+ *
+ * @param string $key       Meta key (already validated/allowlisted by the caller).
+ * @param mixed  $value     Raw value from input.
+ * @param string $post_type The post's real post type. Defaults to 'post' for callers that do not
+ *                           yet know it (matches this function's pre-round-7 behavior).
  * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
  */
-function aafm_sanitize_meta_value( string $key, $value ) {
+function aafm_sanitize_meta_value( string $key, $value, string $post_type = 'post' ) {
 	if ( ! is_scalar( $value ) ) {
 		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
 		$value = aafm_sanitize_plain_text( $value );
 	}
-	$probe = sanitize_meta( $key, $value, 'post', 'post' );
+	$probe = sanitize_meta( $key, $value, 'post', $post_type );
 	if ( ! is_scalar( $probe ) ) {
 		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
@@ -764,18 +774,25 @@ function aafm_validate_term_meta_key( string $key ) {
  * aafm_sanitize_meta_value()'s docblock for why the actual write-time sanitize_meta() call
  * inside update_metadata() must remain the only one whose output is ever stored.
  *
- * @param string $key   Term-meta key (already validated/allowlisted by the caller).
- * @param mixed  $value Raw value from input.
+ * Codex round 7 R7-3: the probe used to pass the literal string 'term' as the object subtype,
+ * which is never a real taxonomy name, so a sanitize_callback registered via
+ * register_term_meta( $taxonomy, ... ) for ANY taxonomy was always invisible to this probe. Now
+ * takes the real taxonomy the same way aafm_sanitize_meta_value() takes the real post type.
+ *
+ * @param string $key      Term-meta key (already validated/allowlisted by the caller).
+ * @param mixed  $value    Raw value from input.
+ * @param string $taxonomy The term's real taxonomy. Defaults to '' for callers that do not yet
+ *                          know it; that only ever matches a generic (non-subtype) sanitizer.
  * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
  */
-function aafm_sanitize_term_meta_value( string $key, $value ) {
+function aafm_sanitize_term_meta_value( string $key, $value, string $taxonomy = '' ) {
 	if ( ! is_scalar( $value ) ) {
 		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
 		$value = aafm_sanitize_plain_text( $value );
 	}
-	$probe = sanitize_meta( $key, $value, 'term', 'term' );
+	$probe = sanitize_meta( $key, $value, 'term', $taxonomy );
 	if ( ! is_scalar( $probe ) ) {
 		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
@@ -968,6 +985,14 @@ function aafm_validate_user_meta_key( string $key ) {
  * inside update_metadata() must remain the only one whose output is ever stored.
  *
  * Mirrors aafm_sanitize_term_meta_value() but is user-scoped.
+ *
+ * Codex round 7 R7-3 was raised against this function too, but it does not apply: unlike a
+ * post type or a taxonomy, a user object's subtype is not caller-supplied. Core's own
+ * get_object_subtype( 'user', $user_id ) (wp-includes/meta.php) resolves to the literal string
+ * 'user' for any user that exists - never ''. This function's caller only ever reaches here after
+ * confirming the target user exists (get_userdata() check upstream), so the hardcoded 'user'
+ * subtype below already matches what update_metadata() itself passes to sanitize_meta() at write
+ * time. Verified against wp-includes/meta.php's get_object_subtype(), not assumed.
  *
  * @param string $key   User-meta key (already validated/allowlisted by the caller).
  * @param mixed  $value Raw value from input.
@@ -1194,17 +1219,22 @@ function aafm_validate_featured_attachment_id( $attachment_id ) {
  * and the helpers.php meta-key doctrine: a caller cannot tell "blocked" from "not allowlisted"
  * from "non-scalar value").
  *
- * @param array<string,mixed> $meta Raw meta object from input.
+ * @param array<string,mixed> $meta      Raw meta object from input.
+ * @param string              $post_type The post's real (or, for a create, about-to-be-assigned)
+ *                                       post type. Codex round 7 R7-3: threaded through to
+ *                                       aafm_sanitize_meta_value() so its coercion-to-array probe
+ *                                       is not blind to a sanitize_callback registered for a
+ *                                       non-'post' post type.
  * @return array<string,mixed>|WP_Error Sanitized key=>value map, or error.
  */
-function aafm_validate_meta_payload( array $meta ) {
+function aafm_validate_meta_payload( array $meta, string $post_type = 'post' ) {
 	$clean = array();
 	foreach ( $meta as $raw_key => $raw_value ) {
 		$key = aafm_validate_meta_key( (string) $raw_key );
 		if ( is_wp_error( $key ) ) {
 			return aafm_generic_error();
 		}
-		$value = aafm_sanitize_meta_value( $key, $raw_value );
+		$value = aafm_sanitize_meta_value( $key, $raw_value, $post_type );
 		if ( is_wp_error( $value ) ) {
 			return aafm_generic_error();
 		}
@@ -1224,10 +1254,13 @@ function aafm_validate_meta_payload( array $meta ) {
  * here; it is folded into the postarr by the create/update path so it lands in the same atomic
  * row write.)
  *
- * @param array<string,mixed> $input Raw ability input.
+ * @param array<string,mixed> $input     Raw ability input.
+ * @param string              $post_type The target post's real (create: about-to-be-assigned)
+ *                                       post type, threaded through to aafm_validate_meta_payload()
+ *                                       - see its docblock (Codex round 7 R7-3).
  * @return array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>}|WP_Error
  */
-function aafm_validate_write_enrichment( array $input ) {
+function aafm_validate_write_enrichment( array $input, string $post_type = 'post' ) {
 	$bundle = array(
 		'terms'          => array(),
 		'featured_media' => 0,
@@ -1253,7 +1286,7 @@ function aafm_validate_write_enrichment( array $input ) {
 	}
 
 	if ( isset( $input['meta'] ) && is_array( $input['meta'] ) ) {
-		$meta = aafm_validate_meta_payload( $input['meta'] );
+		$meta = aafm_validate_meta_payload( $input['meta'], $post_type );
 		if ( is_wp_error( $meta ) ) {
 			return $meta;
 		}
@@ -2081,8 +2114,12 @@ function aafm_generic_error(): WP_Error {
  * @param mixed  $intended       The unslashed value the write attempted to store.
  * @param string $meta_key       Meta key.
  * @param string $object_type    'post', 'term', or 'user'.
- * @param string $object_subtype The post type / taxonomy the meta key is registered under, or ''
- *                                for an object type that carries no subtype (user meta).
+ * @param string $object_subtype The post type / taxonomy the meta key is registered under. For
+ *                                user meta this is the literal string 'user' (core's own
+ *                                get_object_subtype( 'user', $id ), wp-includes/meta.php, resolves
+ *                                to 'user' for any user that exists - never ''; verified against
+ *                                core, not assumed). '' only matches a generic, non-subtype
+ *                                sanitizer.
  * @return bool
  */
 function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {

@@ -339,6 +339,50 @@ function aafm_tec_event_orm_args( array $input ): array {
 }
 
 /**
+ * Confirm venue_id/organizer_ids in $input actually name existing venue/organizer posts.
+ *
+ * Codex hunt F5: aafm_tec_event_orm_args() above passes these ids through absint() alone.
+ * TEC's own repository (Repositories/Event.php, confirmed against the installed plugin)
+ * silently drops an invalid venue/organizer relationship on save rather than erroring, so a
+ * caller-supplied id naming an ordinary post would be dropped with no error and no signal
+ * in the response - the exact silent-wrong-answer shape this validation exists to stop.
+ *
+ * @param array<string,mixed> $input Raw ability input, before aafm_tec_event_orm_args().
+ * @return WP_Error|null Error naming the first invalid id, or null when every given id is valid.
+ */
+function aafm_tec_validate_venue_organizer_ids( array $input ) {
+	if ( ! empty( $input['venue_id'] ) ) {
+		$venue_id = absint( $input['venue_id'] );
+		if ( 'tribe_venue' !== get_post_type( $venue_id ) ) {
+			return new WP_Error(
+				'aafm_tec_invalid_venue',
+				sprintf(
+					/* translators: %d: the invalid post id supplied as venue_id. */
+					__( 'venue_id %d does not name an existing venue.', 'agent-abilities-for-mcp' ),
+					$venue_id
+				)
+			);
+		}
+	}
+	if ( array_key_exists( 'organizer_ids', $input ) && is_array( $input['organizer_ids'] ) ) {
+		foreach ( $input['organizer_ids'] as $organizer_id ) {
+			$organizer_id = absint( $organizer_id );
+			if ( 'tribe_organizer' !== get_post_type( $organizer_id ) ) {
+				return new WP_Error(
+					'aafm_tec_invalid_organizer',
+					sprintf(
+						/* translators: %d: the invalid post id found in organizer_ids. */
+						__( 'organizer_ids contains %d, which does not name an existing organizer.', 'agent-abilities-for-mcp' ),
+						$organizer_id
+					)
+				);
+			}
+		}
+	}
+	return null;
+}
+
+/**
  * Args for aafm/tec-create-event.
  *
  * @return array<string,mixed>
@@ -420,6 +464,11 @@ function aafm_exec_tec_create_event( array $input ) {
 		return $status;
 	}
 
+	$invalid_relationship = aafm_tec_validate_venue_organizer_ids( $input );
+	if ( $invalid_relationship instanceof WP_Error ) {
+		return $invalid_relationship;
+	}
+
 	$args                = aafm_tec_event_orm_args( $input );
 	$args['post_status'] = $status;
 
@@ -494,6 +543,11 @@ function aafm_exec_tec_update_event( array $input ) {
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
 	if ( false !== $owning_builder ) {
 		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
+	$invalid_relationship = aafm_tec_validate_venue_organizer_ids( $input );
+	if ( $invalid_relationship instanceof WP_Error ) {
+		return $invalid_relationship;
 	}
 
 	$args = aafm_tec_event_orm_args( $input );

@@ -178,9 +178,25 @@ namespace AAFM\Tests {
 			foreach ( $meta as $key => $value ) {
 				if ( '_EventOrganizerID' === $key ) {
 					delete_post_meta( $id, $key );
+					// Codex hunt F5: the real repository (Repositories/Event.php) silently
+					// drops an organizer id that doesn't actually name a tribe_organizer post
+					// rather than erroring - reproduced here so a caller that skips this
+					// plugin's own aafm_tec_validate_venue_organizer_ids() check has something
+					// to go red against.
 					foreach ( (array) $value as $organizer_id ) {
+						if ( 'tribe_organizer' !== get_post_type( (int) $organizer_id ) ) {
+							continue;
+						}
 						add_post_meta( $id, $key, (int) $organizer_id );
 					}
+					continue;
+				}
+				if ( '_EventVenueID' === $key ) {
+					// Same silent-drop behavior as organizers, for the single venue relationship.
+					if ( 'tribe_venue' !== get_post_type( (int) $value ) ) {
+						continue;
+					}
+					update_post_meta( $id, $key, (int) $value );
 					continue;
 				}
 				if ( '_EventAllDay' === $key && ! $value ) {

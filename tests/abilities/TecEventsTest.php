@@ -86,6 +86,48 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( $expected, $out['event']['organizer_ids'] );
 	}
 
+	/**
+	 * Codex hunt F5: venue_id/organizer_ids used to pass through absint() alone. The real TEC
+	 * repository silently drops an invalid relationship id rather than erroring, so a caller
+	 * naming an ordinary post as the venue would previously get a normal success response with
+	 * the venue relationship simply missing. Must now be refused up front instead.
+	 */
+	public function test_create_event_refuses_a_venue_id_that_is_not_a_venue(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$not_a_venue = self::factory()->post->create();
+
+		$out = aafm_exec_tec_create_event(
+			array(
+				'title'      => 'Should be refused',
+				'start_date' => '2027-01-01 09:00:00',
+				'end_date'   => '2027-01-01 12:00:00',
+				'venue_id'   => $not_a_venue,
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_tec_invalid_venue', $out->get_error_code() );
+	}
+
+	/**
+	 * Companion to the venue case above, for organizer_ids.
+	 */
+	public function test_update_event_refuses_an_organizer_id_that_is_not_an_organizer(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id         = $this->create_event();
+		$not_an_organizer = self::factory()->post->create();
+
+		$out = aafm_exec_tec_update_event(
+			array(
+				'event_id'      => $event_id,
+				'organizer_ids' => array( $not_an_organizer ),
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_tec_invalid_organizer', $out->get_error_code() );
+	}
+
 	public function test_create_event_with_a_public_status_requires_publish_capability(): void {
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $author );

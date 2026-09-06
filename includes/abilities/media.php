@@ -1309,10 +1309,15 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 	 * sideload, caption re-save) rather than the response-processing logic in isolation.
 	 * Read-only in production: nothing in this codebase adds a callback to it.
 	 *
+	 * Codex round 7 R7-8: this used to also pass the full caller-supplied $url, recreating the
+	 * class of bug B1 fixed on the aafm_media_fetch_before_exec seam - a signed query string or
+	 * embedded credentials in the source URL would reach any logger attached to WordPress's own
+	 * 'all' hook. No fixture in this codebase's own tests reads the second argument, so it is
+	 * dropped rather than reconstructed into a redacted URL.
+	 *
 	 * @param array{headers:array<string,string>,body:string,response:array{code:int,message:string}}|WP_Error|null $pre_fetch_result Null to perform the real fetch.
-	 * @param string $url The URL being fetched.
 	 */
-	$response = apply_filters( 'aafm_media_fetch_pre_fetch_result', null, $url );
+	$response = apply_filters( 'aafm_media_fetch_pre_fetch_result', null );
 	if ( null === $response ) {
 		$response = aafm_ssrf_owned_curl_fetch( $url, $target['host'], $target['port'], $target['ip'], $target['max_bytes'] );
 	}
@@ -1413,10 +1418,17 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	 * really applied to a cURL handle. Read-only in production: nothing in this codebase adds a
 	 * callback to it, and the returned array is used exactly as filtered.
 	 *
+	 * Codex round 7 R7-8: this used to also pass the full caller-supplied $url - a signed query
+	 * string or embedded credentials in the source URL would reach any logger attached to
+	 * WordPress's own 'all' hook, recreating the class of bug B1 fixed on the sibling
+	 * aafm_media_fetch_before_exec seam. The URL was already set on the handle by curl_init( $url )
+	 * before this filter runs, so nothing about the fetch itself depended on receiving it again
+	 * here; only the extra, logger-visible argument is dropped. No fixture in this codebase's own
+	 * tests reads a second argument here.
+	 *
 	 * @param array<int,mixed> $options The cURL options this fetch is about to set.
-	 * @param string           $url     The URL being fetched.
 	 */
-	$options = apply_filters( 'aafm_media_fetch_curl_options', $options, $url );
+	$options = apply_filters( 'aafm_media_fetch_curl_options', $options );
 	// Codex final round 4 HIGH: curl_setopt_array()'s return was ignored, so a single option this
 	// array cannot apply (it stops applying at the first failure) still let curl_exec() run with
 	// whichever security options DID make it through - possibly none of the DNS pin, proxy

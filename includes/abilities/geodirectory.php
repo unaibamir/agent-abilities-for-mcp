@@ -403,7 +403,11 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	// offset at all) is immune to both: a row's own position never depends on how many OTHER rows
 	// currently exist before it, only on IDs already fully processed. An iteration cap guards
 	// against a pathological host filter that always returns a full batch.
-	$batch_size = max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) );
+	// Codex round 5, R5-4: this filter only had a floor, no ceiling, so a hook returning
+	// PHP_INT_MAX made the FIRST WP_Query itself unbounded - the iteration cap below never gets
+	// a chance to engage, since the damage is inside one batch, not across many. Narrow-only,
+	// same shape as aafm_geodirectory_listing_batch_cap()'s own hard ceiling.
+	$batch_size = min( 500, max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) ) );
 	// Codex hunt F8: the cap below is filterable so a test can reach it without creating a
 	// thousand-plus posts, by lowering the cap instead of the batch size.
 	$batch_cap = aafm_geodirectory_listing_batch_cap();
@@ -628,6 +632,38 @@ function aafm_args_geodirectory_create_listing(): array {
 }
 
 /**
+ * Delete a listing whose creation could not be confirmed, and report whether the removal itself
+ * succeeded - shared by the core-field check and the address/location-field check below so the
+ * "delete, then pick one of two messages" shape lives in one place, not two.
+ *
+ * Codex final round 2 MEDIUM: wp_delete_post()'s own return was never checked, so a
+ * pre_delete_post filter refusing the deletion (any plugin can register one) would leave the
+ * half-written post behind while the message claimed nothing remained.
+ *
+ * @param int    $post_id Listing post id to remove.
+ * @param string $unconfirmed_what Fragment describing what could not be confirmed, e.g. "its
+ *                                 address or location fields did not save".
+ * @return WP_Error
+ */
+function aafm_geodirectory_rollback_unconfirmed_create( int $post_id, string $unconfirmed_what ): WP_Error {
+	$removed = wp_delete_post( $post_id, true );
+	return new WP_Error(
+		'aafm_geodirectory_write_unconfirmed',
+		$removed instanceof WP_Post
+			? sprintf(
+				/* translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save". */
+				__( 'The listing could not be created: %s. Nothing was created.', 'agent-abilities-for-mcp' ),
+				$unconfirmed_what
+			)
+			: sprintf(
+				/* translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save". */
+				__( 'The listing could not be created: %s, and the incomplete listing could not be removed automatically. Delete it manually.', 'agent-abilities-for-mcp' ),
+				$unconfirmed_what
+			)
+	);
+}
+
+/**
  * Execute aafm/geodirectory-create-listing: core wp_insert_post() for title/content/status,
  * geodir_save_post_meta() for the documented address/lat/lng subset.
  *
@@ -673,20 +709,24 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Codex round 5, R5-4: the update path already rereads and compares title/content after its
+	// own wp_update_post() call (Codex hunt F4), but create only ever verified the address/
+	// location fields below - a wp_insert_post_data filter silently reverting the title, content,
+	// or status would still report success. Same confirm-by-reread principle, applied here too.
+	$after = get_post( $post_id );
+	if ( ! $after instanceof WP_Post
+		|| $after->post_title !== $title
+		|| $after->post_content !== $content
+		|| $after->post_status !== $status
+	) {
+		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title, content, or status could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
+	}
+
 	if ( ! aafm_geodirectory_write_fields( (int) $post_id, $input ) ) {
 		// The core post exists, but the caller's address/location fields could not be confirmed
 		// as saved - a partially-created listing under a "success" report would be exactly the
 		// silent-wrong-answer shape this release exists to stop, so remove it and say so instead.
-		// Codex final round 2 MEDIUM: wp_delete_post()'s own return was never checked, so a
-		// pre_delete_post filter refusing the deletion (any plugin can register one) would leave
-		// the half-written post behind while this message claimed nothing remained.
-		$removed = wp_delete_post( (int) $post_id, true );
-		return new WP_Error(
-			'aafm_geodirectory_write_unconfirmed',
-			$removed instanceof WP_Post
-				? __( 'The listing could not be created: its address or location fields did not save. Nothing was created.', 'agent-abilities-for-mcp' )
-				: __( 'The listing could not be created: its address or location fields did not save, and the incomplete listing could not be removed automatically. Delete it manually.', 'agent-abilities-for-mcp' )
-		);
+		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its address or location fields did not save', 'agent-abilities-for-mcp' ) );
 	}
 
 	$post = get_post( $post_id );

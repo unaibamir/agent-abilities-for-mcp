@@ -593,6 +593,38 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 5, R5-4: create only ever verified the address/location fields (the test
+	 * above), never the core title/content/status the update path already confirms (Codex hunt
+	 * F4) - a wp_insert_post_data filter that silently reverts the requested title must roll the
+	 * create back and report an error, not a success response claiming the requested title landed.
+	 */
+	public function test_create_rolls_back_and_errors_when_the_title_write_is_vetoed(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$veto = static function ( $data ) {
+			$data['post_title'] = 'Vetoed back to this';
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $veto );
+		$out = aafm_exec_geodirectory_create_listing( array( 'title' => 'Requested title' ) );
+		remove_filter( 'wp_insert_post_data', $veto );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_geodirectory_write_unconfirmed', $out->get_error_code() );
+
+		$leftover = new \WP_Query(
+			array(
+				'post_type'      => 'gd_place',
+				'post_status'    => 'any',
+				'title'          => 'Vetoed back to this',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+			)
+		);
+		$this->assertSame( array(), $leftover->posts, 'A create whose title could not be confirmed must not be left behind.' );
+	}
+
+	/**
 	 * Codex final round 2 MEDIUM: a legitimate third-party filter on 'geodir_get_post_info' that
 	 * merely reformats the returned value (not GeoDirectory's own default behavior - something
 	 * another active plugin or theme could add) must not make the write-confirmation check see a

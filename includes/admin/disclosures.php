@@ -222,7 +222,11 @@ function aafm_ability_disclosures(): array {
 
 		// Avada / Fusion Builder.
 		'aafm/avada-get-page-content'      => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
-		'aafm/avada-replace-text'          => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode tree to stay byte-identical before and after - a replacement that would touch a shortcode tag or its attributes is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+		// Codex hunt F7: shortcode_parse_atts() (what the guard actually compares) discards
+		// quoting style and whitespace inside a tag, so a change limited to those is not caught
+		// even though the tree it builds otherwise stays equal. Worded to the real guarantee
+		// (structure and attribute values) rather than the "byte-identical" claim that didn't hold.
+		'aafm/avada-replace-text'          => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee) - a replacement that would touch a shortcode tag or its attributes is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 
 		// GeoDirectory (default-off).
 		'aafm/geodirectory-get-listings'   => __( 'Lists GeoDirectory business/place listings (title, status, link).', 'agent-abilities-for-mcp' ),

@@ -66,7 +66,7 @@ function aafm_avada_registry_definitions(): array {
 		),
 		'aafm/avada-replace-text'     => array(
 			'label'        => __( 'Replace text in an Avada page', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode tree to stay byte-identical before and after - a replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee) - a replacement that would touch a shortcode tag, its self-closing form, or an attribute is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'avada',
@@ -369,6 +369,13 @@ function aafm_fusion_shortcode_walk( string $content, int $depth ): ?array {
  * mirroring how aafm_replacement_preserves_structure() needs no bespoke HTML-attribute case
  * either. Either side failing to parse (null) refuses the write, per
  * 228-avada-guard-design.md §2 step 4's fail-closed rule.
+ *
+ * Codex hunt F7: 'atts' is shortcode_parse_atts()'s output, a normalized associative array -
+ * it discards the original quoting style and interior whitespace entirely, so two attribute
+ * strings differing only in quote character or whitespace (or a duplicate attribute that
+ * shadows an earlier one) parse to the identical array and pass this check unchanged. This
+ * compares structure and attribute VALUES, not the raw bytes inside a tag - not the
+ * byte-identical guarantee the disclosure used to claim.
  *
  * @param string $before Content before the replacement.
  * @param string $after  Content after the replacement.

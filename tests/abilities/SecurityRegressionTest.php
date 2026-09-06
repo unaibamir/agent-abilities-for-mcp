@@ -581,7 +581,11 @@ final class SecurityRegressionTest extends TestCase {
 	/**
 	 * Records one parsed `use` alias into the given map.
 	 *
-	 * @param array<string,string> $map Alias => real bare name, mutated in place.
+	 * Codex round 8, R8-5: the map key is lower-cased on write - PHP resolves both function and
+	 * class names case-insensitively, so `use function wp_safe_remote_get as fetch;` must still be
+	 * found by a call written `FETCH(...)`. resolves_to() lower-cases the same way on lookup.
+	 *
+	 * @param array<string,string> $map Lower-cased alias => real bare name, mutated in place.
 	 * @param string               $entry Raw "Qualified\Name" or "Qualified\Name as Alias" text.
 	 */
 	private function record_use_alias( array &$map, string $entry ): void {
@@ -590,27 +594,33 @@ final class SecurityRegressionTest extends TestCase {
 			return;
 		}
 		if ( preg_match( '/^(.*?)\s+as\s+(\w+)$/i', $entry, $m ) ) {
-			$map[ $m[2] ] = $this->trailing_name_segment( trim( $m[1] ) );
+			$map[ strtolower( $m[2] ) ] = $this->trailing_name_segment( trim( $m[1] ) );
 			return;
 		}
-		$real         = $this->trailing_name_segment( $entry );
-		$map[ $real ] = $real;
+		$real                       = $this->trailing_name_segment( $entry );
+		$map[ strtolower( $real ) ] = $real;
 	}
 
 	/**
 	 * Whether a collapsed name token's bare segment resolves - directly, or through an imported
 	 * alias - to the given target name.
 	 *
+	 * Codex round 8, R8-5: PHP resolves function names, class names, and `use` aliases
+	 * case-insensitively (class constants and property/method names on an object are the only
+	 * case-sensitive parts of a call). A prior case-sensitive variant here missed a call written in
+	 * a different case, or through an alias whose declared case did not match the call site's - the
+	 * alias lookup is now keyed by lower case (see record_use_alias()) and the final comparison
+	 * always uses strcasecmp().
+	 *
 	 * @param string               $token_text Collapsed token text.
 	 * @param string               $target Bare target name to match.
-	 * @param array<string,string> $aliases Alias => real bare name, from parse_use_aliases().
-	 * @param bool                 $case_sensitive True for class names, false for function names.
+	 * @param array<string,string> $aliases Lower-cased alias => real bare name, from parse_use_aliases().
 	 * @return bool
 	 */
-	private function resolves_to( string $token_text, string $target, array $aliases, bool $case_sensitive ): bool {
+	private function resolves_to( string $token_text, string $target, array $aliases ): bool {
 		$bare     = $this->trailing_name_segment( $token_text );
-		$resolved = $aliases[ $bare ] ?? $bare;
-		return $case_sensitive ? $target === $resolved : 0 === strcasecmp( $target, $resolved );
+		$resolved = $aliases[ strtolower( $bare ) ] ?? $bare;
+		return 0 === strcasecmp( $target, $resolved );
 	}
 
 	/**
@@ -634,7 +644,7 @@ final class SecurityRegressionTest extends TestCase {
 	private function count_function_call_tokens( array $tokens, string $name, array $aliases = array() ): int {
 		$count = 0;
 		foreach ( $tokens as $i => $token ) {
-			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], $name, $aliases, false ) ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], $name, $aliases ) ) {
 				continue;
 			}
 			$next = $this->significant_token( $tokens, $i, 1 );
@@ -659,14 +669,14 @@ final class SecurityRegressionTest extends TestCase {
 	 * an imported `use WpOrg\Requests\Requests as Net; Net::` both count.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
-	 * @param string                                        $class_name Exact class name, case-sensitive.
+	 * @param string                                        $class_name Class name, matched case-insensitively (Codex round 8, R8-5).
 	 * @param array<string,string>                          $aliases Class alias => real bare name.
 	 * @return int
 	 */
 	private function count_static_class_prefix_tokens( array $tokens, string $class_name, array $aliases = array() ): int {
 		$count = 0;
 		foreach ( $tokens as $i => $token ) {
-			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], $class_name, $aliases, true ) ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], $class_name, $aliases ) ) {
 				continue;
 			}
 			$next = $this->significant_token( $tokens, $i, 1 );
@@ -687,14 +697,14 @@ final class SecurityRegressionTest extends TestCase {
 	 * `use WP_Http as Http;` alias both count as a reference to WP_Http.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
-	 * @param string                                        $name Exact identifier name, case-sensitive.
+	 * @param string                                        $name Identifier name, matched case-insensitively (Codex round 8, R8-5).
 	 * @param array<string,string>                          $aliases Class alias => real bare name.
 	 * @return int
 	 */
 	private function count_identifier_tokens( array $tokens, string $name, array $aliases = array() ): int {
 		$count = 0;
 		foreach ( $tokens as $token ) {
-			if ( is_array( $token ) && T_STRING === $token[0] && $this->resolves_to( $token[1], $name, $aliases, true ) ) {
+			if ( is_array( $token ) && T_STRING === $token[0] && $this->resolves_to( $token[1], $name, $aliases ) ) {
 				++$count;
 			}
 		}
@@ -722,7 +732,7 @@ final class SecurityRegressionTest extends TestCase {
 		$count = 0;
 		$total = count( $tokens );
 		foreach ( $tokens as $i => $token ) {
-			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], 'file_get_contents', $aliases, false ) ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to( $token[1], 'file_get_contents', $aliases ) ) {
 				continue;
 			}
 			$next = $this->significant_token( $tokens, $i, 1 );
@@ -919,6 +929,47 @@ final class SecurityRegressionTest extends TestCase {
 		$tokens = $this->collapsed_fixture_tokens( '\\WpOrg\\Requests\\Requests::get( $url );' );
 
 		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests' ) );
+	}
+
+	/**
+	 * Codex round 8, R8-5: PHP function calls and imported aliases both resolve
+	 * case-insensitively, so `use function wp_safe_remote_get as fetch;` followed by a call
+	 * written `FETCH(...)` is still the same primitive - a bare uppercase call proves the
+	 * final-name comparison is case-insensitive, and an uppercase call through a differently
+	 * cased alias proves the alias lookup itself is too.
+	 */
+	public function test_scanner_counts_an_uppercase_call_as_the_bare_primitive(): void {
+		$tokens = $this->collapsed_fixture_tokens( 'WP_SAFE_REMOTE_GET( $url );' );
+
+		$this->assertSame( 1, $this->count_function_call_tokens( $tokens, 'wp_safe_remote_get' ) );
+	}
+
+	public function test_scanner_counts_an_uppercase_call_through_a_lowercase_alias(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use function wp_safe_remote_get as fetch;\nFETCH( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 1, $this->count_function_call_tokens( $tokens, 'wp_safe_remote_get', $aliases['function'] ) );
+	}
+
+	/**
+	 * Same case-insensitivity, for the class-name matchers: a static-call prefix through an
+	 * uppercase alias, and a bare class reference with mismatched case.
+	 */
+	public function test_scanner_counts_an_uppercase_static_prefix_through_an_alias(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\Requests as Net;\nNET::get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+	}
+
+	public function test_scanner_counts_a_mismatched_case_identifier_reference(): void {
+		$tokens = $this->collapsed_fixture_tokens( 'new wp_http();' );
+
+		$this->assertSame( 1, $this->count_identifier_tokens( $tokens, 'WP_Http' ) );
 	}
 
 	public function test_scanner_counts_a_variable_file_get_contents_argument_as_outbound(): void {

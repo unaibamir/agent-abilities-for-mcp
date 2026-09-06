@@ -1090,55 +1090,23 @@ function aafm_url_would_use_proxy( string $url ): bool {
 }
 
 /**
- * SSRF-hardened fetch for aafm/upload-media-from-url, implementing every control decided in
- * 228-url-upload-ssrf-design.md: https-only, no bare IP-literal host, resolve-once-then-pin via
- * CURLOPT_RESOLVE (so the connection cannot re-resolve to a different address than the one this
- * function validated), no redirects, and a size cap enforced by aborting the transfer itself -
- * before any body bytes when a declared Content-Length is already oversized, mid-transfer
- * otherwise - not merely rejected after a full (bounded) download completes.
+ * Validate a caller-supplied URL against every control decided in
+ * 228-url-upload-ssrf-design.md before any network fetch is attempted: https-only, no bare
+ * IP-literal host, no outbound-proxy routing, resolve-once (so the transport cannot re-resolve
+ * the hostname on its own between this check and the actual connection), the resolved IP refused
+ * if private/reserved, and the port checked against the same safe-port allowlist
+ * wp_http_validate_url() itself uses.
  *
- * Codex round C finding 1: WordPress's HTTP API can fall back from cURL to the Fsockopen
- * transport (that fallback does its OWN, unpinned DNS resolution), and CURLOPT_RESOLVE pinning
- * only applies inside the http_api_curl action, which never fires for that fallback - a silent
- * TOCTOU reopening. Since Requests checks cURL's availability before Fsockopen's and picks cURL
- * whenever it can, refusing outright when cURL is unavailable removes the fallback path entirely
- * rather than trying to detect after the fact whether the pin actually applied.
- *
- * Live-network finding, full gate (2026-09-05): an earlier version of this function set
- * CURLOPT_HEADERFUNCTION/CURLOPT_WRITEFUNCTION on the SAME handle WP_Http_Curl uses, inside the
- * http_api_curl action. WP_Http_Curl::request() (wp-includes/class-wp-http-curl.php) sets its OWN
- * header/write callbacks on that handle BEFORE firing http_api_curl, and curl_setopt() for the
- * same option simply replaces the previous callback - so those callbacks silently starved
- * WP_Http_Curl's internal body/header buffers, which it then read as "no response" and reported
- * as a curl error regardless of the real transfer having succeeded. Every real fetch broke.
- *
- * Codex final round 7/8 MEDIUM (this fix): the interim workaround above - bounding the transfer
- * via WP's own 'limit_response_size' request arg instead of aborting it - correctly REJECTS an
- * oversized result, but only after the (bounded) download completes, and remains vulnerable to a
- * LATER http_api_curl callback (from another plugin, at a higher priority) overriding this
- * function's proxy/resolve pin. Both gaps share one root cause: sharing WP_Http_Curl's handle at
- * all. Fixed by NOT sharing it - a `pre_http_request` short-circuit (228-url-upload-ssrf-design.md
- * §2's option (b), previously rejected in favor of staying inside WP's HTTP stack, revisited once
- * option (a)'s header/write-callback limitation above was found to be a real, tested wall, not a
- * risk worth re-attempting) performs the actual fetch on a cURL handle this function owns
- * OUTRIGHT via aafm_ssrf_owned_curl_fetch() below. Nothing else in the process ever touches that
- * handle, so its own HEADERFUNCTION/WRITEFUNCTION callbacks can safely abort the transfer, and
- * there is no shared http_api_curl hook left for a later-priority callback to race.
- *
- * Codex final round 9 MEDIUM: moving off http_api_curl closed that race but opened a new one one
- * level up - the `pre_http_request` short-circuit itself ran at the default priority, so any
- * OTHER, permanently-registered callback on that same hook at a later priority could discard this
- * function's pinned response and let WP fall through to its own unpinned transport. Fixed by
- * registering at PHP_INT_MAX (nothing runs after it) with a `finally` guaranteeing the transient
- * hook is removed even if an earlier callback throws; see the comment at the add_filter() call
- * below for the mechanics. Also found in the same round: the resolved port was never checked
- * against WP's own safe-port allowlist (80/443/8080 by default), because this short-circuit
- * bypasses 'reject_unsafe_urls' entirely - fixed just above by re-deriving that same check.
+ * Split out of aafm_ssrf_safe_fetch_url() (Codex hunt H2) so the validation step is directly
+ * testable on its own - a test can assert a URL passes or fails this gate without ever reaching
+ * the network, which the combined function could not offer once it stopped routing through WP's
+ * mockable 'pre_http_request' hook.
  *
  * @param string $url Caller-supplied URL.
- * @return string|WP_Error Fetched bytes, or a WP_Error naming which control refused the request.
+ * @return array{host:string,port:int,ip:string,max_bytes:int}|WP_Error The connection target on
+ *              success, or a WP_Error naming which control refused the request.
  */
-function aafm_ssrf_safe_fetch_url( string $url ) {
+function aafm_ssrf_validate_fetch_target( string $url ) {
 	if ( ! aafm_curl_available() ) {
 		return new WP_Error( 'aafm_curl_unavailable', __( 'This server cannot safely fetch a remote URL for upload.', 'agent-abilities-for-mcp' ) );
 	}
@@ -1170,69 +1138,36 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 		return new WP_Error( 'aafm_private_range_refused', __( 'The host resolves to a private or reserved IP address.', 'agent-abilities-for-mcp' ) );
 	}
 
-	$port      = isset( $parts['port'] ) ? (int) $parts['port'] : 443;
-	$max_bytes = (int) wp_max_upload_size();
+	$port = isset( $parts['port'] ) ? (int) $parts['port'] : 443;
 
-	// Codex final round 9 MEDIUM: 'reject_unsafe_urls' below is passed to wp_safe_remote_get(),
-	// but WP_Http::request() only acts on it AFTER firing 'pre_http_request' - the short-circuit
-	// this function installs runs first and returns before that safe-port check ever executes, so
-	// it never actually applied here despite being requested. Re-derive the same allowlist
-	// wp_http_validate_url() itself uses (default 80/443/8080, still filterable by
-	// 'http_allowed_safe_ports' so a site customizing that filter for its other HTTP calls gets
-	// the same behaviour here) rather than calling that function directly, which would perform its
-	// own unmocked gethostbyname() lookup on top of aafm_resolve_hostname_to_ip() above.
+	// wp_http_validate_url()'s own default allowlist (80/443/8080), re-derived rather than
+	// calling that function directly - it would perform its own unmocked gethostbyname() lookup
+	// on top of aafm_resolve_hostname_to_ip() above. Still filterable via 'http_allowed_safe_ports'
+	// so a site customizing that filter for its other HTTP calls gets the same behaviour here.
 	$allowed_ports = apply_filters( 'http_allowed_safe_ports', array( 80, 443, 8080 ), $host, $url ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- mirroring core's own hook (wp-includes/http.php), not a hook this plugin defines.
 	if ( ! is_array( $allowed_ports ) || ! in_array( $port, $allowed_ports, true ) ) {
 		return new WP_Error( 'aafm_unsafe_port', __( 'That port is not allowed for a remote fetch.', 'agent-abilities-for-mcp' ) );
 	}
 
-	// Short-circuit WP's HTTP transport for THIS url only, on a handle this function owns
-	// outright (aafm_ssrf_owned_curl_fetch()) - see this function's docblock for why. A
-	// well-behaved pre_http_request filter never overrides an earlier one's short-circuit (the
-	// convention every core and third-party filter on this hook follows, and the one a test's own
-	// mock relies on): pass a non-false $preempt straight through untouched, and never touch a
-	// request for a different URL that happens to run in the same PHP process.
-	//
-	// Codex final round 9 MEDIUM: registering at the default priority 10 let any OTHER,
-	// permanently-registered 'pre_http_request' callback at a later priority run AFTER this one
-	// and discard its return value - a badly-behaved callback that unconditionally returns false
-	// regardless of the $preempt it was handed would silently undo the pin and send the request
-	// through WP's ordinary, unpinned transport instead. Registering at PHP_INT_MAX instead makes
-	// this callback the last one WordPress runs on this hook, so nothing can act after it: any
-	// earlier-registered callback still runs first (as it always would have), but whatever it
-	// leaves in $preempt is what THIS callback inspects and has the final say over, closing the
-	// override this finding demonstrated. remove_filter() must use the identical priority
-	// argument or it is a silent no-op that would leave this closure registered indefinitely.
-	$intercept = static function ( $preempt, $parsed_args, $request_url ) use ( $url, $host, $port, $ip, $max_bytes ) {
-		if ( false !== $preempt || $request_url !== $url ) {
-			return $preempt;
-		}
-		return aafm_ssrf_owned_curl_fetch( $url, $host, $port, $ip, $max_bytes );
-	};
-	add_filter( 'pre_http_request', $intercept, PHP_INT_MAX, 3 );
-	try {
-		$response = wp_safe_remote_get(
-			$url,
-			array(
-				'timeout'            => 10,
-				'redirection'        => 0,
-				'reject_unsafe_urls' => true,
-				// Codex final round 2 HIGH: WP core's default User-Agent ('WordPress/{version};
-				// {site url}', class-wp-http.php) discloses the site's own URL to whatever host
-				// the caller supplied - not a leak of post content, but not "sends nothing of
-				// yours" either. A neutral, non-identifying string removes the disclosure at its
-				// source rather than merely documenting it.
-				'user-agent'         => 'Agent Abilities for MCP (media fetch)',
-			)
-		);
-	} finally {
-		// Codex final round 9 LOW: a `finally` guarantees this scoped hook is always removed,
-		// even if some OTHER 'pre_http_request' callback ahead of it in the chain throws - without
-		// it, this closure (and the $ip/$max_bytes it closes over) would stay registered for every
-		// later request in the same PHP process.
-		remove_filter( 'pre_http_request', $intercept, PHP_INT_MAX );
-	}
+	return array(
+		'host'      => $host,
+		'port'      => $port,
+		'ip'        => $ip,
+		'max_bytes' => (int) wp_max_upload_size(),
+	);
+}
 
+/**
+ * Turn aafm_ssrf_owned_curl_fetch()'s raw result into fetched bytes or a WP_Error, independent of
+ * how the fetch was performed. Split out of aafm_ssrf_safe_fetch_url() (Codex hunt H2) so this
+ * logic is directly testable with a synthetic response array, with no network and no fetch
+ * mechanism involved at all.
+ *
+ * @param array{headers:array<string,string>,body:string,response:array{code:int,message:string}}|WP_Error $response  Raw fetch result.
+ * @param int                                                                                              $max_bytes wp_max_upload_size() at fetch time.
+ * @return string|WP_Error Fetched bytes, or a WP_Error naming which control refused the response.
+ */
+function aafm_ssrf_process_fetch_response( $response, int $max_bytes ) {
 	if ( is_wp_error( $response ) ) {
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
 	}
@@ -1244,12 +1179,11 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
 	}
 
-	// The REAL abort already happened inside aafm_ssrf_owned_curl_fetch() above - before any body
-	// bytes for an honest oversized Content-Length, mid-transfer otherwise - which reports itself
-	// back here as this same shape (an oversized 'content-length' header with an empty body, or a
-	// body already over the cap). This is the defense-in-depth re-check for a hostile server that
-	// claims any Content-Length it likes, and for a mocked response in a test that never goes
-	// through the real curl fetch at all.
+	// The REAL abort already happened inside aafm_ssrf_owned_curl_fetch() - before any body bytes
+	// for an honest oversized Content-Length, mid-transfer otherwise - which reports itself back
+	// here as this same shape (an oversized 'content-length' header with an empty body, or a body
+	// already over the cap). This is the defense-in-depth re-check for a hostile server that
+	// claims any Content-Length it likes, and for a synthetic response in a test.
 	$content_length = wp_remote_retrieve_header( $response, 'content-length' );
 	if ( is_numeric( $content_length ) && (int) $content_length > $max_bytes ) {
 		return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
@@ -1267,6 +1201,84 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 }
 
 /**
+ * SSRF-hardened fetch for aafm/upload-media-from-url: validate the target
+ * (aafm_ssrf_validate_fetch_target()), fetch it on a cURL handle this plugin owns outright
+ * (aafm_ssrf_owned_curl_fetch()), then turn the raw result into bytes or an error
+ * (aafm_ssrf_process_fetch_response()).
+ *
+ * Codex round C finding 1: WordPress's HTTP API can fall back from cURL to the Fsockopen
+ * transport (that fallback does its OWN, unpinned DNS resolution), and CURLOPT_RESOLVE pinning
+ * only applies inside the http_api_curl action, which never fires for that fallback - a silent
+ * TOCTOU reopening. Since Requests checks cURL's availability before Fsockopen's and picks cURL
+ * whenever it can, refusing outright when cURL is unavailable removes the fallback path entirely
+ * rather than trying to detect after the fact whether the pin actually applied.
+ *
+ * Live-network finding, full gate (2026-09-05): an earlier version of this function set
+ * CURLOPT_HEADERFUNCTION/CURLOPT_WRITEFUNCTION on the SAME handle WP_Http_Curl uses, inside the
+ * http_api_curl action. WP_Http_Curl::request() (wp-includes/class-wp-http-curl.php) sets its OWN
+ * header/write callbacks on that handle BEFORE firing http_api_curl, and curl_setopt() for the
+ * same option simply replaces the previous callback - so those callbacks silently starved
+ * WP_Http_Curl's internal body/header buffers, which it then read as "no response" and reported
+ * as a curl error regardless of the real transfer having succeeded. Every real fetch broke.
+ *
+ * Codex final round 7/8 MEDIUM: the interim workaround above - bounding the transfer via WP's own
+ * 'limit_response_size' request arg instead of aborting it - correctly REJECTS an oversized
+ * result, but only after the (bounded) download completes, and remains vulnerable to a LATER
+ * http_api_curl callback (from another plugin, at a higher priority) overriding this function's
+ * proxy/resolve pin. Both gaps share one root cause: sharing WP_Http_Curl's handle at all. Fixed
+ * by NOT sharing it - a cURL handle this function owns OUTRIGHT via aafm_ssrf_owned_curl_fetch()
+ * below. Nothing else in the process ever touches that handle, so its own
+ * HEADERFUNCTION/WRITEFUNCTION callbacks can safely abort the transfer.
+ *
+ * Codex final round 9 MEDIUM (superseded by Codex hunt H2 below): this function used to reach
+ * aafm_ssrf_owned_curl_fetch() through a `pre_http_request` short-circuit registered around a
+ * `wp_safe_remote_get()` call, so the fetch still nominally went through WP's HTTP stack. That
+ * still left a global hook in play - any OTHER 'pre_http_request' callback, from another plugin,
+ * could in principle run before this one and pre-empt it first, and 'reject_unsafe_urls' passed
+ * to wp_safe_remote_get() never actually applied, since WP_Http::request() only acts on it AFTER
+ * firing 'pre_http_request'. Round 9 closed the override by registering at PHP_INT_MAX and
+ * re-deriving the safe-port check independently (now in aafm_ssrf_validate_fetch_target()).
+ *
+ * Codex hunt H2 (accepted hardening follow-up, 2026-09-06): removes the `pre_http_request`
+ * plumbing entirely. There is no window for a pre-emption question to arise when nothing is
+ * registered on a shared hook in the first place: aafm_ssrf_owned_curl_fetch() is called
+ * directly, and wp_safe_remote_get()/WP's HTTP stack are no longer part of this path at all. The
+ * validation and response-processing halves are their own functions above so they stay testable
+ * without a network mock; aafm_ssrf_owned_curl_fetch() itself is directly callable and already has
+ * real local-server tests (tests/abilities/SsrfOwnedCurlFetchTest.php).
+ *
+ * @param string $url Caller-supplied URL.
+ * @return string|WP_Error Fetched bytes, or a WP_Error naming which control refused the request.
+ */
+function aafm_ssrf_safe_fetch_url( string $url ) {
+	$target = aafm_ssrf_validate_fetch_target( $url );
+	if ( is_wp_error( $target ) ) {
+		return $target;
+	}
+
+	/**
+	 * Test-only short-circuit for the owned-curl fetch itself, applied AFTER target validation
+	 * (so a test still exercises the real https/proxy/IP-literal/resolve/private-range/port
+	 * checks above) and BEFORE the real network call. Returning an array here, in the same shape
+	 * aafm_ssrf_owned_curl_fetch() returns, skips curl_init()/curl_exec() entirely and feeds that
+	 * array straight to aafm_ssrf_process_fetch_response() - the same seam
+	 * tests/abilities/UploadMediaFromUrlSsrfTest.php uses by calling that function directly, but
+	 * reachable here for a test that needs the full ability round trip (permission check,
+	 * sideload, caption re-save) rather than the response-processing logic in isolation.
+	 * Read-only in production: nothing in this codebase adds a callback to it.
+	 *
+	 * @param array{headers:array<string,string>,body:string,response:array{code:int,message:string}}|WP_Error|null $pre_fetch_result Null to perform the real fetch.
+	 * @param string $url The URL being fetched.
+	 */
+	$response = apply_filters( 'aafm_media_fetch_pre_fetch_result', null, $url );
+	if ( null === $response ) {
+		$response = aafm_ssrf_owned_curl_fetch( $url, $target['host'], $target['port'], $target['ip'], $target['max_bytes'] );
+	}
+
+	return aafm_ssrf_process_fetch_response( $response, $target['max_bytes'] );
+}
+
+/**
  * Perform the actual network fetch for aafm_ssrf_safe_fetch_url() on a cURL handle this function
  * owns outright - never WP_Http_Curl's handle, and never touched by anything else in the process
  * (see aafm_ssrf_safe_fetch_url()'s docblock for why the earlier shared-handle approach could not
@@ -1281,14 +1293,13 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
  *   the instant the running byte count exceeds $max_bytes, not by requesting a truncated buffer
  *   and letting the real network transfer run to completion or the timeout regardless.
  *
- * Builds and returns a plain array in the same shape a real WP HTTP transport returns (a
- * `pre_http_request` filter returning this shape short-circuits WP_Http::request() with it
- * untouched - see wp-includes/class-wp-http.php), so every existing wp_remote_retrieve_*() call
- * in aafm_ssrf_safe_fetch_url() keeps working unchanged, and the SAME 'aafm_too_large' error code
- * still surfaces from the SAME downstream checks whichever abort mechanism fired - this function
- * reports the abort as data (an oversized 'content-length' header, or a body already over the
- * cap), never as a WP_Error, so it cannot be flattened into the generic 'aafm_fetch_failed' the
- * caller gives every genuine transport failure.
+ * Builds and returns a plain array in the same shape WP's own HTTP transport returns
+ * (wp_remote_retrieve_*()'s documented input shape - see wp-includes/class-wp-http.php), so
+ * aafm_ssrf_process_fetch_response() keeps working on it unchanged, and the SAME 'aafm_too_large'
+ * error code still surfaces from the SAME downstream checks whichever abort mechanism fired -
+ * this function reports the abort as data (an oversized 'content-length' header, or a body
+ * already over the cap), never as a WP_Error, so it cannot be flattened into the generic
+ * 'aafm_fetch_failed' the caller gives every genuine transport failure.
  *
  * @param string $url       Already-validated https:// URL.
  * @param string $host      Hostname - used only for the TLS SNI/cert check, never for connecting.
@@ -1308,29 +1319,30 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	$aborted_on_header     = false;
 	$aborted_on_body       = false;
 
-	curl_setopt( $ch, CURLOPT_HEADER, false ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
-	curl_setopt( $ch, CURLOPT_FOLLOWLOCATION, false ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- §3: no redirect-following, matches the previous 'redirection' => 0 request arg.
-	// Deliberately no CURLOPT_PROTOCOLS restriction here (unlike CURLOPT_PROXY/CURLOPT_NOPROXY
-	// below, which guard a DIFFERENT bypass vector - environment proxy config - the caller's own
-	// scheme check cannot see): the only caller, aafm_ssrf_safe_fetch_url(), already refuses a
-	// non-https $url before this function ever runs, and CURLOPT_FOLLOWLOCATION is false, so
-	// nothing mid-request can switch scheme either. Restricting it here anyway would only block
-	// this function's own direct-call test fixture (a bare `php -S` cannot speak TLS at all) for
-	// a check the caller has already made redundant.
-	curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
-	curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, 2 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
-	curl_setopt( $ch, CURLOPT_PROXY, '' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- disables any environment-configured proxy for this one handle (Codex final round 3 HIGH).
-	curl_setopt( $ch, CURLOPT_NOPROXY, '*' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- belt-and-suspenders alongside CURLOPT_PROXY above.
-	curl_setopt( $ch, CURLOPT_RESOLVE, array( "{$host}:{$port}:{$ip}" ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- pins the connection to the pre-validated IP; SNI/cert still use $host.
-	curl_setopt( $ch, CURLOPT_TIMEOUT, 10 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
-	curl_setopt( $ch, CURLOPT_CONNECTTIMEOUT, 10 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
-	// Codex final round 2 HIGH: a neutral, non-identifying User-Agent - WP core's default
-	// discloses this site's own URL to whatever host the caller supplied.
-	curl_setopt( $ch, CURLOPT_USERAGENT, 'Agent Abilities for MCP (media fetch)' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
-	curl_setopt( // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
-		$ch,
-		CURLOPT_HEADERFUNCTION,
-		static function ( $handle, string $header_line ) use ( $max_bytes, &$header_content_length, &$aborted_on_header ): int {
+	$options = array(
+		CURLOPT_HEADER         => false,
+		// §3: no redirect-following, matches this design's original 'redirection' => 0 request arg.
+		CURLOPT_FOLLOWLOCATION => false,
+		// Deliberately no CURLOPT_PROTOCOLS restriction here (unlike CURLOPT_PROXY/CURLOPT_NOPROXY
+		// below, which guard a DIFFERENT bypass vector - environment proxy config - the caller's
+		// own scheme check cannot see): the only caller, aafm_ssrf_safe_fetch_url(), already
+		// refuses a non-https $url before this function ever runs, and CURLOPT_FOLLOWLOCATION is
+		// false, so nothing mid-request can switch scheme either. Restricting it here anyway would
+		// only block this function's own direct-call test fixture (a bare `php -S` cannot speak
+		// TLS at all) for a check the caller has already made redundant.
+		CURLOPT_SSL_VERIFYPEER => true,
+		CURLOPT_SSL_VERIFYHOST => 2,
+		// Disables any environment-configured proxy for this one handle (Codex final round 3 HIGH).
+		CURLOPT_PROXY          => '',
+		CURLOPT_NOPROXY        => '*', // Belt-and-suspenders alongside CURLOPT_PROXY above.
+		// Pins the connection to the pre-validated IP; SNI/cert still use $host.
+		CURLOPT_RESOLVE        => array( "{$host}:{$port}:{$ip}" ),
+		CURLOPT_TIMEOUT        => 10,
+		CURLOPT_CONNECTTIMEOUT => 10,
+		// Codex final round 2 HIGH: a neutral, non-identifying User-Agent - WP core's default
+		// discloses this site's own URL to whatever host the caller supplied.
+		CURLOPT_USERAGENT      => 'Agent Abilities for MCP (media fetch)',
+		CURLOPT_HEADERFUNCTION => static function ( $handle, string $header_line ) use ( $max_bytes, &$header_content_length, &$aborted_on_header ): int {
 			$len = strlen( $header_line );
 			if ( preg_match( '/^content-length:\s*(\d+)/i', $header_line, $matches ) && (int) $matches[1] > $max_bytes ) {
 				$header_content_length = $matches[1];
@@ -1338,20 +1350,32 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 				return 0; // Any return other than $len tells libcurl to abort - before any body byte.
 			}
 			return $len;
-		}
-	);
-	curl_setopt( // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt
-		$ch,
-		CURLOPT_WRITEFUNCTION,
-		static function ( $handle, string $chunk ) use ( &$body, &$aborted_on_body, $max_bytes ): int {
+		},
+		CURLOPT_WRITEFUNCTION  => static function ( $handle, string $chunk ) use ( &$body, &$aborted_on_body, $max_bytes ): int {
 			$body .= $chunk;
 			if ( strlen( $body ) > $max_bytes ) {
 				$aborted_on_body = true;
 				return 0; // Abort: the real, accumulated byte count exceeded the cap.
 			}
 			return strlen( $chunk );
-		}
+		},
 	);
+
+	/**
+	 * The exact cURL options this fetch is about to apply, immediately before it does.
+	 *
+	 * Codex hunt H2/F12: a test can hook this to assert the real, final CURLOPT_RESOLVE/
+	 * CURLOPT_PROXY/CURLOPT_FOLLOWLOCATION values a live fetch would actually use, rather than
+	 * only proving aafm_resolve_hostname_to_ip() was called once (what the pre_http_request-based
+	 * mock this replaced could prove) with no way to see whether the pin it produced was ever
+	 * really applied to a cURL handle. Read-only in production: nothing in this codebase adds a
+	 * callback to it, and the returned array is used exactly as filtered.
+	 *
+	 * @param array<int,mixed> $options The cURL options this fetch is about to set.
+	 * @param string           $url     The URL being fetched.
+	 */
+	$options = apply_filters( 'aafm_media_fetch_curl_options', $options, $url );
+	curl_setopt_array( $ch, $options ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt_array
 
 	$ok    = curl_exec( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_exec
 	$errno = curl_errno( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_errno

@@ -3,7 +3,21 @@
  * Dedicated SSRF-regression tests for aafm/upload-media-from-url, one per control decided in
  * 228-url-upload-ssrf-design.md: https-only, no bare IP literal, resolve-once-then-pin (proven
  * by a call-count assertion, not just a refusal - Codex-review amendment 20), no redirects, a
- * size cap enforced even against a mocked HTTP layer, and the existing byte-sniff allow-list.
+ * size cap enforced even against a synthetic fetch result, and the existing byte-sniff allow-list.
+ *
+ * Codex hunt H2 (2026-09-06): aafm_ssrf_safe_fetch_url() no longer routes through
+ * `wp_safe_remote_get()`/`pre_http_request` at all - it calls aafm_ssrf_owned_curl_fetch()
+ * directly (includes/abilities/media.php). Mocking a fetch result via `pre_http_request` would
+ * therefore no longer intercept anything, so every test below that used to fake a response that
+ * way now either calls aafm_ssrf_validate_fetch_target() directly (the validation half, before
+ * any fetch is attempted) or aafm_ssrf_process_fetch_response() directly (the response-handling
+ * half, with a synthetic array in the same shape aafm_ssrf_owned_curl_fetch() returns) - both
+ * split out of aafm_ssrf_safe_fetch_url() specifically so they stay unit-testable without a
+ * network mock. Two tests whose entire subject was the removed `pre_http_request` short-circuit
+ * itself (that it registered at PHP_INT_MAX, and that it passed an earlier filter's result
+ * through untouched) are deleted outright: there is nothing left to prove once no such
+ * registration happens at all. Real-bytes-over-a-real-socket coverage of
+ * aafm_ssrf_owned_curl_fetch() itself lives in tests/abilities/SsrfOwnedCurlFetchTest.php.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -124,12 +138,14 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 9 MEDIUM: this function short-circuits WP's HTTP transport via
-	 * 'pre_http_request', which runs BEFORE 'reject_unsafe_urls' is ever acted on inside
+	 * Codex final round 9 MEDIUM: this function used to short-circuit WP's HTTP transport via
+	 * 'pre_http_request', which ran BEFORE 'reject_unsafe_urls' was ever acted on inside
 	 * WP_Http::request() - so passing that request arg gave no actual port protection, and an
 	 * otherwise-valid public host on an arbitrary port (a probe of any open TLS service on the
 	 * public internet, not just image hosts) sailed through. Fixed by re-deriving the same
-	 * 80/443/8080 default allowlist wp_http_validate_url() itself uses.
+	 * 80/443/8080 default allowlist wp_http_validate_url() itself uses, now inside
+	 * aafm_ssrf_validate_fetch_target() (Codex hunt H2 dropped the pre_http_request/
+	 * reject_unsafe_urls plumbing this check originally had to work around entirely).
 	 */
 	public function test_refuses_a_port_outside_the_safe_allowlist(): void {
 		$out = aafm_ssrf_safe_fetch_url( 'https://example.test:8443/pixel.png' );
@@ -140,29 +156,22 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	/**
 	 * The 'http_allowed_safe_ports' filter is WP core's own mechanism for a site to widen that
 	 * default allowlist; a site that already uses it for its other HTTP calls should not need a
-	 * second, plugin-specific setting for this ability to respect the same policy.
+	 * second, plugin-specific setting for this ability to respect the same policy. Asserted at
+	 * the validation step directly (Codex hunt H2) rather than through a full fetch: whether the
+	 * widened port is accepted is entirely decided there, before any network attempt.
 	 */
 	public function test_a_port_added_via_the_core_safe_ports_filter_is_allowed(): void {
 		add_filter(
 			'http_allowed_safe_ports',
 			static fn( array $ports ): array => array_merge( $ports, array( 8443 ) )
 		);
-		add_filter(
-			'pre_http_request',
-			static fn() => array(
-				'headers'  => array( 'content-type' => 'image/png' ),
-				'body'     => base64_decode( self::PNG_B64 ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding a fixture constant, not obfuscating anything.
-				'response' => array( 'code' => 200 ),
-				'cookies'  => array(),
-			)
-		);
 
-		$out = aafm_ssrf_safe_fetch_url( 'https://example.test:8443/pixel.png' );
+		$target = aafm_ssrf_validate_fetch_target( 'https://example.test:8443/pixel.png' );
 
 		remove_all_filters( 'http_allowed_safe_ports' );
-		remove_all_filters( 'pre_http_request' );
 
-		$this->assertIsString( $out );
+		$this->assertIsArray( $target, 'A port added via the core safe-ports filter must pass validation.' );
+		$this->assertSame( 8443, $target['port'] );
 	}
 
 	/**
@@ -170,6 +179,13 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	 * test if invoked more than once for a single fetch. A naive re-resolution bug passes a plain
 	 * "is refused" test (the first, validated resolution is what a refusal test checks) - only a
 	 * call-count assertion catches a second, un-pinned lookup between validation and connection.
+	 *
+	 * Codex hunt H2: asserted against aafm_ssrf_validate_fetch_target() alone now, since
+	 * resolution only ever happens there - aafm_ssrf_owned_curl_fetch() takes the already-resolved
+	 * IP as a plain string argument and has no way to call the resolver again, so "never
+	 * re-resolved between validation and connection" is now a structural property of the function
+	 * signatures, not just an observed one. This also drops the prior need to mock a fetch result
+	 * just to get past validation to the point being measured.
 	 */
 	public function test_resolves_the_hostname_exactly_once_per_fetch(): void {
 		$calls = 0;
@@ -180,166 +196,80 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 				return '203.0.113.10'; // TEST-NET-3, public per filter_var()'s own flags.
 			}
 		);
-		add_filter(
-			'pre_http_request',
-			static fn() => array(
-				'headers'  => array(),
-				'body'     => '',
-				'response' => array( 'code' => 500 ),
-				'cookies'  => array(),
-			)
-		);
 
-		aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
+		aafm_ssrf_validate_fetch_target( 'https://example.test/image.jpg' );
 
 		remove_all_filters( 'aafm_resolve_hostname_to_ip' );
-		remove_all_filters( 'pre_http_request' );
 
-		$this->assertSame( 1, $calls, 'The hostname must be resolved exactly once per fetch, never re-resolved between validation and connection.' );
+		$this->assertSame( 1, $calls, 'The hostname must be resolved exactly once during validation.' );
 	}
 
+	/**
+	 * Codex hunt H2: asserted against aafm_ssrf_process_fetch_response() directly with a synthetic
+	 * response in the same shape aafm_ssrf_owned_curl_fetch() returns for a redirect (a 302 status,
+	 * no captured headers - that function never records a Location header, since
+	 * CURLOPT_FOLLOWLOCATION is off and nothing downstream needs one).
+	 */
 	public function test_does_not_follow_a_redirect(): void {
-		add_filter(
-			'pre_http_request',
-			static fn() => array(
-				'headers'  => array( 'location' => 'https://169.254.169.254/latest/meta-data/' ),
+		$out = aafm_ssrf_process_fetch_response(
+			array(
+				'headers'  => array(),
 				'body'     => '',
-				'response' => array( 'code' => 302 ),
-				'cookies'  => array(),
-			)
+				'response' => array(
+					'code'    => 302,
+					'message' => '',
+				),
+			),
+			(int) wp_max_upload_size()
 		);
-
-		$out = aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
-
-		remove_all_filters( 'pre_http_request' );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
 		$this->assertSame( 'aafm_fetch_failed', $out->get_error_code() );
 	}
 
+	/**
+	 * Codex hunt H2: asserted against aafm_ssrf_process_fetch_response() directly. The mid-transfer
+	 * abort itself (the mechanism that actually stops an oversized body being downloaded) is
+	 * proven against a real local server in SsrfOwnedCurlFetchTest.php; this is the
+	 * defense-in-depth re-check one layer up, for a body that reaches this function already over
+	 * the cap by whatever means.
+	 */
 	public function test_refuses_a_payload_over_the_size_cap(): void {
-		$oversized = str_repeat( 'x', (int) wp_max_upload_size() + 1 );
-		add_filter(
-			'pre_http_request',
-			static fn() => array(
+		$max_bytes = (int) wp_max_upload_size();
+		$out       = aafm_ssrf_process_fetch_response(
+			array(
 				'headers'  => array(),
-				'body'     => $oversized,
-				'response' => array( 'code' => 200 ),
-				'cookies'  => array(),
-			)
+				'body'     => str_repeat( 'x', $max_bytes + 1 ),
+				'response' => array(
+					'code'    => 200,
+					'message' => '',
+				),
+			),
+			$max_bytes
 		);
-
-		$out = aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
-
-		remove_all_filters( 'pre_http_request' );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
 		$this->assertSame( 'aafm_too_large', $out->get_error_code() );
 	}
 
 	/**
-	 * Codex final round 7/8 MEDIUM (fix): the byte cap is no longer enforced via WP's own
-	 * 'limit_response_size' request arg (that mechanism could only reject AFTER a bounded
-	 * download completed, never before). This test's own mock deliberately runs at a LOWER
-	 * priority than aafm_ssrf_safe_fetch_url()'s own pre_http_request intercept (which registers
-	 * at PHP_INT_MAX as of round 9, so any earlier-registered callback, at any priority, still
-	 * runs first) - proving the production intercept correctly treats an earlier filter's
-	 * non-false return as already-decided and passes it straight through untouched, exactly the
-	 * convention every pre_http_request filter (including a test's own mock) depends on. The
-	 * request args that DO still reach wp_safe_remote_get() (as a fallback default, should the
-	 * intercept ever not fire) still carry the neutral User-Agent and the
-	 * no-redirect/reject-unsafe-urls floor.
+	 * Codex hunt H2: asserted against aafm_ssrf_process_fetch_response() with a synthetic
+	 * response, then fed through the real byte-sniff/upload path. Real bytes fetched over a real
+	 * socket are covered separately in SsrfOwnedCurlFetchTest.php; this test's job is only the
+	 * response-shape-to-upload composition, which never needed a network call to exercise.
 	 */
-	public function test_an_earlier_pre_http_request_filter_is_never_overridden(): void {
-		$captured_args = null;
-		add_filter(
-			'pre_http_request',
-			static function ( $preempt, $args ) use ( &$captured_args ) {
-				$captured_args = $args;
-				return array(
-					'headers'  => array(),
-					'body'     => '',
-					'response' => array( 'code' => 500 ),
-					'cookies'  => array(),
-				);
-			},
-			10,
-			2
-		);
-
-		$out = aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
-
-		remove_all_filters( 'pre_http_request' );
-
-		$this->assertInstanceOf( WP_Error::class, $out, "The test's own mock (a 500 response) must be the result used, not silently replaced by the production intercept." );
-		$this->assertIsArray( $captured_args );
-		$this->assertNull( $captured_args['limit_response_size'], 'The size cap is enforced by the owned-handle fetch now (WP core defaults this arg to null when unset), not this now-obsolete request arg.' );
-
-		// Codex final round 2 HIGH: WP core's default User-Agent discloses the site's own URL to
-		// the caller-supplied host. The fallback request must still carry a neutral one instead.
-		$this->assertSame( 'Agent Abilities for MCP (media fetch)', $captured_args['user-agent'] );
-		$this->assertStringNotContainsString( home_url(), (string) $captured_args['user-agent'] );
-	}
-
-	/**
-	 * Codex final round 9 MEDIUM (fix): before this round, the intercept registered at the
-	 * default priority 10, so a LATER, permanently-registered 'pre_http_request' callback (e.g.
-	 * from another plugin) could discard the pinned response this function already produced and
-	 * force WordPress to fall through to its own unpinned transport - reopening exactly the
-	 * DNS/proxy path this whole design exists to close. Registering at PHP_INT_MAX instead means
-	 * nothing can ever run after this intercept (it is the highest priority PHP can represent),
-	 * closing the override by construction rather than by hoping every third-party callback
-	 * happens to use a lower number. Proven here by inspecting WP's own filter registry from
-	 * inside an even-lower-priority spy - which also short-circuits with a non-false mock so
-	 * this test never lets the real owned-handle fetch touch the network.
-	 */
-	public function test_the_intercept_registers_at_the_maximum_priority_so_nothing_can_run_after_it(): void {
-		$observed_priority = null;
-		add_filter(
-			'pre_http_request',
-			static function () use ( &$observed_priority ) {
-				global $wp_filter;
-				if ( isset( $wp_filter['pre_http_request'] ) ) {
-					$priorities        = array_keys( $wp_filter['pre_http_request']->callbacks );
-					$observed_priority = empty( $priorities ) ? null : max( $priorities );
-				}
-				// Non-false: short-circuits before the production intercept's own body ever runs,
-				// so this test never performs a real network fetch.
-				return array(
-					'headers'  => array(),
-					'body'     => '',
-					'response' => array( 'code' => 500 ),
-					'cookies'  => array(),
-				);
-			},
-			1,
-			1
-		);
-
-		aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
-
-		remove_all_filters( 'pre_http_request' );
-
-		$this->assertSame(
-			PHP_INT_MAX,
-			$observed_priority,
-			"aafm_ssrf_safe_fetch_url()'s own pre_http_request intercept must register at PHP_INT_MAX so no later-registered callback can discard its pinned response."
-		);
-	}
-
 	public function test_a_non_image_response_is_refused_by_the_existing_byte_sniff(): void {
-		add_filter(
-			'pre_http_request',
-			static fn() => array(
+		$fetched = aafm_ssrf_process_fetch_response(
+			array(
 				'headers'  => array( 'content-type' => 'image/jpeg' ),
 				'body'     => '<html><body>not an image</body></html>',
-				'response' => array( 'code' => 200 ),
-				'cookies'  => array(),
-			)
+				'response' => array(
+					'code'    => 200,
+					'message' => '',
+				),
+			),
+			(int) wp_max_upload_size()
 		);
-
-		$fetched = aafm_ssrf_safe_fetch_url( 'https://example.test/image.jpg' );
-		remove_all_filters( 'pre_http_request' );
 
 		$this->assertIsString( $fetched );
 
@@ -353,18 +283,18 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	public function test_a_legitimate_public_https_image_is_fetched_and_uploaded(): void {
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 		$png = base64_decode( self::PNG_B64, true );
-		add_filter(
-			'pre_http_request',
-			static fn() => array(
+
+		$fetched = aafm_ssrf_process_fetch_response(
+			array(
 				'headers'  => array( 'content-type' => 'image/png' ),
 				'body'     => $png,
-				'response' => array( 'code' => 200 ),
-				'cookies'  => array(),
-			)
+				'response' => array(
+					'code'    => 200,
+					'message' => '',
+				),
+			),
+			(int) wp_max_upload_size()
 		);
-
-		$fetched = aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
-		remove_all_filters( 'pre_http_request' );
 
 		$this->assertIsString( $fetched );
 

@@ -35,7 +35,7 @@ final class UploadMediaFromUrlWireTest extends TestCase {
 			}
 		}
 		$this->written_files = array();
-		remove_all_filters( 'pre_http_request' );
+		remove_all_filters( 'aafm_media_fetch_pre_fetch_result' );
 		remove_all_filters( 'aafm_resolve_hostname_to_ip' );
 		parent::tear_down();
 	}
@@ -88,12 +88,14 @@ final class UploadMediaFromUrlWireTest extends TestCase {
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 		$png = base64_decode( self::PNG_B64, true );
 		add_filter(
-			'pre_http_request',
+			'aafm_media_fetch_pre_fetch_result',
 			static fn() => array(
 				'headers'  => array( 'content-type' => 'image/png' ),
 				'body'     => $png,
-				'response' => array( 'code' => 200 ),
-				'cookies'  => array(),
+				'response' => array(
+					'code'    => 200,
+					'message' => '',
+				),
 			)
 		);
 

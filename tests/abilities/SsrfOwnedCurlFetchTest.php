@@ -142,4 +142,22 @@ final class SsrfOwnedCurlFetchTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 		$this->assertSame( 'aafm_fetch_failed', $out->get_error_code() );
 	}
+
+	/**
+	 * Codex hunt H2: aafm_ssrf_safe_fetch_url() now composes aafm_ssrf_owned_curl_fetch() and
+	 * aafm_ssrf_process_fetch_response() directly, with no pre_http_request mock possible or
+	 * needed in between. This is the one test that proves that composition against a REAL fetch
+	 * result rather than a synthetic array - UploadMediaFromUrlSsrfTest.php covers
+	 * aafm_ssrf_process_fetch_response() against synthetic responses, and the tests above cover
+	 * aafm_ssrf_owned_curl_fetch() against a real socket; this proves the two functions actually
+	 * fit together.
+	 */
+	public function test_process_fetch_response_accepts_a_real_local_fetch_result(): void {
+		$this->start_local_server();
+
+		$raw = aafm_ssrf_owned_curl_fetch( "{$this->base_url}/?mode=small-ok", '127.0.0.1', 0, '127.0.0.1', 1000 );
+		$out = aafm_ssrf_process_fetch_response( $raw, 1000 );
+
+		$this->assertSame( 'ok', $out );
+	}
 }

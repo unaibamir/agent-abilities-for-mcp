@@ -313,12 +313,14 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 			$png = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', true );
 			add_filter(
-				'pre_http_request',
+				'aafm_media_fetch_pre_fetch_result',
 				static fn() => array(
 					'headers'  => array( 'content-type' => 'image/png' ),
 					'body'     => $png,
-					'response' => array( 'code' => 200 ),
-					'cookies'  => array(),
+					'response' => array(
+						'code'    => 200,
+						'message' => '',
+					),
 				)
 			);
 			// example.test never resolves in this container (RFC 2606) and some DNS setups
@@ -370,7 +372,7 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 			'req-sweep-' . $short_name
 		);
 
-		remove_all_filters( 'pre_http_request' );
+		remove_all_filters( 'aafm_media_fetch_pre_fetch_result' );
 		remove_all_filters( 'aafm_resolve_hostname_to_ip' );
 
 		// Codex round C finding 6: every fixture in this sweep is deliberately success-shaped

@@ -326,4 +326,33 @@ final class ReplaceSitewideTest extends TestCase {
 			'An unrelated nested query must not be contaminated by the LIKE-clause filter.'
 		);
 	}
+
+	/**
+	 * Codex round 5 R5-2: only is_wp_error() was checked on each post's wp_update_post() result,
+	 * so a wp_insert_post_data filter that reverts the content must count that post as a failed
+	 * write, not an updated one, for a change that never actually landed in storage.
+	 */
+	public function test_a_vetoed_write_is_counted_as_failed_not_updated(): void {
+		$content = 'the quick fox';
+		$post    = self::factory()->post->create_and_get( array( 'post_content' => $content ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$veto = static function ( $data ) use ( $content ) {
+			$data['post_content'] = $content;
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $veto );
+		$out = aafm_exec_replace_sitewide(
+			array(
+				'search'  => 'quick',
+				'replace' => 'slow',
+				'dry_run' => false,
+			)
+		);
+		remove_filter( 'wp_insert_post_data', $veto );
+
+		$this->assertSame( $content, get_post( $post->ID )->post_content, 'precondition: the veto filter must have kept the content unwritten.' );
+		$this->assertSame( 0, $out['updated_posts'], 'A vetoed write must not be counted as updated.' );
+		$this->assertSame( 1, $out['failed_updates'], 'A vetoed write must be counted as a failed update.' );
+	}
 }

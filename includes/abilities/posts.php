@@ -1632,8 +1632,15 @@ function aafm_exec_replace_in_post( array $input ) {
 	}
 
 	$updated = get_post( (int) $result );
-	if ( ! $updated instanceof WP_Post ) {
-		return aafm_generic_error();
+	// Codex round 5 R5-2: only is_wp_error() was checked here, so a wp_insert_post_data filter
+	// that vetoed or reverted the content would report the pre-computed replacement count as
+	// though it had landed. Confirm the exact intended content actually made it to storage,
+	// matching Avada's replace-text fix (Codex hunt F4).
+	if ( ! $updated instanceof WP_Post || $updated->post_content !== $new ) {
+		return new WP_Error(
+			'aafm_replace_write_unconfirmed',
+			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+		);
 	}
 
 	$response = array(
@@ -1913,6 +1920,15 @@ function aafm_exec_replace_sitewide( array $input ) {
 			true
 		);
 		if ( is_wp_error( $result ) ) {
+			++$failed;
+			continue;
+		}
+		// Codex round 5 R5-2: is_wp_error() alone does not catch a wp_insert_post_data filter
+		// that vetoes or reverts the content, which would count a post as updated when nothing
+		// actually changed. Confirm the exact intended content landed, matching the single-post
+		// replace-text fix above.
+		$after = get_post( (int) $result );
+		if ( ! $after instanceof WP_Post || $after->post_content !== $new ) {
 			++$failed;
 			continue;
 		}

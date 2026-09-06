@@ -338,4 +338,41 @@ final class ReplaceInPostTest extends TestCase {
 	public function test_perm_callback_returns_false_on_empty_input(): void {
 		$this->assertFalse( aafm_perm_replace_in_post( array() ) );
 	}
+
+	/**
+	 * Codex round 5 R5-2: only is_wp_error() was checked on the wp_update_post() result, so a
+	 * wp_insert_post_data filter that reverts the content must surface as a structured error, not
+	 * a success response reporting a positive replacement count for a change that never landed.
+	 */
+	public function test_returns_an_error_when_the_write_is_vetoed(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$content = 'red fox red fox red';
+		$id      = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => $content,
+			)
+		);
+
+		$veto = static function ( $data ) use ( $content ) {
+			$data['post_content'] = $content;
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $veto );
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'red',
+				'replace' => 'blue',
+			)
+		);
+		remove_filter( 'wp_insert_post_data', $veto );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed content write must return an error, not a success claiming the replacement was saved.'
+		);
+	}
 }

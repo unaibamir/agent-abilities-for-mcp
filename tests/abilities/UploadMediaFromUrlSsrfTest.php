@@ -236,6 +236,73 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
+	 * Codex final round 4 HIGH: curl_setopt_array()'s return value was ignored, so a single option
+	 * it could not apply (CURLOPT_PROXYTYPE with an out-of-range value, verified separately to make
+	 * curl_setopt_array() return false without throwing, per the cURL manual's documented behavior)
+	 * still let curl_exec() run. This injects exactly that failure via the aafm_media_fetch_curl_options
+	 * seam and proves two things: a WP_Error comes back, and curl_exec() itself was never reached.
+	 * The second point is observed directly via the aafm_media_fetch_before_exec seam
+	 * (fires right before curl_exec(), a test-only observation point) rather than inferred from
+	 * elapsed wall time, which is circumstantial: a host that rejects the pinned TEST-NET-3 address
+	 * instantly would pass that check even with the fail-closed guard reverted.
+	 */
+	public function test_a_curl_option_the_handle_cannot_apply_aborts_before_any_connection(): void {
+		$reached_exec = false;
+		add_filter(
+			'aafm_media_fetch_curl_options',
+			static function ( array $options ): array {
+				// CURLOPT_PROXYTYPE only accepts a small set of CURLPROXY_* constants; an
+				// out-of-range value makes curl_setopt_array() return false without throwing,
+				// which is exactly the silent-failure shape this test guards against.
+				$options[ CURLOPT_PROXYTYPE ] = 999999;
+				return $options;
+			}
+		);
+		add_action(
+			'aafm_media_fetch_before_exec',
+			static function () use ( &$reached_exec ): void {
+				$reached_exec = true;
+			}
+		);
+
+		try {
+			$out = aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
+		} finally {
+			remove_all_filters( 'aafm_media_fetch_curl_options' );
+			remove_all_actions( 'aafm_media_fetch_before_exec' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_fetch_failed', $out->get_error_code() );
+		$this->assertFalse( $reached_exec, 'curl_exec() must never run when an option the handle cannot apply is rejected.' );
+	}
+
+	/**
+	 * Proves the aafm_media_fetch_before_exec seam used above is actually live: with a benign
+	 * option set (no bad CURLOPT_PROXYTYPE), the fetch must reach the point right before
+	 * curl_exec() and fire the action, aborting there via a thrown exception so no real network
+	 * call happens. Without this test, a seam that silently stopped firing would make the test
+	 * above pass for the wrong reason (nothing ever sets $reached_exec, bad option or not).
+	 */
+	public function test_the_before_exec_seam_fires_with_a_benign_option_set(): void {
+		add_action(
+			'aafm_media_fetch_before_exec',
+			static function (): void {
+				throw new \RuntimeException( 'aafm-test-abort-before-curl-exec' );
+			}
+		);
+
+		try {
+			aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
+			$this->fail( 'Expected the before-exec seam to abort the fetch.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'aafm-test-abort-before-curl-exec', $e->getMessage() );
+		} finally {
+			remove_all_actions( 'aafm_media_fetch_before_exec' );
+		}
+	}
+
+	/**
 	 * Codex hunt H2: asserted against aafm_ssrf_process_fetch_response() directly with a synthetic
 	 * response in the same shape aafm_ssrf_owned_curl_fetch() returns for a redirect (a 302 status,
 	 * no captured headers - that function never records a Location header, since

@@ -1397,7 +1397,24 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	 * @param string           $url     The URL being fetched.
 	 */
 	$options = apply_filters( 'aafm_media_fetch_curl_options', $options, $url );
-	curl_setopt_array( $ch, $options ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt_array
+	// Codex final round 4 HIGH: curl_setopt_array()'s return was ignored, so a single option this
+	// array cannot apply (it stops applying at the first failure) still let curl_exec() run with
+	// whichever security options DID make it through - possibly none of the DNS pin, proxy
+	// neutralization, timeout, or byte-cap options above. Fail closed instead: never call
+	// curl_exec() unless every option in the array was confirmed applied.
+	if ( true !== curl_setopt_array( $ch, $options ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt_array
+		curl_close( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_close
+		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
+	}
+
+	/**
+	 * Fires immediately before curl_exec(), once every option has been confirmed applied.
+	 *
+	 * Test observation point only: nothing in this codebase hooks it in production. It lets a
+	 * test prove the fail-closed guard above actually prevented curl_exec() from running, rather
+	 * than inferring that from a WP_Error return alone.
+	 */
+	do_action( 'aafm_media_fetch_before_exec' );
 
 	$ok    = curl_exec( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_exec
 	$errno = curl_errno( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_errno

@@ -566,6 +566,8 @@ final class SecurityRegressionTest extends TestCase {
 			$includes . '/abilities/pages.php',
 			$includes . '/abilities/comments.php',
 			$includes . '/abilities/blocks.php',
+			// Gate round 1 finding 6: tec-delete-event now carries the same guard as its siblings.
+			$includes . '/abilities/tec/events.php',
 		);
 
 		foreach ( $sources as $path ) {

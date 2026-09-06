@@ -362,6 +362,29 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( 'trash', get_post_status( $event_id ) );
 	}
 
+	/**
+	 * Gate round 1 finding 6: tec-delete-event must refuse, not silently permanently delete,
+	 * on a Trash-disabled site - matching the trash-post/trash-page/delete-block guarantee
+	 * (see tests/abilities/TrashDisabledTest.php's identical disable_trash() pattern).
+	 */
+	public function test_delete_event_refuses_and_keeps_event_when_trash_disabled(): void {
+		add_filter( 'aafm_trash_is_enabled', '__return_false' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+
+		$out = aafm_exec_tec_delete_event( array( 'event_id' => $event_id ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_trash_disabled', $out->get_error_code() );
+
+		// Critical: the event must still exist (NOT force-deleted).
+		$event = get_post( $event_id );
+		$this->assertNotNull( $event, 'tec-delete-event permanently deleted the event when Trash was disabled.' );
+		$this->assertSame( 'publish', $event->post_status );
+
+		remove_filter( 'aafm_trash_is_enabled', '__return_false' );
+	}
+
 	public function test_get_events_lists_and_searches(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$this->create_event( array( 'post_title' => 'Findable Concert' ) );

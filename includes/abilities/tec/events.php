@@ -653,14 +653,23 @@ function aafm_args_tec_delete_event(): array {
  * wp_delete_post() (the repository's own default delete callback, confirmed no
  * 'tribe_repository_events_delete_callback' override exists in the installed plugin) only
  * auto-trashes for the literal post types 'post' or 'page' - for any custom post type, including
- * tribe_events, it goes straight to a PERMANENT delete. Calling wp_trash_post() directly is the
- * only way to guarantee this ability's own "always recoverable via Trash" contract, matching this
- * plugin's own trash-post convention (aafm_exec_trash_post()) exactly.
+ * tribe_events, it goes straight to a PERMANENT delete. Calling wp_trash_post() directly moves
+ * the event to Trash the normal way, matching this plugin's own trash-post/trash-page/
+ * delete-block abilities.
+ *
+ * Codex hunt F6, gate round 1 finding 6: the disclosure only weakened the "always recoverable"
+ * claim to name the Trash-disabled risk (core's own wp_trash_post() permanently deletes when
+ * EMPTY_TRASH_DAYS is falsy) rather than closing it, leaving this the one "trash" ability that
+ * could still silently, permanently destroy data. Now guarded exactly like trash-post/trash-page/
+ * delete-block: refuse outright on a Trash-disabled site instead of documenting the risk.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_delete_event( array $input ) {
+	if ( ! aafm_trash_is_enabled() ) {
+		return aafm_trash_disabled_error();
+	}
 	$id = absint( $input['event_id'] ?? 0 );
 	if ( ! wp_trash_post( $id ) ) {
 		return aafm_generic_error();

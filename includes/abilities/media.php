@@ -1119,6 +1119,12 @@ function aafm_curl_available(): bool {
  * pattern, since the real decision depends on PHP constants a test cannot safely define without
  * leaking into every other test in the process.
  *
+ * Codex round 8 LOW: this is a plugin-defined filter, unlike http_allowed_safe_ports below, so
+ * nothing requires it to carry the URL. Passing $url as an extra arg exposed the full fetch
+ * target - including any signed query string - to every 'all' hook observer before any control
+ * had a chance to run. The filtered value already answers the only question a caller needs
+ * ("would this go through a proxy"), so the URL is dropped rather than redacted.
+ *
  * @param string $url The URL that would be fetched.
  * @return bool
  */
@@ -1126,8 +1132,7 @@ function aafm_url_would_use_proxy( string $url ): bool {
 	$proxy = new WP_HTTP_Proxy();
 	return (bool) apply_filters(
 		'aafm_url_would_use_proxy',
-		$proxy->is_enabled() && $proxy->send_through_proxy( $url ),
-		$url
+		$proxy->is_enabled() && $proxy->send_through_proxy( $url )
 	);
 }
 
@@ -1186,6 +1191,13 @@ function aafm_ssrf_validate_fetch_target( string $url ) {
 	// calling that function directly - it would perform its own unmocked gethostbyname() lookup
 	// on top of aafm_resolve_hostname_to_ip() above. Still filterable via 'http_allowed_safe_ports'
 	// so a site customizing that filter for its other HTTP calls gets the same behaviour here.
+	//
+	// Codex round 8 LOW: this call also exposes $url to any 'all' hook observer. Accepted rather
+	// than redacted: this is core's own hook with core's own signature (wp-includes/http.php
+	// passes the same $url to it on every ordinary wp_http_validate_url() call a site already
+	// makes), so a site's existing filter callback already expects this exact shape. Diverging
+	// from it here would break that expectation without closing anything - the same URL already
+	// reaches this same hook through core's normal HTTP calls.
 	$allowed_ports = apply_filters( 'http_allowed_safe_ports', array( 80, 443, 8080 ), $host, $url ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- mirroring core's own hook (wp-includes/http.php), not a hook this plugin defines.
 	if ( ! is_array( $allowed_ports ) || ! in_array( $port, $allowed_ports, true ) ) {
 		return new WP_Error( 'aafm_unsafe_port', __( 'That port is not allowed for a remote fetch.', 'agent-abilities-for-mcp' ) );

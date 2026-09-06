@@ -114,6 +114,32 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 		$this->assertFalse( aafm_url_would_use_proxy( 'https://example.test/pixel.png' ) );
 	}
 
+	/**
+	 * Codex round 8 LOW: aafm_url_would_use_proxy() used to pass the full URL as a second filter
+	 * argument, so any 'all' hook observer could read a signed query string before any control had
+	 * run. This is a plugin-defined filter (unlike the core-mirrored http_allowed_safe_ports below,
+	 * which legitimately still carries the URL), so a call-count assertion is what proves the URL
+	 * was dropped rather than merely unread by this particular observer.
+	 */
+	public function test_proxy_filter_does_not_receive_the_url(): void {
+		$received_args = null;
+		add_filter(
+			'aafm_url_would_use_proxy',
+			static function () use ( &$received_args ) {
+				$received_args = func_get_args();
+				return false;
+			},
+			10,
+			20
+		);
+
+		aafm_url_would_use_proxy( 'https://example.test/pixel.png?token=super-secret' );
+
+		remove_all_filters( 'aafm_url_would_use_proxy' );
+
+		$this->assertCount( 1, $received_args, 'the proxy filter must receive only the boolean value, never the URL.' );
+	}
+
 	public function test_refuses_a_non_https_scheme(): void {
 		$out = aafm_ssrf_safe_fetch_url( 'http://example.com/x.jpg' );
 		$this->assertInstanceOf( WP_Error::class, $out );

@@ -72,7 +72,7 @@ function aafm_geodirectory_registry_definitions(): array {
 	return array(
 		'aafm/geodirectory-get-listings'   => array(
 			'label'        => __( 'Get GeoDirectory listings', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'List GeoDirectory business/place listings (title, status, link). Default-off integration; enable it in the Integrations tab.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'List GeoDirectory business/place listings (title, status, link). Returns truncated: true if an internal enumeration cap was hit, meaning total is a floor rather than an exact count. Default-off integration; enable it in the Integrations tab.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'geodirectory',
@@ -338,8 +338,9 @@ function aafm_args_geodirectory_get_listings(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'listings' => array( 'type' => 'array' ),
-				'total'    => array( 'type' => 'integer' ),
+				'listings'  => array( 'type' => 'array' ),
+				'total'     => array( 'type' => 'integer' ),
+				'truncated' => array( 'type' => 'boolean' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_geodirectory_get_listings',
@@ -352,6 +353,23 @@ function aafm_args_geodirectory_get_listings(): array {
 			),
 		),
 	);
+}
+
+/**
+ * The batch-count ceiling for aafm_exec_geodirectory_get_listings()'s enumeration loop.
+ *
+ * Codex final round 4 MEDIUM: 'aafm_geodirectory_list_batch_cap' used to have no ceiling, so a
+ * hook returning e.g. PHP_INT_MAX defeated the cap's whole purpose as protection against a
+ * pathological host filter that always returns a full batch. The filter may only narrow the cap,
+ * never raise it past this hard ceiling.
+ *
+ * ponytail: 1000 is the hard ceiling this ability will ever examine in one call; raise it here
+ * (not just in the filter's return value) if a real directory ever legitimately needs more.
+ *
+ * @return int
+ */
+function aafm_geodirectory_listing_batch_cap(): int {
+	return min( 1000, max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_cap', 1000 ) ) );
 }
 
 /**
@@ -386,6 +404,9 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	// currently exist before it, only on IDs already fully processed. An iteration cap guards
 	// against a pathological host filter that always returns a full batch.
 	$batch_size = max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) );
+	// Codex hunt F8: the cap below is filterable so a test can reach it without creating a
+	// thousand-plus posts, by lowering the cap instead of the batch size.
+	$batch_cap = aafm_geodirectory_listing_batch_cap();
 	// Codex final round 4 MEDIUM: an unscoped 'posts_where' filter runs against EVERY WP_Query
 	// built while it's attached, not just this function's own - a plugin or theme hook fired
 	// from inside this loop (e.g. its own nested WP_Query in a 'the_posts' callback) would
@@ -410,13 +431,38 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	};
 
 	add_filter( 'posts_where', $keyset_filter, 10, 2 );
+	$truncated = false;
 	try {
 		$iterations = 0;
 		do {
 			// ponytail: 1000 batches at the default size of 500 covers 500,000 listings - a
 			// pathological host filter that always returns a full batch stops here instead of
 			// looping forever; raise the multiplier if a real directory ever legitimately exceeds it.
-			if ( ++$iterations > 1000 ) {
+			if ( ++$iterations > $batch_cap ) {
+				// Codex hunt F8: signal the cap in the response instead of silently
+				// undercounting - a caller past the cap needs to know `total` is a floor, not
+				// an exact count.
+				//
+				// Codex final round 4 LOW: reaching this branch only means the LAST permitted batch
+				// came back full, which happens whenever the row count is an exact multiple of the
+				// batch size too - nothing was actually omitted in that case. A cheap one-row probe
+				// past the last-seen ID (same marker/filter, so it obeys the identical WHERE and
+				// ordering) is the only way to tell "one more row exists" from "that batch just
+				// happened to be full".
+				$probe     = new WP_Query(
+					array(
+						'post_type'         => 'gd_place',
+						'post_status'       => 'any',
+						'perm'              => 'readable',
+						'posts_per_page'    => 1,
+						'fields'            => 'ids',
+						'orderby'           => 'ID',
+						'order'             => 'ASC',
+						'no_found_rows'     => true,
+						'aafm_query_marker' => $query_marker,
+					)
+				);
+				$truncated = ! empty( $probe->posts );
 				break;
 			}
 			$query = new WP_Query(
@@ -474,8 +520,9 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	}
 
 	return array(
-		'listings' => $listings,
-		'total'    => $total,
+		'listings'  => $listings,
+		'total'     => $total,
+		'truncated' => $truncated,
 	);
 }
 

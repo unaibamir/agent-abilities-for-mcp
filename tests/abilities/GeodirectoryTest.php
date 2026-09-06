@@ -238,6 +238,97 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex hunt F8: the enumeration loop caps out silently after a fixed number of full
+	 * batches, undercounting `total` with no signal. `truncated` must be false below the cap.
+	 */
+	public function test_get_listings_reports_not_truncated_below_the_cap(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 3 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		self::factory()->post->create_many(
+			5,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+
+		$this->assertFalse( $out['truncated'] );
+	}
+
+	/**
+	 * Codex hunt F8: lowering the (filterable) batch cap, rather than creating a thousand-plus
+	 * posts, is the only practical way to exercise the cap in a test. With a batch size of 2 and
+	 * a cap of 2, the loop can examine at most 4 rows before breaking - 5 real rows guarantees
+	 * the cap is hit.
+	 */
+	public function test_get_listings_reports_truncated_once_the_batch_cap_is_hit(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => 2 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		self::factory()->post->create_many(
+			5,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+		remove_all_filters( 'aafm_geodirectory_list_batch_cap' );
+
+		$this->assertTrue( $out['truncated'] );
+		$this->assertSame( 4, $out['total'] );
+	}
+
+	/**
+	 * Codex final round 4 LOW: hitting the cap only proves the last permitted batch came back
+	 * full, not that a row was actually omitted - the row count here is an exact multiple of the
+	 * batch size (cap 2 x batch size 2 = 4 rows, 4 real rows), so nothing was left out and
+	 * `truncated` must be false.
+	 */
+	public function test_get_listings_reports_not_truncated_when_the_row_count_exactly_fills_the_cap(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => 2 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		self::factory()->post->create_many(
+			4,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+			)
+		);
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+		remove_all_filters( 'aafm_geodirectory_list_batch_cap' );
+
+		$this->assertFalse( $out['truncated'] );
+		$this->assertSame( 4, $out['total'] );
+	}
+
+	/**
+	 * Codex final round 4 MEDIUM: the batch cap filter had no ceiling, so a hook returning
+	 * PHP_INT_MAX defeated the cap's purpose entirely. It may only narrow the cap, never raise it
+	 * past the hard 1000 ceiling.
+	 */
+	public function test_geodirectory_listing_batch_cap_cannot_be_raised_past_1000(): void {
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => PHP_INT_MAX );
+
+		$cap = aafm_geodirectory_listing_batch_cap();
+
+		remove_all_filters( 'aafm_geodirectory_list_batch_cap' );
+
+		$this->assertSame( 1000, $cap );
+	}
+
+	/**
 	 * Codex final round 3 MEDIUM: an OFFSET-based batch loop is unstable under mutation - trashing
 	 * a row from an earlier batch shifts every later OFFSET window down by one, so the next batch
 	 * skips exactly one real row. Keyset pagination (WHERE ID > last-seen-ID, no offset at all)

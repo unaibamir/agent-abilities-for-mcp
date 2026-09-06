@@ -439,40 +439,166 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Strip every // and /* comment (docblocks included) out of a source file before the
-	 * primitive-count regexes below run against it - the same fix
-	 * tests/PageBuilderGuardSweepTest.php already applies to function bodies, applied here to
-	 * whole files. Without it, a primitive's name sitting in prose (this file's own docblocks are
-	 * full of them, explaining why each control exists) would inflate the count past what real
-	 * code actually calls.
+	 * Find the next (direction 1) or previous (direction -1) significant token around a given
+	 * index: whitespace, comments, and docblocks never count as significant, so a primitive's
+	 * name sitting in a comment - or separated from a real paren only by blank lines - cannot
+	 * change what "the token right before/after this one" means.
 	 *
-	 * @param string $source Full file source, opening `<?php` tag included.
-	 * @return string The same source with every comment token's text removed.
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param int                                           $index Index to look around.
+	 * @param int                                           $direction 1 for next, -1 for previous.
+	 * @return array{0:int,1:string,2:int}|string|null
 	 */
-	private function strip_comments_from_source( string $source ): string {
-		$tokens   = token_get_all( $source );
-		$stripped = '';
-		foreach ( $tokens as $token ) {
-			if ( is_array( $token ) ) {
-				if ( T_COMMENT === $token[0] || T_DOC_COMMENT === $token[0] ) {
-					continue;
-				}
-				$stripped .= $token[1];
-			} else {
-				$stripped .= $token;
+	private function significant_token( array $tokens, int $index, int $direction ) {
+		$i     = $index + $direction;
+		$total = count( $tokens );
+		while ( $i >= 0 && $i < $total ) {
+			$token = $tokens[ $i ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				$i += $direction;
+				continue;
 			}
+			return $token;
 		}
-		return $stripped;
+		return null;
 	}
 
 	/**
-	 * Codex round 5, R5-5: the retired scan above recognized only wp_remote_get/post/request,
-	 * missing direct siblings such as wp_safe_remote_get() and wp_remote_head(), and exempted
-	 * entire files by name - a SECOND unguarded call anywhere in an already-exempt file passed
-	 * silently. This scans comment-stripped source for the whole outbound-primitive family and
-	 * checks an exact expected call count per file, so only the specific calls this codebase's
-	 * own SSRF design already accounts for are allowed, and one more of any of them anywhere
-	 * fails the suite.
+	 * Codex round 6, B6-6: the retired scan stripped comments and then ran regexes against the
+	 * reconstructed source text - so a string literal such as "wp_safe_remote_get(" or a method
+	 * named the same as a primitive, like $client->curl_exec(), still counted as a hit. Tokens
+	 * distinguish these cases directly: a string literal is never a T_STRING identifier token,
+	 * and a real function call has '(' as its very next significant token with neither '->'
+	 * (a method call), '::' (a static call), nor the `function` keyword (a declaration) as the
+	 * token right before it.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param string                                        $name Bare function name to count real calls of.
+	 * @return int
+	 */
+	private function count_function_call_tokens( array $tokens, string $name ): int {
+		$count = 0;
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || 0 !== strcasecmp( $token[1], $name ) ) {
+				continue;
+			}
+			$next = $this->significant_token( $tokens, $i, 1 );
+			if ( ! is_string( $next ) || '(' !== $next ) {
+				continue;
+			}
+			$prev = $this->significant_token( $tokens, $i, -1 );
+			if ( is_array( $prev ) && in_array( $prev[0], array( T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION ), true ) ) {
+				continue;
+			}
+			++$count;
+		}
+		return $count;
+	}
+
+	/**
+	 * Codex round 6, B6-6: counts a static call prefix like `Requests::` - the class name token
+	 * immediately followed by `::` - the one primitive in this suite where a preceding `::` is
+	 * exactly the pattern being looked for, not something to exclude.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param string                                        $class_name Exact class name, case-sensitive.
+	 * @return int
+	 */
+	private function count_static_class_prefix_tokens( array $tokens, string $class_name ): int {
+		$count = 0;
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || $class_name !== $token[1] ) {
+				continue;
+			}
+			$next = $this->significant_token( $tokens, $i, 1 );
+			if ( is_array( $next ) && T_DOUBLE_COLON === $next[0] ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
+
+	/**
+	 * Codex round 6, B6-6: counts a bare class-name reference such as `WP_Http`, used for
+	 * `new WP_Http()`, a type hint, or an `instanceof` check - none of which put '(' right after
+	 * the name. Only a real identifier token counts; the class name sitting inside a string
+	 * literal (e.g. `class_exists( 'WP_Http' )`) never tokenizes as T_STRING at all.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param string                                        $name Exact identifier name, case-sensitive.
+	 * @return int
+	 */
+	private function count_identifier_tokens( array $tokens, string $name ): int {
+		$count = 0;
+		foreach ( $tokens as $token ) {
+			if ( is_array( $token ) && T_STRING === $token[0] && $name === $token[1] ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
+
+	/**
+	 * Codex round 6, B6-6: file_get_contents() is only an outbound-fetch primitive when its
+	 * argument is an http(s) URL - the local, non-network calls this codebase actually makes are
+	 * legitimate. Confirm the call is real (same rule as count_function_call_tokens()), then walk
+	 * the balanced parens collecting the raw argument text and look for 'http' in THAT text only,
+	 * rather than in the whole comment-stripped file the retired regex scanned.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @return int
+	 */
+	private function count_file_get_contents_http_calls( array $tokens ): int {
+		$count = 0;
+		$total = count( $tokens );
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || T_STRING !== $token[0] || 0 !== strcasecmp( $token[1], 'file_get_contents' ) ) {
+				continue;
+			}
+			$next = $this->significant_token( $tokens, $i, 1 );
+			if ( ! is_string( $next ) || '(' !== $next ) {
+				continue;
+			}
+			$prev = $this->significant_token( $tokens, $i, -1 );
+			if ( is_array( $prev ) && in_array( $prev[0], array( T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION ), true ) ) {
+				continue;
+			}
+
+			$open_index = $i + 1;
+			while ( $open_index < $total && '(' !== $tokens[ $open_index ] ) {
+				++$open_index;
+			}
+			$depth = 0;
+			$args  = '';
+			for ( $j = $open_index; $j < $total; $j++ ) {
+				$t = $tokens[ $j ];
+				if ( '(' === $t ) {
+					++$depth;
+				} elseif ( ')' === $t ) {
+					--$depth;
+					if ( 0 === $depth ) {
+						break;
+					}
+				}
+				$args .= is_array( $t ) ? $t[1] : $t;
+			}
+			if ( false !== stripos( $args, 'http' ) ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
+
+	/**
+	 * Codex round 5, R5-5: the retired scan recognized only wp_remote_get/post/request, missing
+	 * direct siblings such as wp_safe_remote_get() and wp_remote_head(), and exempted entire
+	 * files by name - a SECOND unguarded call anywhere in an already-exempt file passed silently.
+	 *
+	 * Codex round 6, B6-6: that scan then stripped comments and regexed the leftover source text,
+	 * which still let a string literal or a same-named method call through. This version tokenizes
+	 * each file once and asks the token-based helpers above whether each hit is a real call, static
+	 * prefix, or bare identifier, so only the specific calls this codebase's own SSRF design already
+	 * accounts for are allowed, and one more of any of them anywhere fails the suite.
 	 *
 	 * Only two call sites may reach the network at all: aafm_ssrf_owned_curl_fetch()'s
 	 * cURL handle in media.php (owned outright, pinned via CURLOPT_RESOLVE, proxy disabled, no
@@ -487,24 +613,19 @@ final class SecurityRegressionTest extends TestCase {
 		$dir   = dirname( __DIR__, 2 ) . '/includes';
 		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir ) );
 
-		// Every pattern already requires the trailing '(' (or '::'/word boundary for a class
-		// reference) that marks a real, executable use - not the bare name sitting in a string.
-		$primitives = array(
-			'wp_remote_get'           => '/\bwp_remote_get\s*\(/',
-			'wp_remote_post'          => '/\bwp_remote_post\s*\(/',
-			'wp_remote_request'       => '/\bwp_remote_request\s*\(/',
-			'wp_remote_head'          => '/\bwp_remote_head\s*\(/',
-			'wp_safe_remote_get'      => '/\bwp_safe_remote_get\s*\(/',
-			'wp_safe_remote_post'     => '/\bwp_safe_remote_post\s*\(/',
-			'wp_safe_remote_request'  => '/\bwp_safe_remote_request\s*\(/',
-			'wp_safe_remote_head'     => '/\bwp_safe_remote_head\s*\(/',
-			'Requests::'              => '/\bRequests::/',
-			'WP_Http'                 => '/\bWP_Http\b/',
-			'curl_init'               => '/\bcurl_init\s*\(/',
-			'curl_exec'               => '/\bcurl_exec\s*\(/',
-			'fsockopen'               => '/\bfsockopen\s*\(/',
-			'stream_socket_client'    => '/\bstream_socket_client\s*\(/',
-			'file_get_contents(http)' => '/\bfile_get_contents\s*\([^)]*http/i',
+		$function_primitives = array(
+			'wp_remote_get',
+			'wp_remote_post',
+			'wp_remote_request',
+			'wp_remote_head',
+			'wp_safe_remote_get',
+			'wp_safe_remote_post',
+			'wp_safe_remote_request',
+			'wp_safe_remote_head',
+			'curl_init',
+			'curl_exec',
+			'fsockopen',
+			'stream_socket_client',
 		);
 
 		$allowed = array(
@@ -523,8 +644,8 @@ final class SecurityRegressionTest extends TestCase {
 			}
 			// Reading our own bundled source for a static scan - not a remote fetch.
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-			$src  = $this->strip_comments_from_source( (string) file_get_contents( $file->getPathname() ) );
-			$path = str_replace( '\\', '/', $file->getPathname() );
+			$tokens = token_get_all( (string) file_get_contents( $file->getPathname() ) );
+			$path   = str_replace( '\\', '/', $file->getPathname() );
 
 			$expected = array();
 			foreach ( $allowed as $allowed_suffix => $counts ) {
@@ -534,22 +655,31 @@ final class SecurityRegressionTest extends TestCase {
 				}
 			}
 
-			foreach ( $primitives as $label => $pattern ) {
-				$count = (int) preg_match_all( $pattern, $src );
+			foreach ( $function_primitives as $label ) {
 				$this->assertSame(
 					$expected[ $label ] ?? 0,
-					$count,
-					sprintf(
-						'%s call count mismatch in %s (expected %d, found %d)',
-						$label,
-						$file->getFilename(),
-						$expected[ $label ] ?? 0,
-						$count
-					)
+					$this->count_function_call_tokens( $tokens, $label ),
+					sprintf( '%s call count mismatch in %s', $label, $file->getFilename() )
 				);
 			}
+			$this->assertSame(
+				$expected['Requests::'] ?? 0,
+				$this->count_static_class_prefix_tokens( $tokens, 'Requests' ),
+				sprintf( 'Requests:: call count mismatch in %s', $file->getFilename() )
+			);
+			$this->assertSame(
+				$expected['WP_Http'] ?? 0,
+				$this->count_identifier_tokens( $tokens, 'WP_Http' ),
+				sprintf( 'WP_Http reference count mismatch in %s', $file->getFilename() )
+			);
+			$this->assertSame(
+				$expected['file_get_contents(http)'] ?? 0,
+				$this->count_file_get_contents_http_calls( $tokens ),
+				sprintf( 'file_get_contents(http) call count mismatch in %s', $file->getFilename() )
+			);
 		}
 	}
+
 
 	/**
 	 * CVE class: PERMANENT DELETE.

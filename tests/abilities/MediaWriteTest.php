@@ -506,6 +506,76 @@ final class MediaWriteTest extends TestCase {
 		$this->assertSame( wp_kses_post( '<script>alert(1)</script>' ), $stored_content, 'the stored content must be exactly what wp_kses_post() produces, matching the aafm-update-media sibling policy (media.php:914).' );
 	}
 
+	/**
+	 * Codex round 5 R5-2: the caption resave after core's own sanitization pass was only
+	 * checked via is_wp_error(), so a wp_insert_attachment_data filter reverting that resave
+	 * would leave the un-renormalized, potentially unsafe caption in storage while this ability
+	 * still reported success. This is the exact security gap the resave exists to close.
+	 *
+	 * Attachment writes never fire wp_insert_post_data - wp_insert_post() branches on post
+	 * type and applies wp_insert_attachment_data instead (wp-includes/post.php), so the veto
+	 * has to hook that filter or it never runs at all.
+	 */
+	public function test_upload_media_returns_an_error_when_the_caption_resave_is_vetoed(): void {
+		$this->acting_as( 'administrator' );
+
+		$unsafe = '<script>alert(1)</script>';
+		add_filter(
+			'wp_read_image_metadata',
+			static function ( $meta ) use ( $unsafe ) {
+				$meta['caption'] = $unsafe;
+				return $meta;
+			},
+			PHP_INT_MAX
+		);
+		$veto = static function ( $data ) use ( $unsafe ) {
+			$data['post_content'] = $unsafe;
+			return $data;
+		};
+		add_filter( 'wp_insert_attachment_data', $veto, 20 );
+
+		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 'test.png',
+				'data_base64' => self::PNG_B64,
+			)
+		);
+
+		remove_filter( 'wp_insert_attachment_data', $veto, 20 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed caption resave must return an error, not a success leaving the unsafe caption in storage.'
+		);
+	}
+
+	/**
+	 * Codex round 5 R5-2: update_post_meta()'s return value for the caller's alt text was
+	 * discarded outright, so a metadata filter vetoing that write must surface as a structured
+	 * error, not a success response for an attachment whose alt text never actually landed.
+	 */
+	public function test_upload_media_returns_an_error_when_the_alt_write_is_vetoed(): void {
+		$this->acting_as( 'administrator' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$out  = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 'test.png',
+				'data_base64' => self::PNG_B64,
+				'alt'         => 'a fox',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed alt-text write must return an error, not a success claiming the alt text was saved.'
+		);
+	}
+
 	public function test_update_media_is_in_registry_as_write(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( 'aafm/update-media', $registry );
@@ -609,6 +679,81 @@ final class MediaWriteTest extends TestCase {
 		$post = self::factory()->post->create();
 		$this->assertFalse(
 			wp_get_ability( 'aafm/update-media' )->check_permissions( array( 'attachment_id' => $post ) )
+		);
+	}
+
+	/**
+	 * Codex round 5 R5-2: the post-field write was only checked via is_wp_error(), so a
+	 * wp_insert_attachment_data filter reverting the title must surface as a structured error,
+	 * not a success response claiming the new title was saved.
+	 *
+	 * Attachment writes never fire wp_insert_post_data - wp_insert_post() branches on post
+	 * type and applies wp_insert_attachment_data instead (wp-includes/post.php), so the veto
+	 * has to hook that filter or it never runs at all.
+	 */
+	public function test_update_media_returns_an_error_when_a_post_field_write_is_vetoed(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'vetoed-title.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_title'     => 'Old Title',
+			)
+		);
+
+		$veto = static function ( $data ) {
+			$data['post_title'] = 'Old Title';
+			return $data;
+		};
+		add_filter( 'wp_insert_attachment_data', $veto );
+		$out = wp_get_ability( 'aafm/update-media' )->execute(
+			array(
+				'attachment_id' => $att,
+				'title'         => 'New Title',
+			)
+		);
+		remove_filter( 'wp_insert_attachment_data', $veto );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed title write must return an error, not a success claiming the new title was saved.'
+		);
+	}
+
+	/**
+	 * Codex round 5 R5-2: update_post_meta()'s return value for the alt text write was
+	 * discarded outright, so a metadata filter vetoing that write must surface as a structured
+	 * error, not a success response reporting the old alt text as though it were replaced.
+	 */
+	public function test_update_media_returns_an_error_when_the_alt_write_is_vetoed(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'vetoed-alt.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_post_meta( $att, '_wp_attachment_image_alt', 'Old Alt' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$out  = wp_get_ability( 'aafm/update-media' )->execute(
+			array(
+				'attachment_id' => $att,
+				'alt'           => 'New Alt',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed alt-text write must return an error, not a success claiming the new alt text was saved.'
 		);
 	}
 

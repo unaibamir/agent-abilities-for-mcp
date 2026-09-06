@@ -930,6 +930,15 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
+		// Codex round 5 R5-2: is_wp_error() alone does not catch a wp_insert_post_data filter that
+		// reverts this resave, which would leave the un-renormalized, IPTC/EXIF-sourced caption in
+		// storage - exactly the security gap this resave exists to close. Confirm the sanitized
+		// content actually landed before trusting it, same orphan-cleanup discipline as above.
+		$confirmed_field = get_post_field( 'post_content', $attachment_id, 'raw' );
+		if ( ! is_string( $confirmed_field ) || $confirmed_field !== $sanitized_content ) {
+			wp_delete_attachment( $attachment_id, true );
+			return aafm_generic_error();
+		}
 	}
 
 	// The caller's own alt text wins over whatever media_handle_sideload() may already have set
@@ -937,7 +946,15 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 	// backslash in the alt text is stripped unless it is slashed first, exactly like the sibling
 	// meta writers.
 	if ( null !== $alt ) {
-		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( aafm_sanitize_plain_text( $alt ) ) );
+		$alt_clean = aafm_sanitize_plain_text( $alt );
+		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $alt_clean ) );
+		// Codex round 5 R5-2: update_post_meta()'s return value was discarded outright, so a
+		// metadata filter vetoing the alt write would report success with the old alt text still
+		// in storage. Confirm it landed, same orphan-cleanup discipline as the branches above.
+		if ( ! aafm_meta_write_confirmed( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean ) ) {
+			wp_delete_attachment( $attachment_id, true );
+			return aafm_generic_error();
+		}
 	}
 
 	$attachment = get_post( $attachment_id );
@@ -1579,10 +1596,12 @@ function aafm_exec_update_media( array $input ) {
 		}
 	}
 
+	$alt_clean = null;
 	if ( $has_alt ) {
 		// update_post_meta() unslashes its value, so slash here too (matches
 		// aafm_exec_update_post_meta) to preserve literal backslashes in alt text.
-		update_post_meta( $att_id, '_wp_attachment_image_alt', wp_slash( aafm_sanitize_plain_text( (string) $input['alt'] ) ) );
+		$alt_clean = aafm_sanitize_plain_text( (string) $input['alt'] );
+		update_post_meta( $att_id, '_wp_attachment_image_alt', wp_slash( $alt_clean ) );
 	}
 
 	$fresh = get_post( $att_id );
@@ -1590,7 +1609,36 @@ function aafm_exec_update_media( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Codex round 5 R5-2: the post-field write was only checked via is_wp_error(), and the alt
+	// meta write's return value was discarded outright - a wp_insert_post_data filter reverting a
+	// field, or an update_post_metadata filter vetoing the alt write, would report success while
+	// the response carried the caller's stale value. Confirm every field actually provided.
+	if ( $has_title && ( $postarr['post_title'] ?? null ) !== $fresh->post_title ) {
+		return aafm_media_write_unconfirmed_error();
+	}
+	if ( $has_caption && ( $postarr['post_excerpt'] ?? null ) !== $fresh->post_excerpt ) {
+		return aafm_media_write_unconfirmed_error();
+	}
+	if ( $has_description && $fresh->post_content !== $postarr['post_content'] ) {
+		return aafm_media_write_unconfirmed_error();
+	}
+	if ( $has_alt && ! aafm_meta_write_confirmed( get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean ) ) {
+		return aafm_media_write_unconfirmed_error();
+	}
+
 	return array( 'media' => aafm_media_item_payload( $fresh ) );
+}
+
+/**
+ * The structured error for aafm/update-media when a field could not be confirmed as saved.
+ *
+ * @return WP_Error
+ */
+function aafm_media_write_unconfirmed_error(): WP_Error {
+	return new WP_Error(
+		'aafm_media_write_unconfirmed',
+		__( 'The media item could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+	);
 }
 
 /**

@@ -533,6 +533,41 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 6 B6-2: the attachment-id companion meta and the Twitter fallback flag were written
+	 * but never included in the confirmation pass, so a filter vetoing only one of them still reported
+	 * success while the frontend kept rendering a stale image. Veto only the companion key here (the
+	 * visible URL field is left alone) and assert the ability now surfaces an error instead of a false
+	 * success.
+	 */
+	public function test_update_post_returns_an_error_when_only_the_image_id_companion_is_vetoed(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		$fb_att   = (int) self::factory()->attachment->create_object( 'rm-og.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+
+		$veto = static function ( $check, $object_id, $meta_key ) {
+			return 'rank_math_facebook_image_id' === $meta_key ? true : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'og_image' => (string) wp_get_attachment_url( $fb_att ),
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		// Precondition: the veto really did block only the companion write, not the URL meta.
+		$this->assertNotSame( '', get_post_meta( $post_id, 'rank_math_facebook_image', true ), 'precondition: the visible URL field must still have written.' );
+		$this->assertSame( '', get_post_meta( $post_id, 'rank_math_facebook_image_id', true ), 'precondition: the veto filter must have kept the image-id companion unwritten.' );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A vetoed image-id companion must surface as an error even though the visible URL field wrote successfully.'
+		);
+	}
+
+	/**
 	 * 1.7.2 bug #6: AAFM_SCHEMA_MAX_DEPTH has two declaration sites that disagree.
 	 * includes/bridge.php:60 declares `const AAFM_SCHEMA_MAX_DEPTH = 30;` (the value that actually
 	 * wins, since it loads first); includes/integrations.php:220 carries a dead

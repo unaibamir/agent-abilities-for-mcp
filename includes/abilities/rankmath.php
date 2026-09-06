@@ -513,9 +513,16 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	}
 
 	// Persist the attachment-id companion meta the frontend actually renders from. A cleared image (0)
-	// blanks the id so the resolver falls through to the featured image, never a stale id.
+	// blanks the id so the resolver falls through to the featured image, never a stale id. Codex round
+	// 6 B6-2: these companion writes were not confirmed below, so a filter could veto just one of them
+	// while the visible URL field still reported success and the frontend kept rendering a stale image.
+	// Track each expected companion value so the confirmation pass after this function's other writes
+	// catches that too.
+	$companion_expected = array();
 	foreach ( $resolved_ids as $field => $attachment_id ) {
-		update_post_meta( $id, $image_id_fields[ $field ], $attachment_id > 0 ? $attachment_id : '' );
+		$companion_value = $attachment_id > 0 ? $attachment_id : '';
+		update_post_meta( $id, $image_id_fields[ $field ], $companion_value );
+		$companion_expected[ $image_id_fields[ $field ] ] = $companion_value;
 	}
 
 	// Turn off the Twitter->Facebook fallback when Twitter-specific fields are provided; otherwise the
@@ -525,6 +532,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// string 'off' as false; an empty string, '0', or boolean false falls back to the truthy default.
 	if ( aafm_rankmath_twitter_fields_provided( $input ) ) {
 		update_post_meta( $id, 'rank_math_twitter_use_facebook', 'off' );
+		$companion_expected['rank_math_twitter_use_facebook'] = 'off';
 	}
 
 	if ( array_key_exists( 'robots', $input ) ) {
@@ -564,6 +572,18 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	$confirmed = aafm_rankmath_read_fields( $id );
 	foreach ( $expected as $field => $value ) {
 		if ( $confirmed[ $field ] !== $value ) {
+			return new WP_Error(
+				'aafm_rankmath_write_unconfirmed',
+				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+			);
+		}
+	}
+
+	// Codex round 6 B6-2: the companion writes above (image-id, Twitter fallback) render but are not
+	// part of the unified output shape, so they were never checked here. A veto of just one of them
+	// used to slip through this confirmation entirely.
+	foreach ( $companion_expected as $key => $value ) {
+		if ( ! aafm_meta_write_confirmed( get_post_meta( $id, $key, true ), $value ) ) {
 			return new WP_Error(
 				'aafm_rankmath_write_unconfirmed',
 				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )

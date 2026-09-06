@@ -207,6 +207,18 @@ function aafm_ajax_save_settings(): void {
 	// old or the new requested state, exactly the residual the gate review flagged. Say plainly
 	// that some changes did not take rather than implying either a full success or a full rollback.
 	if ( ! $oauth_persisted || ! $dcr_persisted ) {
+		// The high-risk / read-only switches above already certified by this point (their own
+		// failure branch already returned above if either had failed), so an attempted one has no
+		// audit row yet - it is only written on failure there, or unconditionally much further down
+		// once every write in this handler has succeeded. Without this, an OAuth/DCR OFF failure
+		// here would return before either log call ever ran, leaving an applied restrictive change
+		// with no activity-log row at all (Codex round 6, B6-4).
+		if ( $high_risk_attempted ) {
+			aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
+		}
+		if ( $read_only_attempted ) {
+			aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
+		}
 		if ( $oauth_persisted xor $dcr_persisted ) {
 			wp_send_json_error(
 				array(

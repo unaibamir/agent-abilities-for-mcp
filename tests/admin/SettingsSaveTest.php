@@ -318,8 +318,42 @@ final class SettingsSaveTest extends TestCase {
 		remove_all_filters( 'wp_die_ajax_handler' );
 		remove_all_filters( 'wp_die_handler' );
 		remove_filter( 'wp_doing_ajax', '__return_true' );
+		remove_all_actions( 'added_option' );
+		remove_all_actions( 'updated_option' );
 		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['aafm_high_risk_abilities_unlocked'] );
+		wp_cache_delete( 'alloptions', 'options' );
+		delete_option( 'aafm_oauth_enabled' );
+		delete_option( 'aafm_oauth_dcr_enabled' );
 		parent::tear_down();
+	}
+
+	/**
+	 * Mirrors PairedSecurityWriteOrderTest::make_option_write_unpersistable(): whatever the
+	 * handler under test writes to $option, a raw query puts the row straight back to
+	 * $stuck_raw_value immediately afterward, so the write can never actually persist.
+	 *
+	 * @param string $option          Option name.
+	 * @param mixed  $stuck_raw_value Raw (already-serialized) value the row is kept at.
+	 * @return void
+	 */
+	private function make_option_write_unpersistable( string $option, $stuck_raw_value ): void {
+		$revert = static function () use ( $option, $stuck_raw_value ): void {
+			global $wpdb;
+			$wpdb->query(
+				$wpdb->prepare(
+					"REPLACE INTO $wpdb->options (option_name, option_value, autoload) VALUES (%s, %s, 'yes')",
+					$option,
+					$stuck_raw_value
+				)
+			);
+		};
+		$guard  = static function ( $changed ) use ( $option, $revert ): void {
+			if ( $changed === $option ) {
+				$revert();
+			}
+		};
+		add_action( 'added_option', $guard );
+		add_action( 'updated_option', $guard );
 	}
 
 	/**
@@ -404,6 +438,37 @@ final class SettingsSaveTest extends TestCase {
 		// it would on the next request. Every reader casts, so the type is not part of the contract.
 		$this->assertTrue( (bool) get_option( 'aafm_high_risk_abilities_unlocked', false ) );
 		$this->assertSame( '1', get_option( 'aafm_high_risk_abilities_unlocked', 'MISSING' ), 'The row is stored, not merely cached.' );
+	}
+
+	/**
+	 * Codex round 6, B6-4: locking the high-risk switch persists before the OAuth-off write is
+	 * even attempted. If that later OAuth-off write then fails to persist, the handler used to
+	 * return straight to wp_send_json_error() without ever logging the lock that had already
+	 * landed - an applied restrictive change with no activity-log row to show for it. The fix logs
+	 * every attempted, already-certified switch change before this early return, not only in the
+	 * success path further down.
+	 */
+	public function test_ajax_save_settings_logs_high_risk_lock_when_later_oauth_write_fails(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_high_risk_abilities_unlocked', true ); // Start unlocked, so locking is a real transition.
+		update_option( 'aafm_oauth_enabled', '1' ); // Start on.
+		// The OAuth-off write can never persist; it snaps back to the old ('1', still on) value.
+		$this->make_option_write_unpersistable( 'aafm_oauth_enabled', '1' );
+
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		// aafm_high_risk_abilities_unlocked is absent, so the save requests locking (restrictive).
+		// aafm_oauth_enabled is also absent, so the save requests OAuth off - the write that fails.
+
+		$json = $this->run_handler( 'aafm_ajax_save_settings' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the OAuth-off write did not persist.' );
+		$this->assertFalse( get_option( 'aafm_high_risk_abilities_unlocked', false ), 'The lock itself must still have taken.' );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm/high-risk-abilities-unlocked' ) );
+		$this->assertNotEmpty( $rows, 'The high-risk lock that already certified must still get its activity-log row, even though a later write in the same save failed.' );
+		$this->assertSame( 'success', $rows[0]['status'] ?? '', 'The row must record the lock as the success it actually was.' );
 	}
 
 	/**

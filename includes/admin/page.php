@@ -510,7 +510,14 @@ function aafm_ajax_save_post_types(): void {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 	$types = aafm_sanitize_allowed_post_types_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	update_option( 'aafm_allowed_post_types', $types );
+
+	// Verified, not a bare update_option(): this option gates which content types an agent can
+	// even see, so a stale persistent object cache silently keeping the old list live (Codex hunt
+	// F1) must be reported as a failed save, not a success.
+	if ( ! aafm_update_option_verified( 'aafm_allowed_post_types', $types ) ) {
+		aafm_log_ability_persist_failure( 'aafm_allowed_post_types', __( 'Exposed content types', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed content types', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success( array( 'post_types' => $types ) );
 }
 
@@ -699,8 +706,18 @@ function aafm_ajax_save_meta_keys(): void {
 	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$keys   = aafm_sanitize_allowed_meta_keys_input( $posted );
 	$denied = aafm_sanitize_denied_meta_keys_input( $posted );
-	update_option( 'aafm_allowed_meta_keys', $keys );
-	update_option( 'aafm_denied_meta_keys', $denied );
+
+	// Verified, not a bare update_option(): these two options gate which post meta an agent can
+	// read or write, so a stale persistent object cache silently keeping the old list live (Codex
+	// hunt F1) must be reported as a failed save, not a success.
+	if ( ! aafm_update_option_verified( 'aafm_allowed_meta_keys', $keys ) ) {
+		aafm_log_ability_persist_failure( 'aafm_allowed_meta_keys', __( 'Exposed post meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed post meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! aafm_update_option_verified( 'aafm_denied_meta_keys', $denied ) ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	delete_transient( 'aafm_detected_meta_keys' );
 	wp_send_json_success(
 		array(
@@ -725,7 +742,12 @@ function aafm_ajax_save_denied_meta_keys(): void {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	update_option( 'aafm_denied_meta_keys', $keys );
+
+	// Verified, not a bare update_option(): see aafm_ajax_save_meta_keys() above (Codex hunt F1).
+	if ( ! aafm_update_option_verified( 'aafm_denied_meta_keys', $keys ) ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success( array( 'deny_meta_keys' => $keys ) );
 }
 
@@ -742,8 +764,17 @@ function aafm_ajax_save_user_meta_keys(): void {
 	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$exposed = aafm_sanitize_exposed_user_meta_keys_input( $posted );
 	$denied  = aafm_sanitize_denied_user_meta_keys_input( $posted );
-	update_option( 'aafm_exposed_user_meta_keys', $exposed );
-	update_option( 'aafm_denied_user_meta_keys', $denied );
+
+	// Verified, not a bare update_option(): these two options gate which user meta an agent can
+	// read or write (Codex hunt F1).
+	if ( ! aafm_update_option_verified( 'aafm_exposed_user_meta_keys', $exposed ) ) {
+		aafm_log_ability_persist_failure( 'aafm_exposed_user_meta_keys', __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! aafm_update_option_verified( 'aafm_denied_user_meta_keys', $denied ) ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_user_meta_keys', __( 'Denied user meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied user meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success(
 		array(
 			'exposed_user_meta_keys' => $exposed,
@@ -765,8 +796,17 @@ function aafm_ajax_save_term_meta_keys(): void {
 	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$exposed = aafm_sanitize_exposed_term_meta_keys_input( $posted );
 	$denied  = aafm_sanitize_denied_term_meta_keys_input( $posted );
-	update_option( 'aafm_exposed_term_meta_keys', $exposed );
-	update_option( 'aafm_denied_term_meta_keys', $denied );
+
+	// Verified, not a bare update_option(): these two options gate which term meta an agent can
+	// read or write (Codex hunt F1).
+	if ( ! aafm_update_option_verified( 'aafm_exposed_term_meta_keys', $exposed ) ) {
+		aafm_log_ability_persist_failure( 'aafm_exposed_term_meta_keys', __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! aafm_update_option_verified( 'aafm_denied_term_meta_keys', $denied ) ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_term_meta_keys', __( 'Denied term meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied term meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success(
 		array(
 			'exposed_term_meta_keys' => $exposed,

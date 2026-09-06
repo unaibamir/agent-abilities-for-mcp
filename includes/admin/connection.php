@@ -685,6 +685,12 @@ function aafm_ajax_oauth_revoke_grant(): void {
  * never implies "this is what your agent will see," and it never sends or logs the
  * Application Password.
  *
+ * Codex hunt F3: the target URL comes from aafm_endpoint_url(), which calls core's own
+ * rest_url() and is therefore filterable by any active plugin to a different host.
+ * Sending this call's scoped auth cookies there trusts whatever rest_url filter the site
+ * already runs - already-privileged, already-installed code, not attacker input - the
+ * same trust prerequisite documented in aafm_ability_disclosures()'s file docblock.
+ *
  * @return void
  */
 function aafm_ajax_test_connection(): void {

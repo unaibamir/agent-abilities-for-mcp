@@ -17,6 +17,17 @@ defined( 'ABSPATH' ) || exit;
  * Keys match aafm_get_abilities_registry() one-to-one; the render layer falls back to the
  * registry description if a key is ever missing.
  *
+ * Outbound-request exemption (Codex hunt F3): the only ability-facing outbound HTTP call
+ * is the SSRF-hardened aafm/upload-media-from-url fetch. One admin-only exception sits
+ * outside the ability surface entirely: aafm_ajax_test_connection() (connection.php)
+ * self-calls the MCP endpoint to confirm it answers, gated behind manage_options plus a
+ * nonce and never reachable by an MCP agent. Its target, aafm_endpoint_url(), resolves
+ * through WordPress core's own rest_url(), which any active plugin can filter to a
+ * different host - trusting that destination means trusting whatever rest_url filter the
+ * site already runs, the same already-privileged trust any other installed plugin
+ * requires, not attacker-controlled input. Carved out by name in
+ * SecurityRegressionTest::test_source_tree_has_no_dangerous_primitives().
+ *
  * @return array<string,string>
  */
 function aafm_ability_disclosures(): array {

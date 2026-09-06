@@ -423,9 +423,14 @@ final class SecurityRegressionTest extends TestCase {
 		$banned_curl_exec  = '/\bcurl_exec\s*\(/';
 		$curl_exec_allowed = 'includes/abilities/media.php';
 		// Remote-fetch primitives must never appear in the agent-exposed surface (an
-		// agent could otherwise be steered into SSRF). They are permitted ONLY in the
-		// admin Connection tab's reachability probe, which is gated behind manage_options +
-		// a nonce, targets this site's own endpoint, and is never reachable by an MCP agent.
+		// agent could otherwise be steered into SSRF). They are permitted ONLY in
+		// aafm_ajax_test_connection()'s single call site in connection.php: an admin-only,
+		// manage_options + nonce gated reachability probe, never reachable by an MCP agent.
+		// Codex hunt F3: its target, aafm_endpoint_url(), calls core's rest_url(), which any
+		// active plugin can filter to a different host - trusting that destination means
+		// trusting whatever rest_url filter the site already runs, not attacker input. Named
+		// exemption per the dossier's "no outbound requests except the SSRF-hardened URL
+		// upload" invariant; see aafm_ability_disclosures()'s file docblock in disclosures.php.
 		$banned_fetch  = '/\b(wp_remote_get|wp_remote_post|wp_remote_request)\s*\(/';
 		$fetch_allowed = 'includes/admin/connection.php';
 

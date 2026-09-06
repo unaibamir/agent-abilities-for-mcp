@@ -387,6 +387,98 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 6, B6-5: the cap-lookahead probe used to fetch only ONE extra batch. If every
+	 * row in that single batch happened to be invisible to the caller, a later visible row past
+	 * it was still missed and `truncated` came back false even though more visible data existed.
+	 * Four visible listings exactly fill the cap (batch size 2, cap 2), a full batch of another
+	 * user's drafts follows (all invisible), and one more visible listing sits after that - the
+	 * probe must keep advancing past the all-invisible batch to find it.
+	 */
+	public function test_get_listings_probe_advances_past_an_entirely_invisible_batch(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => 2 );
+
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		self::factory()->post->create_many(
+			4,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+				'post_author' => $author,
+			)
+		);
+
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create_many(
+			2,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $other,
+			)
+		);
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+				'post_author' => $author,
+			)
+		);
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+		remove_all_filters( 'aafm_geodirectory_list_batch_cap' );
+
+		$this->assertTrue(
+			$out['truncated'],
+			'A visible listing past a fully-invisible probe batch must still flip truncated to true.'
+		);
+	}
+
+	/**
+	 * Codex round 6, B6-5: the mirror case. Once the probe has advanced past every invisible
+	 * batch and reaches the real end of the data with nothing visible left, `truncated` must
+	 * settle back to false rather than get stuck true from having looped at all.
+	 */
+	public function test_get_listings_probe_reports_not_truncated_when_only_invisible_rows_remain(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => 2 );
+
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		self::factory()->post->create_many(
+			4,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+				'post_author' => $author,
+			)
+		);
+
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create_many(
+			3,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $other,
+			)
+		);
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+		remove_all_filters( 'aafm_geodirectory_list_batch_cap' );
+
+		$this->assertFalse(
+			$out['truncated'],
+			'Once every remaining row is invisible to the caller, truncated must settle to false.'
+		);
+	}
+
+	/**
 	 * Codex final round 4 MEDIUM: the batch cap filter had no ceiling, so a hook returning
 	 * PHP_INT_MAX defeated the cap's purpose entirely. It may only narrow the cap, never raise it
 	 * past the hard 1000 ceiling.

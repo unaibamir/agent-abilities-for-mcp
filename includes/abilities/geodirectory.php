@@ -479,25 +479,49 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 				// run each one through the SAME aafm_geodirectory_listing_is_visible() predicate
 				// the enumeration uses below, so a probe never disagrees with what the loop itself
 				// would have kept.
-				$probe     = new WP_Query(
-					array(
-						'post_type'         => 'gd_place',
-						'post_status'       => 'any',
-						'perm'              => 'readable',
-						'posts_per_page'    => $batch_size,
-						'orderby'           => 'ID',
-						'order'             => 'ASC',
-						'no_found_rows'     => true,
-						'aafm_query_marker' => $query_marker,
-					)
-				);
-				$truncated = false;
-				foreach ( $probe->posts as $probe_post ) {
-					if ( $probe_post instanceof WP_Post && aafm_geodirectory_listing_is_visible( $probe_post, $public_stati ) ) {
+				//
+				// Codex round 6, B6-5: a single probe batch answered a different question again - if
+				// EVERY row in that one batch is invisible, a later visible row past it was still
+				// missed and `truncated` came back false. Keep advancing the same keyset cursor
+				// through further probe batches (never counted against $iterations, but bounded by
+				// the same $batch_cap) until a visible row turns up or a short batch proves the real
+				// end of the data was reached.
+				$truncated        = false;
+				$probe_iterations = 0;
+				do {
+					if ( ++$probe_iterations > $batch_cap ) {
+						// ponytail: the probe hit the same hard ceiling the enumeration itself obeys
+						// without ever resolving visible-or-not - report truncated rather than assert
+						// a "nothing more" the scan never actually confirmed.
 						$truncated = true;
 						break;
 					}
-				}
+					$probe         = new WP_Query(
+						array(
+							'post_type'         => 'gd_place',
+							'post_status'       => 'any',
+							'perm'              => 'readable',
+							'posts_per_page'    => $batch_size,
+							'orderby'           => 'ID',
+							'order'             => 'ASC',
+							'no_found_rows'     => true,
+							'aafm_query_marker' => $query_marker,
+						)
+					);
+					$probe_fetched = count( $probe->posts );
+					foreach ( $probe->posts as $probe_post ) {
+						if ( ! $probe_post instanceof WP_Post ) {
+							continue;
+						}
+						if ( $probe_post->ID > $last_id ) {
+							$last_id = $probe_post->ID;
+						}
+						if ( aafm_geodirectory_listing_is_visible( $probe_post, $public_stati ) ) {
+							$truncated = true;
+							break 2;
+						}
+					}
+				} while ( $probe_fetched === $batch_size );
 				break;
 			}
 			$query = new WP_Query(

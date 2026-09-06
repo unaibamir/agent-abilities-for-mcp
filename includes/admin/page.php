@@ -710,13 +710,27 @@ function aafm_ajax_save_meta_keys(): void {
 	// Verified, not a bare update_option(): these two options gate which post meta an agent can
 	// read or write, so a stale persistent object cache silently keeping the old list live (Codex
 	// hunt F1) must be reported as a failed save, not a success.
-	if ( ! aafm_update_option_verified( 'aafm_allowed_meta_keys', $keys ) ) {
-		aafm_log_ability_persist_failure( 'aafm_allowed_meta_keys', __( 'Exposed post meta keys', 'agent-abilities-for-mcp' ) );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed post meta keys', 'agent-abilities-for-mcp' ) ) ) );
-	}
+	//
+	// Deny is written before exposed - the restrictive half before the permissive one (Codex round
+	// 5, R5-1). Deny always wins over exposed in the precedence chain
+	// (aafm_validate_scoped_meta_key(): hard-block, then deny, then allow), so if the exposed write
+	// below fails after this one succeeds, a key that is meant to be denied is already denied and
+	// cannot become reachable through the stale exposed list. The old order (exposed first) could
+	// leave a newly-exposed key live with its intended deny never taking effect.
 	if ( ! aafm_update_option_verified( 'aafm_denied_meta_keys', $denied ) ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! aafm_update_option_verified( 'aafm_allowed_meta_keys', $keys ) ) {
+		aafm_log_ability_persist_failure( 'aafm_allowed_meta_keys', __( 'Exposed post meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error(
+			array(
+				'message' => aafm_paired_write_partial_failure_message(
+					__( 'Denied post meta keys', 'agent-abilities-for-mcp' ),
+					__( 'Exposed post meta keys', 'agent-abilities-for-mcp' )
+				),
+			)
+		);
 	}
 	delete_transient( 'aafm_detected_meta_keys' );
 	wp_send_json_success(
@@ -766,14 +780,22 @@ function aafm_ajax_save_user_meta_keys(): void {
 	$denied  = aafm_sanitize_denied_user_meta_keys_input( $posted );
 
 	// Verified, not a bare update_option(): these two options gate which user meta an agent can
-	// read or write (Codex hunt F1).
-	if ( ! aafm_update_option_verified( 'aafm_exposed_user_meta_keys', $exposed ) ) {
-		aafm_log_ability_persist_failure( 'aafm_exposed_user_meta_keys', __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) ) ) );
-	}
+	// read or write (Codex hunt F1). Deny before exposed, restrictive before permissive, for the
+	// same reason as the post-meta pair above (Codex round 5, R5-1).
 	if ( ! aafm_update_option_verified( 'aafm_denied_user_meta_keys', $denied ) ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_user_meta_keys', __( 'Denied user meta keys', 'agent-abilities-for-mcp' ) );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied user meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! aafm_update_option_verified( 'aafm_exposed_user_meta_keys', $exposed ) ) {
+		aafm_log_ability_persist_failure( 'aafm_exposed_user_meta_keys', __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error(
+			array(
+				'message' => aafm_paired_write_partial_failure_message(
+					__( 'Denied user meta keys', 'agent-abilities-for-mcp' ),
+					__( 'Exposed user meta keys', 'agent-abilities-for-mcp' )
+				),
+			)
+		);
 	}
 	wp_send_json_success(
 		array(
@@ -798,14 +820,22 @@ function aafm_ajax_save_term_meta_keys(): void {
 	$denied  = aafm_sanitize_denied_term_meta_keys_input( $posted );
 
 	// Verified, not a bare update_option(): these two options gate which term meta an agent can
-	// read or write (Codex hunt F1).
-	if ( ! aafm_update_option_verified( 'aafm_exposed_term_meta_keys', $exposed ) ) {
-		aafm_log_ability_persist_failure( 'aafm_exposed_term_meta_keys', __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ) );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ) ) ) );
-	}
+	// read or write (Codex hunt F1). Deny before exposed, restrictive before permissive, for the
+	// same reason as the post-meta pair above (Codex round 5, R5-1).
 	if ( ! aafm_update_option_verified( 'aafm_denied_term_meta_keys', $denied ) ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_term_meta_keys', __( 'Denied term meta keys', 'agent-abilities-for-mcp' ) );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied term meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( ! aafm_update_option_verified( 'aafm_exposed_term_meta_keys', $exposed ) ) {
+		aafm_log_ability_persist_failure( 'aafm_exposed_term_meta_keys', __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error(
+			array(
+				'message' => aafm_paired_write_partial_failure_message(
+					__( 'Denied term meta keys', 'agent-abilities-for-mcp' ),
+					__( 'Exposed term meta keys', 'agent-abilities-for-mcp' )
+				),
+			)
+		);
 	}
 	wp_send_json_success(
 		array(

@@ -186,6 +186,39 @@ function aafm_ajax_save_settings(): void {
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
 	}
 
+	// OAuth and DCR get the same restrictive-first treatment as the two switches above: turning
+	// either OFF closes an attack surface (no self-registering OAuth clients, no OAuth at all), so
+	// that direction is written now, before the ordinary settings loop - including the IP
+	// allowlist - below. Turning either ON is the permissive direction and is deferred until every
+	// restrictive write, including a narrowed IP allowlist, has certified (Codex round 5, R5-1): an
+	// operator asking for "OAuth on, restricted to these IPs" must never end up with OAuth on and
+	// the old, wider allowlist because the allowlist write failed after OAuth had already been
+	// flipped on.
+	$oauth_persisted = ( '1' === $clean['aafm_oauth_enabled'] ) ? true : aafm_update_option_verified( 'aafm_oauth_enabled', '0' );
+	$dcr_persisted   = ( '1' === $clean['aafm_oauth_dcr_enabled'] ) ? true : aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '0' );
+
+	// Gate review, 1.7.4 final round: both writes above are already attempted by this point, so a
+	// failure of exactly ONE of the pair is a genuine partial save, not an all-or-nothing failure.
+	// This is deliberately NOT aafm_paired_write_partial_failure_message() - that helper's "the
+	// site is now stricter than requested" claim only holds when the failed half is the permissive
+	// one (as it is below, once OAuth/DCR are deferred to the ON branch). Here both writes are the
+	// OFF/restrictive direction, so whichever one failed simply keeps its OLD value, which may
+	// still be ON - a mixed-direction save could leave the site transiently wider than either the
+	// old or the new requested state, exactly the residual the gate review flagged. Say plainly
+	// that some changes did not take rather than implying either a full success or a full rollback.
+	if ( ! $oauth_persisted || ! $dcr_persisted ) {
+		if ( $oauth_persisted xor $dcr_persisted ) {
+			wp_send_json_error(
+				array(
+					'message' => $oauth_persisted
+						? aafm_mixed_write_partial_failure_message( __( 'Enable OAuth', 'agent-abilities-for-mcp' ), __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) )
+						: aafm_mixed_write_partial_failure_message( __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ), __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ),
+				)
+			);
+		}
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ) ) );
+	}
+
 	// Every value below only takes effect once it reads back from the database as what was just
 	// written (aafm_update_option_verified()), not merely once update_option() has been called. A
 	// persistent object cache that still disagrees with the database can make a plain
@@ -200,8 +233,11 @@ function aafm_ajax_save_settings(): void {
 		'aafm_force_draft'              => array( $clean['aafm_force_draft'], __( 'Force draft on create', 'agent-abilities-for-mcp' ) ),
 		'aafm_block_guard_strict'       => array( $clean['aafm_block_guard_strict'], __( 'Strict block validation', 'agent-abilities-for-mcp' ) ),
 		'aafm_delete_data_on_uninstall' => array( $clean['aafm_delete_data_on_uninstall'], __( 'Delete data on uninstall', 'agent-abilities-for-mcp' ) ),
-		'aafm_oauth_enabled'            => array( $clean['aafm_oauth_enabled'], __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ),
-		'aafm_oauth_dcr_enabled'        => array( $clean['aafm_oauth_dcr_enabled'], __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) ),
+		// aafm_oauth_enabled and aafm_oauth_dcr_enabled are NOT here: their OFF direction already
+		// persisted above and their ON direction is deferred below, both restrictive-first (Codex
+		// round 5, R5-1). The IP allowlist stays in this ordinary loop, which runs before that
+		// deferred ON write, so a narrowed allowlist is always in place before OAuth or DCR can
+		// turn on.
 		'aafm_ip_allowlist'             => array( $clean['aafm_ip_allowlist'], __( 'The IP allowlist', 'agent-abilities-for-mcp' ) ),
 	);
 	foreach ( $verified_settings as $verified_option => $verified_pair ) {
@@ -231,6 +267,15 @@ function aafm_ajax_save_settings(): void {
 		// Off deletes the row here too, for the reason spelled out above the high-risk branch.
 		$read_only_persisted = aafm_set_read_only_mode( false );
 	}
+	// Same deferred-permissive rule for OAuth and DCR (see the restrictive-first block above): the
+	// IP allowlist and every other ordinary setting are already verified by this point, so turning
+	// either on now can never leave a wider surface than requested.
+	if ( '1' === $clean['aafm_oauth_enabled'] ) {
+		$oauth_persisted = aafm_update_option_verified( 'aafm_oauth_enabled', '1' );
+	}
+	if ( '1' === $clean['aafm_oauth_dcr_enabled'] ) {
+		$dcr_persisted = aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '1' );
+	}
 
 	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
 	aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
@@ -243,6 +288,25 @@ function aafm_ajax_save_settings(): void {
 	}
 	if ( ! $read_only_persisted ) {
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	// Reached here only once every other governance switch, and every ordinary setting including
+	// the IP allowlist, has already certified above - so a failure at this point is a genuine
+	// partial save where everything else took and only this one permissive write did not, leaving
+	// the site correctly stricter (not wider) than requested. aafm_paired_write_partial_failure_message()'s
+	// claim holds here, unlike the mixed-direction OFF-write pair earlier in this function.
+	if ( ! $oauth_persisted ) {
+		wp_send_json_error(
+			array(
+				'message' => aafm_paired_write_partial_failure_message( __( 'Every other setting', 'agent-abilities-for-mcp' ), __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ),
+			)
+		);
+	}
+	if ( ! $dcr_persisted ) {
+		wp_send_json_error(
+			array(
+				'message' => aafm_paired_write_partial_failure_message( __( 'Every other setting', 'agent-abilities-for-mcp' ), __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) ),
+			)
+		);
 	}
 
 	wp_send_json_success(

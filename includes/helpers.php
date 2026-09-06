@@ -2280,3 +2280,43 @@ function aafm_switch_not_persisted_message( string $label ): string {
 		$label
 	);
 }
+
+/**
+ * The operator-facing explanation when a paired write persisted its restrictive half but not
+ * its permissive half, so the operator can see exactly what state the site is left in rather
+ * than a generic "could not be changed" that implies nothing at all was saved (Codex round 5,
+ * R5-1).
+ *
+ * @param string $saved_label  Human name of the half that persisted, already translated.
+ * @param string $failed_label Human name of the half that did not, already translated.
+ * @return string
+ */
+function aafm_paired_write_partial_failure_message( string $saved_label, string $failed_label ): string {
+	return sprintf(
+		/* translators: 1: name of the value that saved, 2: name of the value that could not be. */
+		__( '%1$s was saved, but %2$s could not be changed: the site\'s persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
+		$saved_label,
+		$failed_label
+	);
+}
+
+/**
+ * The operator-facing explanation for a partial save where two INDEPENDENT writes were both
+ * attempted and exactly one failed, but - unlike aafm_paired_write_partial_failure_message() -
+ * whether that leaves the site stricter or wider than requested depends on the old value of the
+ * one that failed, not on which half saved. Used where both halves of a pair are written in the
+ * same (e.g. both restrictive) direction, so a failure of either one simply keeps its own old
+ * value rather than guaranteeing a narrower net result (gate review, 1.7.4 final round).
+ *
+ * @param string $saved_label  Human name of the value that persisted, already translated.
+ * @param string $failed_label Human name of the value that did not, already translated.
+ * @return string
+ */
+function aafm_mixed_write_partial_failure_message( string $saved_label, string $failed_label ): string {
+	return sprintf(
+		/* translators: 1: name of the value that saved, 2: name of the value that could not be. */
+		__( '%1$s was saved, but %2$s could not be changed: the site\'s persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
+		$saved_label,
+		$failed_label
+	);
+}

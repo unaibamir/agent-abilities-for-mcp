@@ -344,6 +344,49 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 5, R5-7: the cap-lookahead probe used only 'perm' => 'readable', which does not
+	 * exclude a draft/pending row the caller cannot edit - so a trailing draft owned by another
+	 * user could flip `truncated` to true even though the caller's own visible set (four published
+	 * listings) was already complete. The author here cannot edit the other user's draft, so it
+	 * must never be counted as "one more visible row".
+	 */
+	public function test_get_listings_probe_does_not_count_another_users_trailing_draft(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => 2 );
+
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		self::factory()->post->create_many(
+			4,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+				'post_author' => $author,
+			)
+		);
+
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $other,
+			)
+		);
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		remove_all_filters( 'aafm_geodirectory_list_batch_size' );
+		remove_all_filters( 'aafm_geodirectory_list_batch_cap' );
+
+		$this->assertSame( 4, $out['total'] );
+		$this->assertFalse(
+			$out['truncated'],
+			'A trailing draft the caller cannot edit must not flip truncated once the visible set is complete.'
+		);
+	}
+
+	/**
 	 * Codex final round 4 MEDIUM: the batch cap filter had no ceiling, so a hook returning
 	 * PHP_INT_MAX defeated the cap's purpose entirely. It may only narrow the cap, never raise it
 	 * past the hard 1000 ceiling.

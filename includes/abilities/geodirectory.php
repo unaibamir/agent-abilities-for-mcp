@@ -373,6 +373,24 @@ function aafm_geodirectory_listing_batch_cap(): int {
 }
 
 /**
+ * Whether a candidate listing is visible under this ability's own rule: public status, or the
+ * current user can edit it. Shared by the enumeration loop and the truncation lookahead probe
+ * below so the two can never disagree about what counts as visible.
+ *
+ * Codex round 5, R5-7: the probe used to rely only on WP_Query's 'perm' => 'readable', which (per
+ * this file's own note above) does not exclude 'draft'/'pending' rows the caller cannot edit -
+ * so a trailing draft owned by someone else could flip `truncated` to true even though the
+ * caller's visible set was already complete.
+ *
+ * @param WP_Post  $post Candidate listing.
+ * @param string[] $public_stati Public post statuses, from get_post_stati( array( 'public' => true ) ).
+ * @return bool
+ */
+function aafm_geodirectory_listing_is_visible( WP_Post $post, array $public_stati ): bool {
+	return in_array( $post->post_status, $public_stati, true ) || current_user_can( 'edit_post', $post->ID );
+}
+
+/**
  * Execute aafm/geodirectory-get-listings: a plain WP_Query against gd_place, no custom-table join
  * needed for a bare list.
  *
@@ -449,24 +467,37 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 				//
 				// Codex final round 4 LOW: reaching this branch only means the LAST permitted batch
 				// came back full, which happens whenever the row count is an exact multiple of the
-				// batch size too - nothing was actually omitted in that case. A cheap one-row probe
+				// batch size too - nothing was actually omitted in that case. A lookahead probe
 				// past the last-seen ID (same marker/filter, so it obeys the identical WHERE and
 				// ordering) is the only way to tell "one more row exists" from "that batch just
 				// happened to be full".
+				//
+				// Codex round 5, R5-7: a one-row 'perm' => 'readable' probe answered a different
+				// question than the enumeration asks - it could see a trailing draft/pending row
+				// the caller cannot edit and report `truncated` even though the visible set was
+				// already complete. Fetch a full extra batch of real posts (not just ids) and
+				// run each one through the SAME aafm_geodirectory_listing_is_visible() predicate
+				// the enumeration uses below, so a probe never disagrees with what the loop itself
+				// would have kept.
 				$probe     = new WP_Query(
 					array(
 						'post_type'         => 'gd_place',
 						'post_status'       => 'any',
 						'perm'              => 'readable',
-						'posts_per_page'    => 1,
-						'fields'            => 'ids',
+						'posts_per_page'    => $batch_size,
 						'orderby'           => 'ID',
 						'order'             => 'ASC',
 						'no_found_rows'     => true,
 						'aafm_query_marker' => $query_marker,
 					)
 				);
-				$truncated = ! empty( $probe->posts );
+				$truncated = false;
+				foreach ( $probe->posts as $probe_post ) {
+					if ( $probe_post instanceof WP_Post && aafm_geodirectory_listing_is_visible( $probe_post, $public_stati ) ) {
+						$truncated = true;
+						break;
+					}
+				}
 				break;
 			}
 			$query = new WP_Query(
@@ -489,8 +520,9 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 			// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at
 			// all (only 'private'), so an Author could still see another user's draft listing
 			// through the SQL layer alone. Filter every result through the SAME
-			// public-status-or-per-object-edit rule aafm_perm_geodirectory_get() already uses, so
-			// no non-public listing the caller cannot edit ever reaches the response regardless
+			// public-status-or-per-object-edit rule aafm_perm_geodirectory_get() already uses (now
+			// aafm_geodirectory_listing_is_visible(), shared with the cap-lookahead probe above),
+			// so no non-public listing the caller cannot edit ever reaches the response regardless
 			// of which status 'perm' missed.
 			foreach ( $query->posts as $post ) {
 				if ( ! $post instanceof WP_Post ) {
@@ -499,7 +531,7 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 				if ( $post->ID > $last_id ) {
 					$last_id = $post->ID;
 				}
-				if ( ! in_array( $post->post_status, $public_stati, true ) && ! current_user_can( 'edit_post', $post->ID ) ) {
+				if ( ! aafm_geodirectory_listing_is_visible( $post, $public_stati ) ) {
 					continue;
 				}
 				$visible[] = $post;

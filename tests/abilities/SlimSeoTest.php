@@ -127,6 +127,45 @@ final class SlimSeoTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Codex round 8 R8-1: the canonical-form recomputation used to run sanitize_meta() against
+	 * wp_slash( $stored ) and then unslash the sanitizer's OUTPUT, feeding a slash-sensitive
+	 * registered sanitizer a backslash-quote sequence that core's own write-time call, which
+	 * unslashes the incoming value BEFORE sanitizing, never sees.
+	 */
+	public function test_update_post_confirms_a_write_whose_title_contains_a_quote_and_backslash(): void {
+		$post = self::factory()->post->create_and_get();
+
+		$slash_sensitive = static function ( $value ) {
+			if ( is_array( $value ) && isset( $value['title'] ) && is_string( $value['title'] ) && false !== strpos( $value['title'], "\\'" ) ) {
+				$value['title'] = 'SAW_A_SLASHED_QUOTE';
+			}
+			return $value;
+		};
+		add_filter( 'sanitize_post_meta_slim_seo', $slash_sensitive );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$out = aafm_exec_slim_seo_update_post(
+			array(
+				'post_id' => $post->ID,
+				'title'   => "O'Reilly",
+			)
+		);
+		remove_filter( 'sanitize_post_meta_slim_seo', $slash_sensitive );
+
+		$this->assertIsArray(
+			$out,
+			'A title containing a quote must not be misjudged as unconfirmed because the guard fed the sanitizer a slashed form the real write never used.'
+		);
+		$stored = get_post_meta( $post->ID, 'slim_seo', true );
+		$this->assertSame(
+			"O'Reilly",
+			$stored['title'],
+			"precondition: the sanitizer must not have fired, since core's own call never sees a slashed value here."
+		);
+		$this->assertSame( "O'Reilly", $out['title'] );
+	}
+
 	public function test_update_post_requires_edit_access(): void {
 		$post = self::factory()->post->create();
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );

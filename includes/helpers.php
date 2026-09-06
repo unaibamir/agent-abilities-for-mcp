@@ -2091,24 +2091,30 @@ function aafm_generic_error(): WP_Error {
  * stored form rather than the plugin's own pre-write intent.
  *
  * Core's own update_metadata() (the shared engine behind update_post_meta()/update_term_meta()/
- * update_user_meta(), wp-includes/meta.php) unslashes the incoming SLASHED value and then runs it
- * through sanitize_meta( $meta_key, $meta_value, $object_type, $object_subtype ) before it ever
- * reaches storage. A vendor or core filter registered on that meta key's sanitize_{type}_meta_{key}
- * hook (register_meta()'s sanitize_callback lands here) can legitimately trim, cast, or otherwise
+ * update_user_meta(), wp-includes/meta.php) unslashes the incoming $meta_value and THEN runs the
+ * unslashed result through sanitize_meta( $meta_key, $meta_value, $object_type, $object_subtype )
+ * before it ever reaches storage - verified by reading update_metadata() itself, not assumed. A
+ * vendor or core filter registered on that meta key's sanitize_{type}_meta_{key} hook
+ * (register_meta()'s sanitize_callback lands here) can legitimately trim, cast, or otherwise
  * normalize the value on the way in. Comparing a fresh read against the plugin's pre-write intent
  * instead of that canonical form reports a false error on a write that landed exactly as the
  * site's own registered sanitizer defines "landed" - Codex round 6 B6-3. Running the same
  * sanitize_meta() call here keeps a genuine veto caught: a filter that reverts to the OLD value,
  * or an update_*_metadata short-circuit that never wrote at all, still differs from the sanitized
- * NEW value. Every call site writes $intended slashed (wp_slash()), and that is exactly the input
- * core's own sanitize_meta() call sees at write time, so this slashes $intended the same way before
- * sanitizing and unslashes the result before comparing - matching aafm_post_field_write_confirmed()'s
- * pipeline below - so a quote/backslash-sensitive registered sanitizer is judged against the same
- * input WordPress actually sanitized, not the plugin's raw pre-slash intent. A scalar meta value
- * round-trips through a longtext column, so the stored value reads back as a string; comparing
- * stringified forms also avoids a false mismatch on a genuine no-op (re-sending an int or bool
- * unchanged). An array-valued meta key (a serialized token list, for example) is compared by exact
- * array equality instead, since casting an array to string is a PHP warning, not a comparison.
+ * NEW value.
+ *
+ * Codex round 8 R8-1: every call site passes wp_slash( $value ) to update_post_meta()/
+ * update_term_meta()/update_user_meta() so that core's own internal wp_unslash() is a no-op
+ * round trip back to $value - core's sanitize_meta() call therefore sees exactly the unslashed
+ * $intended this function receives, never a slashed form of it. This function used to run
+ * sanitize_meta() against wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, which
+ * feeds a slash-sensitive registered sanitizer a different input than core's own call ever sees
+ * and can misjudge its output. Passing $intended straight through matches core's pipeline
+ * exactly: no slashing in, no unslashing out. A scalar meta value round-trips through a longtext
+ * column, so the stored value reads back as a string; comparing stringified forms also avoids a
+ * false mismatch on a genuine no-op (re-sending an int or bool unchanged). An array-valued meta
+ * key (a serialized token list, for example) is compared by exact array equality instead, since
+ * casting an array to string is a PHP warning, not a comparison.
  *
  * @param mixed  $stored         The value read back from storage after the write.
  * @param mixed  $intended       The unslashed value the write attempted to store.
@@ -2123,7 +2129,7 @@ function aafm_generic_error(): WP_Error {
  * @return bool
  */
 function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
-	$expected = wp_unslash( sanitize_meta( $meta_key, wp_slash( $intended ), $object_type, $object_subtype ) );
+	$expected = sanitize_meta( $meta_key, $intended, $object_type, $object_subtype );
 	if ( is_array( $expected ) || is_array( $stored ) ) {
 		return $stored === $expected;
 	}

@@ -277,10 +277,12 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 	// aafm_meta_write_confirmed() helper used by every sibling SEO integration: routing through it
 	// per field here would run the whole-array hook against a lone scalar and misfire.
 	//
-	// $stored is slashed the same way update_post_meta() above slashed it, since that is exactly
-	// the input core's own sanitize_meta() call saw at write time - comparing against an unslashed
-	// recomputation would misjudge a quote/backslash-sensitive registered sanitizer.
-	$canonical = wp_unslash( sanitize_meta( 'slim_seo', wp_slash( $stored ), 'post', (string) get_post_type( $id ) ) );
+	// Codex round 8 R8-1: update_post_meta() above wp_slash()s $stored so that core's own
+	// internal wp_unslash() inside update_metadata() is a no-op round trip back to $stored -
+	// core's sanitize_meta() call therefore sees $stored unslashed, exactly as passed here. This
+	// used to slash $stored before sanitizing and unslash the sanitizer's OUTPUT, which feeds a
+	// slash-sensitive registered sanitizer a different input than core's own call ever sees.
+	$canonical = sanitize_meta( 'slim_seo', $stored, 'post', (string) get_post_type( $id ) );
 	$canonical = is_array( $canonical ) ? $canonical : array();
 	$confirmed = aafm_slim_seo_read_fields( $id );
 	foreach ( aafm_slim_seo_fields() as $field ) {

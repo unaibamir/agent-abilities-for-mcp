@@ -413,6 +413,51 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 8 R8-1: the confirmation guard used to run sanitize_meta() against
+	 * wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, but core's own
+	 * update_metadata() unslashes the incoming value and THEN sanitizes it - the guard was
+	 * feeding a slash-sensitive registered sanitizer a different input than core's own call ever
+	 * sees. A value containing an apostrophe (which wp_slash() escapes with a backslash) exposed
+	 * the mismatch: the guard's recomputation saw a backslash-quote sequence the real write never
+	 * did, and a sanitizer keyed on that saw two different inputs and produced two different
+	 * outputs, so a write that landed exactly as core's own sanitizer defines "landed" was
+	 * reported as unconfirmed.
+	 */
+	public function test_update_meta_confirms_a_write_whose_value_contains_a_quote_and_backslash(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		// A sanitizer that behaves differently when it sees a backslash immediately before a
+		// quote - the exact input a slashed-then-sanitized value would carry that an
+		// unslashed-then-sanitized value never would.
+		$slash_sensitive = static function ( $value ) {
+			return ( is_string( $value ) && false !== strpos( $value, "\\'" ) ) ? 'SAW_A_SLASHED_QUOTE' : $value;
+		};
+		add_filter( 'sanitize_post_meta_aafm_note', $slash_sensitive );
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => "O'Reilly",
+			)
+		);
+		remove_filter( 'sanitize_post_meta_aafm_note', $slash_sensitive );
+
+		$this->assertIsArray(
+			$out,
+			'A write whose value contains a quote must not be misjudged as unconfirmed because the guard fed the sanitizer a slashed form the real write never used.'
+		);
+		$this->assertSame(
+			"O'Reilly",
+			get_post_meta( $id, 'aafm_note', true ),
+			"precondition: the sanitizer must not have fired, since core's own call never sees a slashed value here."
+		);
+		$this->assertSame( "O'Reilly", $out['value'] );
+	}
+
+	/**
 	 * Codex round 7 R7-3: aafm_sanitize_meta_value()'s coercion-to-array probe used to always pass
 	 * the literal string 'post' as the object subtype, so a sanitize_callback registered for a
 	 * page (or any other non-'post' type) never reached the subtype-specific hook the probe

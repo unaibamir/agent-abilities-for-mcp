@@ -79,6 +79,39 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
+	 * Strips one named function's body out of source text, mirrors
+	 * SecurityRegressionTest::strip_function_body(): a plain brace-depth counter, correct for this
+	 * codebase's consistent style (no nested top-level functions). Used below to scope the
+	 * discovery.php exemption to the seed function alone rather than the whole file (Codex round
+	 * 6, B6-7).
+	 *
+	 * @param string $source        Full file contents.
+	 * @param string $function_name Function name to strip, without parentheses.
+	 * @return string The same source with that one function's body removed.
+	 */
+	private function strip_function_body( string $source, string $function_name ): string {
+		$out    = array();
+		$inside = false;
+		$depth  = 0;
+		foreach ( explode( "\n", $source ) as $line ) {
+			if ( ! $inside ) {
+				if ( preg_match( '/^function\s+' . preg_quote( $function_name, '/' ) . '\s*\(/', $line ) ) {
+					$inside = true;
+					$depth  = 0;
+					continue;
+				}
+				$out[] = $line;
+				continue;
+			}
+			$depth += substr_count( $line, '{' ) - substr_count( $line, '}' );
+			if ( $depth <= 0 && str_contains( $line, '{' ) ) {
+				$inside = false;
+			}
+		}
+		return implode( "\n", $out );
+	}
+
+	/**
 	 * Static source scan, mirrors PageBuilderGuardSweepTest's mechanical approach, widened from
 	 * includes/admin/page.php alone to every file under includes/ (Codex round 5, R5-3): a bare
 	 * update_option()/delete_option()/add_option() call naming one of the guarded security
@@ -86,17 +119,21 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * rather than running it catches a future edit that reintroduces a bare write even if it
 	 * moves to a new file or helper function this list has never heard of.
 	 *
-	 * A file-scoped allowlist covers the one bare write that really is safe: the two add_option()
-	 * calls in aafm_oauth_seed_default_options() (includes/oauth/discovery.php), which run once
-	 * at activation, never overwrite an existing row by design, and seed both OAuth options to
-	 * their safe default. Every other file still fails the scan for the same two option names.
+	 * The one bare write that really is safe is the pair of add_option() calls inside
+	 * aafm_oauth_seed_default_options() (includes/oauth/discovery.php), which run once at
+	 * activation, never overwrite an existing row by design, and seed both OAuth options to their
+	 * safe default. A file-wide exemption for those two option names used to cover that, but it
+	 * also silently permitted a bare write to either option ANYWHERE ELSE in discovery.php (Codex
+	 * round 6, B6-7). The seed function's body is stripped out of discovery.php's source before
+	 * the scan runs instead, so the exemption is scoped to the two calls it actually covers, and
+	 * every other line in the file - including both guarded options - is checked like any other
+	 * file. The regex also now tolerates the whitespace and double-quote spellings a bare write
+	 * could otherwise slip past, such as `update_option ( "aafm_oauth_enabled", ...)`.
 	 */
 	public function test_no_bare_option_write_names_a_security_allowlist_option(): void {
-		$guarded_options = $this->guarded_security_options();
-
-		$allowlist = array(
-			'includes/oauth/discovery.php' => array( 'aafm_oauth_enabled', 'aafm_oauth_dcr_enabled' ),
-		);
+		$guarded_options     = $this->guarded_security_options();
+		$oauth_seed_scoped   = 'includes/oauth/discovery.php';
+		$oauth_seed_function = 'aafm_oauth_seed_default_options';
 
 		$includes_dir = AAFM_PLUGIN_DIR . 'includes';
 		$files        = new \RecursiveIteratorIterator(
@@ -121,15 +158,15 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			$this->assertNotSame( '', $source, "The sweep must actually read {$relative} - an empty read would make this test pass by finding nothing." );
 			++$scanned;
 
-			$exempt = $allowlist[ $relative ] ?? array();
+			$scan_source = $oauth_seed_scoped === $relative
+				? $this->strip_function_body( $source, $oauth_seed_function )
+				: $source;
+
 			foreach ( $guarded_options as $option ) {
-				if ( in_array( $option, $exempt, true ) ) {
-					continue;
-				}
 				foreach ( array( 'update_option', 'delete_option', 'add_option' ) as $bare_call ) {
 					$this->assertDoesNotMatchRegularExpression(
-						'/\b' . $bare_call . '\(\s*\'' . preg_quote( $option, '/' ) . '\'/',
-						$source,
+						'/\b' . $bare_call . '\s*\(\s*[\'"]' . preg_quote( $option, '/' ) . '[\'"]/',
+						$scan_source,
 						"A bare {$bare_call}() naming {$option} was found in {$relative} - route it through aafm_update_option_verified() instead."
 					);
 				}

@@ -17,6 +17,16 @@
  * guard fails this test by construction rather than needing a human to remember to add a row
  * above.
  *
+ * Codex hunt H1 (2026-09-06, accepted hardening follow-up logged in
+ * 231-1-7-4-build-record-2026-09-05.md): the scan's own signals were narrower than the write
+ * shapes a future ability could actually use. Broadened to also catch wp_insert_post() called
+ * with an 'ID' (WordPress core treats that as an update, not a create - the same commit-an-
+ * existing-post verb wp_update_post() is), a direct update_post_meta()/add_post_meta() write to
+ * one of the page builders' own rendering-source meta keys (aafm_page_builder_markers()), and a
+ * raw $wpdb write to the posts or postmeta table. Each addition was checked against the current
+ * source tree for new false positives before landing (none found) - see the per-signal comments
+ * below for what each one is scoped to and why.
+ *
  * @package AgentAbilitiesForMCP
  */
 
@@ -86,8 +96,14 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			'aafm_exec_update_menu_item'            => 'nav_menu_item post type - an internal menu-structure record, not a page a classic page builder ever owns.',
 			// Known false positives from the mechanical scan matching TEXT, not code: a
 			// translatable description string and a comment, not an actual write call.
+			// Codex final round 4 MEDIUM: the scan is now comment-blind (see strip_comments()
+			// below), which resolves two of this list's three former "matches only in prose"
+			// entries on its own - aafm_exec_moderate_comment and aafm_exec_aioseo_update_post
+			// both matched only inside a // comment, never in real code, and are no longer in
+			// this list at all. aafm_args_replace_sitewide stays: its false-positive text lives
+			// inside a translatable __() description string, which is real, executed code, not a
+			// comment - comment-stripping does not and should not touch it.
 			'aafm_args_replace_sitewide'            => 'Args/schema builder only, no write - matches only because its own output_schema description mentions "wp_update_post()" in prose.',
-			'aafm_exec_aioseo_update_post'          => 'Matches only because of comment prose explaining why this does NOT call ->save() directly (it uses AIOSEO\'s own savePost() instead); AIOSEO\'s data lives in its own tables, never post_content.',
 		);
 	}
 
@@ -123,6 +139,38 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			}
 		}
 		return $functions;
+	}
+
+	/**
+	 * Strip every // and /* comment (docblocks included) out of a function body before the
+	 * signal regexes run against it.
+	 *
+	 * Codex final round 4 MEDIUM: the broadened Signal B ('wp_insert_post(' as a substring) also
+	 * matches that literal text sitting inside a comment explaining unrelated behavior - a real
+	 * false positive this file used to paper over with a blanket function-level exemption, which
+	 * also hid any FUTURE real unguarded write in that same function. Tokenizing with
+	 * token_get_all() and dropping T_COMMENT/T_DOC_COMMENT is the actual fix: it makes the scanner
+	 * blind to prose while staying fully sensitive to real code, comments and all, everywhere else.
+	 * A string literal (e.g. a translatable description built with __()) is a real, executed
+	 * token - not a comment - and is deliberately left untouched.
+	 *
+	 * @param string $body Full source text of one function, as extracted by extract_function_bodies().
+	 * @return string The same body with every comment token's text removed.
+	 */
+	private function strip_comments( string $body ): string {
+		$tokens   = token_get_all( "<?php\n" . $body );
+		$stripped = '';
+		foreach ( $tokens as $token ) {
+			if ( is_array( $token ) ) {
+				if ( T_COMMENT === $token[0] || T_DOC_COMMENT === $token[0] ) {
+					continue;
+				}
+				$stripped .= $token[1];
+			} else {
+				$stripped .= $token;
+			}
+		}
+		return $stripped;
 	}
 
 	/**
@@ -169,17 +217,65 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			$source    = (string) file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading this plugin's own local source files to scan them, not a remote URL.
 			$functions = $this->extract_function_bodies( $source );
 			foreach ( $functions as $function_name => $body ) {
+				// Codex final round 4 MEDIUM: match against a comment-blind copy of the body, not
+				// the raw source, so prose in a // or /* comment can never trip a signal or hide
+				// a real one behind an exemption. See strip_comments() for why a string literal
+				// (a translatable __() description, say) is deliberately left untouched.
+				$body = $this->strip_comments( $body );
 				// Signal A: a direct 'post_content' key assignment in this function's own body.
 				$writes_content_directly = (bool) preg_match( "/'post_content'\\s*=>/", $body );
-				// Signal B: commits an update to an EXISTING post (wp_update_post() always
-				// requires an ID; a repository ->save() call, in this codebase's ORM usage, is
-				// exclusively the update verb - ->create() is the create verb) - catches a write
-				// whose content came from a shared args-builder helper called earlier, rather
-				// than assigned inline (e.g. aafm_exec_tec_update_event()).
+				// Signal B: commits an update to an EXISTING post. wp_update_post() always
+				// requires an ID (whether called with an array or a WP_Post/stdClass argument -
+				// this is a substring match, so either form matches); wp_insert_post() is the
+				// create verb, EXCEPT that WordPress core itself treats a postarr carrying an
+				// 'ID' as an update too (wp-includes/post.php delegates to wp_update_post()
+				// internally) - a future write path could exploit exactly that to commit an
+				// existing-post update while dodging a wp_update_post()-only scan, so both
+				// functions are treated as the same signal here; a repository ->save() call, in
+				// this codebase's ORM usage, is exclusively the update verb - ->create() is the
+				// create verb. Catches a write whose content came from a shared args-builder
+				// helper called earlier, rather than assigned inline (e.g.
+				// aafm_exec_tec_update_event()).
 				$commits_an_existing_post_update = ! $is_woocommerce
-					&& ( false !== strpos( $body, 'wp_update_post(' ) || false !== strpos( $body, '->save(' ) );
+					&& (
+						false !== strpos( $body, 'wp_update_post(' )
+						|| false !== strpos( $body, 'wp_insert_post(' )
+						|| false !== strpos( $body, '->save(' )
+					);
+				// Signal C: writes one of the page builders' OWN rendering-source meta keys
+				// directly (aafm_page_builder_markers(), includes/page-builder-guard.php) rather
+				// than through post_content/post_excerpt - the exact data a foreign builder
+				// actually renders from, so a write here is just as capable of silently
+				// corrupting or being ignored by builder-owned content as a post_content write
+				// is. Scoped to the known marker key names specifically (not every
+				// update_post_meta()/add_post_meta() call) so an ordinary SEO- or
+				// allowlist-gated meta write - already covered by its own hard-block chokepoint,
+				// aafm_hard_blocked_meta_key() - does not become a false positive here.
+				$writes_a_builder_marker_key = false;
+				foreach ( array_keys( aafm_page_builder_markers() ) as $marker_key ) {
+					if (
+						( false !== strpos( $body, 'update_post_meta(' ) || false !== strpos( $body, 'add_post_meta(' ) )
+						&& false !== strpos( $body, "'" . $marker_key . "'" )
+					) {
+						$writes_a_builder_marker_key = true;
+						break;
+					}
+				}
+				// Signal D: a direct $wpdb write to the posts or postmeta table, bypassing every
+				// WordPress post API (and so every signal above) entirely. No current write site
+				// does this - GeoDirectory, this release's one integration with no post-field
+				// write API of its own, uses core wp_insert_post()/wp_update_post() specifically
+				// to stay on this signal's radar (see the dossier's TEC/GeoDirectory standing
+				// invariant) - but a future integration could still reach for $wpdb directly.
+				$writes_posts_table_directly = ! $is_woocommerce
+					&& ( false !== strpos( $body, '$wpdb->posts' ) || false !== strpos( $body, '$wpdb->postmeta' ) )
+					&& (
+						false !== strpos( $body, '$wpdb->update(' )
+						|| false !== strpos( $body, '$wpdb->insert(' )
+						|| false !== strpos( $body, '$wpdb->query(' )
+					);
 
-				if ( ! $writes_content_directly && ! $commits_an_existing_post_update ) {
+				if ( ! $writes_content_directly && ! $commits_an_existing_post_update && ! $writes_a_builder_marker_key && ! $writes_posts_table_directly ) {
 					continue;
 				}
 				$seen_any = true;
@@ -192,11 +288,11 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			}
 		}
 
-		$this->assertTrue( $seen_any, 'The sweep found zero post_content writers at all - it is almost certainly broken, not proving the codebase is clean.' );
+		$this->assertTrue( $seen_any, 'The sweep found zero content or builder-marker writers at all - it is almost certainly broken, not proving the codebase is clean.' );
 		$this->assertSame(
 			array(),
 			$unguarded,
-			'Every function that writes post_content must call aafm_post_has_foreign_builder_ownership() itself, or be added to exempt_post_content_writers() with a reason: ' . implode( ', ', $unguarded )
+			'Every function that writes post_content, commits an existing-post update, writes a page builder\'s own marker meta, or writes the posts/postmeta table directly must call aafm_post_has_foreign_builder_ownership() itself, or be added to exempt_post_content_writers() with a reason: ' . implode( ', ', $unguarded )
 		);
 	}
 

@@ -340,4 +340,35 @@ final class PostMetaTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 		$this->assertSame( 'active', get_post_meta( $id, 'fusion_builder_status', true ), 'The marker must survive an attempted clear untouched.' );
 	}
+
+	/**
+	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
+	 * update_post_meta(...)`, so a metadata filter that short-circuits update_post_metadata to a
+	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
+	 * success and returned the old stored value.
+	 */
+	public function test_update_meta_returns_an_error_when_the_write_is_vetoed(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'aafm_note', 'old value' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$out  = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed meta write must return an error, not a success reporting the old value.'
+		);
+	}
 }

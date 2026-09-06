@@ -281,4 +281,35 @@ final class UserMetaTest extends TestCase {
 			aafm_unreachable_user_meta_key_error( 'aafm/get-user-meta', array( 'key' => array( 'x' ) ) )
 		);
 	}
+
+	/**
+	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
+	 * update_user_meta(...)`, so a metadata filter that short-circuits update_user_metadata to a
+	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
+	 * success and returned the old stored value.
+	 */
+	public function test_update_user_meta_returns_an_error_when_the_write_is_vetoed(): void {
+		add_filter( 'aafm_allowed_user_meta_keys', static fn() => array( 'twitter' ) );
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$uid = self::factory()->user->create( array( 'role' => 'author' ) );
+		update_user_meta( $uid, 'twitter', 'old value' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_user_metadata', $veto, 10, 0 );
+		$out  = wp_get_ability( 'aafm/update-user-meta' )->execute(
+			array(
+				'user_id' => $uid,
+				'key'     => 'twitter',
+				'value'   => 'new value',
+			)
+		);
+		remove_filter( 'update_user_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$out,
+			'A vetoed user meta write must return an error, not a success reporting the old value.'
+		);
+	}
 }

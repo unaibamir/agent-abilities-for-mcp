@@ -276,16 +276,15 @@ function aafm_exec_update_user_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	if ( false === update_user_meta( $id, $key, wp_slash( $value ) ) ) {
-		// update_user_meta returns false on a same-value no-op too. User meta round-trips
-		// through a longtext column, so the stored value reads back as a string; compare
-		// stringified forms to avoid a false failure on a genuine no-op (e.g. re-sending an
-		// int or bool).
-		if ( (string) get_user_meta( $id, $key, true ) !== (string) $value ) {
-			return aafm_generic_error();
-		}
-	}
+	update_user_meta( $id, $key, wp_slash( $value ) );
 	$stored = get_user_meta( $id, $key, true );
+	// Codex round 5 R5-2: update_user_meta()'s return value only catches an outright failure. A
+	// metadata filter that short-circuits update_user_metadata to a truthy value bypasses the
+	// write while reporting success, so checking only `false === update_user_meta(...)` never
+	// caught it. Confirm what actually landed unconditionally instead.
+	if ( ! aafm_meta_write_confirmed( $stored, $value ) ) {
+		return aafm_generic_error();
+	}
 	return array(
 		'user_id' => $id,
 		'key'     => $key,

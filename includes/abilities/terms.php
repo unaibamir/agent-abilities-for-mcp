@@ -624,18 +624,19 @@ function aafm_exec_update_term_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	if ( false === update_term_meta( $term_id, $key, wp_slash( $value ) ) ) {
-		// update_term_meta returns false on a same-value no-op too. Meta round-trips through a
-		// longtext column, so the stored value reads back as a string; compare stringified forms
-		// to avoid a false failure on a genuine no-op (e.g. re-sending an int or bool).
-		if ( (string) get_term_meta( $term_id, $key, true ) !== (string) $value ) {
-			return aafm_generic_error();
-		}
+	update_term_meta( $term_id, $key, wp_slash( $value ) );
+	$stored = get_term_meta( $term_id, $key, true );
+	// Codex round 5 R5-2: update_term_meta()'s return value only catches an outright failure. A
+	// metadata filter that short-circuits update_term_metadata to a truthy value bypasses the
+	// write while reporting success, so checking only `false === update_term_meta(...)` never
+	// caught it. Confirm what actually landed unconditionally instead.
+	if ( ! aafm_meta_write_confirmed( $stored, $value ) ) {
+		return aafm_generic_error();
 	}
 	return array(
 		'term_id'  => $term_id,
 		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
-		'value'    => get_term_meta( $term_id, $key, true ),
+		'value'    => $stored,
 	);
 }
 

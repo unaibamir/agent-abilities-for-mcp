@@ -280,4 +280,36 @@ final class TermMetaTest extends TestCase {
 		);
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
 	}
+
+	/**
+	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
+	 * update_term_meta(...)`, so a metadata filter that short-circuits update_term_metadata to a
+	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
+	 * success and returned the old stored value.
+	 */
+	public function test_update_term_meta_returns_an_error_when_the_write_is_vetoed(): void {
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'seo_title' ) );
+		$this->acting_as( 'editor' );
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		update_term_meta( $term_id, 'seo_title', 'old value' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_term_metadata', $veto, 10, 0 );
+		$out  = aafm_exec_update_term_meta(
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $term_id,
+				'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		remove_filter( 'update_term_metadata', $veto, 10 );
+		remove_all_filters( 'aafm_allowed_term_meta_keys' );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed term meta write must return an error, not a success reporting the old value.'
+		);
+	}
 }

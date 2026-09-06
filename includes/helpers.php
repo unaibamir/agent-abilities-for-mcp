@@ -2045,6 +2045,22 @@ function aafm_generic_error(): WP_Error {
 }
 
 /**
+ * Whether a scalar meta write actually landed as requested. Meta round-trips through a longtext
+ * column, so the stored value reads back as a string; comparing stringified forms avoids a false
+ * mismatch on a genuine no-op (re-sending an int or bool unchanged) while still catching a
+ * metadata filter that short-circuits the write and reports success without ever touching
+ * storage - update_post_meta()/update_term_meta()/update_user_meta() only return false on an
+ * outright failure, not on that kind of silent veto.
+ *
+ * @param mixed $stored   The value read back from storage after the write.
+ * @param mixed $intended The value the write attempted to store.
+ * @return bool
+ */
+function aafm_meta_write_confirmed( $stored, $intended ): bool {
+	return (string) $stored === (string) $intended;
+}
+
+/**
  * Whether WordPress will move trashed content to the Trash instead of deleting it.
  *
  * Core's wp_trash_post()/wp_trash_comment() force a permanent, unrecoverable delete

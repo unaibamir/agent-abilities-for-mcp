@@ -205,6 +205,37 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
+	 * Codex hunt F12: the validation test above proves the hostname is resolved once, but
+	 * nothing there shows the pin it produced is ever applied to a cURL handle. This test runs the
+	 * real owned-fetch path and uses the aafm_media_fetch_curl_options seam to capture the final
+	 * option array right before curl_setopt_array(), aborting there so no network call happens.
+	 */
+	public function test_owned_fetch_pins_resolution_and_disables_proxy_and_redirects(): void {
+		$captured = null;
+		add_filter(
+			'aafm_media_fetch_curl_options',
+			static function ( array $options ) use ( &$captured ) {
+				$captured = $options;
+				throw new \RuntimeException( 'aafm-test-abort-before-curl-exec' );
+			}
+		);
+
+		try {
+			aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
+			$this->fail( 'Expected the test seam to abort the fetch before curl_exec() ran.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'aafm-test-abort-before-curl-exec', $e->getMessage() );
+		} finally {
+			remove_all_filters( 'aafm_media_fetch_curl_options' );
+		}
+
+		$this->assertIsArray( $captured );
+		$this->assertSame( array( 'example.test:443:203.0.113.10' ), $captured[ CURLOPT_RESOLVE ] );
+		$this->assertSame( '', $captured[ CURLOPT_PROXY ] );
+		$this->assertFalse( $captured[ CURLOPT_FOLLOWLOCATION ] );
+	}
+
+	/**
 	 * Codex hunt H2: asserted against aafm_ssrf_process_fetch_response() directly with a synthetic
 	 * response in the same shape aafm_ssrf_owned_curl_fetch() returns for a redirect (a 302 status,
 	 * no captured headers - that function never records a Location header, since

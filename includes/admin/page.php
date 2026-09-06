@@ -706,14 +706,26 @@ function aafm_detected_meta_keys(): array {
  *   3. deny := new deny - narrows deny down to what was actually requested; if this fails, deny
  *      simply stays at the stage-1 union instead of reaching its final, narrower value.
  *
+ * The "old deny" half of the union is read here, authoritatively, from the database row itself
+ * (Codex round 7, R7-1) rather than accepted as a caller-supplied snapshot. The getters
+ * (aafm_denied_meta_keys() and its user/term siblings) both trust a cache-backed get_option()
+ * and strip the `*` deny-all sentinel for display purposes, so a caller-supplied snapshot could
+ * either be stale (a persistent cache still answering for a since-changed row) or silently drop
+ * a live deny-all - either way the stage-1 union would be built from a narrower list than what
+ * is actually stored, and stage 1 could then certify a union that is itself wider than the
+ * pre-request state. Reading the raw row directly, sentinel included, keeps the union at least
+ * as strict as whatever is really in the database right now.
+ *
  * @param string            $deny_option    Deny-list option name.
  * @param string            $exposed_option Exposed-list option name.
- * @param array<int,string> $old_deny       Deny list in effect before this request.
  * @param array<int,string> $new_deny       Requested deny list.
  * @param array<int,string> $new_exposed    Requested exposed list.
  * @return int 0 on full success; 1, 2, or 3 naming the stage that failed to certify.
  */
-function aafm_paired_meta_write_three_stage( string $deny_option, string $exposed_option, array $old_deny, array $new_deny, array $new_exposed ): int {
+function aafm_paired_meta_write_three_stage( string $deny_option, string $exposed_option, array $new_deny, array $new_exposed ): int {
+	$views    = aafm_read_option_views( $deny_option );
+	$old_deny = ( $views['db_found'] && is_array( $views['db_value'] ) ) ? array_map( 'strval', $views['db_value'] ) : array();
+
 	$union = array_values( array_unique( array_merge( $old_deny, $new_deny ) ) );
 
 	if ( ! aafm_update_option_verified( $deny_option, $union ) ) {
@@ -745,10 +757,9 @@ function aafm_ajax_save_meta_keys(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$posted   = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$keys     = aafm_sanitize_allowed_meta_keys_input( $posted );
-	$denied   = aafm_sanitize_denied_meta_keys_input( $posted );
-	$old_deny = aafm_denied_meta_keys();
+	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$keys   = aafm_sanitize_allowed_meta_keys_input( $posted );
+	$denied = aafm_sanitize_denied_meta_keys_input( $posted );
 
 	$deny_label    = __( 'Denied post meta keys', 'agent-abilities-for-mcp' );
 	$exposed_label = __( 'Exposed post meta keys', 'agent-abilities-for-mcp' );
@@ -757,7 +768,7 @@ function aafm_ajax_save_meta_keys(): void {
 	// read or write, so a stale persistent object cache silently keeping the old list live (Codex
 	// hunt F1) must be reported as a failed save, not a success. The three-stage write order keeps
 	// every intermediate state at least as strict as before this request (Codex round 6, B6-1).
-	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_meta_keys', 'aafm_allowed_meta_keys', $old_deny, $denied, $keys );
+	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_meta_keys', 'aafm_allowed_meta_keys', $denied, $keys );
 	if ( 1 === $stage ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', $deny_label );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );
@@ -813,10 +824,9 @@ function aafm_ajax_save_user_meta_keys(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$posted   = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$exposed  = aafm_sanitize_exposed_user_meta_keys_input( $posted );
-	$denied   = aafm_sanitize_denied_user_meta_keys_input( $posted );
-	$old_deny = aafm_denied_user_meta_keys();
+	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$exposed = aafm_sanitize_exposed_user_meta_keys_input( $posted );
+	$denied  = aafm_sanitize_denied_user_meta_keys_input( $posted );
 
 	$deny_label    = __( 'Denied user meta keys', 'agent-abilities-for-mcp' );
 	$exposed_label = __( 'Exposed user meta keys', 'agent-abilities-for-mcp' );
@@ -825,7 +835,7 @@ function aafm_ajax_save_user_meta_keys(): void {
 	// read or write (Codex hunt F1). The three-stage write order keeps every intermediate state
 	// at least as strict as before this request, even when this request narrows both lists at
 	// once (Codex round 6, B6-1; superseding the simple deny-first order from round 5, R5-1).
-	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_user_meta_keys', 'aafm_exposed_user_meta_keys', $old_deny, $denied, $exposed );
+	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_user_meta_keys', 'aafm_exposed_user_meta_keys', $denied, $exposed );
 	if ( 1 === $stage ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_user_meta_keys', $deny_label );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );
@@ -856,10 +866,9 @@ function aafm_ajax_save_term_meta_keys(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$posted   = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$exposed  = aafm_sanitize_exposed_term_meta_keys_input( $posted );
-	$denied   = aafm_sanitize_denied_term_meta_keys_input( $posted );
-	$old_deny = aafm_denied_term_meta_keys();
+	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$exposed = aafm_sanitize_exposed_term_meta_keys_input( $posted );
+	$denied  = aafm_sanitize_denied_term_meta_keys_input( $posted );
 
 	$deny_label    = __( 'Denied term meta keys', 'agent-abilities-for-mcp' );
 	$exposed_label = __( 'Exposed term meta keys', 'agent-abilities-for-mcp' );
@@ -868,7 +877,7 @@ function aafm_ajax_save_term_meta_keys(): void {
 	// read or write (Codex hunt F1). The three-stage write order keeps every intermediate state
 	// at least as strict as before this request, even when this request narrows both lists at
 	// once (Codex round 6, B6-1; superseding the simple deny-first order from round 5, R5-1).
-	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_term_meta_keys', 'aafm_exposed_term_meta_keys', $old_deny, $denied, $exposed );
+	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_term_meta_keys', 'aafm_exposed_term_meta_keys', $denied, $exposed );
 	if ( 1 === $stage ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_term_meta_keys', $deny_label );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );

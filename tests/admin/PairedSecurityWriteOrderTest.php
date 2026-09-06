@@ -290,6 +290,90 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
+	 * Plant a real, unrelated-to-`*` DB row while making a persistent-cache-style layer answer
+	 * with a different, narrower value for the same option - the same shape UpgradeMigrationTest
+	 * and PersistentObjectCacheSwitchTest use, adapted to a non-absent row.
+	 *
+	 * @param string            $option      Option name.
+	 * @param array<int,string> $stale_value Value the cache should serve instead of the real row.
+	 * @return void
+	 */
+	private function plant_stale_alloptions_value( string $option, array $stale_value ): void {
+		$all            = wp_load_alloptions( true );
+		$all[ $option ] = $stale_value;
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame( $stale_value, get_option( $option, 'MISSING' ), 'Precondition: the stale cache is what get_option() sees.' );
+	}
+
+	/**
+	 * Codex round 7, R7-1: the deny-all sentinel `*` must survive the three-stage union even
+	 * when both requested lists are submitted empty. Before this fix, the "old deny" half of
+	 * the union came from aafm_denied_meta_keys(), which strips `*` for display purposes, so
+	 * stage 1 certified an EMPTY union - discarding a live deny-all - and a subsequent exposed
+	 * write failure left the old exposed key reachable with nothing left denying it, wider than
+	 * both the old and the requested policy.
+	 */
+	public function test_post_meta_wildcard_deny_survives_stage_one_when_new_lists_are_empty(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_denied_meta_keys', array( '*' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'secret' ) );
+		// The exposed write can never persist; it snaps back to the old ('secret') list.
+		$this->make_option_write_unpersistable( 'aafm_allowed_meta_keys', serialize( array( 'secret' ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- raw row value for a direct REPLACE, mirrors PersistentObjectCacheSwitchTest.
+
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		// Both fields submitted empty: neither list is meant to change.
+		unset( $_POST['aafm_meta_keys'], $_POST['aafm_deny_meta_keys'] );
+
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the exposed write did not persist.' );
+		$this->assertContains(
+			'*',
+			(array) get_option( 'aafm_denied_meta_keys' ),
+			'The deny-all sentinel must still be in effect after stage 1 - it must never be dropped just because both submitted lists were empty.'
+		);
+		$this->assertSame( array( 'secret' ), get_option( 'aafm_allowed_meta_keys' ), 'The exposed list must stay at its old value: the write failed and was never applied.' );
+	}
+
+	/**
+	 * Codex round 7, R7-1's other origin for a wrong "old deny" snapshot: a persistent object
+	 * cache still answering with a narrower value than the real database row. Before this fix,
+	 * the "old deny" half of the union came from a cache-trusting get_option(), so a stale cache
+	 * claiming the deny list was already empty would make stage 1 certify an empty union even
+	 * though the database still explicitly denied the key - permanently erasing that denial
+	 * regardless of whether the paired exposed write ever succeeds.
+	 */
+	public function test_post_meta_stale_cache_old_deny_does_not_narrow_the_union(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_denied_meta_keys', array( 'secret' ) );
+		update_option( 'aafm_allowed_meta_keys', array() );
+		// The exposed write can never persist; it snaps back to the old (empty) list.
+		$this->make_option_write_unpersistable( 'aafm_allowed_meta_keys', serialize( array() ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- raw row value for a direct REPLACE, mirrors PersistentObjectCacheSwitchTest.
+		// A stale cache layer claims the deny list is already empty, even though the real row
+		// (which aafm_read_option_views() must consult instead) still holds 'secret'.
+		$this->plant_stale_alloptions_value( 'aafm_denied_meta_keys', array() );
+
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['aafm_meta_keys'] = 'secret';
+		unset( $_POST['aafm_deny_meta_keys'] );
+
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the exposed write did not persist.' );
+		$this->assertSame(
+			array( 'secret' ),
+			get_option( 'aafm_denied_meta_keys' ),
+			'The union must be built from the real database row, not a stale cache value that hides the live deny entry.'
+		);
+	}
+
+	/**
 	 * Codex round 6, B6-1's settings.php half: the IP allowlist write already runs before any
 	 * OAuth-on write in aafm_ajax_save_settings(), so if the allowlist write fails, OAuth must
 	 * never be turned on in the same request - even when the request explicitly asked for it.

@@ -745,11 +745,14 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 	// own wp_update_post() call (Codex hunt F4), but create only ever verified the address/
 	// location fields below - a wp_insert_post_data filter silently reverting the title, content,
 	// or status would still report success. Same confirm-by-reread principle, applied here too.
+	// Codex round 6 B6-3: compare against each field's CANONICAL sanitize_post_field() form, not
+	// the pre-write intent - a false mismatch here used to DELETE an otherwise valid listing, so
+	// this is the highest-stakes site for the false-normalization bug this fix closes.
 	$after = get_post( $post_id );
 	if ( ! $after instanceof WP_Post
-		|| $after->post_title !== $title
-		|| $after->post_content !== $content
-		|| $after->post_status !== $status
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_status', $status )
 	) {
 		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title, content, or status could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
 	}
@@ -872,11 +875,13 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		// similar) filter silently vetoing or normalizing the title/content would report
 		// success while the stored post kept its old values. Confirm by reread, the same
 		// pattern aafm_geodirectory_write_fields() already applies one call below to the
-		// address/location fields, extended to cover the core post fields too.
+		// address/location fields, extended to cover the core post fields too. Codex round 6
+		// B6-3: compare against each field's CANONICAL sanitize_post_field() form, not the
+		// pre-write intent, so a legitimate normalization is not mistaken for a veto.
 		$after = get_post( $id );
 		if ( ! $after instanceof WP_Post
-			|| ( array_key_exists( 'post_title', $update ) && $after->post_title !== $update['post_title'] )
-			|| ( array_key_exists( 'post_content', $update ) && $after->post_content !== $update['post_content'] )
+			|| ( array_key_exists( 'post_title', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_title', $update['post_title'] ) )
+			|| ( array_key_exists( 'post_content', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_content', $update['post_content'] ) )
 		) {
 			return new WP_Error(
 				'aafm_geodirectory_write_unconfirmed',

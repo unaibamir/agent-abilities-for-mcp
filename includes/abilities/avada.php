@@ -458,8 +458,10 @@ function aafm_exec_avada_replace_text( array $input ) {
 	// wp_update_post() ever ran, and never re-validated against what actually landed in
 	// storage - a wp_insert_post_data (or similar) filter revising the content on save would
 	// report a count and structure that no longer matched what was stored. Confirm the exact
-	// intended content actually landed before reporting success.
-	if ( ! $fresh instanceof WP_Post || $fresh->post_content !== $new ) {
+	// intended content actually landed before reporting success. Codex round 6 B6-3: compare
+	// against the CANONICAL sanitize_post_field() form, not $new itself, so a legitimate
+	// normalization is not mistaken for a veto.
+	if ( ! $fresh instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new ) ) {
 		return new WP_Error(
 			'aafm_avada_write_unconfirmed',
 			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )

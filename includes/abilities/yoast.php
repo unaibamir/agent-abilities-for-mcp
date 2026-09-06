@@ -399,8 +399,12 @@ function aafm_exec_yoast_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Tracked by real META KEY, not the unified field name, so the confirmation pass below runs
+	// sanitize_meta() against the exact key a registered sanitize callback would fire on.
+	$post_type     = (string) get_post_type( $id );
+	$expected_meta = array();
+
 	$url_fields = aafm_yoast_url_fields();
-	$expected   = array();
 	foreach ( aafm_yoast_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
@@ -410,7 +414,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
 		// is stripped unless it is slashed first, exactly like the sibling meta writers.
 		update_post_meta( $id, $key, wp_slash( $clean ) );
-		$expected[ $field ] = $clean;
+		$expected_meta[ $key ] = $clean;
 	}
 
 	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
@@ -422,7 +426,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 			// An out-of-enum value is dropped (not written), so a bad directive cannot persist.
 			if ( in_array( $raw, $spec['enum'], true ) ) {
 				update_post_meta( $id, $spec['key'], wp_slash( $raw ) );
-				$expected[ $field ] = $raw;
+				$expected_meta[ $spec['key'] ] = $raw;
 			}
 			continue;
 		}
@@ -435,17 +439,17 @@ function aafm_exec_yoast_update_post( array $input ) {
 			)
 		);
 		update_post_meta( $id, $spec['key'], wp_slash( implode( ',', $kept ) ) );
-		$expected[ $field ] = implode( ',', $kept );
+		$expected_meta[ $spec['key'] ] = implode( ',', $kept );
 	}
 
 	// Codex round 5 R5-2: every update_post_meta() call above discarded its return value, so a
 	// site-installed update_post_metadata filter vetoing any of these writes would report success
 	// while the response still carried the requested value rather than what storage actually
-	// holds. Confirm every field the caller actually wrote against a fresh read before reporting
-	// success (matches the sibling meta writers in meta.php, terms.php, user-meta.php).
-	$confirmed = aafm_yoast_read_fields( $id );
-	foreach ( $expected as $field => $value ) {
-		if ( $confirmed[ $field ] !== $value ) {
+	// holds. Codex round 6 B6-3: compare against the CANONICAL sanitize_meta() form of each write,
+	// not its pre-write intent, so a registered sanitize callback's legitimate normalization is not
+	// mistaken for a veto (matches the sibling meta writers in meta.php, terms.php, user-meta.php).
+	foreach ( $expected_meta as $key => $value ) {
+		if ( ! aafm_meta_write_confirmed( get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
 			return new WP_Error(
 				'aafm_yoast_write_unconfirmed',
 				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
@@ -453,7 +457,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 		}
 	}
 
-	return $confirmed;
+	return aafm_yoast_read_fields( $id );
 }
 
 /**

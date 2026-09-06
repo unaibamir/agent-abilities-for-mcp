@@ -266,16 +266,32 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 	// fresh read with no comparison to what was requested, so a site-installed
 	// update_post_metadata filter vetoing this write would report success while returning the
 	// OLD values. Confirm every field the caller actually touched against what landed.
+	//
+	// Codex round 6 B6-3: the whole slim_seo array is ONE meta value, so sanitize_meta() must
+	// see the entire array the way update_post_meta() actually sanitized it, not a per-field
+	// scalar reapplication of the same hook (which would misfire against a filter that expects
+	// its normal array shape). Sanitize the whole intended array once, then compare each field the
+	// caller touched against that canonical form rather than against the plugin's own pre-write
+	// intent - a legitimate normalization from a registered sanitize_post_meta_slim_seo callback
+	// no longer reads as a false error. This is a deliberate divergence from the scalar
+	// aafm_meta_write_confirmed() helper used by every sibling SEO integration: routing through it
+	// per field here would run the whole-array hook against a lone scalar and misfire.
+	//
+	// $stored is slashed the same way update_post_meta() above slashed it, since that is exactly
+	// the input core's own sanitize_meta() call saw at write time - comparing against an unslashed
+	// recomputation would misjudge a quote/backslash-sensitive registered sanitizer.
+	$canonical = wp_unslash( sanitize_meta( 'slim_seo', wp_slash( $stored ), 'post', (string) get_post_type( $id ) ) );
+	$canonical = is_array( $canonical ) ? $canonical : array();
 	$confirmed = aafm_slim_seo_read_fields( $id );
 	foreach ( aafm_slim_seo_fields() as $field ) {
-		if ( array_key_exists( $field, $input ) && $confirmed[ $field ] !== $stored[ $field ] ) {
+		if ( array_key_exists( $field, $input ) && (string) ( $canonical[ $field ] ?? '' ) !== $confirmed[ $field ] ) {
 			return new WP_Error(
 				'aafm_slim_seo_write_unconfirmed',
 				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
 			);
 		}
 	}
-	if ( array_key_exists( 'noindex', $input ) && $confirmed['noindex'] !== $stored['noindex'] ) {
+	if ( array_key_exists( 'noindex', $input ) && ! empty( $canonical['noindex'] ) !== $confirmed['noindex'] ) {
 		return new WP_Error(
 			'aafm_slim_seo_write_unconfirmed',
 			__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )

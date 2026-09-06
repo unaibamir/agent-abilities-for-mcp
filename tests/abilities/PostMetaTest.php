@@ -371,4 +371,44 @@ final class PostMetaTest extends TestCase {
 			'A vetoed meta write must return an error, not a success reporting the old value.'
 		);
 	}
+
+	/**
+	 * Codex round 6 B6-3: the confirmation guard compared the fresh read against the plugin's own
+	 * pre-write intent, so a site-registered sanitize_post_meta_{key} callback (register_meta()'s
+	 * sanitize_callback lands there, exactly like update_metadata() itself runs on every meta
+	 * write) that legitimately normalizes the value on save was indistinguishable from a filter
+	 * vetoing the write, and the ability returned a false error even though the write landed
+	 * exactly as the site's own sanitizer defines "landed".
+	 */
+	public function test_update_meta_confirms_a_legitimate_sanitize_meta_normalization(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		// A site-registered sanitizer that appends a fixed suffix, the same shape as a vendor
+		// plugin's own meta normalization (trimming, casting, or otherwise reshaping the value on
+		// its way into storage).
+		$normalize = static fn( $value ) => $value . '-normalized';
+		add_filter( 'sanitize_post_meta_aafm_note', $normalize );
+		$out       = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		remove_filter( 'sanitize_post_meta_aafm_note', $normalize );
+
+		$this->assertIsArray(
+			$out,
+			'A write that landed in its sanitizer-normalized form must not be reported as an unconfirmed write.'
+		);
+		$this->assertSame(
+			'new value-normalized',
+			get_post_meta( $id, 'aafm_note', true ),
+			'precondition: the registered sanitizer must have actually normalized the stored value.'
+		);
+		$this->assertSame( 'new value-normalized', $out['value'], 'The response must reflect the value actually stored, not the caller\'s pre-normalization intent.' );
+	}
 }

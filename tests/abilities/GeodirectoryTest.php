@@ -711,6 +711,25 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 6 B6-3: the title/content/status confirmation compared the fresh read against
+	 * the pre-write intent, so a legitimate save-time normalization was indistinguishable from a
+	 * veto - and here that false mismatch DELETES an otherwise valid listing
+	 * (aafm_geodirectory_rollback_unconfirmed_create()), not merely reports an error. An acting
+	 * user who lacks unfiltered_html gets core's own title_save_pre kses on save (kses_init()),
+	 * which unconditionally entity-encodes a bare ampersand the same way it always does for that
+	 * role. The listing must survive with its title in the canonical, actually-stored form.
+	 */
+	public function test_create_confirms_a_legitimate_ampersand_title_normalization_and_does_not_delete_the_listing(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ), 'precondition: an author must not hold unfiltered_html.' );
+
+		$out = aafm_exec_geodirectory_create_listing( array( 'title' => 'Fish & Chips Diner' ) );
+
+		$this->assertIsArray( $out, 'A create whose title landed in its kses-normalized form must not be rolled back as unconfirmed.' );
+		$this->assertSame( 'Fish &amp; Chips Diner', get_post( $out['listing_id'] )->post_title );
+	}
+
+	/**
 	 * Codex final round 2 MEDIUM: a legitimate third-party filter on 'geodir_get_post_info' that
 	 * merely reformats the returned value (not GeoDirectory's own default behavior - something
 	 * another active plugin or theme could add) must not make the write-confirmation check see a

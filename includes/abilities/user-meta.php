@@ -281,8 +281,11 @@ function aafm_exec_update_user_meta( array $input ) {
 	// Codex round 5 R5-2: update_user_meta()'s return value only catches an outright failure. A
 	// metadata filter that short-circuits update_user_metadata to a truthy value bypasses the
 	// write while reporting success, so checking only `false === update_user_meta(...)` never
-	// caught it. Confirm what actually landed unconditionally instead.
-	if ( ! aafm_meta_write_confirmed( $stored, $value ) ) {
+	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
+	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
+	// sanitize callback's legitimate normalization is not mistaken for a veto. Users carry no
+	// object subtype.
+	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'user' ) ) {
 		return aafm_generic_error();
 	}
 	return array(

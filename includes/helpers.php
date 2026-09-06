@@ -2045,19 +2045,78 @@ function aafm_generic_error(): WP_Error {
 }
 
 /**
- * Whether a scalar meta write actually landed as requested. Meta round-trips through a longtext
- * column, so the stored value reads back as a string; comparing stringified forms avoids a false
- * mismatch on a genuine no-op (re-sending an int or bool unchanged) while still catching a
- * metadata filter that short-circuits the write and reports success without ever touching
- * storage - update_post_meta()/update_term_meta()/update_user_meta() only return false on an
- * outright failure, not on that kind of silent veto.
+ * Whether a scalar meta write actually landed as requested, judged against the value's CANONICAL
+ * stored form rather than the plugin's own pre-write intent.
  *
- * @param mixed $stored   The value read back from storage after the write.
- * @param mixed $intended The value the write attempted to store.
+ * Core's own update_metadata() (the shared engine behind update_post_meta()/update_term_meta()/
+ * update_user_meta(), wp-includes/meta.php) unslashes the incoming SLASHED value and then runs it
+ * through sanitize_meta( $meta_key, $meta_value, $object_type, $object_subtype ) before it ever
+ * reaches storage. A vendor or core filter registered on that meta key's sanitize_{type}_meta_{key}
+ * hook (register_meta()'s sanitize_callback lands here) can legitimately trim, cast, or otherwise
+ * normalize the value on the way in. Comparing a fresh read against the plugin's pre-write intent
+ * instead of that canonical form reports a false error on a write that landed exactly as the
+ * site's own registered sanitizer defines "landed" - Codex round 6 B6-3. Running the same
+ * sanitize_meta() call here keeps a genuine veto caught: a filter that reverts to the OLD value,
+ * or an update_*_metadata short-circuit that never wrote at all, still differs from the sanitized
+ * NEW value. Every call site writes $intended slashed (wp_slash()), and that is exactly the input
+ * core's own sanitize_meta() call sees at write time, so this slashes $intended the same way before
+ * sanitizing and unslashes the result before comparing - matching aafm_post_field_write_confirmed()'s
+ * pipeline below - so a quote/backslash-sensitive registered sanitizer is judged against the same
+ * input WordPress actually sanitized, not the plugin's raw pre-slash intent. A scalar meta value
+ * round-trips through a longtext column, so the stored value reads back as a string; comparing
+ * stringified forms also avoids a false mismatch on a genuine no-op (re-sending an int or bool
+ * unchanged). An array-valued meta key (a serialized token list, for example) is compared by exact
+ * array equality instead, since casting an array to string is a PHP warning, not a comparison.
+ *
+ * @param mixed  $stored         The value read back from storage after the write.
+ * @param mixed  $intended       The unslashed value the write attempted to store.
+ * @param string $meta_key       Meta key.
+ * @param string $object_type    'post', 'term', or 'user'.
+ * @param string $object_subtype The post type / taxonomy the meta key is registered under, or ''
+ *                                for an object type that carries no subtype (user meta).
  * @return bool
  */
-function aafm_meta_write_confirmed( $stored, $intended ): bool {
-	return (string) $stored === (string) $intended;
+function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
+	$expected = wp_unslash( sanitize_meta( $meta_key, wp_slash( $intended ), $object_type, $object_subtype ) );
+	if ( is_array( $expected ) || is_array( $stored ) ) {
+		return $stored === $expected;
+	}
+	return (string) $stored === (string) $expected;
+}
+
+/**
+ * The post-field sibling of aafm_meta_write_confirmed(): whether a post-field write (post_title,
+ * post_content, post_excerpt, post_status, and so on) landed as intended, judged against the
+ * field's CANONICAL stored form rather than the plugin's own pre-write intent.
+ *
+ * Core's own wp_insert_post()/wp_update_post() run the whole $postarr through sanitize_post( $postarr, 'db' )
+ * (wp-includes/post.php), which for a post_-prefixed field applies the pre_{$field} then
+ * {$field_no_prefix}_save_pre filters - verified by reading sanitize_post_field()'s 'db' branch
+ * against this plugin's WP floor. That is exactly where kses_init() attaches wp_filter_post_kses()
+ * to content_save_pre/excerpt_save_pre (and wp_filter_kses() to title_save_pre, alongside core's
+ * unconditional `trim` on the same hook) whenever the acting user lacks unfiltered_html, and where
+ * a vendor plugin can hook its own normalization. Both of those save-time filters expect and
+ * return SLASHED data (wp_filter_kses()/wp_filter_post_kses() strip and re-add slashes
+ * internally), matching how the real write always runs with wp_slash() applied first, so this
+ * mirrors the exact pipeline: slash the intended value, sanitize it at 'db' context, then unslash
+ * the result before comparing it to a fresh, cache-busted read. A legitimate normalization no
+ * longer reports as an error; a genuine veto (a filter reverting to the OLD value) still differs
+ * from the canonical NEW value and is still caught.
+ *
+ * @param int    $post_id  Post id, already saved.
+ * @param string $field    Post field name (post_title, post_content, post_excerpt, post_status, ...).
+ * @param string $intended The unslashed value the write attempted to persist.
+ * @return bool
+ */
+function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended ): bool {
+	clean_post_cache( $post_id );
+	$sanitized = sanitize_post_field( $field, wp_slash( $intended ), $post_id, 'db' );
+	// This helper is only ever called for string post fields (post_title, post_content,
+	// post_excerpt, post_status); sanitize_post_field()'s broader return type (it also handles
+	// int and array-of-int fields) is guarded here rather than widening this function's contract.
+	$expected = wp_unslash( is_scalar( $sanitized ) ? (string) $sanitized : '' );
+	$stored   = get_post_field( $field, $post_id, 'raw' );
+	return ( is_scalar( $stored ) ? (string) $stored : '' ) === $expected;
 }
 
 /**

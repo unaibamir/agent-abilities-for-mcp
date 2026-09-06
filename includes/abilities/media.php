@@ -951,7 +951,10 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		// Codex round 5 R5-2: update_post_meta()'s return value was discarded outright, so a
 		// metadata filter vetoing the alt write would report success with the old alt text still
 		// in storage. Confirm it landed, same orphan-cleanup discipline as the branches above.
-		if ( ! aafm_meta_write_confirmed( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean ) ) {
+		// Codex round 6 B6-3: compare against the CANONICAL sanitize_meta() form, not the pre-write
+		// intent, so a registered sanitize callback's legitimate normalization is not mistaken for
+		// a veto.
+		if ( ! aafm_meta_write_confirmed( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', 'attachment' ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
@@ -1612,17 +1615,20 @@ function aafm_exec_update_media( array $input ) {
 	// Codex round 5 R5-2: the post-field write was only checked via is_wp_error(), and the alt
 	// meta write's return value was discarded outright - a wp_insert_post_data filter reverting a
 	// field, or an update_post_metadata filter vetoing the alt write, would report success while
-	// the response carried the caller's stale value. Confirm every field actually provided.
-	if ( $has_title && ( $postarr['post_title'] ?? null ) !== $fresh->post_title ) {
+	// the response carried the caller's stale value. Confirm every field actually provided. Codex
+	// round 6 B6-3: compare against each field's CANONICAL sanitize_post_field()/sanitize_meta()
+	// form, not the pre-write intent, so a legitimate normalization (kses for a user without
+	// unfiltered_html, the core `trim` on title) is not mistaken for a veto.
+	if ( $has_title && ! aafm_post_field_write_confirmed( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ) ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_caption && ( $postarr['post_excerpt'] ?? null ) !== $fresh->post_excerpt ) {
+	if ( $has_caption && ! aafm_post_field_write_confirmed( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ) ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_description && $fresh->post_content !== $postarr['post_content'] ) {
+	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'] ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_alt && ! aafm_meta_write_confirmed( get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean ) ) {
+	if ( $has_alt && ! aafm_meta_write_confirmed( get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', 'attachment' ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
 

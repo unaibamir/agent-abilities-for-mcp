@@ -353,8 +353,10 @@ function aafm_exec_update_post_meta( array $input ) {
 	// Codex round 5 R5-2: update_post_meta()'s return value only catches an outright failure. A
 	// metadata filter that short-circuits update_post_metadata to a truthy value bypasses the
 	// write while reporting success, so checking only `false === update_post_meta(...)` never
-	// caught it. Confirm what actually landed unconditionally instead.
-	if ( ! aafm_meta_write_confirmed( $stored, $value ) ) {
+	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
+	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
+	// sanitize callback's legitimate normalization is not mistaken for a veto.
+	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'post', (string) get_post_type( $id ) ) ) {
 		return aafm_generic_error();
 	}
 	return array(

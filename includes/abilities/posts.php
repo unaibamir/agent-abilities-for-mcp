@@ -1635,8 +1635,11 @@ function aafm_exec_replace_in_post( array $input ) {
 	// Codex round 5 R5-2: only is_wp_error() was checked here, so a wp_insert_post_data filter
 	// that vetoed or reverted the content would report the pre-computed replacement count as
 	// though it had landed. Confirm the exact intended content actually made it to storage,
-	// matching Avada's replace-text fix (Codex hunt F4).
-	if ( ! $updated instanceof WP_Post || $updated->post_content !== $new ) {
+	// matching Avada's replace-text fix (Codex hunt F4). Codex round 6 B6-3: compare against the
+	// CANONICAL sanitize_post_field() form, not $new itself, so a legitimate normalization (kses
+	// for a user without unfiltered_html re-running over the whole assembled document) is not
+	// mistaken for a veto.
+	if ( ! $updated instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new ) ) {
 		return new WP_Error(
 			'aafm_replace_write_unconfirmed',
 			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )
@@ -1926,9 +1929,11 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// Codex round 5 R5-2: is_wp_error() alone does not catch a wp_insert_post_data filter
 		// that vetoes or reverts the content, which would count a post as updated when nothing
 		// actually changed. Confirm the exact intended content landed, matching the single-post
-		// replace-text fix above.
+		// replace-text fix above. Codex round 6 B6-3: compare against the CANONICAL
+		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
+		// mistaken for a veto.
 		$after = get_post( (int) $result );
-		if ( ! $after instanceof WP_Post || $after->post_content !== $new ) {
+		if ( ! $after instanceof WP_Post || ! aafm_post_field_write_confirmed( $post->ID, 'post_content', $new ) ) {
 			++$failed;
 			continue;
 		}

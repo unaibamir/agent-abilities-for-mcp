@@ -1453,6 +1453,13 @@ function aafm_register_mcp_server( $adapter ): void {
 
 	// Per-connection capability gate at request time (the user is anonymous here; see
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.
+	//
+	// Codex hunt F11: a separate plugin's own later-priority mcp_adapter_tools_list callback
+	// could still re-add a tool DTO this filter already removed - discovery narrowing here is
+	// best-effort, not the real gate. Execution stays authoritative and independent: every call
+	// still passes through aafm_user_can_call_ability() at the register.php chokepoint, so a
+	// tool restored to the listing this way is refused (and logged) the same as any other call
+	// to a hidden tool. Accepted as-is; not raising the priority.
 	add_filter( 'mcp_adapter_tools_list', 'aafm_filter_mcp_tools_list', 5, 2 );
 
 	// Advertise only the capabilities we actually implement (tools); strip prompts/resources.

@@ -404,13 +404,21 @@ function aafm_ability_list_permission( string $name ): ?callable {
 
 		// GeoDirectory (added 1.7.4, default-off): gd_place registers with the literal
 		// 'capability_type' => 'post', so its mapped caps are the SAME primitive names as the
-		// built-in post type - aafm_can_edit_post_family() applies unchanged. Both abilities gate
-		// per-object (aafm_perm_geodirectory_get()/aafm_perm_geodirectory_update(), both check
-		// edit_posts first and are false with empty input once a real listing_id is required).
-		// geodirectory-get-listings (list) and geodirectory-create-listing (create) are
-		// object-independent and need no case here - each falls through to its real
-		// permission_callback with empty input, the correct discovery answer.
+		// built-in post type. geodirectory-get-listings (list) and geodirectory-create-listing
+		// (create) are object-independent and need no case here - each falls through to its
+		// real permission_callback with empty input, the correct discovery answer.
+		//
+		// Codex hunt F10: aafm_perm_geodirectory_get() gates on the LITERAL edit_posts
+		// capability as an unconditional first check, not the wider edit family, so discovery
+		// must match that exact floor - the family() approximation below was showing the tool
+		// to a caller (e.g. one holding only edit_others_posts) who could never actually call
+		// it. aafm_perm_geodirectory_update() has no such unconditional check - it is purely
+		// per-object (current_user_can( 'edit_post', $post->ID )) - so it keeps the same
+		// conservative family() approximation used for every other per-object content-edit
+		// ability, which can only ever show the tool to a caller who may or may not be able to
+		// touch a given object, never to one who is refused regardless of the object.
 		case 'aafm/geodirectory-get-listing':
+			return static fn(): bool => current_user_can( 'edit_posts' );
 		case 'aafm/geodirectory-update-listing':
 			return static fn(): bool => aafm_can_edit_post_family();
 

@@ -39,6 +39,36 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertSame( 'write', $registry['aafm/geodirectory-update-listing']['risk'] );
 	}
 
+	/**
+	 * Codex hunt F10: discovery for geodirectory-get-listing used the broader
+	 * edit_posts/edit_others_posts/edit_published_posts family, while its real permission
+	 * callback (aafm_perm_geodirectory_get()) requires the literal edit_posts capability as an
+	 * unconditional first check. A role holding only edit_others_posts saw the tool in
+	 * tools/list but could never actually call it - discovery must match that literal floor.
+	 */
+	public function test_get_listing_discovery_matches_its_literal_edit_posts_floor(): void {
+		$role = get_role( 'subscriber' );
+		$role->add_cap( 'edit_others_posts' );
+		$user = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $user );
+
+		try {
+			$this->assertFalse(
+				aafm_user_can_discover_ability( 'aafm/geodirectory-get-listing' ),
+				'edit_others_posts alone must not surface a tool whose real floor requires edit_posts.'
+			);
+		} finally {
+			$role->remove_cap( 'edit_others_posts' );
+		}
+
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/geodirectory-get-listing' ),
+			'edit_posts (author\'s native cap) must still surface the tool.'
+		);
+	}
+
 	public function test_create_then_get_listing_round_trips_the_address_fields(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
 

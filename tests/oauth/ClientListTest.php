@@ -158,4 +158,52 @@ final class ClientListTest extends TestCase {
 
 		$this->assertSame( array(), aafm_oauth_list_grants() );
 	}
+
+	/**
+	 * S4 of the 1.7.4 security assessment: nothing snapshots the approver's role at
+	 * consent time, so the grants list must read it LIVE - the same grant row must
+	 * reflect a role change made after the grant was approved, with no re-approval
+	 * and no change to the consent row itself.
+	 */
+	public function test_list_grants_reports_the_users_current_role_not_a_snapshot_at_consent(): void {
+		// Subscriber, not editor: on a single-site install core grants editors
+		// unfiltered_html by default, which aafm_oauth_user_is_high_privilege() itself
+		// treats as an escalation capability. Subscriber holds none of the five checked
+		// capabilities, so it is the genuinely low-privilege baseline this test needs.
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
+		$this->seed_consent( $user_id, 'client_abc' );
+
+		$before = aafm_oauth_list_grants();
+		$this->assertSame( array( 'subscriber' ), $before[0]['user_roles'] );
+		$this->assertFalse( $before[0]['is_high_privilege'], 'A subscriber is not high privilege.' );
+
+		// Widen the role after the grant was approved - no re-consent, same row.
+		$user = get_userdata( $user_id );
+		$this->assertInstanceOf( \WP_User::class, $user );
+		$user->set_role( 'administrator' );
+
+		$after = aafm_oauth_list_grants();
+		$this->assertCount( 1, $after, 'The same single grant row, not a new one.' );
+		$this->assertSame( array( 'administrator' ), $after[0]['user_roles'], 'The role must be read live, not from a stored snapshot.' );
+		$this->assertTrue( $after[0]['is_high_privilege'], 'An administrator must be flagged high privilege.' );
+	}
+
+	/**
+	 * The high-privilege flag must reuse the same live capability check the consent screen's
+	 * own administrator warning uses (aafm_oauth_user_is_high_privilege()), not a role-name
+	 * string match - a non-administrator role holding manage_options must also be flagged.
+	 */
+	public function test_list_grants_flags_high_privilege_by_capability_not_just_role_name(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user    = get_userdata( $user_id );
+		$this->assertInstanceOf( \WP_User::class, $user );
+		$user->add_cap( 'manage_options' );
+
+		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
+		$this->seed_consent( $user_id, 'client_abc' );
+
+		$grants = aafm_oauth_list_grants();
+		$this->assertTrue( $grants[0]['is_high_privilege'], 'A capability that can administer the site must be flagged regardless of role name.' );
+	}
 }

@@ -792,6 +792,15 @@ function aafm_ajax_test_connection(): void {
  * shows a one-line empty state when it has no rows. Revoke buttons are wired in admin.js
  * (confirm + nonce-checked AJAX); the nonce field printed here is what those calls read.
  *
+ * The Active Grants table's "Current role" column reads each identity's LIVE role from
+ * aafm_oauth_list_grants(), never a value captured when the grant was approved (1.7.4
+ * security assessment, S4): nothing in the schema stores a consent-time snapshot to diff
+ * against, so this is the honest, no-schema-change way to give an operator visibility into
+ * what a grant currently authorizes, even though it cannot by itself flag that a role
+ * changed since approval. A high-privilege identity is called out with the same
+ * aafm-pill-warn styling and the same "administrator access" language the consent screen
+ * itself uses (aafm_oauth_user_is_high_privilege(), authorize.php).
+ *
  * Only ever called from inside the capability-gated Connection tab, within the
  * aafm_oauth_enabled() card.
  *
@@ -914,11 +923,17 @@ function aafm_render_oauth_management(): void {
 	if ( empty( $grants ) ) {
 		echo '<p class="aafm-empty-state">' . esc_html__( 'No one has approved an OAuth connection yet.', 'agent-abilities-for-mcp' ) . '</p>';
 	} else {
-		$scope_hint = __( 'The app can only do what this user\'s role allows and what you have turned on under Abilities.', 'agent-abilities-for-mcp' );
+		$scope_hint     = __( 'The app can only do what this user\'s role allows and what you have turned on under Abilities.', 'agent-abilities-for-mcp' );
+		$role_names_map = wp_roles()->get_names();
 
 		echo '<div class="aafm-table-wrap">';
 		echo '<table class="widefat striped aafm-oauth-table aafm-grants-table"><thead><tr>';
 		echo '<th>' . esc_html__( 'User', 'agent-abilities-for-mcp' ) . '</th>';
+		printf(
+			'<th><span title="%1$s">%2$s</span></th>',
+			esc_attr__( "The user's role right now, not necessarily what it was when they approved this connection. A token always acts with whatever this identity can currently do.", 'agent-abilities-for-mcp' ),
+			esc_html__( 'Current role', 'agent-abilities-for-mcp' )
+		);
 		echo '<th>' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
 		echo '<th>' . esc_html__( 'Scope', 'agent-abilities-for-mcp' ) . '</th>';
 		echo '<th>' . esc_html__( 'Granted', 'agent-abilities-for-mcp' ) . '</th>';
@@ -939,6 +954,26 @@ function aafm_render_oauth_management(): void {
 				esc_html( $grant['user_display'] ),
 				esc_html( $grant['user_login'] )
 			);
+
+			echo '<td>';
+			$role_names = array_map(
+				static function ( $role_slug ) use ( $role_names_map ) {
+					return isset( $role_names_map[ $role_slug ] ) ? translate_user_role( $role_names_map[ $role_slug ] ) : (string) $role_slug;
+				},
+				(array) $grant['user_roles']
+			);
+			$role_label = ! empty( $role_names ) ? implode( ', ', $role_names ) : __( 'No role', 'agent-abilities-for-mcp' );
+			if ( ! empty( $grant['is_high_privilege'] ) ) {
+				printf(
+					'<span class="aafm-pill aafm-pill-warn" title="%1$s">%2$s</span>',
+					esc_attr__( 'This connection currently acts with full administrator access.', 'agent-abilities-for-mcp' ),
+					esc_html( $role_label )
+				);
+			} else {
+				echo esc_html( $role_label );
+			}
+			echo '</td>';
+
 			printf( '<td>%s</td>', esc_html( $client_name ) );
 			printf(
 				'<td><span title="%1$s">%2$s</span></td>',

@@ -472,7 +472,17 @@ function aafm_oauth_list_clients(): array {
  * whose user no longer exists is skipped (there is nothing meaningful to show or
  * revoke for a deleted account). Ordered newest first. Read-only, prepared query.
  *
- * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string}>
+ * Also reads each user's CURRENT role and privilege level, not a value stored at
+ * consent time - the token table keeps no such snapshot, and none is added here. A
+ * token always acts with whatever capabilities the identity holds right now, so a
+ * live read is the only honest thing to show: the 1.7.4 security assessment (S4)
+ * noted that an operator has no visibility into what a grant currently means if the
+ * connected identity's role changed after they approved it. is_high_privilege reuses
+ * aafm_oauth_user_is_high_privilege() (authorize.php), the same check that drives the
+ * consent screen's own administrator warning, so "high privilege" means the same
+ * thing in both places.
+ *
+ * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string,user_roles:list<string>,is_high_privilege:bool}>
  */
 function aafm_oauth_list_grants(): array {
 	global $wpdb;
@@ -510,12 +520,14 @@ function aafm_oauth_list_grants(): array {
 		}
 
 		$out[] = array(
-			'user_id'      => $user_id,
-			'user_display' => (string) $user->display_name,
-			'user_login'   => (string) $user->user_login,
-			'client_id'    => (string) $row['client_id'],
-			'client_name'  => (string) $row['client_name'],
-			'granted_at'   => (string) $row['granted_at'],
+			'user_id'           => $user_id,
+			'user_display'      => (string) $user->display_name,
+			'user_login'        => (string) $user->user_login,
+			'client_id'         => (string) $row['client_id'],
+			'client_name'       => (string) $row['client_name'],
+			'granted_at'        => (string) $row['granted_at'],
+			'user_roles'        => array_values( array_map( 'strval', $user->roles ) ),
+			'is_high_privilege' => function_exists( 'aafm_oauth_user_is_high_privilege' ) && aafm_oauth_user_is_high_privilege( $user ),
 		);
 	}
 

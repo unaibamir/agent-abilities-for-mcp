@@ -21,7 +21,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_comments_definitions' );
 function aafm_register_comments_definitions( array $registry ): array {
 	$registry['aafm/get-comments']         = array(
 		'label'        => __( 'Get comments', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List approved comments for a post (email and IP are never returned).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List approved comments for a post, or across the whole site when post_id is omitted (email and IP are never returned). The whole-site listing is scanned up to an internal cap before pagination; truncated: true means that cap was hit, so total is a floor rather than an exact count.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',
@@ -110,11 +110,12 @@ function aafm_args_get_comments(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'comments' => array(
+				'comments'  => array(
 					'type'  => 'array',
 					'items' => array( 'type' => 'object' ),
 				),
-				'total'    => array( 'type' => 'integer' ),
+				'total'     => array( 'type' => 'integer' ),
+				'truncated' => array( 'type' => 'boolean' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_comments',
@@ -161,6 +162,32 @@ function aafm_perm_get_comments( array $input ): bool {
 }
 
 /**
+ * Scan ceiling for aafm_exec_get_comments()'s whole-site, unprivileged branch.
+ *
+ * Codex round 9, R9-4: that branch used to ask get_comments() for one DB page, THEN drop
+ * comments on unreadable posts - so a readable comment could be pushed off page 1 (or off
+ * every page) by unreadable ones consuming its slot, with no `total` and no truncation
+ * signal to tell the caller a readable result was stranded further in. Comments are now
+ * fetched in one bounded, unpaginated scan (default id/date order preserved), filtered by
+ * post readability, and only THEN paginated - the same authorize-before-paginate fix
+ * already applied to GeoDirectory listings (B184). The filter is narrow-only (matching
+ * aafm_geodirectory_listing_batch_cap()'s own posture) so a hook can lower the cap for a
+ * test without ever raising it past the hard ceiling.
+ *
+ * ponytail: 2000 is a flat, deliberate ceiling on a single call, not a true site-wide
+ * limit - a subscriber's own site-wide comment feed rarely needs to look past the newest
+ * couple thousand approved comments. If a real site needs this branch to page reliably
+ * past that many comments on hidden posts, replace this single bounded scan with
+ * GeoDirectory's batched keyset loop (includes/abilities/geodirectory.php) instead of
+ * just raising the number.
+ *
+ * @return int
+ */
+function aafm_comments_sitewide_scan_cap(): int {
+	return min( 2000, max( 1, (int) apply_filters( 'aafm_comments_sitewide_scan_cap', 2000 ) ) );
+}
+
+/**
  * Execute aafm/get-comments.
  *
  * Returns APPROVED comments only. The status filter is pinned server-side so a
@@ -175,56 +202,79 @@ function aafm_exec_get_comments( array $input ): array {
 	$paging  = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 
-	$comments = get_comments(
-		array(
-			'post_id' => $post_id,
-			'status'  => 'approve',
-			'number'  => $paging['per_page'],
-			'paged'   => $paging['page'],
-		)
-	);
-
-	// Whole-site listing (no post_id): a low-privilege caller must never receive a
-	// comment whose parent post they cannot read. A caller who can moderate comments
-	// already sees every comment in the dashboard, so the post-filter only applies to
-	// everyone else. This mirrors the per-object visibility guard in
-	// aafm_perm_get_comments() for the site-wide branch - "approved" is not "public"
-	// when the parent post is private, draft, or password-protected.
-	if ( $post_id <= 0 && ! current_user_can( 'moderate_comments' ) ) {
-		$comments = array_filter(
-			(array) $comments,
-			static fn( $comment ): bool => $comment instanceof WP_Comment
-				&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID )
-		);
-	}
-
-	$result = array(
-		'comments' => aafm_redact_comments( $comments ),
-	);
-
-	// `total` is the count for the same status+post filter, computed in the DB BEFORE the
-	// site-wide visibility post-filter above. It is only safe to expose when it already
-	// matches what the caller may see:
-	// - a post-scoped query (post_id given) is gated by the permission callback, so the
-	// count is exact for that post; and
-	// - a moderate_comments caller sees every comment anyway.
-	// For the whole-site UNPRIVILEGED listing the DB count includes approved comments on
-	// hidden/private/password-protected posts the caller cannot read, so reporting it would
-	// leak the existence and volume of comments on content they have no access to. Recomputing
-	// an exact post-filtered total would mean loading every approved comment site-wide (a
-	// performance/DoS concern), so `total` is simply omitted for that branch - it is optional
-	// in the output schema.
+	// A moderate_comments caller sees every comment anyway, and a post-scoped query is
+	// already gated by the permission callback on that one post's readability, so neither
+	// branch can hide a readable result behind an unreadable one - DB-side pagination stays
+	// correct and cheap for both.
 	if ( $post_id > 0 || current_user_can( 'moderate_comments' ) ) {
-		$result['total'] = (int) get_comments(
+		$comments = get_comments(
 			array(
 				'post_id' => $post_id,
 				'status'  => 'approve',
-				'count'   => true,
+				'number'  => $paging['per_page'],
+				'paged'   => $paging['page'],
 			)
+		);
+
+		return array(
+			'comments'  => aafm_redact_comments( $comments ),
+			'total'     => (int) get_comments(
+				array(
+					'post_id' => $post_id,
+					'status'  => 'approve',
+					'count'   => true,
+				)
+			),
+			'truncated' => false,
 		);
 	}
 
-	return $result;
+	// Whole-site listing, unprivileged caller: a comment whose parent post they can't read
+	// must never occupy a page slot or count toward `total`. Scan up to the cap in one
+	// unpaginated fetch, filter to readable posts, THEN paginate/count the readable set -
+	// see aafm_comments_sitewide_scan_cap() for why this must run before pagination rather
+	// than after it.
+	$raw_total = (int) get_comments(
+		array(
+			'status' => 'approve',
+			'count'  => true,
+		)
+	);
+
+	if ( 0 === $raw_total ) {
+		return array(
+			'comments'  => array(),
+			'total'     => 0,
+			'truncated' => false,
+		);
+	}
+
+	$scan_cap  = aafm_comments_sitewide_scan_cap();
+	$truncated = $raw_total > $scan_cap;
+	$scanned   = get_comments(
+		array(
+			'status' => 'approve',
+			'number' => min( $raw_total, $scan_cap ),
+		)
+	);
+
+	$visible = array_values(
+		array_filter(
+			(array) $scanned,
+			static fn( $comment ): bool => $comment instanceof WP_Comment
+				&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID )
+		)
+	);
+
+	$page_comments = array_slice( $visible, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );
+
+	return array(
+		'comments'  => aafm_redact_comments( $page_comments ),
+		// A floor, not an exact count, when truncated: comments past the scan cap were
+		// never examined, so some of them could also be readable.
+		'total'     => count( $visible ),
+		'truncated' => $truncated,
+	);
 }
 
 /**

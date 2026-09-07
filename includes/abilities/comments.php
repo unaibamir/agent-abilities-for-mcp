@@ -894,6 +894,18 @@ function aafm_exec_update_comment( array $input ) {
 	if ( ! $saved instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue
 		return aafm_generic_error();
 	}
+
+	// wp_update_comment() returning a non-false, non-WP_Error value only means the write did not
+	// hard-fail - not that the requested content is what actually landed. A `wp_update_comment_data`
+	// filter can veto the change by rewriting comment_content back to its prior value, and that
+	// return value is exactly what a genuine already-equal no-op also produces (Codex round 9,
+	// R9-5), so the two are indistinguishable without comparing what was actually stored. Compare
+	// the fresh row against the requested content directly: a match covers both a real update and
+	// a true no-op, and only a real divergence is an error.
+	if ( $saved->comment_content !== $content ) {
+		return aafm_generic_error();
+	}
+
 	return array( 'comment' => aafm_redact_comment( $saved ) );
 }
 

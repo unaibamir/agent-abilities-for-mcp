@@ -161,6 +161,50 @@ final class ActivityTabTest extends TestCase {
 		$this->assertSame( 'aafm/get-posts', $rows[0]['ability'], 'No tamper marker must be written over a clear that did not happen.' );
 	}
 
+	/**
+	 * Codex round 10, R10-3: the round 9 fix above only faulted the TRUNCATE and left the
+	 * confirming COUNT healthy, so it could not see that a get_var()-style confirming read that
+	 * itself fails casts straight to `(int) null === 0` - the same "unreadable, so call it empty"
+	 * mistake the TRUNCATE fix was meant to close, one query later. Faulting the TRUNCATE and its
+	 * confirming COUNT together must still report failure and write no marker, not a false success
+	 * from an unreadable table looking exactly like a genuinely empty one.
+	 */
+	public function test_clear_log_reports_failure_and_writes_no_marker_when_truncate_and_its_confirming_count_both_fail(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+			)
+		);
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_truncate = false !== strpos( $query, 'TRUNCATE TABLE `' . $wpdb->prefix . 'aafm_activity_log`' );
+				$is_count    = false !== strpos( $query, 'SELECT COUNT(*) FROM `' . $wpdb->prefix . 'aafm_activity_log`' );
+				return ( $is_truncate || $is_count ) ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$json              = $this->run_handler( 'aafm_ajax_clear_log' );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'A truncate whose confirming count also fails must not report success.' );
+		$this->assertSame( 1, aafm_activity_count(), 'The original row must survive; no false marker should be added.' );
+		$rows = aafm_query_activity( array() );
+		$this->assertSame( 'aafm/get-posts', $rows[0]['ability'], 'No tamper marker must be written when the clear could never be confirmed.' );
+	}
+
 	public function test_the_header_row_is_the_v5_six(): void {
 		$html = $this->render_activity_tab();
 		foreach ( array( 'Time (UTC)', 'Principal', 'Event', 'Detail', 'Status', 'Arg keys' ) as $header ) {

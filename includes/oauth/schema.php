@@ -436,6 +436,11 @@ function aafm_maybe_upgrade_oauth_tables(): void {
  * affected-row count (Codex round 9, R9-3): a table this call never actually reached still
  * counts as failed, even though it never contributes a nonzero affected-row count either way.
  *
+ * The confirmation read goes through aafm_wpdb_scalar() rather than a bare get_var() (Codex round
+ * 10, R10-3): a get_var() read that itself failed used to cast straight to `(int) null === 0`,
+ * the same "unreadable, so call it empty" mistake the DELETE-count fix above already closed, just
+ * one query later.
+ *
  * @return bool True when every table is confirmed empty after this call.
  */
 function aafm_truncate_oauth_tables(): bool {
@@ -449,8 +454,8 @@ function aafm_truncate_oauth_tables(): bool {
 		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i', $table ) );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$remaining = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
-		if ( 0 !== (int) $remaining ) {
+		$remaining = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+		if ( ! $remaining['ok'] || 0 !== (int) $remaining['value'] ) {
 			$ok = false;
 		}
 	}

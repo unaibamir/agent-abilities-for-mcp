@@ -204,6 +204,54 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 10, R10-3: R9-3's fix certified each table's DELETE against a fresh row-count
+	 * read, but that read was a bare get_var(), which casts a failed read straight to
+	 * `(int) null === 0` - the same "unreadable, so call it empty" mistake as trusting the
+	 * DELETE's own affected-row count. Faulting the clients-table DELETE and its confirming COUNT
+	 * together must still report failure for that table, and the row it never actually reached
+	 * must survive; the other three tables (never faulted) must still come back genuinely clear.
+	 */
+	public function test_truncate_reports_failure_for_a_table_whose_delete_and_confirming_count_both_fail(): void {
+		aafm_install_oauth_tables();
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_abc',
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
+
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$table    = $wpdb->prefix . 'aafm_oauth_clients';
+				$is_write = false !== strpos( $query, 'DELETE FROM `' . $table . '`' );
+				$is_count = false !== strpos( $query, 'SELECT COUNT(*) FROM `' . $table . '`' );
+				return ( $is_write || $is_count ) ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$result = aafm_truncate_oauth_tables();
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( $result, 'A table whose delete and confirming count both fail must not certify as truncated.' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$remaining = (int) $wpdb->get_var(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+			"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_clients WHERE client_id = 'client_abc'"
+		);
+		$this->assertSame( 1, $remaining, 'The row was never actually reachable; it must still be there.' );
+	}
+
+	/**
 	 * The upgrade runs the installer when the recorded schema version is missing.
 	 */
 	public function test_upgrade_runs_when_version_missing(): void {

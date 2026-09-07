@@ -897,6 +897,11 @@ function aafm_activity_max_id(): int {
  * result (Codex round 9, R9-8): a failed truncate must not let a caller go on to write a
  * marker row claiming the clear happened, or report success while the original rows survive.
  *
+ * The confirmation read goes through aafm_wpdb_scalar() rather than a bare get_var() (Codex round
+ * 10, R10-3): a get_var() read that itself failed used to cast straight to `(int) null === 0`, the
+ * same "unreadable, so call it empty" mistake as a stale TRUNCATE, letting the memo flush and the
+ * marker row below both run as if the clear had genuinely happened.
+ *
  * @return bool True when the table is confirmed empty after this call.
  */
 function aafm_clear_activity_log(): bool {
@@ -906,8 +911,8 @@ function aafm_clear_activity_log(): bool {
 	$wpdb->query( $wpdb->prepare( 'TRUNCATE TABLE %i', $table ) );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$remaining = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
-	if ( 0 !== (int) $remaining ) {
+	$remaining = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+	if ( ! $remaining['ok'] || 0 !== (int) $remaining['value'] ) {
 		return false;
 	}
 

@@ -325,7 +325,9 @@ final class CommentsReadTest extends TestCase {
 		);
 
 		$this->acting_as( 'subscriber' );
-		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 100 ) );
+		// per_page is capped by the ability's own input schema at AAFM_LIST_PER_PAGE_MAX (50);
+		// 100 would fail schema validation before aafm_exec_get_comments() ever runs.
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) );
 
 		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
 

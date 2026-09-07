@@ -435,11 +435,15 @@ function aafm_update_option_verified( string $option, $value, ?bool $autoload = 
 	$caches_ok = aafm_forget_option_caches( $option ) && $caches_ok;
 	aafm_force_refresh_option_caches( $option );
 
-	get_option( $option );
-
 	if ( ! $caches_ok ) {
 		return false;
 	}
 
-	return aafm_option_write_certified( $option, $value );
+	$certified = aafm_option_write_certified( $option, $value );
+
+	if ( $certified ) {
+		get_option( $option );
+	}
+
+	return $certified;
 }

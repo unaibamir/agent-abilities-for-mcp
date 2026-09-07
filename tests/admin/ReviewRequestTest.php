@@ -733,10 +733,16 @@ final class ReviewRequestTest extends TestCase {
 	public function test_ajax_reports_failure_when_the_verdict_write_fails(): void {
 		$this->acting_as( 'administrator' );
 
+		// Matches the bare option name, not only the `option_name = '...'` WHERE-clause shape:
+		// a narrower match lets the row's existence-check SELECT fail while update_option()'s
+		// own add_option() fallback still reaches the option name through an INSERT ... ON
+		// DUPLICATE KEY UPDATE, which is not written as `option_name = '...'` and so would slip
+		// through untouched and actually persist the new state - the opposite of the write
+		// failure this test means to simulate.
 		add_filter(
 			'query',
 			static function ( string $query ): string {
-				return false !== strpos( $query, "option_name = 'aafm_review_request'" )
+				return false !== strpos( $query, 'aafm_review_request' )
 					? 'SELECT * FROM aafm_missing_table_for_test'
 					: $query;
 			}

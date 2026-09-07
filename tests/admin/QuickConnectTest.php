@@ -553,10 +553,16 @@ final class QuickConnectTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		update_option( 'aafm_quickconnect_dismissed', '0' );
 
+		// Matches the bare option name, not only the `option_name = '...'` WHERE-clause shape:
+		// a narrower match lets the row's existence-check SELECT fail while update_option()'s
+		// own add_option() fallback still reaches the option name through an INSERT ... ON
+		// DUPLICATE KEY UPDATE, which is not written as `option_name = '...'` and so would slip
+		// through untouched and actually persist the new value - the opposite of the write
+		// failure this test means to simulate.
 		add_filter(
 			'query',
 			static function ( string $query ): string {
-				return false !== strpos( $query, "option_name = 'aafm_quickconnect_dismissed'" )
+				return false !== strpos( $query, 'aafm_quickconnect_dismissed' )
 					? 'SELECT * FROM aafm_missing_table_for_test'
 					: $query;
 			}

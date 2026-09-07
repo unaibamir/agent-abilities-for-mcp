@@ -46,6 +46,13 @@ function aafm_mcp_tool_name( string $ability_name ): string {
  * into the server with none of this plugin's permission, allowlist, rate-limit, or audit
  * chokepoints behind it (those all live on AAFM's own decorated callbacks, never reached).
  *
+ * Codex round 10 R10-4: the R9-7 fix first shipped as `instanceof AAFM_Rate_Limited_Ability`, but
+ * that class is public and non-final, and `wp_register_ability()` accepts a caller-chosen
+ * `ability_class`, so a foreign plugin can preclaim the name using this exact class with its own
+ * permissive callbacks and pass a class check. Object identity closes that: the object admitted
+ * here must be the SAME object aafm_register_ability_with_log() (register.php) actually returned
+ * for this name, not merely an instance of the class it happens to use.
+ *
  * @param array<int,string>    $enabled Enabled ability names.
  * @param array<string,string> $omitted Receives name => reason for every enabled name left out
  *                                       because it resolved to an object AAFM never registered,
@@ -61,14 +68,15 @@ function aafm_build_server_tools( array $enabled, array &$omitted = array() ): a
 		if ( ! $ability instanceof WP_Ability ) {
 			continue;
 		}
-		// The ability_class every name this plugin's own chokepoint processes is registered
-		// under (aafm_register_ability_with_log(), register.php) - native and bridged alike,
-		// and never overridden by any caller in this codebase. An object of any other class
-		// resolved here proves a different plugin's registration won this name, not ours, so
-		// admitting it into the server would silently hand it every permission, allowlist,
-		// rate-limit, and audit guarantee this plugin's own name implies but never actually
-		// enforces for it.
-		if ( ! $ability instanceof AAFM_Rate_Limited_Ability ) {
+		// Require the exact object aafm_register_ability_with_log() (register.php) returned for
+		// this name, not merely an instance of the class it uses. A class check is forgeable - a
+		// caller can pass that same public, non-final class as its own `ability_class` - but a
+		// caller cannot hand back the specific object our own wp_register_ability() call produced.
+		// An object resolved here that is not that exact instance proves a different plugin's
+		// registration won this name, not ours, so admitting it into the server would silently
+		// hand it every permission, allowlist, rate-limit, and audit guarantee this plugin's own
+		// name implies but never actually enforces for it.
+		if ( aafm_remember_registered_ability( $name ) !== $ability ) {
 			$omitted[ $name ] = 'name_claimed';
 			continue;
 		}

@@ -62,6 +62,41 @@ function aafm_remember_raw_permission( string $name, ?callable $callback = null 
 }
 
 /**
+ * Remember (or read) the exact WP_Ability object this plugin's own registration chokepoint
+ * returned for a name, so server construction can require that same object rather than trust its
+ * class.
+ *
+ * Codex round 10 R10-4: R9-7's original fix required `instanceof AAFM_Rate_Limited_Ability`, but
+ * that class is public and non-final and `wp_register_ability()` accepts a caller-chosen
+ * `ability_class`, so a foreign plugin can preclaim a reserved name using this exact class with
+ * its own permissive callbacks and pass the check. Object identity cannot be forged that way: a
+ * caller can name our class, but cannot hand back the specific object our own call to
+ * wp_register_ability() produced.
+ *
+ * Self-invalidating by construction, which is what makes this safe under process-lifetime static
+ * state (this store, like aafm_remember_raw_permission() above, is never explicitly reset between
+ * PHPUnit tests sharing one process). The check this feeds is always "is the object CURRENTLY
+ * registered under this name the one we stored", never "did we ever store something for this
+ * name" - so a later collision that replaces the registry's object for $name with a foreign one
+ * fails the comparison regardless of what this store held from an earlier, legitimate
+ * registration. A name-keyed boolean or class-name memo cannot do this: once true, always true.
+ *
+ * @param string          $name    Ability name.
+ * @param WP_Ability|null $ability Object to store, or null to read.
+ * @return WP_Ability|null Stored object when reading; null otherwise.
+ */
+function aafm_remember_registered_ability( string $name, ?WP_Ability $ability = null ): ?WP_Ability {
+	static $store = array();
+
+	if ( null !== $ability ) {
+		$store[ $name ] = $ability;
+		return null;
+	}
+
+	return $store[ $name ] ?? null;
+}
+
+/**
  * The single storage behind per-invocation audit-row correlation: a per-ability-name stack of
  * {token, row_id} frames. Returned BY REFERENCE so every function below shares the same
  * request-scoped state without each keeping its own copy. Never call this directly outside this
@@ -1312,7 +1347,13 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		$args['ability_class'] = AAFM_Rate_Limited_Ability::class;
 	}
 
-	return wp_register_ability( $name, $args );
+	$registered = wp_register_ability( $name, $args );
+	if ( $registered instanceof WP_Ability ) {
+		// Record the exact object this call produced (R10-4) so aafm_build_server_tools() can
+		// require that same object at server construction, rather than trust its class.
+		aafm_remember_registered_ability( $name, $registered );
+	}
+	return $registered;
 }
 
 /**

@@ -255,6 +255,166 @@ final class ServerToolsTest extends TestCase {
 		$this->assertSame( 'name_claimed', $omitted[ $name ] ?? null );
 	}
 
+	// =========================================================================
+	// aafm_build_server_tools() -- ownership check hardened to object identity (Codex round 10
+	// R10-4)
+	//
+	// R9-7's fix checked `instanceof AAFM_Rate_Limited_Ability`, which is forgeable: that class
+	// is public and non-final, and wp_register_ability() accepts a caller-chosen ability_class,
+	// so a foreign plugin can preclaim a name using AAFM's own subclass with its own permissive
+	// callbacks and pass a class check that never proves the object came from this plugin's
+	// chokepoint. These fixtures register the foreign object with
+	// 'ability_class' => \AAFM_Rate_Limited_Ability::class explicitly - the exact hole a plain
+	// WP_Ability fixture (the R9-7 tests above) cannot see.
+	// =========================================================================
+
+	/**
+	 * Direct proof: a foreign object registered outside aafm_register_ability_with_log(), but
+	 * using AAFM_Rate_Limited_Ability as its own ability_class, is still excluded and recorded.
+	 * A class-only ownership check would pass this object; only object identity catches it.
+	 */
+	public function test_a_foreign_ability_using_our_own_subclass_is_excluded_and_recorded(): void {
+		$this->acting_as( 'administrator' );
+
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				if ( ! wp_has_ability( 'aafm/foreign-subclass-claim' ) ) {
+					wp_register_ability(
+						'aafm/foreign-subclass-claim',
+						array(
+							'label'               => 'Foreign Subclass Claim',
+							'description'         => 'Registered directly, naming AAFM_Rate_Limited_Ability as its own ability_class.',
+							'category'            => 'aafm-reads',
+							'ability_class'       => \AAFM_Rate_Limited_Ability::class,
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'foreign' => true ),
+							'permission_callback' => '__return_true',
+						)
+					);
+				}
+			}
+		);
+
+		$ability = wp_get_ability( 'aafm/foreign-subclass-claim' );
+		$this->assertInstanceOf(
+			\AAFM_Rate_Limited_Ability::class,
+			$ability,
+			'The fixture must actually use our subclass, or this test proves nothing about the identity check.'
+		);
+
+		$omitted = array();
+		$tools   = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/foreign-subclass-claim' ), $omitted );
+
+		$this->assertContains( 'aafm/pub-read', $tools, 'A genuinely AAFM-registered ability must still be served.' );
+		$this->assertNotContains(
+			'aafm/foreign-subclass-claim',
+			$tools,
+			'An object of our own subclass that this plugin never registered must still never be served.'
+		);
+		$this->assertSame(
+			'name_claimed',
+			$omitted['aafm/foreign-subclass-claim'] ?? null,
+			'The exclusion must be recorded so the operator can be told, not dropped silently.'
+		);
+	}
+
+	/**
+	 * End-to-end shape of R10-4: a foreign plugin claims a reserved, enabled name before this
+	 * plugin's own registration pass runs, using AAFM's own subclass as its ability_class.
+	 * aafm_register_enabled_abilities() sees the name already answered and skips re-registering
+	 * it, so the object left standing under the name is the foreign one, an instance of the right
+	 * class but the wrong object - yet the server tool set must still exclude it, and the foreign
+	 * callbacks must never run through this plugin's chokepoint.
+	 */
+	public function test_a_name_preclaimed_with_our_subclass_before_registration_is_kept_out_of_the_server(): void {
+		$this->acting_as( 'administrator' );
+		$name = 'aafm/subclass-collision-probe';
+
+		add_filter(
+			'aafm_abilities_registry',
+			static function ( array $registry ) use ( $name ): array {
+				$registry[ $name ] = array(
+					'label'        => 'Subclass Collision Probe',
+					'description'  => 'Registry fixture for the R10-4 regression.',
+					'group'        => 'reads',
+					'risk'         => 'read',
+					'args_builder' => static function () use ( $name ): array {
+						return array(
+							'label'               => 'Subclass Collision Probe',
+							'description'         => 'Fixture ability this plugin would register if the name were free.',
+							'category'            => 'aafm-reads',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'native' => true ),
+							'permission_callback' => '__return_true',
+						);
+					},
+				);
+				return $registry;
+			}
+		);
+
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				if ( ! wp_has_ability( $name ) ) {
+					wp_register_ability(
+						$name,
+						array(
+							'label'               => 'Foreign Claimant',
+							'description'         => 'A different plugin registered under this reserved name first, using our own subclass.',
+							'category'            => 'aafm-reads',
+							'ability_class'       => \AAFM_Rate_Limited_Ability::class,
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'foreign' => true ),
+							'permission_callback' => '__return_true',
+						)
+					);
+				}
+			}
+		);
+
+		// This plugin's own real registration pass now runs and, per
+		// aafm_register_enabled_abilities()'s idempotent-reentry guard, finds the name already
+		// answered and skips it - so aafm_register_ability_with_log() never runs for this name and
+		// never records its object under aafm_remember_registered_ability().
+		$this->register_enabled( array( $name ) );
+
+		$ability = wp_get_ability( $name );
+		$this->assertInstanceOf(
+			\AAFM_Rate_Limited_Ability::class,
+			$ability,
+			'The foreign registration must have won the name using our own subclass - a class check alone would admit this object.'
+		);
+		$this->assertSame(
+			array( 'foreign' => true ),
+			$ability->execute( array() ),
+			'The live object under this name must be the foreign one, proving the collision actually happened.'
+		);
+
+		$omitted = array();
+		$tools   = aafm_build_server_tools( array( $name ), $omitted );
+
+		$this->assertSame(
+			array(),
+			$tools,
+			'A name this plugin never actually registered must never reach the server tool set, even when the winning object shares our own ability class.'
+		);
+		$this->assertSame( 'name_claimed', $omitted[ $name ] ?? null );
+	}
+
 	public function test_registering_the_server_does_not_error(): void {
 		$this->acting_as( 'administrator' );
 		$adapter = \WP\MCP\Core\McpAdapter::instance();

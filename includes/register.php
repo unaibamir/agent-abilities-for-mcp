@@ -1333,20 +1333,16 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		return $result;
 	};
 
-	// The registry instantiates this subclass instead of WP_Ability so the per-call rate memo is
-	// released however core's execute() resolves - including the input-schema refusal that returns
-	// BEFORE the decorated execute callback ever runs (the B12 batch leak; see the subclass for the
-	// full path list). A caller's own ability_class is honored; nothing in this plugin passes one.
-	if ( ! isset( $args['ability_class'] ) && class_exists( 'AAFM_Rate_Limited_Ability' ) ) {
-		$args['ability_class'] = AAFM_Rate_Limited_Ability::class;
-	}
-
-	// Register and record atomically through AAFM_Registration_Authority (R11-3): it performs
-	// this same wp_register_ability() call itself and records only what THAT call returns, so
-	// nothing outside this function can hand it a substitute object to record instead. See that
+	// Register and record atomically through AAFM_Registration_Authority (R11-3, R12-1): it
+	// performs this same wp_register_ability() call itself, forces its own trusted
+	// AAFM_Rate_Limited_Ability class (so the per-call rate memo is always released however
+	// core's execute() resolves - including the input-schema refusal that returns BEFORE the
+	// decorated execute callback ever runs, the B12 batch leak) rather than honoring any
+	// `ability_class` this $args might carry, and records only what THAT call returns. See that
 	// class's docblock for why the earlier two-step version (register here, then separately tell
-	// a public setter what to remember) was forgeable, and for what this still cannot rule out -
-	// a caller that skips this function entirely and calls the class directly with its own,
+	// a public setter what to remember) was forgeable, why trusting a caller-chosen
+	// ability_class was forgeable the same way, and for what this still cannot rule out - a
+	// caller that skips this function entirely and calls the class directly with its own,
 	// undecorated $args.
 	return AAFM_Registration_Authority::register( $name, $args );
 }

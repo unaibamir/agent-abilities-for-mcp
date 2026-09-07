@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Fixtures\HostileAbility;
 use AAFM\Tests\TestCase;
 
 final class ServerToolsTest extends TestCase {
@@ -488,6 +489,113 @@ final class ServerToolsTest extends TestCase {
 			'The poisoning attempt must not get the foreign, undecorated ability served through this plugin.'
 		);
 		$this->assertSame( 'name_claimed', $omitted[ $name ] ?? null );
+	}
+
+	// =========================================================================
+	// AAFM_Registration_Authority::register() -- a caller-supplied ability_class is never honored
+	// (Codex round 12 R12-1)
+	//
+	// aafm_register_ability_with_log() decorates whatever $args it is given before calling
+	// register() - but it used to also honor whatever `ability_class` those $args carried. A
+	// caller invoking either function directly with a hostile WP_Ability subclass of its own (one
+	// that overrides execute() to discard the decoration) would still have that class registered
+	// and recorded as this plugin's own. register() now forces its own trusted class on every call
+	// it makes, discarding whatever $args passed, for both routes into it.
+	// =========================================================================
+
+	/**
+	 * The chokepoint route: a hostile ability_class passed through aafm_register_ability_with_log()
+	 * must not survive - the trusted class always wins.
+	 */
+	public function test_a_caller_supplied_ability_class_is_never_registered_or_recorded(): void {
+		$this->acting_as( 'administrator' );
+		$name = 'aafm/hostile-class-probe';
+
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				if ( ! wp_has_ability( $name ) ) {
+					aafm_register_ability_with_log(
+						$name,
+						array(
+							'label'               => 'Hostile Class Probe',
+							'description'         => 'Registered through the audited chokepoint with a hostile ability_class.',
+							'category'            => 'aafm-reads',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'trusted' => true ),
+							'permission_callback' => '__return_true',
+							'ability_class'       => HostileAbility::class,
+						)
+					);
+				}
+			}
+		);
+
+		$ability = wp_get_ability( $name );
+		$this->assertInstanceOf(
+			\AAFM_Rate_Limited_Ability::class,
+			$ability,
+			'A caller-supplied ability_class must be discarded in favor of this plugin\'s own trusted class.'
+		);
+		$this->assertNotInstanceOf( HostileAbility::class, $ability );
+		$this->assertSame(
+			array( 'trusted' => true ),
+			$ability->execute( array() ),
+			'The registered object must run this plugin\'s own decorated execute path, not the hostile subclass.'
+		);
+		$this->assertSame(
+			$ability,
+			aafm_remember_registered_ability( $name ),
+			'The recorded object must be the same forced-class instance the registration produced.'
+		);
+	}
+
+	/**
+	 * The direct route: even skipping aafm_register_ability_with_log() entirely and calling the
+	 * authority itself, a hostile ability_class still does not survive. This is a narrower defense
+	 * than the chokepoint gives - the permission_callback and execute_callback here are still
+	 * undecorated, a known and documented limit of calling the authority directly - but the class
+	 * substitution specifically is closed on both routes.
+	 */
+	public function test_authority_register_called_directly_still_forces_the_trusted_class(): void {
+		$this->acting_as( 'administrator' );
+		$name = 'aafm/hostile-class-direct-probe';
+
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				if ( ! wp_has_ability( $name ) ) {
+					\AAFM_Registration_Authority::register(
+						$name,
+						array(
+							'label'               => 'Hostile Class Direct Probe',
+							'description'         => 'Registered by calling the authority directly, bypassing the decorators entirely.',
+							'category'            => 'aafm-reads',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'undecorated' => true ),
+							'permission_callback' => '__return_true',
+							'ability_class'       => HostileAbility::class,
+						)
+					);
+				}
+			}
+		);
+
+		$ability = wp_get_ability( $name );
+		$this->assertInstanceOf(
+			\AAFM_Rate_Limited_Ability::class,
+			$ability,
+			'Even a direct call to the authority must not honor a caller-supplied ability_class.'
+		);
+		$this->assertNotInstanceOf( HostileAbility::class, $ability );
 	}
 
 	public function test_registering_the_server_does_not_error(): void {

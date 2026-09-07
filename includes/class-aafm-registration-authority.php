@@ -47,6 +47,28 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * aafm_register_ability_with_log()'s decoration logic into this same class as register()'s only
  * caller, which was not done here - see the note on aafm_register_ability_with_log() in
  * register.php.
+ *
+ * Codex round 12 R12-1: register() used to pass $args straight through to
+ * wp_register_ability(), which honors a caller-supplied `ability_class`. A caller invoking
+ * aafm_register_ability_with_log() directly - decorators and all - could still hand it a
+ * purpose-built WP_Ability subclass of its own that overrides prepare_properties() or execute()
+ * to discard what the decorators just did, and register() would faithfully register and record
+ * that hostile object as this plugin's own. register() below now forces
+ * AAFM_Rate_Limited_Ability as the ability_class on every call it makes, overwriting whatever
+ * $args carried, so neither route into this class - through aafm_register_ability_with_log() or
+ * directly - can substitute a foreign class for the one this plugin's own decorators expect.
+ *
+ * This closes the class-substitution route only. It does NOT touch the limit already documented
+ * above: a caller that skips aafm_register_ability_with_log() and calls register() directly can
+ * still hand it its own undecorated permission_callback and execute_callback, and those still get
+ * registered and recorded as this plugin's own, because forcing the ability class governs which
+ * object's execute() runs, not which permission or execute logic that object runs. Closing that
+ * would mean this class deriving every canonical registration argument itself from the native and
+ * bridge registries rather than trusting any caller's $args at all - a real refactor, left undone
+ * here because every route to it requires a plugin already executing arbitrary PHP in this same
+ * process to bother writing a purpose-built caller against our internal functions, and a plugin
+ * willing to do that could as easily unhook our filters or write to the database directly. See
+ * planning doc 239 (R12-1) for the full threat-model reasoning.
  */
 final class AAFM_Registration_Authority {
 
@@ -67,6 +89,12 @@ final class AAFM_Registration_Authority {
 	 * @return WP_Ability|null Whatever wp_register_ability() returns.
 	 */
 	public static function register( string $name, array $args ): ?WP_Ability {
+		// R12-1: force our own trusted ability class, discarding whatever $args carried. This is
+		// the only place that actually calls wp_register_ability(), so overriding here closes the
+		// class-substitution route for every caller of this method - see the class docblock.
+		if ( class_exists( 'AAFM_Rate_Limited_Ability' ) ) {
+			$args['ability_class'] = AAFM_Rate_Limited_Ability::class;
+		}
 		$registered = wp_register_ability( $name, $args );
 		if ( $registered instanceof WP_Ability ) {
 			self::$store[ $name ] = $registered;

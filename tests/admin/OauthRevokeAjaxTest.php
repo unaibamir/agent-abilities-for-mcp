@@ -471,4 +471,117 @@ final class OauthRevokeAjaxTest extends TestCase {
 		$this->assertFalse( $json['success'] ?? true, 'A pending code that could not be certified as cleared must not report success, even though the consent delete and token revoke both genuinely succeeded.' );
 		$this->assertSame( 1, $this->codes( 'client_abc', $admin ), 'The pending code was never actually reachable; it must still be there.' );
 	}
+
+	/**
+	 * Codex round 11, R11-1: the round 9 fix (test_revoke_grant_reports_failure_when_the_token_-
+	 * revoke_write_fails, above) faults only the token UPDATE and leaves its confirming
+	 * aafm_oauth_client_has_active_tokens() COUNT healthy, so it cannot see the same
+	 * cancel-two-failures-into-a-false-success shape the round 10 fixes above already cover for
+	 * the client-deactivate, consent-delete, and pending-code paths. Faulting the token UPDATE and
+	 * its exact confirming COUNT together must still report failure, and the token row itself
+	 * must still read active. The certification is scoped to aafm_oauth_get_access_token_row()
+	 * rather than a full aafm_oauth_validate_access_token() bearer check: this handler also
+	 * deactivates the client (a genuinely successful, independent write), which alone would
+	 * block the bearer regardless of whether the token-revoke certification under test is
+	 * correct, so it cannot discriminate the two.
+	 */
+	public function test_revoke_client_reports_failure_when_the_token_revoke_write_and_its_confirming_count_both_fail(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_abc',
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'client_id'  => 'client_abc',
+				'wp_user_id' => 7,
+				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			)
+		);
+
+		$nonce              = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']     = $nonce;
+		$_REQUEST['nonce']  = $nonce;
+		$_POST['client_id'] = 'client_abc';
+
+		$this->fail_query_containing( 'UPDATE `' . $wpdb->prefix . 'aafm_oauth_access_tokens` SET is_active = 0 WHERE client_id' );
+		$this->fail_query_containing( 'SELECT COUNT(*) FROM `' . $wpdb->prefix . 'aafm_oauth_access_tokens` WHERE client_id' );
+		$suppressed = $wpdb->suppress_errors( true );
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_oauth_revoke_client' );
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( $json['success'] ?? true, 'A token revoke whose write and confirming count both fail must not report success.' );
+		$this->assertNotNull(
+			aafm_oauth_get_access_token_row( $tokens['access_token'] ),
+			'The token row was never actually reachable; it must still read active.'
+		);
+	}
+
+	/**
+	 * Same gap as above, scoped to the per-grant revoke path and
+	 * aafm_oauth_user_client_has_active_tokens().
+	 */
+	public function test_revoke_grant_reports_failure_when_the_token_revoke_write_and_its_confirming_count_both_fail(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_abc',
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'client_id'  => 'client_abc',
+				'wp_user_id' => $admin,
+				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			)
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_consents',
+			array(
+				'wp_user_id' => $admin,
+				'client_id'  => 'client_abc',
+			),
+			array( '%d', '%s' )
+		);
+
+		$nonce              = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']     = $nonce;
+		$_REQUEST['nonce']  = $nonce;
+		$_POST['user_id']   = (string) $admin;
+		$_POST['client_id'] = 'client_abc';
+
+		$this->fail_query_containing( 'UPDATE `' . $wpdb->prefix . 'aafm_oauth_access_tokens` SET is_active = 0 WHERE wp_user_id' );
+		$this->fail_query_containing( 'SELECT COUNT(*) FROM `' . $wpdb->prefix . 'aafm_oauth_access_tokens` WHERE wp_user_id' );
+		$suppressed = $wpdb->suppress_errors( true );
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_oauth_revoke_grant' );
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( $json['success'] ?? true, 'A token revoke whose write and confirming count both fail must not report success.' );
+		$this->assertNotNull(
+			aafm_oauth_get_access_token_row( $tokens['access_token'] ),
+			'The token row was never actually reachable; it must still read active.'
+		);
+	}
 }

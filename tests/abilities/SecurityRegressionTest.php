@@ -414,13 +414,24 @@ final class SecurityRegressionTest extends TestCase {
 	 * test_outbound_network_primitives_match_an_exact_per_file_allowlist() below, which covers
 	 * the whole WP safe-remote/cURL/socket family with an exact per-file call count instead of a
 	 * blanket per-file pass.
+	 *
+	 * Codex round 9, R9-13: the old `/\b(eval|create_function|assert|download_url)\s*\(/` regex
+	 * was case-sensitive text matching, while PHP identifiers and keywords are not, so
+	 * `EVAL( $payload )` still executes with the regex green. Tokens fix this two ways: `eval` is
+	 * a language construct, not a callable, so PHP itself never tokenizes it as T_STRING - it is
+	 * always T_EVAL regardless of case - so it gets its own count. The other three are ordinary
+	 * function calls, so they reuse count_function_call_tokens(), the same real-call tokenizer this
+	 * suite already trusts for the outbound-network and force-delete sweeps: resolves_to() matches
+	 * via strcasecmp(), so an uppercase or mixed-case call to any of them is caught the same as a
+	 * bare one.
 	 */
 	public function test_source_tree_has_no_dangerous_primitives(): void {
 		$dir   = dirname( __DIR__, 2 ) . '/includes';
 		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir ) );
 
-		// Code-exec primitives must NEVER appear anywhere in our source.
-		$banned_exec = '/\b(eval|create_function|assert|download_url)\s*\(/';
+		// Ordinary function calls among the banned code-exec primitives (eval is handled below;
+		// it is a language construct, never a T_STRING callable).
+		$banned_calls = array( 'create_function', 'assert', 'download_url' );
 
 		foreach ( $files as $file ) {
 			if ( 'php' !== $file->getExtension() ) {
@@ -430,11 +441,24 @@ final class SecurityRegressionTest extends TestCase {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$src = (string) file_get_contents( $file->getPathname() );
 
-			$this->assertDoesNotMatchRegularExpression(
-				$banned_exec,
-				$src,
-				'Code-exec primitive in ' . $file->getFilename()
-			);
+			$tokens  = $this->collapse_qualified_names( token_get_all( $src ) );
+			$aliases = $this->parse_use_aliases( $tokens );
+
+			$eval_count = 0;
+			foreach ( $tokens as $token ) {
+				if ( is_array( $token ) && T_EVAL === $token[0] ) {
+					++$eval_count;
+				}
+			}
+			$this->assertSame( 0, $eval_count, 'Code-exec primitive eval() in ' . $file->getFilename() );
+
+			foreach ( $banned_calls as $primitive ) {
+				$this->assertSame(
+					0,
+					$this->count_function_call_tokens( $tokens, $primitive, $aliases['function'] ),
+					'Code-exec primitive ' . $primitive . '() in ' . $file->getFilename()
+				);
+			}
 		}
 	}
 

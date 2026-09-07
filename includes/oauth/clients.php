@@ -291,9 +291,17 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
  * failed read to 0 read an unreadable cap as spare capacity and let the public registration
  * route grow the clients table without bound during an outage (Codex round 11, R11-4, the
  * DCR sibling of R10-1's certification-read class). Counts only is_active = 1 rows (a revoked
- * client no longer counts against the cap). Tolerates a not-yet-installed table the same way
- * a real empty table reads - `ok` true, `count` 0 - since that is the normal state before
- * activation ever creates the table, not a failure a live gate needs to deny on.
+ * client no longer counts against the cap).
+ *
+ * Codex round 12 R12-2: an earlier version of this docblock claimed a not-yet-installed table
+ * reads the same as a real empty table - `ok` true, `count` 0. It does not, and never did: the
+ * query below goes through aafm_wpdb_scalar(), which returns `ok` false on ANY failed query,
+ * a missing table included, exactly like any other unreadable table. So the DCR soft cap
+ * (aafm_oauth_rest_register()) correctly answers `temporarily_unavailable` (HTTP 503) before
+ * the clients table has ever been created, the same fail-closed response as any other read
+ * failure - it does not read a not-yet-installed table as "0 clients, plenty of room". Only
+ * {@see aafm_oauth_count_active_clients()} below, the display-only wrapper, folds that failure
+ * into a bare 0 - and it is explicitly not safe for a live gate for exactly that reason.
  *
  * @return array{ok:bool,count:int} `ok` false only on a genuine query failure; `count` is the
  *              confirmed active-client count when `ok` is true, and always 0 when it is not -

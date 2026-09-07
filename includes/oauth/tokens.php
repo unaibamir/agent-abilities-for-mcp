@@ -392,6 +392,70 @@ function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id )
 }
 
 /**
+ * Whether a client still has any active token row, regardless of expiry.
+ *
+ * Used by the admin "Revoke client" handler to certify a full revocation against the tokens
+ * table directly, rather than trusting aafm_oauth_revoke_client_tokens()'s own affected-row
+ * count: a real SQL failure and "nothing left to revoke" both leave that count at zero (Codex
+ * round 9, R9-2), so the count alone cannot tell the handler whether the client is actually
+ * clear. Deliberately ignores expires_at - a still-flagged-active row is what a caller
+ * elsewhere would treat as live, so it is what this check treats as live too.
+ *
+ * @param string $client_id The public client identifier.
+ * @return bool
+ */
+function aafm_oauth_client_has_active_tokens( string $client_id ): bool {
+	if ( '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = $wpdb->get_var(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE client_id = %s AND is_active = 1',
+			$table,
+			$client_id
+		)
+	);
+
+	return (int) $count > 0;
+}
+
+/**
+ * Whether a single user still has any active token row for one client, regardless of expiry.
+ *
+ * Same purpose as aafm_oauth_client_has_active_tokens(), scoped to the admin "Revoke grant"
+ * action.
+ *
+ * @param int    $user_id   The WordPress user id.
+ * @param string $client_id The public client identifier.
+ * @return bool
+ */
+function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_id ): bool {
+	if ( $user_id <= 0 || '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = $wpdb->get_var(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE wp_user_id = %d AND client_id = %s AND is_active = 1',
+			$table,
+			$user_id,
+			$client_id
+		)
+	);
+
+	return (int) $count > 0;
+}
+
+/**
  * Revoke an entire refresh-token lineage, given any one row id in it.
  *
  * Each rotation links child.refresh_parent_id = parent.id, so the lineage is a

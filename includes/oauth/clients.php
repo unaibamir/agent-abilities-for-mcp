@@ -474,7 +474,7 @@ function aafm_oauth_list_grants(): array {
  * caller's separate step (aafm_oauth_revoke_client_tokens()).
  *
  * @param string $client_id The public client identifier.
- * @return bool True when a client row was updated.
+ * @return bool True when the client is confirmed deactivated after this call.
  */
 function aafm_oauth_deactivate_client( string $client_id ): bool {
 	if ( '' === $client_id ) {
@@ -485,7 +485,7 @@ function aafm_oauth_deactivate_client( string $client_id ): bool {
 	$table = $wpdb->prefix . 'aafm_oauth_clients';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$updated = $wpdb->query(
+	$wpdb->query(
 		$wpdb->prepare(
 			'UPDATE %i SET is_active = 0 WHERE client_id = %s AND is_active = 1',
 			$table,
@@ -493,7 +493,11 @@ function aafm_oauth_deactivate_client( string $client_id ): bool {
 		)
 	);
 
-	return (int) $updated > 0;
+	// Certify against a fresh read rather than trusting the UPDATE's own affected-row count: a
+	// real SQL failure and "already inactive, nothing to update" both leave that count at zero,
+	// so casting it straight to a bool collapsed the two (Codex round 9, R9-2) and let a failed
+	// revoke still report the client as deactivated.
+	return aafm_oauth_client_is_deactivated( $client_id );
 }
 
 /**
@@ -504,7 +508,7 @@ function aafm_oauth_deactivate_client( string $client_id ): bool {
  *
  * @param int    $user_id   The WordPress user id whose grant is removed.
  * @param string $client_id The client the grant is for.
- * @return bool True when a consent row was deleted.
+ * @return bool True when the consent is confirmed gone after this call.
  */
 function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
 	if ( $user_id <= 0 || '' === $client_id ) {
@@ -515,7 +519,7 @@ function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
 	$table = $wpdb->prefix . 'aafm_oauth_consents';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$deleted = $wpdb->delete(
+	$wpdb->delete(
 		$table,
 		array(
 			'wp_user_id' => $user_id,
@@ -524,5 +528,8 @@ function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
 		array( '%d', '%s' )
 	);
 
-	return (int) $deleted > 0;
+	// Certify against a fresh read (see aafm_oauth_deactivate_client()) rather than trusting
+	// $wpdb->delete()'s own affected-row count, for the same reason: a real SQL failure and "no
+	// matching row" both leave that count at zero (Codex round 9, R9-2).
+	return ! aafm_oauth_has_consent( $user_id, $client_id );
 }

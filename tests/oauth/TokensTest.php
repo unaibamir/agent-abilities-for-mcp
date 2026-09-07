@@ -21,6 +21,29 @@ use WP_Error;
 class TokensTest extends TestCase {
 
 	/**
+	 * Installs the OAuth tables and seeds the 'client_abc' row every test in this file
+	 * mints tokens under, so aafm_oauth_client_is_deactivated() resolves a confirmed active
+	 * row rather than denying a client_id it has never seen (Codex round 11, R11-2).
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_abc',
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
+	}
+
+	/**
 	 * A representative mint context. Override individual keys per test.
 	 *
 	 * @return array<string,mixed>
@@ -220,6 +243,44 @@ class TokensTest extends TestCase {
 		remove_all_filters( 'query' );
 
 		$this->assertFalse( $result, 'An unreadable clients table must refuse the token, not accept it.' );
+	}
+
+	/**
+	 * Codex round 11, R11-2: aafm_oauth_client_is_deactivated() used to read a missing client row
+	 * as "not deactivated" (the same as a confirmed-active row), so a token whose owning client
+	 * row was later deleted - a partial table clear, a manual repair, or a race with the
+	 * abandoned-client reaper - kept validating indefinitely. The token here is genuinely fresh;
+	 * only the client row is gone. The live gate must require a positively confirmed active row,
+	 * not merely the absence of a "deactivated" one.
+	 */
+	public function test_validate_fails_when_owning_client_row_is_deleted(): void {
+		aafm_install_oauth_tables();
+
+		$client = aafm_oauth_register_client(
+			array( 'redirect_uris' => array( 'https://app.example/callback' ) )
+		);
+		$this->assertIsArray( $client );
+
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'client_id'  => $client['client_id'],
+				'wp_user_id' => 42,
+				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			)
+		);
+
+		// Active client, fresh token: validates.
+		$this->assertSame( 42, aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+
+		// The client row disappears entirely - not deactivated, just gone.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->delete( $wpdb->prefix . 'aafm_oauth_clients', array( 'client_id' => $client['client_id'] ), array( '%s' ) );
+
+		$this->assertFalse(
+			aafm_oauth_validate_access_token( $tokens['access_token'] ),
+			'A token whose owning client row was deleted must not keep validating.'
+		);
 	}
 
 	/**

@@ -64,10 +64,39 @@ class ValidatorTest extends TestCase {
 		$_SERVER['HTTPS'] = 'on';
 
 		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
+
+		// R11-2: aafm_oauth_client_is_deactivated() now denies a client_id with no row at all
+		// (not just a row confirmed inactive), so every synthetic client_id this file mints
+		// tokens for needs a real, active client row to resolve.
+		foreach ( array( 'c', 'wrong-audience-client', 'attribution_client' ) as $client_id ) {
+			$this->register_client_row( $client_id );
+		}
 
 		// OAuth is OFF by default now; the resolver's happy path requires it on. The
 		// disabled-bearer test sets it back to '0' explicitly.
 		update_option( 'aafm_oauth_enabled', '1' );
+	}
+
+	/**
+	 * Seed a minimal, active OAuth client row for a synthetic client_id used only to mint
+	 * tokens in this file (never through aafm_oauth_register_client(), which generates its
+	 * own random id).
+	 *
+	 * @param string $client_id Public client id to seed.
+	 */
+	private function register_client_row( string $client_id ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => $client_id,
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
 	}
 
 	/**

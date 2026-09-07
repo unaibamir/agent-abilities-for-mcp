@@ -228,32 +228,32 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
 }
 
 /**
- * Whether a client row exists for this id but has been deactivated (is_active = 0).
+ * Whether a client is anything other than a confirmed, currently-active registration.
  *
- * Used to re-enforce a client deactivation AFTER authorize-time, at code redemption, refresh
+ * Used to re-enforce a client's standing AFTER authorize-time, at code redemption, refresh
  * rotation, and bearer validation - so disabling a compromised client stops its already-issued
- * tokens, its refresh rotation, and the redemption of a code minted before deactivation. Returns
- * false when no row exists at all, so synthetic client ids (never registered) are not blocked -
- * only a known-and-disabled client is.
+ * tokens, its refresh rotation, and the redemption of a code minted before deactivation.
  *
- * Fails closed: every caller of this function is a live authorization gate, never a
- * certification (those go through a direct aafm_wpdb_scalar() read instead - see
- * aafm_oauth_deactivate_client() and aafm_oauth_delete_consent()). So when the read itself
- * fails, this returns true (treat as deactivated) rather than false - an unreadable clients
- * table must deny, not admit, or a deactivated client's tokens keep validating for the
- * duration of the outage (Codex round 10, R10-10). The events this denial feeds
- * (aafm_oauth_log_event's 'bearer'/'refresh' 'denied' rows, and the generic invalid_grant
- * responses at code redemption and refresh) are already worded as a plain denial rather than
- * a claim that the client was deactivated, so failing closed here does not misreport a
- * transient database error as a revocation.
+ * Fails closed in every direction, because every caller of this function is a live
+ * authorization gate, never a certification (those go through a direct aafm_wpdb_scalar()
+ * read instead - see aafm_oauth_deactivate_client() and aafm_oauth_delete_consent()): an
+ * unreadable clients table denies (Codex round 10, R10-10), and so does a row that is
+ * missing entirely rather than confirmed inactive (Codex round 11, R11-2) - a client whose
+ * row was removed by a partial table clear, a manual repair, or the abandoned-client reaper
+ * must not keep authenticating just because there is nothing left to read as "deactivated".
+ * Only a row read back with is_active = 1 counts as active; anything else - no row, a
+ * non-1 value, or a failed read - denies. The events this denial feeds (aafm_oauth_log_event's
+ * 'bearer'/'refresh' 'denied' rows, and the generic invalid_grant responses at code redemption
+ * and refresh) are already worded as a plain denial rather than a claim that the client was
+ * deactivated, so failing closed here does not misreport a missing row or a database error as
+ * a revocation.
  *
  * @param string $client_id The client identifier carried by a code/token row.
- * @return bool True when a client row is confirmed inactive, OR when the row could not be
- *              read at all. False only when a row is confirmed absent or confirmed active.
+ * @return bool True unless a client row is read back and confirmed active (is_active = 1).
  */
 function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 	if ( '' === $client_id ) {
-		return false;
+		return true; // No client id to authorize against: deny, this is a live auth gate.
 	}
 
 	global $wpdb;

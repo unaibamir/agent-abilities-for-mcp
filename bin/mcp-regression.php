@@ -1687,8 +1687,8 @@ final class AAFM_Mcp_Regression {
 		} else {
 			$sf      = $this->call( 'set-featured-image', [ 'post_id' => $post_id, 'attachment_id' => $att_id ] );
 			$got     = $this->call_post( 'get-post', [ 'post_id' => $post_id ] );
-			$fid     = (int) ( $got['featured_media'] ?? $got['featured_image_id'] ?? $got['thumbnail_id'] ?? 0 );
-			$set_ok  = ! $sf['isError'] && (bool) ( $sf['data']['set'] ?? false ) && ( 0 === $fid || $fid === $att_id );
+			$fid     = (int) ( $got['featured_image']['id'] ?? 0 );
+			$set_ok  = ! $sf['isError'] && (bool) ( $sf['data']['set'] ?? false ) && $fid === $att_id;
 			$this->record( $section, 'set-featured-image sets the post thumbnail', $set_ok ? 'PASS' : 'FAIL', 'set=' . var_export( $sf['data']['set'] ?? null, true ) );
 		}
 

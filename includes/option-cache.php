@@ -391,23 +391,41 @@ function aafm_persist_operator_switch( string $option, bool $on ): bool {
  * The certification itself is aafm_option_write_certified(), which checks the database row and the
  * object cache's own forced views directly, not a bare `===` of the caller's value against a
  * subsequent `get_option()` read - see that function's docblock for why an unforced read is not
- * enough on its own. get_option() is still called afterward so this request's own runtime cache is
- * left holding the same value the rest of the plugin will read for the remainder of it - callers
- * elsewhere rely on that read reflecting the write this function just made - it is simply no
- * longer where the boolean this function returns comes from.
+ * enough on its own. get_option() is called once more only after certification succeeds, so this
+ * request's own runtime cache is left holding the same value the rest of the plugin will read for
+ * the remainder of it - callers elsewhere rely on that read reflecting the write this function just
+ * made - it is simply no longer where the boolean this function returns comes from.
+ *
+ * That warming read is deliberately skipped on an uncertified write (Codex round 9 re-check): a
+ * plain get_option() call for an option this request just deliberately forgot the cache of, run
+ * while the database itself cannot answer for the option (the same condition certification just
+ * failed under), does not merely read nothing - core's own get_option() (wp-includes/option.php)
+ * caches that empty read into `notoptions`, asserting the option does not exist at all. For an
+ * option whose row is really still there, that is a second, worse wrong answer stacked on top of
+ * the one certification already reported: not just "unverified" but "confirmed absent" for every
+ * later get_option() call in this request, and, under a persistent object cache, beyond it too.
+ * Nothing this function can still do at that point makes the read trustworthy, so it is skipped
+ * rather than risked.
  *
  * $autoload is passed straight through to `update_option()` when given (its own null default
  * lets WordPress decide, the same as calling it with no third argument at all), for the rare
  * option that needs an explicit autoload state - `false` for one big enough that autoloading it
  * would cost every request that never asks for it, `true` to force it in.
  *
- * @param string           $option   Option name.
- * @param mixed            $value    New value to store.
- * @param string|bool|null $autoload Optional. Passed through to update_option(); null lets
- *                                    WordPress choose, matching the 2-argument call.
+ * Typed `bool|null`, not the legacy `string|bool|null`: core's own signature only ever declares
+ * `bool|null` for this parameter (`'yes'`/`'no'` are accepted at runtime for backward
+ * compatibility but deprecated as of WP 6.7, per wp-includes/option.php's own docblock), and
+ * every caller in this plugin already passes a real bool or omits the argument. Accepting the
+ * deprecated string shape here would just pass it straight through to a call core itself is
+ * moving away from.
+ *
+ * @param string    $option   Option name.
+ * @param mixed     $value    New value to store.
+ * @param bool|null $autoload Optional. Passed through to update_option(); null lets WordPress
+ *                             choose, matching the 2-argument call.
  * @return bool True when the option now certifies as $value.
  */
-function aafm_update_option_verified( string $option, $value, $autoload = null ): bool {
+function aafm_update_option_verified( string $option, $value, ?bool $autoload = null ): bool {
 	$caches_ok = aafm_forget_option_caches( $option );
 	if ( null === $autoload ) {
 		update_option( $option, $value );

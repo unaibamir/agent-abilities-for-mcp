@@ -468,6 +468,39 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 11, R11-4: aafm_oauth_count_active_clients() cast a failed COUNT(*) to 0, so
+	 * the DCR soft cap read an unreadable clients table as zero active clients - spare capacity -
+	 * and let registration through during an outage instead of refusing it the same way a
+	 * confirmed-at-cap read does. Fault only the cap's own COUNT query; registration must still
+	 * be refused with the identical temporarily_unavailable/503 shape the cap-reached branch uses.
+	 */
+	public function test_register_refuses_when_the_cap_read_fails(): void {
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_cap_read = false !== strpos( $query, 'SELECT COUNT(*) FROM `' . $wpdb->prefix . 'aafm_oauth_clients` WHERE is_active = 1' );
+				return $is_cap_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) )
+		);
+
+		$response = rest_do_request( $request );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertSame( 503, $response->get_status() );
+		$this->assertSame( 'temporarily_unavailable', $response->get_data()['error'] );
+	}
+
+	/**
 	 * A client_name exactly at the storage column's limit (191 characters) is accepted and
 	 * stored/returned unchanged - the boundary the guard and the VARCHAR(191) column must agree on.
 	 */

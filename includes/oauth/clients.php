@@ -270,30 +270,57 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 		return true; // Unreadable table: fail closed, this is a live auth gate.
 	}
 
-	// null => no row (synthetic / never-registered id): not deactivated. A row with is_active 0
-	// is the only "deactivated" case.
-	return null !== $view['value'] && 0 === (int) $view['value'];
+	if ( null === $view['value'] ) {
+		return true; // No row: nothing to positively authorize against, fail closed.
+	}
+
+	return 1 !== (int) $view['value'];
+}
+
+/**
+ * Count active registered OAuth clients, with a failure signal a live abuse-control
+ * decision can act on.
+ *
+ * Backs the DCR soft cap (aafm_oauth_rest_register()): the count itself is not enough there,
+ * because a query failure and a genuine count of 0 both leave `count` at 0, and casting a
+ * failed read to 0 read an unreadable cap as spare capacity and let the public registration
+ * route grow the clients table without bound during an outage (Codex round 11, R11-4, the
+ * DCR sibling of R10-1's certification-read class). Counts only is_active = 1 rows (a revoked
+ * client no longer counts against the cap). Tolerates a not-yet-installed table the same way
+ * a real empty table reads - `ok` true, `count` 0 - since that is the normal state before
+ * activation ever creates the table, not a failure a live gate needs to deny on.
+ *
+ * @return array{ok:bool,count:int} `ok` false only on a genuine query failure; `count` is the
+ *              confirmed active-client count when `ok` is true, and always 0 when it is not -
+ *              a caller enforcing a cap must check `ok`, not just `count`.
+ */
+function aafm_oauth_count_active_clients_view(): array {
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_clients';
+
+	$suppressed = $wpdb->suppress_errors();
+	$view       = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE is_active = 1', $table ) );
+	$wpdb->suppress_errors( $suppressed );
+
+	return array(
+		'ok'    => $view['ok'],
+		'count' => $view['ok'] ? max( 0, (int) $view['value'] ) : 0,
+	);
 }
 
 /**
  * Count active registered OAuth clients.
  *
- * Used by the DCR endpoint to enforce a soft cap so the public registration route cannot grow
- * the clients table without bound. Counts only is_active = 1 rows (a revoked client no longer
- * counts against the cap). Tolerates a not-yet-installed table by returning 0.
+ * Display-only convenience wrapper around {@see aafm_oauth_count_active_clients_view()}:
+ * tolerates any read failure, including a not-yet-installed table, by reporting 0. Not safe
+ * for a live abuse-control decision - a caller enforcing a cap must use
+ * aafm_oauth_count_active_clients_view() instead, so a failed read denies rather than reading
+ * as "no active clients, plenty of room" (Codex round 11, R11-4).
  *
- * @return int Non-negative count of active clients.
+ * @return int Non-negative count of active clients, or 0 when the count could not be read.
  */
 function aafm_oauth_count_active_clients(): int {
-	global $wpdb;
-	$table = $wpdb->prefix . 'aafm_oauth_clients';
-
-	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE is_active = 1', $table ) );
-	$wpdb->suppress_errors( $suppressed );
-
-	return max( 0, (int) $count );
+	return aafm_oauth_count_active_clients_view()['count'];
 }
 
 /**

@@ -422,12 +422,18 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	 * @param int $max Maximum active clients. Default AAFM_OAUTH_MAX_ACTIVE_CLIENTS.
 	 */
 	$max_clients = (int) apply_filters( 'aafm_oauth_max_clients', AAFM_OAUTH_MAX_ACTIVE_CLIENTS );
-	if ( $max_clients > 0 && aafm_oauth_count_active_clients() >= $max_clients ) {
-		return aafm_oauth_rest_protocol_error(
-			'temporarily_unavailable',
-			__( 'Client registration is temporarily unavailable. Please try again later.', 'agent-abilities-for-mcp' ),
-			503
-		);
+	if ( $max_clients > 0 ) {
+		$active_view = aafm_oauth_count_active_clients_view();
+		// An unreadable count must deny the same as a confirmed cap: casting a failed read to 0
+		// active clients read the cap as spare capacity and let the public registration route
+		// grow unbounded during an outage (Codex round 11, R11-4).
+		if ( ! $active_view['ok'] || $active_view['count'] >= $max_clients ) {
+			return aafm_oauth_rest_protocol_error(
+				'temporarily_unavailable',
+				__( 'Client registration is temporarily unavailable. Please try again later.', 'agent-abilities-for-mcp' ),
+				503
+			);
+		}
 	}
 
 	$params = aafm_oauth_rest_params( $request );

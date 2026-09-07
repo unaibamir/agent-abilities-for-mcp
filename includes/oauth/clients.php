@@ -230,14 +230,19 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
 /**
  * Whether a client is anything other than a confirmed, currently-active registration.
  *
- * Used to re-enforce a client's standing AFTER authorize-time, at code redemption, refresh
- * rotation, and bearer validation - so disabling a compromised client stops its already-issued
- * tokens, its refresh rotation, and the redemption of a code minted before deactivation.
+ * Used to re-enforce a client's standing AFTER authorize-time, at three live authorization
+ * gates - code redemption (rest.php), refresh rotation (tokens.php), and bearer validation
+ * (validator.php) - so disabling a compromised client stops its already-issued tokens, its
+ * refresh rotation, and the redemption of a code minted before deactivation. A fourth caller,
+ * aafm_oauth_validate_access_token() (tokens.php), is NOT a live gate: its own docblock states
+ * it lacks RFC 8707 audience binding and exists for token-lifecycle/introspection use only, never
+ * as a standalone authorization decision (Codex round 12, R12-3 - an earlier docblock here
+ * claimed every caller was a live gate, which was true of three but not that fourth).
  *
- * Fails closed in every direction, because every caller of this function is a live
- * authorization gate, never a certification (those go through a direct aafm_wpdb_scalar()
- * read instead - see aafm_oauth_deactivate_client() and aafm_oauth_delete_consent()): an
- * unreadable clients table denies (Codex round 10, R10-10), and so does a row that is
+ * Fails closed in every direction regardless of which of those four callers is asking, because
+ * certification reads go through a direct aafm_wpdb_scalar() read instead - see
+ * aafm_oauth_deactivate_client() and aafm_oauth_delete_consent() - never through this function:
+ * an unreadable clients table denies (Codex round 10, R10-10), and so does a row that is
  * missing entirely rather than confirmed inactive (Codex round 11, R11-2) - a client whose
  * row was removed by a partial table clear, a manual repair, or the abandoned-client reaper
  * must not keep authenticating just because there is nothing left to read as "deactivated".

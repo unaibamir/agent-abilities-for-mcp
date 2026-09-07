@@ -137,6 +137,55 @@ function aafm_force_refresh_option_caches( string $option ): void {
 }
 
 /**
+ * Run one already-prepared, single-column SELECT and report whether the query itself succeeded,
+ * using $wpdb->query()'s own return value rather than $wpdb->last_error.
+ *
+ * $wpdb->last_error is not a reliable failure signal on its own (Codex round 10, R10-1):
+ * $wpdb->query() (wp-includes/class-wpdb.php) returns false, before ever touching last_error, on
+ * three paths - $wpdb->ready is false, the `query` filter returns an empty query, and a failed
+ * reconnection after the server has gone away. A caller that only checked last_error read all
+ * three as "the query ran clean and found nothing," which is exactly how aafm_read_option_views()
+ * used to let an unreadable database certify as row absence - the defect commit 39dd5ab was
+ * written to close, still reachable through those three branches. $wpdb->query()'s own return is
+ * false on every one of them (and on every path that does set last_error, since query() itself
+ * returns false whenever last_error ends up non-empty), so checking it directly closes all four at
+ * once with one signal instead of two.
+ *
+ * On success, the value is read out of $wpdb->last_result exactly the way $wpdb->get_var() reads
+ * it internally, so a caller sees the identical value get_var() would have returned - this changes
+ * only how a failure is detected, never what a success looks like.
+ *
+ * @param string $sql A fully prepared SQL statement ($wpdb->prepare()'s output), expected to be a
+ *                     single-column SELECT (a scalar or a COUNT(*)).
+ * @return array{ok:bool,value:mixed} ok is false when the query itself failed - value is not
+ *              trustworthy either way in that case. value is the first column of the first row, or
+ *              null when the query succeeded but matched nothing.
+ */
+function aafm_wpdb_scalar( string $sql ): array {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- $sql is required by this function's own contract to already be $wpdb->prepare()'s output; every caller in this codebase passes a prepare() call directly.
+	$result = $wpdb->query( $sql );
+	if ( false === $result ) {
+		return array(
+			'ok'    => false,
+			'value' => null,
+		);
+	}
+
+	$value = null;
+	if ( ! empty( $wpdb->last_result[0] ) ) {
+		$columns = array_values( get_object_vars( $wpdb->last_result[0] ) );
+		$value   = ( isset( $columns[0] ) && '' !== $columns[0] ) ? $columns[0] : null;
+	}
+
+	return array(
+		'ok'    => true,
+		'value' => $value,
+	);
+}
+
+/**
  * Read $option as two independent, uninterpreted views - the object cache's and the database's -
  * instead of folding them into `get_option()`'s single, cache-trusting answer.
  *
@@ -159,10 +208,10 @@ function aafm_force_refresh_option_caches( string $option ): void {
  * result) and a query that simply finds no matching row both make `$wpdb->get_var()` return null -
  * `db_found` alone cannot tell "confirmed absent" from "could not check" apart (Codex round 9
  * re-check: this was the gap behind a failed configuration delete still certifying as a clean
- * reset - R9-3). `db_error` names that gap explicitly by reading `$wpdb->last_error`, which
- * `$wpdb->query()` resets to `''` at the top of every call (wp-includes/class-wpdb.php's own
- * `flush()`), so it reports only the immediately preceding query's own outcome, not a stale error
- * from earlier in the request.
+ * reset - R9-3). `db_error` names that gap explicitly, from aafm_wpdb_scalar()'s own `ok` flag
+ * rather than `$wpdb->last_error` alone: last_error is not set on every failure path (Codex round
+ * 10, R10-1 - see that function's docblock for the three it misses), so a caller that trusted it
+ * alone could still certify an unreadable database as proof the row was gone.
  *
  * @param string $option Option name.
  * @return array{db_found:bool,db_value:mixed,db_error:bool,cache_found:bool,cache_value:mixed}
@@ -197,13 +246,13 @@ function aafm_read_option_views( string $option ): array {
 	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache; certification must be checked against the row itself, mirroring aafm_uninstall_should_delete_data()'s reasoning.
-	$raw      = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
-	$db_error = '' !== $wpdb->last_error;
-	$db_found = ! $db_error && null !== $raw;
+	$scalar   = aafm_wpdb_scalar( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
+	$db_error = ! $scalar['ok'];
+	$db_found = ! $db_error && null !== $scalar['value'];
 
 	return array(
 		'db_found'    => $db_found,
-		'db_value'    => $db_found ? maybe_unserialize( $raw ) : false,
+		'db_value'    => $db_found ? maybe_unserialize( $scalar['value'] ) : false,
 		'db_error'    => $db_error,
 		'cache_found' => $cache_found,
 		'cache_value' => $cache_value,

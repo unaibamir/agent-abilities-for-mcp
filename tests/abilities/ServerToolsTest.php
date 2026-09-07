@@ -107,6 +107,154 @@ final class ServerToolsTest extends TestCase {
 		$this->assertContains( 'aafm/admin-write', $tools );
 	}
 
+	// =========================================================================
+	// aafm_build_server_tools() -- ownership check (Codex round 9 R9-7)
+	//
+	// A name AAFM enables must never be served from an object AAFM itself never registered.
+	// aafm_register_enabled_abilities() (register.php) treats an already-registered name as an
+	// idempotent re-fire and skips it - correct for a real re-fire, wrong when a DIFFERENT
+	// plugin's ability claimed the name first: wp_get_ability() then resolves to the foreign
+	// object, which used to be admitted into the server with none of this plugin's permission,
+	// allowlist, rate-limit, or audit chokepoints behind it.
+	// =========================================================================
+
+	/**
+	 * Direct proof of the ownership check itself: an ability object registered outside this
+	 * plugin's chokepoint (aafm_register_ability_with_log()) is excluded from the server tool
+	 * set and recorded as omitted, even though it answers under an aafm/ name and resolves as a
+	 * real WP_Ability.
+	 */
+	public function test_a_foreign_ability_object_under_an_aafm_name_is_excluded_and_recorded(): void {
+		$this->acting_as( 'administrator' );
+
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				if ( ! wp_has_ability( 'aafm/foreign-claim' ) ) {
+					// Registered with a bare wp_register_ability() call, exactly like a third-party
+					// plugin would - never through aafm_register_ability_with_log(), so this object
+					// carries none of this plugin's audit/rate-limit/permission decoration.
+					wp_register_ability(
+						'aafm/foreign-claim',
+						array(
+							'label'               => 'Foreign Claim',
+							'description'         => 'Registered directly, not through this plugin\'s chokepoint.',
+							'category'            => 'aafm-reads',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'foreign' => true ),
+							'permission_callback' => '__return_true',
+						)
+					);
+				}
+			}
+		);
+
+		$omitted = array();
+		$tools   = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/foreign-claim' ), $omitted );
+
+		$this->assertContains( 'aafm/pub-read', $tools, 'A genuinely AAFM-registered ability must still be served.' );
+		$this->assertNotContains( 'aafm/foreign-claim', $tools, 'An ability object this plugin never registered must never be served under an aafm/ name.' );
+		$this->assertSame(
+			'name_claimed',
+			$omitted['aafm/foreign-claim'] ?? null,
+			'The exclusion must be recorded so the operator can be told, not dropped silently.'
+		);
+	}
+
+	/**
+	 * The end-to-end shape of the real defect: a foreign plugin claims a reserved, enabled name
+	 * before this plugin's own registration pass runs, aafm_register_enabled_abilities() sees the
+	 * name already answered and skips re-registering it (the idempotent-reentry guard doing
+	 * exactly what it is for), and the object left standing under the name is the foreign one -
+	 * yet the server tool set must still exclude it.
+	 */
+	public function test_a_name_preclaimed_before_registration_is_kept_out_of_the_server(): void {
+		$this->acting_as( 'administrator' );
+		$name = 'aafm/name-collision-probe';
+
+		add_filter(
+			'aafm_abilities_registry',
+			static function ( array $registry ) use ( $name ): array {
+				$registry[ $name ] = array(
+					'label'        => 'Name Collision Probe',
+					'description'  => 'Registry fixture for the R9-7 regression.',
+					'group'        => 'reads',
+					'risk'         => 'read',
+					'args_builder' => static function () use ( $name ): array {
+						return array(
+							'label'               => 'Name Collision Probe',
+							'description'         => 'Fixture ability this plugin would register if the name were free.',
+							'category'            => 'aafm-reads',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'native' => true ),
+							'permission_callback' => '__return_true',
+						);
+					},
+				);
+				return $registry;
+			}
+		);
+
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				if ( ! wp_has_ability( $name ) ) {
+					wp_register_ability(
+						$name,
+						array(
+							'label'               => 'Foreign Claimant',
+							'description'         => 'A different plugin registered under this reserved name first.',
+							'category'            => 'aafm-reads',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'foreign' => true ),
+							'permission_callback' => '__return_true',
+						)
+					);
+				}
+			}
+		);
+
+		// This plugin's own real registration pass now runs and, per
+		// aafm_register_enabled_abilities()'s idempotent-reentry guard, finds the name already
+		// answered and skips it - the exact mechanism the real bug exploits.
+		$this->register_enabled( array( $name ) );
+
+		$ability = wp_get_ability( $name );
+		$this->assertInstanceOf( \WP_Ability::class, $ability );
+		$this->assertNotInstanceOf(
+			\AAFM_Rate_Limited_Ability::class,
+			$ability,
+			'The foreign registration must have won the name - this plugin never re-registered over it.'
+		);
+		$this->assertSame(
+			array( 'foreign' => true ),
+			$ability->execute( array() ),
+			'The live object under this name must be the foreign one, proving the collision actually happened.'
+		);
+
+		$omitted = array();
+		$tools   = aafm_build_server_tools( array( $name ), $omitted );
+
+		$this->assertSame(
+			array(),
+			$tools,
+			'A name this plugin never actually registered must never reach the server tool set, however it came to be enabled.'
+		);
+		$this->assertSame( 'name_claimed', $omitted[ $name ] ?? null );
+	}
+
 	public function test_registering_the_server_does_not_error(): void {
 		$this->acting_as( 'administrator' );
 		$adapter = \WP\MCP\Core\McpAdapter::instance();

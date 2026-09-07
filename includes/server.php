@@ -26,7 +26,8 @@ function aafm_mcp_tool_name( string $ability_name ): string {
 }
 
 /**
- * Build the registration-time $tools catalog: every enabled ability that exists.
+ * Build the registration-time $tools catalog: every enabled ability that exists AND is actually
+ * ours.
  *
  * IMPORTANT (corrected on the live path in Phase 2.4): create_server() runs inside
  * mcp_adapter_init at rest_api_init priority 15, and on the adapter's streamable-HTTP
@@ -37,14 +38,38 @@ function aafm_mcp_tool_name( string $ability_name ): string {
  * agent user IS resolved. The hard gate remains each ability's own permission_callback at
  * execute time. (See ROADMAP "Carried issues" for the timing correction to Phase 0.5 #2.)
  *
- * @param array<int,string> $enabled Enabled ability names.
+ * Codex round 9 R9-7: a reserved enabled name is only safe to serve when the object registered
+ * under it is genuinely this plugin's own. aafm_register_enabled_abilities() (register.php)
+ * treats an already-registered name as an idempotent re-fire and skips re-registering it - the
+ * right call for a real re-fire, but wrong when a DIFFERENT plugin's ability claimed the name
+ * first: wp_get_ability() then resolves to the foreign object, which this function used to admit
+ * into the server with none of this plugin's permission, allowlist, rate-limit, or audit
+ * chokepoints behind it (those all live on AAFM's own decorated callbacks, never reached).
+ *
+ * @param array<int,string>    $enabled Enabled ability names.
+ * @param array<string,string> $omitted Receives name => reason for every enabled name left out
+ *                                       because it resolved to an object AAFM never registered,
+ *                                       so the operator can be told rather than served silently
+ *                                       (by reference, appended to, not reset - a caller that
+ *                                       does not pass one simply does not get this bookkeeping).
  * @return list<string>
  */
-function aafm_build_server_tools( array $enabled ): array {
+function aafm_build_server_tools( array $enabled, array &$omitted = array() ): array {
 	$tools = array();
 	foreach ( $enabled as $name ) {
 		$ability = wp_get_ability( $name );
 		if ( ! $ability instanceof WP_Ability ) {
+			continue;
+		}
+		// The ability_class every name this plugin's own chokepoint processes is registered
+		// under (aafm_register_ability_with_log(), register.php) - native and bridged alike,
+		// and never overridden by any caller in this codebase. An object of any other class
+		// resolved here proves a different plugin's registration won this name, not ours, so
+		// admitting it into the server would silently hand it every permission, allowlist,
+		// rate-limit, and audit guarantee this plugin's own name implies but never actually
+		// enforces for it.
+		if ( ! $ability instanceof AAFM_Rate_Limited_Ability ) {
+			$omitted[ $name ] = 'name_claimed';
 			continue;
 		}
 		// If a user is already resolved (e.g. unit tests, or a transport that resolves auth
@@ -1429,6 +1454,8 @@ function aafm_omitted_reason_label( string $reason ): string {
 			return __( 'its schema could not be serialized', 'agent-abilities-for-mcp' );
 		case 'tool_cap':
 			return __( 'the enabled tool limit was reached', 'agent-abilities-for-mcp' );
+		case 'name_claimed':
+			return __( 'another plugin has already registered a tool under this name', 'agent-abilities-for-mcp' );
 		default:
 			return __( 'it exceeded a safety limit', 'agent-abilities-for-mcp' );
 	}
@@ -1455,8 +1482,18 @@ function aafm_register_mcp_server( $adapter ): void {
 	// breaches the measurement limits and cap the total tool count, so neither the adapter's
 	// recursive schema serialization nor the request-time per-tool permission loop can be driven
 	// into an uncatchable memory/time fatal by a pathological enabled+bridged set. Omissions are
-	// logged and surfaced (aafm_reconcile_omitted_abilities), never silently dropped.
-	$tools = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( aafm_all_server_ability_names() ) );
+	// logged and surfaced (aafm_reconcile_omitted_abilities), never silently dropped. This call
+	// already reconciles the option for THIS pass's schema/cap omissions before the name-claimed
+	// check below runs, so reading the option back afterward is always fresh, never stale.
+	$claimed = array();
+	$tools   = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( aafm_all_server_ability_names() ), $claimed );
+	// Codex round 9 R9-7: fold in any name-claimed omissions on top of the fresh schema/cap set
+	// just reconciled above, rather than a second unconditional write, so the common case (no
+	// collision) costs nothing beyond the one is-empty check.
+	if ( array() !== $claimed ) {
+		$current = get_option( AAFM_OMITTED_ABILITIES_OPTION, array() );
+		aafm_reconcile_omitted_abilities( array_merge( is_array( $current ) ? $current : array(), $claimed ) );
+	}
 
 	// Per-connection capability gate at request time (the user is anonymous here; see
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.

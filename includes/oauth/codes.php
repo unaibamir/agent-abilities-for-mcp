@@ -200,10 +200,16 @@ function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ):
  * Used by the admin "Revoke client" handler to certify aafm_oauth_revoke_client_codes() actually
  * cleared the table, rather than trusting that delete's own affected-row count (Codex round 10,
  * R10-2): the revoke handlers called the delete and threw its result away entirely, so the codes
- * table was never certified at all - only the client and its tokens were. A code left behind by a
- * failed delete is still redeemable within its ~60-second window even after the client is
- * deactivated and its tokens revoked (the token endpoint's own consent re-check is a second layer,
- * not a substitute for actually clearing the row here).
+ * table was never certified at all - only the client and its tokens were.
+ *
+ * Codex round 11 R11-5 corrected an earlier version of this comment that overstated the risk: a
+ * code left behind by a failed delete is NOT actually redeemable after the fact. The token
+ * endpoint independently re-checks client deactivation before redemption
+ * (aafm_oauth_rest_token_authorization_code(), includes/oauth/rest.php) and re-checks consent at
+ * redemption for the revoked-grant case, so a leftover row cannot mint a token either way.
+ * Clearing the row here is still worth certifying: defence in depth against a future redemption
+ * path that might not repeat both re-checks, and data hygiene - a stale, unusable code should
+ * not linger in the table pretending to be live.
  *
  * Same fail-closed bias as aafm_oauth_client_has_active_tokens(): this has exactly one caller
  * shape, a revoke handler certifying a full clear, so a read that could not run must count as

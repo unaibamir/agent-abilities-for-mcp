@@ -203,11 +203,11 @@ function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
  *
  * @param int    $user_id   WordPress user ID.
  * @param string $client_id The public client identifier.
- * @return void
+ * @return bool True when the consent is confirmed stored after this call.
  */
-function aafm_oauth_record_consent( int $user_id, string $client_id ): void {
+function aafm_oauth_record_consent( int $user_id, string $client_id ): bool {
 	if ( $user_id <= 0 || '' === $client_id ) {
-		return;
+		return false;
 	}
 
 	global $wpdb;
@@ -221,6 +221,12 @@ function aafm_oauth_record_consent( int $user_id, string $client_id ): void {
 		),
 		array( '%d', '%s', '%s' )
 	);
+
+	// Certify against a fresh read rather than trusting $wpdb->replace()'s own result (same
+	// reasoning as aafm_oauth_deactivate_client()): a failed REPLACE must stop the approval
+	// handler from minting and handing back a code that redemption will find has no matching
+	// consent (Codex round 9, R9-6).
+	return aafm_oauth_has_consent( $user_id, $client_id );
 }
 
 /**
@@ -711,8 +717,15 @@ function aafm_oauth_handle_authorize(): void {
 			aafm_oauth_redirect_error( $valid['redirect_uri'], 'access_denied', $valid['state'] );
 		}
 
-		// Approve: persist consent, then issue the code.
-		aafm_oauth_record_consent( $user_id, $valid['client_id'] );
+		// Approve: persist consent, then issue the code. A code must never be minted over a
+		// consent write that did not actually take - redemption would only fail it later as a
+		// dead invalid_grant after the client was already told approval succeeded.
+		if ( ! aafm_oauth_record_consent( $user_id, $valid['client_id'] ) ) {
+			aafm_oauth_render_local_error(
+				500,
+				__( 'Could not record your approval. Please try again.', 'agent-abilities-for-mcp' )
+			);
+		}
 		aafm_oauth_issue_code_and_redirect( $valid, $user_id );
 	}
 

@@ -430,6 +430,110 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * Drive the full init handler for one authorize POST (the "Approve" submission),
+	 * capturing the first redirect or status the same way run_authorize_get() does.
+	 *
+	 * @param array<string,string> $params Authorize params, already merged with a valid nonce
+	 *                                       and the 'approve' decision.
+	 * @return array{redirect:?string,status:?int} Captured redirect target and HTTP status.
+	 */
+	private function run_authorize_post( array $params ): array {
+		$captured = array(
+			'redirect' => null,
+			'status'   => null,
+		);
+
+		$catch_redirect = static function ( $location ) use ( &$captured ) {
+			$captured['redirect'] = (string) $location;
+			throw new \RuntimeException( 'aafm_test_redirect' );
+		};
+		$catch_status   = static function ( $header, $code ) use ( &$captured ) {
+			$captured['status'] = (int) $code;
+			throw new \RuntimeException( 'aafm_test_status' );
+		};
+		add_filter( 'wp_redirect', $catch_redirect, 1 );
+		add_filter( 'status_header', $catch_status, 1, 2 );
+
+		$params['aafm_oauth'] = 'authorize';
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- snapshot only, restored verbatim in the finally block.
+		$prev_post = $_POST;
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- snapshot only, restored verbatim in the finally block.
+		$prev_get    = $_GET;
+		$prev_server = $_SERVER;
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- test harness seeds the request.
+		$_POST                     = $params;
+		$_GET                      = array( 'aafm_oauth' => 'authorize' );
+		$_SERVER['REQUEST_METHOD'] = 'POST';
+		$_SERVER['REQUEST_URI']    = '/?aafm_oauth=authorize';
+		$_SERVER['HTTPS']          = 'on';
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- test harness only: demotes the CLI "headers already sent" warning so the status_header capture runs.
+		set_error_handler(
+			static function ( $errno, $errstr ) {
+				return str_contains( $errstr, 'Cannot modify header information' );
+			},
+			E_WARNING
+		);
+
+		ob_start();
+		try {
+			aafm_oauth_handle_authorize();
+		} catch ( \RuntimeException $e ) {
+			unset( $e );
+		} finally {
+			ob_end_clean();
+			restore_error_handler();
+			remove_filter( 'wp_redirect', $catch_redirect, 1 );
+			remove_filter( 'status_header', $catch_status, 1 );
+			$_POST   = $prev_post;
+			$_GET    = $prev_get;
+			$_SERVER = $prev_server;
+		}
+
+		return array(
+			'redirect' => $captured['redirect'],
+			'status'   => $captured['status'],
+		);
+	}
+
+	/**
+	 * Codex round 9, R9-6: a failed consent write must not let the approve submission mint and
+	 * redirect a code. Before the fix, aafm_oauth_record_consent() discarded $wpdb->replace()'s
+	 * result, so the approval carried on regardless and handed back a code that redemption would
+	 * later refuse as invalid_grant, after the client was already told approval succeeded.
+	 */
+	public function test_approve_does_not_issue_a_code_when_the_consent_write_fails(): void {
+		$this->acting_as( 'administrator' );
+		$user   = get_current_user_id();
+		$client = $this->register_client();
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				return false !== strpos( $query, 'REPLACE INTO `' . $wpdb->prefix . 'aafm_oauth_consents`' )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$params                        = $this->valid_params( $client );
+		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent' );
+		$params['aafm_oauth_decision'] = 'approve';
+		$result                        = $this->run_authorize_post( $params );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertNull( $result['redirect'], 'A failed consent write must not redirect back to the client with a code.' );
+		$this->assertSame( 500, $result['status'], 'A failed consent write must render a local error, not proceed.' );
+		$this->assertFalse( aafm_oauth_has_consent( $user, $client ), 'The consent write failed as injected; no row should exist.' );
+	}
+
+	/**
 	 * A LOGGED-OUT request to the authorize endpoint is sent to wp-login, with the
 	 * authorize URL carried as redirect_to so the user returns after signing in.
 	 *

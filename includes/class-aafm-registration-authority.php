@@ -73,9 +73,23 @@ if ( ! class_exists( 'WP_Ability' ) ) {
 final class AAFM_Registration_Authority {
 
 	/**
-	 * The WP_Ability object this plugin's own registration produced, keyed by ability name.
+	 * A WeakReference to the WP_Ability object this plugin's own registration produced, keyed by
+	 * ability name.
 	 *
-	 * @var array<string,WP_Ability>
+	 * Codex round 12 R12-4: a strong reference here used to keep every uniquely named ability this
+	 * plugin ever registered - and its permission/execute closures - alive for the rest of the
+	 * process, even after core's own wp_unregister_ability() had forgotten it: nothing pruned an
+	 * entry on unregister. Harmless for the usual case of a fixed set of names registered once per
+	 * request, but a real unbounded leak in a long-lived process (WP-CLI, a persistent worker) that
+	 * registers and unregisters many uniquely named abilities over its lifetime - proven by a probe
+	 * of 64 register-then-unregister cycles leaving core with zero registrations and this store
+	 * still holding all 64. A WeakReference costs nothing while core still holds its own (strong)
+	 * reference, and once core drops that, the object is freed exactly as it would be with no store
+	 * at all - owned() below then reads it back as null, which is indistinguishable from "this
+	 * plugin never registered this name", so a collected record fails the identity check closed
+	 * rather than passing it.
+	 *
+	 * @var array<string,WeakReference<WP_Ability>>
 	 */
 	private static $store = array();
 
@@ -97,21 +111,23 @@ final class AAFM_Registration_Authority {
 		}
 		$registered = wp_register_ability( $name, $args );
 		if ( $registered instanceof WP_Ability ) {
-			self::$store[ $name ] = $registered;
+			self::$store[ $name ] = WeakReference::create( $registered );
 		}
 		return $registered;
 	}
 
 	/**
 	 * Read-only: the object this plugin's own registration produced for $name, or null if this
-	 * plugin never registered it. Self-invalidating: this compares against whatever is CURRENTLY
-	 * stored, so a later registration that replaces $store[$name] makes any earlier answer stale
-	 * on its own, with nothing else to reset.
+	 * plugin never registered it OR that registration has since been unregistered and collected.
+	 * Self-invalidating: this dereferences whatever is CURRENTLY stored, so a later registration
+	 * that replaces $store[$name] - or core forgetting $name entirely - makes any earlier answer
+	 * stale on its own, with nothing else to reset.
 	 *
 	 * @param string $name Ability name.
 	 * @return WP_Ability|null
 	 */
 	public static function owned( string $name ): ?WP_Ability {
-		return self::$store[ $name ] ?? null;
+		$ref = self::$store[ $name ] ?? null;
+		return $ref instanceof WeakReference ? $ref->get() : null;
 	}
 }

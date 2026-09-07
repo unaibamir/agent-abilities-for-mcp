@@ -598,6 +598,70 @@ final class ServerToolsTest extends TestCase {
 		$this->assertNotInstanceOf( HostileAbility::class, $ability );
 	}
 
+	// =========================================================================
+	// AAFM_Registration_Authority -- the ownership store does not retain unregistered abilities
+	// (Codex round 12 R12-4)
+	//
+	// The store used to hold a strong reference to every uniquely named ability ever registered
+	// through it, with nothing removing an entry when core's wp_unregister_ability() unregistered
+	// one - a real leak in a long-lived process (WP-CLI, a persistent worker) that registers and
+	// unregisters many uniquely-named abilities over its lifetime. It now holds a WeakReference,
+	// so the object - and its closures - is freed the moment core drops its own reference.
+	// =========================================================================
+
+	/**
+	 * Register, unregister, and prove the object is actually collected rather than merely
+	 * trusting the class's own bookkeeping - and that the identity check reads a collected
+	 * record as "never registered", never as a stale match.
+	 */
+	public function test_unregistering_an_ability_lets_the_ownership_store_release_it(): void {
+		$this->acting_as( 'administrator' );
+		$name = 'aafm/gc-probe';
+
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				if ( ! wp_has_ability( $name ) ) {
+					aafm_register_ability_with_log(
+						$name,
+						array(
+							'label'               => 'GC Probe',
+							'description'         => 'Registered then unregistered to prove the ownership store releases it.',
+							'category'            => 'aafm-reads',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array(),
+							'permission_callback' => '__return_true',
+						)
+					);
+				}
+			}
+		);
+
+		$ability = \AAFM_Registration_Authority::owned( $name );
+		$this->assertInstanceOf( \WP_Ability::class, $ability, 'Fixture setup: registration must have landed.' );
+
+		// A WeakReference of our own, independent of the authority's internal store, so this test
+		// proves the object is actually collected rather than merely trusting the class's own
+		// bookkeeping.
+		$probe   = \WeakReference::create( $ability );
+		$ability = null; // Drop this test's only other reference; core's registry still holds one.
+
+		wp_unregister_ability( $name );
+
+		$this->assertNull(
+			$probe->get(),
+			'Once core drops its own reference, the ownership store must not be the thing keeping this object alive.'
+		);
+		$this->assertNull(
+			\AAFM_Registration_Authority::owned( $name ),
+			'A collected record must read back as "never registered by this plugin", never as a stale match - fail closed, not a false positive.'
+		);
+	}
+
 	public function test_registering_the_server_does_not_error(): void {
 		$this->acting_as( 'administrator' );
 		$adapter = \WP\MCP\Core\McpAdapter::instance();

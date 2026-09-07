@@ -256,11 +256,75 @@ jobs:
       - name: Run PHPUnit
         run: vendor/bin/phpunit
 
+  # Multisite twin of the phpunit job above. tests/multisite.xml.dist sets WP_TESTS_MULTISITE=1
+  # so the WP test library installs its own multisite tables and every @group ms-required test
+  # actually executes instead of skipping - the plain `phpunit` job above runs the single-site
+  # config, where those tests always skip. This exists because nothing ran them: CI only ever
+  # invoked `vendor/bin/phpunit`, so multisite-only security and lifecycle behavior, including
+  # the per-blog session-persistence guard the 1.7.4 mcp-adapter bump exists to fix, sat outside
+  # the release gate with the suite reporting green throughout (Codex round 9, R9-9). Provisioning
+  # mirrors the phpunit job exactly - same matrix, same service, same install script - because
+  # WP_TESTS_MULTISITE is read at PHPUnit runtime from the config file, not at provisioning time,
+  # so there is nothing for this step to do differently. A separate database name keeps this
+  # job's fixtures apart from the single-site job's, the same way contract.yml's WP_CONTRACT_DB
+  # keeps the contract suite apart from both.
+  phpunit-multisite:
+    name: Multisite · PHP ${{ matrix.php }} · WP ${{ matrix.wp }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4']
+        wp: ['6.9', 'latest']
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      WP_TESTS_DIR: /tmp/wordpress-tests-lib-ms
+      WP_CORE_DIR: /tmp/wordpress-ms
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP + Composer
+        uses: ./.github/actions/setup-php-composer
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, zip, gd
+          tools: composer:v2
+
+      - name: Provision WordPress core + PHPUnit test suite
+        run: |
+          set -euo pipefail
+          # Same mirror workaround as the phpunit job above - see that step's comment.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
+          sudo timeout 180 apt-get update -o Acquire::Retries=2 || true
+          sudo apt-get install -y --no-install-recommends subversion
+          bin/install-wp-tests.sh wordpress_test_ms root root 127.0.0.1 '${{ matrix.wp }}'
+
+      - name: Run PHPUnit (multisite)
+        run: vendor/bin/phpunit -c tests/multisite.xml.dist
+
   # Single gating check that fans in the whole suite - this is the context to
   # require in branch protection, so the matrix can change without re-wiring.
   test-result:
     name: Test Suite Result
-    needs: [phpcs, phpstan, i18n, lint74, phpunit]
+    needs: [phpcs, phpstan, i18n, lint74, phpunit, phpunit-multisite]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     permissions: {}
@@ -271,7 +335,8 @@ jobs:
             || [ "${{ needs.phpstan.result }}" != "success" ] \
             || [ "${{ needs.i18n.result }}" != "success" ] \
             || [ "${{ needs.lint74.result }}" != "success" ] \
-            || [ "${{ needs.phpunit.result }}" != "success" ]; then
+            || [ "${{ needs.phpunit.result }}" != "success" ] \
+            || [ "${{ needs.phpunit-multisite.result }}" != "success" ]; then
             echo "One or more required checks failed."
             exit 1
           fi

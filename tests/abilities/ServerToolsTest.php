@@ -415,6 +415,81 @@ final class ServerToolsTest extends TestCase {
 		$this->assertSame( 'name_claimed', $omitted[ $name ] ?? null );
 	}
 
+	// =========================================================================
+	// aafm_build_server_tools() -- the ownership record itself cannot be poisoned (Codex round 11
+	// R11-3)
+	//
+	// R10-4 closed the class-forgery route by comparing object identity against whatever
+	// aafm_register_ability_with_log() actually returned. But the record it compared against used
+	// to be writable through a public, two-argument aafm_remember_registered_ability( $name,
+	// $ability ) that trusted whatever object it was handed - so a foreign plugin could register a
+	// name directly with wp_register_ability() (bypassing every AAFM decorator) and then call that
+	// setter itself, making the record - and the identity check it feeds - believe its own
+	// undecorated object was ours. The fixture below calls the function with that old two-argument
+	// shape via call_user_func_array() (a direct call would now fail static analysis, since the
+	// write parameter no longer exists in the signature - but nothing stops an attacker's own
+	// compiled code from calling it that way at runtime, which is exactly the shape this proves is
+	// now inert).
+	// =========================================================================
+
+	/**
+	 * The literal R11-3 attack: register a name directly with core, then try to make the record
+	 * believe that object is ours by calling the old two-argument write shape. Must be a no-op.
+	 */
+	public function test_poisoning_the_ownership_record_directly_no_longer_admits_a_foreign_ability(): void {
+		$this->acting_as( 'administrator' );
+		$name = 'aafm/poisoned-record-probe';
+
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				if ( ! wp_has_ability( $name ) ) {
+					wp_register_ability(
+						$name,
+						array(
+							'label'               => 'Poisoned Record Probe',
+							'description'         => 'Registered directly with core, with no AAFM decorators at all.',
+							'category'            => 'aafm-reads',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array( 'foreign' => true ),
+							'permission_callback' => '__return_true',
+						)
+					);
+				}
+			}
+		);
+
+		$foreign = wp_get_ability( $name );
+		$this->assertInstanceOf(
+			\WP_Ability::class,
+			$foreign,
+			'Fixture setup: the foreign registration must have actually landed.'
+		);
+
+		// The attack: try to make the record believe THIS foreign object is the one AAFM's own
+		// registration produced, using the exact old write shape.
+		call_user_func_array( 'aafm_remember_registered_ability', array( $name, $foreign ) );
+
+		$this->assertNull(
+			aafm_remember_registered_ability( $name ),
+			'A name this plugin never registered itself must never be recorded as owned, no matter how the write is attempted.'
+		);
+
+		$omitted = array();
+		$tools   = aafm_build_server_tools( array( $name ), $omitted );
+
+		$this->assertSame(
+			array(),
+			$tools,
+			'The poisoning attempt must not get the foreign, undecorated ability served through this plugin.'
+		);
+		$this->assertSame( 'name_claimed', $omitted[ $name ] ?? null );
+	}
+
 	public function test_registering_the_server_does_not_error(): void {
 		$this->acting_as( 'administrator' );
 		$adapter = \WP\MCP\Core\McpAdapter::instance();

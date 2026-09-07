@@ -53,6 +53,11 @@ function aafm_mcp_tool_name( string $ability_name ): string {
  * here must be the SAME object aafm_register_ability_with_log() (register.php) actually returned
  * for this name, not merely an instance of the class it happens to use.
  *
+ * Codex round 11 R11-3: the record this check compares against used to be writable through a
+ * public setter that trusted whatever object it was handed - forgeable the same way the class
+ * check was. AAFM_Registration_Authority (includes/class-aafm-registration-authority.php) now
+ * owns that record and never accepts a ready-made object; see its docblock for the mechanism.
+ *
  * @param array<int,string>    $enabled Enabled ability names.
  * @param array<string,string> $omitted Receives name => reason for every enabled name left out
  *                                       because it resolved to an object AAFM never registered,

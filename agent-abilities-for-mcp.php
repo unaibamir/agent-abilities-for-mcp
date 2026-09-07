@@ -315,6 +315,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/block-guard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/page-builder-guard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/allowlist.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/class-aafm-registration-authority.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/class-aafm-rate-limited-ability.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';

@@ -62,9 +62,8 @@ function aafm_remember_raw_permission( string $name, ?callable $callback = null 
 }
 
 /**
- * Remember (or read) the exact WP_Ability object this plugin's own registration chokepoint
- * returned for a name, so server construction can require that same object rather than trust its
- * class.
+ * Read the exact WP_Ability object this plugin's own registration chokepoint returned for a
+ * name, so server construction can require that same object rather than trust its class.
  *
  * Codex round 10 R10-4: R9-7's original fix required `instanceof AAFM_Rate_Limited_Ability`, but
  * that class is public and non-final and `wp_register_ability()` accepts a caller-chosen
@@ -73,27 +72,22 @@ function aafm_remember_raw_permission( string $name, ?callable $callback = null 
  * caller can name our class, but cannot hand back the specific object our own call to
  * wp_register_ability() produced.
  *
- * Self-invalidating by construction, which is what makes this safe under process-lifetime static
- * state (this store, like aafm_remember_raw_permission() above, is never explicitly reset between
- * PHPUnit tests sharing one process). The check this feeds is always "is the object CURRENTLY
- * registered under this name the one we stored", never "did we ever store something for this
- * name" - so a later collision that replaces the registry's object for $name with a foreign one
- * fails the comparison regardless of what this store held from an earlier, legitimate
- * registration. A name-keyed boolean or class-name memo cannot do this: once true, always true.
+ * Codex round 11 R11-3: this function used to also take a second, optional argument and write
+ * the store directly - a public two-argument function that trusts whatever WP_Ability object it
+ * is handed is exactly as forgeable as the class check it replaced, just one indirection later:
+ * a foreign plugin could register a name directly with wp_register_ability() and then call THIS
+ * function itself to make its own object believed. The write is gone from here entirely; it now
+ * happens only inside AAFM_Registration_Authority::register()
+ * (includes/class-aafm-registration-authority.php), which never accepts a ready-made object -
+ * see that class's docblock for the full mechanism and its honestly-bounded limits. This
+ * function is now read-only, a thin pass-through kept so every existing call site (server.php)
+ * is unchanged.
  *
- * @param string          $name    Ability name.
- * @param WP_Ability|null $ability Object to store, or null to read.
- * @return WP_Ability|null Stored object when reading; null otherwise.
+ * @param string $name Ability name.
+ * @return WP_Ability|null Stored object, or null if this plugin never registered $name itself.
  */
-function aafm_remember_registered_ability( string $name, ?WP_Ability $ability = null ): ?WP_Ability {
-	static $store = array();
-
-	if ( null !== $ability ) {
-		$store[ $name ] = $ability;
-		return null;
-	}
-
-	return $store[ $name ] ?? null;
+function aafm_remember_registered_ability( string $name ): ?WP_Ability {
+	return AAFM_Registration_Authority::owned( $name );
 }
 
 /**
@@ -1347,13 +1341,14 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		$args['ability_class'] = AAFM_Rate_Limited_Ability::class;
 	}
 
-	$registered = wp_register_ability( $name, $args );
-	if ( $registered instanceof WP_Ability ) {
-		// Record the exact object this call produced (R10-4) so aafm_build_server_tools() can
-		// require that same object at server construction, rather than trust its class.
-		aafm_remember_registered_ability( $name, $registered );
-	}
-	return $registered;
+	// Register and record atomically through AAFM_Registration_Authority (R11-3): it performs
+	// this same wp_register_ability() call itself and records only what THAT call returns, so
+	// nothing outside this function can hand it a substitute object to record instead. See that
+	// class's docblock for why the earlier two-step version (register here, then separately tell
+	// a public setter what to remember) was forgeable, and for what this still cannot rule out -
+	// a caller that skips this function entirely and calls the class directly with its own,
+	// undecorated $args.
+	return AAFM_Registration_Authority::register( $name, $args );
 }
 
 /**

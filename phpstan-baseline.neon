@@ -4,4 +4,4 @@ parameters:
 			message: '#^Parameter \#1 \$name of function wp_register_ability expects lowercase\-string&non\-falsy\-string, string given\.$#'
 			identifier: argument.type
 			count: 1
-			path: includes/register.php
+			path: includes/class-aafm-registration-authority.php

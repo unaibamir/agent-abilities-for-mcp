@@ -181,6 +181,48 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 10, R10-10: aafm_oauth_client_is_deactivated() used to cast a failed SELECT to
+	 * false ("not deactivated"), so a live bearer token whose owning client could not actually be
+	 * checked kept validating for the duration of a transient database failure. The client here is
+	 * genuinely ACTIVE and the token is genuinely fresh; only the deactivation-check read fails.
+	 * The token must still be refused, not accepted, because the live gate cannot tell "confirmed
+	 * active" apart from "could not check."
+	 */
+	public function test_validate_fails_closed_when_the_deactivation_read_fails(): void {
+		aafm_install_oauth_tables();
+
+		$client = aafm_oauth_register_client(
+			array( 'redirect_uris' => array( 'https://app.example/callback' ) )
+		);
+		$this->assertIsArray( $client );
+
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'client_id'  => $client['client_id'],
+				'wp_user_id' => 42,
+				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			)
+		);
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_read = false !== strpos( $query, 'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`' );
+				return $is_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$result = aafm_oauth_validate_access_token( $tokens['access_token'] );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( $result, 'An unreadable clients table must refuse the token, not accept it.' );
+	}
+
+	/**
 	 * An unknown access token does not validate.
 	 */
 	public function test_validate_unknown_access_token_returns_false(): void {
@@ -387,6 +429,45 @@ class TokensTest extends TestCase {
 		$this->deactivate_client( $client_id );
 		$rejected = aafm_oauth_rotate_refresh( $ok['refresh_token'], $client_id );
 		$this->assertInstanceOf( WP_Error::class, $rejected, 'a deactivated client must not rotate its refresh token' );
+	}
+
+	/**
+	 * Codex round 10, R10-10: same fail-open shape as test_validate_fails_closed_when_the_deactivation_read_fails()
+	 * above, but at the refresh-rotation gate. The client is genuinely ACTIVE; only the
+	 * deactivation-check read fails. Rotation must still be rejected, not granted a fresh pair.
+	 */
+	public function test_rotate_refresh_rejected_when_the_deactivation_read_fails(): void {
+		aafm_install_oauth_tables();
+
+		$client = aafm_oauth_register_client( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) );
+		$this->assertIsArray( $client );
+		$client_id = (string) $client['client_id'];
+
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'client_id'  => $client_id,
+				'wp_user_id' => 42,
+				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			)
+		);
+		$this->assertIsArray( $tokens );
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_read = false !== strpos( $query, 'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`' );
+				return $is_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$rejected = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $client_id );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertInstanceOf( WP_Error::class, $rejected, 'an unreadable clients table must refuse rotation, not grant it' );
 	}
 
 	/**

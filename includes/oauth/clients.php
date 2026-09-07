@@ -236,8 +236,20 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
  * false when no row exists at all, so synthetic client ids (never registered) are not blocked -
  * only a known-and-disabled client is.
  *
+ * Fails closed: every caller of this function is a live authorization gate, never a
+ * certification (those go through a direct aafm_wpdb_scalar() read instead - see
+ * aafm_oauth_deactivate_client() and aafm_oauth_delete_consent()). So when the read itself
+ * fails, this returns true (treat as deactivated) rather than false - an unreadable clients
+ * table must deny, not admit, or a deactivated client's tokens keep validating for the
+ * duration of the outage (Codex round 10, R10-10). The events this denial feeds
+ * (aafm_oauth_log_event's 'bearer'/'refresh' 'denied' rows, and the generic invalid_grant
+ * responses at code redemption and refresh) are already worded as a plain denial rather than
+ * a claim that the client was deactivated, so failing closed here does not misreport a
+ * transient database error as a revocation.
+ *
  * @param string $client_id The client identifier carried by a code/token row.
- * @return bool True only when a client row exists AND is inactive.
+ * @return bool True when a client row is confirmed inactive, OR when the row could not be
+ *              read at all. False only when a row is confirmed absent or confirmed active.
  */
 function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 	if ( '' === $client_id ) {
@@ -246,7 +258,7 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$is_active = $wpdb->get_var(
+	$view = aafm_wpdb_scalar(
 		$wpdb->prepare(
 			'SELECT is_active FROM %i WHERE client_id = %s',
 			$wpdb->prefix . 'aafm_oauth_clients',
@@ -254,9 +266,13 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 		)
 	);
 
+	if ( ! $view['ok'] ) {
+		return true; // Unreadable table: fail closed, this is a live auth gate.
+	}
+
 	// null => no row (synthetic / never-registered id): not deactivated. A row with is_active 0
 	// is the only "deactivated" case.
-	return null !== $is_active && 0 === (int) $is_active;
+	return null !== $view['value'] && 0 === (int) $view['value'];
 }
 
 /**

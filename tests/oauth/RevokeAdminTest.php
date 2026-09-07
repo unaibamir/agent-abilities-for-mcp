@@ -98,6 +98,35 @@ final class RevokeAdminTest extends TestCase {
 		$this->assertSame( 0, aafm_oauth_revoke_client_tokens( 'client_abc' ) );
 	}
 
+	/**
+	 * Codex round 10, R10-10: aafm_oauth_client_is_deactivated() used to cast a failed SELECT to
+	 * false ("not deactivated"), and every caller of it is a live authorization gate - so an
+	 * unreadable clients table let a deactivated client's already-issued tokens keep validating
+	 * for the duration of the outage. The client here is genuinely ACTIVE; only the read fails.
+	 * The function must still report it as deactivated, because a live gate cannot tell "confirmed
+	 * active" apart from "could not check" and must fail closed.
+	 */
+	public function test_client_is_deactivated_fails_closed_when_the_read_fails(): void {
+		$this->seed_client( 'client_abc', 1 );
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_read = false !== strpos( $query, 'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`' );
+				return $is_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$deactivated = aafm_oauth_client_is_deactivated( 'client_abc' );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertTrue( $deactivated, 'An unreadable clients table must fail closed, not report the client as fine.' );
+	}
+
 	public function test_delete_consent_and_revoke_user_client_tokens_is_scoped(): void {
 		global $wpdb;
 		$this->seed_client( 'client_abc', 1 );

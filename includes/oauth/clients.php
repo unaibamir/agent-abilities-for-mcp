@@ -497,7 +497,17 @@ function aafm_oauth_deactivate_client( string $client_id ): bool {
 	// real SQL failure and "already inactive, nothing to update" both leave that count at zero,
 	// so casting it straight to a bool collapsed the two (Codex round 9, R9-2) and let a failed
 	// revoke still report the client as deactivated.
-	return aafm_oauth_client_is_deactivated( $client_id );
+	//
+	// A direct aafm_wpdb_scalar() read here, not aafm_oauth_client_is_deactivated() (Codex round
+	// 10, R10-2): that helper is also the live token-validation guard (tokens.php, validator.php),
+	// where the safe direction on a read failure is to ASSUME deactivated and reject the token.
+	// Certification needs the opposite bias - a read failure here must NOT count as "confirmed
+	// deactivated," or a client whose deactivating UPDATE and confirming SELECT both fail the
+	// same way (an unreadable database) still reports a clean revoke.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT is_active FROM %i WHERE client_id = %s', $table, $client_id ) );
+
+	return $view['ok'] && null !== $view['value'] && 0 === (int) $view['value'];
 }
 
 /**
@@ -531,5 +541,22 @@ function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
 	// Certify against a fresh read (see aafm_oauth_deactivate_client()) rather than trusting
 	// $wpdb->delete()'s own affected-row count, for the same reason: a real SQL failure and "no
 	// matching row" both leave that count at zero (Codex round 9, R9-2).
-	return ! aafm_oauth_has_consent( $user_id, $client_id );
+	//
+	// A direct aafm_wpdb_scalar() read here, not aafm_oauth_has_consent() (Codex round 10, R10-2):
+	// that helper also gates whether the authorize screen skips asking for consent again, where the
+	// safe direction on a read failure is to ASSUME no consent and show the screen. Certification
+	// needs the opposite bias - a read failure must not count as "confirmed gone," or a delete whose
+	// DELETE and confirming SELECT both fail the same way still reports the grant revoked while the
+	// row, and the bearer tokens it backs, survive.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$view = aafm_wpdb_scalar(
+		$wpdb->prepare(
+			'SELECT id FROM %i WHERE wp_user_id = %d AND client_id = %s',
+			$table,
+			$user_id,
+			$client_id
+		)
+	);
+
+	return $view['ok'] && null === $view['value'];
 }

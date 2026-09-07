@@ -598,9 +598,11 @@ function aafm_ajax_oauth_revoke_client(): void {
 	aafm_oauth_revoke_client_codes( $client_id );
 
 	// Authoritative final-state read: report success only when the client is really
-	// deactivated and no active token for it survives, whatever any single write above
-	// reported on its own (Codex round 9, R9-2 - a failed UPDATE used to still send success).
-	if ( ! $deactivated || aafm_oauth_client_has_active_tokens( $client_id ) ) {
+	// deactivated, no active token for it survives, and no code row survives either, whatever
+	// any single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to
+	// still send success; Codex round 10, R10-2 - the code-table delete above was never
+	// certified at all).
+	if ( ! $deactivated || aafm_oauth_client_has_active_tokens( $client_id ) || aafm_oauth_client_has_pending_codes( $client_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the client. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 
@@ -675,11 +677,12 @@ function aafm_ajax_oauth_revoke_grant(): void {
 	// could still mint fresh tokens after the consent and existing tokens are gone.
 	aafm_oauth_revoke_user_client_codes( $user_id, $client_id );
 
-	// Authoritative final-state read: report success only when the consent is really gone and
-	// no active token for this user+client survives, whatever any single write above reported
-	// on its own (Codex round 9, R9-2 - a failed UPDATE used to still send success while the
-	// bearer token kept validating).
-	if ( ! $consent_deleted || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) ) {
+	// Authoritative final-state read: report success only when the consent is really gone, no
+	// active token for this user+client survives, and no code row survives either, whatever any
+	// single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to still
+	// send success while the bearer token kept validating; Codex round 10, R10-2 - the code-table
+	// delete above was never certified at all).
+	if ( ! $consent_deleted || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_pending_codes( $user_id, $client_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the grant. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 

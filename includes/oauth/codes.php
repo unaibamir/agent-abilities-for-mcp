@@ -193,3 +193,68 @@ function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ):
 		)
 	);
 }
+
+/**
+ * Whether a client still has any authorization-code row, redeemed or not.
+ *
+ * Used by the admin "Revoke client" handler to certify aafm_oauth_revoke_client_codes() actually
+ * cleared the table, rather than trusting that delete's own affected-row count (Codex round 10,
+ * R10-2): the revoke handlers called the delete and threw its result away entirely, so the codes
+ * table was never certified at all - only the client and its tokens were. A code left behind by a
+ * failed delete is still redeemable within its ~60-second window even after the client is
+ * deactivated and its tokens revoked (the token endpoint's own consent re-check is a second layer,
+ * not a substitute for actually clearing the row here).
+ *
+ * Same fail-closed bias as aafm_oauth_client_has_active_tokens(): this has exactly one caller
+ * shape, a revoke handler certifying a full clear, so a read that could not run must count as
+ * "still has a pending code," never as "confirmed clear."
+ *
+ * @param string $client_id The public client identifier.
+ * @return bool True when the client is confirmed to have at least one code row, OR when the
+ *              confirming read itself failed and cannot rule that out.
+ */
+function aafm_oauth_client_has_pending_codes( string $client_id ): bool {
+	if ( '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE client_id = %s', $table, $client_id ) );
+
+	return ! $count['ok'] || (int) $count['value'] > 0;
+}
+
+/**
+ * Whether a single user still has any authorization-code row for one client, redeemed or not.
+ *
+ * Same purpose and fail-closed bias as aafm_oauth_client_has_pending_codes(), scoped to the admin
+ * "Revoke grant" action.
+ *
+ * @param int    $user_id   The WordPress user id.
+ * @param string $client_id The public client identifier.
+ * @return bool True when the pair is confirmed to have at least one code row, OR when the
+ *              confirming read itself failed and cannot rule that out.
+ */
+function aafm_oauth_user_client_has_pending_codes( int $user_id, string $client_id ): bool {
+	if ( $user_id <= 0 || '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = aafm_wpdb_scalar(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE wp_user_id = %d AND client_id = %s',
+			$table,
+			$user_id,
+			$client_id
+		)
+	);
+
+	return ! $count['ok'] || (int) $count['value'] > 0;
+}

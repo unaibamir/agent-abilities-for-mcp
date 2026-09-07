@@ -401,8 +401,17 @@ function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id )
  * clear. Deliberately ignores expires_at - a still-flagged-active row is what a caller
  * elsewhere would treat as live, so it is what this check treats as live too.
  *
+ * The count read goes through aafm_wpdb_scalar() rather than a bare get_var() (Codex round 10,
+ * R10-2): a get_var() read that itself failed used to cast straight to `(int) null > 0 === false`
+ * - a database this function cannot read reported the exact same "no active tokens" answer as a
+ * database it genuinely found none in. This function has exactly one caller shape (a revoke
+ * handler certifying full revocation), so the correct bias for that failure is the opposite one:
+ * a read that could not run must count as "still has active tokens," or a revoke whose UPDATE and
+ * confirming COUNT both fail the same way still reports success while a live bearer token survives.
+ *
  * @param string $client_id The public client identifier.
- * @return bool
+ * @return bool True when the client is confirmed to have at least one active token, OR when the
+ *              confirming read itself failed and cannot rule that out.
  */
 function aafm_oauth_client_has_active_tokens( string $client_id ): bool {
 	if ( '' === $client_id ) {
@@ -413,7 +422,7 @@ function aafm_oauth_client_has_active_tokens( string $client_id ): bool {
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count = $wpdb->get_var(
+	$count = aafm_wpdb_scalar(
 		$wpdb->prepare(
 			'SELECT COUNT(*) FROM %i WHERE client_id = %s AND is_active = 1',
 			$table,
@@ -421,18 +430,19 @@ function aafm_oauth_client_has_active_tokens( string $client_id ): bool {
 		)
 	);
 
-	return (int) $count > 0;
+	return ! $count['ok'] || (int) $count['value'] > 0;
 }
 
 /**
  * Whether a single user still has any active token row for one client, regardless of expiry.
  *
  * Same purpose as aafm_oauth_client_has_active_tokens(), scoped to the admin "Revoke grant"
- * action.
+ * action, including the same fail-closed bias on a read failure (see that function's docblock).
  *
  * @param int    $user_id   The WordPress user id.
  * @param string $client_id The public client identifier.
- * @return bool
+ * @return bool True when the pair is confirmed to have at least one active token, OR when the
+ *              confirming read itself failed and cannot rule that out.
  */
 function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_id ): bool {
 	if ( $user_id <= 0 || '' === $client_id ) {
@@ -443,7 +453,7 @@ function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count = $wpdb->get_var(
+	$count = aafm_wpdb_scalar(
 		$wpdb->prepare(
 			'SELECT COUNT(*) FROM %i WHERE wp_user_id = %d AND client_id = %s AND is_active = 1',
 			$table,
@@ -452,7 +462,7 @@ function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_
 		)
 	);
 
-	return (int) $count > 0;
+	return ! $count['ok'] || (int) $count['value'] > 0;
 }
 
 /**

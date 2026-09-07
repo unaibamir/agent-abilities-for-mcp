@@ -35,13 +35,15 @@ if ( ! defined( 'AAFM_OAUTH_MAX_FIELD_LEN' ) ) {
 }
 
 /**
- * Upper bound (in bytes) for a registered client_name.
+ * Upper bound (in characters) for a registered client_name.
  *
- * The storage column is VARCHAR(191); 255 leaves headroom while refusing an
- * abusive name outright rather than silently truncating it.
+ * Matches the storage column, client_name VARCHAR(191): MySQL counts a VARCHAR length in
+ * characters, not bytes, so this guard is measured with mb_strlen() rather than strlen() and
+ * pinned to the same number. A 255-byte guard against a 191-character column let a 192-character
+ * ASCII name pass validation and then fail (or truncate) at insert (Codex round 9, R9-11).
  */
 if ( ! defined( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN' ) ) {
-	define( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN', 255 );
+	define( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN', 191 );
 }
 
 /**
@@ -433,8 +435,11 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	$redirect_uris = isset( $params['redirect_uris'] ) && is_array( $params['redirect_uris'] ) ? $params['redirect_uris'] : array();
 	$client_name   = isset( $params['client_name'] ) && is_scalar( $params['client_name'] ) ? (string) $params['client_name'] : '';
 
-	// Refuse an abusive client_name outright rather than silently truncating it.
-	if ( strlen( $client_name ) > AAFM_OAUTH_MAX_CLIENT_NAME_LEN ) {
+	// Refuse an abusive client_name outright rather than silently truncating it. Counted with
+	// mb_strlen(), matching the character-length semantics of the VARCHAR(191) storage column
+	// this guard mirrors - a byte count would reject or admit multibyte names inconsistently
+	// with what the column actually holds.
+	if ( mb_strlen( $client_name, 'UTF-8' ) > AAFM_OAUTH_MAX_CLIENT_NAME_LEN ) {
 		return aafm_oauth_rest_protocol_error(
 			'invalid_client_metadata',
 			__( 'The client name is too long.', 'agent-abilities-for-mcp' ),

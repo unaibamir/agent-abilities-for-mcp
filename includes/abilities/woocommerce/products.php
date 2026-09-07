@@ -1230,14 +1230,19 @@ function aafm_exec_wc_update_product( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Codex round 9 R9-1: description/short_description save as this product post's
-	// post_content/post_excerpt, so an EXISTING product owned by a foreign page builder gets the
-	// same refusal every other content-write ability gives, checked unconditionally before any
-	// field is read, matching aafm_exec_update_post()/aafm_exec_tec_update_event(). A brand-new
-	// product has no prior owner, so aafm_exec_wc_create_product() does not need this check.
-	$owning_builder = aafm_post_has_foreign_builder_ownership( $product->get_id() );
-	if ( false !== $owning_builder ) {
-		return aafm_page_builder_owned_error( $owning_builder );
+	// Codex round 9 R9-1 / round 10 R10-6: description/short_description are the only two fields
+	// aafm_wc_apply_product_input() routes to this product post's post_content/post_excerpt, so an
+	// EXISTING product owned by a foreign page builder gets the same refusal every other
+	// content-write ability gives -- but only when one of those two fields is actually present.
+	// Checking this unconditionally (the original R9-1 fix) refused unrelated price/SKU/stock/
+	// category/status updates on a builder-owned product, which never touch post_content or
+	// post_excerpt and so have nothing for the builder to silently ignore. A brand-new product has
+	// no prior owner, so aafm_exec_wc_create_product() does not need this check either way.
+	if ( array_key_exists( 'description', $input ) || array_key_exists( 'short_description', $input ) ) {
+		$owning_builder = aafm_post_has_foreign_builder_ownership( $product->get_id() );
+		if ( false !== $owning_builder ) {
+			return aafm_page_builder_owned_error( $owning_builder );
+		}
 	}
 
 	// `type` cannot be changed on update -- converting a product between simple/grouped/external/

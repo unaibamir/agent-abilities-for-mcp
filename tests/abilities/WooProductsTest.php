@@ -825,6 +825,89 @@ final class WooProductsTest extends TestCase {
 	}
 
 	// =========================================================================
+	// aafm/wc-update-product -- the ownership guard is scoped to content fields
+	// (Codex round 10 R10-6)
+	//
+	// R9-1's fix above ran the ownership check unconditionally, so a builder-owned product
+	// refused every update, including price/SKU/stock/category/status changes that never touch
+	// post_content or post_excerpt and so have nothing for a builder to silently ignore. The
+	// check now only runs when description or short_description is present.
+	// =========================================================================
+
+	/**
+	 * A non-content update (regular_price here) on a builder-owned product now succeeds -- the
+	 * write does not touch post_content/post_excerpt, so there is nothing for the builder to
+	 * silently ignore.
+	 */
+	public function test_update_product_allows_a_non_content_update_on_a_builder_owned_product(): void {
+		$this->acting_as( 'administrator' );
+
+		$product_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'product',
+				'post_status'  => 'publish',
+				'post_content' => 'BUILDER_OWNED_CONTENT',
+			)
+		);
+		\AAFM\Tests\WcStubStore::seed(
+			$product_id,
+			array(
+				'id'     => $product_id,
+				'name'   => 'Builder-owned product',
+				'status' => 'publish',
+			)
+		);
+		update_post_meta( $product_id, '_elementor_data', '[{"id":"owned"}]' );
+		$this->assertSame( 'elementor', aafm_post_has_foreign_builder_ownership( $product_id ), 'Fixture setup: the post must actually read as Elementor-owned.' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'    => $product_id,
+				'regular_price' => '19.99',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A price-only update must not be refused by the content-ownership guard.' );
+		$this->assertSame( '19.99', $res['regular_price'] );
+	}
+
+	/**
+	 * The same builder-owned product still refuses a description update -- the narrowing above
+	 * scopes the guard to content fields, it does not remove it.
+	 */
+	public function test_update_product_still_refuses_a_content_update_on_a_builder_owned_product(): void {
+		$this->acting_as( 'administrator' );
+
+		$product_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'product',
+				'post_status'  => 'publish',
+				'post_content' => 'BUILDER_OWNED_CONTENT',
+			)
+		);
+		\AAFM\Tests\WcStubStore::seed(
+			$product_id,
+			array(
+				'id'          => $product_id,
+				'name'        => 'Builder-owned product',
+				'status'      => 'publish',
+				'description' => 'BUILDER_OWNED_CONTENT',
+			)
+		);
+		update_post_meta( $product_id, '_elementor_data', '[{"id":"owned"}]' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'  => $product_id,
+				'description' => 'REPLACED_CONTENT',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_page_builder_owned', $res->get_error_code() );
+	}
+
+	// =========================================================================
 	// aafm/wc-update-product -- `type` (MCP defect fix)
 	//
 	// aafm_exec_wc_update_product() used to unset $input['type'] before applying, so a caller-sent

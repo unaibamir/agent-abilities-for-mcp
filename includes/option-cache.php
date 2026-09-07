@@ -80,13 +80,29 @@ function aafm_forget_option_caches( string $option ): bool {
  * the delete silently does nothing (see aafm_forget_option_caches()). The follow-up forget makes
  * the outcome the same in both cases.
  *
+ * The return value used to report only whether the cache cleanup succeeded, never whether the
+ * row was actually gone (Codex round 9, R9-3): `delete_option()`'s own result was discarded, so a
+ * failed DELETE against a row the cache had never heard of certified as a clean success. This now
+ * certifies the deletion itself with aafm_option_write_certified(), the same primitive
+ * aafm_persist_operator_switch()'s off branch already uses, so a caller gets one honest answer
+ * for "is this option's row actually gone" rather than a signal about the cache alone.
+ *
  * @param string $option Option name.
- * @return bool Whatever aafm_forget_option_caches() reports for this option (see its docblock);
- *              true unless a cache rewrite it attempted was rejected.
+ * @return bool True when the option's row is confirmed absent, from both the database and every
+ *              object-cache view this call could reach; false when a cache rewrite was rejected
+ *              or the row is still there.
  */
 function aafm_delete_option_cache_safe( string $option ): bool {
 	delete_option( $option );
-	return aafm_forget_option_caches( $option );
+	$caches_ok = aafm_forget_option_caches( $option );
+
+	aafm_force_refresh_option_caches( $option );
+
+	if ( ! $caches_ok ) {
+		return false;
+	}
+
+	return aafm_option_write_certified( $option, null, true );
 }
 
 /**

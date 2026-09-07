@@ -893,13 +893,24 @@ function aafm_activity_max_id(): int {
 /**
  * Delete every activity row.
  *
- * @return void
+ * Certifies the table is actually empty afterward rather than trusting the TRUNCATE's own
+ * result (Codex round 9, R9-8): a failed truncate must not let a caller go on to write a
+ * marker row claiming the clear happened, or report success while the original rows survive.
+ *
+ * @return bool True when the table is confirmed empty after this call.
  */
-function aafm_clear_activity_log(): void {
+function aafm_clear_activity_log(): bool {
 	global $wpdb;
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query( $wpdb->prepare( 'TRUNCATE TABLE %i', $table ) );
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$remaining = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+	if ( 0 !== (int) $remaining ) {
+		return false;
+	}
+
 	// The review notice quotes a five-minute memo of the success count. A clear has to silence
 	// it now rather than at the expiry, or the ask goes on claiming a total the log can no
 	// longer back, which is the one thing its render guard exists to stop. Through the owner
@@ -907,6 +918,8 @@ function aafm_clear_activity_log(): void {
 	if ( function_exists( 'aafm_review_request_flush_display_count' ) ) {
 		aafm_review_request_flush_display_count();
 	}
+
+	return true;
 }
 
 /**

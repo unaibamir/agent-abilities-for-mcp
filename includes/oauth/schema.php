@@ -432,16 +432,30 @@ function aafm_maybe_upgrade_oauth_tables(): void {
  * which rewrites these tables to their TEMPORARY form (TRUNCATE cannot target a
  * temporary table in some MySQL configs). Mirrors aafm_drop_oauth_tables()' escaping.
  *
- * @return void
+ * Certifies each table by reading its row count back rather than trusting the DELETE's own
+ * affected-row count (Codex round 9, R9-3): a table this call never actually reached still
+ * counts as failed, even though it never contributes a nonzero affected-row count either way.
+ *
+ * @return bool True when every table is confirmed empty after this call.
  */
-function aafm_truncate_oauth_tables(): void {
+function aafm_truncate_oauth_tables(): bool {
 	global $wpdb;
 
+	$ok = true;
 	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+		$table = $wpdb->prefix . $suffix;
 		// Internal table name bound as a SQL identifier via %i (available since WP 6.2).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i', $wpdb->prefix . $suffix ) );
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i', $table ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$remaining = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+		if ( 0 !== (int) $remaining ) {
+			$ok = false;
+		}
 	}
+
+	return $ok;
 }
 
 /**

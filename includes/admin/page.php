@@ -936,8 +936,12 @@ function aafm_ajax_clear_log(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	aafm_clear_activity_log();
-	aafm_log_activity_cleared_marker();
+	if ( ! aafm_clear_activity_log() ) {
+		wp_send_json_error( array( 'message' => __( 'Could not clear the activity log. Please try again.', 'agent-abilities-for-mcp' ) ) );
+	}
+	if ( ! aafm_log_activity_cleared_marker() ) {
+		wp_send_json_error( array( 'message' => __( 'The activity log was cleared, but the clear could not be recorded. Please try again.', 'agent-abilities-for-mcp' ) ) );
+	}
 	wp_send_json_success();
 }
 
@@ -952,11 +956,13 @@ function aafm_ajax_clear_log(): void {
  * markers written before schema v5 have no event_type, and keeping the name means an operator's
  * old and new markers still read as the same event.
  *
- * @return void
+ * @return bool True when the marker row was actually inserted (Codex round 9, R9-8): a failed
+ *              insert here would otherwise leave the freshly emptied log with no tamper
+ *              evidence at all while the caller still reported success.
  */
-function aafm_log_activity_cleared_marker(): void {
+function aafm_log_activity_cleared_marker(): bool {
 	$user = wp_get_current_user();
-	aafm_log_activity(
+	return aafm_log_activity(
 		array(
 			'ability'           => 'aafm/activity-log-cleared',
 			'principal_user_id' => (int) $user->ID,
@@ -965,7 +971,7 @@ function aafm_log_activity_cleared_marker(): void {
 			'event_type'        => 'log_cleared',
 			'detail'            => __( 'Activity log cleared', 'agent-abilities-for-mcp' ),
 		)
-	);
+	) > 0;
 }
 
 /**

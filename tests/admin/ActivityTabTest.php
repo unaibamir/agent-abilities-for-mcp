@@ -119,6 +119,48 @@ final class ActivityTabTest extends TestCase {
 		$this->assertSame( 'aafm/activity-log-cleared', $rows[0]['ability'] );
 	}
 
+	/**
+	 * Codex round 9, R9-8: a failed TRUNCATE used to still let the handler write the "Activity
+	 * log cleared" marker and report success, leaving the original row plus a marker falsely
+	 * claiming the clear happened. Both must now fail: the handler must report an error and the
+	 * original row must survive untouched by any marker.
+	 */
+	public function test_clear_log_reports_failure_and_writes_no_marker_when_truncate_fails(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+			)
+		);
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				return false !== strpos( $query, 'TRUNCATE TABLE `' . $wpdb->prefix . 'aafm_activity_log`' )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$json              = $this->run_handler( 'aafm_ajax_clear_log' );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'A failed truncate must not report success.' );
+		$this->assertSame( 1, aafm_activity_count(), 'The original row must survive; no false marker should be added.' );
+		$rows = aafm_query_activity( array() );
+		$this->assertSame( 'aafm/get-posts', $rows[0]['ability'], 'No tamper marker must be written over a clear that did not happen.' );
+	}
+
 	public function test_the_header_row_is_the_v5_six(): void {
 		$html = $this->render_activity_tab();
 		foreach ( array( 'Time (UTC)', 'Principal', 'Event', 'Detail', 'Status', 'Arg keys' ) as $header ) {

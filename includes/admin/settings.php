@@ -549,17 +549,36 @@ function aafm_uninstall_site_data(): void {
  * after the clear (L4, shared with the direct "Clear log" action in
  * aafm_ajax_clear_log()) - the emptied log always shows who reset the plugin and when.
  *
- * @return void
+ * Every step now reports its own real outcome instead of being fired and forgotten (Codex round
+ * 9, R9-3): a delete that silently failed used to leave a stale option live - most dangerously
+ * aafm_enabled_abilities, which reset deliberately leaves the agent user and its application
+ * passwords able to reach - while the caller still told the operator everything was cleared.
+ *
+ * @return bool True when every configuration option, the activity log (plus its marker), and
+ *              all four OAuth tables are confirmed cleared.
  */
-function aafm_reset_plugin(): void {
+function aafm_reset_plugin(): bool {
+	$ok = true;
+
 	// Cache-safe on purpose: reset is what an operator reaches for when a setting looks stuck, and
 	// a stale persistent object cache is one way a setting gets stuck (aafm_forget_option_caches()).
 	foreach ( aafm_config_option_names() as $option ) {
-		aafm_delete_option_cache_safe( $option );
+		if ( ! aafm_delete_option_cache_safe( $option ) ) {
+			$ok = false;
+		}
 	}
-	aafm_clear_activity_log();
-	aafm_log_activity_cleared_marker();
-	aafm_truncate_oauth_tables();
+
+	if ( ! aafm_clear_activity_log() ) {
+		$ok = false;
+	} elseif ( ! aafm_log_activity_cleared_marker() ) {
+		$ok = false;
+	}
+
+	if ( ! aafm_truncate_oauth_tables() ) {
+		$ok = false;
+	}
+
+	return $ok;
 }
 
 /**
@@ -576,7 +595,13 @@ function aafm_ajax_reset_plugin(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	aafm_reset_plugin();
+	if ( ! aafm_reset_plugin() ) {
+		wp_send_json_error(
+			array(
+				'message' => __( 'Reset did not fully complete. Some settings, the activity log, or OAuth data may still hold their old state - please try again.', 'agent-abilities-for-mcp' ),
+			)
+		);
+	}
 	wp_send_json_success(
 		array(
 			'message' => __( 'Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone.', 'agent-abilities-for-mcp' ),

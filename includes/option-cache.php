@@ -155,9 +155,20 @@ function aafm_force_refresh_option_caches( string $option ): void {
  * function outside that one allowed to cost that extra query, because it exists specifically to
  * certify a write the plugin just made.
  *
+ * A query that errors (a broken table, a lost DB connection, anything short of a clean empty
+ * result) and a query that simply finds no matching row both make `$wpdb->get_var()` return null -
+ * `db_found` alone cannot tell "confirmed absent" from "could not check" apart (Codex round 9
+ * re-check: this was the gap behind a failed configuration delete still certifying as a clean
+ * reset - R9-3). `db_error` names that gap explicitly by reading `$wpdb->last_error`, which
+ * `$wpdb->query()` resets to `''` at the top of every call (wp-includes/class-wpdb.php's own
+ * `flush()`), so it reports only the immediately preceding query's own outcome, not a stale error
+ * from earlier in the request.
+ *
  * @param string $option Option name.
- * @return array{db_found:bool,db_value:mixed,cache_found:bool,cache_value:mixed} db_found/db_value
- *              describe the row for the current blog (db_value is false when the row is absent);
+ * @return array{db_found:bool,db_value:mixed,db_error:bool,cache_found:bool,cache_value:mixed}
+ *              db_found/db_value describe the row for the current blog (db_value is false when the
+ *              row is absent); db_error is true when the read itself failed, in which case
+ *              db_found/db_value are not trustworthy either way and must not be certified against;
  *              cache_found/cache_value describe whichever of the per-option key or the alloptions
  *              blob answered for the option (cache_value is null when neither did).
  */
@@ -187,11 +198,13 @@ function aafm_read_option_views( string $option ): array {
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache; certification must be checked against the row itself, mirroring aafm_uninstall_should_delete_data()'s reasoning.
 	$raw      = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
-	$db_found = null !== $raw;
+	$db_error = '' !== $wpdb->last_error;
+	$db_found = ! $db_error && null !== $raw;
 
 	return array(
 		'db_found'    => $db_found,
 		'db_value'    => $db_found ? maybe_unserialize( $raw ) : false,
+		'db_error'    => $db_error,
 		'cache_found' => $cache_found,
 		'cache_value' => $cache_value,
 	);
@@ -258,6 +271,14 @@ function aafm_option_value_matches( $stored, $expected ): bool {
  * blob this function reads may still be the stale one that failure left behind, so the caller
  * should treat the whole write as uncertified rather than call this function at all in that case.
  *
+ * A database read that itself fails (aafm_read_option_views()'s `db_error`) is checked first and
+ * fails certification outright, on either branch (Codex round 9 re-check, R9-3 remainder): the
+ * expect-absent branch below would otherwise read "the row can't be found" the same way whether
+ * the row is genuinely gone or the query that would have found it just errored, so a broken read
+ * could certify a delete that never actually happened as a clean success. There is no default to
+ * fall back on here the way the row-absent-but-readable case below has one - an unreadable
+ * database is not evidence of anything, in either direction.
+ *
  * @param string $option        Option name.
  * @param mixed  $expected      Value the write intended to store. Ignored when $expect_absent.
  * @param bool   $expect_absent True when the intended state is "no row for this option" (the off
@@ -266,6 +287,10 @@ function aafm_option_value_matches( $stored, $expected ): bool {
  */
 function aafm_option_write_certified( string $option, $expected, bool $expect_absent = false ): bool {
 	$views = aafm_read_option_views( $option );
+
+	if ( $views['db_error'] ) {
+		return false;
+	}
 
 	if ( $expect_absent ) {
 		if ( $views['db_found'] ) {

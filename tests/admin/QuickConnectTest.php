@@ -543,6 +543,37 @@ final class QuickConnectTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 9, R9-10: the dismiss flag used to be a bare update_option() whose result was
+	 * discarded, so a failed write still reported success and the client-side handler closed the
+	 * modal regardless - the wizard would then silently reopen on the next visit with the operator
+	 * believing they had permanently dismissed it. A failed write must now report an error and
+	 * leave the option undismissed.
+	 */
+	public function test_dismiss_ajax_reports_failure_when_the_write_fails(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_quickconnect_dismissed', '0' );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, "option_name = 'aafm_quickconnect_dismissed'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$json = $this->capture_ajax_json( 'aafm_ajax_quickconnect_dismiss' );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'A failed dismiss write must not report success.' );
+		$this->assertSame( '0', get_option( 'aafm_quickconnect_dismissed' ), 'The undismissed state must survive a failed write.' );
+	}
+
+	/**
 	 * The dedicated agent-user creation path stamps the plugin marker, so the onboarding
 	 * "connected" signal recognises it. This is the same path the wizard's app-password branch uses.
 	 */

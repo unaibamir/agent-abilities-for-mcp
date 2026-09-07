@@ -2224,7 +2224,13 @@
 
 			// ---- Permanent opt-out ----
 			root.querySelector( '#aafm-qc-dismiss' ).addEventListener( 'click', async () => {
-				await this.#post( 'aafm_quickconnect_dismiss' );
+				const json = await this.#post( 'aafm_quickconnect_dismiss' );
+				if ( ! json?.success ) {
+					if ( hint ) {
+						hint.textContent = json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					}
+					return;
+				}
 				root.classList.add( 'is-closed' );
 				landFocus();
 			} );

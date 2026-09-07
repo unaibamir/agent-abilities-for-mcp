@@ -45,38 +45,35 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 
 	/**
 	 * Every security/configuration option this plugin defines, wherever it might be written.
-	 * Kept as one list (rather than per-file) so a future addition to any of the writers above
-	 * only needs one new line here, not one per file it happens to touch.
+	 *
+	 * Derived from aafm_config_option_names() - the reset's own canonical list of every
+	 * configuration option a reset clears - merged with the handful of security-relevant
+	 * options that live outside that list on purpose: migration guards, schema-version stamps,
+	 * an allowlist-override option, and aafm_delete_data_on_uninstall (which a reset
+	 * deliberately preserves, so it can never appear in the reset's own list). Deriving from
+	 * the canonical list rather than hand-keeping a second one is the fix for what Codex round 9
+	 * (R9-10) found: four options - the Quick Connect wizard's two flags, the menu-pointer flag,
+	 * and the review-request state - existed only in aafm_config_option_names(), never in this
+	 * file's own separately hand-kept copy, so their bare update_option()/add_option() calls went
+	 * unnoticed by this sweep even though the writers were sitting right there in includes/.
 	 *
 	 * @return list<string>
 	 */
 	private function guarded_security_options(): array {
-		return array(
-			'aafm_enabled_abilities',
-			'aafm_enabled_bridged_abilities',
-			'aafm_ability_allowlist_overrides',
-			'aafm_allowed_post_types',
-			'aafm_allowed_meta_keys',
-			'aafm_denied_meta_keys',
-			'aafm_exposed_user_meta_keys',
-			'aafm_denied_user_meta_keys',
-			'aafm_exposed_term_meta_keys',
-			'aafm_denied_term_meta_keys',
-			'aafm_high_risk_abilities_unlocked',
-			'aafm_read_only_mode',
-			'aafm_oauth_enabled',
-			'aafm_oauth_dcr_enabled',
-			'aafm_oauth_toggle_migrated',
-			'aafm_oauth_dcr_default_on_migrated',
-			'aafm_oauth_schema_version',
-			'aafm_activity_log_schema_version',
-			'aafm_rate_limit_per_min',
-			'aafm_max_title_len',
-			'aafm_log_retention_days',
-			'aafm_force_draft',
-			'aafm_block_guard_strict',
-			'aafm_delete_data_on_uninstall',
-			'aafm_ip_allowlist',
+		return array_values(
+			array_unique(
+				array_merge(
+					aafm_config_option_names(),
+					array(
+						'aafm_ability_allowlist_overrides',
+						'aafm_oauth_toggle_migrated',
+						'aafm_oauth_dcr_default_on_migrated',
+						'aafm_oauth_schema_version',
+						'aafm_activity_log_schema_version',
+						'aafm_delete_data_on_uninstall',
+					)
+				)
+			)
 		);
 	}
 
@@ -322,23 +319,29 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * rather than running it catches a future edit that reintroduces a bare write even if it
 	 * moves to a new file or helper function this list has never heard of.
 	 *
-	 * The one bare write that really is safe is the pair of add_option() calls inside
-	 * aafm_oauth_seed_default_options() (includes/oauth/discovery.php), which run once at
-	 * activation, never overwrite an existing row by design, and seed both OAuth options to their
-	 * safe default. A file-wide exemption for those two option names used to cover that, but it
-	 * also silently permitted a bare write to either option ANYWHERE ELSE in discovery.php (Codex
-	 * round 6, B6-7). The seed function's body is stripped out of discovery.php's source before
-	 * the scan runs instead, so the exemption is scoped to the two calls it actually covers, and
-	 * every other line in the file - including both guarded options - is checked like any other
-	 * file. The scan is now token-based rather than regex-based (Codex round 8, R8-6): the retired
-	 * regex was case-sensitive and required literal whitespace, never a comment, between the
-	 * function name and its opening paren, so `UPDATE_OPTION( ... )` or a call with an inline
-	 * comment before the paren evaded it entirely.
+	 * The bare writes that really are safe are add_option() calls whose whole point is
+	 * add_option()'s no-op-if-present behaviour, never update_option()'s overwrite: the pair
+	 * inside aafm_oauth_seed_default_options() (includes/oauth/discovery.php), which run once at
+	 * activation and seed both OAuth options to their safe default, and the single call inside
+	 * aafm_quickconnect_flag_menu_pointer() (includes/admin/onboarding-pointer.php, Codex round 9,
+	 * R9-10), which seeds the first-activation pointer flag exactly once so a later
+	 * deactivate/reactivate cycle cannot re-arm a pointer the operator already dismissed. A
+	 * file-wide exemption for an option name used to cover the discovery.php case, but it also
+	 * silently permitted a bare write to that option ANYWHERE ELSE in the file (Codex round 6,
+	 * B6-7). Each exempt function's body is stripped out of its file's source before the scan
+	 * runs instead, so the exemption is scoped to the one call it actually covers, and every
+	 * other line in the file - including every guarded option - is checked like any other file.
+	 * The scan is token-based rather than regex-based (Codex round 8, R8-6): the retired regex
+	 * was case-sensitive and required literal whitespace, never a comment, between the function
+	 * name and its opening paren, so `UPDATE_OPTION( ... )` or a call with an inline comment
+	 * before the paren evaded it entirely.
 	 */
 	public function test_no_bare_option_write_names_a_security_allowlist_option(): void {
-		$guarded_options     = $this->guarded_security_options();
-		$oauth_seed_scoped   = 'includes/oauth/discovery.php';
-		$oauth_seed_function = 'aafm_oauth_seed_default_options';
+		$guarded_options  = $this->guarded_security_options();
+		$exempt_functions = array(
+			'includes/oauth/discovery.php'          => 'aafm_oauth_seed_default_options',
+			'includes/admin/onboarding-pointer.php' => 'aafm_quickconnect_flag_menu_pointer',
+		);
 
 		$includes_dir = AAFM_PLUGIN_DIR . 'includes';
 		$files        = new \RecursiveIteratorIterator(
@@ -363,8 +366,8 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			$this->assertNotSame( '', $source, "The sweep must actually read {$relative} - an empty read would make this test pass by finding nothing." );
 			++$scanned;
 
-			$scan_source = $oauth_seed_scoped === $relative
-				? $this->strip_function_body( $source, $oauth_seed_function )
+			$scan_source = isset( $exempt_functions[ $relative ] )
+				? $this->strip_function_body( $source, $exempt_functions[ $relative ] )
 				: $source;
 
 			$tokens  = token_get_all( $scan_source );

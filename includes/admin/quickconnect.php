@@ -356,7 +356,9 @@ function aafm_ajax_quickconnect_finish(): void {
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The enabled abilities selection', 'agent-abilities-for-mcp' ) ) ) );
 	}
 
-	update_option( 'aafm_quickconnect_finished', '1' );
+	if ( ! aafm_update_option_verified( 'aafm_quickconnect_finished', '1' ) ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Finishing the wizard', 'agent-abilities-for-mcp' ) ) ) );
+	}
 
 	wp_send_json_success(
 		array(
@@ -383,7 +385,9 @@ function aafm_ajax_quickconnect_dismiss(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	update_option( 'aafm_quickconnect_dismissed', '1' );
+	if ( ! aafm_update_option_verified( 'aafm_quickconnect_dismissed', '1' ) ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Dismissing the wizard', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success();
 }
 

@@ -724,6 +724,57 @@ final class ReviewRequestTest extends TestCase {
 		$this->assertSame( 'pending', aafm_review_request_state()['status'] );
 	}
 
+	/**
+	 * Codex round 9, R9-10: aafm_review_request_save_state() was a bare update_option() whose
+	 * result was discarded, so aafm_review_request_record_verdict() returned its in-memory state
+	 * as if it had been stored and the AJAX handler reported success regardless. A failed write
+	 * must now report an error and leave the option at its prior state.
+	 */
+	public function test_ajax_reports_failure_when_the_verdict_write_fails(): void {
+		$this->acting_as( 'administrator' );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, "option_name = 'aafm_review_request'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+
+		$nonce             = wp_create_nonce( 'aafm_review_request' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$_POST['verdict']  = 'dismiss';
+
+		ob_start();
+		try {
+			aafm_ajax_review_request();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		}
+		$json = json_decode( (string) ob_get_clean(), true );
+
+		remove_all_filters( 'wp_die_ajax_handler' );
+		remove_all_filters( 'wp_die_handler' );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['verdict'] );
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'A failed verdict write must not report success.' );
+		$this->assertSame( 'pending', aafm_review_request_state()['status'], 'The prior state must survive a failed write.' );
+	}
+
 
 	public function test_notice_renders_on_the_plugins_screen_when_eligible(): void {
 		$this->acting_as( 'administrator' );

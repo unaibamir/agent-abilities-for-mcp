@@ -250,7 +250,10 @@ function aafm_backfill_agent_user_marker(): void {
 		}
 	}
 
-	update_option( 'aafm_agent_user_marker_backfilled', '1', true );
+	// A failed write here just means this admin_init runs the (idempotent, conservative) check
+	// again next time - cheaper to retry than to report, so the result is intentionally unused,
+	// same as the other fire-and-forget guards this file has no operator-facing response for.
+	aafm_update_option_verified( 'aafm_agent_user_marker_backfilled', '1', true );
 }
 
 /**

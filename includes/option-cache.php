@@ -371,13 +371,24 @@ function aafm_persist_operator_switch( string $option, bool $on ): bool {
  * elsewhere rely on that read reflecting the write this function just made - it is simply no
  * longer where the boolean this function returns comes from.
  *
- * @param string $option Option name.
- * @param mixed  $value  New value to store.
+ * $autoload is passed straight through to `update_option()` when given (its own null default
+ * lets WordPress decide, the same as calling it with no third argument at all), for the rare
+ * option that needs an explicit autoload state - `false` for one big enough that autoloading it
+ * would cost every request that never asks for it, `true` to force it in.
+ *
+ * @param string           $option   Option name.
+ * @param mixed            $value    New value to store.
+ * @param string|bool|null $autoload Optional. Passed through to update_option(); null lets
+ *                                    WordPress choose, matching the 2-argument call.
  * @return bool True when the option now certifies as $value.
  */
-function aafm_update_option_verified( string $option, $value ): bool {
+function aafm_update_option_verified( string $option, $value, $autoload = null ): bool {
 	$caches_ok = aafm_forget_option_caches( $option );
-	update_option( $option, $value );
+	if ( null === $autoload ) {
+		update_option( $option, $value );
+	} else {
+		update_option( $option, $value, $autoload );
+	}
 	$caches_ok = aafm_forget_option_caches( $option ) && $caches_ok;
 	aafm_force_refresh_option_caches( $option );
 

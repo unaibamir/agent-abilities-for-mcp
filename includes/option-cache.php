@@ -345,10 +345,22 @@ function aafm_option_write_certified( string $option, $expected, bool $expect_ab
  *
  * The return value comes from aafm_option_write_certified(), not from a subsequent get_option()
  * (see that function's docblock for why an unforced read is not enough on its own). get_option()
- * is still called afterward so this request's own runtime cache is left holding the same value the
- * rest of the plugin will read for the remainder of it - callers elsewhere rely on that read
- * reflecting the write this function just made - it is simply no longer where the boolean this
- * function returns comes from.
+ * is still called after certification succeeds, not before, so this request's own runtime cache is
+ * left holding the same value the rest of the plugin will read for the remainder of it - callers
+ * elsewhere rely on that read reflecting the write this function just made - it is simply no longer
+ * where the boolean this function returns comes from.
+ *
+ * That warming read is skipped on an uncertified write, the same guard aafm_update_option_verified()
+ * applies and for the identical reason (see that function's docblock): a plain get_option() call,
+ * run while the database itself cannot answer for the option, does not merely read nothing - core's
+ * own get_option() (wp-includes/option.php) caches that empty read into `notoptions`, asserting the
+ * option does not exist at all. On this function's off branch that assertion is normally the correct
+ * end state - off IS the row's absence - but only when certification actually confirmed the row is
+ * gone; a certification failure means the database read itself could not be trusted (aafm_read_-
+ * option_views()'s db_error), so a row that is genuinely still present would get the exact same
+ * false "confirmed absent" answer as a row that really was deleted. On the on branch the same guard
+ * additionally protects against warming the cache with a value that was never actually confirmed
+ * stored.
  *
  * @param string $option Option name.
  * @param bool   $on     Whether the switch should be on.
@@ -365,15 +377,20 @@ function aafm_persist_operator_switch( string $option, bool $on ): bool {
 	}
 
 	aafm_force_refresh_option_caches( $option );
-	get_option( $option, false );
 
 	if ( ! $caches_ok ) {
 		return false;
 	}
 
-	return $on
+	$certified = $on
 		? aafm_option_write_certified( $option, true )
 		: aafm_option_write_certified( $option, false, true );
+
+	if ( $certified ) {
+		get_option( $option, false );
+	}
+
+	return $certified;
 }
 
 /**

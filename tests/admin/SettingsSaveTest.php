@@ -472,6 +472,44 @@ final class SettingsSaveTest extends TestCase {
 	}
 
 	/**
+	 * Sibling of the aafm_update_option_verified() fix (commit d501772): aafm_persist_operator_-
+	 * switch()'s off branch used to call get_option() unconditionally, before checking whether
+	 * certification had actually succeeded. When the database read backing certification itself
+	 * fails - not just the delete - that unconditional call runs get_option() while the database
+	 * cannot answer for the option, and core's own get_option() (wp-includes/option.php) caches an
+	 * empty read like that into `notoptions`, asserting the option does not exist. For a switch
+	 * whose off state IS the row's absence, that is indistinguishable from the switch actually
+	 * being off - the exact class of bug 1.7.3 shipped a hotfix for. Here the row genuinely
+	 * survives (the DELETE query is broken by the same fault as the certifying read), so a correct
+	 * implementation must leave get_option() free to report the switch as still on.
+	 */
+	public function test_persist_operator_switch_off_does_not_poison_notoptions_when_the_certifying_read_fails(): void {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, 'aafm_high_risk_abilities_unlocked' )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$result = aafm_persist_operator_switch( 'aafm_high_risk_abilities_unlocked', false );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( $result, 'A certification read that itself failed must not certify the switch as off.' );
+		$this->assertTrue(
+			(bool) get_option( 'aafm_high_risk_abilities_unlocked', false ),
+			'The row survived the broken delete; a stale notoptions entry must not still assert it is gone.'
+		);
+	}
+
+	/**
 	 * Every field the Settings tab renders must be forwarded by the save payload in admin.js.
 	 *
 	 * The save handler does not serialise the form: admin.js names each field by hand and appends

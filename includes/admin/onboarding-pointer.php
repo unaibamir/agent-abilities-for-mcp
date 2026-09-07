@@ -55,6 +55,24 @@ function aafm_quickconnect_flag_menu_pointer(): bool {
 }
 
 /**
+ * Activation-hook entry point for aafm_quickconnect_flag_menu_pointer().
+ *
+ * WordPress's register_activation_hook() expects a callable(bool): void - it passes the
+ * network-wide activation flag in and does nothing with a return value.
+ * aafm_quickconnect_flag_menu_pointer() itself has to return bool so it can certify the row it
+ * just seeded (Codex round 9, R9-10), so that certifying function cannot be the activation
+ * callback directly. This thin wrapper is: it satisfies the hook's void contract while still
+ * running (and discarding the result of) the certified write.
+ *
+ * @param bool $network_wide Whether the plugin is being activated network-wide. Unused: the
+ *                            pointer flag is a per-site option.
+ * @return void
+ */
+function aafm_quickconnect_activate_menu_pointer( bool $network_wide = false ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- signature required by register_activation_hook()'s callable(bool): void contract.
+	aafm_quickconnect_flag_menu_pointer();
+}
+
+/**
  * Whether the current user has already dismissed the menu pointer.
  *
  * @return bool

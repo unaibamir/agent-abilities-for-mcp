@@ -246,7 +246,7 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
 // later reactivation never re-arms it; per-user dismissal is tracked in the core dismissed-pointers
 // meta.
 require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
-register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_quickconnect_flag_menu_pointer' );
+register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_quickconnect_activate_menu_pointer' );
 
 // One-time upgrade safety: an install updated in place from a pre-off-by-default version
 // holds no stored toggle row and ran on the old on-by-default reader, so the new

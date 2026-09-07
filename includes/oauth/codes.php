@@ -264,3 +264,55 @@ function aafm_oauth_user_client_has_pending_codes( int $user_id, string $client_
 
 	return ! $count['ok'] || (int) $count['value'] > 0;
 }
+
+/**
+ * Delete every authorization code issued to one user, across every client.
+ *
+ * Used when a WordPress user is deleted (see aafm_oauth_cleanup_deleted_user() in
+ * tokens.php). Same purpose as aafm_oauth_revoke_user_client_codes(), scoped to the
+ * whole user rather than one client pair.
+ *
+ * @param int $user_id The WordPress user.
+ * @return int Rows deleted.
+ */
+function aafm_oauth_revoke_user_codes( int $user_id ): int {
+	if ( $user_id <= 0 ) {
+		return 0;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	return (int) $wpdb->query(
+		$wpdb->prepare(
+			'DELETE FROM %i WHERE wp_user_id = %d',
+			$table,
+			$user_id
+		)
+	);
+}
+
+/**
+ * Whether a single user still has any authorization-code row for any client, redeemed or not.
+ *
+ * Same fail-closed certification bias as aafm_oauth_user_client_has_pending_codes(), scoped to
+ * the whole user rather than one client pair. Used to certify aafm_oauth_revoke_user_codes().
+ *
+ * @param int $user_id The WordPress user id.
+ * @return bool True when the user is confirmed to have at least one code row, OR when the
+ *              confirming read itself failed and cannot rule that out.
+ */
+function aafm_oauth_user_has_pending_codes( int $user_id ): bool {
+	if ( $user_id <= 0 ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE wp_user_id = %d', $table, $user_id ) );
+
+	return ! $count['ok'] || (int) $count['value'] > 0;
+}

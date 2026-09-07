@@ -576,3 +576,125 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 	);
 	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 }
+
+/**
+ * Revoke every active token a single user holds, across every client.
+ *
+ * Used when a WordPress user is deleted (see aafm_oauth_cleanup_deleted_user() below).
+ * Same purpose as aafm_oauth_revoke_user_client_tokens(), scoped to the whole user
+ * rather than one client pair.
+ *
+ * @param int $user_id The WordPress user id whose tokens are revoked.
+ * @return int Number of token rows deactivated.
+ */
+function aafm_oauth_revoke_user_tokens( int $user_id ): int {
+	if ( $user_id <= 0 ) {
+		return 0;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query(
+		$wpdb->prepare(
+			'UPDATE %i SET is_active = 0 WHERE wp_user_id = %d AND is_active = 1',
+			$table,
+			$user_id
+		)
+	);
+
+	return (int) $wpdb->rows_affected;
+}
+
+/**
+ * Whether a single user still has any active token row, for any client.
+ *
+ * Same fail-closed certification bias as aafm_oauth_user_client_has_active_tokens(),
+ * scoped to the whole user. Used to certify aafm_oauth_revoke_user_tokens().
+ *
+ * @param int $user_id The WordPress user id.
+ * @return bool True when the user is confirmed to have at least one active token, OR when
+ *              the confirming read itself failed and cannot rule that out.
+ */
+function aafm_oauth_user_has_active_tokens( int $user_id ): bool {
+	if ( $user_id <= 0 ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = aafm_wpdb_scalar(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE wp_user_id = %d AND is_active = 1',
+			$table,
+			$user_id
+		)
+	);
+
+	return ! $count['ok'] || (int) $count['value'] > 0;
+}
+
+/**
+ * Clean up a deleted WordPress user's OAuth grants: consents, tokens and codes.
+ *
+ * Hooked on 'deleted_user' rather than 'delete_user': it fires only once WordPress has
+ * finished acting on the deletion, never pre-emptively for one a later step in the same
+ * request might still abort. Both wp_delete_user() and the network-wide wpmu_delete_user()
+ * fire it with the same ( $id, $reassign, $user ) signature at the very end (verified by
+ * reading wp-admin/includes/user.php and wp-admin/includes/ms.php), so one hook covers
+ * single-site deletion and a full network deletion alike.
+ *
+ * On a multisite subsite, wp_delete_user() does NOT delete the account - core's own
+ * docblock says so - it calls remove_user_from_blog() for the current site instead, then
+ * still fires 'deleted_user' regardless. So on that path this cleanup runs for a user whose
+ * network account survives, wp_user_id still resolves to a real WP_User with ID > 0. That
+ * is deliberately fine, not a bug: the action fired specifically because the user's
+ * membership on THIS site just ended, so a grant recorded in THIS site's OAuth tables is
+ * exactly as reasonable to clear as it is for the true-deletion case.
+ *
+ * Deliberately does NOT separately hook 'remove_user_from_blog': that fires on a plain
+ * "Remove" from a subsite's Users list, which calls remove_user_from_blog() directly
+ * without going through wp_delete_user(), so 'deleted_user' never fires for it and this
+ * cleanup never runs for it either. Left alone on purpose: the account stays fully live,
+ * capability checks already read live state per request and deny the moment the role on
+ * this site is gone (verified in the 1.7.4 security assessment, S4), and clearing the
+ * grant here would mean a later re-add to the site loses a connection that a plain
+ * membership toggle should arguably preserve.
+ *
+ * Scoped to the current site's own tables (the $wpdb->prefix in effect when the hook fires),
+ * the same scope every other function in this file uses. On wpmu_delete_user() this only
+ * reaches the tables of whichever site is the current blog at the moment the network admin
+ * request runs - not every site in the network the user may separately have connected on.
+ * Sweeping every site would need a switch_to_blog() loop this plugin has no other precedent
+ * for, and a grant left on another site is exactly as inert as the general case this finding
+ * already established (a deleted user's id never resolves to a logged-in identity again), so
+ * it is left as a known, named gap rather than an unannounced one.
+ *
+ * A failed cleanup is logged through the existing OAuth audit trail and never blocks, aborts
+ * or reports an error back into the user-deletion request: deleting a user is a core operation
+ * this plugin has no standing to veto, and the fail-safe reasoning above means a leftover row
+ * is a hygiene issue, not a live credential.
+ *
+ * @param int $user_id The id of the WordPress user that was just deleted.
+ * @return void
+ */
+function aafm_oauth_cleanup_deleted_user( int $user_id ): void {
+	if ( $user_id <= 0 ) {
+		return;
+	}
+
+	$consents_gone = aafm_oauth_delete_all_user_consents( $user_id );
+	aafm_oauth_revoke_user_tokens( $user_id );
+	aafm_oauth_revoke_user_codes( $user_id );
+
+	$clean = $consents_gone
+		&& ! aafm_oauth_user_has_active_tokens( $user_id )
+		&& ! aafm_oauth_user_has_pending_codes( $user_id );
+
+	if ( ! $clean && function_exists( 'aafm_oauth_log_event' ) ) {
+		aafm_oauth_log_event( 'revoke', 'error', array( 'user_id' => $user_id ) );
+	}
+}

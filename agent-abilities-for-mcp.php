@@ -229,6 +229,12 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/codes.php';
 // Access/refresh token manager: hashed storage, refresh rotation, reuse detection.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 
+// When a WordPress user is deleted, clean up the OAuth consents, tokens and codes they
+// leave behind rather than letting them go orphaned. See aafm_oauth_cleanup_deleted_user()
+// for why 'deleted_user' is the chosen hook and what multisite scope this does and does not
+// cover.
+add_action( 'deleted_user', 'aafm_oauth_cleanup_deleted_user' );
+
 // Discovery documents: the two .well-known metadata files served before REST auth.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
 add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );

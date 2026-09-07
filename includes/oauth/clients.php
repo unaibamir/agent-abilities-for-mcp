@@ -616,3 +616,33 @@ function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
 
 	return $view['ok'] && null === $view['value'];
 }
+
+/**
+ * Delete every consent (grant) a single user holds, across every client.
+ *
+ * Used when a WordPress user is deleted (see aafm_oauth_cleanup_deleted_user() in
+ * tokens.php): the user is gone, so every client they ever approved becomes an
+ * orphaned grant, not just one. Unlike aafm_oauth_delete_consent(), this is not
+ * scoped to a single client_id - it clears the user's whole consent history in
+ * one query, on the same certify-against-a-fresh-read discipline as the
+ * single-client version.
+ *
+ * @param int $user_id The WordPress user id whose consents are removed.
+ * @return bool True when the user is confirmed to hold no consent rows after this call.
+ */
+function aafm_oauth_delete_all_user_consents( int $user_id ): bool {
+	if ( $user_id <= 0 ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_consents';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->delete( $table, array( 'wp_user_id' => $user_id ), array( '%d' ) );
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT id FROM %i WHERE wp_user_id = %d', $table, $user_id ) );
+
+	return $view['ok'] && null === $view['value'];
+}

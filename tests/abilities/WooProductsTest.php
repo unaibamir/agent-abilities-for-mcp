@@ -714,6 +714,117 @@ final class WooProductsTest extends TestCase {
 	}
 
 	// =========================================================================
+	// aafm/wc-update-product -- page-builder ownership and block-content guards
+	// (Codex round 9 R9-1)
+	//
+	// aafm_wc_apply_product_input() used to send description/short_description straight to the
+	// WC_Product setters, and aafm_exec_wc_update_product() saved without ever checking
+	// page-builder ownership. WooCommerce persists both fields as the product post's
+	// post_content/post_excerpt, so a builder-owned product's classic content could be silently
+	// rewritten with no storefront effect, and strict block-validation policy was skipped
+	// entirely. The ownership check only applies to an UPDATE of an existing product; a brand-new
+	// product has no prior owner to protect.
+	// =========================================================================
+
+	/**
+	 * An update touching a builder-owned product's description is refused, and the post is left
+	 * byte-for-byte untouched.
+	 */
+	public function test_update_product_refuses_a_builder_owned_description(): void {
+		$this->acting_as( 'administrator' );
+
+		$product_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'product',
+				'post_status'  => 'publish',
+				'post_content' => 'BUILDER_OWNED_CONTENT',
+			)
+		);
+		\AAFM\Tests\WcStubStore::seed(
+			$product_id,
+			array(
+				'id'          => $product_id,
+				'name'        => 'Builder-owned product',
+				'status'      => 'publish',
+				'description' => 'BUILDER_OWNED_CONTENT',
+			)
+		);
+		update_post_meta( $product_id, '_elementor_data', '[{"id":"owned"}]' );
+		$this->assertSame( 'elementor', aafm_post_has_foreign_builder_ownership( $product_id ), 'Fixture setup: the post must actually read as Elementor-owned.' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'  => $product_id,
+				'description' => 'REPLACED_CONTENT',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_page_builder_owned', $res->get_error_code() );
+
+		$unchanged = get_post( $product_id );
+		$this->assertSame( 'BUILDER_OWNED_CONTENT', $unchanged->post_content, 'The builder-owned post must be left byte-for-byte untouched.' );
+	}
+
+	/**
+	 * Strict block-guard mode refuses a description whose markup would show as invalid content
+	 * in the block editor, the same as any other content-write ability.
+	 */
+	public function test_update_product_honors_the_strict_block_guard_on_description(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_block_guard_strict', '__return_true' );
+
+		$content = '<!-- wp:heading --><h2 class="has-text-color">Broken</h2><!-- /wp:heading -->';
+		$res     = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'  => 101,
+				'description' => $content,
+			)
+		);
+
+		remove_filter( 'aafm_block_guard_strict', '__return_true' );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_invalid_block_content', $res->get_error_code() );
+	}
+
+	/**
+	 * The same strict block-guard refusal applies to short_description, not only description.
+	 */
+	public function test_update_product_honors_the_strict_block_guard_on_short_description(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_block_guard_strict', '__return_true' );
+
+		$content = '<!-- wp:heading --><h2 class="has-text-color">Broken</h2><!-- /wp:heading -->';
+		$res     = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'        => 101,
+				'short_description' => $content,
+			)
+		);
+
+		remove_filter( 'aafm_block_guard_strict', '__return_true' );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_invalid_block_content', $res->get_error_code() );
+	}
+
+	/**
+	 * A brand-new product has no prior owner: aafm_exec_wc_create_product() must not run the
+	 * ownership check at all, only aafm_exec_wc_update_product() does.
+	 */
+	public function test_create_product_is_never_blocked_by_the_ownership_guard(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'        => 'New Product',
+				'description' => 'Plain description, no page-builder markers involved.',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+	}
+
+	// =========================================================================
 	// aafm/wc-update-product -- `type` (MCP defect fix)
 	//
 	// aafm_exec_wc_update_product() used to unset $input['type'] before applying, so a caller-sent

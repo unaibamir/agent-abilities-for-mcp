@@ -56,8 +56,10 @@ final class PageBuilderGuardSweepTest extends TestCase {
 
 	/**
 	 * Every function, anywhere under includes/abilities/, that assigns a 'post_content' array
-	 * key, calls wp_update_post(), or calls a repository ->save() (outside woocommerce/ - see
-	 * find_ability_php_files()'s own scoping) must either call
+	 * key, calls wp_update_post(), calls a repository ->save() (outside woocommerce/ - see
+	 * find_ability_php_files()'s own scoping), or calls a WC_Product content setter
+	 * (set_description()/set_short_description(), which WooCommerce persists as
+	 * post_content/post_excerpt - Codex round 9 R9-1) must either call
 	 * aafm_post_has_foreign_builder_ownership() in its own body, or be listed here with a reason.
 	 * This is the mechanical half of the sweep: it does not run any PHP, it only reads source
 	 * text, so it catches a future write path the moment it's written, before any test author has
@@ -83,6 +85,12 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			// (aafm_exec_tec_create_event, which needs no guard, and aafm_exec_tec_update_event,
 			// which now has one) are checked at their own chokepoint.
 			'aafm_tec_event_orm_args'               => 'Builds an args array only; the actual write (and its own ownership check) happens in the calling create/update function.',
+			// Codex round 9 R9-1: shared setter helper, not itself a write site - it is called by
+			// BOTH aafm_exec_wc_create_product() (a brand-new product, nothing pre-existing to
+			// protect) and aafm_exec_wc_update_product() (which now runs the ownership check on
+			// the existing product BEFORE calling this), so the check belongs at the caller, the
+			// same split aafm_tec_event_orm_args() uses above.
+			'aafm_wc_apply_product_input'           => 'Shared setter helper for both create and update; the update caller (aafm_exec_wc_update_product) now runs the ownership check itself before calling this, and create has no prior owner to protect.',
 			// Structured contact-info entities, not rendered page content: neither accepts a
 			// content field at all (confirmed: neither venues.php nor organizers.php contains the
 			// literal 'post_content' anywhere), so there is nothing here a page builder could ever
@@ -208,10 +216,16 @@ final class PageBuilderGuardSweepTest extends TestCase {
 		$seen_any  = false;
 		foreach ( $files as $file ) {
 			// Signal B (wp_update_post()/repository ->save()) is scoped OUT of woocommerce/:
-			// every ->save() there is a WC_Order/WC_Product/WC_Coupon/etc CRUD-object save, never
-			// a write to post_content - WooCommerce entities are not content pages a classic page
-			// builder renders or owns. Signal A ('post_content' literal) still applies everywhere;
-			// it simply never matches inside woocommerce/ in practice.
+			// most ->save() calls there are a WC_Order/WC_Coupon/etc CRUD-object save with no
+			// content field at all. Codex round 9 R9-1: this used to exclude EVERY WooCommerce
+			// ->save(), including WC_Product's, on that same assumption - wrong for
+			// description/short_description, which WooCommerce persists as the product post's
+			// post_content/post_excerpt. Signal E below catches that write shape specifically
+			// (the setter call, not the generic ->save()), so the blanket Signal B/D exclusion
+			// can stay narrow instead of widening it to a signal that would false-positive on
+			// every non-content WC_Product/WC_Order/WC_Coupon save. Signal A ('post_content'
+			// literal) still applies everywhere; it simply never matches inside woocommerce/ in
+			// practice, since WooCommerce writes through its own setters, not a raw array key.
 			$is_woocommerce = false !== strpos( $file, DIRECTORY_SEPARATOR . 'woocommerce' . DIRECTORY_SEPARATOR );
 
 			$source    = (string) file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading this plugin's own local source files to scan them, not a remote URL.
@@ -274,8 +288,24 @@ final class PageBuilderGuardSweepTest extends TestCase {
 						|| false !== strpos( $body, '$wpdb->insert(' )
 						|| false !== strpos( $body, '$wpdb->query(' )
 					);
+				// Signal E: a WC_Product content setter, on the $product variable specifically.
+				// Codex round 9 R9-1: WooCommerce persists description/short_description as the
+				// product post's post_content/post_excerpt, so this is the WooCommerce-specific
+				// write shape Signal B's blanket exclusion above cannot see. Scoped to the
+				// literal `$product->set_description(`/`$product->set_short_description(` call
+				// shape products.php actually uses (not a bare `->set_description(` wildcard),
+				// so an ordinary non-content WC_Product save (price, stock, status) stays outside
+				// the scan, and so do WC_Product_Variation::set_description()
+				// (variations.php - a product_variation post, never individually rendered or
+				// owned by a page builder, the same reasoning the nav_menu_item exemption above
+				// already uses) and WC_Coupon::set_description() (coupons.php - free-form admin
+				// text through aafm_sanitize_multiline_text(), not page content a builder could
+				// ever own). Both are pre-existing, unfixed gaps outside this round's scope, not
+				// new false positives this signal introduces - see the round 9 findings write-up.
+				$writes_wc_product_content = false !== strpos( $body, '$product->set_description(' )
+					|| false !== strpos( $body, '$product->set_short_description(' );
 
-				if ( ! $writes_content_directly && ! $commits_an_existing_post_update && ! $writes_a_builder_marker_key && ! $writes_posts_table_directly ) {
+				if ( ! $writes_content_directly && ! $commits_an_existing_post_update && ! $writes_a_builder_marker_key && ! $writes_posts_table_directly && ! $writes_wc_product_content ) {
 					continue;
 				}
 				$seen_any = true;

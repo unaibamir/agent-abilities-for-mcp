@@ -159,39 +159,59 @@ final class ServerToolsListExposureTest extends TestCase {
 	 * This test proves that indistinguishability holds for a REAL disabled ability, not just an
 	 * invented name, and additionally proves the same name is absent from tools/list.
 	 *
-	 * Finds a disabled-but-registered candidate dynamically rather than hardcoding one: the
-	 * high-risk floor (aafm_high_risk_abilities(), gated by aafm_high_risk_unlocked() in
-	 * includes/registry.php) reliably removes at least one registered ability from
-	 * aafm_get_enabled_abilities()'s returned set in the default test fixture. Registering the
-	 * FULL catalog via register_enabled() above still leaves those high-risk names out of
-	 * aafm_all_server_ability_names() (the subtraction happens inside
-	 * aafm_get_enabled_abilities() itself, before the server or the oracle ever see the list),
-	 * which is exactly the "registered but disabled" shape this test needs - without this test
-	 * needing to toggle the enabled-abilities option itself a second time.
+	 * Codex round 9, R9-12: this used to enable the FULL catalog via enable_full_catalog_as_admin()
+	 * and go hunting through wp_get_abilities() for whatever the high-risk floor happened to strip
+	 * out - but that floor is subtracted inside aafm_get_enabled_abilities() itself
+	 * (includes/registry.php), before register_enabled() ever calls aafm_register_ability_with_log()
+	 * for a high-risk name, so no such name is ever actually registered in this fixture. The search
+	 * found nothing and the test skipped, proving neither the tools/list exclusion nor the
+	 * tools/call refusal its name promises - and any pass in a full-suite run depended entirely on
+	 * some earlier test leaking a process-wide registration into this one.
+	 *
+	 * The fixture is now built directly instead of hunted for: enable every native ability except
+	 * one deliberately held-back name (aafm/get-posts, a plain read with no vendor dependency),
+	 * then register that one name separately through aafm_register_ability_with_log() - the exact
+	 * chokepoint aafm_register_enabled_abilities() itself calls - so it becomes a genuine AAFM-owned
+	 * WP_Ability that simply never made it into the operator's enabled set. That is deterministic
+	 * and independent of suite order, and it fails loudly instead of skipping if the registration
+	 * does not take.
 	 */
 	public function test_a_disabled_but_registered_ability_is_absent_from_list_and_refused_on_call(): void {
-		$this->enable_full_catalog_as_admin();
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey(
+			'aafm/get-posts',
+			$registry,
+			'Fixture assumption broken: aafm/get-posts is no longer in the ability registry.'
+		);
+
+		$disabled_registered_name = 'aafm/get-posts';
+		$enabled_names            = array_values( array_diff( array_keys( $registry ), array( $disabled_registered_name ) ) );
+
+		$this->register_enabled( $enabled_names );
+		$this->acting_as( 'administrator' );
+
+		if ( ! wp_has_ability( $disabled_registered_name ) ) {
+			$args = call_user_func( $registry[ $disabled_registered_name ]['args_builder'] );
+			$this->in_action(
+				'wp_abilities_api_init',
+				static function () use ( $disabled_registered_name, $args ): void {
+					aafm_register_ability_with_log( $disabled_registered_name, $args );
+				}
+			);
+		}
+
+		$this->assertTrue(
+			wp_has_ability( $disabled_registered_name ),
+			'Could not register the fixture ability "' . $disabled_registered_name . '" through the plugin\'s own chokepoint - fixture broken, not a real disabled-but-registered case.'
+		);
+		$this->assertNotContains(
+			$disabled_registered_name,
+			aafm_all_server_ability_names(),
+			'Fixture assumption broken: "' . $disabled_registered_name . '" ended up in the enabled set anyway.'
+		);
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_exposure_test_server( $adapter );
-
-		$enabled_names = aafm_all_server_ability_names();
-
-		$disabled_registered_name = null;
-		foreach ( wp_get_abilities() as $ability ) {
-			$name = $ability->get_name();
-			if ( 0 !== strpos( $name, 'aafm/' ) && 0 !== strpos( $name, 'aafm-bridge/' ) ) {
-				continue;
-			}
-			if ( ! in_array( $name, $enabled_names, true ) ) {
-				$disabled_registered_name = $name;
-				break;
-			}
-		}
-
-		if ( null === $disabled_registered_name ) {
-			$this->markTestSkipped( 'No registered-but-disabled aafm/ or aafm-bridge/ ability found in this fixture (every registered ability is currently enabled) - nothing to prove exclusion against.' );
-		}
 
 		$wire_name = aafm_mcp_tool_name( $disabled_registered_name );
 

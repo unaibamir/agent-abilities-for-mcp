@@ -282,11 +282,11 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 ## Changelog
 ### 1.7.4
 
-* **Feature:** A page-builder write guard now refuses an edit that would silently do nothing on a page owned by Elementor, Divi, Beaver Builder, or Avada, and a new per-role and per-connection allowlist narrows what each role or OAuth client can reach on top of the existing global list. Native abilities also cover The Events Calendar, Event Tickets, Slim SEO, and Avada, plus GeoDirectory, off by default until you turn it on.
-* **Feature:** A new SSRF-hardened ability uploads media straight from a URL, get-media can search by filename and alt text, and get-post/get-page can now skip returning the full body while still reporting its length, so an agent can judge a large page before fetching it. An OAuth connection can also be marked as an agent identity in the activity log.
-* **Fix:** The bump to mcp-adapter 0.6.1 closes a multisite bug where a genuinely persisted session on a network site could be rejected as unpersisted, and every ability was re-audited against the adapter's new default-exposure behavior so nothing became reachable that the operator never turned on.
-* **Fix:** Several OAuth and settings paths treated a failed database read as permission granted or as work already done, so a deactivated client, a missing client record, or an unreadable registration limit could each let a request through, and a revoke that never took could be logged as a success. They now refuse the request instead, OAuth grants belonging to a deleted WordPress user are cleared out rather than left behind, and the Connections screen shows each connected identity's current role.
-* **Fix:** A checkout race between a coupon and its tax class is narrowed, a stale allowlist read and a page-builder guard that was refusing price and stock updates it should have allowed are corrected, and a batch of smaller fixes lands across the admin screens and the connection tab. The dashboard now links to the demo video, the readme's guidance for connecting through ChatGPT's OAuth flow was updated, and an internal audit removed unused and duplicated code.
+* **Feature:** 26 new abilities cover The Events Calendar, Event Tickets, Slim SEO, Avada, and GeoDirectory, plus uploading media straight from a URL. All of them stay off until you turn them on.
+* **Feature:** A page-builder guard refuses a write that would silently do nothing on a page owned by Elementor, Divi, Beaver Builder, or Avada. A new allowlist narrows what each role or connection can reach.
+* **Fix:** The bump to mcp-adapter 0.6.1 closes a multisite bug where a real subsite connection was reported as failed.
+* **Fix:** Several OAuth paths treated a failed database read as permission granted. A deactivated client, a missing client record, or an unreadable registration limit now refuse the request instead of letting it through.
+* **Fix:** Grants belonging to a deleted user are cleared out, the Connections screen shows each identity's current role, and a batch of smaller fixes lands across WooCommerce, the admin screens, and the connection tab.
 
 ### 1.7.3
 

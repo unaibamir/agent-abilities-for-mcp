@@ -584,8 +584,17 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
  * Same purpose as aafm_oauth_revoke_user_client_tokens(), scoped to the whole user
  * rather than one client pair.
  *
+ * Errors are suppressed around the query (restored immediately after) so a not-yet-installed
+ * or otherwise unreadable table never prints a raw wpdb error block - the same discipline
+ * aafm_oauth_delete_all_user_consents() and the read-only listings in clients.php already
+ * follow. The return value distinguishes a failed query from a clean no-op: $wpdb->rows_affected
+ * is not read when the query itself returned false, because a real SQL failure and "nothing to
+ * revoke" both leave that count at zero (the same R9-2 shape aafm_oauth_deactivate_client() and
+ * aafm_oauth_delete_consent() already guard against with a certifying re-read).
+ *
  * @param int $user_id The WordPress user id whose tokens are revoked.
- * @return int Number of token rows deactivated.
+ * @return int Number of token rows deactivated, or -1 when the query itself failed and the
+ *              count cannot be trusted - a caller must not read -1 as "nothing to revoke".
  */
 function aafm_oauth_revoke_user_tokens( int $user_id ): int {
 	if ( $user_id <= 0 ) {
@@ -595,16 +604,18 @@ function aafm_oauth_revoke_user_tokens( int $user_id ): int {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
+	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query(
+	$result = $wpdb->query(
 		$wpdb->prepare(
 			'UPDATE %i SET is_active = 0 WHERE wp_user_id = %d AND is_active = 1',
 			$table,
 			$user_id
 		)
 	);
+	$wpdb->suppress_errors( $suppressed );
 
-	return (int) $wpdb->rows_affected;
+	return false === $result ? -1 : (int) $wpdb->rows_affected;
 }
 
 /**
@@ -686,11 +697,19 @@ function aafm_oauth_cleanup_deleted_user( int $user_id ): void {
 		return;
 	}
 
-	$consents_gone = aafm_oauth_delete_all_user_consents( $user_id );
-	aafm_oauth_revoke_user_tokens( $user_id );
-	aafm_oauth_revoke_user_codes( $user_id );
+	$consents_gone  = aafm_oauth_delete_all_user_consents( $user_id );
+	$tokens_revoked = aafm_oauth_revoke_user_tokens( $user_id );
+	$codes_revoked  = aafm_oauth_revoke_user_codes( $user_id );
 
+	// The -1 sentinel from a failed revoke query is checked directly, rather than trusted to
+	// surface only through the certifying reads below: those still catch it in the common case
+	// where every OAuth table shares the same fate, but a table-by-table failure (the tokens
+	// table gone while consents and codes are fine, say) would otherwise revoke nothing while
+	// reporting the write as clean, the same silent-failure shape aafm_oauth_delete_all_user_consents()
+	// closes with its own certifying read.
 	$clean = $consents_gone
+		&& $tokens_revoked >= 0
+		&& $codes_revoked >= 0
 		&& ! aafm_oauth_user_has_active_tokens( $user_id )
 		&& ! aafm_oauth_user_has_pending_codes( $user_id );
 

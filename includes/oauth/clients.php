@@ -639,6 +639,12 @@ function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
  * one query, on the same certify-against-a-fresh-read discipline as the
  * single-client version.
  *
+ * Errors are suppressed around both the delete and the certifying read (restored immediately
+ * after), the same discipline the read-only listings above already follow - a not-yet-installed
+ * or otherwise unreadable consents table must not print a raw wpdb error block, which is what
+ * happens uncorrected: this runs unconditionally on 'deleted_user', including in the PHPUnit
+ * fixtures where the OAuth tables are never installed.
+ *
  * @param int $user_id The WordPress user id whose consents are removed.
  * @return bool True when the user is confirmed to hold no consent rows after this call.
  */
@@ -650,11 +656,15 @@ function aafm_oauth_delete_all_user_consents( int $user_id ): bool {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_consents';
 
+	$suppressed = $wpdb->suppress_errors();
+
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->delete( $table, array( 'wp_user_id' => $user_id ), array( '%d' ) );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT id FROM %i WHERE wp_user_id = %d', $table, $user_id ) );
+
+	$wpdb->suppress_errors( $suppressed );
 
 	return $view['ok'] && null === $view['value'];
 }

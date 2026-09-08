@@ -272,8 +272,16 @@ function aafm_oauth_user_client_has_pending_codes( int $user_id, string $client_
  * tokens.php). Same purpose as aafm_oauth_revoke_user_client_codes(), scoped to the
  * whole user rather than one client pair.
  *
+ * Errors are suppressed around the query (restored immediately after) so a not-yet-installed
+ * or otherwise unreadable table never prints a raw wpdb error block - the same discipline the
+ * read-only helpers in this file already follow. $wpdb->query() returns false, not an int, on
+ * a failed DELETE - casting that straight to (int) collapsed a real SQL failure into the same
+ * 0 a genuine "nothing to delete" produces, which is exactly the R9-2 shape this codebase
+ * otherwise guards against with a certifying re-read.
+ *
  * @param int $user_id The WordPress user.
- * @return int Rows deleted.
+ * @return int Rows deleted, or -1 when the query itself failed and the count cannot be
+ *              trusted - a caller must not read -1 as "nothing to delete".
  */
 function aafm_oauth_revoke_user_codes( int $user_id ): int {
 	if ( $user_id <= 0 ) {
@@ -283,14 +291,18 @@ function aafm_oauth_revoke_user_codes( int $user_id ): int {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_codes';
 
+	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	return (int) $wpdb->query(
+	$result = $wpdb->query(
 		$wpdb->prepare(
 			'DELETE FROM %i WHERE wp_user_id = %d',
 			$table,
 			$user_id
 		)
 	);
+	$wpdb->suppress_errors( $suppressed );
+
+	return false === $result ? -1 : (int) $result;
 }
 
 /**

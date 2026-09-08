@@ -249,10 +249,12 @@ function aafm_review_request_flush_display_count(): void {
  * bundle every front-end request pays for to answer questions only wp-admin asks.
  *
  * @param array<string,mixed> $state The full state array to store.
- * @return void
+ * @return bool True when the option now certifies as $state (Codex round 9, R9-10) - callers
+ *              that report a verdict back to the operator must act on this rather than assume
+ *              a bare update_option() always lands.
  */
-function aafm_review_request_save_state( array $state ): void {
-	update_option( 'aafm_review_request', $state, false );
+function aafm_review_request_save_state( array $state ): bool {
+	return aafm_update_option_verified( 'aafm_review_request', $state, false );
 }
 
 /**
@@ -688,7 +690,10 @@ JS;
  * at would cost more machinery than the preference row is worth.
  *
  * @param string $verdict One of 'review', 'later', 'dismiss'.
- * @return array{status:string,first_success_seen_at:int,snooze_until:int,snooze_count:int,threshold_met:int}
+ * @return array{state:array{status:string,first_success_seen_at:int,snooze_until:int,snooze_count:int,threshold_met:int},persisted:bool}
+ *              persisted is false when the save did not actually take (Codex round 9, R9-10);
+ *              the returned state is still the caller's in-memory copy of what was requested,
+ *              never a claim that it is what the database now holds.
  */
 function aafm_review_request_record_verdict( string $verdict ): array {
 	// Read immediately before the write, and past the request's own object cache, so the two
@@ -699,14 +704,21 @@ function aafm_review_request_record_verdict( string $verdict ): array {
 	wp_cache_delete( 'aafm_review_request', 'options' );
 	$state = aafm_review_request_state();
 
-	// Already answered for good: report the stored state and change nothing.
+	// Already answered for good: report the stored state and change nothing. Nothing was
+	// written this call, so there is nothing to certify - the stored state is what persisted.
 	if ( in_array( $state['status'], array( 'reviewed', 'dismissed' ), true ) ) {
-		return $state;
+		return array(
+			'state'     => $state,
+			'persisted' => true,
+		);
 	}
 	// Already snoozed and the snooze has not run out: a repeat "later" is a stale tab, not a
 	// second appearance, so it must not spend another snooze.
 	if ( 'later' === $verdict && 'snoozed' === $state['status'] && time() < $state['snooze_until'] ) {
-		return $state;
+		return array(
+			'state'     => $state,
+			'persisted' => true,
+		);
 	}
 
 	if ( 'review' === $verdict ) {
@@ -721,9 +733,12 @@ function aafm_review_request_record_verdict( string $verdict ): array {
 		$state['snooze_count'] = $state['snooze_count'] + 1;
 		$state['snooze_until'] = time() + aafm_review_request_snooze_seconds();
 	}
-	aafm_review_request_save_state( $state );
+	$persisted = aafm_review_request_save_state( $state );
 
-	return $state;
+	return array(
+		'state'     => $state,
+		'persisted' => $persisted,
+	);
 }
 
 /**
@@ -748,9 +763,12 @@ function aafm_ajax_review_request(): void {
 		wp_send_json_error( array( 'message' => __( 'Unknown action.', 'agent-abilities-for-mcp' ) ), 400 );
 	}
 
-	$state = aafm_review_request_record_verdict( $verdict );
+	$result = aafm_review_request_record_verdict( $verdict );
+	if ( ! $result['persisted'] ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Your answer', 'agent-abilities-for-mcp' ) ) ) );
+	}
 
-	wp_send_json_success( array( 'status' => $state['status'] ) );
+	wp_send_json_success( array( 'status' => $result['state']['status'] ) );
 }
 
 /**

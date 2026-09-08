@@ -134,27 +134,19 @@ function aafm_cidr_match( string $ip, string $cidr ): bool {
 		return inet_pton( $ip ) === inet_pton( $cidr );
 	}
 
-	list( $subnet, $prefix_raw ) = explode( '/', $cidr, 2 );
-
-	if ( false === filter_var( $subnet, FILTER_VALIDATE_IP ) ) {
+	$parsed = aafm_split_and_validate_cidr( $cidr );
+	if ( null === $parsed ) {
 		return false;
 	}
-
-	// Prefix must be a plain run of digits (no sign, no whitespace, no decimals).
-	if ( '' === $prefix_raw || 1 !== preg_match( '/^\d+$/', $prefix_raw ) ) {
-		return false;
-	}
-	$prefix = (int) $prefix_raw;
+	list(
+		'subnet' => $subnet,
+		'prefix' => $prefix,
+		'max'    => $max,
+	) = $parsed;
 
 	// Both ends must belong to the same address family.
-	$ip_is_v4     = false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
-	$subnet_is_v4 = false !== filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
-	if ( $ip_is_v4 !== $subnet_is_v4 ) {
-		return false;
-	}
-
-	$max = $ip_is_v4 ? 32 : 128;
-	if ( $prefix < 0 || $prefix > $max ) {
+	$ip_is_v4 = false !== filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 );
+	if ( ( 32 === $max ) !== $ip_is_v4 ) {
 		return false;
 	}
 
@@ -200,20 +192,42 @@ function aafm_is_valid_ip_or_cidr( string $line ): bool {
 		return false !== filter_var( $line, FILTER_VALIDATE_IP );
 	}
 
-	list( $subnet, $prefix_raw ) = explode( '/', $line, 2 );
+	return null !== aafm_split_and_validate_cidr( $line );
+}
+
+/**
+ * Split and validate a `network/prefix` string shared by aafm_cidr_match() and
+ * aafm_is_valid_ip_or_cidr(): the subnet must be a well-formed IPv4 or IPv6 address, the
+ * prefix must be a plain run of digits (no sign, whitespace, or decimals), and the prefix
+ * must not exceed the family's bit length (32 for IPv4, 128 for IPv6). Callers that already
+ * handled a bare host (no `/`) before reaching here never pass one.
+ *
+ * @param string $value A `network/prefix` string (never a bare host).
+ * @return array{subnet:string,prefix:int,max:int}|null Null on any validation failure.
+ */
+function aafm_split_and_validate_cidr( string $value ): ?array {
+	list( $subnet, $prefix_raw ) = explode( '/', $value, 2 );
 
 	if ( false === filter_var( $subnet, FILTER_VALIDATE_IP ) ) {
-		return false;
+		return null;
 	}
 
 	// Prefix must be a plain run of digits (no sign, whitespace, or decimals).
 	if ( '' === $prefix_raw || 1 !== preg_match( '/^\d+$/', $prefix_raw ) ) {
-		return false;
+		return null;
 	}
+	$prefix = (int) $prefix_raw;
 
 	$max = ( false !== filter_var( $subnet, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) ? 32 : 128;
+	if ( $prefix > $max ) {
+		return null;
+	}
 
-	return (int) $prefix_raw <= $max;
+	return array(
+		'subnet' => $subnet,
+		'prefix' => $prefix,
+		'max'    => $max,
+	);
 }
 
 /**
@@ -310,4 +324,23 @@ function aafm_log_retention_days(): int {
 function aafm_title_within_limit( string $title ): bool {
 	$max = aafm_max_title_len();
 	return $max <= 0 || mb_strlen( $title ) <= $max;
+}
+
+/**
+ * Enforce the max-title-length setting, returning the standard WP_Error when it fails.
+ *
+ * The chokepoints aafm_insert_post()/aafm_exec_update_post() already run this check on their own
+ * behalf. Codex final round 9 MEDIUM: TEC events/venues/organizers and GeoDirectory build
+ * their own args arrays instead of routing through either of those, so the setting silently
+ * never applied to them. This is the same check, reused rather than re-derived, for those
+ * write paths.
+ *
+ * @param string $title Sanitized title about to be persisted.
+ * @return true|WP_Error
+ */
+function aafm_enforce_title_limit( string $title ) {
+	if ( ! aafm_title_within_limit( $title ) ) {
+		return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'agent-abilities-for-mcp' ) );
+	}
+	return true;
 }

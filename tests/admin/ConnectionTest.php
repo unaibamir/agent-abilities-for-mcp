@@ -423,6 +423,30 @@ final class ConnectionTest extends TestCase {
 		$this->assertStringContainsString( 'PASTE-APPLICATION-PASSWORD-HERE', $html );
 	}
 
+	public function test_windows_certificate_callout_uses_the_shared_notice_component(): void {
+		$html = $this->render_connection_tab();
+
+		// Isolate the Windows/Certificate callout's own wrapper - not just any element on the
+		// page - so this test can't pass by coincidence off the unrelated REST-lockdown notice,
+		// which already carries aafm-notice/aafm-notice-info/aafm-notice-ic today.
+		$this->assertMatchesRegularExpression(
+			'/<div class="aafm-notice aafm-notice-info[^"]*aafm-os-note[^"]*">.*?<\/div>\s*<\/div>/s',
+			$html,
+			'the callout wrapper must carry aafm-notice, aafm-notice-info, and aafm-os-note together on one element'
+		);
+		preg_match( '/<div class="aafm-notice aafm-notice-info[^"]*aafm-os-note[^"]*">.*?<\/div>\s*<\/div>/s', $html, $matches );
+		$callout_html = $matches[0] ?? '';
+		$this->assertNotSame( '', $callout_html, 'could not isolate the callout wrapper from the rendered tab' );
+
+		// Inside that isolated wrapper: the icon span, and the two labelled rows nested within it.
+		$this->assertStringContainsString( 'aafm-notice-ic', $callout_html );
+		$this->assertStringContainsString( 'aafm-os-note-row', $callout_html );
+		$this->assertStringContainsString( '>Windows<', $callout_html );
+		$this->assertStringContainsString( '>Certificate<', $callout_html );
+		// The old bespoke wp-admin-native wrapper classes are gone from this element.
+		$this->assertStringNotContainsString( 'notice notice-info inline', $callout_html );
+	}
+
 	public function test_connection_tab_emits_every_client_snippet(): void {
 		$html = $this->render_connection_tab();
 

@@ -80,13 +80,29 @@ function aafm_forget_option_caches( string $option ): bool {
  * the delete silently does nothing (see aafm_forget_option_caches()). The follow-up forget makes
  * the outcome the same in both cases.
  *
+ * The return value used to report only whether the cache cleanup succeeded, never whether the
+ * row was actually gone (Codex round 9, R9-3): `delete_option()`'s own result was discarded, so a
+ * failed DELETE against a row the cache had never heard of certified as a clean success. This now
+ * certifies the deletion itself with aafm_option_write_certified(), the same primitive
+ * aafm_persist_operator_switch()'s off branch already uses, so a caller gets one honest answer
+ * for "is this option's row actually gone" rather than a signal about the cache alone.
+ *
  * @param string $option Option name.
- * @return bool Whatever aafm_forget_option_caches() reports for this option (see its docblock);
- *              true unless a cache rewrite it attempted was rejected.
+ * @return bool True when the option's row is confirmed absent, from both the database and every
+ *              object-cache view this call could reach; false when a cache rewrite was rejected
+ *              or the row is still there.
  */
 function aafm_delete_option_cache_safe( string $option ): bool {
 	delete_option( $option );
-	return aafm_forget_option_caches( $option );
+	$caches_ok = aafm_forget_option_caches( $option );
+
+	aafm_force_refresh_option_caches( $option );
+
+	if ( ! $caches_ok ) {
+		return false;
+	}
+
+	return aafm_option_write_certified( $option, null, true );
 }
 
 /**
@@ -121,6 +137,55 @@ function aafm_force_refresh_option_caches( string $option ): void {
 }
 
 /**
+ * Run one already-prepared, single-column SELECT and report whether the query itself succeeded,
+ * using $wpdb->query()'s own return value rather than $wpdb->last_error.
+ *
+ * $wpdb->last_error is not a reliable failure signal on its own (Codex round 10, R10-1):
+ * $wpdb->query() (wp-includes/class-wpdb.php) returns false, before ever touching last_error, on
+ * three paths - $wpdb->ready is false, the `query` filter returns an empty query, and a failed
+ * reconnection after the server has gone away. A caller that only checked last_error read all
+ * three as "the query ran clean and found nothing," which is exactly how aafm_read_option_views()
+ * used to let an unreadable database certify as row absence - the defect commit 39dd5ab was
+ * written to close, still reachable through those three branches. $wpdb->query()'s own return is
+ * false on every one of them (and on every path that does set last_error, since query() itself
+ * returns false whenever last_error ends up non-empty), so checking it directly closes all four at
+ * once with one signal instead of two.
+ *
+ * On success, the value is read out of $wpdb->last_result exactly the way $wpdb->get_var() reads
+ * it internally, so a caller sees the identical value get_var() would have returned - this changes
+ * only how a failure is detected, never what a success looks like.
+ *
+ * @param string $sql A fully prepared SQL statement ($wpdb->prepare()'s output), expected to be a
+ *                     single-column SELECT (a scalar or a COUNT(*)).
+ * @return array{ok:bool,value:mixed} ok is false when the query itself failed - value is not
+ *              trustworthy either way in that case. value is the first column of the first row, or
+ *              null when the query succeeded but matched nothing.
+ */
+function aafm_wpdb_scalar( string $sql ): array {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- $sql is required by this function's own contract to already be $wpdb->prepare()'s output; every caller in this codebase passes a prepare() call directly.
+	$result = $wpdb->query( $sql );
+	if ( false === $result ) {
+		return array(
+			'ok'    => false,
+			'value' => null,
+		);
+	}
+
+	$value = null;
+	if ( ! empty( $wpdb->last_result[0] ) ) {
+		$columns = array_values( get_object_vars( $wpdb->last_result[0] ) );
+		$value   = ( isset( $columns[0] ) && '' !== $columns[0] ) ? $columns[0] : null;
+	}
+
+	return array(
+		'ok'    => true,
+		'value' => $value,
+	);
+}
+
+/**
  * Read $option as two independent, uninterpreted views - the object cache's and the database's -
  * instead of folding them into `get_option()`'s single, cache-trusting answer.
  *
@@ -139,9 +204,20 @@ function aafm_force_refresh_option_caches( string $option ): void {
  * function outside that one allowed to cost that extra query, because it exists specifically to
  * certify a write the plugin just made.
  *
+ * A query that errors (a broken table, a lost DB connection, anything short of a clean empty
+ * result) and a query that simply finds no matching row both make `$wpdb->get_var()` return null -
+ * `db_found` alone cannot tell "confirmed absent" from "could not check" apart (Codex round 9
+ * re-check: this was the gap behind a failed configuration delete still certifying as a clean
+ * reset - R9-3). `db_error` names that gap explicitly, from aafm_wpdb_scalar()'s own `ok` flag
+ * rather than `$wpdb->last_error` alone: last_error is not set on every failure path (Codex round
+ * 10, R10-1 - see that function's docblock for the three it misses), so a caller that trusted it
+ * alone could still certify an unreadable database as proof the row was gone.
+ *
  * @param string $option Option name.
- * @return array{db_found:bool,db_value:mixed,cache_found:bool,cache_value:mixed} db_found/db_value
- *              describe the row for the current blog (db_value is false when the row is absent);
+ * @return array{db_found:bool,db_value:mixed,db_error:bool,cache_found:bool,cache_value:mixed}
+ *              db_found/db_value describe the row for the current blog (db_value is false when the
+ *              row is absent); db_error is true when the read itself failed, in which case
+ *              db_found/db_value are not trustworthy either way and must not be certified against;
  *              cache_found/cache_value describe whichever of the per-option key or the alloptions
  *              blob answered for the option (cache_value is null when neither did).
  */
@@ -170,12 +246,14 @@ function aafm_read_option_views( string $option ): array {
 	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache; certification must be checked against the row itself, mirroring aafm_uninstall_should_delete_data()'s reasoning.
-	$raw      = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
-	$db_found = null !== $raw;
+	$scalar   = aafm_wpdb_scalar( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
+	$db_error = ! $scalar['ok'];
+	$db_found = ! $db_error && null !== $scalar['value'];
 
 	return array(
 		'db_found'    => $db_found,
-		'db_value'    => $db_found ? maybe_unserialize( $raw ) : false,
+		'db_value'    => $db_found ? maybe_unserialize( $scalar['value'] ) : false,
+		'db_error'    => $db_error,
 		'cache_found' => $cache_found,
 		'cache_value' => $cache_value,
 	);
@@ -242,6 +320,14 @@ function aafm_option_value_matches( $stored, $expected ): bool {
  * blob this function reads may still be the stale one that failure left behind, so the caller
  * should treat the whole write as uncertified rather than call this function at all in that case.
  *
+ * A database read that itself fails (aafm_read_option_views()'s `db_error`) is checked first and
+ * fails certification outright, on either branch (Codex round 9 re-check, R9-3 remainder): the
+ * expect-absent branch below would otherwise read "the row can't be found" the same way whether
+ * the row is genuinely gone or the query that would have found it just errored, so a broken read
+ * could certify a delete that never actually happened as a clean success. There is no default to
+ * fall back on here the way the row-absent-but-readable case below has one - an unreadable
+ * database is not evidence of anything, in either direction.
+ *
  * @param string $option        Option name.
  * @param mixed  $expected      Value the write intended to store. Ignored when $expect_absent.
  * @param bool   $expect_absent True when the intended state is "no row for this option" (the off
@@ -250,6 +336,10 @@ function aafm_option_value_matches( $stored, $expected ): bool {
  */
 function aafm_option_write_certified( string $option, $expected, bool $expect_absent = false ): bool {
 	$views = aafm_read_option_views( $option );
+
+	if ( $views['db_error'] ) {
+		return false;
+	}
 
 	if ( $expect_absent ) {
 		if ( $views['db_found'] ) {
@@ -304,10 +394,22 @@ function aafm_option_write_certified( string $option, $expected, bool $expect_ab
  *
  * The return value comes from aafm_option_write_certified(), not from a subsequent get_option()
  * (see that function's docblock for why an unforced read is not enough on its own). get_option()
- * is still called afterward so this request's own runtime cache is left holding the same value the
- * rest of the plugin will read for the remainder of it - callers elsewhere rely on that read
- * reflecting the write this function just made - it is simply no longer where the boolean this
- * function returns comes from.
+ * is still called after certification succeeds, not before, so this request's own runtime cache is
+ * left holding the same value the rest of the plugin will read for the remainder of it - callers
+ * elsewhere rely on that read reflecting the write this function just made - it is simply no longer
+ * where the boolean this function returns comes from.
+ *
+ * That warming read is skipped on an uncertified write, the same guard aafm_update_option_verified()
+ * applies and for the identical reason (see that function's docblock): a plain get_option() call,
+ * run while the database itself cannot answer for the option, does not merely read nothing - core's
+ * own get_option() (wp-includes/option.php) caches that empty read into `notoptions`, asserting the
+ * option does not exist at all. On this function's off branch that assertion is normally the correct
+ * end state - off IS the row's absence - but only when certification actually confirmed the row is
+ * gone; a certification failure means the database read itself could not be trusted (aafm_read_-
+ * option_views()'s db_error), so a row that is genuinely still present would get the exact same
+ * false "confirmed absent" answer as a row that really was deleted. On the on branch the same guard
+ * additionally protects against warming the cache with a value that was never actually confirmed
+ * stored.
  *
  * @param string $option Option name.
  * @param bool   $on     Whether the switch should be on.
@@ -324,15 +426,20 @@ function aafm_persist_operator_switch( string $option, bool $on ): bool {
 	}
 
 	aafm_force_refresh_option_caches( $option );
-	get_option( $option, false );
 
 	if ( ! $caches_ok ) {
 		return false;
 	}
 
-	return $on
+	$certified = $on
 		? aafm_option_write_certified( $option, true )
 		: aafm_option_write_certified( $option, false, true );
+
+	if ( $certified ) {
+		get_option( $option, false );
+	}
+
+	return $certified;
 }
 
 /**
@@ -350,26 +457,59 @@ function aafm_persist_operator_switch( string $option, bool $on ): bool {
  * The certification itself is aafm_option_write_certified(), which checks the database row and the
  * object cache's own forced views directly, not a bare `===` of the caller's value against a
  * subsequent `get_option()` read - see that function's docblock for why an unforced read is not
- * enough on its own. get_option() is still called afterward so this request's own runtime cache is
- * left holding the same value the rest of the plugin will read for the remainder of it - callers
- * elsewhere rely on that read reflecting the write this function just made - it is simply no
- * longer where the boolean this function returns comes from.
+ * enough on its own. get_option() is called once more only after certification succeeds, so this
+ * request's own runtime cache is left holding the same value the rest of the plugin will read for
+ * the remainder of it - callers elsewhere rely on that read reflecting the write this function just
+ * made - it is simply no longer where the boolean this function returns comes from.
  *
- * @param string $option Option name.
- * @param mixed  $value  New value to store.
+ * That warming read is deliberately skipped on an uncertified write (Codex round 9 re-check): a
+ * plain get_option() call for an option this request just deliberately forgot the cache of, run
+ * while the database itself cannot answer for the option (the same condition certification just
+ * failed under), does not merely read nothing - core's own get_option() (wp-includes/option.php)
+ * caches that empty read into `notoptions`, asserting the option does not exist at all. For an
+ * option whose row is really still there, that is a second, worse wrong answer stacked on top of
+ * the one certification already reported: not just "unverified" but "confirmed absent" for every
+ * later get_option() call in this request, and, under a persistent object cache, beyond it too.
+ * Nothing this function can still do at that point makes the read trustworthy, so it is skipped
+ * rather than risked.
+ *
+ * $autoload is passed straight through to `update_option()` when given (its own null default
+ * lets WordPress decide, the same as calling it with no third argument at all), for the rare
+ * option that needs an explicit autoload state - `false` for one big enough that autoloading it
+ * would cost every request that never asks for it, `true` to force it in.
+ *
+ * Typed `bool|null`, not the legacy `string|bool|null`: core's own signature only ever declares
+ * `bool|null` for this parameter (`'yes'`/`'no'` are accepted at runtime for backward
+ * compatibility but deprecated as of WP 6.7, per wp-includes/option.php's own docblock), and
+ * every caller in this plugin already passes a real bool or omits the argument. Accepting the
+ * deprecated string shape here would just pass it straight through to a call core itself is
+ * moving away from.
+ *
+ * @param string    $option   Option name.
+ * @param mixed     $value    New value to store.
+ * @param bool|null $autoload Optional. Passed through to update_option(); null lets WordPress
+ *                             choose, matching the 2-argument call.
  * @return bool True when the option now certifies as $value.
  */
-function aafm_update_option_verified( string $option, $value ): bool {
+function aafm_update_option_verified( string $option, $value, ?bool $autoload = null ): bool {
 	$caches_ok = aafm_forget_option_caches( $option );
-	update_option( $option, $value );
+	if ( null === $autoload ) {
+		update_option( $option, $value );
+	} else {
+		update_option( $option, $value, $autoload );
+	}
 	$caches_ok = aafm_forget_option_caches( $option ) && $caches_ok;
 	aafm_force_refresh_option_caches( $option );
-
-	get_option( $option );
 
 	if ( ! $caches_ok ) {
 		return false;
 	}
 
-	return aafm_option_write_certified( $option, $value );
+	$certified = aafm_option_write_certified( $option, $value );
+
+	if ( $certified ) {
+		get_option( $option );
+	}
+
+	return $certified;
 }

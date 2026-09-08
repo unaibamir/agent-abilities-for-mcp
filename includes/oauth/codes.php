@@ -193,3 +193,138 @@ function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ):
 		)
 	);
 }
+
+/**
+ * Whether a client still has any authorization-code row, redeemed or not.
+ *
+ * Used by the admin "Revoke client" handler to certify aafm_oauth_revoke_client_codes() actually
+ * cleared the table, rather than trusting that delete's own affected-row count (Codex round 10,
+ * R10-2): the revoke handlers called the delete and threw its result away entirely, so the codes
+ * table was never certified at all - only the client and its tokens were.
+ *
+ * Codex round 11 R11-5 corrected an earlier version of this comment that overstated the risk: a
+ * code left behind by a failed delete is NOT actually redeemable after the fact. The token
+ * endpoint independently re-checks client deactivation before redemption
+ * (aafm_oauth_rest_token_authorization_code(), includes/oauth/rest.php) and re-checks consent at
+ * redemption for the revoked-grant case, so a leftover row cannot mint a token either way.
+ * Clearing the row here is still worth certifying: defence in depth against a future redemption
+ * path that might not repeat both re-checks, and data hygiene - a stale, unusable code should
+ * not linger in the table pretending to be live.
+ *
+ * Same fail-closed bias as aafm_oauth_client_has_active_tokens(): this has exactly one caller
+ * shape, a revoke handler certifying a full clear, so a read that could not run must count as
+ * "still has a pending code," never as "confirmed clear."
+ *
+ * @param string $client_id The public client identifier.
+ * @return bool True when the client is confirmed to have at least one code row, OR when the
+ *              confirming read itself failed and cannot rule that out.
+ */
+function aafm_oauth_client_has_pending_codes( string $client_id ): bool {
+	if ( '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE client_id = %s', $table, $client_id ) );
+
+	return ! $count['ok'] || (int) $count['value'] > 0;
+}
+
+/**
+ * Whether a single user still has any authorization-code row for one client, redeemed or not.
+ *
+ * Same purpose and fail-closed bias as aafm_oauth_client_has_pending_codes(), scoped to the admin
+ * "Revoke grant" action.
+ *
+ * @param int    $user_id   The WordPress user id.
+ * @param string $client_id The public client identifier.
+ * @return bool True when the pair is confirmed to have at least one code row, OR when the
+ *              confirming read itself failed and cannot rule that out.
+ */
+function aafm_oauth_user_client_has_pending_codes( int $user_id, string $client_id ): bool {
+	if ( $user_id <= 0 || '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = aafm_wpdb_scalar(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE wp_user_id = %d AND client_id = %s',
+			$table,
+			$user_id,
+			$client_id
+		)
+	);
+
+	return ! $count['ok'] || (int) $count['value'] > 0;
+}
+
+/**
+ * Delete every authorization code issued to one user, across every client.
+ *
+ * Used when a WordPress user is deleted (see aafm_oauth_cleanup_deleted_user() in
+ * tokens.php). Same purpose as aafm_oauth_revoke_user_client_codes(), scoped to the
+ * whole user rather than one client pair.
+ *
+ * Errors are suppressed around the query (restored immediately after) so a not-yet-installed
+ * or otherwise unreadable table never prints a raw wpdb error block - the same discipline the
+ * read-only helpers in this file already follow. $wpdb->query() returns false, not an int, on
+ * a failed DELETE - casting that straight to (int) collapsed a real SQL failure into the same
+ * 0 a genuine "nothing to delete" produces, which is exactly the R9-2 shape this codebase
+ * otherwise guards against with a certifying re-read.
+ *
+ * @param int $user_id The WordPress user.
+ * @return int Rows deleted, or -1 when the query itself failed and the count cannot be
+ *              trusted - a caller must not read -1 as "nothing to delete".
+ */
+function aafm_oauth_revoke_user_codes( int $user_id ): int {
+	if ( $user_id <= 0 ) {
+		return 0;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$result = $wpdb->query(
+		$wpdb->prepare(
+			'DELETE FROM %i WHERE wp_user_id = %d',
+			$table,
+			$user_id
+		)
+	);
+	$wpdb->suppress_errors( $suppressed );
+
+	return false === $result ? -1 : (int) $result;
+}
+
+/**
+ * Whether a single user still has any authorization-code row for any client, redeemed or not.
+ *
+ * Same fail-closed certification bias as aafm_oauth_user_client_has_pending_codes(), scoped to
+ * the whole user rather than one client pair. Used to certify aafm_oauth_revoke_user_codes().
+ *
+ * @param int $user_id The WordPress user id.
+ * @return bool True when the user is confirmed to have at least one code row, OR when the
+ *              confirming read itself failed and cannot rule that out.
+ */
+function aafm_oauth_user_has_pending_codes( int $user_id ): bool {
+	if ( $user_id <= 0 ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE wp_user_id = %d', $table, $user_id ) );
+
+	return ! $count['ok'] || (int) $count['value'] > 0;
+}

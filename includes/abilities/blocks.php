@@ -130,23 +130,18 @@ function aafm_args_list_blocks(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
+			'properties'           => array_merge(
+				aafm_pagination_schema_props(
+					100,
+					__( 'Number of blocks per page, clamped to the 1-100 range regardless of the value requested. Defaults to 20 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
 				),
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => 100,
-					'description' => __( 'Number of blocks per page, clamped to the 1-100 range regardless of the value requested. Defaults to 20 when omitted.', 'agent-abilities-for-mcp' ),
-				),
-				'search'   => array(
-					'type'        => 'string',
-					'description' => __( 'Free-text search using WordPress\'s normal post search, matched against the block\'s title and content. Omit to list every block you can edit.', 'agent-abilities-for-mcp' ),
-				),
+				array(
+					'search' => array(
+						'type'        => 'string',
+						'description' => __( 'Free-text search using WordPress\'s normal post search, matched against the block\'s title and content. Omit to list every block you can edit.', 'agent-abilities-for-mcp' ),
+					),
+				)
 			),
 			'additionalProperties' => false,
 		),

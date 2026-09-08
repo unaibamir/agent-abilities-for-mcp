@@ -44,7 +44,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-page'] = array(
 		'label'        => __( 'Update page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the page is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -83,27 +83,22 @@ function aafm_args_get_pages(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'status'          => array(
+					'status' => array(
 						'type'        => 'string',
 						'default'     => 'publish',
 						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private pages; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'search'          => array(
+					'search' => array(
 						'type'        => 'string',
 						'description' => __( 'Free-text search term matched against the page title and content, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
 					),
-					'page'            => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page'        => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => 50,
-						'description' => __( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-					),
+				),
+				aafm_pagination_schema_props(
+					50,
+					__( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				),
+				array(
 					'content_format'  => array(
 						'type'        => 'string',
 						'enum'        => array( 'rendered', 'raw' ),
@@ -174,16 +169,21 @@ function aafm_args_get_page(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'page_id'        => array(
+					'page_id'         => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
 						'description' => __( 'ID of the page to retrieve.', 'agent-abilities-for-mcp' ),
 					),
-					'content_format' => array(
+					'content_format'  => array(
 						'type'        => 'string',
 						'enum'        => array( 'rendered', 'raw' ),
 						'default'     => 'rendered',
 						'description' => __( 'Format for the returned content: rendered HTML (default) or raw block markup.', 'agent-abilities-for-mcp' ),
+					),
+					'include_content' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => __( 'Whether to include the page content. Defaults to true; pass false to omit it, for example when only content_length is needed to preflight size.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -274,7 +274,8 @@ function aafm_exec_get_page( array $input ) {
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
-	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	$include_content = ! array_key_exists( 'include_content', $input ) || (bool) $input['include_content'];
 	// Branch review fix (lang scope and result shaping): same reasoning as
 	// aafm_exec_get_post() in posts.php - see that function's comment for the full
 	// explanation. Shape under the requested language when one was resolved, or the post's
@@ -283,7 +284,13 @@ function aafm_exec_get_page( array $input ) {
 	return array(
 		'post' => aafm_with_language(
 			$shape_lang,
-			static fn(): array => aafm_rich_post( $post, array( 'content_format' => $format ) )
+			static fn(): array => aafm_rich_post(
+				$post,
+				array(
+					'content_format'  => $format,
+					'include_content' => $include_content,
+				)
+			)
 		),
 	);
 }

@@ -320,6 +320,74 @@ final class HelpersTest extends TestCase {
 		$this->assertSame( 1, $args['page'] );
 	}
 
+	/**
+	 * Aafm_pagination_schema_props() centralizes the type/minimum/maximum shape every
+	 * list-shaped ability's page + per_page properties share; the description text stays
+	 * caller-owned. Ceiling and descriptions must come through verbatim.
+	 */
+	public function test_pagination_schema_props_shape(): void {
+		$props = aafm_pagination_schema_props( 25, 'per-page text', 'page text' );
+
+		$this->assertSame(
+			array(
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'maximum'     => AAFM_LIST_PAGE_MAX,
+				'description' => 'page text',
+			),
+			$props['page']
+		);
+		$this->assertSame(
+			array(
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'maximum'     => 25,
+				'description' => 'per-page text',
+			),
+			$props['per_page']
+		);
+	}
+
+	/**
+	 * Aafm_stable_sort() ties break on original position, reproducing PHP 8's stable usort()
+	 * on this plugin's PHP 7.4 floor. This is the failure mode PHP 7.4's unstable usort() has:
+	 * two equal-comparing items must come back in their original relative order, never swapped.
+	 */
+	public function test_stable_sort_ties_break_on_original_position(): void {
+		$items  = array(
+			array(
+				'label' => 'b',
+				'tag'   => 1,
+			),
+			array(
+				'label' => 'a',
+				'tag'   => 2,
+			),
+			array(
+				'label' => 'b',
+				'tag'   => 3,
+			),
+			array(
+				'label' => 'a',
+				'tag'   => 4,
+			),
+		);
+		$sorted = aafm_stable_sort(
+			$items,
+			static function ( array $a, array $b ): int {
+				return strcmp( $a['label'], $b['label'] );
+			}
+		);
+		// Both 'a' rows before both 'b' rows; within each label, original order preserved.
+		$this->assertSame( array( 2, 4, 1, 3 ), array_column( $sorted, 'tag' ) );
+	}
+
+	public function test_stable_sort_keeps_order_when_comparator_never_breaks_a_tie(): void {
+		$items  = array( 'x', 'y', 'z' );
+		$sorted = aafm_stable_sort( $items, static fn( $a, $b ): int => 0 ); // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- comparator signature is usort()'s contract; this test deliberately never breaks a tie.
+		$this->assertSame( array( 'x', 'y', 'z' ), $sorted );
+	}
+
 	public function test_generic_error_leaks_nothing(): void {
 		$err = aafm_generic_error();
 		$this->assertInstanceOf( WP_Error::class, $err );
@@ -470,6 +538,65 @@ final class HelpersTest extends TestCase {
 		unregister_post_meta( 'post', 'aafm_array_coercer' );
 	}
 
+	public function test_term_meta_value_sanitizer_refuses_callback_that_returns_non_scalar(): void {
+		$coerce = static fn() => array( 'evil' => 1 );
+		add_filter( 'sanitize_term_meta_aafm_array_coercer', $coerce );
+		$result = aafm_sanitize_term_meta_value( 'aafm_array_coercer', 'plain' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		remove_filter( 'sanitize_term_meta_aafm_array_coercer', $coerce );
+	}
+
+	/**
+	 * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
+	 * no matter what post type the meta actually belonged to. register_post_meta() for a
+	 * non-'post' type registers its sanitize_callback on the subtype-specific
+	 * sanitize_post_meta_{key}_for_{subtype} hook (wp-includes/meta.php), which sanitize_meta()
+	 * only consults when given that same subtype - so a coercion callback registered for 'page'
+	 * was invisible to the old hardcoded probe. Passing the real post type must surface it.
+	 */
+	public function test_meta_value_sanitizer_catches_a_page_specific_coercion_callback(): void {
+		register_post_meta(
+			'page',
+			'aafm_page_only_coercer',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'sanitize_callback' => static fn() => array( 'evil' => 1 ),
+			)
+		);
+		$result = aafm_sanitize_meta_value( 'aafm_page_only_coercer', 'plain', 'page' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		unregister_post_meta( 'page', 'aafm_page_only_coercer' );
+	}
+
+	/**
+	 * Codex round 7 R7-3, term-meta sibling: the probe used to pass the literal string 'term',
+	 * which is never a real taxonomy name, so a callback registered via
+	 * register_term_meta( $taxonomy, ... ) for ANY taxonomy was always invisible to it.
+	 */
+	public function test_term_meta_value_sanitizer_catches_a_taxonomy_specific_coercion_callback(): void {
+		register_term_meta(
+			'category',
+			'aafm_category_only_coercer',
+			array(
+				'type'              => 'string',
+				'single'            => true,
+				'sanitize_callback' => static fn() => array( 'evil' => 1 ),
+			)
+		);
+		$result = aafm_sanitize_term_meta_value( 'aafm_category_only_coercer', 'plain', 'category' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		unregister_term_meta( 'category', 'aafm_category_only_coercer' );
+	}
+
+	public function test_user_meta_value_sanitizer_refuses_callback_that_returns_non_scalar(): void {
+		$coerce = static fn() => array( 'evil' => 1 );
+		add_filter( 'sanitize_user_meta_aafm_array_coercer', $coerce );
+		$result = aafm_sanitize_user_meta_value( 'aafm_array_coercer', 'plain' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		remove_filter( 'sanitize_user_meta_aafm_array_coercer', $coerce );
+	}
+
 	public function test_redact_revision_is_metadata_only(): void {
 		$pid = self::factory()->post->create(
 			array(
@@ -509,5 +636,44 @@ final class HelpersTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_revision( (int) $rev_a->ID, $b ) ); // wrong parent.
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_revision( $a, $a ) );               // not a revision.
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_revision( 0, $a ) );                // missing.
+	}
+
+	public function test_status_requires_publish_cap_uses_a_supplied_public_status_list_instead_of_recomputing(): void {
+		// A synthetic list that shares NOTHING with the real get_post_stati() output. The old
+		// (pre-fix) implementation ignores any second argument and always recomputes its own
+		// real list internally, so passing this synthetic list and asserting on ITS contents -
+		// not on a real status - is what actually distinguishes old behavior from new. A test
+		// using only 'publish'/'future'/'draft' (real statuses) would pass unchanged on the old
+		// code too, since the real list already contains them regardless of what's passed in.
+		$synthetic_list = array( 'synthetic-public-status' );
+
+		// A status NOT in the real get_post_stati() output, but present in the synthetic list:
+		// only true if the supplied list was actually used instead of a fresh real one.
+		$this->assertTrue( aafm_status_requires_publish_cap( 'synthetic-public-status', $synthetic_list ) );
+
+		// A real public status ('publish') that is NOT in the synthetic list: false only if the
+		// supplied list was used instead of falling back to the real, always-'publish'-containing
+		// list computed internally.
+		$this->assertFalse( aafm_status_requires_publish_cap( 'publish', $synthetic_list ) );
+
+		// The null-default path is unchanged: still computes the real list itself.
+		$this->assertTrue( aafm_status_requires_publish_cap( 'publish' ) );
+		$this->assertTrue( aafm_status_requires_publish_cap( 'future' ) ); // 'future' branches before the list check either way.
+	}
+
+	public function test_authorize_post_status_uses_a_supplied_public_status_list_instead_of_recomputing(): void {
+		$synthetic_list = array( 'synthetic-public-status' );
+
+		// With the synthetic list, 'synthetic-public-status' is now publish-equivalent (would
+		// require $publish_cap) AND recognized (passes the allow-list) - both only true if
+		// aafm_authorize_post_status() actually used the supplied list for both checks instead
+		// of computing its own real one twice internally.
+		$result = aafm_authorize_post_status( 'synthetic-public-status', 'manage_options', $synthetic_list );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_status_forbidden', $result->get_error_code() ); // current user lacks manage_options.
+
+		// 'draft' still authorizes fine regardless of the supplied list - it's in the hardcoded
+		// private-status set, never gated on the public-status list.
+		$this->assertSame( 'draft', aafm_authorize_post_status( 'draft', 'manage_options', $synthetic_list ) );
 	}
 }

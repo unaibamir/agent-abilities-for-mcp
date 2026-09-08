@@ -35,13 +35,15 @@ if ( ! defined( 'AAFM_OAUTH_MAX_FIELD_LEN' ) ) {
 }
 
 /**
- * Upper bound (in bytes) for a registered client_name.
+ * Upper bound (in characters) for a registered client_name.
  *
- * The storage column is VARCHAR(191); 255 leaves headroom while refusing an
- * abusive name outright rather than silently truncating it.
+ * Matches the storage column, client_name VARCHAR(191): MySQL counts a VARCHAR length in
+ * characters, not bytes, so this guard is measured with mb_strlen() rather than strlen() and
+ * pinned to the same number. A 255-byte guard against a 191-character column let a 192-character
+ * ASCII name pass validation and then fail (or truncate) at insert (Codex round 9, R9-11).
  */
 if ( ! defined( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN' ) ) {
-	define( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN', 255 );
+	define( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN', 191 );
 }
 
 /**
@@ -420,12 +422,18 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	 * @param int $max Maximum active clients. Default AAFM_OAUTH_MAX_ACTIVE_CLIENTS.
 	 */
 	$max_clients = (int) apply_filters( 'aafm_oauth_max_clients', AAFM_OAUTH_MAX_ACTIVE_CLIENTS );
-	if ( $max_clients > 0 && aafm_oauth_count_active_clients() >= $max_clients ) {
-		return aafm_oauth_rest_protocol_error(
-			'temporarily_unavailable',
-			__( 'Client registration is temporarily unavailable. Please try again later.', 'agent-abilities-for-mcp' ),
-			503
-		);
+	if ( $max_clients > 0 ) {
+		$active_view = aafm_oauth_count_active_clients_view();
+		// An unreadable count must deny the same as a confirmed cap: casting a failed read to 0
+		// active clients read the cap as spare capacity and let the public registration route
+		// grow unbounded during an outage (Codex round 11, R11-4).
+		if ( ! $active_view['ok'] || $active_view['count'] >= $max_clients ) {
+			return aafm_oauth_rest_protocol_error(
+				'temporarily_unavailable',
+				__( 'Client registration is temporarily unavailable. Please try again later.', 'agent-abilities-for-mcp' ),
+				503
+			);
+		}
 	}
 
 	$params = aafm_oauth_rest_params( $request );
@@ -433,8 +441,11 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	$redirect_uris = isset( $params['redirect_uris'] ) && is_array( $params['redirect_uris'] ) ? $params['redirect_uris'] : array();
 	$client_name   = isset( $params['client_name'] ) && is_scalar( $params['client_name'] ) ? (string) $params['client_name'] : '';
 
-	// Refuse an abusive client_name outright rather than silently truncating it.
-	if ( strlen( $client_name ) > AAFM_OAUTH_MAX_CLIENT_NAME_LEN ) {
+	// Refuse an abusive client_name outright rather than silently truncating it. Counted with
+	// mb_strlen(), matching the character-length semantics of the VARCHAR(191) storage column
+	// this guard mirrors - a byte count would reject or admit multibyte names inconsistently
+	// with what the column actually holds.
+	if ( mb_strlen( $client_name, 'UTF-8' ) > AAFM_OAUTH_MAX_CLIENT_NAME_LEN ) {
 		return aafm_oauth_rest_protocol_error(
 			'invalid_client_metadata',
 			__( 'The client name is too long.', 'agent-abilities-for-mcp' ),

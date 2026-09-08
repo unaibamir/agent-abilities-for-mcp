@@ -1413,7 +1413,7 @@ class WC_Coupon {
 	public function set_product_ids( $v ) { $this->data['product_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_excluded_product_ids( $v ) { $this->data['excluded_product_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_email_restrictions( $v ) { $this->data['email_restrictions'] = array_map( 'strval', (array) $v ); }
-	public function save() { $id = \AAFM\Tests\WcCouponStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
+	public function save() { do_action( 'woocommerce_before_coupon_object_save', $this ); $id = \AAFM\Tests\WcCouponStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 	public function delete( $force = false ) { return \AAFM\Tests\WcCouponStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
@@ -1717,6 +1717,91 @@ PHP;
 		WcShippingStubStore::reset();
 		WcTaxStubStore::reset();
 		WcGatewayStubStore::reset();
+		TecTicketsStubStore::reset();
+	}
+
+	/**
+	 * Register the three real TEC custom post types (with their real capability_type/
+	 * map_meta_cap args) and grant the administrator role every mapped TEC capability, so a
+	 * test can exercise real current_user_can()/map_meta_cap() behavior instead of a second,
+	 * hand-rolled permission model. Idempotent across the process, mirroring stub_woocommerce()'s
+	 * class_exists()-guarded shape.
+	 *
+	 * @return void
+	 */
+	protected function stub_tec(): void {
+		aafm_tec_stub_define_globals();
+		aafm_tec_stub_register_post_types();
+
+		$admin = get_role( 'administrator' );
+		if ( null !== $admin ) {
+			foreach (
+				array(
+					'edit_tribe_events',
+					'edit_others_tribe_events',
+					'edit_published_tribe_events',
+					'publish_tribe_events',
+					'delete_tribe_events',
+					'delete_others_tribe_events',
+					'delete_published_tribe_events',
+					'edit_tribe_event',
+					'delete_tribe_event',
+					'read_tribe_event',
+					'read_private_tribe_events',
+					'edit_tribe_venues',
+					'edit_others_tribe_venues',
+					'edit_published_tribe_venues',
+					'edit_tribe_venue',
+					'edit_tribe_organizers',
+					'edit_others_tribe_organizers',
+					'edit_published_tribe_organizers',
+					'edit_tribe_organizer',
+				) as $cap
+			) {
+				if ( ! $admin->has_cap( $cap ) ) {
+					$admin->add_cap( $cap );
+				}
+			}
+		}
+	}
+
+	/**
+	 * Define the Event Tickets global stubs without needing the full TEC post-type/capability
+	 * setup - used by tests that only exercise Event Tickets' own detection or ticket/attendee
+	 * surface. stub_tec() also calls the same underlying define step, so calling both is a no-op
+	 * on the second call.
+	 *
+	 * @return void
+	 */
+	protected function stub_event_tickets(): void {
+		aafm_tec_stub_define_globals();
+	}
+
+	/**
+	 * Seed one stub ticket for an event. Call after stub_tec() (the event must already exist).
+	 *
+	 * @param int    $event_id Parent event id.
+	 * @param string $name     Ticket name.
+	 * @param float  $price    Ticket price.
+	 * @param int    $capacity Ticket capacity.
+	 * @return int The stub ticket's id.
+	 */
+	protected function stub_add_ticket( int $event_id, string $name = 'Test ticket', float $price = 10.0, int $capacity = 100 ): int {
+		static $next_id                      = 9000;
+		$id                                  = ++$next_id;
+		TecTicketsStubStore::$tickets[ $id ] = new \Tribe__Tickets__Ticket_Object( $id, $event_id, $name, $price, $capacity );
+		return $id;
+	}
+
+	/**
+	 * Seed one stub attendee row for an event. Call after stub_tec().
+	 *
+	 * @param int                 $event_id Parent event id.
+	 * @param array<string,mixed> $data     Attendee data (purchaser_name, purchaser_email, product_id, etc).
+	 * @return void
+	 */
+	protected function stub_add_attendee( int $event_id, array $data ): void {
+		TecTicketsStubStore::$attendees[ $event_id ][] = $data;
 	}
 
 	/**
@@ -1761,12 +1846,36 @@ PHP;
 		return <<<'PHP'
 class WC_Tax {
 	/**
+	 * Mirrors real WC_Tax::get_tax_rate_classes(): caches the class list under
+	 * ['tax-rate-classes', 'taxes'] for the life of the request, exactly like
+	 * class-wc-tax.php:818-833. A caller must wp_cache_delete() that key to force a live
+	 * re-read - the same requirement this stub exists to let a test prove or disprove.
+	 *
+	 * @return array<int,object>
+	 */
+	private static function get_tax_rate_classes(): array {
+		$cached = wp_cache_get( 'tax-rate-classes', 'taxes' );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		$rows = array();
+		foreach ( \AAFM\Tests\WcTaxStubStore::$classes as $slug => $name ) {
+			$rows[] = (object) array(
+				'name' => $name,
+				'slug' => $slug,
+			);
+		}
+		wp_cache_set( 'tax-rate-classes', $rows, 'taxes' );
+		return $rows;
+	}
+
+	/**
 	 * Return all custom tax class NAMES (standard is NOT included, mirroring real WC).
 	 *
 	 * @return string[]
 	 */
 	public static function get_tax_classes(): array {
-		return array_values( \AAFM\Tests\WcTaxStubStore::$classes );
+		return wp_list_pluck( self::get_tax_rate_classes(), 'name' );
 	}
 
 	/**
@@ -1775,7 +1884,7 @@ class WC_Tax {
 	 * @return string[]
 	 */
 	public static function get_tax_class_slugs(): array {
-		return array_keys( \AAFM\Tests\WcTaxStubStore::$classes );
+		return wp_list_pluck( self::get_tax_rate_classes(), 'slug' );
 	}
 
 	/**
@@ -1790,11 +1899,38 @@ class WC_Tax {
 			return new \WP_Error( 'wc_tax', 'Tax class save failed.' );
 		}
 		$slug = $slug ? $slug : sanitize_title( $name );
+		if ( \AAFM\Tests\WcTaxStubStore::$simulate_masked_insert_failure ) {
+			// Mirrors WC's real bug: a unique-index collision inside this function's own insert
+			// is swallowed because is_wp_error() never matches $wpdb->insert()'s false return, so
+			// WC reports success without actually storing $name.
+			return array( 'name' => $name, 'slug' => $slug );
+		}
 		if ( isset( \AAFM\Tests\WcTaxStubStore::$classes[ $slug ] ) ) {
 			return new \WP_Error( 'wc_tax', 'Tax class already exists.' );
 		}
 		\AAFM\Tests\WcTaxStubStore::$classes[ $slug ] = $name;
+		wp_cache_delete( 'tax-rate-classes', 'taxes' );
 		return array( 'name' => $name, 'slug' => $slug );
+	}
+
+	/**
+	 * Get an existing tax class by field (mirrors real WC_Tax::get_tax_class_by()).
+	 *
+	 * @param string $field Field name (only 'slug' is supported by this stub).
+	 * @param string $item  Field value to look up.
+	 * @return array<string,string>|bool The class as [name, slug], or false when not found.
+	 */
+	public static function get_tax_class_by( string $field, string $item ) {
+		if ( 'slug' !== $field ) {
+			return false;
+		}
+		if ( ! isset( \AAFM\Tests\WcTaxStubStore::$classes[ $item ] ) ) {
+			return false;
+		}
+		return array(
+			'name' => \AAFM\Tests\WcTaxStubStore::$classes[ $item ],
+			'slug' => $item,
+		);
 	}
 
 	/**

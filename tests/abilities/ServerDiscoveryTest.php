@@ -41,10 +41,6 @@ final class ServerDiscoveryTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// The audited registration wrapper logs every permission check + execute to the
-		// custom table, so it must exist before any ability registers or runs.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->register_whole_catalog();
 	}
 

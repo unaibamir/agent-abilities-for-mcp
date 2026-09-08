@@ -17,6 +17,17 @@ defined( 'ABSPATH' ) || exit;
  * Keys match aafm_get_abilities_registry() one-to-one; the render layer falls back to the
  * registry description if a key is ever missing.
  *
+ * Outbound-request exemption (Codex hunt F3): the only ability-facing outbound HTTP call
+ * is the SSRF-hardened aafm/upload-media-from-url fetch. One admin-only exception sits
+ * outside the ability surface entirely: aafm_ajax_test_connection() (connection.php)
+ * self-calls the MCP endpoint to confirm it answers, gated behind manage_options plus a
+ * nonce and never reachable by an MCP agent. Its target, aafm_endpoint_url(), resolves
+ * through WordPress core's own rest_url(), which any active plugin can filter to a
+ * different host - trusting that destination means trusting whatever rest_url filter the
+ * site already runs, the same already-privileged trust any other installed plugin
+ * requires, not attacker-controlled input. Carved out by name in
+ * SecurityRegressionTest::test_source_tree_has_no_dangerous_primitives().
+ *
  * @return array<string,string>
  */
 function aafm_ability_disclosures(): array {
@@ -94,6 +105,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/create-post'                 => __( 'Creates and publishes a post. Requires the publish capability, and respects force-draft if you turned it on.', 'agent-abilities-for-mcp' ),
 		'aafm/update-post'                 => __( "Updates an existing post's fields by id. Publishing is gated separately.", 'agent-abilities-for-mcp' ),
 		'aafm/replace-in-post'             => __( 'Finds and replaces literal text in a post\'s body, sanitizing the inserted text. It edits only the replaced spans, leaves the rest of the content untouched, never changes the status, and the change is reversible from the revision history.', 'agent-abilities-for-mcp' ),
+		'aafm/replace-sitewide'            => __( 'Finds and replaces literal text across multiple posts of one type and status, bounded to 50 posts per call. Previews the match by default; you pass dry_run:false to apply it. Every candidate post goes through the same structure-preserving guard as replace-in-post, so a match inside markup is skipped and reported, never applied.', 'agent-abilities-for-mcp' ),
 		'aafm/create-page'                 => __( 'Creates and publishes a page. Requires the publish_pages capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-page'                 => __( 'Updates an existing page by id. Publishing is gated separately.', 'agent-abilities-for-mcp' ),
 		'aafm/create-cpt-item'             => __( 'Creates an item of a custom content type you have allowlisted. It stays a draft unless the agent holds that type\'s publish capability, and force-draft still applies.', 'agent-abilities-for-mcp' ),
@@ -102,6 +114,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/update-user-meta'            => __( 'Writes one allowlisted scalar user meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright.', 'agent-abilities-for-mcp' ),
 		'aafm/set-featured-image'          => __( "Sets a post's featured image to an existing attachment id. It does not upload anything.", 'agent-abilities-for-mcp' ),
 		'aafm/upload-media'                => __( 'Uploads an image from base64 data (jpg, png, gif, webp; SVG is rejected) and adds it to the media library.', 'agent-abilities-for-mcp' ),
+		'aafm/upload-media-from-url'       => __( 'Fetches an image from an HTTPS URL and adds it to the media library. The URL is resolved and validated before any bytes are fetched, private/loopback/link-local targets are refused, and redirects are not followed into them either.', 'agent-abilities-for-mcp' ),
 		'aafm/update-media'                => __( "Updates an attachment's title, alt text, caption, or description. Requires edit access to that attachment.", 'agent-abilities-for-mcp' ),
 		'aafm/moderate-comment'            => __( 'Approves, unapproves, spams, or trashes a comment. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
 		'aafm/create-comment'              => __( 'Adds a comment to a post as the agent user. It is held for moderation, never auto-published, and the author is always the agent, not free-form input. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
@@ -181,5 +194,44 @@ function aafm_ability_disclosures(): array {
 		'aafm/wc-list-payment-gateways'    => __( 'Lists all registered WooCommerce payment gateways with id, title, and enabled state. Credential and secret settings are never returned. Read-only. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-get-payment-gateway'      => __( 'Reads one payment gateway by id: title, description, enabled state, order, and non-secret settings. Fields whose names contain key, secret, token, password, api, or private are always stripped before the response is sent. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-update-payment-gateway'   => __( 'Updates a payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Credential and secret fields can never be written through this ability. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+
+		// The Events Calendar / Event Tickets.
+		'aafm/tec-get-events'              => __( 'Lists events via the Events Calendar, filtered by an optional search term. An optional status filter can include draft/pending/future events you can edit, or private events if you have that access.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-event'               => __( 'Reads a single event by id, including its dates, venue, and organizers.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-create-event'            => __( 'Creates an event. Defaults to draft; a publicly-visible status additionally requires the publish-events capability. Requires the edit-events capability.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-update-event'            => __( 'Updates an event by id. A publicly-visible status additionally requires the publish-events capability. Requires edit access to that event.', 'agent-abilities-for-mcp' ),
+		// Codex hunt F6, gate round 1 finding 6: now guarded by the same aafm_trash_is_enabled()
+		// check as trash-post/trash-page/delete-block, so this claim is true the same way theirs
+		// is - refuses outright rather than falling through to WordPress's own permanent delete.
+		'aafm/tec-delete-event'            => __( 'Moves an event to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that event.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-venues'              => __( 'Lists venues via the Events Calendar. An optional status filter can include draft/pending/future venues you can edit, or private venues if you have that access.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-venue'               => __( 'Reads a single venue by id.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-create-venue'            => __( 'Creates a venue. Defaults to draft; a publicly-visible status additionally requires the publish-venues capability. Requires the edit-venues capability.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-update-venue'            => __( 'Updates a venue by id. A publicly-visible status additionally requires the publish-venues capability. Requires edit access to that venue.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-organizers'          => __( 'Lists organizers via the Events Calendar. An optional status filter can include draft/pending/future organizers you can edit, or private organizers if you have that access.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-organizer'           => __( 'Reads a single organizer by id.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-create-organizer'        => __( 'Creates an organizer. Defaults to draft; a publicly-visible status additionally requires the publish-organizers capability. Requires the edit-organizers capability.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-update-organizer'        => __( 'Updates an organizer by id. A publicly-visible status additionally requires the publish-organizers capability. Requires edit access to that organizer.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-tickets'             => __( 'Lists every ticket for one event, across every ticketing provider. Requires edit access to that event. Read-only - no ticket write ability is offered, since ticket creation and RSVP processing are commerce flows this plugin does not touch.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-ticket'              => __( 'Reads a single ticket by id. Requires edit access to its parent event.', 'agent-abilities-for-mcp' ),
+		'aafm/tec-get-attendees'           => __( 'Lists attendees and RSVPs for one event. Requires edit access to that event. Read-only.', 'agent-abilities-for-mcp' ),
+
+		// Slim SEO.
+		'aafm/slim-seo-get-post'           => __( "Reads a post's Slim SEO fields (title, description, canonical, social images, and the noindex flag). Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'aafm/slim-seo-update-post'        => __( "Writes a post's Slim SEO fields. A field omitted from the call is left untouched. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+
+		// Avada / Fusion Builder.
+		'aafm/avada-get-page-content'      => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+		// Codex hunt F7: shortcode_parse_atts() (what the guard actually compares) discards
+		// quoting style and whitespace inside a tag, so a change limited to those is not caught
+		// even though the tree it builds otherwise stays equal. Worded to the real guarantee
+		// (structure and attribute values) rather than the "byte-identical" claim that didn't hold.
+		'aafm/avada-replace-text'          => __( 'Replaces literal text within an Avada/Fusion Builder page while requiring the Fusion shortcode structure and every attribute value to stay the same before and after (quoting style and whitespace inside a tag are not part of this guarantee) - a replacement that would touch a shortcode tag or its attributes is refused rather than risk breaking the layout. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+
+		// GeoDirectory (default-off).
+		'aafm/geodirectory-get-listings'   => __( 'Lists GeoDirectory business/place listings (title, status, link).', 'agent-abilities-for-mcp' ),
+		'aafm/geodirectory-get-listing'    => __( 'Reads one GeoDirectory listing by id, including its address and coordinates.', 'agent-abilities-for-mcp' ),
+		'aafm/geodirectory-create-listing' => __( 'Creates a GeoDirectory business/place listing with a title, content, and optional address/coordinates.', 'agent-abilities-for-mcp' ),
+		'aafm/geodirectory-update-listing' => __( "Updates an existing GeoDirectory listing's title, content, or address/coordinates. Fields omitted from the call are left untouched.", 'agent-abilities-for-mcp' ),
 	);
 }

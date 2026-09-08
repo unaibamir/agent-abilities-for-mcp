@@ -30,30 +30,59 @@ function aafm_integration_cards(): array {
 	// integration" - not classify it. Deliberately NOT the 'abilities'/'bolt' glyph, which means
 	// "enabled" elsewhere in this UI; reusing it here would imply a state the icon doesn't track.
 	return array(
-		'yoast'       => array(
+		'yoast'         => array(
 			'label'   => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'wordpress-seo/wp-seo.php' ),
 		),
-		'rankmath'    => array(
+		'rankmath'      => array(
 			'label'   => __( 'Rank Math', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'seo-by-rank-math/rank-math.php' ),
 		),
-		'aioseo'      => array(
+		'aioseo'        => array(
 			'label'   => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ),
 		),
-		'acf'         => array(
+		'acf'           => array(
 			'label'   => __( 'ACF', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'advanced-custom-fields/acf.php', 'advanced-custom-fields-pro/acf.php', 'secure-custom-fields/secure-custom-fields.php' ),
 		),
-		'woocommerce' => array(
+		'woocommerce'   => array(
 			'label'   => __( 'WooCommerce', 'agent-abilities-for-mcp' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'woocommerce/woocommerce.php' ),
+		),
+		'slim_seo'      => array(
+			'label'   => __( 'Slim SEO', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'slim-seo/slim-seo.php' ),
+		),
+		'tec'           => array(
+			'label'   => __( 'The Events Calendar', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'the-events-calendar/the-events-calendar.php' ),
+		),
+		'event_tickets' => array(
+			'label'   => __( 'Event Tickets', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'event-tickets/event-tickets.php' ),
+		),
+		'avada'         => array(
+			'label'   => __( 'Avada / Fusion Builder', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			// Avada is a theme, not a plugin - there is no plugin file to probe for an
+			// "installed but inactive" state, so this deliberately stays empty and
+			// aafm_integration_status() falls through to 'not_installed' whenever inactive
+			// (Task 21 Step 7: active/not_installed only, no installed_inactive for this card).
+			'plugins' => array(),
+		),
+		'geodirectory'  => array(
+			'label'   => __( 'GeoDirectory', 'agent-abilities-for-mcp' ),
+			'icon'    => 'integrations',
+			'plugins' => array( 'geodirectory/geodirectory.php' ),
 		),
 	);
 }
@@ -67,18 +96,39 @@ function aafm_integration_cards(): array {
  *                         abilities do not register. Checked before the file-presence probe so a
  *                         genuinely-active-but-outdated store gets the accurate reason, not the
  *                         generic "Not installed"/"Inactive" copy.
+ * 'missing_dependency' - Event Tickets only: the plugin is active but The Events Calendar is
+ *                         not, so its ticket abilities do not register (they are gated on a
+ *                         parent TEC event - see includes/abilities/tec/tickets.php). Checked
+ *                         before the generic 'active' report so the card never claims a
+ *                         readiness the runtime registration gate does not actually grant.
  * 'installed_inactive' - a candidate host plugin file is present but not active.
  * 'not_installed'      - no candidate host plugin file is present.
  *
  * @param string $slug Integration slug.
- * @return string One of 'active' | 'below_floor' | 'installed_inactive' | 'not_installed'.
+ * @return string One of 'active' | 'below_floor' | 'missing_dependency' | 'installed_inactive' |
+ *                'not_installed'.
  */
 function aafm_integration_status( string $slug ): string {
+	// Codex final round 4 MEDIUM: registering Event Tickets' abilities already requires TEC too
+	// (includes/abilities/tec/tickets.php), but this card reported a bare 'active' from Event
+	// Tickets alone, so the card said "Active" and let the operator enable abilities that would
+	// never actually register or appear in tools/list. Checked before the general 'active' report
+	// below, the same way 'below_floor' is checked before it for a version mismatch.
+	if ( 'event_tickets' === $slug && aafm_integration_active( 'event_tickets' ) && ! aafm_integration_active( 'tec' ) ) {
+		return 'missing_dependency';
+	}
+
 	if ( aafm_integration_active( $slug ) ) {
 		return 'active';
 	}
 
 	if ( 'woocommerce' === $slug && aafm_woocommerce_below_version_floor() ) {
+		return 'below_floor';
+	}
+	if ( 'tec' === $slug && aafm_tec_below_version_floor() ) {
+		return 'below_floor';
+	}
+	if ( 'event_tickets' === $slug && aafm_event_tickets_below_version_floor() ) {
 		return 'below_floor';
 	}
 
@@ -111,6 +161,33 @@ function aafm_woocommerce_below_version_floor(): bool {
 	}
 	$version = aafm_woocommerce_version();
 	return null !== $version && ! version_compare( $version, AAFM_WOOCOMMERCE_MIN_VERSION, '>=' );
+}
+
+/**
+ * Whether The Events Calendar is installed and active, but below AAFM_TEC_MIN_VERSION.
+ * Mirrors aafm_woocommerce_below_version_floor()'s shape exactly.
+ *
+ * @return bool
+ */
+function aafm_tec_below_version_floor(): bool {
+	if ( ! class_exists( 'Tribe__Events__Main' ) ) {
+		return false;
+	}
+	$version = aafm_tec_version();
+	return null !== $version && ! version_compare( $version, AAFM_TEC_MIN_VERSION, '>=' );
+}
+
+/**
+ * Whether Event Tickets is installed and active, but below AAFM_EVENT_TICKETS_MIN_VERSION.
+ *
+ * @return bool
+ */
+function aafm_event_tickets_below_version_floor(): bool {
+	if ( ! class_exists( 'Tribe__Tickets__Main' ) ) {
+		return false;
+	}
+	$version = aafm_event_tickets_version();
+	return null !== $version && ! version_compare( $version, AAFM_EVENT_TICKETS_MIN_VERSION, '>=' );
 }
 
 /**
@@ -311,13 +388,15 @@ function aafm_render_integrations_tab(): void {
 /**
  * The status pill markup for an integration card head.
  *
- * @param string $status One of 'active' | 'below_floor' | 'installed_inactive' | 'not_installed'.
+ * @param string $status One of 'active' | 'below_floor' | 'missing_dependency' |
+ *                        'installed_inactive' | 'not_installed'.
  * @return string Escaped HTML.
  */
 function aafm_integration_status_pill( string $status ): string {
 	$map                   = array(
 		'active'             => array( 'aafm-pill-success', __( 'Active', 'agent-abilities-for-mcp' ) ),
 		'below_floor'        => array( 'aafm-pill-warn', __( 'Update required', 'agent-abilities-for-mcp' ) ),
+		'missing_dependency' => array( 'aafm-pill-warn', __( 'Requires The Events Calendar', 'agent-abilities-for-mcp' ) ),
 		'installed_inactive' => array( 'aafm-pill-warn', __( 'Inactive', 'agent-abilities-for-mcp' ) ),
 		'not_installed'      => array( 'aafm-pill-neutral', __( 'Not installed', 'agent-abilities-for-mcp' ) ),
 	);
@@ -344,13 +423,29 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 		case 'active':
 			return __( 'Active. Turn on the abilities you want this agent to use.', 'agent-abilities-for-mcp' );
 		case 'below_floor':
+			// Codex final round 4 MEDIUM: this used to hardcode WooCommerce's own constant and
+			// version function for EVERY integration's below-floor notice, so a TEC or Event
+			// Tickets site below its real floor was told to install a WooCommerce version it
+			// likely already had. Each versioned integration's own minimum-version constant and
+			// version-reader function, matching the exact pair aafm_{slug}_below_version_floor()
+			// already checks against for that slug.
+			$version_floor                    = array(
+				'woocommerce'   => array( AAFM_WOOCOMMERCE_MIN_VERSION, 'aafm_woocommerce_version' ),
+				'tec'           => array( AAFM_TEC_MIN_VERSION, 'aafm_tec_version' ),
+				'event_tickets' => array( AAFM_EVENT_TICKETS_MIN_VERSION, 'aafm_event_tickets_version' ),
+			);
+			[ $min_version, $version_reader ] = $version_floor[ $slug ] ?? array( '', '__return_null' );
 			return sprintf(
 				/* translators: 1: the integration plugin name, e.g. WooCommerce. 2: the minimum required version. 3: the version installed on this site. */
 				__( '%1$s %2$s or newer is required for these abilities; this site is running %3$s.', 'agent-abilities-for-mcp' ),
 				$label,
-				AAFM_WOOCOMMERCE_MIN_VERSION,
-				(string) aafm_woocommerce_version()
+				$min_version,
+				(string) $version_reader()
 			);
+		case 'missing_dependency':
+			// Event Tickets only, currently: every ticket ability is gated on a parent TEC event
+			// (includes/abilities/tec/tickets.php), so Event Tickets alone cannot register them.
+			return __( 'Event Tickets is active, but its ticket abilities are gated on a parent event and need The Events Calendar active too. Install and activate The Events Calendar to use these abilities.', 'agent-abilities-for-mcp' );
 		case 'installed_inactive':
 			return sprintf(
 				/* translators: %s: the integration plugin name, e.g. WooCommerce. */

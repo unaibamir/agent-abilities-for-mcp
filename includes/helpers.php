@@ -143,19 +143,32 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	if ( is_protected_meta( $key, 'post' ) ) {
 		return true;
 	}
-	$builtin = array(
-		'session_tokens',
-		'_application_passwords',
-		'wp_capabilities',
-		'wp_user_level',
-		'wp_user-settings',
-		'wp_user-settings-time',
-		'default_password_nonce',
-		'_password_reset_key',
-		'community-events-location',
-		'_new_email',
-		$wpdb->prefix . 'capabilities',
-		$wpdb->prefix . 'user_level',
+	$builtin = array_merge(
+		array(
+			'session_tokens',
+			'_application_passwords',
+			'wp_capabilities',
+			'wp_user_level',
+			'wp_user-settings',
+			'wp_user-settings-time',
+			'default_password_nonce',
+			'_password_reset_key',
+			'community-events-location',
+			'_new_email',
+			$wpdb->prefix . 'capabilities',
+			$wpdb->prefix . 'user_level',
+		),
+		// Codex final round 7 HIGH: every page-builder ownership marker (includes/page-
+		// builder-guard.php) must be absolutely blocked from the generic meta abilities, not
+		// merely left off the operator's allowlist - a caller who cleared a marker via
+		// update-post-meta/delete-post-meta made aafm_exec_update_post()'s ownership check pass
+		// on the next call, writing straight through the refusal guard. `_elementor_data` and
+		// `_fl_builder_data` were already covered by is_protected_meta()'s leading-underscore
+		// rule above; `et_pb_use_builder`, `fusion_builder_status`, and `fusion_builder_converted`
+		// were not, and neither list is scoped to post meta only, so pulling the whole marker map
+		// in here (harmless for term/user meta, where these names never legitimately occur) keeps
+		// this correct for any marker added later through the aafm_page_builder_markers filter.
+		array_keys( aafm_page_builder_markers() )
 	);
 	/**
 	 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this
@@ -176,6 +189,139 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 }
 
 /**
+ * Shared engine behind aafm_allowed_meta_keys(), aafm_allowed_term_meta_keys(), and
+ * aafm_allowed_user_meta_keys(). The three scopes share the read/floor/strip/dedupe shape but
+ * differ in two DELIBERATE, security-relevant ways this function keeps as explicit parameters
+ * rather than flattening:
+ *
+ * - $pre_filter_floor: post-meta hard-block-floors the option value BEFORE handing it to the
+ *   filter as the filter's own default (so a filter reading its $default argument never sees a
+ *   blocked key); term-meta and user-meta skip this pre-floor and pass the raw option straight
+ *   through, because their filter result is unioned with the option afterward anyway (see next
+ *   point), making a pre-floor on the base redundant rather than protective for them.
+ * - $filter_replaces: post-meta's filter result REPLACES the base outright, so a legacy or
+ *   rogue filter that returns an unrelated array (or empty) can shrink or clear the whole
+ *   allowlist. Term-meta and user-meta instead UNION the filter result with the option base
+ *   (`array_merge($base, $filtered)`), so their filter can only ADD keys - a filter returning
+ *   [] is a no-op, option ∪ [] = option, and the admin's list can never be shrunk by a filter.
+ *
+ * Every caller passes exactly what its own current behavior is; this function does not pick a
+ * "more correct" default for either flag.
+ *
+ * @param string           $option_name       The exposed/allowed option name for this scope.
+ * @param non-empty-string $filter_tag The apply_filters() tag for this scope.
+ * @param callable         $hard_block        The scope's hard-block checker, string $key -> bool.
+ * @param bool             $pre_filter_floor  Whether to hard-block-floor the option value before it is
+ *                                            passed to the filter as the filter's default.
+ * @param bool             $filter_replaces   True: the filter's return value replaces the base
+ *                                            (post-meta's shape). False: the filter's return value is
+ *                                            UNIONed with the base (term-meta/user-meta's shape).
+ * @return list<string>
+ */
+function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag, callable $hard_block, bool $pre_filter_floor, bool $filter_replaces ): array {
+	$stored = get_option( $option_name, array() );
+	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+
+	if ( $pre_filter_floor ) {
+		$stored = array_values(
+			array_filter(
+				$stored,
+				static function ( string $k ) use ( $hard_block ): bool {
+					return ! $hard_block( $k );
+				}
+			)
+		);
+	}
+
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- $filter_tag is always one of the three fixed, already-prefixed, already-documented tags each caller below passes literally (aafm_allowed_meta_keys, aafm_allowed_term_meta_keys, aafm_allowed_user_meta_keys); this is parameterization across three known call sites, not a genuinely dynamic hook name.
+	$filtered = (array) apply_filters( $filter_tag, $stored );
+	$filtered = array_map( 'strval', $filtered );
+
+	$merged = $filter_replaces ? $filtered : array_merge( $stored, $filtered );
+
+	return array_values(
+		array_unique(
+			array_filter(
+				array_map( 'strval', $merged ),
+				static function ( string $k ) use ( $hard_block ): bool {
+					return '' !== $k && '*' !== $k && ! $hard_block( $k );
+				}
+			)
+		)
+	);
+}
+
+/**
+ * Shared engine behind aafm_denied_meta_keys(), aafm_denied_term_meta_keys(), and
+ * aafm_denied_user_meta_keys(): read the deny option, string-coerce, strip empties and the
+ * `*` sentinel (surfaced separately by the matching *_deny_has_star() function), de-dupe. No
+ * filter and no hard-block floor here in any scope - denying an already-blocked key is a
+ * harmless no-op, so there is nothing to re-check.
+ *
+ * @param string $option_name The denied-keys option name for this scope.
+ * @return list<string>
+ */
+function aafm_scoped_denied_meta_keys( string $option_name ): array {
+	$stored = get_option( $option_name, array() );
+	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+
+	return array_values(
+		array_unique(
+			array_filter(
+				$stored,
+				static function ( string $k ): bool {
+					return '' !== $k && '*' !== $k;
+				}
+			)
+		)
+	);
+}
+
+/**
+ * Shared engine behind the three *_allow_has_star() functions: whether an option's RAW value
+ * (not the filtered getter, which strips the sentinel) carries the `*` wildcard.
+ *
+ * @param string $option_name The option to read.
+ * @return bool
+ */
+function aafm_scoped_meta_has_star( string $option_name ): bool {
+	$raw = get_option( $option_name, array() );
+	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+}
+
+/**
+ * Shared engine behind aafm_validate_meta_key(), aafm_validate_term_meta_key(), and
+ * aafm_validate_user_meta_key(): the absolute precedence chain hard-block -> deny -> allow/`*`,
+ * identical across all three scopes except which hard-block/deny/allow callables and error
+ * code/message apply. Hard-block is computed FIRST so every reject is the same generic error -
+ * no oracle distinguishing the reject reason.
+ *
+ * @param string   $key           Requested meta key.
+ * @param callable $hard_block    string $key -> bool.
+ * @param callable $deny_has_star (): bool.
+ * @param callable $denied_keys   (): list<string>.
+ * @param callable $allow_has_star (): bool.
+ * @param callable $allowed_keys  (): list<string>.
+ * @param string   $error_code    WP_Error code on rejection.
+ * @param string   $error_message Translated WP_Error message on rejection.
+ * @return string|WP_Error
+ */
+function aafm_validate_scoped_meta_key( string $key, callable $hard_block, callable $deny_has_star, callable $denied_keys, callable $allow_has_star, callable $allowed_keys, string $error_code, string $error_message ) {
+	$key     = trim( (string) $key );
+	$exposed = '' !== $key
+		&& '*' !== $key                             // floor 1: the sentinel is never addressable.
+		&& ! $hard_block( $key )                    // floor 1 (absolute).
+		&& ! $deny_has_star()                       // floor 2: deny-all kill switch.
+		&& ! in_array( $key, $denied_keys(), true ) // floor 2: explicit deny.
+		&& ( $allow_has_star() || in_array( $key, $allowed_keys(), true ) ); // floor 3.
+
+	if ( ! $exposed ) {
+		return new WP_Error( $error_code, $error_message );
+	}
+	return $key;
+}
+
+/**
  * Default-deny meta-key allowlist. Default empty; opt-in via the aafm_allowed_meta_keys
  * option (admin textarea) or the matching filter. Hard-blocked keys are stripped AFTER the
  * option read AND after the filter, so neither a junk write nor a rogue filter exposes one.
@@ -183,26 +329,7 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
  * @return list<string>
  */
 function aafm_allowed_meta_keys(): array {
-	$stored = get_option( 'aafm_allowed_meta_keys', array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
-	$stored = array_values( array_filter( $stored, static fn( $k ) => ! aafm_hard_blocked_meta_key( $k ) ) );
-
-	/**
-	 * Filters the meta keys exposed to AI agents. Re-floored against the hard-block
-	 * after this filter, so adding a blocked key is a no-op.
-	 *
-	 * @param list<string> $stored Allowlisted, non-blocked keys.
-	 */
-	$filtered = (array) apply_filters( 'aafm_allowed_meta_keys', $stored );
-
-	// '*' is a wildcard SENTINEL, never a literal key - strip it here so the literal
-	// enumeration never contains it. The star is surfaced separately via
-	// aafm_meta_allow_has_star(), which the validator reads.
-	return array_values(
-		array_unique(
-			array_filter( array_map( 'strval', $filtered ), static fn( $k ) => '' !== $k && '*' !== $k && ! aafm_hard_blocked_meta_key( $k ) )
-		)
-	);
+	return aafm_scoped_allowed_meta_keys( 'aafm_allowed_meta_keys', 'aafm_allowed_meta_keys', 'aafm_hard_blocked_meta_key', true, true );
 }
 
 /**
@@ -216,14 +343,7 @@ function aafm_allowed_meta_keys(): array {
  * @return list<string>
  */
 function aafm_denied_meta_keys(): array {
-	$stored = get_option( 'aafm_denied_meta_keys', array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
-
-	return array_values(
-		array_unique(
-			array_filter( $stored, static fn( $k ) => '' !== $k && '*' !== $k )
-		)
-	);
+	return aafm_scoped_denied_meta_keys( 'aafm_denied_meta_keys' );
 }
 
 /**
@@ -234,8 +354,7 @@ function aafm_denied_meta_keys(): array {
  * @return bool
  */
 function aafm_meta_allow_has_star(): bool {
-	$raw = get_option( 'aafm_allowed_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_allowed_meta_keys' );
 }
 
 /**
@@ -246,8 +365,7 @@ function aafm_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_meta_deny_has_star(): bool {
-	$raw = get_option( 'aafm_denied_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_denied_meta_keys' );
 }
 
 /**
@@ -263,18 +381,16 @@ function aafm_meta_deny_has_star(): bool {
  * @return string|WP_Error
  */
 function aafm_validate_meta_key( string $key ) {
-	$key     = trim( (string) $key );
-	$exposed = '' !== $key
-		&& '*' !== $key                                         // floor 1: the sentinel is never addressable.
-		&& ! aafm_hard_blocked_meta_key( $key )                 // floor 1 (absolute).
-		&& ! aafm_meta_deny_has_star()                          // floor 2: deny-all kill switch.
-		&& ! in_array( $key, aafm_denied_meta_keys(), true )    // floor 2: explicit deny.
-		&& ( aafm_meta_allow_has_star() || in_array( $key, aafm_allowed_meta_keys(), true ) ); // floor 3.
-
-	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_meta_key_not_allowed', __( 'This meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
-	}
-	return $key;
+	return aafm_validate_scoped_meta_key(
+		$key,
+		'aafm_hard_blocked_meta_key',
+		'aafm_meta_deny_has_star',
+		'aafm_denied_meta_keys',
+		'aafm_meta_allow_has_star',
+		'aafm_allowed_meta_keys',
+		'aafm_meta_key_not_allowed',
+		__( 'This meta key is not available to agents.', 'agent-abilities-for-mcp' )
+	);
 }
 
 /**
@@ -330,6 +446,7 @@ function aafm_recoverable_delete_abilities(): array {
 		'aafm/trash-post',
 		'aafm/trash-page',
 		'aafm/delete-block',
+		'aafm/tec-delete-event',
 	);
 
 	/**
@@ -531,26 +648,49 @@ function aafm_delete_guarantee(): array {
 /**
  * Coerce + sanitize a meta value for writing. Scalar-only: arrays/objects are refused so
  * the agent can never store a serialized structure. Strings are plain-text sanitized (meta
- * is not rendered as post content); the result is then run through sanitize_meta so any
- * registered sanitize_callback still applies. The object subtype ('post') is passed so the
- * per-key sanitize_post_meta_{$key} callback actually fires - the 3-arg form skips it.
- * Whatever the callback returns is re-asserted as scalar before it can be stored or returned,
- * so a callback that coerces the value into an array/object is refused (defence in depth,
- * symmetric with the scalar-only read path).
+ * is not rendered as post content). The plain-text-sanitized value is then run through
+ * sanitize_meta() ONCE as a PROBE, purely to check that a registered sanitize_post_meta_{$key}
+ * callback cannot coerce a scalar into an array/object; the probe's return value is discarded,
+ * never stored or forwarded. WordPress's own update_metadata() (the shared engine behind
+ * update_post_meta(), wp-includes/meta.php) already runs sanitize_meta( $meta_key, $meta_value,
+ * 'post', $subtype ) on the value again at write time - that write-time call is the only one
+ * whose output is ever stored, so a cumulative or non-idempotent callback still runs exactly
+ * once against the stored value. Running the probe re-invokes the callback an extra time but
+ * cannot double-apply it to what gets written. aafm_meta_write_confirmed() independently
+ * recomputes the same canonical form afterward to confirm the write landed.
  *
- * @param string $key   Meta key (already validated/allowlisted by the caller).
- * @param mixed  $value Raw value from input.
+ * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
+ * regardless of the post's real type. sanitize_meta() only checks the subtype-specific
+ * sanitize_{type}_meta_{key}_for_{subtype} hook when a subtype is given (wp-includes/meta.php),
+ * so a sanitize_callback registered via register_post_meta() for a non-'post' type (a page, a
+ * custom post type) was invisible to this probe - a scalar-to-array coercion registered for that
+ * type would sail through undetected. $post_type is now the caller's real post type.
+ *
+ * Codex round 8 R8-2: "the caller's real post type" is not necessarily what update_metadata()
+ * itself resolves at write time - core resolves the write-time subtype through
+ * get_object_subtype( 'post', $object_id ), which is filterable via get_object_subtype_post
+ * (wp-includes/meta.php). A caller that already has the object id should pass
+ * get_object_subtype( 'post', $id ) rather than the raw get_post_type() result, so a site
+ * filtering that hook is honoured here the same way it is at write time. A create-path caller
+ * has no id yet and passes the intended post type instead - see aafm_validate_write_enrichment().
+ *
+ * @param string $key       Meta key (already validated/allowlisted by the caller).
+ * @param mixed  $value     Raw value from input.
+ * @param string $post_type The post's real object subtype (get_object_subtype( 'post', $id )
+ *                           where an id exists), or the intended post type on a create where it
+ *                           does not yet. Defaults to 'post' for callers that do not yet know it
+ *                           (matches this function's pre-round-7 behavior).
  * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
  */
-function aafm_sanitize_meta_value( string $key, $value ) {
+function aafm_sanitize_meta_value( string $key, $value, string $post_type = 'post' ) {
 	if ( ! is_scalar( $value ) ) {
 		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
 		$value = aafm_sanitize_plain_text( $value );
 	}
-	$value = sanitize_meta( $key, $value, 'post', 'post' );
-	if ( ! is_scalar( $value ) ) {
+	$probe = sanitize_meta( $key, $value, 'post', $post_type );
+	if ( ! is_scalar( $probe ) ) {
 		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	return $value;
@@ -570,26 +710,7 @@ function aafm_sanitize_meta_value( string $key, $value ) {
  * @return list<string>
  */
 function aafm_allowed_term_meta_keys(): array {
-	$base = get_option( 'aafm_exposed_term_meta_keys', array() );
-	$base = is_array( $base ) ? array_map( 'strval', $base ) : array();
-
-	/**
-	 * Filters the term-meta keys exposed to AI agents. UNIONed with the option base (never
-	 * replaces it) and re-floored against the hard-block after, so it can only ADD keys and
-	 * can never re-admit a protected/auth key.
-	 *
-	 * @param array<string> $base Option-backed exposed term-meta keys.
-	 */
-	$filtered = (array) apply_filters( 'aafm_allowed_term_meta_keys', $base );
-	$merged   = array_merge( $base, array_map( 'strval', $filtered ) );
-
-	// '*' is a wildcard SENTINEL, never a literal key - strip it here (surfaced separately via
-	// aafm_term_meta_allow_has_star()), and re-floor the merged set against the hard-block.
-	return array_values(
-		array_unique(
-			array_filter( $merged, static fn( $k ) => '' !== $k && '*' !== $k && ! aafm_hard_blocked_meta_key( $k ) )
-		)
-	);
+	return aafm_scoped_allowed_meta_keys( 'aafm_exposed_term_meta_keys', 'aafm_allowed_term_meta_keys', 'aafm_hard_blocked_meta_key', false, false );
 }
 
 /**
@@ -602,14 +723,7 @@ function aafm_allowed_term_meta_keys(): array {
  * @return list<string>
  */
 function aafm_denied_term_meta_keys(): array {
-	$stored = get_option( 'aafm_denied_term_meta_keys', array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
-
-	return array_values(
-		array_unique(
-			array_filter( $stored, static fn( $k ) => '' !== $k && '*' !== $k )
-		)
-	);
+	return aafm_scoped_denied_meta_keys( 'aafm_denied_term_meta_keys' );
 }
 
 /**
@@ -620,8 +734,7 @@ function aafm_denied_term_meta_keys(): array {
  * @return bool
  */
 function aafm_term_meta_allow_has_star(): bool {
-	$raw = get_option( 'aafm_exposed_term_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_exposed_term_meta_keys' );
 }
 
 /**
@@ -632,8 +745,7 @@ function aafm_term_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_term_meta_deny_has_star(): bool {
-	$raw = get_option( 'aafm_denied_term_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_denied_term_meta_keys' );
 }
 
 /**
@@ -650,39 +762,53 @@ function aafm_term_meta_deny_has_star(): bool {
  * @return string|WP_Error
  */
 function aafm_validate_term_meta_key( string $key ) {
-	$key     = trim( (string) $key );
-	$exposed = '' !== $key
-		&& '*' !== $key                                              // floor 1: the sentinel is never addressable.
-		&& ! aafm_hard_blocked_meta_key( $key )                      // floor 1 (absolute).
-		&& ! aafm_term_meta_deny_has_star()                          // floor 2: deny-all kill switch.
-		&& ! in_array( $key, aafm_denied_term_meta_keys(), true )    // floor 2: explicit deny.
-		&& ( aafm_term_meta_allow_has_star() || in_array( $key, aafm_allowed_term_meta_keys(), true ) ); // floor 3.
-
-	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_term_meta_key_not_allowed', __( 'This term meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
-	}
-	return $key;
+	return aafm_validate_scoped_meta_key(
+		$key,
+		'aafm_hard_blocked_meta_key',
+		'aafm_term_meta_deny_has_star',
+		'aafm_denied_term_meta_keys',
+		'aafm_term_meta_allow_has_star',
+		'aafm_allowed_term_meta_keys',
+		'aafm_term_meta_key_not_allowed',
+		__( 'This term meta key is not available to agents.', 'agent-abilities-for-mcp' )
+	);
 }
 
 /**
  * Coerce + sanitize a term-meta value for writing. Scalar-only: arrays/objects are refused
- * so the agent can never store a serialized structure. Strings are plain-text sanitized,
- * then run through sanitize_meta() with the 'term' object type so any registered
- * sanitize_term_meta_{$key} callback fires; the result is re-asserted as scalar.
+ * so the agent can never store a serialized structure. Strings are plain-text sanitized. The
+ * plain-text-sanitized value is then run through sanitize_meta() ONCE as a PROBE, purely to
+ * check that a registered sanitize_term_meta_{$key} callback cannot coerce a scalar into an
+ * array/object; the probe's return value is discarded, never stored or forwarded - see
+ * aafm_sanitize_meta_value()'s docblock for why the actual write-time sanitize_meta() call
+ * inside update_metadata() must remain the only one whose output is ever stored.
  *
- * @param string $key   Term-meta key (already validated/allowlisted by the caller).
- * @param mixed  $value Raw value from input.
+ * Codex round 7 R7-3: the probe used to pass the literal string 'term' as the object subtype,
+ * which is never a real taxonomy name, so a sanitize_callback registered via
+ * register_term_meta( $taxonomy, ... ) for ANY taxonomy was always invisible to this probe. Now
+ * takes the real taxonomy the same way aafm_sanitize_meta_value() takes the real post type.
+ *
+ * Codex round 8 R8-2: a term's taxonomy is filterable at write time via get_object_subtype_term
+ * (wp-includes/meta.php's get_object_subtype()), so a caller that already has the term id should
+ * pass get_object_subtype( 'term', $term_id ) rather than the raw, requested taxonomy - see
+ * aafm_sanitize_meta_value()'s matching R8-2 note.
+ *
+ * @param string $key      Term-meta key (already validated/allowlisted by the caller).
+ * @param mixed  $value    Raw value from input.
+ * @param string $taxonomy The term's real object subtype (get_object_subtype( 'term', $term_id )
+ *                          where a term id exists). Defaults to '' for callers that do not yet
+ *                          know it; that only ever matches a generic (non-subtype) sanitizer.
  * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
  */
-function aafm_sanitize_term_meta_value( string $key, $value ) {
+function aafm_sanitize_term_meta_value( string $key, $value, string $taxonomy = '' ) {
 	if ( ! is_scalar( $value ) ) {
 		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
 		$value = aafm_sanitize_plain_text( $value );
 	}
-	$value = sanitize_meta( $key, $value, 'term', 'term' );
-	if ( ! is_scalar( $value ) ) {
+	$probe = sanitize_meta( $key, $value, 'term', $taxonomy );
+	if ( ! is_scalar( $probe ) ) {
 		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	return $value;
@@ -772,26 +898,7 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
  * @return list<string>
  */
 function aafm_allowed_user_meta_keys(): array {
-	$base = get_option( 'aafm_exposed_user_meta_keys', array() );
-	$base = is_array( $base ) ? array_map( 'strval', $base ) : array();
-
-	/**
-	 * Filters the user-meta keys exposed to AI agents. UNIONed with the option base (never
-	 * replaces it) and re-floored against the hard-block after, so it can only ADD keys and
-	 * can never re-admit a protected/auth key.
-	 *
-	 * @param array<string> $base Option-backed exposed user-meta keys.
-	 */
-	$filtered = (array) apply_filters( 'aafm_allowed_user_meta_keys', $base );
-	$merged   = array_merge( $base, array_map( 'strval', $filtered ) );
-
-	// '*' is a wildcard SENTINEL, never a literal key - strip it here (surfaced separately via
-	// aafm_user_meta_allow_has_star()), and re-floor the merged set against the user hard-block.
-	return array_values(
-		array_unique(
-			array_filter( $merged, static fn( $k ) => '' !== $k && '*' !== $k && ! aafm_hard_blocked_user_meta_key( $k ) )
-		)
-	);
+	return aafm_scoped_allowed_meta_keys( 'aafm_exposed_user_meta_keys', 'aafm_allowed_user_meta_keys', 'aafm_hard_blocked_user_meta_key', false, false );
 }
 
 /**
@@ -804,14 +911,7 @@ function aafm_allowed_user_meta_keys(): array {
  * @return list<string>
  */
 function aafm_denied_user_meta_keys(): array {
-	$stored = get_option( 'aafm_denied_user_meta_keys', array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
-
-	return array_values(
-		array_unique(
-			array_filter( $stored, static fn( $k ) => '' !== $k && '*' !== $k )
-		)
-	);
+	return aafm_scoped_denied_meta_keys( 'aafm_denied_user_meta_keys' );
 }
 
 /**
@@ -822,8 +922,7 @@ function aafm_denied_user_meta_keys(): array {
  * @return bool
  */
 function aafm_user_meta_allow_has_star(): bool {
-	$raw = get_option( 'aafm_exposed_user_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_exposed_user_meta_keys' );
 }
 
 /**
@@ -834,8 +933,7 @@ function aafm_user_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_user_meta_deny_has_star(): bool {
-	$raw = get_option( 'aafm_denied_user_meta_keys', array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	return aafm_scoped_meta_has_star( 'aafm_denied_user_meta_keys' );
 }
 
 /**
@@ -880,42 +978,58 @@ function aafm_allowed_site_settings(): array {
  * @return string|WP_Error
  */
 function aafm_validate_user_meta_key( string $key ) {
-	$key     = trim( (string) $key );
-	$exposed = '' !== $key
-		&& '*' !== $key                                              // floor 1: the sentinel is never addressable.
-		&& ! aafm_hard_blocked_user_meta_key( $key )                 // floor 1 (absolute).
-		&& ! aafm_user_meta_deny_has_star()                          // floor 2: deny-all kill switch.
-		&& ! in_array( $key, aafm_denied_user_meta_keys(), true )    // floor 2: explicit deny.
-		&& ( aafm_user_meta_allow_has_star() || in_array( $key, aafm_allowed_user_meta_keys(), true ) ); // floor 3.
-
-	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_user_meta_key_not_allowed', __( 'This user meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
-	}
-	return $key;
+	return aafm_validate_scoped_meta_key(
+		$key,
+		'aafm_hard_blocked_user_meta_key',
+		'aafm_user_meta_deny_has_star',
+		'aafm_denied_user_meta_keys',
+		'aafm_user_meta_allow_has_star',
+		'aafm_allowed_user_meta_keys',
+		'aafm_user_meta_key_not_allowed',
+		__( 'This user meta key is not available to agents.', 'agent-abilities-for-mcp' )
+	);
 }
 
 /**
  * Coerce + sanitize a user-meta value for writing. Scalar-only: arrays/objects are refused
- * so the agent can never store a serialized structure. Strings are plain-text sanitized,
- * then run through sanitize_meta() with the 'user' object type so any registered
- * sanitize_user_meta_{$key} callback fires; the result is re-asserted as scalar.
+ * so the agent can never store a serialized structure. Strings are plain-text sanitized. The
+ * plain-text-sanitized value is then run through sanitize_meta() ONCE as a PROBE, purely to
+ * check that a registered sanitize_user_meta_{$key} callback cannot coerce a scalar into an
+ * array/object; the probe's return value is discarded, never stored or forwarded - see
+ * aafm_sanitize_meta_value()'s docblock for why the actual write-time sanitize_meta() call
+ * inside update_metadata() must remain the only one whose output is ever stored.
  *
- * Mirrors aafm_sanitize_term_meta_value() but is user-scoped - the live
- * aafm_sanitize_meta_value() hardwires the 'post' subtype and CANNOT be reused here.
+ * Mirrors aafm_sanitize_term_meta_value() but is user-scoped.
  *
- * @param string $key   User-meta key (already validated/allowlisted by the caller).
- * @param mixed  $value Raw value from input.
+ * Codex round 7 R7-3 was raised against this function too, but was judged not to apply: unlike a
+ * post type or a taxonomy, a user object's subtype is not caller-supplied - core's own
+ * get_object_subtype( 'user', $user_id ) (wp-includes/meta.php) resolves to the literal string
+ * 'user' for any user that exists, never ''.
+ *
+ * Codex round 8 R8-2: that resolution is still filterable, via get_object_subtype_user, the same
+ * way get_object_subtype_post and get_object_subtype_term are - a site remapping a user's
+ * subtype for its own register_meta() scoping was invisible to the hardcoded 'user' literal this
+ * probe used to pass. $object_subtype now defaults to 'user' (this function's pre-round-8
+ * behavior for a caller that has not resolved it) but a caller that already has the user id
+ * should pass get_object_subtype( 'user', $user_id ) instead, exactly as aafm_sanitize_meta_value()
+ * and aafm_sanitize_term_meta_value() already do for their object types.
+ *
+ * @param string $key            User-meta key (already validated/allowlisted by the caller).
+ * @param mixed  $value          Raw value from input.
+ * @param string $object_subtype The user's real object subtype (get_object_subtype( 'user',
+ *                                $user_id )). Defaults to 'user', the value core resolves for
+ *                                any user absent a get_object_subtype_user filter.
  * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
  */
-function aafm_sanitize_user_meta_value( string $key, $value ) {
+function aafm_sanitize_user_meta_value( string $key, $value, string $object_subtype = 'user' ) {
 	if ( ! is_scalar( $value ) ) {
 		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
 		$value = aafm_sanitize_plain_text( $value );
 	}
-	$value = sanitize_meta( $key, $value, 'user', 'user' );
-	if ( ! is_scalar( $value ) ) {
+	$probe = sanitize_meta( $key, $value, 'user', $object_subtype );
+	if ( ! is_scalar( $probe ) ) {
 		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	return $value;
@@ -1128,17 +1242,22 @@ function aafm_validate_featured_attachment_id( $attachment_id ) {
  * and the helpers.php meta-key doctrine: a caller cannot tell "blocked" from "not allowlisted"
  * from "non-scalar value").
  *
- * @param array<string,mixed> $meta Raw meta object from input.
+ * @param array<string,mixed> $meta      Raw meta object from input.
+ * @param string              $post_type The post's real (or, for a create, about-to-be-assigned)
+ *                                       post type. Codex round 7 R7-3: threaded through to
+ *                                       aafm_sanitize_meta_value() so its coercion-to-array probe
+ *                                       is not blind to a sanitize_callback registered for a
+ *                                       non-'post' post type.
  * @return array<string,mixed>|WP_Error Sanitized key=>value map, or error.
  */
-function aafm_validate_meta_payload( array $meta ) {
+function aafm_validate_meta_payload( array $meta, string $post_type = 'post' ) {
 	$clean = array();
 	foreach ( $meta as $raw_key => $raw_value ) {
 		$key = aafm_validate_meta_key( (string) $raw_key );
 		if ( is_wp_error( $key ) ) {
 			return aafm_generic_error();
 		}
-		$value = aafm_sanitize_meta_value( $key, $raw_value );
+		$value = aafm_sanitize_meta_value( $key, $raw_value, $post_type );
 		if ( is_wp_error( $value ) ) {
 			return aafm_generic_error();
 		}
@@ -1158,10 +1277,13 @@ function aafm_validate_meta_payload( array $meta ) {
  * here; it is folded into the postarr by the create/update path so it lands in the same atomic
  * row write.)
  *
- * @param array<string,mixed> $input Raw ability input.
+ * @param array<string,mixed> $input     Raw ability input.
+ * @param string              $post_type The target post's real (create: about-to-be-assigned)
+ *                                       post type, threaded through to aafm_validate_meta_payload()
+ *                                       - see its docblock (Codex round 7 R7-3).
  * @return array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>}|WP_Error
  */
-function aafm_validate_write_enrichment( array $input ) {
+function aafm_validate_write_enrichment( array $input, string $post_type = 'post' ) {
 	$bundle = array(
 		'terms'          => array(),
 		'featured_media' => 0,
@@ -1187,7 +1309,7 @@ function aafm_validate_write_enrichment( array $input ) {
 	}
 
 	if ( isset( $input['meta'] ) && is_array( $input['meta'] ) ) {
-		$meta = aafm_validate_meta_payload( $input['meta'] );
+		$meta = aafm_validate_meta_payload( $input['meta'], $post_type );
 		if ( is_wp_error( $meta ) ) {
 			return $meta;
 		}
@@ -1280,19 +1402,23 @@ function aafm_validate_post_status( string $status, bool $can_read_private ) {
  * deliberate strengthening, not a widening. 'draft' and 'pending' need no extra authority:
  * every caller reaching this function already cleared at least edit_posts.
  *
- * @param string $status Requested status (raw; sanitized here).
+ * @param string        $status          Requested status (raw; sanitized here).
+ * @param string[]|null $public_statuses The caller's already-computed public-status list
+ *                                       (from get_post_stati(array('public'=>true))), when it
+ *                                       has one. Pass it through to avoid recomputing the same
+ *                                       core lookup more than once in the same request. Null
+ *                                       (the default) computes it here, unchanged from before.
  * @return bool True when the status requires the type's publish capability.
  */
-function aafm_status_requires_publish_cap( string $status ): bool {
+function aafm_status_requires_publish_cap( string $status, ?array $public_statuses = null ): bool {
 	$status = sanitize_key( $status );
 	if ( in_array( $status, array( 'future', 'private' ), true ) ) {
 		return true;
 	}
-	return in_array(
-		$status,
-		array_values( get_post_stati( array( 'public' => true ) ) ),
-		true
-	);
+	if ( null === $public_statuses ) {
+		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
+	}
+	return in_array( $status, $public_statuses, true );
 }
 
 /**
@@ -1391,6 +1517,10 @@ function aafm_rich_post_output_properties(): array {
 			'type'        => 'string',
 			'description' => __( 'Present on single-post reads and when include_content=true; omitted for password-protected posts.', 'agent-abilities-for-mcp' ),
 		),
+		'content_length' => array(
+			'type'        => 'integer',
+			'description' => __( 'Byte length of the raw stored content (strlen of post_content), present even when include_content is false so a caller can preflight size before a full fetch. Reported as 0 for a password-protected post, regardless of its real length.', 'agent-abilities-for-mcp' ),
+		),
 		'excerpt'        => array( 'type' => 'string' ),
 		'terms'          => array(
 			'type'                 => 'object',
@@ -1457,6 +1587,12 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// post without inspecting post_password, so this is the only place the body is
 	// withheld. Mirrors the precedent in comments.php (gate on empty password).
 	$is_protected = '' !== (string) $post->post_password;
+
+	// Computed unconditionally, independent of include_content/content_format, so a caller can
+	// preflight size before a full fetch even when include_content=false - the whole point of
+	// this field. Reports 0 for a protected post rather than the real length, so it can never
+	// become a side channel that leaks how much content a caller who cannot read it holds.
+	$shape['content_length'] = $is_protected ? 0 : strlen( (string) $post->post_content );
 
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter, applied so blocks/shortcodes render.
 	$rendered = $is_protected ? '' : (string) apply_filters( 'the_content', $post->post_content );
@@ -1884,12 +2020,195 @@ function aafm_paginate_args( array $input, int $max = 50 ): array {
 }
 
 /**
+ * The `page` + `per_page` input-schema property pair every list-shaped ability declares
+ * alongside the runtime clamping aafm_paginate_args() already centralizes.
+ *
+ * The description text is call-site-owned (it varies by ability, e.g. "Number of posts
+ * per page..." vs "Number of coupons per page..."), so this only centralizes the
+ * `type`/`minimum`/`maximum` shape every call site repeated identically.
+ *
+ * `$per_page_first` preserves each ability's original property order in the JSON schema
+ * a client sees over `tools/list`: most abilities declared `page` first, but get-comments,
+ * get-pending-comments, get-media, get-users, and wc-list-coupons declared `per_page`
+ * first, so this refactor must not silently reorder those five.
+ *
+ * @param int    $max                  Maximum allowed per_page for this ability.
+ * @param string $per_page_description Translated description for the per_page property.
+ * @param string $page_description     Translated description for the page property.
+ * @param bool   $per_page_first       Whether to emit `per_page` before `page`, matching
+ *                                     that ability's original property order.
+ * @return array{page:array<string,mixed>,per_page:array<string,mixed>}
+ */
+function aafm_pagination_schema_props( int $max, string $per_page_description, string $page_description, bool $per_page_first = false ): array {
+	$page = array(
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'maximum'     => AAFM_LIST_PAGE_MAX,
+		'description' => $page_description,
+	);
+
+	$per_page = array(
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'maximum'     => $max,
+		'description' => $per_page_description,
+	);
+
+	return $per_page_first
+		? array(
+			'per_page' => $per_page,
+			'page'     => $page,
+		)
+		: array(
+			'page'     => $page,
+			'per_page' => $per_page,
+		);
+}
+
+/**
+ * A stable usort(): pairs every item with its original position and tie-breaks on it, so the
+ * result matches what PHP 8's stable usort() would produce even on this plugin's PHP 7.4 floor
+ * (usort() only became stable in PHP 8.0). Without this, a tie on this plugin's floor could
+ * reorder output between requests, or - for a caller that slices the result afterward - return
+ * a genuinely different SET of items, not merely a different order.
+ *
+ * @param array<int|string,mixed> $items      Items to sort. Keys are not preserved.
+ * @param callable                $comparator ( $a, $b ): int, same contract as usort()'s own
+ *                                             comparator. Only called to break non-ties; when it
+ *                                             returns 0 this function tie-breaks on original
+ *                                             position instead of leaving the order to chance.
+ * @return list<mixed>
+ */
+function aafm_stable_sort( array $items, callable $comparator ): array {
+	$paired = array_map(
+		static function ( $item, $index ): array {
+			return array( $item, $index );
+		},
+		$items,
+		array_keys( $items )
+	);
+	usort(
+		$paired,
+		static function ( array $a, array $b ) use ( $comparator ): int {
+			$cmp = $comparator( $a[0], $b[0] );
+			if ( 0 !== $cmp ) {
+				return $cmp;
+			}
+			return $a[1] <=> $b[1];
+		}
+	);
+	return array_column( $paired, 0 );
+}
+
+/**
  * A single generic error returned to callers - never leaks internal detail.
  *
  * @return WP_Error
  */
 function aafm_generic_error(): WP_Error {
 	return new WP_Error( 'aafm_error', __( 'The request could not be completed.', 'agent-abilities-for-mcp' ) );
+}
+
+/**
+ * Whether a scalar meta write actually landed as requested, judged against the value's CANONICAL
+ * stored form rather than the plugin's own pre-write intent.
+ *
+ * Core's own update_metadata() (the shared engine behind update_post_meta()/update_term_meta()/
+ * update_user_meta(), wp-includes/meta.php) unslashes the incoming $meta_value and THEN runs the
+ * unslashed result through sanitize_meta( $meta_key, $meta_value, $object_type, $object_subtype )
+ * before it ever reaches storage - verified by reading update_metadata() itself, not assumed. A
+ * vendor or core filter registered on that meta key's sanitize_{type}_meta_{key} hook
+ * (register_meta()'s sanitize_callback lands here) can legitimately trim, cast, or otherwise
+ * normalize the value on the way in. Comparing a fresh read against the plugin's pre-write intent
+ * instead of that canonical form reports a false error on a write that landed exactly as the
+ * site's own registered sanitizer defines "landed" - Codex round 6 B6-3. Running the same
+ * sanitize_meta() call here keeps a genuine veto caught: a filter that reverts to the OLD value,
+ * or an update_*_metadata short-circuit that never wrote at all, still differs from the sanitized
+ * NEW value.
+ *
+ * Codex round 8 R8-1: every call site passes wp_slash( $value ) to update_post_meta()/
+ * update_term_meta()/update_user_meta() so that core's own internal wp_unslash() is a no-op
+ * round trip back to $value - core's sanitize_meta() call therefore sees exactly the unslashed
+ * $intended this function receives, never a slashed form of it. This function used to run
+ * sanitize_meta() against wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, which
+ * feeds a slash-sensitive registered sanitizer a different input than core's own call ever sees
+ * and can misjudge its output. Passing $intended straight through matches core's pipeline
+ * exactly: no slashing in, no unslashing out. A scalar meta value round-trips through a longtext
+ * column, so the stored value reads back as a string; comparing stringified forms also avoids a
+ * false mismatch on a genuine no-op (re-sending an int or bool unchanged). An array-valued meta
+ * key (a serialized token list, for example) is compared by exact array equality instead, since
+ * casting an array to string is a PHP warning, not a comparison.
+ *
+ * @param mixed  $stored         The value read back from storage after the write.
+ * @param mixed  $intended       The unslashed value the write attempted to store.
+ * @param string $meta_key       Meta key.
+ * @param string $object_type    'post', 'term', or 'user'.
+ * @param string $object_subtype The post type / taxonomy the meta key is registered under. For
+ *                                user meta this is the literal string 'user' (core's own
+ *                                get_object_subtype( 'user', $id ), wp-includes/meta.php, resolves
+ *                                to 'user' for any user that exists - never ''; verified against
+ *                                core, not assumed). '' only matches a generic, non-subtype
+ *                                sanitizer.
+ * @return bool
+ */
+function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
+	$expected = sanitize_meta( $meta_key, $intended, $object_type, $object_subtype );
+	if ( is_array( $expected ) || is_array( $stored ) ) {
+		return $stored === $expected;
+	}
+	return (string) $stored === (string) $expected;
+}
+
+/**
+ * The post-field sibling of aafm_meta_write_confirmed(): whether a post-field write (post_title,
+ * post_content, post_excerpt, post_status, and so on) landed as intended, judged against the
+ * field's CANONICAL stored form rather than the plugin's own pre-write intent.
+ *
+ * Core's own wp_insert_post()/wp_update_post() run the whole $postarr through sanitize_post( $postarr, 'db' )
+ * (wp-includes/post.php), which for a post_-prefixed field applies the pre_{$field} then
+ * {$field_no_prefix}_save_pre filters - verified by reading sanitize_post_field()'s 'db' branch
+ * against this plugin's WP floor. That is exactly where kses_init() attaches wp_filter_post_kses()
+ * to content_save_pre/excerpt_save_pre (and wp_filter_kses() to title_save_pre, alongside core's
+ * unconditional `trim` on the same hook) whenever the acting user lacks unfiltered_html, and where
+ * a vendor plugin can hook its own normalization. Both of those save-time filters expect and
+ * return SLASHED data (wp_filter_kses()/wp_filter_post_kses() strip and re-add slashes
+ * internally), matching how the real write always runs with wp_slash() applied first, so this
+ * mirrors the exact pipeline: slash the intended value, sanitize it at 'db' context, then unslash
+ * the result before comparing it to a fresh, cache-busted read. A legitimate normalization no
+ * longer reports as an error; a genuine veto (a filter reverting to the OLD value) still differs
+ * from the canonical NEW value and is still caught.
+ *
+ * Codex round 7 R7-4: on a CREATE, core's own sanitize_post( $postarr, 'db' ) inside
+ * wp_insert_post() runs before the row exists and before an ID is assigned - $postarr['ID'] is
+ * unset, and sanitize_post() defaults that to 0 (wp-includes/post.php) before calling
+ * sanitize_post_field() for every field. Recomputing the expected value with the newly assigned,
+ * positive $post_id instead of the 0 the real write actually sanitized with can disagree with an
+ * ID-sensitive registered filter and falsely reject (and, for GeoDirectory's create path, delete)
+ * an otherwise valid create. $sanitize_context_id lets a create-path caller supply the same
+ * context (0) the real write used; it defaults to $post_id, matching every existing update-path
+ * caller, which already sanitizes with the real, existing id and is unaffected by this parameter.
+ *
+ * @param int      $post_id             Post id, already saved (used for the read-back).
+ * @param string   $field               Post field name (post_title, post_content, post_excerpt,
+ *                                      post_status, ...).
+ * @param string   $intended            The unslashed value the write attempted to persist.
+ * @param int|null $sanitize_context_id The id to recompute the canonical form with. Defaults to
+ *                                      $post_id (an update, where the row already existed at
+ *                                      sanitize time). Pass 0 for a create, matching what core's
+ *                                      own sanitize_post( $postarr, 'db' ) actually used before
+ *                                      the row was inserted.
+ * @return bool
+ */
+function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended, ?int $sanitize_context_id = null ): bool {
+	clean_post_cache( $post_id );
+	$context_id = $sanitize_context_id ?? $post_id;
+	$sanitized  = sanitize_post_field( $field, wp_slash( $intended ), $context_id, 'db' );
+	// This helper is only ever called for string post fields (post_title, post_content,
+	// post_excerpt, post_status); sanitize_post_field()'s broader return type (it also handles
+	// int and array-of-int fields) is guarded here rather than widening this function's contract.
+	$expected = wp_unslash( is_scalar( $sanitized ) ? (string) $sanitized : '' );
+	$stored   = get_post_field( $field, $post_id, 'raw' );
+	return ( is_scalar( $stored ) ? (string) $stored : '' ) === $expected;
 }
 
 /**
@@ -2126,5 +2445,45 @@ function aafm_switch_not_persisted_message( string $label ): string {
 		/* translators: %s: the name of the setting, for example "Read-only mode". */
 		__( '%s could not be changed: the site\'s persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
 		$label
+	);
+}
+
+/**
+ * The operator-facing explanation when a paired write persisted its restrictive half but not
+ * its permissive half, so the operator can see exactly what state the site is left in rather
+ * than a generic "could not be changed" that implies nothing at all was saved (Codex round 5,
+ * R5-1).
+ *
+ * @param string $saved_label  Human name of the half that persisted, already translated.
+ * @param string $failed_label Human name of the half that did not, already translated.
+ * @return string
+ */
+function aafm_paired_write_partial_failure_message( string $saved_label, string $failed_label ): string {
+	return sprintf(
+		/* translators: 1: name of the value that saved, 2: name of the value that could not be. */
+		__( '%1$s was saved, but %2$s could not be changed: the site\'s persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
+		$saved_label,
+		$failed_label
+	);
+}
+
+/**
+ * The operator-facing explanation for a partial save where two INDEPENDENT writes were both
+ * attempted and exactly one failed, but - unlike aafm_paired_write_partial_failure_message() -
+ * whether that leaves the site stricter or wider than requested depends on the old value of the
+ * one that failed, not on which half saved. Used where both halves of a pair are written in the
+ * same (e.g. both restrictive) direction, so a failure of either one simply keeps its own old
+ * value rather than guaranteeing a narrower net result (gate review, 1.7.4 final round).
+ *
+ * @param string $saved_label  Human name of the value that persisted, already translated.
+ * @param string $failed_label Human name of the value that did not, already translated.
+ * @return string
+ */
+function aafm_mixed_write_partial_failure_message( string $saved_label, string $failed_label ): string {
+	return sprintf(
+		/* translators: 1: name of the value that saved, 2: name of the value that could not be. */
+		__( '%1$s was saved, but %2$s could not be changed: the site\'s persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
+		$saved_label,
+		$failed_label
 	);
 }

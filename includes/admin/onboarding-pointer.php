@@ -36,10 +36,40 @@ function aafm_quickconnect_pointer_id(): string {
  * Whether a given admin actually sees the pointer is then gated per user by the core
  * dismissed-pointers meta.
  *
+ * Deliberately does NOT route through aafm_update_option_verified(): that helper's
+ * update_option() call would overwrite an existing row, but add_option()'s no-op-if-present
+ * behaviour is exactly what keeps a reactivate cycle from re-arming a pointer the operator
+ * already dismissed. So this certifies the row's presence directly with the same lower-level
+ * cache primitives instead (Codex round 9, R9-10), without disturbing that contract.
+ *
+ * @return bool True when a row for the option is confirmed present after this call, whether
+ *              this call created it or an earlier activation already had.
+ */
+function aafm_quickconnect_flag_menu_pointer(): bool {
+	aafm_forget_option_caches( 'aafm_menu_pointer_active' );
+	add_option( 'aafm_menu_pointer_active', '1' );
+	aafm_forget_option_caches( 'aafm_menu_pointer_active' );
+	aafm_force_refresh_option_caches( 'aafm_menu_pointer_active' );
+
+	return aafm_read_option_views( 'aafm_menu_pointer_active' )['db_found'];
+}
+
+/**
+ * Activation-hook entry point for aafm_quickconnect_flag_menu_pointer().
+ *
+ * WordPress's register_activation_hook() expects a callable(bool): void - it passes the
+ * network-wide activation flag in and does nothing with a return value.
+ * aafm_quickconnect_flag_menu_pointer() itself has to return bool so it can certify the row it
+ * just seeded (Codex round 9, R9-10), so that certifying function cannot be the activation
+ * callback directly. This thin wrapper is: it satisfies the hook's void contract while still
+ * running (and discarding the result of) the certified write.
+ *
+ * @param bool $network_wide Whether the plugin is being activated network-wide. Unused: the
+ *                            pointer flag is a per-site option.
  * @return void
  */
-function aafm_quickconnect_flag_menu_pointer(): void {
-	add_option( 'aafm_menu_pointer_active', '1' );
+function aafm_quickconnect_activate_menu_pointer( bool $network_wide = false ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- signature required by register_activation_hook()'s callable(bool): void contract.
+	aafm_quickconnect_flag_menu_pointer();
 }
 
 /**

@@ -53,12 +53,6 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 
 	use IntegrationStubs;
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function tear_down(): void {
 		$this->reset_integration_stubs();
 		parent::tear_down();

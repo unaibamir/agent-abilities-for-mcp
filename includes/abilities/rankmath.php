@@ -497,6 +497,13 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		$resolved_ids[ $field ] = $attachment_id;
 	}
 
+	// Every write below is tracked by its real META KEY and the exact value passed to
+	// update_post_meta(), not a display-shaped stand-in - sanitize_meta() (called by
+	// aafm_meta_write_confirmed() below) must see the same value type a registered sanitize
+	// callback actually ran against, an array for rank_math_robots, a scalar everywhere else.
+	$post_type     = (string) get_post_type( $id );
+	$expected_meta = array();
+
 	$url_fields = aafm_rankmath_url_fields();
 	foreach ( aafm_rankmath_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
@@ -508,12 +515,17 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		// is stripped unless it is slashed first. Every sibling meta writer (meta.php, terms.php,
 		// user-meta.php) slashes; these SEO writers must too.
 		update_post_meta( $id, $key, wp_slash( $clean ) );
+		$expected_meta[ $key ] = $clean;
 	}
 
 	// Persist the attachment-id companion meta the frontend actually renders from. A cleared image (0)
-	// blanks the id so the resolver falls through to the featured image, never a stale id.
+	// blanks the id so the resolver falls through to the featured image, never a stale id. Codex round
+	// 6 B6-2: these companion writes were not confirmed below, so a filter could veto just one of them
+	// while the visible URL field still reported success and the frontend kept rendering a stale image.
 	foreach ( $resolved_ids as $field => $attachment_id ) {
-		update_post_meta( $id, $image_id_fields[ $field ], $attachment_id > 0 ? $attachment_id : '' );
+		$companion_value                             = $attachment_id > 0 ? $attachment_id : '';
+		$expected_meta[ $image_id_fields[ $field ] ] = $companion_value;
+		update_post_meta( $id, $image_id_fields[ $field ], $companion_value );
 	}
 
 	// Turn off the Twitter->Facebook fallback when Twitter-specific fields are provided; otherwise the
@@ -523,6 +535,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// string 'off' as false; an empty string, '0', or boolean false falls back to the truthy default.
 	if ( aafm_rankmath_twitter_fields_provided( $input ) ) {
 		update_post_meta( $id, 'rank_math_twitter_use_facebook', 'off' );
+		$expected_meta['rank_math_twitter_use_facebook'] = 'off';
 	}
 
 	if ( array_key_exists( 'robots', $input ) ) {
@@ -535,6 +548,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 			)
 		);
 		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
+		$expected_meta['rank_math_robots'] = $kept;
 
 		// Delegation audit sweep (210-sweep-B5-report.md): rank_math_robots is the exact meta key
 		// Sitemap::is_object_indexable() reads to decide sitemap inclusion, but Cache_Watcher only
@@ -549,6 +563,23 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		// disabled (Cache_Watcher::clear() checks Sitemap::is_cache_enabled() internally).
 		if ( class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {
 			\RankMath\Sitemap\Cache_Watcher::invalidate_post( $id );
+		}
+	}
+
+	// Codex round 5 R5-2: every update_post_meta() call above discarded its return value, unlike
+	// the schema sibling one call below (aafm_exec_rankmath_update_schema()), which already
+	// rereads and compares. A site-installed update_post_metadata filter vetoing any of these
+	// writes would report success while the response still carried the requested value rather
+	// than what storage actually holds. Codex round 6 B6-3: compare against the CANONICAL
+	// sanitize_meta() form of each write, not its pre-write intent, so a registered sanitize
+	// callback's legitimate normalization is not mistaken for a veto - a robots array runs through
+	// the same sanitize_meta() call a scalar field does, keeping the comparison correct for both.
+	foreach ( $expected_meta as $key => $value ) {
+		if ( ! aafm_meta_write_confirmed( get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
+			return new WP_Error(
+				'aafm_rankmath_write_unconfirmed',
+				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+			);
 		}
 	}
 

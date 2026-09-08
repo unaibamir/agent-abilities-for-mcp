@@ -45,10 +45,10 @@ fi
 # extraction step actually found the known-good entries, so format drift
 # fails loudly instead of silently passing.
 matches="$(printf '%s' "$clean" | "$TOOL" --list 2>&1)"
-if printf '%s\n' "$matches" | grep -qx "wordpress" && printf '%s\n' "$matches" | grep -qx "composer"; then
-  ok "the matcher's extraction step actually found wordpress and composer (not silently matching nothing)"
+if printf '%s\n' "$matches" | grep -qx "wordpress/mcp-adapter" && printf '%s\n' "$matches" | grep -qx "composer/InstalledVersions.php"; then
+  ok "the matcher's extraction step actually found wordpress/mcp-adapter and composer/InstalledVersions.php (not silently matching nothing)"
 else
-  bad "matcher extraction" "expected 'wordpress' and 'composer' in the matched-package list; got: $matches"
+  bad "matcher extraction" "expected 'wordpress/mcp-adapter' and 'composer/InstalledVersions.php' in the matched-package list; got: $matches"
 fi
 
 echo "== 2. a dev-regenerated autoloader, __DIR__ form (autoload_static.php/autoload_real.php shape), fails =="
@@ -70,6 +70,43 @@ if printf '%s' "$out" | grep -q "phpunit"; then
   ok "error message names the offending package (phpunit)"
 else
   bad "error message" "did not mention 'phpunit'. Output: $out"
+fi
+
+echo "== 2b. a real Jetpack Autoloader entry passes, but a sibling dev-only package under the SAME automattic org fails =="
+# Regression guard for the "widen automattic|composer|wordpress to a two-segment
+# package check" fix: a naive widening that only inspected the first path
+# segment would let ANY automattic/* package through, including a real
+# dev-only sibling like automattic/vipwpcs (wordpress/mcp-adapter's own
+# require-dev, composer.json:64) - never a package this plugin ships.
+jetpack_ok="<?php
+class X {
+    public static \$classMap = array(
+        'Automattic\\\\Jetpack\\\\Autoloader\\\\AutoloadGenerator' => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src/AutoloadGenerator.php',
+    );
+}"
+if out="$(printf '%s' "$jetpack_ok" | "$TOOL" --stdin 2>&1)"; then
+  ok "a real automattic/jetpack-autoloader entry passes"
+else
+  bad "jetpack-autoloader entry" "expected exit 0, got non-zero. Output: $out"
+fi
+
+vipwpcs_bad="<?php
+class X {
+    public static \$classMap = array(
+        'Automattic\\\\VIPWPCS\\\\Something' => __DIR__ . '/..' . '/automattic/vipwpcs/src/Something.php',
+    );
+}"
+out="$(printf '%s' "$vipwpcs_bad" | "$TOOL" --stdin 2>&1)"
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  ok "automattic/vipwpcs (a dev-only sibling under the same org) exits non-zero"
+else
+  bad "automattic/vipwpcs exit code" "expected non-zero, got 0 - the widened allowlist accepts any automattic/* package, not just jetpack-autoloader"
+fi
+if printf '%s' "$out" | grep -q "automattic/vipwpcs"; then
+  ok "error message names the offending package (automattic/vipwpcs)"
+else
+  bad "error message" "did not mention 'automattic/vipwpcs'. Output: $out"
 fi
 
 echo "== 3. a dev-regenerated autoloader, \$vendorDir form (autoload_classmap.php/autoload_psr4.php/autoload_files.php shape), fails =="

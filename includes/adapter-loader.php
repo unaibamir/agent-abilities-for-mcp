@@ -9,10 +9,12 @@
  * that race, and our floor check then rejects the loaded version - so our /mcp route never
  * registers (site-wide 404 for our endpoint).
  *
- * Our copy is 0.5.0 and we MUST run it: 0.4.1 lacks the mcp_adapter_tools_list filter, our
+ * Our copy is 0.6.1 and we MUST run it: 0.4.1 lacks the mcp_adapter_tools_list filter, our
  * request-time per-connection capability gate, so running on it would be a silent security
- * regression. The public McpAdapter API is identical between 0.4.1 and 0.5.0 and 0.5.0 is an
- * additive superset, so forcing our 0.5.0 to be the loaded copy is API-safe for other plugins.
+ * regression. The public McpAdapter API is additive between 0.4.1 and 0.5.0. Whether that same
+ * claim holds through 0.6.1 - specifically for McpValidator's public MIME-validation methods,
+ * which the adapter's own changelog says were removed - is verified directly against a simulated
+ * sibling in tests/coexistence/McpValidatorRemovedMethodsTest.php, not assumed here.
  *
  * The fix: register a PREPENDED autoloader for the WP\MCP\ namespace resolving from our bundled
  * copy, then EAGER-DECLARE every adapter class from that copy (aafm_eager_load_adapter()), both at
@@ -154,7 +156,7 @@ function aafm_adapter_path_to_class( string $path, string $base, string $prefix 
  * (WP\MCP\Core\*, Handlers\*, Domain\*, Transport\*, Infrastructure\*, Servers\*, Abilities\*) never
  * references either of them, so we gain nothing by pre-declaring them and lose coexistence by doing
  * so. We therefore skip them in the eager load: the standalone plugin's unguarded require then
- * declares its OWN copy with no collision, while our eager load still commits PHP to our 0.5.0
+ * declares its OWN copy with no collision, while our eager load still commits PHP to our 0.6.1
  * McpAdapter (the class that carries the per-connection capability gate). This does NOT weaken the
  * Rank Math case: Rank Math bundles an older adapter as a plain Composer LIBRARY (lazy autoloader, no
  * unguarded plugin-shell require) and loads after us, so our eager McpAdapter still wins that race.
@@ -251,11 +253,13 @@ function aafm_register_adapter_autoloader(): void {
  * request. The win is eager-declare vs lazy-autoload, not folder ordering: plugins load in
  * activation order (the active_plugins option), not alphabetically, but a sibling that ships the
  * adapter as a plain Composer library only declares its classes on first reference, whereas we
- * declare all of our 0.5.0 WP\MCP\ classes here, during our plugin-include phase. That makes PHP
+ * declare all of our 0.6.1 WP\MCP\ classes here, during our plugin-include phase. That makes PHP
  * commit to our copy; a later sibling that references the same class then transparently uses ours. The public
- * McpAdapter API is identical across 0.4.1 and 0.5.0 (0.5.0 is an additive superset), so a
- * 0.4.1-expecting consumer keeps working - and we keep the per-connection capability gate that
- * 0.4.1 lacks.
+ * McpAdapter API is additive across 0.4.1 and 0.5.0, so a 0.4.1-expecting consumer keeps working -
+ * and we keep the per-connection capability gate that 0.4.1 lacks. A 0.5.0-expecting consumer that
+ * calls a since-removed McpValidator method is a real, separate risk this eager-load choice
+ * creates; see the coexistence fixture in tests/coexistence/McpValidatorRemovedMethodsTest.php
+ * (added when the adapter was bumped to 0.6.1) for what actually happens.
  *
  * One recursive require_once pass is sufficient: if a class file references a not-yet-declared
  * WP\MCP\ interface or trait, the prepended autoloader registered above resolves it from our
@@ -276,7 +280,7 @@ function aafm_register_adapter_autoloader(): void {
  * only a handful of require_once calls on already-bundled files.
  *
  * Inverse-version trade: this override is version-agnostic - it forces ANY later-loading sibling
- * (older OR newer copy) onto our 0.5.0, since PHP commits to whichever copy is declared first. The
+ * (older OR newer copy) onto our 0.6.1, since PHP commits to whichever copy is declared first. The
  * floor/upper-bound check and "too old"/"too new" notices in bootstrap.php are the fallback for the
  * residual case where an incompatible copy is declared by a plugin that loads BEFORE us.
  *

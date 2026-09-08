@@ -137,6 +137,39 @@ final class LogTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7, R7-2: the version guard used to read get_option()'s cache-trusting view, so
+	 * a stale persistent cache claiming the current version was already stored, over a real
+	 * database row that is genuinely behind, would skip the self-heal for good - permanently,
+	 * since nothing else ever re-checks the row. Checks the real database row directly
+	 * (bypassing the object cache entirely) rather than get_option(), which the stale cache
+	 * would make report the current version either way.
+	 */
+	public function test_upgrade_runs_when_a_stale_cache_hides_an_old_version(): void {
+		global $wpdb;
+
+		update_option( 'aafm_activity_log_schema_version', '2' );
+
+		$all                                     = wp_load_alloptions( true );
+		$all['aafm_activity_log_schema_version'] = AAFM_ACTIVITY_LOG_SCHEMA_VERSION;
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			AAFM_ACTIVITY_LOG_SCHEMA_VERSION,
+			get_option( 'aafm_activity_log_schema_version', 'MISSING' ),
+			'Precondition: the stale cache is what get_option() sees.'
+		);
+
+		aafm_maybe_upgrade_activity_log();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- reading straight past the object cache is the point of this assertion.
+		$real_row = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s", 'aafm_activity_log_schema_version' ) );
+		$this->assertSame(
+			AAFM_ACTIVITY_LOG_SCHEMA_VERSION,
+			$real_row,
+			'The self-heal must still run and re-stamp the real database row, even though a stale cache claimed the current version was already stored.'
+		);
+	}
+
+	/**
 	 * The declared length of a VARCHAR column on the activity-log table, or 0 when not found.
 	 *
 	 * @param string $column Column name.

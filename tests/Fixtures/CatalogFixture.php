@@ -101,6 +101,19 @@ final class CatalogFixture {
 		'aafm/wc-count-products',
 		'aafm/wc-list-payment-gateways',
 		'aafm/wc-get-payment-gateway',
+		'aafm/slim-seo-get-post',
+		'aafm/tec-get-events',
+		'aafm/tec-get-event',
+		'aafm/tec-get-venues',
+		'aafm/tec-get-venue',
+		'aafm/tec-get-organizers',
+		'aafm/tec-get-organizer',
+		'aafm/tec-get-tickets',
+		'aafm/tec-get-ticket',
+		'aafm/tec-get-attendees',
+		'aafm/avada-get-page-content',
+		'aafm/geodirectory-get-listings',
+		'aafm/geodirectory-get-listing',
 	);
 
 	/**
@@ -186,6 +199,19 @@ final class CatalogFixture {
 		'aafm/wc-update-tax-rate',
 		'aafm/wc-create-tax-class',
 		'aafm/wc-update-payment-gateway',
+		'aafm/slim-seo-update-post',
+		'aafm/replace-sitewide',
+		'aafm/tec-create-event',
+		'aafm/tec-update-event',
+		'aafm/tec-delete-event',
+		'aafm/tec-create-venue',
+		'aafm/tec-update-venue',
+		'aafm/tec-create-organizer',
+		'aafm/tec-update-organizer',
+		'aafm/upload-media-from-url',
+		'aafm/avada-replace-text',
+		'aafm/geodirectory-create-listing',
+		'aafm/geodirectory-update-listing',
 	);
 
 	/**
@@ -238,5 +264,6 @@ final class CatalogFixture {
 		'aafm/delete-menu-item',
 		'aafm/wc-delete-product',
 		'aafm/wc-delete-product-variation',
+		'aafm/tec-delete-event',
 	);
 }

@@ -14,12 +14,13 @@ defined( 'ABSPATH' ) || exit;
  * is true, in which case it is run through wp_kses_post() so only post-safe markup survives.
  *
  * The leading glyph is an inline SVG from aafm_icon(), keyed by variant. Callers can
- * override it with the `icon` arg (an aafm_icon name). The legacy `dashicon` arg is still
- * accepted for back-compat and mapped to the closest aafm_icon glyph.
+ * override it with the `icon` arg (an aafm_icon name).
  *
  * @param string              $variant warning|info|success|error (unknown → info).
  * @param string              $message Plain text (escaped), or HTML run through wp_kses_post() when $args['html'].
- * @param array<string,mixed> $args    icon (override aafm_icon name), dashicon (legacy override), inline (bool), html (bool).
+ * @param array<string,mixed> $args    icon (override aafm_icon name), inline (bool), html (bool),
+ *                                     class (extra CSS class appended to the wrapper, sanitized
+ *                                     with sanitize_html_class()).
  * @return string
  */
 function aafm_get_notice_html( string $variant, string $message, array $args = array() ): string {
@@ -33,32 +34,19 @@ function aafm_get_notice_html( string $variant, string $message, array $args = a
 		$variant = 'info';
 	}
 
-	// Back-compat: map the old dashicon override names to the closest aafm_icon glyph.
-	$dashicon_map = array(
-		'dashicons-warning' => 'warning',
-		'dashicons-info'    => 'info',
-		'dashicons-yes-alt' => 'success',
-		'dashicons-dismiss' => 'error',
-		'dashicons-shield'  => 'shield',
-	);
-
-	$icon_name = $icons[ $variant ];
-	if ( isset( $args['icon'] ) ) {
-		$icon_name = (string) $args['icon'];
-	} elseif ( isset( $args['dashicon'] ) ) {
-		$legacy    = (string) $args['dashicon'];
-		$icon_name = $dashicon_map[ $legacy ] ?? $icons[ $variant ];
-	}
+	$icon_name = isset( $args['icon'] ) ? (string) $args['icon'] : $icons[ $variant ];
 
 	$inline = empty( $args['inline'] ) ? '' : ' aafm-notice-inline';
+	$extra  = empty( $args['class'] ) ? '' : ' ' . sanitize_html_class( (string) $args['class'] );
 	$body   = empty( $args['html'] ) ? esc_html( $message ) : wp_kses_post( $message );
 
 	return sprintf(
-		'<div class="aafm-notice aafm-notice-%1$s%2$s"><span class="aafm-notice-ic">%3$s</span><div class="aafm-notice-body">%4$s</div></div>',
+		'<div class="aafm-notice aafm-notice-%1$s%2$s%5$s"><span class="aafm-notice-ic">%3$s</span><div class="aafm-notice-body">%4$s</div></div>',
 		esc_attr( $variant ),
 		esc_attr( $inline ),
 		wp_kses( aafm_icon( $icon_name ), aafm_svg_allowed_html() ),
-		$body
+		$body,
+		esc_attr( $extra )
 	);
 }
 

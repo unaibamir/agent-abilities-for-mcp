@@ -13,14 +13,6 @@ use AAFM\Tests\TestCase;
 
 final class IconsTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		// aafm_render_admin_page() defaults to the dashboard tab, which counts activity-log
-		// rows; install the table so the render is clean rather than emitting a DB notice.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_integrations_icon_is_a_non_empty_svg(): void {
 		$svg = aafm_icon( 'integrations' );
 		$this->assertNotSame( '', $svg, 'The integrations icon must not be empty.' );

@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce' | 'slim_seo' | 'tec' | 'event_tickets' | 'avada' | 'geodirectory'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
@@ -42,6 +42,21 @@ function aafm_integration_active( string $slug ): bool {
 			break;
 		case 'woocommerce':
 			$active = aafm_woocommerce_active();
+			break;
+		case 'slim_seo':
+			$active = aafm_slim_seo_active();
+			break;
+		case 'tec':
+			$active = aafm_tec_active();
+			break;
+		case 'event_tickets':
+			$active = aafm_event_tickets_active();
+			break;
+		case 'avada':
+			$active = aafm_avada_active();
+			break;
+		case 'geodirectory':
+			$active = aafm_geodirectory_active();
 			break;
 		default:
 			return false;
@@ -165,6 +180,174 @@ function aafm_aioseo_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_aioseo_active', $active );
+}
+
+/**
+ * Whether Slim SEO is active, behind a filterable seam (see aafm_yoast_active() for the
+ * rationale). No version floor: Slim SEO's single-serialized-meta-key shape
+ * (`slim_seo`, six fields) has shown no breaking-change history worth gating on, unlike AIOSEO's
+ * partial-save fix - a deliberate choice, not an oversight.
+ *
+ * SLIM_SEO_VER (not SLIM_SEO_VERSION) is the constant Slim SEO actually defines, confirmed
+ * 2026-09-03 against plugins.svn.wordpress.org/slim-seo/trunk/slim-seo.php.
+ *
+ * @return bool
+ */
+function aafm_slim_seo_active(): bool {
+	$active = defined( 'SLIM_SEO_VER' );
+
+	/**
+	 * Filters whether Slim SEO is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_slim_seo_active', $active );
+}
+
+/**
+ * The Events Calendar's minimum required version.
+ *
+ * Pinned to the version verified locally when this integration was built
+ * (wp/wp-content/plugins/the-events-calendar/src/Tribe/Main.php:43); raise only with a stated
+ * reason.
+ */
+if ( ! defined( 'AAFM_TEC_MIN_VERSION' ) ) {
+	define( 'AAFM_TEC_MIN_VERSION', '6.17.3.1' );
+}
+
+/**
+ * The TEC version this site reports, or null when undetectable. Filterable, mirroring
+ * aafm_aioseo_version() so the test suite can pin an arbitrary version without defining the real
+ * Tribe__Events__Main::VERSION constant.
+ *
+ * @return string|null
+ */
+function aafm_tec_version(): ?string {
+	$version = class_exists( 'Tribe__Events__Main' ) && defined( 'Tribe__Events__Main::VERSION' )
+		? (string) Tribe__Events__Main::VERSION
+		: null;
+
+	/**
+	 * Filters the TEC version reported for the ability floor check.
+	 *
+	 * @param string|null $version Detected version, or null when undetectable.
+	 */
+	return apply_filters( 'aafm_tec_version', $version );
+}
+
+/**
+ * Whether The Events Calendar is active AND at or above AAFM_TEC_MIN_VERSION, behind a
+ * filterable seam.
+ *
+ * @return bool
+ */
+function aafm_tec_active(): bool {
+	$active = class_exists( 'Tribe__Events__Main' ) && function_exists( 'tribe_events' );
+	if ( $active ) {
+		$version = aafm_tec_version();
+		$active  = null !== $version && version_compare( $version, AAFM_TEC_MIN_VERSION, '>=' );
+	}
+
+	/**
+	 * Filters whether TEC is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_tec_active', $active );
+}
+
+/**
+ * Event Tickets' minimum required version.
+ *
+ * Pinned to the version verified locally when this integration was built
+ * (wp/wp-content/plugins/event-tickets/src/Tribe/Main.php:21); raise only with a stated reason.
+ */
+if ( ! defined( 'AAFM_EVENT_TICKETS_MIN_VERSION' ) ) {
+	define( 'AAFM_EVENT_TICKETS_MIN_VERSION', '5.29.3.1' );
+}
+
+/**
+ * The Event Tickets version this site reports, or null when undetectable.
+ *
+ * @return string|null
+ */
+function aafm_event_tickets_version(): ?string {
+	$version = class_exists( 'Tribe__Tickets__Main' ) && defined( 'Tribe__Tickets__Main::VERSION' )
+		? (string) Tribe__Tickets__Main::VERSION
+		: null;
+
+	/**
+	 * Filters the Event Tickets version reported for the ability floor check.
+	 *
+	 * @param string|null $version Detected version, or null when undetectable.
+	 */
+	return apply_filters( 'aafm_event_tickets_version', $version );
+}
+
+/**
+ * Whether Event Tickets is active AND at or above AAFM_EVENT_TICKETS_MIN_VERSION, behind a
+ * filterable seam. A distinct slug from 'tec': Event Tickets is a separate plugin that can
+ * theoretically be absent while The Events Calendar is present.
+ *
+ * @return bool
+ */
+function aafm_event_tickets_active(): bool {
+	$active = class_exists( 'Tribe__Tickets__Main' ) && function_exists( 'tribe_tickets' );
+	if ( $active ) {
+		$version = aafm_event_tickets_version();
+		$active  = null !== $version && version_compare( $version, AAFM_EVENT_TICKETS_MIN_VERSION, '>=' );
+	}
+
+	/**
+	 * Filters whether Event Tickets is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_event_tickets_active', $active );
+}
+
+/**
+ * Whether Avada/Fusion Builder is active, behind a filterable seam.
+ *
+ * Avada is a theme, not a plugin, and Fusion Builder ships as the bundled
+ * fusion-builder plugin - detection keys on the plugin's own runtime, confirmed
+ * (2026-09-05) against a real installed copy (Fusion Builder 3.16.1): the class
+ * FusionBuilder always exists once the plugin has loaded, and fusion_builder_map()
+ * is one of its own core registration functions. No version floor is imposed - unlike
+ * TEC/Event Tickets, this plan pins no minimum Avada/Fusion Builder version.
+ *
+ * @return bool
+ */
+function aafm_avada_active(): bool {
+	$active = class_exists( 'FusionBuilder' ) && function_exists( 'fusion_builder_map' );
+
+	/**
+	 * Filters whether Avada/Fusion Builder is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_avada_active', $active );
+}
+
+/**
+ * Whether GeoDirectory is active, behind a filterable seam.
+ *
+ * Real detection is the same pairing Task 22's own research used to confirm the plugin's
+ * runtime: the geodir_get_post_info() function (includes/post-functions.php) plus the gd_place
+ * post type it registers (includes/class-geodir-post-types.php) both being present, so a partial
+ * or mid-activation state does not falsely report active.
+ *
+ * @return bool
+ */
+function aafm_geodirectory_active(): bool {
+	$active = function_exists( 'geodir_get_post_info' ) && post_type_exists( 'gd_place' );
+
+	/**
+	 * Filters whether GeoDirectory is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_geodirectory_active', $active );
 }
 
 /**

@@ -33,7 +33,11 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// CREATE; dbDelta never changes an existing table's engine, so the bump re-runs the installer
 	// once, which converts a pre-existing MyISAM lifecycle table with a guarded one-time ALTER
 	// (aafm_oauth_enforce_lifecycle_engine()). The stored charset/collation is unchanged.
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '7' );
+	// v8 adds an `is_agent_identity` column to the clients table: an operator-settable flag,
+	// distinct from the existing user-level aafm_agent_user_marker_meta_key() marker, that marks
+	// an OAuth client itself as an agent connection. Defaults to 0 for every existing row, so a
+	// bump changes no client's flagged state. Additive, no data migration.
+	define( 'AAFM_OAUTH_SCHEMA_VERSION', '8' );
 }
 
 /**
@@ -75,6 +79,7 @@ function aafm_install_oauth_tables(): void {
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		created_by_ip VARCHAR(45) NOT NULL DEFAULT '',
 		is_active TINYINT(1) NOT NULL DEFAULT 1,
+		is_agent_identity TINYINT(1) NOT NULL DEFAULT 0,
 		PRIMARY KEY  (id),
 		UNIQUE KEY client_id (client_id),
 		KEY created_at (created_at)
@@ -304,16 +309,28 @@ function aafm_oauth_finalize_schema( bool $engine_ok ): void {
 	}
 
 	if ( $schema_ok && $engine_ok ) {
-		update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_oauth_tables()
+		// below trusts this stamp to decide whether the installer needs to run again, so a write
+		// that a persistent cache silently no-ops must not be allowed to look like it landed.
+		if ( ! aafm_update_option_verified( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION ) ) {
+			// Codex round 8 R8-3: this return value used to be discarded. The schema itself is
+			// genuinely fine, but with the version left un-stamped, aafm_maybe_upgrade_oauth_tables()
+			// reruns dbDelta() every request instead of settling - and the error transient above
+			// was already cleared on the strength of $schema_ok alone, hiding the persist failure
+			// from the admin notice. Re-set the transient and log the failure so it is visible.
+			set_transient( 'aafm_oauth_schema_error', time(), DAY_IN_SECONDS );
+			aafm_log_ability_persist_failure( 'aafm_oauth_schema_version', __( 'The OAuth schema version', 'agent-abilities-for-mcp' ) );
+		}
 	}
 }
 
 /**
  * Whether the OAuth schema is actually present: all four tables plus the latest columns.
  *
- * Verifies table presence and the v6 `scope` column on codes + access-tokens - the most recent
- * migration, so its absence is the signal a dbDelta run did not fully land. Gates the version
- * stamp in aafm_oauth_finalize_schema().
+ * Verifies table presence, the v6 `scope` column on codes + access-tokens, and the v8
+ * `is_agent_identity` column on clients - the most recent migration, so its absence is the
+ * signal a dbDelta run did not fully land. Gates the version stamp in
+ * aafm_oauth_finalize_schema().
  *
  * @return bool
  */
@@ -327,7 +344,8 @@ function aafm_oauth_schema_verify(): bool {
 	}
 
 	return aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_codes', 'scope' )
-		&& aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_access_tokens', 'scope' );
+		&& aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_access_tokens', 'scope' )
+		&& aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_clients', 'is_agent_identity' );
 }
 
 /**
@@ -392,10 +410,15 @@ add_action( 'admin_notices', 'aafm_oauth_schema_admin_notice' );
  * every admin request without churn. dbDelta() is safe to re-run and the
  * installer resets the option. Mirrors the audit log's activation wiring.
  *
+ * Reads the database row directly rather than get_option()'s cache-trusting view (Codex round 7,
+ * R7-2): a stale cached current version over an old/absent database row would skip a genuinely
+ * needed install, and this file's own docblocks identify missing tables/columns as the failure
+ * this guard exists to catch.
+ *
  * @return void
  */
 function aafm_maybe_upgrade_oauth_tables(): void {
-	if ( get_option( 'aafm_oauth_schema_version' ) === AAFM_OAUTH_SCHEMA_VERSION ) {
+	if ( AAFM_OAUTH_SCHEMA_VERSION === (string) aafm_read_option_views( 'aafm_oauth_schema_version' )['db_value'] ) {
 		return;
 	}
 
@@ -409,16 +432,35 @@ function aafm_maybe_upgrade_oauth_tables(): void {
  * which rewrites these tables to their TEMPORARY form (TRUNCATE cannot target a
  * temporary table in some MySQL configs). Mirrors aafm_drop_oauth_tables()' escaping.
  *
- * @return void
+ * Certifies each table by reading its row count back rather than trusting the DELETE's own
+ * affected-row count (Codex round 9, R9-3): a table this call never actually reached still
+ * counts as failed, even though it never contributes a nonzero affected-row count either way.
+ *
+ * The confirmation read goes through aafm_wpdb_scalar() rather than a bare get_var() (Codex round
+ * 10, R10-3): a get_var() read that itself failed used to cast straight to `(int) null === 0`,
+ * the same "unreadable, so call it empty" mistake the DELETE-count fix above already closed, just
+ * one query later.
+ *
+ * @return bool True when every table is confirmed empty after this call.
  */
-function aafm_truncate_oauth_tables(): void {
+function aafm_truncate_oauth_tables(): bool {
 	global $wpdb;
 
+	$ok = true;
 	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+		$table = $wpdb->prefix . $suffix;
 		// Internal table name bound as a SQL identifier via %i (available since WP 6.2).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i', $wpdb->prefix . $suffix ) );
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i', $table ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$remaining = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+		if ( ! $remaining['ok'] || 0 !== (int) $remaining['value'] ) {
+			$ok = false;
+		}
 	}
+
+	return $ok;
 }
 
 /**

@@ -29,10 +29,6 @@ final class ReadsCatalogTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// The audited registration wrapper logs every permission check and execute to the
-		// custom table, so it must exist before any ability is registered/invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		// Wave 4: integration abilities only contribute to the registry when their host
 		// plugin is active. Force all three active (+ the mandatory registry-memo flush, the
@@ -42,6 +38,11 @@ final class ReadsCatalogTest extends TestCase {
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
+		add_filter( 'aafm_integration_active_tec', '__return_true' );
+		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		add_filter( 'aafm_integration_active_avada', '__return_true' );
+		add_filter( 'aafm_integration_active_geodirectory', '__return_true' );
 		aafm_registry_cache_should_flush( true );
 	}
 
@@ -71,9 +72,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 76 reads - no more, no fewer.'
+			'The read group must be exactly the 86 reads - no more, no fewer.'
 		);
-		$this->assertCount( count( self::READS ), $reads, 'The read catalog ships exactly 76 read abilities.' );
+		$this->assertCount( count( self::READS ), $reads, 'The read catalog ships exactly 89 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

@@ -318,6 +318,38 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 	}
 
+	/**
+	 * Codex final round 4 MEDIUM: Event Tickets abilities require TEC active too (they're gated
+	 * on a parent event), but the card reported a bare 'active' from Event Tickets alone - the
+	 * operator could enable abilities that would never actually register. The card must report a
+	 * distinct status instead of claiming a readiness the runtime registration gate doesn't grant,
+	 * and its checkboxes must render disabled ($disabled derives directly from status !== 'active').
+	 */
+	public function test_event_tickets_reports_missing_dependency_without_tec(): void {
+		// Force TEC off explicitly rather than assuming it's off by default: once any
+		// earlier test in this process stubs Tribe__Events__Main, class_exists() (and so
+		// aafm_tec_active()) stays true for the rest of the run - classes can't be
+		// undefined. The filter override is the only way to get a genuine "TEC absent"
+		// read in a shared process, matching the sibling test's symmetric "force it on".
+		add_filter( 'aafm_integration_active_tec', '__return_false' );
+		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		$this->assertSame( 'missing_dependency', aafm_integration_status( 'event_tickets' ) );
+
+		$note = aafm_integration_status_note( 'event_tickets', 'missing_dependency' );
+		$this->assertStringContainsString( 'The Events Calendar', $note );
+
+		remove_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		remove_filter( 'aafm_integration_active_tec', '__return_false' );
+	}
+
+	public function test_event_tickets_reports_active_with_tec_also_active(): void {
+		add_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+		add_filter( 'aafm_integration_active_tec', '__return_true' );
+		$this->assertSame( 'active', aafm_integration_status( 'event_tickets' ) );
+		remove_filter( 'aafm_integration_active_tec', '__return_true' );
+		remove_filter( 'aafm_integration_active_event_tickets', '__return_true' );
+	}
+
 	public function test_each_card_is_a_collapsed_details_accordion(): void {
 		$this->acting_as( 'administrator' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
@@ -367,8 +399,9 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 
 		// Each card carries a per-card filter: a search input plus the All / Read Only / Write group.
-		// There are five integration cards, so each control appears at least five times.
-		$this->assertSame( 5, substr_count( $html, 'aafm-integration-filter' ) );
+		// There are ten integration cards (1.7.4 adds Slim SEO, The Events Calendar, Event
+		// Tickets, Avada, and GeoDirectory), so each control appears at least ten times.
+		$this->assertSame( 10, substr_count( $html, 'aafm-integration-filter' ) );
 		$this->assertStringContainsString( 'type="search"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="all"', $html );
 		$this->assertStringContainsString( 'data-filter-risk="read"', $html );
@@ -413,6 +446,43 @@ final class IntegrationsTabTest extends TestCase {
 			remove_filter( 'aafm_rankmath_active', '__return_false', 99 );
 			remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 			remove_all_filters( 'aafm_woocommerce_version' );
+		}
+	}
+
+	/**
+	 * Codex final round 4 MEDIUM: the below-floor status note hardcoded WooCommerce's own
+	 * constant and version-reader function for EVERY integration, so a TEC site below its real
+	 * floor was told to install a WooCommerce version it likely already had. Must resolve the
+	 * minimum and installed version from TEC's own pair instead.
+	 */
+	public function test_tec_card_shows_its_own_below_floor_reason_not_woocommerces(): void {
+		$this->acting_as( 'administrator' );
+		if ( ! class_exists( 'Tribe__Events__Main' ) ) {
+			eval( 'class Tribe__Events__Main {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- class-only marker stub for the floor test, never shipped.
+		}
+		add_filter(
+			'aafm_tec_version',
+			static function () {
+				return '6.0.0';
+			}
+		);
+		add_filter( 'aafm_yoast_active', '__return_false', 99 );
+		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
+
+		try {
+			$this->assertSame( 'below_floor', aafm_integration_status( 'tec' ) );
+
+			$note = aafm_integration_status_note( 'tec', 'below_floor' );
+
+			$this->assertStringContainsString( AAFM_TEC_MIN_VERSION, $note );
+			$this->assertStringContainsString( '6.0.0', $note );
+			$this->assertStringNotContainsString( AAFM_WOOCOMMERCE_MIN_VERSION, $note );
+		} finally {
+			remove_filter( 'aafm_aioseo_active', '__return_false', 99 );
+			remove_filter( 'aafm_rankmath_active', '__return_false', 99 );
+			remove_filter( 'aafm_yoast_active', '__return_false', 99 );
+			remove_all_filters( 'aafm_tec_version' );
 		}
 	}
 

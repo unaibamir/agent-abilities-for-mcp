@@ -13,12 +13,6 @@ use AAFM\Tests\TestCase;
 
 final class HelpTabTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_help_tab_renders_section_headings(): void {
 		$this->acting_as( 'administrator' );
 
@@ -158,7 +152,7 @@ final class HelpTabTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		// The plain-language security model accordion (the differentiator).
-		$this->assertStringContainsString( 'No external calls', $html );
+		$this->assertStringContainsString( 'No phoning home', $html );
 		$this->assertStringContainsString( 'dedicated low-privilege user', $html );
 		$this->assertStringContainsString( 'Two locks on every ability', $html );
 		// The trash-vs-delete distinction: trash is recoverable, delete (and every media/user

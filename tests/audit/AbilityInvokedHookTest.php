@@ -14,12 +14,6 @@ use AAFM\Tests\TestCase;
 
 final class AbilityInvokedHookTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	/**
 	 * Skip a test whose fixture genuinely cannot be built on this core: wp_pre_execute_ability, the
 	 * wp_ability_invoked action, and WP_Ability::invoke_callback()'s Throwable-to-WP_Error

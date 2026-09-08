@@ -57,13 +57,24 @@ final class NoticesTest extends TestCase {
 		$this->assertStringContainsString( $shield, $html );
 	}
 
-	public function test_legacy_dashicon_arg_maps_to_svg(): void {
-		// Back-compat: the old dashicon override name maps to the closest aafm_icon glyph.
-		// The notice embeds the icon through wp_kses() (escape-late), so compare against the
-		// same escaped form - the distinctive shield path survives kses unchanged.
-		$shield = wp_kses( aafm_icon( 'shield' ), aafm_svg_allowed_html() );
-		$html   = aafm_get_notice_html( 'info', 'x', array( 'dashicon' => 'dashicons-shield' ) );
-		$this->assertStringContainsString( $shield, $html );
-		$this->assertStringNotContainsString( 'dashicons', $html );
+	public function test_get_notice_html_appends_an_extra_class_to_the_wrapper(): void {
+		$html = aafm_get_notice_html( 'info', 'A message.', array( 'class' => 'aafm-os-note' ) );
+
+		$this->assertStringContainsString( 'aafm-notice aafm-notice-info aafm-os-note"', $html );
+	}
+
+	public function test_get_notice_html_sanitizes_a_hostile_class_argument(): void {
+		// aafm_get_notice_html() documents a single extra class via sanitize_html_class(),
+		// which strips anything that isn't a valid single CSS class token - prove a
+		// multi-token/hostile value collapses to something safe rather than injecting markup.
+		$html = aafm_get_notice_html( 'info', 'A message.', array( 'class' => '"><script>alert(1)</script>' ) );
+
+		$this->assertStringNotContainsString( '<script>', $html );
+		// The literal injection pattern (closing the class attribute's quote early, then closing
+		// the tag) never survives - only alphanumeric/underscore/hyphen characters remain in the
+		// class token, so a plain "><, which any two adjacent normal HTML tags also produce, is
+		// not itself proof of anything; the real proof is that the hostile "><script sequence
+		// specifically is gone.
+		$this->assertStringNotContainsString( '"><script', $html );
 	}
 }

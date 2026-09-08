@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Guard: the committed composer autoloader may reference only the shipped
-# vendor set (vendor/wordpress, vendor/composer). Every other vendor
-# subdirectory is dev-only and excluded from the release zip by .distignore,
-# so any OTHER reference means the autoloader was regenerated with dev
-# dependencies present - the fb9e16f class of bug: a `require` that resolves
-# locally (the dev packages are on disk during a dev commit) but does not
-# exist in the shipped tree, fatalling every install.
+# vendor set (vendor/wordpress, vendor/composer, vendor/automattic - the last
+# added with the mcp-adapter 0.6.1 bump, which pulls in
+# automattic/jetpack-autoloader as a real production dependency, not a dev
+# one; see composer.json's require block). Every other vendor subdirectory is
+# dev-only and excluded from the release zip by .distignore, so any OTHER
+# reference means the autoloader was regenerated with dev dependencies
+# present - the fb9e16f class of bug: a `require` that resolves locally (the
+# dev packages are on disk during a dev commit) but does not exist in the
+# shipped tree, fatalling every install.
 #
 # Two source shapes are checked, because Composer emits vendor paths
 # differently across the generated files:
@@ -54,28 +57,37 @@ case "${1:-}" in
   --list)     MODE="list" ;;
 esac
 
-# Extract every vendor package name a composer autoloader's __DIR__/$vendorDir
-# concatenation form references, deduped and sorted, unfiltered (no allow/deny
-# applied here - that happens in check_content()).
+# Extract every vendor PACKAGE ROOT (vendor-org/package-name, two segments - a
+# single top-level segment like "automattic" is not a package, it is a vendor
+# org that can hold both shipped and dev-only packages) a composer
+# autoloader's __DIR__/$vendorDir concatenation form references, deduped and
+# sorted, unfiltered (no allow/deny applied here - that happens in
+# check_content()). The character class includes "/" so a package under an
+# org directory (e.g. "automattic/jetpack-autoloader") is captured whole
+# before being reduced to its first two segments below.
 extract_packages() {
 	local content="$1"
 	{
 		printf '%s\n' "$content" \
-			| grep -oE "__DIR__ \. '/\.\.' \. '/[A-Za-z0-9_.-]+" \
+			| grep -oE "__DIR__ \. '/\.\.' \. '/[A-Za-z0-9_./-]+" \
 			| sed -E "s#.*\. '/##"
 		printf '%s\n' "$content" \
-			| grep -oE "\\\$vendorDir \. '/[A-Za-z0-9_.-]+" \
+			| grep -oE "\\\$vendorDir \. '/[A-Za-z0-9_./-]+" \
 			| sed -E "s#.*'/##"
-	} | sort -u
+	} | cut -d/ -f1-2 | sort -u
 }
 
 check_content() {
 	local label="$1"
 	local content="$2"
 	local bad
-	bad="$(extract_packages "$content" | grep -vE '^(wordpress|composer)$' || true)"
+	# Two-segment package roots, except vendor/composer/* itself: Composer's
+	# own generated support files (InstalledVersions.php etc.) sit directly
+	# under vendor/composer/ with no further package subdirectory, so a
+	# two-segment extraction there is "composer/<file>", not a package name.
+	bad="$(extract_packages "$content" | grep -vE '^(wordpress/mcp-adapter$|wordpress/php-mcp-schema$|automattic/jetpack-autoloader$|composer/)' || true)"
 	if [ -n "$bad" ]; then
-		echo "✗ $label references vendor package(s) outside the shipped set (vendor/wordpress, vendor/composer):" >&2
+		echo "✗ $label references vendor package(s) outside the shipped set (wordpress/mcp-adapter, wordpress/php-mcp-schema, automattic/jetpack-autoloader, composer's own generated files):" >&2
 		echo "$bad" | sed 's/^/    - vendor\//' >&2
 		return 1
 	fi

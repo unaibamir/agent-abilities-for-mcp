@@ -15,12 +15,6 @@ use AAFM\Tests\TestCase;
 
 final class HighRiskSaveGuardTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	/**
 	 * Put WooCommerce-subject rows into the LIVE registry for the duration of a test, so the
 	 * high-risk builtins resolve without WooCommerce actually being installed under PHPUnit.

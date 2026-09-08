@@ -330,20 +330,13 @@ function aafm_args_wc_list_products(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array_merge(
+				aafm_pagination_schema_props(
+					100,
+					__( 'Number of products per page, 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
+					__( 'Page number of products to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' )
+				),
 				array(
-					'page'     => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( 'Page number of products to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page' => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => 100,
-						'description' => __( 'Number of products per page, 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
-					),
-					'status'   => array(
+					'status' => array(
 						'type'        => 'string',
 						'description' => "Status filter; 'any' returns all states.",
 						'enum'        => array( 'any', 'publish', 'draft', 'pending', 'private' ),
@@ -696,11 +689,25 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 			);
 		}
 	}
+	// WooCommerce stores these two fields as the product post's post_content/post_excerpt
+	// (Codex round 9 R9-1), so they go through the same block-content guard every other
+	// post_content write uses -- strict mode refuses markup that would show as invalid in the
+	// editor instead of silently storing it.
 	if ( array_key_exists( 'description', $input ) ) {
-		$product->set_description( wp_kses_post( (string) $input['description'] ) );
+		$description = wp_kses_post( (string) $input['description'] );
+		$guard       = aafm_block_guard_evaluate( $description );
+		if ( $guard['error'] instanceof \WP_Error ) {
+			return $guard['error'];
+		}
+		$product->set_description( $description );
 	}
 	if ( array_key_exists( 'short_description', $input ) ) {
-		$product->set_short_description( wp_kses_post( (string) $input['short_description'] ) );
+		$short_description = wp_kses_post( (string) $input['short_description'] );
+		$guard             = aafm_block_guard_evaluate( $short_description );
+		if ( $guard['error'] instanceof \WP_Error ) {
+			return $guard['error'];
+		}
+		$product->set_short_description( $short_description );
 	}
 	if ( array_key_exists( 'regular_price', $input ) ) {
 		$product->set_regular_price( aafm_wc_sanitize_price( $input['regular_price'] ) );
@@ -1221,6 +1228,21 @@ function aafm_exec_wc_update_product( array $input ) {
 	$product = aafm_wc_get_product( (int) ( $input['product_id'] ?? 0 ) );
 	if ( null === $product ) {
 		return aafm_generic_error();
+	}
+
+	// Codex round 9 R9-1 / round 10 R10-6: description/short_description are the only two fields
+	// aafm_wc_apply_product_input() routes to this product post's post_content/post_excerpt, so an
+	// EXISTING product owned by a foreign page builder gets the same refusal every other
+	// content-write ability gives -- but only when one of those two fields is actually present.
+	// Checking this unconditionally (the original R9-1 fix) refused unrelated price/SKU/stock/
+	// category/status updates on a builder-owned product, which never touch post_content or
+	// post_excerpt and so have nothing for the builder to silently ignore. A brand-new product has
+	// no prior owner, so aafm_exec_wc_create_product() does not need this check either way.
+	if ( array_key_exists( 'description', $input ) || array_key_exists( 'short_description', $input ) ) {
+		$owning_builder = aafm_post_has_foreign_builder_ownership( $product->get_id() );
+		if ( false !== $owning_builder ) {
+			return aafm_page_builder_owned_error( $owning_builder );
+		}
 	}
 
 	// `type` cannot be changed on update -- converting a product between simple/grouped/external/

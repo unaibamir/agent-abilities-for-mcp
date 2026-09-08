@@ -17,8 +17,6 @@ final class ReadOnlyModeTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		delete_option( 'aafm_enabled_bridged_abilities' );
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 	}
 
 	public function tear_down(): void {

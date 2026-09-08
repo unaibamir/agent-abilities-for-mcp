@@ -29,7 +29,7 @@ final class AdapterEagerLoadTest extends TestCase {
 		// The bootstrap registers our loader; assert the autoload chain is non-empty and our mapper
 		// resolves WP\MCP\Core\McpAdapter to a path inside our bundle. We do NOT assert spl_autoload_
 		// functions()[0]: other prepended Composer autoloaders sit in front by suite runtime, so a
-		// "we are at index 0" claim would be false. The real guarantee - that PHP commits to our 0.5.0
+		// "we are at index 0" claim would be false. The real guarantee - that PHP commits to our 0.6.1
 		// copy - is covered by test_eager_load_declares_adapter_from_our_bundle().
 		$functions = (array) spl_autoload_functions();
 		$this->assertNotEmpty( $functions );
@@ -75,7 +75,7 @@ final class AdapterEagerLoadTest extends TestCase {
 		$file     = ( new \ReflectionClass( \WP\MCP\Core\McpAdapter::class ) )->getFileName();
 		$expected = realpath( AAFM_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php' );
 		$this->assertSame( $expected, realpath( (string) $file ), 'McpAdapter must be declared from our bundle.' );
-		$this->assertSame( '0.5.0', \WP\MCP\Core\McpAdapter::VERSION );
+		$this->assertSame( '0.6.1', \WP\MCP\Core\McpAdapter::VERSION );
 	}
 
 	public function test_eager_load_is_idempotent(): void {

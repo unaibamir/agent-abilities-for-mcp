@@ -15,10 +15,6 @@ final class MediaReadTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// The audited registration wrapper logs every permission check and execute to the
-		// custom table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
 		// by pushing the action name onto $wp_current_filter - the idiom WP core's own
@@ -211,6 +207,174 @@ final class MediaReadTest extends TestCase {
 
 		$this->assertContains( $needle, $ids );
 		$this->assertCount( 1, $out['media'] );
+	}
+
+	public function test_get_media_search_matches_by_filename(): void {
+		$this->acting_as( 'author' );
+		$id = self::factory()->attachment->create_object(
+			'sunset-photo.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_title'     => 'Photo',
+			)
+		);
+		update_post_meta( $id, '_wp_attached_file', 'sunset-photo.jpg' );
+
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'sunset' ) );
+
+		$this->assertSame( array( $id ), wp_list_pluck( $out['media'], 'id' ) );
+		$this->assertSame( 1, $out['total'] );
+	}
+
+	public function test_get_media_search_matches_by_alt_text(): void {
+		$this->acting_as( 'author' );
+		$id = self::factory()->attachment->create_object(
+			'pic.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_title'     => 'Pic',
+			)
+		);
+		update_post_meta( $id, '_wp_attachment_image_alt', 'a red bicycle leaning on a wall' );
+
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'bicycle' ) );
+
+		$this->assertSame( array( $id ), wp_list_pluck( $out['media'], 'id' ) );
+	}
+
+	/**
+	 * Dropping core 's' in favor of the posts_where OR group must not regress the
+	 * caption/description match core 's' used to provide against post_excerpt/post_content.
+	 */
+	public function test_get_media_search_still_matches_by_caption_and_description(): void {
+		$this->acting_as( 'author' );
+		$id = self::factory()->attachment->create_object(
+			'pic2.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_title'     => 'Pic2',
+				'post_excerpt'   => 'A caption mentioning zephyrwing',
+				'post_content'   => 'A description mentioning gizmotron',
+			)
+		);
+
+		$caption = wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'zephyrwing' ) );
+		$this->assertContains( $id, wp_list_pluck( $caption['media'], 'id' ) );
+
+		$description = wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'gizmotron' ) );
+		$this->assertContains( $id, wp_list_pluck( $description['media'], 'id' ) );
+	}
+
+	/**
+	 * An item matching both title and alt text via the OR group must appear exactly once
+	 * (the EXISTS subquery never multiplies rows the way a JOIN against postmeta would).
+	 */
+	public function test_get_media_search_match_on_multiple_fields_appears_once(): void {
+		$this->acting_as( 'author' );
+		$id = self::factory()->attachment->create_object(
+			'both.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_title'     => 'Widget item',
+			)
+		);
+		update_post_meta( $id, '_wp_attachment_image_alt', 'a widget close up' );
+
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'widget' ) );
+
+		$this->assertSame( array( $id ), wp_list_pluck( $out['media'], 'id' ) );
+		$this->assertSame( 1, $out['total'] );
+	}
+
+	/**
+	 * The scoped posts_where filter is added and removed around one query; it must never
+	 * survive to affect an unrelated query run afterward in the same request.
+	 */
+	public function test_get_media_search_filter_does_not_leak_onto_a_later_query(): void {
+		$this->acting_as( 'author' );
+		self::factory()->attachment->create_object(
+			'leak.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_title'     => 'LeakNeedleTitle',
+			)
+		);
+		$other_post = self::factory()->post->create( array( 'post_title' => 'An unrelated published post' ) );
+
+		wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'LeakNeedleTitle' ) );
+
+		$query = new \WP_Query(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+				'p'           => $other_post,
+			)
+		);
+		$this->assertSame(
+			1,
+			$query->post_count,
+			'A leaked posts_where filter (still scoped to the media search term) would make this unrelated post-lookup return nothing.'
+		);
+	}
+
+	/**
+	 * Codex hunt F2: the scoped posts_where filter had no query-identity marker, so it ran
+	 * against EVERY WP_Query built while it was attached, not only its own - an unrelated
+	 * nested WP_Query fired from a hook during the search (e.g. a 'pre_get_posts' callback
+	 * elsewhere in the stack) would incorrectly receive the same title/content/excerpt/meta OR
+	 * clause too. A private per-call marker in the query args must keep the filter scoped to
+	 * its own query only, the same fix already applied to the GeoDirectory listing scan and the
+	 * sitewide replace scan for the identical shape.
+	 */
+	public function test_get_media_search_filter_does_not_contaminate_a_nested_query(): void {
+		$this->acting_as( 'author' );
+		self::factory()->attachment->create_object(
+			'nestedneedle.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_title'     => 'NestedNeedleTitle',
+			)
+		);
+		$other_post = self::factory()->post->create( array( 'post_title' => 'An unrelated published post' ) );
+
+		$nested_result = null;
+		$callback      = function ( $query ) use ( &$nested_result, $other_post ) {
+			// Only react to our own outer media search query; the nested probe below must fall
+			// through untouched (it carries no 'attachment'/'aafm_query_marker' shape).
+			if ( 'attachment' !== $query->get( 'post_type' ) ) {
+				return;
+			}
+			$nested        = new \WP_Query(
+				array(
+					'post_type'   => 'post',
+					'post_status' => 'publish',
+					'p'           => $other_post,
+				)
+			);
+			$nested_result = $nested->posts;
+		};
+		add_action( 'pre_get_posts', $callback );
+
+		wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'NestedNeedleTitle' ) );
+
+		remove_action( 'pre_get_posts', $callback );
+
+		$this->assertNotEmpty(
+			$nested_result,
+			'A nested query fired mid-search must not be contaminated by the media search filter.'
+		);
 	}
 
 	public function test_get_media_item_is_in_registry_as_read(): void {

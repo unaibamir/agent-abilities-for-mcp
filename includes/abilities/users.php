@@ -96,27 +96,23 @@ function aafm_args_get_users(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'role'     => array(
-					'type'        => 'string',
-					'description' => __( 'Filter to users holding exactly this role slug (for example administrator or editor). An unrecognized slug simply matches no one; it is not validated against a list of real roles.', 'agent-abilities-for-mcp' ),
+			'properties'           => array_merge(
+				array(
+					'role'   => array(
+						'type'        => 'string',
+						'description' => __( 'Filter to users holding exactly this role slug (for example administrator or editor). An unrecognized slug simply matches no one; it is not validated against a list of real roles.', 'agent-abilities-for-mcp' ),
+					),
+					'search' => array(
+						'type'        => 'string',
+						'description' => __( 'Free-text search wrapped in wildcards and matched against login, nicename, display name, email, and URL.', 'agent-abilities-for-mcp' ),
+					),
 				),
-				'search'   => array(
-					'type'        => 'string',
-					'description' => __( 'Free-text search wrapped in wildcards and matched against login, nicename, display name, email, and URL.', 'agent-abilities-for-mcp' ),
-				),
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PER_PAGE_MAX,
-					'description' => __( 'Number of users per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-				),
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-				),
+				aafm_pagination_schema_props(
+					AAFM_LIST_PER_PAGE_MAX,
+					__( 'Number of users per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
+					true
+				)
 			),
 			'additionalProperties' => false,
 		),

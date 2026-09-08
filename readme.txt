@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.3
+Stable tag: 1.7.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,9 +14,9 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 
 = WordPress MCP server for AI agents, governed and off by default =
 
-Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
+Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 179 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
-Nothing is exposed until you turn it on. Permission controls are the point: the agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities before it runs. The audit log covers the rest. Every call is written down before it runs, denied attempts included, so you can see both what the agent did and what it was stopped from doing. You add reach as you build trust, not all at once. Your own AI client connects in to your site; Agent Abilities for MCP makes no requests to any external or third-party service and has no telemetry.
+Nothing is exposed until you turn it on. Permission controls are the point: the agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities before it runs. The audit log covers the rest. Every call is written down before it runs, denied attempts included, so you can see both what the agent did and what it was stopped from doing. You add reach as you build trust, not all at once. Your own AI client connects in to your site; Agent Abilities for MCP contacts no AI provider and has no telemetry. The one ability that reaches an external address, upload-media-from-url, is off by default, fetches only a URL you explicitly give it, and is SSRF-hardened.
 
 Prefer to watch first? Here is a short walkthrough of the plugin in action.
 
@@ -37,25 +37,25 @@ An MCP server hands a language model the ability to change your live site, so ho
 * **Read-only mode.** One switch stops every ability that writes from being registered at all, whatever is ticked, including abilities brought in from your other plugins. It turns nothing on or off by itself, so your selections are still there when you switch it back off.
 * **Two-layer capability gating.** A connection only sees the tools its user can call, and every call re-checks that capability before it runs.
 * **Honest audit log.** Every call is recorded, denied attempts included, with the principal, the argument keys, and a short identifier-only note of what it touched. Free-text argument content is never stored. It lives in your own database and clears from the admin.
-* **Bounded by construction.** No arbitrary option or meta access, no remote URL fetch, no code execution. Uploads are decoded from inline data and checked by their real bytes against an image allow-list, never fetched from a URL. A created user gets the site default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated, and deletes go to Trash where the ability supports it.
+* **Bounded by construction.** No arbitrary option or meta access, no code execution. Uploads are decoded from inline data or fetched from an HTTPS URL, then checked by their real bytes against an image allow-list either way; a URL upload is refused if it targets a private, loopback, or link-local address, and redirects are never followed. A created user gets the site default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated, and deletes go to Trash where the ability supports it.
 * **Optional safety controls.** Switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
-* **No data leaves your site.** The plugin contacts no AI provider and no external service. Your AI client connects in; the plugin never reaches out.
+* **No content leaves your site.** The plugin contacts no AI provider and has no telemetry. Your AI client connects in; the only outbound requests the plugin itself can make are the Connection tab's own reachability check and, only when you turn it on, the upload-media-from-url ability fetching the URL your AI client gives it - that fetch is a normal HTTP GET, so its destination sees the URL, your site's IP, and the request's timing, the same as any browser visiting that address would; it never carries your content, credentials, or site data in the request itself.
 * **Two ways to connect.** Approve an agent in the browser over OAuth, with no secret to put in your config file, or point a dedicated low-privilege user at an Application Password. A guided screen builds the client config and checks the endpoint for you. An Application Password is a whole-site WordPress credential bounded only by that user's role, not something this plugin can scope down, so the allowlist, the high-risk floor, and the audit log below apply to calls made through this plugin's MCP endpoint only. OAuth does not have that limit, since a token this plugin issues only ever authenticates this one endpoint.
 
 = 🤖 Built on the WordPress Abilities API and MCP Adapter =
 
 WordPress 6.9 ships the Abilities API and the official MCP Adapter. Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. It builds on the official MCP Adapter library (wordpress/mcp-adapter) rather than a custom server, so there is no bespoke server to trust and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log for running the Model Context Protocol on WordPress.
 
-= 📦 153 governed abilities =
+= 📦 179 governed abilities =
 
-The plugin ships **153 governed abilities: 83 across WordPress core and 70 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged. Beyond these, it can also bridge abilities declared by your other plugins (see below).
+The plugin ships **179 governed abilities: 85 across WordPress core and 94 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged. Beyond these, it can also bridge abilities declared by your other plugins (see below).
 
-**WordPress core (83 abilities).** Reads plus guarded writes across your whole site:
+**WordPress core (85 abilities).** Reads plus guarded writes across your whole site:
 
 * **📝 Posts & Pages:** list, read, create, update, and delete posts and pages, with destructive actions off by default and deletes routed to Trash.
 * **🏷️ Terms & Taxonomies:** manage categories, tags, and custom taxonomy terms.
 * **💬 Comments:** read and moderate the comment queue.
-* **🖼️ Media:** list and read the media library, and add images decoded from inline data and validated by their real bytes against an image allow-list (never fetched from a URL).
+* **🖼️ Media:** list and read the media library, and add images decoded from inline data or fetched from an HTTPS URL, both validated by their real bytes against an image allow-list.
 * **🗂️ Post Meta:** read and write only the meta keys an administrator has explicitly allowlisted. Protected, underscore-prefixed, and authentication keys can never be allowlisted.
 * **👥 Users:** read and manage users within capability limits. A new user gets the site default role, never admin, and the last administrator can never be removed.
 * **🧭 Site structure:** work with menus and the structural pieces that hold the site together.
@@ -64,13 +64,18 @@ The plugin ships **153 governed abilities: 83 across WordPress core and 70 from 
 * **⚙️ Limited settings & site health:** a tightly scoped set of settings, plus read-only site health and plugin status.
 * **🔍 Site-wide search:** one search that spans every post type at once.
 
-**Integrations (70 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, and logged. Each appears only while its host plugin is active:
+**Integrations (94 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, and logged. Each appears only while its host plugin is active:
 
 * **🛒 WooCommerce MCP (52 abilities):** read and write products, orders, and customers so an AI agent can help run your store. These touch real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear admin notice and stay off until you switch them on.
 * **🧩 Advanced Custom Fields (7 abilities):** read and write ACF field data. Like WooCommerce, these can reach real personal data and sit behind the same clear notice.
 * **📈 Rank Math SEO (5 abilities):** read and manage Rank Math SEO data.
 * **📈 Yoast SEO (3 abilities):** read and manage Yoast SEO data.
 * **📈 All in One SEO (3 abilities):** read and manage AIOSEO data.
+* **📅 The Events Calendar (13 abilities):** read and manage events, venues, and organizers, built on the plugin's own ORM.
+* **🎫 Event Tickets (3 abilities):** read tickets and attendees for an event. No ticket-purchase write is exposed.
+* **📈 Slim SEO (2 abilities):** read and manage Slim SEO data.
+* **🎨 Avada / Fusion Builder (2 abilities):** read a page's raw Fusion Builder markup and replace text in it without disturbing the shortcode layout.
+* **📍 GeoDirectory (4 abilities, off by default):** read and manage business and place listings. Stays off even when GeoDirectory is active; turn it on in the Integrations tab.
 
 More integrations are planned.
 
@@ -161,7 +166,7 @@ Yes, when the connection is scoped, which is what this plugin is built around. T
 
 = What can an agent actually do? =
 
-Only the abilities you have enabled, and only within the bound user's capabilities. The catalog is reads and guarded writes over posts, pages, terms, comments, media, post meta, and site structure, plus revision history and a search that spans every post type at once. There is no ability to change options arbitrarily, change roles, fetch a remote URL, or run code. An agent can only write post meta for keys an administrator has explicitly allowlisted, and protected, underscore-prefixed, and authentication keys can never be allowlisted. Deletes move content to Trash where the ability supports it, and the permanent ones are off by default and capability-gated.
+Only the abilities you have enabled, and only within the bound user's capabilities. The catalog is reads and guarded writes over posts, pages, terms, comments, media, post meta, and site structure, plus revision history and a search that spans every post type at once. There is no ability to change options arbitrarily, change roles, or run code. The one ability that fetches a remote URL is a media upload: it only accepts https, refuses a target that resolves to a private, loopback, or link-local address, never follows a redirect, and stays off until you enable it like every other ability. An agent can only write post meta for keys an administrator has explicitly allowlisted, and protected, underscore-prefixed, and authentication keys can never be allowlisted. Deletes move content to Trash where the ability supports it, and the permanent ones are off by default and capability-gated.
 
 = How does the plugin handle tools and access? =
 
@@ -207,6 +212,10 @@ Any MCP client that can reach your site's endpoint. With OAuth you paste the end
 
 Yes. In ChatGPT, turn on developer mode, then add your site as a custom connector using your MCP endpoint URL and approve the connection once over OAuth. This needs a ChatGPT plan that allows custom connectors. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI also work, some directly and some through the mcp-remote bridge that runs on your own machine.
 
+= Do I need to expose my computer to connect a remote site? =
+
+No. Your WordPress site is the MCP server, so the endpoint is already public over HTTPS on the site itself, not on your computer. Connecting a hosted client like ChatGPT or Claude to a remote WordPress install means pasting that endpoint URL into the client and approving one OAuth sign-in in the browser. No tunnel, no reverse proxy, no local bridge process to keep running. A bridge is only needed for a client that can't open a remote MCP connection on its own, covered above.
+
 = Can ChatGPT edit my WordPress site? =
 
 Only the parts you allow. ChatGPT reaches your site through a custom connector you add yourself, it acts as the WordPress user that approved the connection, and it sees nothing beyond the abilities you switched on. Every write is capability-checked before it runs and recorded in the audit log, and you can stop all writes at once with read-only mode.
@@ -249,11 +258,11 @@ Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". E
 
 = Does it send my content to OpenAI, Anthropic, or Google? =
 
-No. The plugin connects to no AI provider and makes no requests of its own to any external service. Your own AI client connects in to your site and calls the abilities you have enabled. Whatever your AI client does with the results afterward is between you and whoever makes that client.
+No. The plugin never connects to OpenAI, Anthropic, Google, or any other AI provider. Your own AI client connects in to your site and calls the abilities you have enabled. Whatever your AI client does with the results afterward is between you and whoever makes that client. (The one thing the plugin itself can fetch is a URL, if you enable the URL-upload ability - see "Does it send data anywhere?" below.)
 
 = Does it send data anywhere? =
 
-No. The plugin contacts no external service and has no telemetry. Your agent talks directly to your site.
+No AI provider and no telemetry. Your agent talks directly to your site. The one exception is the off-by-default upload-media-from-url ability: if you turn it on, it fetches the URL your AI client gives it (HTTPS only, private and reserved addresses refused, no redirects followed) so that file can be added to your media library. That fetch is an ordinary HTTP GET - like any request to that address, its destination sees the URL, your site's IP, and when the request happened - but it carries none of your content, credentials, or other site data; it only pulls in the file at the URL you asked it to fetch.
 
 = What does the audit log record? =
 
@@ -269,7 +278,7 @@ Please report security issues privately rather than in the support forum, so a f
 
 == External Services ==
 
-This plugin does not contact any external or third-party service. It registers abilities on your own site and answers the requests your AI client sends to it. The one HTTP request it can make on its own is the Connection tab's reachability check, a same-origin call to your own site's MCP endpoint used to confirm it answers - never a request to anywhere else. It includes no analytics or telemetry.
+This plugin contacts no AI provider and includes no analytics or telemetry. It registers abilities on your own site and answers the requests your AI client sends to it. It can make two kinds of outbound HTTP request on its own: the Connection tab's reachability check, a same-origin call to your own site's MCP endpoint used only to confirm it answers, and, only when you enable the off-by-default upload-media-from-url ability, a fetch of the exact HTTPS URL your AI client supplies for that one call, so the file at that URL can be added to your media library. That fetch is SSRF-hardened (HTTPS only, no bare IP-literal host, private and reserved addresses refused, no redirects followed). Like any HTTP request, it necessarily reveals the URL, your site's IP, and the timing to whatever server answers it - but the request itself carries none of your content, credentials, or other site data; it only reads what is already public at the URL you gave it.
 
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source `mcp-remote` tool or `@automattic/mcp-wordpress-remote`. Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client. Their terms are on their own pages:
 
@@ -279,17 +288,25 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 == Screenshots ==
 
 1. The first run walks you through connecting an agent in three steps. Turn the connection on, choose what it can touch, then hand the endpoint to your AI client.
-2. Nothing is exposed until you switch it on. Three of this site's 153 abilities are enabled here, all of them reads, using the button that turns on a section's reads and leaves its writes alone.
+2. Nothing is exposed until you switch it on. Three of this site's 179 abilities are enabled here, all of them reads, using the button that turns on a section's reads and leaves its writes alone.
 3. Read-only mode in force. Every ability that writes loses its checkbox completely and says which switch is holding it down, so a bulk enable cannot sweep one back in by accident.
 4. Read-only mode is a single switch on the Settings tab. While it is on, the high-risk category underneath is held as well, and says so instead of sitting there looking live.
 5. The WooCommerce abilities that move money or grant authority stay padlocked behind a second switch of their own, sitting among ordinary writes you can turn on one at a time.
-6. An integration only appears once the plugin it belongs to is active. WooCommerce is running here with 52 abilities available and none enabled yet, while the others wait until they are installed.
+6. An integration only appears once the plugin it belongs to is active. WooCommerce, Yoast, Rank Math, and All in One SEO are all running here, each with its abilities turned on, while Slim SEO waits for its plugin to be installed.
 7. Abilities that your other plugins register for themselves, grouped by the plugin that declared them, each one off until you turn it on and labelled with the risk that plugin reports.
 8. Your MCP endpoint, the OAuth approval flow that leaves no secret in your config file, and a dedicated low-privilege agent user. The Application Password fallback carries a plain warning that it reaches further than this plugin can scope.
 9. The activity log records what happened and who did it, including every change to what is enabled, with filters for successes, errors, denials and calls that never finished, and a CSV export.
 10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==
+
+= 1.7.4 =
+
+* **Feature:** 26 new abilities cover The Events Calendar, Event Tickets, Slim SEO, Avada, and GeoDirectory, plus uploading media straight from a URL. All of them stay off until you turn them on.
+* **Feature:** A page-builder guard refuses a write that would silently do nothing on a page owned by Elementor, Divi, Beaver Builder, or Avada. A new allowlist narrows what each role or connection can reach.
+* **Fix:** The bump to mcp-adapter 0.6.1 closes a multisite bug where a real subsite connection was reported as failed.
+* **Fix:** Several OAuth paths treated a failed database read as permission granted. A deactivated client, a missing client record, or an unreadable registration limit now refuse the request instead of letting it through.
+* **Fix:** Grants belonging to a deleted user are cleared out, the Connections screen shows each identity's current role, and a batch of smaller fixes lands across WooCommerce, the admin screens, and the connection tab.
 
 = 1.7.3 =
 
@@ -466,6 +483,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.7.4 =
+
+Every new ability in this release, including The Events Calendar, Slim SEO, Avada, GeoDirectory, and URL-based media upload, stays off until you turn it on, so nothing changes automatically. If you use Elementor, Divi, Beaver Builder, or Avada, a write that would land on a page one of them owns is now refused instead of silently doing nothing.
 
 = 1.7.3 =
 

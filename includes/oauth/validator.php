@@ -489,18 +489,3 @@ function aafm_oauth_access_token_row_exists( string $raw ): bool {
 
 	return null !== $id;
 }
-
-/**
- * Defensive pass-through for the rest_authentication_errors filter.
- *
- * Registered so a present-but-invalid `aafm_oat_` token can never let some other
- * code path convert "we didn't resolve a user" into a hard failure on unrelated
- * routes. It returns the incoming value verbatim - null stays null, a WP_Error
- * comes back untouched.
- *
- * @param WP_Error|true|null $errors The current authentication error state.
- * @return WP_Error|true|null The same value, unchanged.
- */
-function aafm_oauth_rest_authentication_errors( $errors ) {
-	return $errors;
-}

@@ -272,20 +272,29 @@ function aafm_exec_update_user_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
-	$value = aafm_sanitize_user_meta_value( $key, $input['value'] ?? '' );
+	// Codex round 7 R7-3: this used to omit the object subtype, defaulting to ''. get_userdata()
+	// above already confirmed the target user exists, and core's get_object_subtype( 'user', $id )
+	// resolves to the literal string 'user' for any user that exists (wp-includes/meta.php) - that
+	// is the subtype update_metadata() itself passes to sanitize_meta() at write time. Codex round
+	// 8 R8-2: that resolution is filterable via get_object_subtype_user, so resolve it through
+	// get_object_subtype() itself rather than hardcoding the literal 'user' - a site remapping the
+	// subtype is honoured here the same way it is at write time.
+	$subtype = (string) get_object_subtype( 'user', $id );
+	$value   = aafm_sanitize_user_meta_value( $key, $input['value'] ?? '', $subtype );
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	if ( false === update_user_meta( $id, $key, wp_slash( $value ) ) ) {
-		// update_user_meta returns false on a same-value no-op too. User meta round-trips
-		// through a longtext column, so the stored value reads back as a string; compare
-		// stringified forms to avoid a false failure on a genuine no-op (e.g. re-sending an
-		// int or bool).
-		if ( (string) get_user_meta( $id, $key, true ) !== (string) $value ) {
-			return aafm_generic_error();
-		}
-	}
+	update_user_meta( $id, $key, wp_slash( $value ) );
 	$stored = get_user_meta( $id, $key, true );
+	// Codex round 5 R5-2: update_user_meta()'s return value only catches an outright failure. A
+	// metadata filter that short-circuits update_user_metadata to a truthy value bypasses the
+	// write while reporting success, so checking only `false === update_user_meta(...)` never
+	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
+	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
+	// sanitize callback's legitimate normalization is not mistaken for a veto.
+	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'user', $subtype ) ) {
+		return aafm_generic_error();
+	}
 	return array(
 		'user_id' => $id,
 		'key'     => $key,

@@ -177,7 +177,7 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertNotEmpty( $registry );
 		// Abilities-tab subjects plus the integration subjects, which render on the Integrations
 		// tab rather than the Abilities tab but are still real, non-empty subjects.
-		$known = array_merge( array_keys( aafm_abilities_subjects() ), array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce' ) );
+		$known = array_merge( array_keys( aafm_abilities_subjects() ), array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce', 'slim_seo', 'tec', 'event_tickets', 'avada', 'geodirectory' ) );
 		foreach ( $registry as $name => $meta ) {
 			$this->assertArrayHasKey( 'subject', $meta, "{$name} is missing a subject." );
 			$this->assertNotSame( '', (string) $meta['subject'], "{$name} has an empty subject." );
@@ -244,8 +244,13 @@ final class AbilitiesSaveTest extends TestCase {
 		$content_close = ( false === $next_panel ) ? strpos( $html, 'aafm-save-status', $content_open ) : $next_panel;
 		$content_panel = substr( $html, $content_open, ( false === $content_close ? null : $content_close - $content_open ) );
 
-		$reads_pos  = strpos( $content_panel, '>Reads<' );
-		$writes_pos = strpos( $content_panel, '>Writes<' );
+		// Matches the real ability-group heading markup exactly (<h3>Reads</h3> inside
+		// .aafm-ability-group-head), not a bare '>Reads<'/'>Writes<' substring: a public custom
+		// post type registered anywhere in the process (e.g. a real content-model test fixture)
+		// also renders in this same panel's "other post types" table, whose own <th>Writes</th>
+		// column header would otherwise false-match and appear before the real Reads heading.
+		$reads_pos  = strpos( $content_panel, '<h3>Reads</h3>' );
+		$writes_pos = strpos( $content_panel, '<h3>Writes</h3>' );
 		$this->assertNotFalse( $reads_pos, 'Content panel should have a Reads heading.' );
 		$this->assertNotFalse( $writes_pos, 'Content panel should have a Writes heading.' );
 		$this->assertLessThan( $writes_pos, $reads_pos, 'Reads must come before Writes.' );

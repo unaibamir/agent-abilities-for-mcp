@@ -294,4 +294,251 @@ final class PostMetaTest extends TestCase {
 		$this->assertArrayHasKey( 'aafm/update-post-meta', $reg );
 		$this->assertArrayHasKey( 'aafm/delete-post-meta', $reg );
 	}
+
+	/**
+	 * Codex final round 7 HIGH: every page-builder ownership marker (includes/page-builder-
+	 * guard.php) must be absolutely blocked from update-post-meta/delete-post-meta, even when the
+	 * operator has exposed every other meta key via `*` - clearing a marker (e.g.
+	 * fusion_builder_status) let aafm_exec_update_post()'s ownership check pass on the very next
+	 * call and write through the refusal guard entirely.
+	 */
+	public function test_page_builder_marker_keys_are_hard_blocked_even_with_star_exposed(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		$id = self::factory()->post->create();
+		update_post_meta( $id, 'fusion_builder_status', 'active' );
+
+		foreach ( array_keys( aafm_page_builder_markers() ) as $marker_key ) {
+			$this->assertFalse(
+				aafm_perm_update_post_meta(
+					array(
+						'post_id'  => $id,
+						'meta_key' => $marker_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					)
+				),
+				"$marker_key must be hard-blocked from update-post-meta even with * exposed."
+			);
+			$this->assertFalse(
+				aafm_perm_delete_post_meta(
+					array(
+						'post_id'  => $id,
+						'meta_key' => $marker_key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					)
+				),
+				"$marker_key must be hard-blocked from delete-post-meta even with * exposed."
+			);
+		}
+
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'fusion_builder_status', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => '',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'active', get_post_meta( $id, 'fusion_builder_status', true ), 'The marker must survive an attempted clear untouched.' );
+	}
+
+	/**
+	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
+	 * update_post_meta(...)`, so a metadata filter that short-circuits update_post_metadata to a
+	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
+	 * success and returned the old stored value.
+	 */
+	public function test_update_meta_returns_an_error_when_the_write_is_vetoed(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'aafm_note', 'old value' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$out  = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed meta write must return an error, not a success reporting the old value.'
+		);
+	}
+
+	/**
+	 * Codex round 6 B6-3: the confirmation guard compared the fresh read against the plugin's own
+	 * pre-write intent, so a site-registered sanitize_post_meta_{key} callback (register_meta()'s
+	 * sanitize_callback lands there, exactly like update_metadata() itself runs on every meta
+	 * write) that legitimately normalizes the value on save was indistinguishable from a filter
+	 * vetoing the write, and the ability returned a false error even though the write landed
+	 * exactly as the site's own sanitizer defines "landed".
+	 */
+	public function test_update_meta_confirms_a_legitimate_sanitize_meta_normalization(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		// A site-registered sanitizer that appends a fixed suffix, the same shape as a vendor
+		// plugin's own meta normalization (trimming, casting, or otherwise reshaping the value on
+		// its way into storage).
+		$normalize = static fn( $value ) => $value . '-normalized';
+		add_filter( 'sanitize_post_meta_aafm_note', $normalize );
+		$out       = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		remove_filter( 'sanitize_post_meta_aafm_note', $normalize );
+
+		$this->assertIsArray(
+			$out,
+			'A write that landed in its sanitizer-normalized form must not be reported as an unconfirmed write.'
+		);
+		$this->assertSame(
+			'new value-normalized',
+			get_post_meta( $id, 'aafm_note', true ),
+			'precondition: the registered sanitizer must have actually normalized the stored value.'
+		);
+		$this->assertSame( 'new value-normalized', $out['value'], 'The response must reflect the value actually stored, not the caller\'s pre-normalization intent.' );
+	}
+
+	/**
+	 * Codex round 8 R8-1: the confirmation guard used to run sanitize_meta() against
+	 * wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, but core's own
+	 * update_metadata() unslashes the incoming value and THEN sanitizes it - the guard was
+	 * feeding a slash-sensitive registered sanitizer a different input than core's own call ever
+	 * sees. A value containing an apostrophe (which wp_slash() escapes with a backslash) exposed
+	 * the mismatch: the guard's recomputation saw a backslash-quote sequence the real write never
+	 * did, and a sanitizer keyed on that saw two different inputs and produced two different
+	 * outputs, so a write that landed exactly as core's own sanitizer defines "landed" was
+	 * reported as unconfirmed.
+	 */
+	public function test_update_meta_confirms_a_write_whose_value_contains_a_quote_and_backslash(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		// A sanitizer that behaves differently when it sees a backslash immediately before a
+		// quote - the exact input a slashed-then-sanitized value would carry that an
+		// unslashed-then-sanitized value never would.
+		$slash_sensitive = static function ( $value ) {
+			return ( is_string( $value ) && false !== strpos( $value, "\\'" ) ) ? 'SAW_A_SLASHED_QUOTE' : $value;
+		};
+		add_filter( 'sanitize_post_meta_aafm_note', $slash_sensitive );
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => "O'Reilly",
+			)
+		);
+		remove_filter( 'sanitize_post_meta_aafm_note', $slash_sensitive );
+
+		$this->assertIsArray(
+			$out,
+			'A write whose value contains a quote must not be misjudged as unconfirmed because the guard fed the sanitizer a slashed form the real write never used.'
+		);
+		$this->assertSame(
+			"O'Reilly",
+			get_post_meta( $id, 'aafm_note', true ),
+			"precondition: the sanitizer must not have fired, since core's own call never sees a slashed value here."
+		);
+		$this->assertSame( "O'Reilly", $out['value'] );
+	}
+
+	/**
+	 * Codex round 7 R7-3: aafm_sanitize_meta_value()'s coercion-to-array probe used to always pass
+	 * the literal string 'post' as the object subtype, so a sanitize_callback registered for a
+	 * page (or any other non-'post' type) never reached the subtype-specific hook the probe
+	 * checked - the value's own documented scalar-only guarantee did not actually apply to it.
+	 */
+	public function test_update_post_meta_catches_a_page_specific_array_coercion(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create(
+			array(
+				'post_author' => $author,
+				'post_type'   => 'page',
+			)
+		);
+
+		register_post_meta(
+			'page',
+			'aafm_note',
+			array(
+				'single'            => true,
+				'sanitize_callback' => static fn() => array( 'evil' => 1 ),
+			)
+		);
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		unregister_post_meta( 'page', 'aafm_note' );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A page-registered sanitizer that coerces the value to an array must be caught, not silently allowed through because the preliminary probe checked the wrong post type.'
+		);
+	}
+
+	/**
+	 * Codex round 8 R8-2: the probe and the confirmation guard used to resolve the object
+	 * subtype from get_post_type( $id ) directly, bypassing core's own get_object_subtype()
+	 * and the get_object_subtype_post filter it runs through. A site remapping a post's write-
+	 * time subtype (a multi-tenant plugin scoping meta by a virtual subtype, for example) was
+	 * invisible to both, so a sanitize_callback registered for the REMAPPED subtype could coerce
+	 * a scalar into an array while this plugin's own boundary still checked the wrong subtype.
+	 */
+	public function test_update_post_meta_honours_a_get_object_subtype_post_filter(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		// A regular 'post' whose write-time subtype a site remaps to 'tenant' - never a real
+		// registered post type, so this can only be caught by following the filter, not by
+		// reading get_post_type() directly.
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		$remap = static fn() => 'tenant';
+		add_filter( 'get_object_subtype_post', $remap );
+		register_post_meta(
+			'tenant',
+			'aafm_note',
+			array(
+				'single'            => true,
+				'sanitize_callback' => static fn() => array( 'evil' => 1 ),
+			)
+		);
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'new value',
+			)
+		);
+		unregister_post_meta( 'tenant', 'aafm_note' );
+		remove_filter( 'get_object_subtype_post', $remap );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A sanitize_callback registered for a get_object_subtype_post-remapped subtype must be caught, not missed because the probe read get_post_type() instead of following the filter.'
+		);
+	}
 }

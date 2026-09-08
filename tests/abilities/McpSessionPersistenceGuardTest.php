@@ -67,9 +67,6 @@ final class McpSessionPersistenceGuardTest extends TestCase {
 
 		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
-
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 	}
 
 	/**

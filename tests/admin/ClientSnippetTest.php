@@ -87,4 +87,25 @@ final class ClientSnippetTest extends TestCase {
 			$server['args']
 		);
 	}
+
+	/**
+	 * Aafm_npx_launch_command() backs both aafm_client_snippet() (no extra args) and
+	 * aafm_oauth_client_snippet() (the endpoint URL appended); both call sites above already
+	 * exercise it through those. Test it directly for the extra-args branch it introduced.
+	 */
+	public function test_npx_launch_command_appends_extra_args(): void {
+		$unix = aafm_npx_launch_command( 'unix', 'mcp-remote', array( 'https://example.com/mcp' ) );
+		$this->assertSame( 'npx', $unix['command'] );
+		$this->assertSame( array( '-y', 'mcp-remote', 'https://example.com/mcp' ), $unix['args'] );
+
+		$windows = aafm_npx_launch_command( 'windows', 'mcp-remote', array( 'https://example.com/mcp' ) );
+		$this->assertSame( 'cmd', $windows['command'] );
+		$this->assertSame( array( '/c', 'npx', '-y', 'mcp-remote', 'https://example.com/mcp' ), $windows['args'] );
+	}
+
+	public function test_client_config_root_key_is_servers_only_for_vscode(): void {
+		$this->assertSame( 'servers', aafm_client_config_root_key( 'vscode' ) );
+		$this->assertSame( 'mcpServers', aafm_client_config_root_key( 'cursor' ) );
+		$this->assertSame( 'mcpServers', aafm_client_config_root_key( 'unknown-slug' ) );
+	}
 }

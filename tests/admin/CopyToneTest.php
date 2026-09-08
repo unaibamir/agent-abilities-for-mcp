@@ -13,13 +13,6 @@ use AAFM\Tests\TestCase;
 
 final class CopyToneTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		// The dashboard render queries the activity log table.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_copy_leans_least_privilege(): void {
 		ob_start();
 		aafm_render_connection_tab();

@@ -338,4 +338,83 @@ final class ReplaceInPostTest extends TestCase {
 	public function test_perm_callback_returns_false_on_empty_input(): void {
 		$this->assertFalse( aafm_perm_replace_in_post( array() ) );
 	}
+
+	/**
+	 * Codex round 5 R5-2: only is_wp_error() was checked on the wp_update_post() result, so a
+	 * wp_insert_post_data filter that reverts the content must surface as a structured error, not
+	 * a success response reporting a positive replacement count for a change that never landed.
+	 */
+	public function test_returns_an_error_when_the_write_is_vetoed(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$content = 'red fox red fox red';
+		$id      = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => $content,
+			)
+		);
+
+		$veto = static function ( $data ) use ( $content ) {
+			$data['post_content'] = $content;
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $veto );
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'red',
+				'replace' => 'blue',
+			)
+		);
+		remove_filter( 'wp_insert_post_data', $veto );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A vetoed content write must return an error, not a success claiming the replacement was saved.'
+		);
+	}
+
+	/**
+	 * Codex round 6 B6-3: the confirmation guard compared the fresh read against $new (the
+	 * pre-write intent), so a legitimate save-time normalization looked identical to a veto. Only
+	 * the INSERTED text is run through this ability's own wp_kses_post() (B8/687ff62's whole
+	 * point); the untouched surrounding content is spliced in as-is and reaches wp_update_post()
+	 * unfiltered. For an acting user who lacks unfiltered_html, core's own content_save_pre kses
+	 * (kses_init(), attached whenever current_user_can('unfiltered_html') is false) runs over the
+	 * WHOLE assembled document and legitimately entity-encodes a bare ampersand the way it always
+	 * does for that role, producing storage that genuinely differs from $new even though the write
+	 * succeeded exactly as the site defines success. A <script> tag does not reproduce this: every
+	 * confirm site in this plugin already strips it with its own sanitizer before the write, so
+	 * core's kses on save is a no-op for it; the bare ampersand is the concrete, always-on
+	 * divergence between this ability's own sanitizer and core's save-time kses.
+	 */
+	public function test_replace_confirms_a_legitimate_ampersand_normalization_on_untouched_content(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$this->assertFalse( current_user_can( 'unfiltered_html' ), 'precondition: an author must not hold unfiltered_html.' );
+
+		$id = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'Fish & Chips is great',
+			)
+		);
+
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'great',
+				'replace' => 'tasty',
+			)
+		);
+
+		$this->assertIsArray( $out, 'A write that landed in its kses-normalized form must not be reported as unconfirmed.' );
+		$this->assertSame(
+			'Fish &amp; Chips is tasty',
+			(string) get_post( $id )->post_content,
+			'precondition: core must have entity-encoded the untouched ampersand for a non-unfiltered_html author.'
+		);
+	}
 }

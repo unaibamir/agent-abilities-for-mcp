@@ -41,7 +41,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
 	);
 	$registry['aafm/restore-revision'] = array(
 		'label'        => __( 'Restore revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible, or when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since the restore would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -82,24 +82,19 @@ function aafm_args_list_revisions(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'post_id'  => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'description' => __( 'ID of the post whose revision history to list. The caller must be able to edit this post.', 'agent-abilities-for-mcp' ),
+			'properties'           => array_merge(
+				array(
+					'post_id' => array(
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of the post whose revision history to list. The caller must be able to edit this post.', 'agent-abilities-for-mcp' ),
+					),
 				),
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-				),
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PER_PAGE_MAX,
-					'description' => __( 'Number of revisions per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-				),
+				aafm_pagination_schema_props(
+					AAFM_LIST_PER_PAGE_MAX,
+					__( 'Number of revisions per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
 			),
 			'required'             => array( 'post_id' ),
 			'additionalProperties' => false,
@@ -339,6 +334,15 @@ function aafm_exec_restore_revision( array $input ) {
 	$revision_id = absint( $input['revision_id'] ?? 0 );
 	if ( is_wp_error( aafm_validate_revision( $revision_id, $post_id ) ) ) {
 		return aafm_generic_error();
+	}
+	// Restoring a revision rewrites title/content/excerpt exactly like aafm/update-post, so it
+	// is a page-builder write too: a builder-owned post's rendered output is driven by the
+	// builder's own meta (_elementor_data, et_pb_use_builder, _fl_builder_data), not post_content,
+	// so a "successful" restore here would silently do nothing visible while still reporting
+	// success.
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $post_id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
 	}
 	// Reversibility guard (B49): the fresh pre-restore snapshot is taken by core's
 	// wp_save_post_revision() hook, which bails when revisions are disabled for this post

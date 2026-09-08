@@ -157,8 +157,6 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'aafm_admin' ),
 			'i18n'    => array(
-				'quickstartsShow'          => __( 'Show config for a specific client', 'agent-abilities-for-mcp' ),
-				'quickstartsHide'          => __( 'Hide client configs', 'agent-abilities-for-mcp' ),
 				'saving'                   => __( 'Saving…', 'agent-abilities-for-mcp' ),
 				'saved'                    => __( 'Saved', 'agent-abilities-for-mcp' ),
 				'errorSaving'              => __( 'Error saving', 'agent-abilities-for-mcp' ),
@@ -197,6 +195,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'revokeGrantConfirm'       => __( 'Revoke this grant? The user will have to approve again to reconnect.', 'agent-abilities-for-mcp' ),
 				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
 				'statusRevoked'            => __( 'Revoked', 'agent-abilities-for-mcp' ),
+				'agentToggleFailed'        => __( 'Could not save. Please try again.', 'agent-abilities-for-mcp' ),
 				// Quick Connect wizard.
 				'qcInProgress'             => __( 'In progress', 'agent-abilities-for-mcp' ),
 				'qcNotStarted'             => __( 'Not started', 'agent-abilities-for-mcp' ),
@@ -511,8 +510,50 @@ function aafm_ajax_save_post_types(): void {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 	$types = aafm_sanitize_allowed_post_types_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	update_option( 'aafm_allowed_post_types', $types );
+
+	// Verified, not a bare update_option(): this option gates which content types an agent can
+	// even see, so a stale persistent object cache silently keeping the old list live (Codex hunt
+	// F1) must be reported as a failed save, not a success.
+	if ( ! aafm_update_option_verified( 'aafm_allowed_post_types', $types ) ) {
+		aafm_log_ability_persist_failure( 'aafm_allowed_post_types', __( 'Exposed content types', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed content types', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success( array( 'post_types' => $types ) );
+}
+
+/**
+ * Shared line-by-line sanitizer for a posted meta-key textarea: split on newlines, trim,
+ * run through aafm_sanitize_plain_text() (never sanitize_key(), which would strip `*`),
+ * drop empties, optionally drop hard-blocked keys, and de-duplicate.
+ *
+ * $hard_block is null for a deny-list field (denied keys are never filtered - denying an
+ * already hard-blocked key is a harmless no-op, and the deny list must be able to name
+ * anything an admin wants refused). For an allow-list field it is the matching hard-block
+ * checker; $exempt_star controls whether the `*` wildcard sentinel skips that check
+ * entirely (true for the user/term allow-lists, matching their original behavior) or is
+ * still run through it like any other key (false for the post allow-list, its original
+ * behavior) - each caller passes exactly what its own inline code decided.
+ *
+ * @param array<string,mixed> $posted      Raw $_POST payload (slashes handled by the caller).
+ * @param string              $field       The $_POST key holding the raw textarea value.
+ * @param callable|null       $hard_block  Hard-block checker, or null to skip filtering.
+ * @param bool                $exempt_star Whether `*` bypasses $hard_block.
+ * @return list<string>
+ */
+function aafm_sanitize_meta_keys_lines( array $posted, string $field, ?callable $hard_block, bool $exempt_star ): array {
+	$raw  = isset( $posted[ $field ] ) ? (string) $posted[ $field ] : '';
+	$keys = array();
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
+		if ( '' === $key ) {
+			continue;
+		}
+		if ( null !== $hard_block && ! ( $exempt_star && '*' === $key ) && $hard_block( $key ) ) {
+			continue;
+		}
+		$keys[] = $key;
+	}
+	return array_values( array_unique( $keys ) );
 }
 
 /**
@@ -527,16 +568,7 @@ function aafm_ajax_save_post_types(): void {
  * @return list<string>
  */
 function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
-	$raw  = isset( $posted['aafm_meta_keys'] ) ? (string) $posted['aafm_meta_keys'] : '';
-	$keys = array();
-	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
-		if ( '' === $key || aafm_hard_blocked_meta_key( $key ) ) {
-			continue;
-		}
-		$keys[] = $key;
-	}
-	return array_values( array_unique( $keys ) );
+	return aafm_sanitize_meta_keys_lines( $posted, 'aafm_meta_keys', 'aafm_hard_blocked_meta_key', false );
 }
 
 /**
@@ -552,16 +584,7 @@ function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
  * @return list<string>
  */
 function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
-	$raw  = isset( $posted['aafm_deny_meta_keys'] ) ? (string) $posted['aafm_deny_meta_keys'] : '';
-	$keys = array();
-	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
-		if ( '' === $key ) {
-			continue;
-		}
-		$keys[] = $key;
-	}
-	return array_values( array_unique( $keys ) );
+	return aafm_sanitize_meta_keys_lines( $posted, 'aafm_deny_meta_keys', null, false );
 }
 
 /**
@@ -576,16 +599,7 @@ function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
  * @return list<string>
  */
 function aafm_sanitize_exposed_user_meta_keys_input( array $posted ): array {
-	$raw  = isset( $posted['aafm_exposed_user_meta_keys'] ) ? (string) $posted['aafm_exposed_user_meta_keys'] : '';
-	$keys = array();
-	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
-		if ( '' === $key || ( '*' !== $key && aafm_hard_blocked_user_meta_key( $key ) ) ) {
-			continue;
-		}
-		$keys[] = $key;
-	}
-	return array_values( array_unique( $keys ) );
+	return aafm_sanitize_meta_keys_lines( $posted, 'aafm_exposed_user_meta_keys', 'aafm_hard_blocked_user_meta_key', true );
 }
 
 /**
@@ -599,16 +613,7 @@ function aafm_sanitize_exposed_user_meta_keys_input( array $posted ): array {
  * @return list<string>
  */
 function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
-	$raw  = isset( $posted['aafm_denied_user_meta_keys'] ) ? (string) $posted['aafm_denied_user_meta_keys'] : '';
-	$keys = array();
-	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
-		if ( '' === $key ) {
-			continue;
-		}
-		$keys[] = $key;
-	}
-	return array_values( array_unique( $keys ) );
+	return aafm_sanitize_meta_keys_lines( $posted, 'aafm_denied_user_meta_keys', null, false );
 }
 
 /**
@@ -623,16 +628,7 @@ function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
  * @return list<string>
  */
 function aafm_sanitize_exposed_term_meta_keys_input( array $posted ): array {
-	$raw  = isset( $posted['aafm_exposed_term_meta_keys'] ) ? (string) $posted['aafm_exposed_term_meta_keys'] : '';
-	$keys = array();
-	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
-		if ( '' === $key || ( '*' !== $key && aafm_hard_blocked_meta_key( $key ) ) ) {
-			continue;
-		}
-		$keys[] = $key;
-	}
-	return array_values( array_unique( $keys ) );
+	return aafm_sanitize_meta_keys_lines( $posted, 'aafm_exposed_term_meta_keys', 'aafm_hard_blocked_meta_key', true );
 }
 
 /**
@@ -646,16 +642,7 @@ function aafm_sanitize_exposed_term_meta_keys_input( array $posted ): array {
  * @return list<string>
  */
 function aafm_sanitize_denied_term_meta_keys_input( array $posted ): array {
-	$raw  = isset( $posted['aafm_denied_term_meta_keys'] ) ? (string) $posted['aafm_denied_term_meta_keys'] : '';
-	$keys = array();
-	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
-		if ( '' === $key ) {
-			continue;
-		}
-		$keys[] = $key;
-	}
-	return array_values( array_unique( $keys ) );
+	return aafm_sanitize_meta_keys_lines( $posted, 'aafm_denied_term_meta_keys', null, false );
 }
 
 /**
@@ -700,6 +687,60 @@ function aafm_detected_meta_keys(): array {
 }
 
 /**
+ * Write a paired exposed/deny option pair through the three-stage sequence that keeps every
+ * intermediate state at least as strict as the state before the request, even when the same
+ * request narrows BOTH lists at once (Codex round 6, B6-1).
+ *
+ * The round-5 fix (deny always written before exposed) is not direction-aware: it only protects
+ * a request that ADDS to deny or REMOVES from exposed. A request that REMOVES a key from deny
+ * and REMOVES it from exposed in the same submission (the bundled UI can post both fields
+ * together) is a live counter-example: if the exposed write fails after the deny write already
+ * dropped the key, the key ends up off deny and still on the old exposed list - reachable, when
+ * both edits meant to make it unreachable. The three stages below stay deny-monotonic at every
+ * point in between:
+ *
+ *   1. deny := union(old deny, new deny) - never narrower than either list, so nothing either
+ *      side wanted denied is ever briefly undenied.
+ *   2. exposed := new exposed - if this fails, deny is still the stage-1 union, which already
+ *      denies everything the old or the new state wanted denied.
+ *   3. deny := new deny - narrows deny down to what was actually requested; if this fails, deny
+ *      simply stays at the stage-1 union instead of reaching its final, narrower value.
+ *
+ * The "old deny" half of the union is read here, authoritatively, from the database row itself
+ * (Codex round 7, R7-1) rather than accepted as a caller-supplied snapshot. The getters
+ * (aafm_denied_meta_keys() and its user/term siblings) both trust a cache-backed get_option()
+ * and strip the `*` deny-all sentinel for display purposes, so a caller-supplied snapshot could
+ * either be stale (a persistent cache still answering for a since-changed row) or silently drop
+ * a live deny-all - either way the stage-1 union would be built from a narrower list than what
+ * is actually stored, and stage 1 could then certify a union that is itself wider than the
+ * pre-request state. Reading the raw row directly, sentinel included, keeps the union at least
+ * as strict as whatever is really in the database right now.
+ *
+ * @param string            $deny_option    Deny-list option name.
+ * @param string            $exposed_option Exposed-list option name.
+ * @param array<int,string> $new_deny       Requested deny list.
+ * @param array<int,string> $new_exposed    Requested exposed list.
+ * @return int 0 on full success; 1, 2, or 3 naming the stage that failed to certify.
+ */
+function aafm_paired_meta_write_three_stage( string $deny_option, string $exposed_option, array $new_deny, array $new_exposed ): int {
+	$views    = aafm_read_option_views( $deny_option );
+	$old_deny = ( $views['db_found'] && is_array( $views['db_value'] ) ) ? array_map( 'strval', $views['db_value'] ) : array();
+
+	$union = array_values( array_unique( array_merge( $old_deny, $new_deny ) ) );
+
+	if ( ! aafm_update_option_verified( $deny_option, $union ) ) {
+		return 1;
+	}
+	if ( ! aafm_update_option_verified( $exposed_option, $new_exposed ) ) {
+		return 2;
+	}
+	if ( ! aafm_update_option_verified( $deny_option, $new_deny ) ) {
+		return 3;
+	}
+	return 0;
+}
+
+/**
  * AJAX: save BOTH the exposed and denied post-meta lists in one request.
  *
  * Mirrors aafm_ajax_save_user_meta_keys() / aafm_ajax_save_term_meta_keys(): one click, one
@@ -719,8 +760,27 @@ function aafm_ajax_save_meta_keys(): void {
 	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$keys   = aafm_sanitize_allowed_meta_keys_input( $posted );
 	$denied = aafm_sanitize_denied_meta_keys_input( $posted );
-	update_option( 'aafm_allowed_meta_keys', $keys );
-	update_option( 'aafm_denied_meta_keys', $denied );
+
+	$deny_label    = __( 'Denied post meta keys', 'agent-abilities-for-mcp' );
+	$exposed_label = __( 'Exposed post meta keys', 'agent-abilities-for-mcp' );
+
+	// Verified, not a bare update_option(): these two options gate which post meta an agent can
+	// read or write, so a stale persistent object cache silently keeping the old list live (Codex
+	// hunt F1) must be reported as a failed save, not a success. The three-stage write order keeps
+	// every intermediate state at least as strict as before this request (Codex round 6, B6-1).
+	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_meta_keys', 'aafm_allowed_meta_keys', $denied, $keys );
+	if ( 1 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', $deny_label );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );
+	}
+	if ( 2 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_allowed_meta_keys', $exposed_label );
+		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $deny_label, $exposed_label ) ) );
+	}
+	if ( 3 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', $deny_label );
+		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $exposed_label, $deny_label ) ) );
+	}
 	delete_transient( 'aafm_detected_meta_keys' );
 	wp_send_json_success(
 		array(
@@ -745,7 +805,12 @@ function aafm_ajax_save_denied_meta_keys(): void {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	update_option( 'aafm_denied_meta_keys', $keys );
+
+	// Verified, not a bare update_option(): see aafm_ajax_save_meta_keys() above (Codex hunt F1).
+	if ( ! aafm_update_option_verified( 'aafm_denied_meta_keys', $keys ) ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) ) ) );
+	}
 	wp_send_json_success( array( 'deny_meta_keys' => $keys ) );
 }
 
@@ -762,8 +827,27 @@ function aafm_ajax_save_user_meta_keys(): void {
 	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$exposed = aafm_sanitize_exposed_user_meta_keys_input( $posted );
 	$denied  = aafm_sanitize_denied_user_meta_keys_input( $posted );
-	update_option( 'aafm_exposed_user_meta_keys', $exposed );
-	update_option( 'aafm_denied_user_meta_keys', $denied );
+
+	$deny_label    = __( 'Denied user meta keys', 'agent-abilities-for-mcp' );
+	$exposed_label = __( 'Exposed user meta keys', 'agent-abilities-for-mcp' );
+
+	// Verified, not a bare update_option(): these two options gate which user meta an agent can
+	// read or write (Codex hunt F1). The three-stage write order keeps every intermediate state
+	// at least as strict as before this request, even when this request narrows both lists at
+	// once (Codex round 6, B6-1; superseding the simple deny-first order from round 5, R5-1).
+	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_user_meta_keys', 'aafm_exposed_user_meta_keys', $denied, $exposed );
+	if ( 1 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_user_meta_keys', $deny_label );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );
+	}
+	if ( 2 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_exposed_user_meta_keys', $exposed_label );
+		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $deny_label, $exposed_label ) ) );
+	}
+	if ( 3 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_user_meta_keys', $deny_label );
+		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $exposed_label, $deny_label ) ) );
+	}
 	wp_send_json_success(
 		array(
 			'exposed_user_meta_keys' => $exposed,
@@ -785,8 +869,27 @@ function aafm_ajax_save_term_meta_keys(): void {
 	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$exposed = aafm_sanitize_exposed_term_meta_keys_input( $posted );
 	$denied  = aafm_sanitize_denied_term_meta_keys_input( $posted );
-	update_option( 'aafm_exposed_term_meta_keys', $exposed );
-	update_option( 'aafm_denied_term_meta_keys', $denied );
+
+	$deny_label    = __( 'Denied term meta keys', 'agent-abilities-for-mcp' );
+	$exposed_label = __( 'Exposed term meta keys', 'agent-abilities-for-mcp' );
+
+	// Verified, not a bare update_option(): these two options gate which term meta an agent can
+	// read or write (Codex hunt F1). The three-stage write order keeps every intermediate state
+	// at least as strict as before this request, even when this request narrows both lists at
+	// once (Codex round 6, B6-1; superseding the simple deny-first order from round 5, R5-1).
+	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_term_meta_keys', 'aafm_exposed_term_meta_keys', $denied, $exposed );
+	if ( 1 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_term_meta_keys', $deny_label );
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );
+	}
+	if ( 2 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_exposed_term_meta_keys', $exposed_label );
+		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $deny_label, $exposed_label ) ) );
+	}
+	if ( 3 === $stage ) {
+		aafm_log_ability_persist_failure( 'aafm_denied_term_meta_keys', $deny_label );
+		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $exposed_label, $deny_label ) ) );
+	}
 	wp_send_json_success(
 		array(
 			'exposed_term_meta_keys' => $exposed,
@@ -833,8 +936,12 @@ function aafm_ajax_clear_log(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	aafm_clear_activity_log();
-	aafm_log_activity_cleared_marker();
+	if ( ! aafm_clear_activity_log() ) {
+		wp_send_json_error( array( 'message' => __( 'Could not clear the activity log. Please try again.', 'agent-abilities-for-mcp' ) ) );
+	}
+	if ( ! aafm_log_activity_cleared_marker() ) {
+		wp_send_json_error( array( 'message' => __( 'The activity log was cleared, but the clear could not be recorded. Please try again.', 'agent-abilities-for-mcp' ) ) );
+	}
 	wp_send_json_success();
 }
 
@@ -849,11 +956,13 @@ function aafm_ajax_clear_log(): void {
  * markers written before schema v5 have no event_type, and keeping the name means an operator's
  * old and new markers still read as the same event.
  *
- * @return void
+ * @return bool True when the marker row was actually inserted (Codex round 9, R9-8): a failed
+ *              insert here would otherwise leave the freshly emptied log with no tamper
+ *              evidence at all while the caller still reported success.
  */
-function aafm_log_activity_cleared_marker(): void {
+function aafm_log_activity_cleared_marker(): bool {
 	$user = wp_get_current_user();
-	aafm_log_activity(
+	return aafm_log_activity(
 		array(
 			'ability'           => 'aafm/activity-log-cleared',
 			'principal_user_id' => (int) $user->ID,
@@ -862,7 +971,7 @@ function aafm_log_activity_cleared_marker(): void {
 			'event_type'        => 'log_cleared',
 			'detail'            => __( 'Activity log cleared', 'agent-abilities-for-mcp' ),
 		)
-	);
+	) > 0;
 }
 
 /**
@@ -1295,6 +1404,11 @@ function aafm_render_admin_page(): void {
 			'href'  => 'https://wordpress.org/support/plugin/agent-abilities-for-mcp/',
 			'icon'  => 'lifebuoy',
 			'label' => __( 'Get Help', 'agent-abilities-for-mcp' ),
+		),
+		array(
+			'href'  => 'https://www.youtube.com/watch?v=Raih7X4QgP0',
+			'icon'  => 'play',
+			'label' => __( 'Watch the demo', 'agent-abilities-for-mcp' ),
 		),
 	);
 	echo '<span class="aafm-nav-ext-group">';
@@ -1952,6 +2066,92 @@ function aafm_render_post_types_selector(): void {
 }
 
 /**
+ * Shared renderer for a two-textarea (exposed + denied) meta-key selector card.
+ *
+ * Aafm_render_meta_keys_selector(), aafm_render_user_meta_keys_selector(), and
+ * aafm_render_term_meta_keys_selector() are thin wrappers around this: they resolve their
+ * own getters, do their own '*' sentinel restore, and hand the result plus their own copy
+ * strings and element ids here. Only the post-meta wrapper passes 'detected', rendering the
+ * "detected on your exposed types" chip row the user/term wrappers don't have. All three
+ * share the same plain <div> (never a nested <form>) with a type="button" save, so the one
+ * outer abilities <form> is never closed early.
+ *
+ * @param array<string,mixed> $cfg {
+ *     Render config.
+ *     @type string        $container_id        Wrapping <div> id.
+ *     @type string        $exposed_title       H3 text above the exposed textarea.
+ *     @type string        $exposed_description Paragraph under that h3.
+ *     @type string        $warning             Text for the warning notice between them.
+ *     @type string[]      $exposed             Exposed keys ('*' already restored if set).
+ *     @type string        $exposed_field_name  Textarea name attribute.
+ *     @type string        $exposed_textarea_id Textarea id attribute.
+ *     @type string        $exposed_label_id    Id the h3 carries, referenced by aria-labelledby.
+ *     @type string        $exposed_hint_id     Id the hint paragraph carries.
+ *     @type string[]|null $detected            Detected keys to render as chips, or null to
+ *                                               skip the whole "detected" section.
+ *     @type string        $denied_title        H3 text above the denied textarea.
+ *     @type string[]      $denied              Denied keys ('*' already restored if set).
+ *     @type string        $denied_field_name   Textarea name attribute.
+ *     @type string        $denied_textarea_id  Textarea id attribute.
+ *     @type string        $denied_label_id     Id the h3 carries.
+ *     @type string        $denied_hint_id      Id the hint paragraph carries.
+ *     @type string        $save_button_id      Save button id attribute.
+ *     @type string        $save_button_label   Save button visible text.
+ *     @type string        $status_class        Class on the aria-live status span.
+ * }
+ * @return void
+ */
+function aafm_render_meta_keys_pair( array $cfg ): void {
+	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-card-pad aafm-meta-keys">';
+	echo '<h3 id="' . esc_attr( $cfg['exposed_label_id'] ) . '">' . esc_html( $cfg['exposed_title'] ) . '</h3>';
+	echo '<p class="description">' . esc_html( $cfg['exposed_description'] ) . '</p>';
+	aafm_render_notice( 'warning', $cfg['warning'] );
+
+	printf(
+		'<textarea name="%1$s" id="%2$s" rows="6" class="large-text code" aria-labelledby="%3$s" aria-describedby="%4$s">%5$s</textarea>',
+		esc_attr( $cfg['exposed_field_name'] ),
+		esc_attr( $cfg['exposed_textarea_id'] ),
+		esc_attr( $cfg['exposed_label_id'] ),
+		esc_attr( $cfg['exposed_hint_id'] ),
+		esc_textarea( implode( "\n", $cfg['exposed'] ) )
+	);
+	echo '<p class="description" id="' . esc_attr( $cfg['exposed_hint_id'] ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	if ( null !== $cfg['detected'] ) {
+		echo '<p class="description">' . esc_html__( 'Detected on your exposed types', 'agent-abilities-for-mcp' ) . '</p>';
+		if ( empty( $cfg['detected'] ) ) {
+			echo '<p class="description">' . esc_html__( 'Nothing detected yet on the types you expose.', 'agent-abilities-for-mcp' ) . '</p>';
+		} else {
+			echo '<div class="aafm-meta-chips">';
+			foreach ( $cfg['detected'] as $key ) {
+				printf(
+					'<button type="button" class="aafm-meta-chip" data-key="%1$s">%2$s</button>',
+					esc_attr( $key ),
+					esc_html( $key )
+				);
+			}
+			echo '</div>';
+		}
+	}
+
+	// Deny list, below the exposed list. Denied keys always win over the exposed list, even
+	// when it uses *. The chip source above writes only into the exposed textarea.
+	echo '<h3 id="' . esc_attr( $cfg['denied_label_id'] ) . '">' . esc_html( $cfg['denied_title'] ) . '</h3>';
+	printf(
+		'<textarea name="%1$s" id="%2$s" rows="4" class="large-text code" aria-labelledby="%3$s" aria-describedby="%4$s">%5$s</textarea>',
+		esc_attr( $cfg['denied_field_name'] ),
+		esc_attr( $cfg['denied_textarea_id'] ),
+		esc_attr( $cfg['denied_label_id'] ),
+		esc_attr( $cfg['denied_hint_id'] ),
+		esc_textarea( implode( "\n", $cfg['denied'] ) )
+	);
+	echo '<p class="description" id="' . esc_attr( $cfg['denied_hint_id'] ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	echo '<p><button type="button" id="' . esc_attr( $cfg['save_button_id'] ) . '" class="aafm-btn aafm-btn-primary">' . esc_html( $cfg['save_button_label'] ) . '</button> <span class="' . esc_attr( $cfg['status_class'] ) . '" aria-live="polite"></span></p>';
+	echo '</div>';
+}
+
+/**
  * Render the "Exposed meta keys" opt-in selector inside the Content sub-tab.
  *
  * One key per line in the textarea is the allowlist; chips below offer the meta keys
@@ -1977,51 +2177,29 @@ function aafm_render_meta_keys_selector(): void {
 		array_unshift( $denied, '*' );
 	}
 
-	// Mirrors the post-types selector: a plain <div> (never a nested <form>) with a
-	// type="button" save, so the one outer abilities <form> is never closed early.
-	echo '<div id="aafm-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3 id="' . esc_attr( 'aafm-meta-keys-label' ) . '">' . esc_html__( 'Exposed meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden.', 'agent-abilities-for-mcp' ) . '</p>';
-	aafm_render_notice( 'warning', __( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'agent-abilities-for-mcp' ) );
-
-	printf(
-		'<textarea name="aafm_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
-		esc_attr( 'aafm-meta-keys' ),
-		esc_attr( 'aafm-meta-keys-label' ),
-		esc_attr( 'aafm-meta-keys-hint' ),
-		esc_textarea( implode( "\n", $allowed ) )
+	aafm_render_meta_keys_pair(
+		array(
+			'container_id'        => 'aafm-meta-keys-form',
+			'exposed_title'       => __( 'Exposed meta keys', 'agent-abilities-for-mcp' ),
+			'exposed_description' => __( 'One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden.', 'agent-abilities-for-mcp' ),
+			'warning'             => __( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'agent-abilities-for-mcp' ),
+			'exposed'             => $allowed,
+			'exposed_field_name'  => 'aafm_meta_keys',
+			'exposed_textarea_id' => 'aafm-meta-keys',
+			'exposed_label_id'    => 'aafm-meta-keys-label',
+			'exposed_hint_id'     => 'aafm-meta-keys-hint',
+			'detected'            => $detected,
+			'denied_title'        => __( 'Denied meta keys', 'agent-abilities-for-mcp' ),
+			'denied'              => $denied,
+			'denied_field_name'   => 'aafm_deny_meta_keys',
+			'denied_textarea_id'  => 'aafm-deny-meta-keys',
+			'denied_label_id'     => 'aafm-deny-meta-keys-label',
+			'denied_hint_id'      => 'aafm-deny-meta-keys-hint',
+			'save_button_id'      => 'aafm-meta-keys-save',
+			'save_button_label'   => __( 'Save meta keys', 'agent-abilities-for-mcp' ),
+			'status_class'        => 'aafm-meta-keys-status',
+		)
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	echo '<p class="description">' . esc_html__( 'Detected on your exposed types', 'agent-abilities-for-mcp' ) . '</p>';
-	if ( empty( $detected ) ) {
-		echo '<p class="description">' . esc_html__( 'Nothing detected yet on the types you expose.', 'agent-abilities-for-mcp' ) . '</p>';
-	} else {
-		echo '<div class="aafm-meta-chips">';
-		foreach ( $detected as $key ) {
-			printf(
-				'<button type="button" class="aafm-meta-chip" data-key="%1$s">%2$s</button>',
-				esc_attr( $key ),
-				esc_html( $key )
-			);
-		}
-		echo '</div>';
-	}
-
-	// Deny list, below the exposed list. Denied keys always win over the exposed list, even
-	// when it uses *. The chip source above writes only into the Exposed textarea.
-	echo '<h3 id="' . esc_attr( 'aafm-deny-meta-keys-label' ) . '">' . esc_html__( 'Denied meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	printf(
-		'<textarea name="aafm_deny_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
-		esc_attr( 'aafm-deny-meta-keys' ),
-		esc_attr( 'aafm-deny-meta-keys-label' ),
-		esc_attr( 'aafm-deny-meta-keys-hint' ),
-		esc_textarea( implode( "\n", $denied ) )
-	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-deny-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	echo '<p><button type="button" id="aafm-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-meta-keys-status" aria-live="polite"></span></p>';
-	echo '</div>';
 }
 
 /**
@@ -2047,32 +2225,29 @@ function aafm_render_user_meta_keys_selector(): void {
 		array_unshift( $denied, '*' );
 	}
 
-	echo '<div id="aafm-user-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3 id="' . esc_attr( 'aafm-exposed-user-meta-keys-label' ) . '">' . esc_html__( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'These are the only user meta keys an agent can read or write on a user it can already edit. Denied keys always win, even when the exposed list uses *.', 'agent-abilities-for-mcp' ) . '</p>';
-	aafm_render_notice( 'warning', __( 'User meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Authentication keys, capabilities, and password keys are blocked for good and cannot be added.', 'agent-abilities-for-mcp' ) );
-
-	printf(
-		'<textarea name="aafm_exposed_user_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
-		esc_attr( 'aafm-exposed-user-meta-keys' ),
-		esc_attr( 'aafm-exposed-user-meta-keys-label' ),
-		esc_attr( 'aafm-exposed-user-meta-keys-hint' ),
-		esc_textarea( implode( "\n", $exposed ) )
+	aafm_render_meta_keys_pair(
+		array(
+			'container_id'        => 'aafm-user-meta-keys-form',
+			'exposed_title'       => __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ),
+			'exposed_description' => __( 'These are the only user meta keys an agent can read or write on a user it can already edit. Denied keys always win, even when the exposed list uses *.', 'agent-abilities-for-mcp' ),
+			'warning'             => __( 'User meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Authentication keys, capabilities, and password keys are blocked for good and cannot be added.', 'agent-abilities-for-mcp' ),
+			'exposed'             => $exposed,
+			'exposed_field_name'  => 'aafm_exposed_user_meta_keys',
+			'exposed_textarea_id' => 'aafm-exposed-user-meta-keys',
+			'exposed_label_id'    => 'aafm-exposed-user-meta-keys-label',
+			'exposed_hint_id'     => 'aafm-exposed-user-meta-keys-hint',
+			'detected'            => null,
+			'denied_title'        => __( 'Denied user meta keys', 'agent-abilities-for-mcp' ),
+			'denied'              => $denied,
+			'denied_field_name'   => 'aafm_denied_user_meta_keys',
+			'denied_textarea_id'  => 'aafm-denied-user-meta-keys',
+			'denied_label_id'     => 'aafm-denied-user-meta-keys-label',
+			'denied_hint_id'      => 'aafm-denied-user-meta-keys-hint',
+			'save_button_id'      => 'aafm-user-meta-keys-save',
+			'save_button_label'   => __( 'Save user meta keys', 'agent-abilities-for-mcp' ),
+			'status_class'        => 'aafm-user-meta-keys-status',
+		)
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-exposed-user-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	echo '<h3 id="' . esc_attr( 'aafm-denied-user-meta-keys-label' ) . '">' . esc_html__( 'Denied user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	printf(
-		'<textarea name="aafm_denied_user_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
-		esc_attr( 'aafm-denied-user-meta-keys' ),
-		esc_attr( 'aafm-denied-user-meta-keys-label' ),
-		esc_attr( 'aafm-denied-user-meta-keys-hint' ),
-		esc_textarea( implode( "\n", $denied ) )
-	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-denied-user-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	echo '<p><button type="button" id="aafm-user-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save user meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-meta-keys-status" aria-live="polite"></span></p>';
-	echo '</div>';
 }
 
 /**
@@ -2098,32 +2273,29 @@ function aafm_render_term_meta_keys_selector(): void {
 		array_unshift( $denied, '*' );
 	}
 
-	echo '<div id="aafm-term-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3 id="' . esc_attr( 'aafm-exposed-term-meta-keys-label' ) . '">' . esc_html__( 'Exposed term meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'These are the only term meta keys an agent can read or write on a term it can already edit. Denied keys always win, even when the exposed list uses *.', 'agent-abilities-for-mcp' ) . '</p>';
-	aafm_render_notice( 'warning', __( 'Term meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and cannot be added.', 'agent-abilities-for-mcp' ) );
-
-	printf(
-		'<textarea name="aafm_exposed_term_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
-		esc_attr( 'aafm-exposed-term-meta-keys' ),
-		esc_attr( 'aafm-exposed-term-meta-keys-label' ),
-		esc_attr( 'aafm-exposed-term-meta-keys-hint' ),
-		esc_textarea( implode( "\n", $exposed ) )
+	aafm_render_meta_keys_pair(
+		array(
+			'container_id'        => 'aafm-term-meta-keys-form',
+			'exposed_title'       => __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ),
+			'exposed_description' => __( 'These are the only term meta keys an agent can read or write on a term it can already edit. Denied keys always win, even when the exposed list uses *.', 'agent-abilities-for-mcp' ),
+			'warning'             => __( 'Term meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and cannot be added.', 'agent-abilities-for-mcp' ),
+			'exposed'             => $exposed,
+			'exposed_field_name'  => 'aafm_exposed_term_meta_keys',
+			'exposed_textarea_id' => 'aafm-exposed-term-meta-keys',
+			'exposed_label_id'    => 'aafm-exposed-term-meta-keys-label',
+			'exposed_hint_id'     => 'aafm-exposed-term-meta-keys-hint',
+			'detected'            => null,
+			'denied_title'        => __( 'Denied term meta keys', 'agent-abilities-for-mcp' ),
+			'denied'              => $denied,
+			'denied_field_name'   => 'aafm_denied_term_meta_keys',
+			'denied_textarea_id'  => 'aafm-denied-term-meta-keys',
+			'denied_label_id'     => 'aafm-denied-term-meta-keys-label',
+			'denied_hint_id'      => 'aafm-denied-term-meta-keys-hint',
+			'save_button_id'      => 'aafm-term-meta-keys-save',
+			'save_button_label'   => __( 'Save term meta keys', 'agent-abilities-for-mcp' ),
+			'status_class'        => 'aafm-term-meta-keys-status',
+		)
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-exposed-term-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	echo '<h3 id="' . esc_attr( 'aafm-denied-term-meta-keys-label' ) . '">' . esc_html__( 'Denied term meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	printf(
-		'<textarea name="aafm_denied_term_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
-		esc_attr( 'aafm-denied-term-meta-keys' ),
-		esc_attr( 'aafm-denied-term-meta-keys-label' ),
-		esc_attr( 'aafm-denied-term-meta-keys-hint' ),
-		esc_textarea( implode( "\n", $denied ) )
-	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-denied-term-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	echo '<p><button type="button" id="aafm-term-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save term meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-term-meta-keys-status" aria-live="polite"></span></p>';
-	echo '</div>';
 }
 
 /**
@@ -2812,7 +2984,7 @@ function aafm_render_help_tab(): void {
 		wp_kses(
 			'<p>' . esc_html__( 'The plugin is built to be safe by default. In plain terms:', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<ul>'
-			. '<li><strong>' . esc_html__( 'No external calls.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never phones home. Your credentials and your content never leave the site - the AI client connects in to you, not the other way round.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'No phoning home.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never contacts an AI provider or a telemetry service, and your credentials never leave the site - the AI client connects in to you, not the other way round. The one exception is the off-by-default "Upload media from URL" ability: turn it on and it will fetch the exact URL your AI client gives it so that file can be added to your media library.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
@@ -2827,7 +2999,7 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'What does the plugin log, and does it call out to anything?', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'The plugin makes no external calls - nothing about your site or its content is sent anywhere.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab\'s same-origin reachability check, and, only if you turn on the "Upload media from URL" ability, a fetch of the URL your AI client supplies so that file can be added to your media library - like any HTTP request, that fetch reveals the URL, your site\'s IP, and its timing to whatever server answers it.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'The activity log records only the argument KEYS of each call (never the values) plus the source IP address of the request. You can clear it any time from the Activity Log tab.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)

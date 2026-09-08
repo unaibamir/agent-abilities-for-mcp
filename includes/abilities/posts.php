@@ -38,7 +38,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_posts_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_posts_definitions( array $registry ): array {
-	$registry['aafm/get-posts']       = array(
+	$registry['aafm/get-posts']        = array(
 		'label'        => __( 'Get posts', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -46,7 +46,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_posts',
 	);
-	$registry['aafm/count-posts']     = array(
+	$registry['aafm/count-posts']      = array(
 		'label'        => __( 'Count posts', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Count posts of an allowlisted post type: a total of active (non-trashed) items, plus a breakdown by status (publish, draft, pending, private, future, trash). Trash and auto-draft are shown in the breakdown but excluded from total. When the caller cannot edit this post type, non-public status counts (draft, pending, private, future, trash) are reported as zero and only public statuses are counted.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -54,7 +54,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_count_posts',
 	);
-	$registry['aafm/get-post']        = array(
+	$registry['aafm/get-post']         = array(
 		'label'        => __( 'Get post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Retrieve a single post by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected posts), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -62,7 +62,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_post',
 	);
-	$registry['aafm/create-draft']    = array(
+	$registry['aafm/create-draft']     = array(
 		'label'        => __( 'Create draft', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create a new post, draft by default. An explicit status is honored, but publish, future, private, or any other publicly-visible status requires this content type\'s publish capability. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -70,7 +70,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_draft',
 	);
-	$registry['aafm/create-post']     = array(
+	$registry['aafm/create-post']      = array(
 		'label'        => __( 'Create post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create a new post, published by default (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -78,23 +78,31 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_post',
 	);
-	$registry['aafm/update-post']     = array(
+	$registry['aafm/update-post']      = array(
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_post',
 	);
-	$registry['aafm/replace-in-post'] = array(
+	$registry['aafm/replace-in-post']  = array(
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_replace_in_post',
 	);
-	$registry['aafm/trash-post']      = array(
+	$registry['aafm/replace-sitewide'] = array(
+		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. Bounded to 50 posts per call; a larger match set reports truncated:true with the real total.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_replace_sitewide',
+	);
+	$registry['aafm/trash-post']       = array(
 		'label'        => __( 'Trash post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -102,7 +110,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_trash_post',
 	);
-	$registry['aafm/create-cpt-item'] = array(
+	$registry['aafm/create-cpt-item']  = array(
 		'label'        => __( 'Create content item', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create an item of an allowlisted custom content type (post_type), draft by default. An explicit status is honored, but publish, future, private, or any other publicly-visible status requires that type\'s publish capability. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -110,15 +118,15 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_cpt_item',
 	);
-	$registry['aafm/update-cpt-item'] = array(
+	$registry['aafm/update-cpt-item']  = array(
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_cpt_item',
 	);
-	$registry['aafm/delete-post']     = array(
+	$registry['aafm/delete-post']      = array(
 		'label'        => __( 'Delete post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -143,32 +151,27 @@ function aafm_args_get_posts(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'post_type'       => array(
+					'post_type' => array(
 						'type'        => 'string',
 						'default'     => 'post',
 						'description' => __( 'Slug of an allowlisted content type to list. Defaults to post. Types outside the operator\'s exposed allowlist are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'status'          => array(
+					'status'    => array(
 						'type'        => 'string',
 						'default'     => 'publish',
 						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private content for this type; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'search'          => array(
+					'search'    => array(
 						'type'        => 'string',
 						'description' => __( 'Free-text search term matched against the post title and content, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
 					),
-					'page'            => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page'        => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PER_PAGE_MAX,
-						'description' => __( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-					),
+				),
+				aafm_pagination_schema_props(
+					AAFM_LIST_PER_PAGE_MAX,
+					__( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				),
+				array(
 					'content_format'  => array(
 						'type'        => 'string',
 						'enum'        => array( 'rendered', 'raw' ),
@@ -455,16 +458,21 @@ function aafm_args_get_post(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'post_id'        => array(
+					'post_id'         => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
 						'description' => __( 'ID of the post to retrieve.', 'agent-abilities-for-mcp' ),
 					),
-					'content_format' => array(
+					'content_format'  => array(
 						'type'        => 'string',
 						'enum'        => array( 'rendered', 'raw' ),
 						'default'     => 'rendered',
 						'description' => __( 'Format for the returned content: rendered HTML (default) or raw block markup.', 'agent-abilities-for-mcp' ),
+					),
+					'include_content' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => __( 'Whether to include the post content. Defaults to true; pass false to omit it, for example when only content_length is needed to preflight size.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -563,7 +571,8 @@ function aafm_exec_get_post( array $input ) {
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	$include_content = ! array_key_exists( 'include_content', $input ) || (bool) $input['include_content'];
 	// Branch review fix (lang scope and result shaping): shape under the CORRECT language,
 	// never ambient. An explicit requested language shapes under that language, matching the
 	// translation aafm_get_post_lang_resolved_id() already resolved above. "all" or no lang at
@@ -576,7 +585,13 @@ function aafm_exec_get_post( array $input ) {
 	return array(
 		'post' => aafm_with_language(
 			$shape_lang,
-			static fn(): array => aafm_rich_post( $post, array( 'content_format' => $format ) )
+			static fn(): array => aafm_rich_post(
+				$post,
+				array(
+					'content_format'  => $format,
+					'include_content' => $include_content,
+				)
+			)
 		),
 	);
 }
@@ -761,21 +776,39 @@ function aafm_perm_create_draft( array $input ): bool {
  * once edit_posts is cleared, while future/private must only be allowed once $publish_cap is
  * held, and a single boolean cannot express both at once.
  *
- * @param string $requested   Raw requested status.
- * @param string $publish_cap Capability required to request a publish-equivalent status.
+ * @param string        $requested       Raw requested status.
+ * @param string        $publish_cap     Capability required to request a publish-equivalent status.
+ * @param string[]|null $public_statuses The caller's already-computed public-status list, when
+ *                                       it has one. Passed through to both internal checks
+ *                                       below so this function computes get_post_stati() at
+ *                                       most once per call instead of twice. Null (the
+ *                                       default) computes it here, unchanged from before.
  * @return string|WP_Error Sanitized status, or WP_Error when unauthorized/unrecognized.
  */
-function aafm_authorize_post_status( string $requested, string $publish_cap ) {
+function aafm_authorize_post_status( string $requested, string $publish_cap, ?array $public_statuses = null ) {
 	$status = sanitize_key( $requested );
-	if ( aafm_status_requires_publish_cap( $status ) && ! current_user_can( $publish_cap ) ) {
+	if ( null === $public_statuses ) {
+		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
+	}
+	if ( aafm_status_requires_publish_cap( $status, $public_statuses ) && ! current_user_can( $publish_cap ) ) {
 		return new WP_Error( 'aafm_status_forbidden', __( 'You do not have permission to set that status.', 'agent-abilities-for-mcp' ) );
 	}
-	$recognized = array_merge(
-		array_values( get_post_stati( array( 'public' => true ) ) ),
-		array( 'draft', 'pending', 'future', 'private' )
-	);
+	$recognized = array_merge( $public_statuses, array( 'draft', 'pending', 'future', 'private' ) );
 	if ( ! in_array( $status, $recognized, true ) ) {
 		return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
+	}
+	// Codex final round 9 MEDIUM: the TEC create/update chokepoints route status entirely
+	// through this function (and aafm_resolve_create_status(), which delegates to it), but the
+	// operator's force-draft override was only ever applied by aafm_insert_post()'s own
+	// duplicate of this same coercion - TEC's writers never called that function, so an explicit
+	// publish/future/private request against an event, venue, or organizer bypassed force-draft
+	// entirely. Moving the coercion into this single shared chokepoint closes it for every
+	// caller at once, TEC included, rather than adding a fourth copy of the same three-line
+	// check. Applying it here is behaviourally identical to aafm_insert_post()'s existing
+	// separate call for its own callers (same condition, same outcome), so that call is left in
+	// place rather than removed for a fix that does not need it touched.
+	if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status, $public_statuses ) ) {
+		$status = 'draft';
 	}
 	return $status;
 }
@@ -797,7 +830,18 @@ function aafm_resolve_create_status( array $input, string $fallback_status, stri
 	if ( ! isset( $input['status'] ) ) {
 		return $fallback_status;
 	}
-	return aafm_authorize_post_status( (string) $input['status'], $publish_cap );
+	$status = aafm_authorize_post_status( (string) $input['status'], $publish_cap );
+	if ( is_wp_error( $status ) ) {
+		return $status;
+	}
+	// aafm_authorize_post_status() only forces draft for a status it recognizes as
+	// publish-equivalent (mirroring the narrower rule an UPDATE needs, so it never touches
+	// pending or retro-unpublishes). A CREATE is held to aafm_insert_post()'s own stricter,
+	// unconditional rule instead - force-draft always wins on create, even for a requested
+	// 'pending' - so this delegating chokepoint applies that second, stronger pass for every
+	// caller that routes through it (TEC events/venues/organizers included), matching what
+	// aafm_insert_post() has always done for its own callers.
+	return aafm_force_draft() ? 'draft' : $status;
 }
 
 /**
@@ -847,7 +891,12 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	}
 
 	// Validate enrichment BEFORE inserting so a bad term/attachment/meta aborts with nothing written.
-	$enrichment = aafm_validate_write_enrichment( $input );
+	// Codex round 7 R7-3: pass the real target post type ($type), not the default 'post', so the
+	// meta probe is not blind to a sanitize_callback registered for this create's actual type.
+	// Codex round 8 R8-2: unlike the update path, there is no post id yet at this point, so
+	// get_object_subtype( 'post', $id ) cannot be resolved here - $type (the intended post type
+	// this create will be assigned) is the closest available proxy for it.
+	$enrichment = aafm_validate_write_enrichment( $input, $type );
 	if ( is_wp_error( $enrichment ) ) {
 		return $enrichment;
 	}
@@ -1111,9 +1160,18 @@ function aafm_exec_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
 	// Validate enrichment BEFORE wp_update_post so a bad term/attachment/meta aborts
-	// with the post left exactly as it was (no half-applied update).
-	$enrichment = aafm_validate_write_enrichment( $input );
+	// with the post left exactly as it was (no half-applied update). Codex round 7 R7-3: pass the
+	// post's real, existing type, not the default 'post'. Codex round 8 R8-2: the id already
+	// exists here, so resolve the same filterable get_object_subtype( 'post', $id ) call core
+	// itself makes at write time, rather than the raw $post->post_type, so a get_object_subtype_post
+	// filter is honoured the same way it is at write time.
+	$enrichment = aafm_validate_write_enrichment( $input, (string) get_object_subtype( 'post', $id ) );
 	if ( is_wp_error( $enrichment ) ) {
 		return $enrichment;
 	}
@@ -1157,9 +1215,10 @@ function aafm_exec_update_post( array $input ) {
 		// Previously this used the type's edit_others cap, which is the wrong question (can this
 		// caller edit someone else's post) and wrongly refused an Author - holds publish_posts
 		// but not edit_others_posts - trying to schedule or privatize their OWN post.
-		$type_object = get_post_type_object( $post->post_type );
-		$publish_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->publish_posts : 'publish_posts';
-		$status      = aafm_authorize_post_status( (string) $input['status'], $publish_cap );
+		$type_object     = get_post_type_object( $post->post_type );
+		$publish_cap     = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->publish_posts : 'publish_posts';
+		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
+		$status          = aafm_authorize_post_status( (string) $input['status'], $publish_cap, $public_statuses );
 		if ( is_wp_error( $status ) ) {
 			return $status;
 		}
@@ -1168,7 +1227,7 @@ function aafm_exec_update_post( array $input ) {
 		// is coerced to 'draft'. This only fires on such an explicit request - an edit-only
 		// update with no 'status' field never reaches here, so force-draft can never
 		// retro-unpublish an already-published post.
-		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status ) ) {
+		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status, $public_statuses ) ) {
 			$status = 'draft';
 		}
 		$postarr['post_status'] = $status;
@@ -1528,6 +1587,11 @@ function aafm_exec_replace_in_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
 	$search  = (string) $input['search'];
 	$replace = (string) $input['replace'];
 	$content = (string) $post->post_content;
@@ -1577,8 +1641,18 @@ function aafm_exec_replace_in_post( array $input ) {
 	}
 
 	$updated = get_post( (int) $result );
-	if ( ! $updated instanceof WP_Post ) {
-		return aafm_generic_error();
+	// Codex round 5 R5-2: only is_wp_error() was checked here, so a wp_insert_post_data filter
+	// that vetoed or reverted the content would report the pre-computed replacement count as
+	// though it had landed. Confirm the exact intended content actually made it to storage,
+	// matching Avada's replace-text fix (Codex hunt F4). Codex round 6 B6-3: compare against the
+	// CANONICAL sanitize_post_field() form, not $new itself, so a legitimate normalization (kses
+	// for a user without unfiltered_html re-running over the whole assembled document) is not
+	// mistaken for a veto.
+	if ( ! $updated instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new ) ) {
+		return new WP_Error(
+			'aafm_replace_write_unconfirmed',
+			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+		);
 	}
 
 	$response = array(
@@ -1589,6 +1663,303 @@ function aafm_exec_replace_in_post( array $input ) {
 		$response['content_warnings'] = $guard['warnings'];
 	}
 	return $response;
+}
+
+/**
+ * The upper bound on how many posts a single aafm/replace-sitewide call touches (or
+ * previews, in dry-run). Mirrors AAFM_LIST_PER_PAGE_MAX's role for list abilities.
+ */
+const AAFM_REPLACE_SITEWIDE_MAX_POSTS = 50;
+
+/**
+ * The upper bound on how many raw SQL matches a single call will examine (get_post() + a
+ * permission/ownership check each) while filling AAFM_REPLACE_SITEWIDE_MAX_POSTS's editable-
+ * candidate budget. Codex final round 3 MEDIUM: without a ceiling here, a search term matching
+ * an enormous number of posts the caller cannot edit (all owned by someone else, all sitting
+ * before the caller's own editable match in ID order) would scan every one of them looking for
+ * 50 it could act on - unbounded work driven entirely by how the matches happen to be
+ * distributed, not by anything the caller controls. This does not add pagination or a
+ * continuation cursor (the locked contract for this ability deliberately has neither); it only
+ * bounds the worst case to a fixed amount of scanning per call, same as the editable-candidate
+ * cap already bounds the worst case of actual writing.
+ */
+const AAFM_REPLACE_SITEWIDE_MAX_SCAN = 5000;
+
+/**
+ * Args for aafm/replace-sitewide.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_replace_sitewide(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/replace-sitewide' ),
+		'description'         => aafm_ability_description( 'aafm/replace-sitewide' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'search'    => array(
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Literal text to find. Matched as-is, not as a regular expression.', 'agent-abilities-for-mcp' ),
+				),
+				'replace'   => array(
+					'type'        => 'string',
+					'description' => __( 'Literal text to substitute for every match.', 'agent-abilities-for-mcp' ),
+				),
+				'post_type' => array(
+					'type'        => 'string',
+					'default'     => 'post',
+					'description' => __( 'Slug of an allowlisted content type to scope the replace to. Defaults to post.', 'agent-abilities-for-mcp' ),
+				),
+				'status'    => array(
+					'type'        => 'string',
+					'default'     => 'publish',
+					'description' => __( 'Post status to scope the replace to. Defaults to publish.', 'agent-abilities-for-mcp' ),
+				),
+				'dry_run'   => array(
+					'type'        => 'boolean',
+					'default'     => true,
+					'description' => __( 'When true (the default), previews the match without writing anything. Pass false to apply the change.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'search', 'replace' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'dry_run'                 => array( 'type' => 'boolean' ),
+				'matched_posts'           => array( 'type' => 'integer' ),
+				'updated_posts'           => array( 'type' => 'integer' ),
+				'skipped_no_permission'   => array( 'type' => 'integer' ),
+				'skipped_structure_guard' => array( 'type' => 'integer' ),
+				'skipped_builder_owned'   => array(
+					'type'        => 'integer',
+					'description' => __( 'Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content.', 'agent-abilities-for-mcp' ),
+				),
+				'failed_updates'          => array(
+					'type'        => 'integer',
+					'description' => __( 'Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal.', 'agent-abilities-for-mcp' ),
+				),
+				'truncated'               => array( 'type' => 'boolean' ),
+				'total_matches'           => array( 'type' => 'integer' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_replace_sitewide',
+		'permission_callback' => 'aafm_perm_edit_posts',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/replace-sitewide.
+ *
+ * The literal-substring match is done in SQL (a posts_where LIKE clause, mirroring the
+ * get-media search pattern in includes/abilities/media.php) rather than fetched-page-then-
+ * filtered-in-PHP: an SQL-side match means pagination and matching happen in the same query, so
+ * a match sitting outside the first AAFM_REPLACE_SITEWIDE_MAX_POSTS rows by ID is never silently
+ * missed from the total - the exact "reported total doesn't match reality" bug class this
+ * release exists to stop repeating. total_matches and truncated are computed from an
+ * unpaginated count of the same WHERE-scoped query before the bounded page is fetched.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_replace_sitewide( array $input ) {
+	$type = aafm_validate_post_type( isset( $input['post_type'] ) ? (string) $input['post_type'] : 'post' );
+	if ( is_wp_error( $type ) ) {
+		return $type;
+	}
+	$type_object = get_post_type_object( $type );
+	$can_private = $type_object instanceof WP_Post_Type && current_user_can( (string) $type_object->cap->read_private_posts );
+	$status      = aafm_validate_post_status( isset( $input['status'] ) ? (string) $input['status'] : 'publish', $can_private );
+	if ( is_wp_error( $status ) ) {
+		return $status;
+	}
+
+	$search  = (string) $input['search'];
+	$replace = (string) $input['replace'];
+	$dry_run = ! array_key_exists( 'dry_run', $input ) || (bool) $input['dry_run'];
+
+	// Codex final round 4 MEDIUM: an unscoped 'posts_where' filter runs against EVERY WP_Query
+	// built while it's attached, not only this function's own two queries below - an unrelated
+	// nested query (fired from any hook during either query) would silently receive this same
+	// LIKE clause. A private, per-call marker in the query args (harmless to core - unrecognized
+	// keys are ignored when building SQL, but still readable via $query->get()) scopes the filter
+	// to this function's own queries only.
+	$query_marker = 'aafm_replace_sitewide_' . wp_generate_password( 12, false, false );
+	$like_filter  = static function ( string $where, WP_Query $query ) use ( $search, $query_marker ): string {
+		if ( $query_marker !== $query->get( 'aafm_query_marker' ) ) {
+			return $where;
+		}
+		global $wpdb;
+		// BINARY forces a byte-exact, case- and accent-sensitive comparison, matching PHP's
+		// str_replace() semantics exactly. Without it MySQL's default collation makes LIKE
+		// case-insensitive, so a search for "quick" would SQL-match "Quick", get selected and
+		// counted as a match, str_replace() would then leave it byte-for-byte unchanged, and
+		// wp_update_post() would still run and be counted as an update - a silent no-op inflating
+		// updated_posts and total_matches alike.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant ($wpdb->posts).
+		return $where . $wpdb->prepare(
+			" AND {$wpdb->posts}.post_content LIKE BINARY %s",
+			'%' . $wpdb->esc_like( $search ) . '%'
+		);
+	};
+
+	// Codex final round 3 MEDIUM: that scan had no ceiling of its own, so a search term matching
+	// an enormous number of non-editable posts could force scanning all of them (get_post() plus
+	// two checks each) looking for AAFM_REPLACE_SITEWIDE_MAX_POSTS editable ones -
+	// AAFM_REPLACE_SITEWIDE_MAX_SCAN bounds that worst case; see its own docblock for why this is
+	// not the continuation cursor the locked contract deliberately omits. Filterable so a test can
+	// prove the scan actually stops without creating thousands of posts to reach the real default
+	// - the same pattern already used for the GeoDirectory list batch size.
+	$max_scan = max( 1, (int) apply_filters( 'aafm_replace_sitewide_max_scan', AAFM_REPLACE_SITEWIDE_MAX_SCAN ) );
+
+	add_filter( 'posts_where', $like_filter, 10, 2 );
+	try {
+		// Codex final round 4 MEDIUM: the real total used to come from fetching EVERY matching id
+		// unpaginated (posts_per_page => -1) - for a search term matching an enormous number of
+		// posts, that alone materializes an enormous id array before any scanning even starts.
+		// WP_Query computes an exact row count via its own single SELECT COUNT(*) whenever
+		// no_found_rows is false, regardless of posts_per_page, so a 1-row probe query gets the
+		// real total without ever fetching the matching ids themselves.
+		$count_probe   = new WP_Query(
+			array(
+				'post_type'         => $type,
+				'post_status'       => $status,
+				'fields'            => 'ids',
+				'posts_per_page'    => 1,
+				'no_found_rows'     => false,
+				'aafm_query_marker' => $query_marker,
+			)
+		);
+		$total_matches = (int) $count_probe->found_posts;
+		$truncated     = $total_matches > AAFM_REPLACE_SITEWIDE_MAX_POSTS;
+
+		// The actual candidate-scanning fetch is bounded to $max_scan ids by the query itself -
+		// Codex final round 2 MEDIUM's own fix (scan in ID order, fill the cap with EDITABLE,
+		// non-builder-owned candidates only; a skipped post costs nothing against the cap) still
+		// applies to this bounded list, it just no longer needs an enormous unbounded one to work
+		// from.
+		$scan_query = new WP_Query(
+			array(
+				'post_type'         => $type,
+				'post_status'       => $status,
+				'fields'            => 'ids',
+				'posts_per_page'    => $max_scan,
+				'orderby'           => 'ID',
+				'order'             => 'ASC',
+				'no_found_rows'     => true,
+				'aafm_query_marker' => $query_marker,
+			)
+		);
+	} finally {
+		remove_filter( 'posts_where', $like_filter, 10 );
+	}
+
+	// Codex final round 2 MEDIUM: an SQL-side `LIMIT AAFM_REPLACE_SITEWIDE_MAX_POSTS` applied
+	// BEFORE permission/builder-ownership filtering meant that enough non-editable matching posts
+	// sitting earlier in ID order could occupy the entire cap, so the caller's own editable match
+	// was never even fetched, let alone processed - repeating the call selected the exact same
+	// unreachable window every time. Scan the bounded id list above in ID order and fill the cap
+	// with EDITABLE, non-builder-owned candidates only; a skipped post costs nothing against it.
+	$candidates    = array();
+	$no_perm       = 0;
+	$builder_owned = 0;
+	foreach ( $scan_query->posts as $post_id ) {
+		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS ) {
+			break;
+		}
+		$post = get_post( (int) $post_id ); // @phpstan-ignore-line cast.int (fields=>ids means $post_id is really an int; the WP_Query stub types ->posts as WP_Post[] unconditionally).
+		if ( ! $post instanceof WP_Post ) {
+			continue;
+		}
+		if ( ! aafm_can_edit_post_object( $post ) ) {
+			++$no_perm;
+			continue;
+		}
+		$owning_builder = aafm_post_has_foreign_builder_ownership( $post->ID );
+		if ( false !== $owning_builder ) {
+			++$builder_owned;
+			continue;
+		}
+		$candidates[] = $post;
+	}
+
+	$updated = 0;
+	$guarded = 0;
+	$failed  = 0;
+
+	foreach ( $candidates as $post ) {
+		// Guards run identically in dry-run and a real apply, so a preview's counters are an
+		// honest forecast of what applying would do - only the actual write is skipped below.
+		$inserted = wp_kses_post( $replace );
+		$new      = str_replace( $search, $inserted, (string) $post->post_content );
+		if ( $new === (string) $post->post_content ) {
+			// Defensive: the SQL-side LIKE BINARY match and str_replace() should always agree,
+			// but if a match somehow produces no actual byte change, treat it as guarded rather
+			// than silently reporting a successful update that touched nothing.
+			++$guarded;
+			continue;
+		}
+		if ( ! aafm_replacement_preserves_structure( (string) $post->post_content, $new ) ) {
+			++$guarded;
+			continue;
+		}
+		$guard = aafm_block_guard_evaluate( $new );
+		if ( $guard['error'] instanceof WP_Error ) {
+			++$guarded;
+			continue;
+		}
+
+		if ( $dry_run ) {
+			continue; // Counted in matched_posts below; nothing written.
+		}
+
+		$result = wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => $new,
+				)
+			),
+			true
+		);
+		if ( is_wp_error( $result ) ) {
+			++$failed;
+			continue;
+		}
+		// Codex round 5 R5-2: is_wp_error() alone does not catch a wp_insert_post_data filter
+		// that vetoes or reverts the content, which would count a post as updated when nothing
+		// actually changed. Confirm the exact intended content landed, matching the single-post
+		// replace-text fix above. Codex round 6 B6-3: compare against the CANONICAL
+		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
+		// mistaken for a veto.
+		$after = get_post( (int) $result );
+		if ( ! $after instanceof WP_Post || ! aafm_post_field_write_confirmed( $post->ID, 'post_content', $new ) ) {
+			++$failed;
+			continue;
+		}
+		++$updated;
+	}
+
+	return array(
+		'dry_run'                 => $dry_run,
+		'matched_posts'           => count( $candidates ),
+		'updated_posts'           => $updated,
+		'skipped_no_permission'   => $no_perm,
+		'skipped_structure_guard' => $guarded,
+		'skipped_builder_owned'   => $builder_owned,
+		'failed_updates'          => $failed,
+		'truncated'               => $truncated,
+		'total_matches'           => $total_matches,
+	);
 }
 
 /**

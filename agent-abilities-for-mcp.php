@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission controls, off by default, and a full audit log.
- * Version:           1.7.3
+ * Version:           1.7.4
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,18 +21,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.7.3' );
+define( 'AAFM_VERSION', '1.7.4' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AAFM_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
-define( 'AAFM_MIN_ADAPTER_VERSION', '0.5.0' );
+define( 'AAFM_MIN_ADAPTER_VERSION', '0.6.1' );
 
 // Win the WP\MCP\ class-declaration race. The wordpress/mcp-adapter library is bundled by many
 // plugins under the same WP\MCP\ namespace, but PHP can load only one McpAdapter per request:
 // whichever copy is declared first wins site-wide. A sibling shipping an older copy via a plain
 // Composer autoloader (confirmed: Rank Math SEO 0.4.1) can win that race and trip our floor check,
-// killing our /mcp route. We MUST run our own 0.5.0 (0.4.1 lacks the per-connection capability
+// killing our /mcp route. We MUST run our own 0.6.1 (0.4.1 lacks the per-connection capability
 // gate). A prepended autoloader alone is not enough - later plugins' Composer autoloaders also
 // prepend and leapfrog ours - so we EAGER-LOAD our copy: declare every WP\MCP\ class from our
 // bundle now, during the plugin-include phase. Declaring every class up front beats a sibling's
@@ -229,6 +229,12 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/codes.php';
 // Access/refresh token manager: hashed storage, refresh rotation, reuse detection.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 
+// When a WordPress user is deleted, clean up the OAuth consents, tokens and codes they
+// leave behind rather than letting them go orphaned. See aafm_oauth_cleanup_deleted_user()
+// for why 'deleted_user' is the chosen hook and what multisite scope this does and does not
+// cover.
+add_action( 'deleted_user', 'aafm_oauth_cleanup_deleted_user' );
+
 // Discovery documents: the two .well-known metadata files served before REST auth.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
 add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
@@ -246,7 +252,7 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
 // later reactivation never re-arms it; per-user dismissal is tracked in the core dismissed-pointers
 // meta.
 require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
-register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_quickconnect_flag_menu_pointer' );
+register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_quickconnect_activate_menu_pointer' );
 
 // One-time upgrade safety: an install updated in place from a pre-off-by-default version
 // holds no stored toggle row and ran on the old on-by-default reader, so the new
@@ -286,11 +292,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/validator.php';
 // Priority 20 runs after cookie auth (10) and alongside core's Application
 // Password resolver. Ordering is not load-bearing for the frozen invariant: the
 // resolver returns early whenever a user is already set, so it can never preempt
-// an App Password (or any other) identity regardless of which runs first.
+// an App Password (or any other) identity regardless of which runs first. We take
+// no position on rest_authentication_errors: a present-but-invalid OAuth token is
+// surfaced only through this resolver returning no user, never by attaching a
+// filter that could turn "no user resolved" into a hard failure on unrelated routes.
 add_filter( 'determine_current_user', 'aafm_oauth_resolve_current_user', 20 );
-// Defensive pass-through so a present-but-invalid OAuth token never gets turned
-// into a hard auth failure on unrelated REST routes.
-add_filter( 'rest_authentication_errors', 'aafm_oauth_rest_authentication_errors', 5 );
 
 // wp_kses allowlist helpers - loaded unconditionally so they are available to the
 // OAuth consent page (rendered on the front end, before aafm_bootstrap()).
@@ -313,6 +319,9 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/wpml.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/safety.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/block-guard.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/page-builder-guard.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/allowlist.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/class-aafm-registration-authority.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/class-aafm-rate-limited-ability.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
@@ -366,6 +375,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/yoast.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/rankmath.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/aioseo.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/slim-seo.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/acf-integration.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/_shared.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/products.php';
@@ -378,6 +388,13 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/tax.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/reports.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/gateways.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/_shared.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/events.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/venues.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/organizers.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/tec/tickets.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/avada.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/geodirectory.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -411,6 +428,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/allowlist.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-request.php';
@@ -440,6 +458,8 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_test_connection', 'aafm_ajax_test_connection' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
+		add_action( 'wp_ajax_aafm_set_client_agent_identity', 'aafm_ajax_set_client_agent_identity' );
+		add_action( 'wp_ajax_aafm_save_allowlist', 'aafm_ajax_save_allowlist' );
 		add_action( 'wp_ajax_aafm_quickconnect_oauth', 'aafm_ajax_quickconnect_oauth' );
 		add_action( 'wp_ajax_aafm_quickconnect_finish', 'aafm_ajax_quickconnect_finish' );
 		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );

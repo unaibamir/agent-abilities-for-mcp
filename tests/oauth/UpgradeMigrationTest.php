@@ -97,6 +97,76 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7, R7-2: the guard used to read get_option()'s cache-trusting view. The database
+	 * guard row is genuinely '1' (adoption already ran), but a stale persistent cache still claims
+	 * it is '0' (not yet run) - the exact reproduction from the finding. The old code would rerun
+	 * the migration and re-force DCR back on over the operator's later, deliberate opt-out.
+	 */
+	public function test_dcr_adoption_guard_ignores_a_stale_cache_claiming_not_yet_migrated(): void {
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		aafm_oauth_dcr_adopt_on_by_default();
+		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
+
+		// Operator deliberately turns it back off after the one-time adoption.
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		// A stale cache layer still claims the guard has not run, even though the real row is '1'.
+		$all                                       = wp_load_alloptions( true );
+		$all['aafm_oauth_dcr_default_on_migrated'] = '0';
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_default_on_migrated', 'MISSING' ),
+			'Precondition: the stale cache is what get_option() sees.'
+		);
+
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_enabled' ),
+			'The migration must not rerun from a stale cache claiming it is still pending: a post-adoption opt-out is not clobbered.'
+		);
+	}
+
+	/**
+	 * Codex round 7, R7-2, the other direction: the database guard row is genuinely absent
+	 * (adoption never ran), but a stale persistent cache claims it is already '1'. The old code
+	 * would skip the migration entirely, permanently leaving a legacy install stuck with DCR off
+	 * (the #90 footgun this migration exists to fix).
+	 */
+	public function test_dcr_adoption_runs_when_a_stale_cache_hides_an_absent_guard(): void {
+		global $wpdb;
+
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_oauth_dcr_default_on_migrated' ) );
+
+		$all                                       = wp_load_alloptions( true );
+		$all['aafm_oauth_dcr_default_on_migrated'] = '1';
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_dcr_default_on_migrated', 'MISSING' ),
+			'Precondition: the stale cache is what get_option() sees.'
+		);
+		$this->assertNull(
+			$wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s", 'aafm_oauth_dcr_default_on_migrated' ) ),
+			'Precondition: no DB row.'
+		);
+
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_dcr_enabled' ),
+			'The migration must still run from the real (absent) database row, even though a stale cache claimed it had already completed.'
+		);
+	}
+
+	/**
 	 * A fresh 1.3.0 install seeds an explicit '0' OAuth row at activation before this
 	 * migration ever runs, so the migration must leave it off - the off-by-default
 	 * default is only correct for genuinely new installs.
@@ -127,6 +197,37 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 5, R5-3: the absence check used to read get_option()'s cache-trusting view, so
+	 * a stale persistent object cache still serving an old value after the real row was gone
+	 * would make the migration think a row already existed, skip the preservation write, and then
+	 * mark itself done for good - permanently losing the pre-upgrade "on" state. The row is
+	 * deleted directly (bypassing delete_option(), which would also clear the cache) and a stale
+	 * '0' is planted in the alloptions cache, mirroring PersistentObjectCacheSwitchTest's
+	 * plant_stale_on(), so this proves the migration reads the database, not the cache.
+	 */
+	public function test_absent_row_is_preserved_even_when_a_stale_cache_still_serves_a_value(): void {
+		delete_option( 'aafm_oauth_toggle_migrated' );
+		delete_option( 'aafm_oauth_enabled' );
+
+		global $wpdb;
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_oauth_enabled' ) );
+		$all                       = wp_load_alloptions( true );
+		$all['aafm_oauth_enabled'] = '0';
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame( '0', get_option( 'aafm_oauth_enabled', 'MISSING' ), 'Precondition: the stale cache is what get_option() sees.' );
+		$this->assertNull( $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s", 'aafm_oauth_enabled' ) ), 'Precondition: no DB row.' );
+
+		aafm_oauth_preserve_toggle_on_upgrade();
+
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_enabled' ),
+			'The migration must preserve the pre-upgrade on state from the real database row, even though a stale cache claimed a value was already stored.'
+		);
+		$this->assertTrue( aafm_oauth_enabled() );
+	}
+
+	/**
 	 * The migration runs exactly once. After it has set its guard, a later absence of
 	 * a toggle row (for example a plugin reset returning to the off-by-default state)
 	 * must NOT be silently forced back on.
@@ -144,5 +245,89 @@ class UpgradeMigrationTest extends TestCase {
 
 		$this->assertFalse( get_option( 'aafm_oauth_enabled' ) );
 		$this->assertFalse( aafm_oauth_enabled() );
+	}
+
+	/**
+	 * Codex round 8, R8-3: the migration-marker write's return value used to be discarded, so a
+	 * certification failure on the guard itself (not the preceding preservation write, which was
+	 * already checked) was indistinguishable from success. The guard must stay unset - so the
+	 * migration is retried rather than recorded as done when it was not - and the failure must be
+	 * logged rather than silent.
+	 */
+	public function test_toggle_migration_marker_failure_is_logged_and_leaves_the_guard_unset(): void {
+		delete_option( 'aafm_oauth_toggle_migrated' );
+		update_option( 'aafm_oauth_enabled', '1' );
+
+		$this->make_option_write_unpersistable( 'aafm_oauth_toggle_migrated', '0' );
+		aafm_oauth_preserve_toggle_on_upgrade();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_toggle_migrated', '0' ),
+			'A certification failure on the marker write must leave the guard unset, not silently record completion.'
+		);
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm_oauth_toggle_migrated', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-array key, not a meta query.
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A failed marker write must be logged, not silently retried forever with no trace.' );
+	}
+
+	/**
+	 * Codex round 8, R8-3, the DCR sibling: same failure, same requirement - the guard stays
+	 * unset and the failure is logged.
+	 */
+	public function test_dcr_adoption_marker_failure_is_logged_and_leaves_the_guard_unset(): void {
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		$this->make_option_write_unpersistable( 'aafm_oauth_dcr_default_on_migrated', '0' );
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ), 'The DCR enable write is unaffected by the marker write failing.' );
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_default_on_migrated', '0' ),
+			'A certification failure on the marker write must leave the guard unset, not silently record completion.'
+		);
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm_oauth_dcr_default_on_migrated', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-array key, not a meta query.
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A failed marker write must be logged, not silently retried forever with no trace.' );
+	}
+
+	/**
+	 * Makes a single option write to $option uncertifiable by reverting the row back to
+	 * $stuck_raw_value immediately after WordPress writes it, so aafm_update_option_verified()'s
+	 * post-write database read never matches what was intended and the write is reported as
+	 * failed. Mirrors SettingsSaveTest's helper of the same name.
+	 *
+	 * @param string $option          Option name to sabotage.
+	 * @param string $stuck_raw_value The value the row is forced back to after every write.
+	 * @return void
+	 */
+	private function make_option_write_unpersistable( string $option, string $stuck_raw_value ): void {
+		$revert = static function () use ( $option, $stuck_raw_value ): void {
+			global $wpdb;
+			$wpdb->query(
+				$wpdb->prepare(
+					"REPLACE INTO $wpdb->options (option_name, option_value, autoload) VALUES (%s, %s, 'yes')",
+					$option,
+					$stuck_raw_value
+				)
+			);
+		};
+		$guard  = static function ( $changed ) use ( $option, $revert ): void {
+			if ( $changed === $option ) {
+				$revert();
+			}
+		};
+		add_action( 'added_option', $guard );
+		add_action( 'updated_option', $guard );
 	}
 }

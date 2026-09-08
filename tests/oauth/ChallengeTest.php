@@ -44,10 +44,6 @@ final class ChallengeTest extends TestCase {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 		$this->original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
 
-		// The 403 IP-block path writes a 'denied' row to the custom activity log.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-
 		// OAuth is OFF by default now; the challenge filter early-returns when disabled, so
 		// enable it for the header tests. The disabled-path tests set it back to '0'.
 		update_option( 'aafm_oauth_enabled', '1' );

@@ -33,56 +33,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+      - name: Set up PHP + Composer
+        uses: ./.github/actions/setup-php-composer
         with:
           php-version: '8.3'
-          coverage: none
           tools: cs2pr
-
-      # Ask Composer where its download cache lives rather than hardcoding ~/.cache/composer,
-      # which is only correct until something sets COMPOSER_HOME or COMPOSER_CACHE_DIR.
-      - name: Resolve the Composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
-
-      # Restore Composer's download cache so these jobs stop re-fetching every dependency from
-      # codeload on every run. Dropping ramsey/composer-install to get past the missing-Composer
-      # fault also dropped its caching, and the runs that followed tripped GitHub's rate limit -
-      # every error was HTTP 429 from codeload.github.com, on jobs that had nothing to do with
-      # each other. This is the replacement.
-      #
-      # The key carries the PHP version so the phpunit matrix legs do not fight over one entry,
-      # and a dev/no-dev scope because plugin-check.yml installs with --no-dev: cache entries are
-      # immutable, so if that job won the race under a shared key, every dev job would restore a
-      # cache with no dev packages in it and re-download them forever.
-      - name: Cache Composer downloads
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          # A lock change degrades to the newest cache for the same scope and PHP version. The
-          # second fallback borrows another PHP leg's cache, which is safe because composer.lock
-          # pins one package set and dist archives do not vary by PHP version - that is what warms
-          # a cold matrix instead of running twelve simultaneous cold downloads.
-          key: ${{ runner.os }}-composer-dev-php8.3-${{ hashFiles('composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-composer-dev-php8.3-
-            ${{ runner.os }}-composer-dev-
-
-      - name: Install Composer dependencies
-        # Called directly rather than through ramsey/composer-install. setup-php installs Composer
-        # and puts it on PATH, but that action resolves it from a fixed tool-cache path that
-        # setup-php no longer writes to, so every job that needed dependencies failed on
-        # "Unable to find Composer at /opt/hostedtoolcache/setup-php/tools/composer". Both actions
-        # were already pinned to their newest releases, so there was no version to bump to.
-        # vendor/ is committed for distribution, and its committed composer/installed.json lists the
-        # dev packages too, while their directories are not tracked. A plain install therefore trusts
-        # that state, skips downloading phpstan and friends, and then dies generating an autoloader
-        # that requires vendor/phpstan/phpstan/bootstrap.php. Discard the stale state and install
-        # clean. This only affects the CI checkout; the shipped tree comes from git archive.
-        run: |
-          rm -rf vendor
-          composer install --no-interaction --no-progress
 
       - name: Run PHPCS
         id: phpcs
@@ -105,41 +60,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+      - name: Set up PHP + Composer
+        uses: ./.github/actions/setup-php-composer
         with:
           php-version: '8.3'
-          coverage: none
           tools: cs2pr
-
-      # See the note in the PHPCS job above for why the cache is here and how the key is scoped.
-      - name: Resolve the Composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Composer downloads
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-dev-php8.3-${{ hashFiles('composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-composer-dev-php8.3-
-            ${{ runner.os }}-composer-dev-
-
-      - name: Install Composer dependencies
-        # Called directly rather than through ramsey/composer-install. setup-php installs Composer
-        # and puts it on PATH, but that action resolves it from a fixed tool-cache path that
-        # setup-php no longer writes to, so every job that needed dependencies failed on
-        # "Unable to find Composer at /opt/hostedtoolcache/setup-php/tools/composer". Both actions
-        # were already pinned to their newest releases, so there was no version to bump to.
-        # vendor/ is committed for distribution, and its committed composer/installed.json lists the
-        # dev packages too, while their directories are not tracked. A plain install therefore trusts
-        # that state, skips downloading phpstan and friends, and then dies generating an autoloader
-        # that requires vendor/phpstan/phpstan/bootstrap.php. Discard the stale state and install
-        # clean. This only affects the CI checkout; the shipped tree comes from git archive.
-        run: |
-          rm -rf vendor
-          composer install --no-interaction --no-progress
 
       - name: Run PHPStan
         run: vendor/bin/phpstan analyse --no-progress --error-format=checkstyle | cs2pr
@@ -165,11 +90,11 @@ jobs:
           persist-credentials: false
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        uses: ./.github/actions/setup-php-composer
         with:
           php-version: '8.3'
-          coverage: none
           tools: wp-cli
+          install-composer: 'false'
 
       - name: Regenerate the template and compare
         run: |
@@ -215,10 +140,10 @@ jobs:
           persist-credentials: false
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        uses: ./.github/actions/setup-php-composer
         with:
           php-version: '7.4'
-          coverage: none
+          install-composer: 'false'
 
       - name: Export the shipped tree and lint every file
         run: |
@@ -304,43 +229,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+      - name: Set up PHP + Composer
+        uses: ./.github/actions/setup-php-composer
         with:
           php-version: ${{ matrix.php }}
           extensions: mysqli, zip, gd
-          coverage: none
           tools: composer:v2
-
-      # See the note in the PHPCS job above. This is the job the PHP version in the key exists
-      # for: twelve legs run at once, and without it they would all race for the same entry.
-      - name: Resolve the Composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Composer downloads
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-dev-php${{ matrix.php }}-${{ hashFiles('composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-composer-dev-php${{ matrix.php }}-
-            ${{ runner.os }}-composer-dev-
-
-      - name: Install Composer dependencies
-        # Called directly rather than through ramsey/composer-install. setup-php installs Composer
-        # and puts it on PATH, but that action resolves it from a fixed tool-cache path that
-        # setup-php no longer writes to, so every job that needed dependencies failed on
-        # "Unable to find Composer at /opt/hostedtoolcache/setup-php/tools/composer". Both actions
-        # were already pinned to their newest releases, so there was no version to bump to.
-        # vendor/ is committed for distribution, and its committed composer/installed.json lists the
-        # dev packages too, while their directories are not tracked. A plain install therefore trusts
-        # that state, skips downloading phpstan and friends, and then dies generating an autoloader
-        # that requires vendor/phpstan/phpstan/bootstrap.php. Discard the stale state and install
-        # clean. This only affects the CI checkout; the shipped tree comes from git archive.
-        run: |
-          rm -rf vendor
-          composer install --no-interaction --no-progress
 
       - name: Provision WordPress core + PHPUnit test suite
         run: |
@@ -355,52 +249,82 @@ jobs:
             /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
           sudo timeout 180 apt-get update -o Acquire::Retries=2 || true
           sudo apt-get install -y --no-install-recommends subversion
-          WP_VERSION='${{ matrix.wp }}'
-          # Resolve "latest" to a concrete version so core and the test suite stay in lockstep.
-          if [ "$WP_VERSION" = "latest" ]; then
-            WP_VERSION="$(curl -fsSL https://api.wordpress.org/core/version-check/1.7/ \
-              | grep -o '"version":"[0-9.]*"' | head -1 | grep -o '[0-9.]*')"
-          fi
-          if [ "$WP_VERSION" = "trunk" ]; then TAG="trunk"; else TAG="tags/${WP_VERSION}"; fi
-
-          mkdir -p "$WP_CORE_DIR"
-          if [ "$WP_VERSION" = "trunk" ]; then
-            curl -fsSL https://wordpress.org/nightly-builds/wordpress-latest.zip -o /tmp/wp.zip
-            unzip -q /tmp/wp.zip -d /tmp/
-            mv /tmp/wordpress/* "$WP_CORE_DIR/"
-          else
-            curl -fsSL "https://wordpress.org/wordpress-${WP_VERSION}.tar.gz" -o /tmp/wp.tgz
-            tar --strip-components=1 -zxmf /tmp/wp.tgz -C "$WP_CORE_DIR"
-          fi
-
-          # Record which WordPress this leg actually installed. The resolved string is what we
-          # ASKED for; version.php is what we GOT, and only the second one is evidence. Without
-          # this the log carries no version at all, so "Tested up to" could never be backed by a
-          # CI run - it had to be inferred from when the job happened to start.
-          echo "Requested WP_VERSION=${WP_VERSION}"
-          echo "Installed  $(grep -o "\$wp_version = '[^']*'" "$WP_CORE_DIR/wp-includes/version.php")"
-
-          mkdir -p "$WP_TESTS_DIR"
-          svn export --quiet --force "https://develop.svn.wordpress.org/${TAG}/tests/phpunit/includes/" "${WP_TESTS_DIR}/includes"
-          svn export --quiet --force "https://develop.svn.wordpress.org/${TAG}/tests/phpunit/data/" "${WP_TESTS_DIR}/data"
-          curl -fsSL "https://develop.svn.wordpress.org/${TAG}/wp-tests-config-sample.php" -o "${WP_TESTS_DIR}/wp-tests-config.php"
-          sed -i "s/youremptytestdbnamehere/wordpress_test/" "${WP_TESTS_DIR}/wp-tests-config.php"
-          sed -i "s/yourusernamehere/root/" "${WP_TESTS_DIR}/wp-tests-config.php"
-          sed -i "s/yourpasswordhere/root/" "${WP_TESTS_DIR}/wp-tests-config.php"
-          sed -i "s|localhost|127.0.0.1|" "${WP_TESTS_DIR}/wp-tests-config.php"
-          sed -i "s:dirname( __FILE__ ) . '/src/':'${WP_CORE_DIR}/':" "${WP_TESTS_DIR}/wp-tests-config.php"
-
-      - name: Create test database
-        run: mysqladmin create wordpress_test -uroot -proot -h127.0.0.1 -P3306 || true
+          # Same script a local `ddev exec bin/install-wp-tests.sh` run uses, so this leg and a
+          # local run can never silently diverge. It also creates the test database itself.
+          bin/install-wp-tests.sh wordpress_test root root 127.0.0.1 '${{ matrix.wp }}'
 
       - name: Run PHPUnit
         run: vendor/bin/phpunit
+
+  # Multisite twin of the phpunit job above. tests/multisite.xml.dist sets WP_TESTS_MULTISITE=1
+  # so the WP test library installs its own multisite tables and every @group ms-required test
+  # actually executes instead of skipping - the plain `phpunit` job above runs the single-site
+  # config, where those tests always skip. This exists because nothing ran them: CI only ever
+  # invoked `vendor/bin/phpunit`, so multisite-only security and lifecycle behavior, including
+  # the per-blog session-persistence guard the 1.7.4 mcp-adapter bump exists to fix, sat outside
+  # the release gate with the suite reporting green throughout (Codex round 9, R9-9). Provisioning
+  # mirrors the phpunit job exactly - same matrix, same service, same install script - because
+  # WP_TESTS_MULTISITE is read at PHPUnit runtime from the config file, not at provisioning time,
+  # so there is nothing for this step to do differently. A separate database name keeps this
+  # job's fixtures apart from the single-site job's, the same way contract.yml's WP_CONTRACT_DB
+  # keeps the contract suite apart from both.
+  phpunit-multisite:
+    name: Multisite · PHP ${{ matrix.php }} · WP ${{ matrix.wp }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4']
+        wp: ['6.9', 'latest']
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      WP_TESTS_DIR: /tmp/wordpress-tests-lib-ms
+      WP_CORE_DIR: /tmp/wordpress-ms
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP + Composer
+        uses: ./.github/actions/setup-php-composer
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, zip, gd
+          tools: composer:v2
+
+      - name: Provision WordPress core + PHPUnit test suite
+        run: |
+          set -euo pipefail
+          # Same mirror workaround as the phpunit job above - see that step's comment.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
+          sudo timeout 180 apt-get update -o Acquire::Retries=2 || true
+          sudo apt-get install -y --no-install-recommends subversion
+          bin/install-wp-tests.sh wordpress_test_ms root root 127.0.0.1 '${{ matrix.wp }}'
+
+      - name: Run PHPUnit (multisite)
+        run: vendor/bin/phpunit -c tests/multisite.xml.dist
 
   # Single gating check that fans in the whole suite - this is the context to
   # require in branch protection, so the matrix can change without re-wiring.
   test-result:
     name: Test Suite Result
-    needs: [phpcs, phpstan, i18n, lint74, phpunit]
+    needs: [phpcs, phpstan, i18n, lint74, phpunit, phpunit-multisite]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     permissions: {}
@@ -411,7 +335,8 @@ jobs:
             || [ "${{ needs.phpstan.result }}" != "success" ] \
             || [ "${{ needs.i18n.result }}" != "success" ] \
             || [ "${{ needs.lint74.result }}" != "success" ] \
-            || [ "${{ needs.phpunit.result }}" != "success" ]; then
+            || [ "${{ needs.phpunit.result }}" != "success" ] \
+            || [ "${{ needs.phpunit-multisite.result }}" != "success" ]; then
             echo "One or more required checks failed."
             exit 1
           fi

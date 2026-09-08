@@ -54,4 +54,6 @@ require_once __DIR__ . '/stubs/WcCouponStubStore.php';
 require_once __DIR__ . '/stubs/WcShippingStubStore.php';
 require_once __DIR__ . '/stubs/WcTaxStubStore.php';
 require_once __DIR__ . '/stubs/WcGatewayStubStore.php';
+require_once __DIR__ . '/stubs/TecStubStore.php';
+require_once __DIR__ . '/stubs/GeodirStubStore.php';
 require_once __DIR__ . '/stubs/IntegrationStubs.php';

@@ -145,6 +145,43 @@ final class RevisionsTest extends TestCase {
 	}
 
 	/**
+	 * A restore rewrites title/content/excerpt exactly like aafm/update-post, so a builder-owned
+	 * post must refuse it the same way (Codex round-b finding 9): restoring a pre-builder
+	 * revision over a post the builder now owns would report success while the builder's own
+	 * meta (which actually drives the rendered output) stays untouched.
+	 */
+	public function test_restore_revision_refuses_a_builder_owned_post(): void {
+		$author = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'v1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'v2',
+			)
+		);
+		$revs   = wp_get_post_revisions( $pid );
+		$oldest = end( $revs );
+		update_post_meta( $pid, '_elementor_data', '[]' );
+
+		$out = aafm_exec_restore_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $oldest->ID,
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_page_builder_owned', $out->get_error_code() );
+		$this->assertSame( 'v2', get_post( $pid )->post_content, 'The builder-owned post must be left untouched.' );
+	}
+
+	/**
 	 * A restore whose underlying write fails must surface the generic error, never a false
 	 * {restored:true}. wp_restore_post_revision() returns the wp_update_post() result, which is
 	 * falsy (0/false/null) on failure and - per its documented int|false|null contract being

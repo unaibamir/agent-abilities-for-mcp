@@ -19,8 +19,6 @@ final class CommentsCrudTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
@@ -310,6 +308,68 @@ final class CommentsCrudTest extends TestCase {
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	/**
+	 * Codex round 9, R9-5: wp_update_comment() returns 0 (not false, not WP_Error) both when a
+	 * filter vetoes the change AND when the request is a genuine no-op, so the executor cannot
+	 * tell the two apart from that return value alone. A wp_update_comment_data filter that
+	 * rewrites the content back to its original value is the veto case: the requested content
+	 * never actually landed, so this must report an error, not success carrying the old content.
+	 */
+	public function test_update_comment_errors_when_a_filter_vetoes_the_content_change(): void {
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID' => $post,
+				'comment_content' => 'original body',
+			)
+		);
+
+		$preserve_original = static function ( array $data ): array {
+			$data['comment_content'] = 'original body';
+			return $data;
+		};
+		add_filter( 'wp_update_comment_data', $preserve_original );
+
+		$out = wp_get_ability( 'aafm/update-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'content'    => 'requested body',
+			)
+		);
+
+		remove_filter( 'wp_update_comment_data', $preserve_original );
+
+		$this->assertInstanceOf( WP_Error::class, $out, 'A vetoed content change must not report success.' );
+		$this->assertSame( 'original body', get_comment( $comment )->comment_content, 'The stored content must be untouched by the vetoed request.' );
+	}
+
+	/**
+	 * A request whose content already matches the stored value is a genuine no-op:
+	 * wp_update_comment() returns 0 for it the same way it does for a filter veto, but this must
+	 * still report success, since the requested state and the stored state agree.
+	 */
+	public function test_update_comment_reports_success_for_a_genuine_no_op(): void {
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID' => $post,
+				'comment_content' => 'same body',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/update-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'content'    => 'same body',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'same body', $out['comment']['content'] );
 	}
 
 	public function test_delete_comment_permanently_removes_the_comment(): void {

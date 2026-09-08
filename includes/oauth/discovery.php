@@ -160,17 +160,40 @@ function aafm_oauth_seed_default_options(): void {
  * @return void
  */
 function aafm_oauth_preserve_toggle_on_upgrade(): void {
-	if ( '1' === get_option( 'aafm_oauth_toggle_migrated', '' ) ) {
+	// The guard itself is read from the database row, not get_option()'s cache-trusting view
+	// (Codex round 7, R7-2): a stale cached '1' over an absent or '0' database row would make
+	// this migration think it already ran and skip preserving the pre-upgrade "on" state for
+	// good, while a stale cached '0' over a genuinely completed migration would rerun it and
+	// potentially re-force the toggle on over an operator's later opt-out.
+	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_toggle_migrated' )['db_value'] ) {
 		return;
 	}
 
-	// A stored toggle is always the string '0' or '1', so get_option() returns false
-	// only when the row is genuinely absent - the signal for a pre-seed in-place upgrade.
-	if ( false === get_option( 'aafm_oauth_enabled', false ) ) {
-		add_option( 'aafm_oauth_enabled', '1', '', true );
+	// The absence check reads the database row directly (aafm_read_option_views(), see
+	// includes/option-cache.php), not get_option()'s cache-trusting view: a stale persistent
+	// cache still serving an old value after the real row has been cleared would make this
+	// migration think a row already exists, skip preserving the pre-upgrade "on" state, and then
+	// mark itself done below - permanently, since the guard is never cleared (Codex round 5,
+	// R5-3). A stored toggle is always the string '0' or '1', so a genuinely absent row is the
+	// only case that needs preserving.
+	if ( ! aafm_read_option_views( 'aafm_oauth_enabled' )['db_found'] ) {
+		if ( ! aafm_update_option_verified( 'aafm_oauth_enabled', '1' ) ) {
+			// The write could not be certified, so the guard below must NOT be set: leave the
+			// migration to try again on the next request rather than record one that never
+			// actually happened.
+			return;
+		}
 	}
 
-	update_option( 'aafm_oauth_toggle_migrated', '1', true );
+	if ( ! aafm_update_option_verified( 'aafm_oauth_toggle_migrated', '1' ) ) {
+		// Codex round 8 R8-3: this return value used to be discarded. Left uncaught, the guard
+		// would silently never record completion, so a later request retries the whole migration -
+		// including the "absent row" branch above, which by then may see a database row again (a
+		// stale cache having recovered) and skip straight to here, forever failing to record a
+		// migration that keeps re-running. Log it so a persistently failing write is visible
+		// rather than silently retried on every request.
+		aafm_log_ability_persist_failure( 'aafm_oauth_toggle_migrated', __( 'The OAuth toggle migration marker', 'agent-abilities-for-mcp' ) );
+	}
 }
 
 /**
@@ -196,17 +219,35 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
  * @return void
  */
 function aafm_oauth_dcr_adopt_on_by_default(): void {
-	if ( '1' === get_option( 'aafm_oauth_dcr_default_on_migrated', '' ) ) {
+	// Same reasoning as aafm_oauth_preserve_toggle_on_upgrade() above (Codex round 7, R7-2): the
+	// guard is read from the database row, not a cache-trusting get_option(), so a stale cache in
+	// either direction cannot make this migration decide from the wrong "already ran" state.
+	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_dcr_default_on_migrated' )['db_value'] ) {
 		return;
 	}
 
-	$stored = get_option( 'aafm_oauth_dcr_enabled', false );
+	// Read the database row directly for the same reason as
+	// aafm_oauth_preserve_toggle_on_upgrade() above: a stale cached '1' over a database '0' (or
+	// a stale cached '0' when the plugin has just written '1') would make this migration decide
+	// from the wrong state and then mark itself done for good (Codex round 5, R5-3).
+	$stored = aafm_read_option_views( 'aafm_oauth_dcr_enabled' )['db_value'];
 	$off    = array( false, 0, '0', '', 'false', 'no', 'off' );
 	if ( in_array( $stored, $off, true ) ) {
-		update_option( 'aafm_oauth_dcr_enabled', '1', true );
+		if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '1' ) ) {
+			// Same reasoning as above: an uncertified write must not be followed by the guard.
+			return;
+		}
 	}
 
-	update_option( 'aafm_oauth_dcr_default_on_migrated', '1', true );
+	if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_default_on_migrated', '1' ) ) {
+		// Codex round 8 R8-3: this return value used to be discarded. A failed marker write left
+		// the migration to retry on the next request - concretely, if an operator turns DCR back
+		// off in the window before that retry, the retry reads the same "off, looks like the old
+		// default" state this function already flips on above, re-enabling DCR over the
+		// operator's deliberate opt-out and contradicting this function's own documented promise
+		// that a later opt-out is respected. Log the failure so it is visible instead of silent.
+		aafm_log_ability_persist_failure( 'aafm_oauth_dcr_default_on_migrated', __( 'The DCR default-on migration marker', 'agent-abilities-for-mcp' ) );
+	}
 }
 
 /**

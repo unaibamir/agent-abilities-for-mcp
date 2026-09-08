@@ -34,8 +34,6 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		delete_option( 'aafm_read_only_mode' );
 		delete_option( 'aafm_high_risk_abilities_unlocked' );
 	}
@@ -441,6 +439,67 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$this->assertTrue(
 			aafm_option_write_certified( 'aafm_read_only_mode', false, true ),
 			'DB row absent + cache absent must certify for an "off" (absent) intent: both independent views agree.'
+		);
+	}
+
+	/**
+	 * Codex round 10, R10-1: aafm_read_option_views() used to detect a failed certification read
+	 * only from $wpdb->last_error, but $wpdb->query() (wp-includes/class-wpdb.php) returns false,
+	 * before last_error is ever touched, when $wpdb->ready is false - so a certifying read run
+	 * while the database connection itself is down used to look like a clean query that simply
+	 * found nothing, and a delete this call never actually reached certified as a confirmed absence.
+	 * The exact reproduction from the finding: high-risk starts unlocked, the off write is
+	 * requested while $wpdb->ready is false, and the certifying read must refuse rather than
+	 * report the switch as off.
+	 */
+	public function test_persist_operator_switch_off_refuses_when_wpdb_is_not_ready_even_though_last_error_is_empty(): void {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+
+		global $wpdb;
+		$wpdb->last_error = '';
+		$was_ready        = $wpdb->ready;
+		$wpdb->ready      = false;
+
+		try {
+			$result = aafm_persist_operator_switch( 'aafm_high_risk_abilities_unlocked', false );
+		} finally {
+			$wpdb->ready = $was_ready;
+		}
+
+		$this->assertFalse( $result, 'A certifying read that could not run because the database was not ready must not certify the switch as off.' );
+		$this->assertTrue(
+			(bool) get_option( 'aafm_high_risk_abilities_unlocked', false ),
+			'The row is untouched (the delete itself could not run while not ready either); the switch must still read as on.'
+		);
+	}
+
+	/**
+	 * Codex round 10, R10-1: the same unreachable-by-last_error branch, this time from the `query`
+	 * filter returning an empty query - $wpdb->query() (wp-includes/class-wpdb.php) returns false
+	 * immediately in that case too, again without ever touching last_error.
+	 */
+	public function test_persist_operator_switch_off_refuses_when_the_query_filter_returns_an_empty_query(): void {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+
+		global $wpdb;
+		$wpdb->last_error = '';
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, 'aafm_high_risk_abilities_unlocked' ) ? '' : $query;
+			}
+		);
+
+		try {
+			$result = aafm_persist_operator_switch( 'aafm_high_risk_abilities_unlocked', false );
+		} finally {
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertFalse( $result, 'A certifying read blanked out by the query filter must not certify the switch as off.' );
+		$this->assertTrue(
+			(bool) get_option( 'aafm_high_risk_abilities_unlocked', false ),
+			'The row is untouched (the delete itself is blanked out the same way); the switch must still read as on.'
 		);
 	}
 

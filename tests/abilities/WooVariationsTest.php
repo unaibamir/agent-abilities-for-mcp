@@ -43,8 +43,6 @@ final class WooVariationsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->seed_variable_parent_with_variations();
 		aafm_registry_cache_should_flush( true );

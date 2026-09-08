@@ -50,6 +50,21 @@ final class IntegrationDetectionTest extends TestCase {
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		// Slim SEO detection keys on defined('SLIM_SEO_VER'); no host plugin defines it on the
+		// bare test site, so this should read false without pinning a seam at all - pin it anyway
+		// for the same deterministic-default reasoning as every sibling case above.
+		add_filter( 'aafm_slim_seo_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'slim_seo' ) );
+		remove_filter( 'aafm_slim_seo_active', '__return_false', 99 );
+	}
+
+	public function test_slim_seo_forces_active_independently(): void {
+		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
+		$this->assertTrue( aafm_integration_active( 'slim_seo' ) );
+		add_filter( 'aafm_yoast_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'yoast' ), 'the filter is per-slug, not global.' );
+		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
+		remove_filter( 'aafm_integration_active_slim_seo', '__return_true' );
 	}
 
 	public function test_per_slug_filter_forces_active_for_tests(): void {

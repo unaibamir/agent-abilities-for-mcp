@@ -1,0 +1,133 @@
+<?php
+/**
+ * The single point of truth for which WP_Ability object this plugin's OWN registration actually
+ * produced for a name.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+defined( 'ABSPATH' ) || exit;
+
+if ( ! class_exists( 'WP_Ability' ) ) {
+	return; // Abilities API absent (WP below the 6.9 floor): nothing registers, so nothing to record.
+}
+
+/**
+ * Codex round 11 R11-3: the R10-4 identity check (object identity, not class) closed the public-
+ * subclass forgery, but the record it compares against used to be writable through a public,
+ * two-argument global function - aafm_remember_registered_ability( $name, $ability ) - that
+ * trusted whatever WP_Ability object it was handed. That is forgeable no matter what the function
+ * is named or which file declares it: PHP gives standalone functions no real access control, and
+ * this plugin is open source on wordpress.org, so an unfamiliar name is no obstacle to a
+ * determined reader. A plugin loaded before AAFM's own wp_abilities_api_init callback could
+ * register a reserved, enabled name directly with core's wp_register_ability() (bypassing every
+ * one of this plugin's decorators entirely), then call that setter itself so the record - and
+ * therefore aafm_build_server_tools()'s identity check in server.php - believed the resulting
+ * undecorated object was this plugin's own. R9-7's original consequence, reached a third way.
+ *
+ * What actually closes it: self::register() is the ONLY thing that ever writes $store, and it
+ * does not accept a ready-made ability - it performs the wp_register_ability() call itself and
+ * records only what THAT call returns. There is no parameter through which a caller can
+ * substitute a different object, so the record can never hold anything but the direct result of
+ * a registration made through this class.
+ *
+ * This does not, and cannot, restrict WHO may call register(). PHP has no way to grant one
+ * specific global function privileged access to a class member that a foreign plugin's code does
+ * not equally have, once that member must be public for aafm_register_ability_with_log()
+ * (register.php) - itself an ordinary global function - to reach it at all. What makes an
+ * ordinary call safe is that its one legitimate caller has already wrapped $args's
+ * permission_callback and execute_callback in this plugin's own permission, allowlist, rate-
+ * limit and audit decorators before this point runs, for ANY $args it is handed, regardless of
+ * who is calling - so a call routed through the normal path is always properly governed. The
+ * caller this cannot defend against is code that skips aafm_register_ability_with_log() and
+ * calls THIS class directly with its own, undecorated $args: that call would still register and
+ * record an undecorated ability. Closing that fully would require folding
+ * aafm_register_ability_with_log()'s decoration logic into this same class as register()'s only
+ * caller, which was not done here - see the note on aafm_register_ability_with_log() in
+ * register.php.
+ *
+ * Codex round 12 R12-1: register() used to pass $args straight through to
+ * wp_register_ability(), which honors a caller-supplied `ability_class`. A caller invoking
+ * aafm_register_ability_with_log() directly - decorators and all - could still hand it a
+ * purpose-built WP_Ability subclass of its own that overrides prepare_properties() or execute()
+ * to discard what the decorators just did, and register() would faithfully register and record
+ * that hostile object as this plugin's own. register() below now forces
+ * AAFM_Rate_Limited_Ability as the ability_class on every call it makes, overwriting whatever
+ * $args carried, so neither route into this class - through aafm_register_ability_with_log() or
+ * directly - can substitute a foreign class for the one this plugin's own decorators expect.
+ *
+ * This closes the class-substitution route only. It does NOT touch the limit already documented
+ * above: a caller that skips aafm_register_ability_with_log() and calls register() directly can
+ * still hand it its own undecorated permission_callback and execute_callback, and those still get
+ * registered and recorded as this plugin's own, because forcing the ability class governs which
+ * object's execute() runs, not which permission or execute logic that object runs. Closing that
+ * would mean this class deriving every canonical registration argument itself from the native and
+ * bridge registries rather than trusting any caller's $args at all - a real refactor, left undone
+ * here because every route to it requires a plugin already executing arbitrary PHP in this same
+ * process to bother writing a purpose-built caller against our internal functions, and a plugin
+ * willing to do that could as easily unhook our filters or write to the database directly. See
+ * planning doc 239 (R12-1) for the full threat-model reasoning.
+ */
+final class AAFM_Registration_Authority {
+
+	/**
+	 * A WeakReference to the WP_Ability object this plugin's own registration produced, keyed by
+	 * ability name.
+	 *
+	 * Codex round 12 R12-4: a strong reference here used to keep every uniquely named ability this
+	 * plugin ever registered - and its permission/execute closures - alive for the rest of the
+	 * process, even after core's own wp_unregister_ability() had forgotten it: nothing pruned an
+	 * entry on unregister. Harmless for the usual case of a fixed set of names registered once per
+	 * request, but a real unbounded leak in a long-lived process (WP-CLI, a persistent worker) that
+	 * registers and unregisters many uniquely named abilities over its lifetime - proven by a probe
+	 * of 64 register-then-unregister cycles leaving core with zero registrations and this store
+	 * still holding all 64. A WeakReference costs nothing while core still holds its own (strong)
+	 * reference, and once core drops that, the object is freed exactly as it would be with no store
+	 * at all - owned() below then reads it back as null, which is indistinguishable from "this
+	 * plugin never registered this name", so a collected record fails the identity check closed
+	 * rather than passing it.
+	 *
+	 * @var array<string,WeakReference<WP_Ability>>
+	 */
+	private static $store = array();
+
+	/**
+	 * Register $name with core and, only when that call actually succeeds, record the resulting
+	 * object as this plugin's own. The store never holds anything but wp_register_ability()'s own
+	 * return value - never a caller-supplied object.
+	 *
+	 * @param string              $name Ability name.
+	 * @param array<string,mixed> $args wp_register_ability() args.
+	 * @return WP_Ability|null Whatever wp_register_ability() returns.
+	 */
+	public static function register( string $name, array $args ): ?WP_Ability {
+		// R12-1: force our own trusted ability class, discarding whatever $args carried. This is
+		// the only place that actually calls wp_register_ability(), so overriding here closes the
+		// class-substitution route for every caller of this method - see the class docblock.
+		if ( class_exists( 'AAFM_Rate_Limited_Ability' ) ) {
+			$args['ability_class'] = AAFM_Rate_Limited_Ability::class;
+		}
+		$registered = wp_register_ability( $name, $args );
+		if ( $registered instanceof WP_Ability ) {
+			self::$store[ $name ] = WeakReference::create( $registered );
+		}
+		return $registered;
+	}
+
+	/**
+	 * Read-only: the object this plugin's own registration produced for $name, or null if this
+	 * plugin never registered it OR that registration has since been unregistered and collected.
+	 * Self-invalidating: this dereferences whatever is CURRENTLY stored, so a later registration
+	 * that replaces $store[$name] - or core forgetting $name entirely - makes any earlier answer
+	 * stale on its own, with nothing else to reset.
+	 *
+	 * @param string $name Ability name.
+	 * @return WP_Ability|null
+	 */
+	public static function owned( string $name ): ?WP_Ability {
+		$ref = self::$store[ $name ] ?? null;
+		return $ref instanceof WeakReference ? $ref->get() : null;
+	}
+}

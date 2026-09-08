@@ -54,6 +54,24 @@ final class ReadGettersEnrichmentTest extends TestCase {
 		$this->assertSame( 'Raw body [sc] here', $out['post']['content'] );
 	}
 
+	public function test_get_post_include_content_false_omits_content_but_keeps_length(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => 'twelve bytes',
+			)
+		);
+		$out     = aafm_exec_get_post(
+			array(
+				'post_id'         => $post_id,
+				'include_content' => false,
+			)
+		);
+
+		$this->assertArrayNotHasKey( 'content', $out['post'] );
+		$this->assertSame( 12, $out['post']['content_length'] );
+	}
+
 	public function test_get_posts_default_omits_content_keeps_light_fields(): void {
 		self::factory()->post->create_many( 3, array( 'post_status' => 'publish' ) );
 		$out = aafm_exec_get_posts( array() );
@@ -96,6 +114,25 @@ final class ReadGettersEnrichmentTest extends TestCase {
 		$this->assertStringContainsString( '<p>', $out['post']['content'] );
 		// Guards the get-page → post type pin: a regression to 'post' must fail here.
 		$this->assertSame( 'page', $out['post']['type'] );
+	}
+
+	public function test_get_page_include_content_false_omits_content_but_keeps_length(): void {
+		$page_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => 'eleven byte',
+			)
+		);
+		$out     = aafm_exec_get_page(
+			array(
+				'page_id'         => $page_id,
+				'include_content' => false,
+			)
+		);
+
+		$this->assertArrayNotHasKey( 'content', $out['post'] );
+		$this->assertSame( 11, $out['post']['content_length'] );
 	}
 
 	public function test_get_pages_default_omits_content(): void {

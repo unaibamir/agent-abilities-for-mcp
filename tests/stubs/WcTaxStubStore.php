@@ -54,14 +54,25 @@ class WcTaxStubStore {
 	public static bool $force_delete_failure = false;
 
 	/**
+	 * When true, create_tax_class() mirrors WC's own masked-failure bug: it reports success
+	 * (returning the requested name/slug) without actually storing $name at that slug, the same
+	 * shape a real unique-index collision inside $wpdb->insert() produces because
+	 * is_wp_error( $wpdb->insert() ) never matches its int|false return.
+	 *
+	 * @var bool
+	 */
+	public static bool $simulate_masked_insert_failure = false;
+
+	/**
 	 * Clear all class state. Does NOT touch the temp DB table - call drop/create for that.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
-		self::$classes              = array();
-		self::$force_save_failure   = false;
-		self::$force_delete_failure = false;
+		self::$classes                        = array();
+		self::$force_save_failure             = false;
+		self::$force_delete_failure           = false;
+		self::$simulate_masked_insert_failure = false;
 	}
 
 	/**

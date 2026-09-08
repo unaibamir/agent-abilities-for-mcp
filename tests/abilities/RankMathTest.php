@@ -25,8 +25,6 @@ final class RankMathTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->force_integration( 'rankmath' );
 		$this->stub_rankmath();
 		aafm_registry_cache_should_flush( true );
@@ -503,6 +501,69 @@ final class RankMathTest extends TestCase {
 			WP_Error::class,
 			$res,
 			'A schema write that never persisted must be reported as failed, not answered with the sanitized input echoed back as though it were stored.'
+		);
+	}
+
+	/**
+	 * Codex round 5 R5-2: aafm_exec_rankmath_update_post() discarded every update_post_meta()
+	 * return value and answered with a fresh read that carried no comparison against what was
+	 * requested, unlike its schema sibling above. A filter that vetoes the postmeta write must
+	 * surface as a structured error, not a success response echoing the caller's stale value.
+	 */
+	public function test_update_post_returns_an_error_when_the_write_is_vetoed(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+		update_post_meta( $post_id, 'rank_math_title', 'Old title' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$res  = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'New title',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A vetoed rank_math_title write must return an error, not a success reporting the old value.'
+		);
+	}
+
+	/**
+	 * Codex round 6 B6-2: the attachment-id companion meta and the Twitter fallback flag were written
+	 * but never included in the confirmation pass, so a filter vetoing only one of them still reported
+	 * success while the frontend kept rendering a stale image. Veto only the companion key here (the
+	 * visible URL field is left alone) and assert the ability now surfaces an error instead of a false
+	 * success.
+	 */
+	public function test_update_post_returns_an_error_when_only_the_image_id_companion_is_vetoed(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		$fb_att   = (int) self::factory()->attachment->create_object( 'rm-og.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+
+		$veto = static function ( $check, $object_id, $meta_key ) {
+			return 'rank_math_facebook_image_id' === $meta_key ? true : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'og_image' => (string) wp_get_attachment_url( $fb_att ),
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		// Precondition: the veto really did block only the companion write, not the URL meta.
+		$this->assertNotSame( '', get_post_meta( $post_id, 'rank_math_facebook_image', true ), 'precondition: the visible URL field must still have written.' );
+		$this->assertSame( '', get_post_meta( $post_id, 'rank_math_facebook_image_id', true ), 'precondition: the veto filter must have kept the image-id companion unwritten.' );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A vetoed image-id companion must surface as an error even though the visible URL field wrote successfully.'
 		);
 	}
 

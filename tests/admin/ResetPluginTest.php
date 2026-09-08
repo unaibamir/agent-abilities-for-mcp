@@ -225,4 +225,107 @@ final class ResetPluginTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-reset-plugin', $html );
 		$this->assertStringContainsString( 'aafm-danger', $html );
 	}
+
+	/**
+	 * Codex round 9, R9-3: aafm_reset_plugin() ignored every aafm_delete_option_cache_safe()
+	 * result, so a failed configuration-option delete still let the caller report a full reset.
+	 * Because reset deliberately preserves the agent user and its application passwords, a
+	 * survived aafm_enabled_abilities row means the agent keeps exactly the access the operator
+	 * was told had been cleared. This must now come back false, and the option must survive.
+	 */
+	public function test_reset_plugin_reports_failure_when_a_configuration_delete_fails(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, "option_name = 'aafm_enabled_abilities'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$result = aafm_reset_plugin();
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( $result, 'A failed configuration delete must not certify as a full reset.' );
+		$this->assertSame(
+			array( 'aafm/get-posts' ),
+			get_option( 'aafm_enabled_abilities' ),
+			'The option that failed to delete must still hold its prior value.'
+		);
+	}
+
+	/**
+	 * Same failure, driven through the AJAX handler: the operator must see an error, not the
+	 * success message that used to be sent unconditionally.
+	 */
+	public function test_ajax_reset_plugin_reports_failure_when_a_configuration_delete_fails(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, "option_name = 'aafm_enabled_abilities'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$json              = $this->run_handler( 'aafm_ajax_reset_plugin' );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'A failed configuration delete must not report success.' );
+		$this->assertSame( array( 'aafm/get-posts' ), get_option( 'aafm_enabled_abilities' ) );
+	}
+
+	/**
+	 * Route wp_send_json through a throwing wp_die so the handler is observable in-process.
+	 * Mirrors the pattern in ActivityTabTest / OauthRevokeAjaxTest.
+	 *
+	 * @return void
+	 */
+	private function intercept_die(): void {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+	}
+
+	/**
+	 * Run an AJAX handler and return its captured JSON payload.
+	 *
+	 * @param callable $handler The AJAX callback to invoke.
+	 * @return array<string,mixed>
+	 */
+	private function run_handler( callable $handler ): array {
+		ob_start();
+		try {
+			$handler();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		}
+		$body = (string) ob_get_clean();
+		$json = json_decode( $body, true );
+		return is_array( $json ) ? $json : array();
+	}
 }

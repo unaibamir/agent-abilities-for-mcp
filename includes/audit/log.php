@@ -130,7 +130,19 @@ function aafm_install_activity_log(): void {
 function aafm_activity_log_finalize_schema(): void {
 	if ( aafm_activity_log_schema_verify() ) {
 		delete_transient( 'aafm_activity_log_schema_error' );
-		update_option( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
+		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_activity_log()
+		// below trusts this stamp to decide whether the installer needs to run again, so a write
+		// that a persistent cache silently no-ops must not be allowed to look like it landed.
+		if ( ! aafm_update_option_verified( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION ) ) {
+			// Codex round 8 R8-3: this return value used to be discarded. The table itself is
+			// genuinely fine, but with the version left un-stamped, aafm_maybe_upgrade_activity_log()
+			// reruns dbDelta() every request instead of settling - and the error transient above
+			// was already cleared on the strength of the schema check alone, hiding the persist
+			// failure from the admin notice. Re-set the transient and log the failure so it is
+			// visible instead of silent.
+			set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
+			aafm_log_ability_persist_failure( 'aafm_activity_log_schema_version', __( 'The activity-log schema version', 'agent-abilities-for-mcp' ) );
+		}
 		return;
 	}
 
@@ -242,10 +254,15 @@ add_action( 'admin_notices', 'aafm_activity_log_schema_admin_notice' );
  * Cheap early return when the option already matches, so this is safe to hook on every admin
  * request. dbDelta() is safe to re-run. Mirrors aafm_maybe_upgrade_oauth_tables().
  *
+ * Reads the database row directly rather than get_option()'s cache-trusting view (Codex round 7,
+ * R7-2): a stale cached current version over an old/absent database row would skip a genuinely
+ * needed repair, and this function's own docblock identifies missing audit rows as the failure
+ * this guard exists to catch.
+ *
  * @return void
  */
 function aafm_maybe_upgrade_activity_log(): void {
-	if ( get_option( 'aafm_activity_log_schema_version' ) === AAFM_ACTIVITY_LOG_SCHEMA_VERSION ) {
+	if ( AAFM_ACTIVITY_LOG_SCHEMA_VERSION === (string) aafm_read_option_views( 'aafm_activity_log_schema_version' )['db_value'] ) {
 		return;
 	}
 
@@ -876,13 +893,29 @@ function aafm_activity_max_id(): int {
 /**
  * Delete every activity row.
  *
- * @return void
+ * Certifies the table is actually empty afterward rather than trusting the TRUNCATE's own
+ * result (Codex round 9, R9-8): a failed truncate must not let a caller go on to write a
+ * marker row claiming the clear happened, or report success while the original rows survive.
+ *
+ * The confirmation read goes through aafm_wpdb_scalar() rather than a bare get_var() (Codex round
+ * 10, R10-3): a get_var() read that itself failed used to cast straight to `(int) null === 0`, the
+ * same "unreadable, so call it empty" mistake as a stale TRUNCATE, letting the memo flush and the
+ * marker row below both run as if the clear had genuinely happened.
+ *
+ * @return bool True when the table is confirmed empty after this call.
  */
-function aafm_clear_activity_log(): void {
+function aafm_clear_activity_log(): bool {
 	global $wpdb;
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query( $wpdb->prepare( 'TRUNCATE TABLE %i', $table ) );
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$remaining = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+	if ( ! $remaining['ok'] || 0 !== (int) $remaining['value'] ) {
+		return false;
+	}
+
 	// The review notice quotes a five-minute memo of the success count. A clear has to silence
 	// it now rather than at the expiry, or the ask goes on claiming a total the log can no
 	// longer back, which is the one thing its render guard exists to stop. Through the owner
@@ -890,6 +923,8 @@ function aafm_clear_activity_log(): void {
 	if ( function_exists( 'aafm_review_request_flush_display_count' ) ) {
 		aafm_review_request_flush_display_count();
 	}
+
+	return true;
 }
 
 /**

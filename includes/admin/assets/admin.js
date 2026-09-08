@@ -36,7 +36,10 @@
 		 */
 		#format( template, ...args ) {
 			let auto = 0;
-			return template.replace( /%(\d+\$)?[sd]/g, ( match, pos ) => {
+			return template.replace( /%%|%(\d+\$)?[sd]/g, ( match, pos ) => {
+				if ( '%%' === match ) {
+					return '%';
+				}
 				const index = pos ? Number( pos.slice( 0, -1 ) ) - 1 : auto++;
 				return String( args[ index ] ?? '' );
 			} );
@@ -70,26 +73,10 @@
 			this.#bindClearLog();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
-			this.#bindQuickstarts();
 			this.#bindOauthRevoke();
+			this.#bindClientAgentToggle();
+			this.#bindAllowlist();
 			this.#bindQuickConnect();
-		}
-
-		#bindQuickstarts() {
-			const toggle = document.querySelector( '.aafm-quickstart-toggle' );
-			const grid = document.querySelector( '#aafm-quickstart-grid' );
-			if ( ! toggle || ! grid ) {
-				return;
-			}
-			toggle.addEventListener( 'click', () => {
-				const open = grid.hidden;
-				grid.hidden = ! open;
-				toggle.setAttribute( 'aria-expanded', open ? 'true' : 'false' );
-				const i18n = aafmAdmin?.i18n;
-				toggle.textContent = open
-					? i18n?.quickstartsHide ?? 'Hide client configs'
-					: i18n?.quickstartsShow ?? 'Show config for a specific client';
-			} );
 		}
 
 		/**
@@ -1130,25 +1117,13 @@
 				const status = root.querySelector( '.aafm-meta-keys-status' );
 				const textarea = root.querySelector( 'textarea[name="aafm_meta_keys"]' );
 				const deny = root.querySelector( 'textarea[name="aafm_deny_meta_keys"]' );
-				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_meta_keys' );
-				body.append( 'nonce', this.#nonce );
-				body.append( 'aafm_meta_keys', textarea?.value ?? '' );
-				body.append( 'aafm_deny_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = await this.#post( 'aafm_save_meta_keys', {
+					aafm_meta_keys: textarea?.value ?? '',
+					aafm_deny_meta_keys: deny?.value ?? '',
+				} );
 				if ( status ) {
 					status.textContent = json?.success
 						? this.#t( 'saved', 'Saved' )
@@ -1171,25 +1146,13 @@
 				const deny = root.querySelector(
 					'textarea[name="aafm_denied_user_meta_keys"]'
 				);
-				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_user_meta_keys' );
-				body.append( 'nonce', this.#nonce );
-				body.append( 'aafm_exposed_user_meta_keys', exposed?.value ?? '' );
-				body.append( 'aafm_denied_user_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = await this.#post( 'aafm_save_user_meta_keys', {
+					aafm_exposed_user_meta_keys: exposed?.value ?? '',
+					aafm_denied_user_meta_keys: deny?.value ?? '',
+				} );
 				if ( status ) {
 					status.textContent = json?.success
 						? this.#t( 'saved', 'Saved' )
@@ -1212,25 +1175,13 @@
 				const deny = root.querySelector(
 					'textarea[name="aafm_denied_term_meta_keys"]'
 				);
-				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_term_meta_keys' );
-				body.append( 'nonce', this.#nonce );
-				body.append( 'aafm_exposed_term_meta_keys', exposed?.value ?? '' );
-				body.append( 'aafm_denied_term_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
+				const json = await this.#post( 'aafm_save_term_meta_keys', {
+					aafm_exposed_term_meta_keys: exposed?.value ?? '',
+					aafm_denied_term_meta_keys: deny?.value ?? '',
+				} );
 				if ( status ) {
 					status.textContent = json?.success
 						? this.#t( 'saved', 'Saved' )
@@ -1834,6 +1785,168 @@
 			} );
 		}
 
+		/**
+		 * Wire the Registered-clients table's per-row "Agent" toggle: on change, POST the
+		 * nonce-checked AJAX action that flags/unflags that client as an agent identity. On
+		 * failure the checkbox reverts to its prior state so the UI never shows a state the
+		 * server did not actually persist.
+		 */
+		#bindClientAgentToggle() {
+			const root = document.querySelector( '.aafm-oauth-manage' );
+			if ( ! root ) {
+				return;
+			}
+			root.addEventListener( 'change', async ( e ) => {
+				const toggle = e.target.closest( '.aafm-client-agent-toggle' );
+				if ( ! toggle || ! root.contains( toggle ) ) {
+					return;
+				}
+
+				const clientId = toggle.dataset.clientId ?? '';
+				const desired = toggle.checked;
+				toggle.disabled = true;
+
+				const json = await this.#post( 'aafm_set_client_agent_identity', {
+					client_id: clientId,
+					is_agent_identity: desired ? '1' : '0',
+				} );
+
+				toggle.disabled = false;
+
+				if ( ! json?.success ) {
+					toggle.checked = ! desired;
+					window.alert(
+						json?.data?.message ??
+							this.#t( 'agentToggleFailed', 'Could not save. Please try again.' )
+					);
+				}
+			} );
+		}
+
+		/**
+		 * Wire the Connections tab's "Ability allowlist" card: add a scope row, remove a row,
+		 * and save the whole set as one AJAX call. Every dynamically-created cell is built with
+		 * DOM APIs (createElement/textContent/value), never innerHTML with interpolated input,
+		 * so no separate escaping helper is needed for the values this card handles.
+		 */
+		#bindAllowlist() {
+			const table = document.getElementById( 'aafm-allowlist-table' );
+			const saveBtn = document.getElementById( 'aafm-allowlist-save' );
+			const addBtn = document.getElementById( 'aafm-allowlist-add-row' );
+			if ( ! table || ! saveBtn || ! addBtn ) {
+				return;
+			}
+			const status = document.getElementById( 'aafm-allowlist-status' );
+			const body = table.querySelector( 'tbody' );
+
+			addBtn.addEventListener( 'click', () => {
+				const typeSelect = document.getElementById( 'aafm-allowlist-new-scope-type' );
+				const idInput = document.getElementById( 'aafm-allowlist-new-scope-id' );
+				const scopeId = idInput?.value.trim() ?? '';
+				if ( ! scopeId ) {
+					idInput?.focus();
+					return;
+				}
+
+				const row = document.createElement( 'tr' );
+				row.dataset.allowlistRow = '';
+				row.dataset.scopeType = typeSelect?.value ?? 'role';
+				row.dataset.scopeId = scopeId;
+
+				const labelCell = document.createElement( 'td' );
+				labelCell.textContent =
+					( typeSelect?.value ?? 'role' ) === 'role' ? `Role: ${ scopeId }` : `Connection: ${ scopeId }`;
+
+				const allowedCell = document.createElement( 'td' );
+				const textarea = document.createElement( 'textarea' );
+				textarea.className = 'aafm-allowlist-allowed';
+				textarea.rows = 2;
+				textarea.value = 'all'; // Unrestricted until the operator narrows it - never starts as "deny everything".
+				allowedCell.append( textarea );
+
+				const removeCell = document.createElement( 'td' );
+				const removeBtn = document.createElement( 'button' );
+				removeBtn.type = 'button';
+				removeBtn.className = 'aafm-btn aafm-btn-secondary aafm-allowlist-remove';
+				removeBtn.textContent = this.#t( 'allowlistRemove', 'Remove' );
+				removeCell.append( removeBtn );
+
+				row.append( labelCell, allowedCell, removeCell );
+				body?.append( row );
+				if ( idInput ) {
+					idInput.value = '';
+				}
+			} );
+
+			table.addEventListener( 'click', ( e ) => {
+				const btn = e.target.closest( '.aafm-allowlist-remove' );
+				if ( btn ) {
+					btn.closest( 'tr' )?.remove();
+				}
+			} );
+
+			saveBtn.addEventListener( 'click', async () => {
+				const rows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).map( ( row ) => {
+					const raw = row.querySelector( '.aafm-allowlist-allowed' )?.value ?? '';
+					const trimmed = raw.trim();
+					const allowedAbilities =
+						trimmed.toLowerCase() === 'all'
+							? 'all'
+							: trimmed
+									.split( /[\n,]/ )
+									.map( ( name ) => name.trim() )
+									.filter( Boolean );
+					return {
+						scope_type: row.dataset.scopeType,
+						scope_id: row.dataset.scopeId,
+						allowed_abilities: allowedAbilities,
+					};
+				} );
+
+				saveBtn.disabled = true;
+				const json = await this.#post( 'aafm_save_allowlist', {
+					allowlist_json: JSON.stringify( rows ),
+				} );
+				saveBtn.disabled = false;
+
+				if ( json?.success ) {
+					// A row naming an unknown role or OAuth client now rejects the WHOLE save
+					// server-side (see aafm_ajax_save_allowlist()'s own comment), so a successful
+					// response never carries a row like that - but two DOM rows can still share
+					// the same scope (the operator added the same role or client twice), and the
+					// server canonicalizes that down to whichever row was submitted LAST. Track
+					// the last DOM row seen for each key so every earlier duplicate is removed,
+					// matching what was actually stored.
+					const keptKeys = new Set(
+						( Array.isArray( json.data?.rows ) ? json.data.rows : [] ).map(
+							( r ) => `${ r.scope_type }:${ r.scope_id }`
+						)
+					);
+					const domRows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] );
+					const lastRowForKey = new Map();
+					domRows.forEach( ( row ) => {
+						lastRowForKey.set( `${ row.dataset.scopeType }:${ row.dataset.scopeId }`, row );
+					} );
+					domRows.forEach( ( row ) => {
+						const key = `${ row.dataset.scopeType }:${ row.dataset.scopeId }`;
+						if ( ! keptKeys.has( key ) || lastRowForKey.get( key ) !== row ) {
+							row.remove();
+						}
+					} );
+
+					if ( status ) {
+						status.textContent = this.#t( 'allowlistSaved', 'Saved.' );
+					}
+				} else if ( status ) {
+					// A row naming an unknown role or OAuth client rejects the whole save with a
+					// row-specific message (aafm_ajax_save_allowlist()) - surfaced here verbatim
+					// rather than a generic "Saved" the operator would have to disbelieve.
+					status.textContent =
+						json?.data?.message ?? this.#t( 'allowlistSaveFailed', 'Could not save. Please try again.' );
+				}
+			} );
+		}
+
 		// Adjust a client's "Active tokens" cell in place after a revoke, so the count stays
 		// truthful without a page reload. Matches the row by dataset (no selector injection).
 		#adjustClientTokens( root, clientId, delta ) {
@@ -2111,7 +2224,13 @@
 
 			// ---- Permanent opt-out ----
 			root.querySelector( '#aafm-qc-dismiss' ).addEventListener( 'click', async () => {
-				await this.#post( 'aafm_quickconnect_dismiss' );
+				const json = await this.#post( 'aafm_quickconnect_dismiss' );
+				if ( ! json?.success ) {
+					if ( hint ) {
+						hint.textContent = json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					}
+					return;
+				}
 				root.classList.add( 'is-closed' );
 				landFocus();
 			} );

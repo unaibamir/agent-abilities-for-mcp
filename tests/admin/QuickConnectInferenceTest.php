@@ -20,8 +20,6 @@ final class QuickConnectInferenceTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		delete_option( 'aafm_enabled_abilities' );
 		delete_option( 'aafm_quickconnect_finished' );
 		delete_option( 'aafm_quickconnect_dismissed' );

@@ -14,24 +14,24 @@ use AAFM\Tests\TestCase;
 final class CoexistenceTest extends TestCase {
 
 	public function test_adapter_within_tested_range_is_compatible(): void {
-		// Compatible == at or above the floor AND below the upper bound (the tested 0.5.x line).
+		// Compatible == at or above the floor AND below the upper bound (the tested 0.6.x line).
 		$this->assertTrue( aafm_adapter_is_compatible( AAFM_MIN_ADAPTER_VERSION ) );
-		$this->assertTrue( aafm_adapter_is_compatible( '0.5.0' ) );
-		$this->assertTrue( aafm_adapter_is_compatible( '0.5.9' ) );
+		$this->assertTrue( aafm_adapter_is_compatible( '0.6.1' ) );
+		$this->assertTrue( aafm_adapter_is_compatible( '0.6.9' ) );
 	}
 
 	public function test_older_adapter_is_incompatible(): void {
-		$this->assertFalse( aafm_adapter_is_compatible( '0.4.0' ) );
-		$this->assertFalse( aafm_adapter_is_compatible( '0.3.9' ) );
-		$this->assertFalse( aafm_adapter_is_too_new( '0.4.0' ) );
+		$this->assertFalse( aafm_adapter_is_compatible( '0.6.0' ) );
+		$this->assertFalse( aafm_adapter_is_compatible( '0.5.0' ) );
+		$this->assertFalse( aafm_adapter_is_too_new( '0.6.0' ) );
 	}
 
 	public function test_too_new_adapter_is_incompatible(): void {
 		// A newer adapter (at or above the upper bound) may have a changed API, so it is rejected.
 		$this->assertFalse( aafm_adapter_is_compatible( AAFM_MAX_ADAPTER_VERSION ) );
-		$this->assertFalse( aafm_adapter_is_compatible( '0.6.0' ) );
+		$this->assertFalse( aafm_adapter_is_compatible( '0.7.0' ) );
 		$this->assertFalse( aafm_adapter_is_compatible( '1.0.0' ) );
-		$this->assertTrue( aafm_adapter_is_too_new( '0.6.0' ) );
+		$this->assertTrue( aafm_adapter_is_too_new( '0.7.0' ) );
 		$this->assertTrue( aafm_adapter_is_too_new( '1.0.0' ) );
 	}
 
@@ -64,6 +64,35 @@ final class CoexistenceTest extends TestCase {
 
 		ob_start();
 		aafm_notice_adapter_outdated();
+		$html = (string) ob_get_clean();
+
+		$this->assertSame( '', $html );
+	}
+
+	/**
+	 * Aafm_notice_adapter_too_new() shares its renderer with the outdated notice above
+	 * (aafm_render_adapter_version_notice()); this mirrors the pair of tests above it,
+	 * against the upper bound instead of the floor.
+	 */
+	public function test_too_new_notice_reports_loaded_and_max_versions(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		ob_start();
+		aafm_notice_adapter_too_new();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-warning', $html );
+		$this->assertStringContainsString( AAFM_MAX_ADAPTER_VERSION, $html );
+		$this->assertStringContainsString( (string) ( aafm_loaded_adapter_version() ?? '' ), $html );
+	}
+
+	public function test_too_new_notice_is_silent_for_users_without_activate_plugins(): void {
+		$subscriber = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $subscriber );
+
+		ob_start();
+		aafm_notice_adapter_too_new();
 		$html = (string) ob_get_clean();
 
 		$this->assertSame( '', $html );

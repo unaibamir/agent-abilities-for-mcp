@@ -468,6 +468,133 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 11, R11-4: aafm_oauth_count_active_clients() cast a failed COUNT(*) to 0, so
+	 * the DCR soft cap read an unreadable clients table as zero active clients - spare capacity -
+	 * and let registration through during an outage instead of refusing it the same way a
+	 * confirmed-at-cap read does. Fault only the cap's own COUNT query; registration must still
+	 * be refused with the identical temporarily_unavailable/503 shape the cap-reached branch uses.
+	 */
+	public function test_register_refuses_when_the_cap_read_fails(): void {
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_cap_read = false !== strpos( $query, 'SELECT COUNT(*) FROM `' . $wpdb->prefix . 'aafm_oauth_clients` WHERE is_active = 1' );
+				return $is_cap_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) )
+		);
+
+		$response = rest_do_request( $request );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertSame( 503, $response->get_status() );
+		$this->assertSame( 'temporarily_unavailable', $response->get_data()['error'] );
+	}
+
+	/**
+	 * A client_name exactly at the storage column's limit (191 characters) is accepted and
+	 * stored/returned unchanged - the boundary the guard and the VARCHAR(191) column must agree on.
+	 */
+	public function test_register_accepts_client_name_at_the_storage_boundary(): void {
+		$name    = str_repeat( 'n', 191 );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'redirect_uris' => array( 'https://app.example/cb' ),
+					'client_name'   => $name,
+				)
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( $name, $response->get_data()['client_name'] );
+	}
+
+	/**
+	 * A 192-character client_name - one character past the VARCHAR(191) storage column - is
+	 * rejected with a clear 400 at the REST boundary, not a generic storage failure at insert
+	 * (Codex round 9, R9-11: a 255-byte guard against a 191-character column let this through).
+	 */
+	public function test_register_rejects_client_name_one_character_over_the_storage_boundary(): void {
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'redirect_uris' => array( 'https://app.example/cb' ),
+					'client_name'   => str_repeat( 'n', 192 ),
+				)
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( 'invalid_client_metadata', $response->get_data()['error'] );
+	}
+
+	/**
+	 * The 191-character limit is counted in characters, not bytes, matching how MySQL sizes a
+	 * VARCHAR(191) column. 191 multibyte characters are well over 191 bytes but must still be
+	 * accepted; a byte-counting guard would have rejected this legitimate name.
+	 */
+	public function test_register_accepts_multibyte_client_name_within_the_character_boundary(): void {
+		$name = str_repeat( 'é', 191 );
+		$this->assertGreaterThan( 191, strlen( $name ) ); // Sanity: this is >191 bytes, exactly 191 characters.
+
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'redirect_uris' => array( 'https://app.example/cb' ),
+					'client_name'   => $name,
+				)
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 201, $response->get_status() );
+		$this->assertSame( $name, $response->get_data()['client_name'] );
+	}
+
+	/**
+	 * 192 multibyte characters is one character over the boundary and must still be rejected -
+	 * proving the guard counts characters rather than passing every multibyte string through on a
+	 * byte-count technicality.
+	 */
+	public function test_register_rejects_multibyte_client_name_over_the_character_boundary(): void {
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'redirect_uris' => array( 'https://app.example/cb' ),
+					'client_name'   => str_repeat( 'é', 192 ),
+				)
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
 	 * An over-long refresh_token is rejected with 400 before any DB lookup.
 	 */
 	public function test_token_rejects_overlong_refresh_token(): void {

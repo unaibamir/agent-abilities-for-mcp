@@ -25,8 +25,6 @@ final class ReviewRequestTest extends TestCase {
 		delete_option( 'aafm_review_request' );
 		delete_option( 'aafm_quickconnect_finished' );
 		delete_option( 'aafm_quickconnect_dismissed' );
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		// The success count is memoized per request. A test process is many logical requests in
 		// one PHP process, so it is recomputed here and after every batch this file logs.
 		aafm_review_request_success_count( true );
@@ -724,6 +722,63 @@ final class ReviewRequestTest extends TestCase {
 
 		$this->assertTrue( $died );
 		$this->assertSame( 'pending', aafm_review_request_state()['status'] );
+	}
+
+	/**
+	 * Codex round 9, R9-10: aafm_review_request_save_state() was a bare update_option() whose
+	 * result was discarded, so aafm_review_request_record_verdict() returned its in-memory state
+	 * as if it had been stored and the AJAX handler reported success regardless. A failed write
+	 * must now report an error and leave the option at its prior state.
+	 */
+	public function test_ajax_reports_failure_when_the_verdict_write_fails(): void {
+		$this->acting_as( 'administrator' );
+
+		// Matches the bare option name, not only the `option_name = '...'` WHERE-clause shape:
+		// a narrower match lets the row's existence-check SELECT fail while update_option()'s
+		// own add_option() fallback still reaches the option name through an INSERT ... ON
+		// DUPLICATE KEY UPDATE, which is not written as `option_name = '...'` and so would slip
+		// through untouched and actually persist the new state - the opposite of the write
+		// failure this test means to simulate.
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, 'aafm_review_request' )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+
+		$nonce             = wp_create_nonce( 'aafm_review_request' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$_POST['verdict']  = 'dismiss';
+
+		ob_start();
+		try {
+			aafm_ajax_review_request();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		}
+		$json = json_decode( (string) ob_get_clean(), true );
+
+		remove_all_filters( 'wp_die_ajax_handler' );
+		remove_all_filters( 'wp_die_handler' );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['verdict'] );
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'A failed verdict write must not report success.' );
+		$this->assertSame( 'pending', aafm_review_request_state()['status'], 'The prior state must survive a failed write.' );
 	}
 
 

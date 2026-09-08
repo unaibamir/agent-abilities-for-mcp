@@ -1,8 +1,7 @@
 <?php
 /**
  * Tests for the OAuth bearer-token validator: the determine_current_user
- * resolver, the access-token row resolver, and the rest_authentication_errors
- * pass-through.
+ * resolver and the access-token row resolver.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -12,7 +11,6 @@ declare( strict_types=1 );
 namespace AAFM\Tests\OAuth;
 
 use AAFM\Tests\TestCase;
-use WP_Error;
 
 /**
  * Verifies that a valid `aafm_oat_` bearer resolves to the approving user on the
@@ -66,14 +64,39 @@ class ValidatorTest extends TestCase {
 		$_SERVER['HTTPS'] = 'on';
 
 		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
+
+		// R11-2: aafm_oauth_client_is_deactivated() now denies a client_id with no row at all
+		// (not just a row confirmed inactive), so every synthetic client_id this file mints
+		// tokens for needs a real, active client row to resolve.
+		foreach ( array( 'c', 'wrong-audience-client', 'attribution_client' ) as $client_id ) {
+			$this->register_client_row( $client_id );
+		}
 
 		// OAuth is OFF by default now; the resolver's happy path requires it on. The
 		// disabled-bearer test sets it back to '0' explicitly.
 		update_option( 'aafm_oauth_enabled', '1' );
+	}
 
-		// The failed-bearer audit tests below read the activity log.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+	/**
+	 * Seed a minimal, active OAuth client row for a synthetic client_id used only to mint
+	 * tokens in this file (never through aafm_oauth_register_client(), which generates its
+	 * own random id).
+	 *
+	 * @param string $client_id Public client id to seed.
+	 */
+	private function register_client_row( string $client_id ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => $client_id,
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
 	}
 
 	/**
@@ -639,17 +662,6 @@ class ValidatorTest extends TestCase {
 		$this->assertSame( $uid, (int) $row['wp_user_id'] );
 
 		$this->assertNull( aafm_oauth_get_access_token_row( 'aafm_oat_unknown' ) );
-	}
-
-	/**
-	 * The rest_authentication_errors hook is a pure pass-through: it never turns a
-	 * non-error into an error, and never mutates an existing WP_Error.
-	 */
-	public function test_rest_authentication_errors_passthrough(): void {
-		$this->assertNull( aafm_oauth_rest_authentication_errors( null ) );
-
-		$error = new WP_Error( 'x', 'y' );
-		$this->assertSame( $error, aafm_oauth_rest_authentication_errors( $error ) );
 	}
 
 	/**

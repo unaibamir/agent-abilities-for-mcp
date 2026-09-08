@@ -13,12 +13,6 @@ use AAFM\Tests\TestCase;
 
 final class AbilityToggleAuditTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_a_newly_enabled_ability_writes_one_enabled_row(): void {
 		$written = aafm_log_ability_toggle_diff( array( 'aafm/get-posts' ), array( 'aafm/get-posts', 'aafm/create-page' ) );
 		$this->assertSame( 1, $written );

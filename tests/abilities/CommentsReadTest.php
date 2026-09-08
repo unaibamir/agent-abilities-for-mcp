@@ -15,10 +15,6 @@ final class CommentsReadTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// The audited registration wrapper logs every permission check and execute to the
-		// custom table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
 		// by pushing the action name onto $wp_current_filter - the idiom WP core's own
@@ -229,5 +225,113 @@ final class CommentsReadTest extends TestCase {
 		$this->assertTrue(
 			wp_get_ability( 'aafm/get-comments' )->check_permissions( array( 'post_id' => $private ) )
 		);
+	}
+
+	/**
+	 * Codex round 9, R9-4: the whole-site listing used to ask the database for one page,
+	 * THEN drop comments on posts the caller can't read - so a readable comment could be
+	 * pushed off page 1 entirely by unreadable ones consuming its slot. An older readable
+	 * comment plus ten newer unreadable ones on a private post must still surface the
+	 * readable one on page 1, and `total` must now be reported (it used to be omitted for
+	 * this branch entirely).
+	 */
+	public function test_get_comments_sitewide_does_not_hide_a_readable_comment_behind_unreadable_ones(): void {
+		$public_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $public_post,
+				'comment_approved' => '1',
+				'comment_content'  => 'READABLE_COMMENT',
+				'comment_date'     => '2020-01-01 00:00:00',
+				'comment_date_gmt' => '2020-01-01 00:00:00',
+			)
+		);
+
+		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
+		for ( $i = 1; $i <= 10; $i++ ) {
+			self::factory()->comment->create(
+				array(
+					'comment_post_ID'  => $private_post,
+					'comment_approved' => '1',
+					'comment_content'  => 'HIDDEN_' . $i,
+					'comment_date'     => sprintf( '2020-02-%02d 00:00:00', $i ),
+					'comment_date_gmt' => sprintf( '2020-02-%02d 00:00:00', $i ),
+				)
+			);
+		}
+
+		$this->acting_as( 'subscriber' );
+		$out      = wp_get_ability( 'aafm/get-comments' )->execute(
+			array(
+				'per_page' => 10,
+				'page'     => 1,
+			)
+		);
+		$contents = wp_list_pluck( $out['comments'], 'content' );
+
+		$this->assertContains( 'READABLE_COMMENT', $contents );
+		$this->assertSame( 1, $out['total'] );
+		$this->assertFalse( $out['truncated'] );
+	}
+
+	/**
+	 * Below the scan cap, `total` must be the exact count of comments the caller can
+	 * actually see, not the raw approved count (which would include the private post's
+	 * comments the subscriber cannot read).
+	 */
+	public function test_get_comments_sitewide_total_excludes_unreadable_comments(): void {
+		$public_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		self::factory()->comment->create_many(
+			2,
+			array(
+				'comment_post_ID'  => $public_post,
+				'comment_approved' => '1',
+			)
+		);
+
+		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
+		self::factory()->comment->create_many(
+			3,
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) );
+
+		$this->assertSame( 2, $out['total'] );
+		$this->assertCount( 2, $out['comments'] );
+		$this->assertFalse( $out['truncated'] );
+	}
+
+	/**
+	 * Lowering the (filterable) scan cap, rather than creating thousands of comments, is
+	 * the practical way to exercise the bound in a test. Once the cap is hit, `truncated`
+	 * must be true and `total` must be a floor (the scanned-and-visible count), never the
+	 * unbounded real total.
+	 */
+	public function test_get_comments_sitewide_reports_truncated_once_the_scan_cap_is_hit(): void {
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 3 );
+
+		$post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		self::factory()->comment->create_many(
+			5,
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '1',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		// per_page is capped by the ability's own input schema at AAFM_LIST_PER_PAGE_MAX (50);
+		// 100 would fail schema validation before aafm_exec_get_comments() ever runs.
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertTrue( $out['truncated'] );
+		$this->assertSame( 3, $out['total'] );
 	}
 }

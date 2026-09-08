@@ -14,12 +14,6 @@ use WP_Application_Passwords;
 
 final class DashboardTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_agent_user_candidates_flags_admins(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$sub   = self::factory()->user->create( array( 'role' => 'subscriber' ) );

@@ -38,7 +38,7 @@ defined( 'ABSPATH' ) || exit;
  */
 function aafm_integration_ability_order(): array {
 	return array(
-		'yoast'       => array(
+		'yoast'         => array(
 			array(
 				'name' => 'aafm/yoast-get-post',
 				'risk' => 'read',
@@ -52,7 +52,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
-		'rankmath'    => array(
+		'rankmath'      => array(
 			array(
 				'name' => 'aafm/rankmath-get-post',
 				'risk' => 'read',
@@ -74,7 +74,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
-		'aioseo'      => array(
+		'aioseo'        => array(
 			array(
 				'name' => 'aafm/aioseo-get-post',
 				'risk' => 'read',
@@ -88,7 +88,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 		),
-		'acf'         => array(
+		'acf'           => array(
 			array(
 				'name' => 'aafm/acf-list-field-groups',
 				'risk' => 'read',
@@ -118,7 +118,7 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 		),
-		'woocommerce' => array(
+		'woocommerce'   => array(
 			array(
 				'name' => 'aafm/wc-list-products',
 				'risk' => 'read',
@@ -325,6 +325,112 @@ function aafm_integration_ability_order(): array {
 			),
 			array(
 				'name' => 'aafm/wc-update-payment-gateway',
+				'risk' => 'write',
+			),
+		),
+		'slim_seo'      => array(
+			array(
+				'name' => 'aafm/slim-seo-get-post',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/slim-seo-update-post',
+				'risk' => 'write',
+			),
+		),
+		'tec'           => array(
+			array(
+				'name' => 'aafm/tec-get-events',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/tec-get-event',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/tec-create-event',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/tec-update-event',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/tec-delete-event',
+				'risk' => 'destructive',
+			),
+			array(
+				'name' => 'aafm/tec-get-venues',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/tec-get-venue',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/tec-create-venue',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/tec-update-venue',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/tec-get-organizers',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/tec-get-organizer',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/tec-create-organizer',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/tec-update-organizer',
+				'risk' => 'write',
+			),
+		),
+		'event_tickets' => array(
+			array(
+				'name' => 'aafm/tec-get-tickets',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/tec-get-ticket',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/tec-get-attendees',
+				'risk' => 'read',
+			),
+		),
+		'avada'         => array(
+			array(
+				'name' => 'aafm/avada-get-page-content',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/avada-replace-text',
+				'risk' => 'write',
+			),
+		),
+		'geodirectory'  => array(
+			array(
+				'name' => 'aafm/geodirectory-get-listings',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/geodirectory-get-listing',
+				'risk' => 'read',
+			),
+			array(
+				'name' => 'aafm/geodirectory-create-listing',
+				'risk' => 'write',
+			),
+			array(
+				'name' => 'aafm/geodirectory-update-listing',
 				'risk' => 'write',
 			),
 		),

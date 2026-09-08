@@ -174,7 +174,7 @@ class SchemaTest extends TestCase {
 		aafm_install_oauth_tables();
 
 		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
-		$this->assertSame( '7', AAFM_OAUTH_SCHEMA_VERSION );
+		$this->assertSame( '8', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 
 	/**
@@ -204,6 +204,54 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 10, R10-3: R9-3's fix certified each table's DELETE against a fresh row-count
+	 * read, but that read was a bare get_var(), which casts a failed read straight to
+	 * `(int) null === 0` - the same "unreadable, so call it empty" mistake as trusting the
+	 * DELETE's own affected-row count. Faulting the clients-table DELETE and its confirming COUNT
+	 * together must still report failure for that table, and the row it never actually reached
+	 * must survive; the other three tables (never faulted) must still come back genuinely clear.
+	 */
+	public function test_truncate_reports_failure_for_a_table_whose_delete_and_confirming_count_both_fail(): void {
+		aafm_install_oauth_tables();
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_abc',
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
+
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$table    = $wpdb->prefix . 'aafm_oauth_clients';
+				$is_write = false !== strpos( $query, 'DELETE FROM `' . $table . '`' );
+				$is_count = false !== strpos( $query, 'SELECT COUNT(*) FROM `' . $table . '`' );
+				return ( $is_write || $is_count ) ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$result = aafm_truncate_oauth_tables();
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( $result, 'A table whose delete and confirming count both fail must not certify as truncated.' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$remaining = (int) $wpdb->get_var(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+			"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_clients WHERE client_id = 'client_abc'"
+		);
+		$this->assertSame( 1, $remaining, 'The row was never actually reachable; it must still be there.' );
+	}
+
+	/**
 	 * The upgrade runs the installer when the recorded schema version is missing.
 	 */
 	public function test_upgrade_runs_when_version_missing(): void {
@@ -215,6 +263,39 @@ class SchemaTest extends TestCase {
 		$this->assertSame(
 			AAFM_OAUTH_SCHEMA_VERSION,
 			get_option( 'aafm_oauth_schema_version' )
+		);
+	}
+
+	/**
+	 * Codex round 7, R7-2: the version guard used to read get_option()'s cache-trusting view, so
+	 * a stale persistent cache still claiming the current version was stored, over a database row
+	 * that was actually missing (or behind), would make the guard skip the installer for good.
+	 * Drop a table directly, delete the real version row, and plant a stale cache claiming the
+	 * current version is already stored - the installer must still run from the real row.
+	 */
+	public function test_upgrade_runs_when_a_stale_cache_hides_a_missing_version(): void {
+		global $wpdb;
+
+		aafm_install_oauth_tables();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'aafm_oauth_schema_version' ) );
+
+		$all                              = wp_load_alloptions( true );
+		$all['aafm_oauth_schema_version'] = AAFM_OAUTH_SCHEMA_VERSION;
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version', 'MISSING' ),
+			'Precondition: the stale cache is what get_option() sees.'
+		);
+		$this->assertFalse( $this->table_exists( 'aafm_oauth_codes' ), 'Precondition: the table is genuinely gone.' );
+
+		aafm_maybe_upgrade_oauth_tables();
+
+		$this->assertTrue(
+			$this->table_exists( 'aafm_oauth_codes' ),
+			'The installer must still run: the database row was missing even though a stale cache claimed the current version was already stored.'
 		);
 	}
 
@@ -265,6 +346,69 @@ class SchemaTest extends TestCase {
 
 		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
 		$this->assertFalse( get_transient( 'aafm_oauth_schema_error' ), 'A healthy verify must clear the error flag.' );
+	}
+
+	/**
+	 * Codex round 8, R8-3: the version-stamp write's return value used to be discarded. A schema
+	 * that is genuinely healthy but whose stamp write fails to persist must not be allowed to look
+	 * settled - the version must stay behind (so the self-heal keeps retrying) and the error
+	 * transient, already cleared on the strength of the schema check alone, must be re-set so the
+	 * admin notice reflects reality.
+	 */
+	public function test_finalize_reflags_the_error_and_logs_when_the_stamp_write_fails_to_persist(): void {
+		aafm_install_oauth_tables();
+		update_option( 'aafm_oauth_schema_version', '1' );
+		delete_transient( 'aafm_oauth_schema_error' );
+
+		$this->make_option_write_unpersistable( 'aafm_oauth_schema_version', '1' );
+		aafm_oauth_finalize_schema( true );
+
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_schema_version' ),
+			'A certification failure on the version stamp must leave the prior version in place.'
+		);
+		$this->assertNotFalse(
+			get_transient( 'aafm_oauth_schema_error' ),
+			'The error flag must be re-set when the schema is healthy but the stamp write itself failed to persist.'
+		);
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm_oauth_schema_version', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-array key, not a meta query.
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A failed version-stamp write must be logged, not silently retried forever with no trace.' );
+	}
+
+	/**
+	 * Makes a single option write to $option uncertifiable by reverting the row back to
+	 * $stuck_raw_value immediately after WordPress writes it, so aafm_update_option_verified()'s
+	 * post-write database read never matches what was intended and the write is reported as
+	 * failed. Mirrors SettingsSaveTest's helper of the same name.
+	 *
+	 * @param string $option          Option name to sabotage.
+	 * @param string $stuck_raw_value The value the row is forced back to after every write.
+	 * @return void
+	 */
+	private function make_option_write_unpersistable( string $option, string $stuck_raw_value ): void {
+		$revert = static function () use ( $option, $stuck_raw_value ): void {
+			global $wpdb;
+			$wpdb->query(
+				$wpdb->prepare(
+					"REPLACE INTO $wpdb->options (option_name, option_value, autoload) VALUES (%s, %s, 'yes')",
+					$option,
+					$stuck_raw_value
+				)
+			);
+		};
+		$guard  = static function ( $changed ) use ( $option, $revert ): void {
+			if ( $changed === $option ) {
+				$revert();
+			}
+		};
+		add_action( 'added_option', $guard );
+		add_action( 'updated_option', $guard );
 	}
 
 	/**

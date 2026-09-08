@@ -18,6 +18,6 @@ final class AdapterLoadTest extends TestCase {
 	}
 
 	public function test_min_adapter_version_constant_defined(): void {
-		$this->assertSame( '0.5.0', AAFM_MIN_ADAPTER_VERSION );
+		$this->assertSame( '0.6.1', AAFM_MIN_ADAPTER_VERSION );
 	}
 }

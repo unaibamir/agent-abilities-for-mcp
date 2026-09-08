@@ -279,4 +279,44 @@ class ClientsTest extends TestCase {
 		$empty = aafm_oauth_register_client( array( 'redirect_uris' => array() ) );
 		$this->assertInstanceOf( WP_Error::class, $empty );
 	}
+
+	/**
+	 * Codex round 11, R11-2: aafm_oauth_client_is_deactivated() used to read a client_id with no
+	 * row at all as "not deactivated" - the same verdict as a confirmed-active row - so an access
+	 * token whose owning client was deleted (a partial table clear, a manual repair, a race with
+	 * the abandoned-client reaper) kept authenticating. Every live gate calling this function must
+	 * see a missing row, an empty client id, and any non-1 is_active value all deny alike; only a
+	 * row confirmed is_active = 1 must return false.
+	 */
+	public function test_is_deactivated_denies_a_client_id_with_no_row(): void {
+		aafm_install_oauth_tables();
+
+		$this->assertTrue(
+			aafm_oauth_client_is_deactivated( 'never-registered-client' ),
+			'A client id with no row at all must deny, not be treated as active.'
+		);
+	}
+
+	/**
+	 * An empty client id denies for the same reason: there is nothing to positively authorize.
+	 */
+	public function test_is_deactivated_denies_an_empty_client_id(): void {
+		aafm_install_oauth_tables();
+
+		$this->assertTrue( aafm_oauth_client_is_deactivated( '' ) );
+	}
+
+	/**
+	 * A confirmed active row (is_active = 1) is the only case that resolves false.
+	 */
+	public function test_is_deactivated_is_false_only_for_a_confirmed_active_row(): void {
+		aafm_install_oauth_tables();
+
+		$res = aafm_oauth_register_client(
+			array( 'redirect_uris' => array( 'https://app.example/cb' ) )
+		);
+		$this->assertIsArray( $res );
+
+		$this->assertFalse( aafm_oauth_client_is_deactivated( $res['client_id'] ) );
+	}
 }

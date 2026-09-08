@@ -26,7 +26,8 @@ function aafm_mcp_tool_name( string $ability_name ): string {
 }
 
 /**
- * Build the registration-time $tools catalog: every enabled ability that exists.
+ * Build the registration-time $tools catalog: every enabled ability that exists AND is actually
+ * ours.
  *
  * IMPORTANT (corrected on the live path in Phase 2.4): create_server() runs inside
  * mcp_adapter_init at rest_api_init priority 15, and on the adapter's streamable-HTTP
@@ -37,14 +38,51 @@ function aafm_mcp_tool_name( string $ability_name ): string {
  * agent user IS resolved. The hard gate remains each ability's own permission_callback at
  * execute time. (See ROADMAP "Carried issues" for the timing correction to Phase 0.5 #2.)
  *
- * @param array<int,string> $enabled Enabled ability names.
+ * Codex round 9 R9-7: a reserved enabled name is only safe to serve when the object registered
+ * under it is genuinely this plugin's own. aafm_register_enabled_abilities() (register.php)
+ * treats an already-registered name as an idempotent re-fire and skips re-registering it - the
+ * right call for a real re-fire, but wrong when a DIFFERENT plugin's ability claimed the name
+ * first: wp_get_ability() then resolves to the foreign object, which this function used to admit
+ * into the server with none of this plugin's permission, allowlist, rate-limit, or audit
+ * chokepoints behind it (those all live on AAFM's own decorated callbacks, never reached).
+ *
+ * Codex round 10 R10-4: the R9-7 fix first shipped as `instanceof AAFM_Rate_Limited_Ability`, but
+ * that class is public and non-final, and `wp_register_ability()` accepts a caller-chosen
+ * `ability_class`, so a foreign plugin can preclaim the name using this exact class with its own
+ * permissive callbacks and pass a class check. Object identity closes that: the object admitted
+ * here must be the SAME object aafm_register_ability_with_log() (register.php) actually returned
+ * for this name, not merely an instance of the class it happens to use.
+ *
+ * Codex round 11 R11-3: the record this check compares against used to be writable through a
+ * public setter that trusted whatever object it was handed - forgeable the same way the class
+ * check was. AAFM_Registration_Authority (includes/class-aafm-registration-authority.php) now
+ * owns that record and never accepts a ready-made object; see its docblock for the mechanism.
+ *
+ * @param array<int,string>    $enabled Enabled ability names.
+ * @param array<string,string> $omitted Receives name => reason for every enabled name left out
+ *                                       because it resolved to an object AAFM never registered,
+ *                                       so the operator can be told rather than served silently
+ *                                       (by reference, appended to, not reset - a caller that
+ *                                       does not pass one simply does not get this bookkeeping).
  * @return list<string>
  */
-function aafm_build_server_tools( array $enabled ): array {
+function aafm_build_server_tools( array $enabled, array &$omitted = array() ): array {
 	$tools = array();
 	foreach ( $enabled as $name ) {
 		$ability = wp_get_ability( $name );
 		if ( ! $ability instanceof WP_Ability ) {
+			continue;
+		}
+		// Require the exact object aafm_register_ability_with_log() (register.php) returned for
+		// this name, not merely an instance of the class it uses. A class check is forgeable - a
+		// caller can pass that same public, non-final class as its own `ability_class` - but a
+		// caller cannot hand back the specific object our own wp_register_ability() call produced.
+		// An object resolved here that is not that exact instance proves a different plugin's
+		// registration won this name, not ours, so admitting it into the server would silently
+		// hand it every permission, allowlist, rate-limit, and audit guarantee this plugin's own
+		// name implies but never actually enforces for it.
+		if ( aafm_remember_registered_ability( $name ) !== $ability ) {
+			$omitted[ $name ] = 'name_claimed';
 			continue;
 		}
 		// If a user is already resolved (e.g. unit tests, or a transport that resolves auth
@@ -203,6 +241,53 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 }
 
 /**
+ * The discovery-time floor shared by every case in aafm_ability_list_permission() below whose
+ * per-object edit gate can resolve to edit_posts, edit_others_posts, OR edit_published_posts
+ * (a role holding ANY one of the three can execute the real per-object check on the right
+ * object) - written out identically eight times below before this existed. True when the
+ * caller holds ANY of the three.
+ *
+ * @return bool
+ */
+function aafm_can_edit_post_family(): bool {
+	return current_user_can( 'edit_posts' )
+		|| current_user_can( 'edit_others_posts' )
+		|| current_user_can( 'edit_published_posts' );
+}
+
+/**
+ * Delete counterpart to aafm_can_edit_post_family(): the discovery-time floor for a per-object
+ * delete gate that can resolve to delete_posts, delete_others_posts, OR
+ * delete_published_posts.
+ *
+ * @return bool
+ */
+function aafm_can_delete_post_family(): bool {
+	return current_user_can( 'delete_posts' )
+		|| current_user_can( 'delete_others_posts' )
+		|| current_user_can( 'delete_published_posts' );
+}
+
+/**
+ * Whether ANY taxonomy matching $tax_args grants the caller $cap_prop (a property name on
+ * WP_Taxonomy::$cap, e.g. 'edit_terms' or 'manage_terms'). Shared by the three
+ * foreach ( get_taxonomies(...) as $tax_object ) loops in aafm_ability_list_permission() below,
+ * which differ only in the taxonomy filter and the capability property they check.
+ *
+ * @param array<string,mixed> $tax_args  get_taxonomies() args, e.g. array() or array('public'=>true).
+ * @param string              $cap_prop  Property name on WP_Taxonomy::$cap to check.
+ * @return bool
+ */
+function aafm_any_taxonomy_grants( array $tax_args, string $cap_prop ): bool {
+	foreach ( get_taxonomies( $tax_args, 'objects' ) as $tax_object ) {
+		if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->{$cap_prop} ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * An object-INDEPENDENT discovery predicate for abilities whose execute-time
  * permission_callback needs a specific object id from the input.
  *
@@ -290,9 +375,90 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/rankmath-update-schema':
 		case 'aafm/aioseo-get-post':
 		case 'aafm/aioseo-update-post':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			// Slim SEO gates per-object on the SAME shared aafm_perm_seo_post_object() as the three
+			// SEO integrations above (edit_post($id), false with empty input), so it needs the
+			// identical discovery floor - added 1.7.4, missed here would leave the ability
+			// registered and enabled but silently undiscoverable/uncallable over the real wire.
+		case 'aafm/slim-seo-get-post':
+		case 'aafm/slim-seo-update-post':
+			return static fn(): bool => aafm_can_edit_post_family();
+
+		// The Events Calendar (added 1.7.4): events/venues/organizers each register with their
+		// OWN capability_type (tribe_event(s) / tribe_venue(s) / tribe_organizer(s)) and
+		// map_meta_cap true, so the per-object edit_tribe_event($id)/edit_tribe_venue($id)/
+		// edit_tribe_organizer($id) checks are false with empty input - the same shape as the
+		// core update-post case below, just against a different capability family per object
+		// type. Each floor is the OR of that type's own edit_{plural}/edit_others_{plural}/
+		// edit_published_{plural} caps, mirroring aafm_can_edit_post_family()'s shape exactly.
+		// Reads of tickets/attendees for one event (tec-get-tickets, tec-get-ticket,
+		// tec-get-attendees) are gated on the PARENT EVENT's per-object cap (Amendment 16), so
+		// they share the event floor, not a bare Event Tickets cap. Lists and creates
+		// (tec-get-events/-venues/-organizers, tec-create-event/-venue/-organizer) are
+		// object-independent and need no case here - each falls through to its real
+		// permission_callback with empty input, the correct discovery answer.
+		case 'aafm/tec-get-tickets':
+		case 'aafm/tec-get-ticket':
+		case 'aafm/tec-get-attendees':
+			return static fn(): bool => current_user_can( 'edit_tribe_events' )
+				|| current_user_can( 'edit_others_tribe_events' )
+				|| current_user_can( 'edit_published_tribe_events' );
+		case 'aafm/tec-update-event':
+			return static fn(): bool => current_user_can( 'edit_tribe_events' )
+				|| current_user_can( 'edit_others_tribe_events' )
+				|| current_user_can( 'edit_published_tribe_events' );
+		case 'aafm/tec-delete-event':
+			return static fn(): bool => current_user_can( 'delete_tribe_events' )
+				|| current_user_can( 'delete_others_tribe_events' )
+				|| current_user_can( 'delete_published_tribe_events' );
+		case 'aafm/tec-update-venue':
+			return static fn(): bool => current_user_can( 'edit_tribe_venues' )
+				|| current_user_can( 'edit_others_tribe_venues' )
+				|| current_user_can( 'edit_published_tribe_venues' );
+		case 'aafm/tec-update-organizer':
+			return static fn(): bool => current_user_can( 'edit_tribe_organizers' )
+				|| current_user_can( 'edit_others_tribe_organizers' )
+				|| current_user_can( 'edit_published_tribe_organizers' );
+
+		// tec-get-event/-venue/-organizer's real gate (aafm_tec_perm_read_*()) allows anyone who
+		// clears the object-independent 'read' floor to read a PUBLISHED object, falling back to
+		// the edit family only for a non-published one - mirroring aafm_perm_get_post()'s own
+		// aafm_can_read_post_object() convention for core content. The coarse 'read' floor is the
+		// correct discovery answer here (same as the core aafm/get-post and aafm/get-page cases
+		// above), not the edit family: gating discovery on edit access would hide the tool from a
+		// caller who can read every published event/venue/organizer but holds no edit capability
+		// at all.
+		case 'aafm/tec-get-event':
+		case 'aafm/tec-get-venue':
+		case 'aafm/tec-get-organizer':
+			return static fn(): bool => current_user_can( 'read' );
+
+		// Avada (added 1.7.4): both abilities gate per-object on aafm_can_edit_post_object() via
+		// aafm_perm_avada_post_object() (includes/abilities/avada.php) - false with empty input,
+		// the same shape as update-post/replace-in-post, so both need the identical
+		// aafm_can_edit_post_family() floor.
+		case 'aafm/avada-get-page-content':
+		case 'aafm/avada-replace-text':
+			return static fn(): bool => aafm_can_edit_post_family();
+
+		// GeoDirectory (added 1.7.4, default-off): gd_place registers with the literal
+		// 'capability_type' => 'post', so its mapped caps are the SAME primitive names as the
+		// built-in post type. geodirectory-get-listings (list) and geodirectory-create-listing
+		// (create) are object-independent and need no case here - each falls through to its
+		// real permission_callback with empty input, the correct discovery answer.
+		//
+		// Codex hunt F10: aafm_perm_geodirectory_get() gates on the LITERAL edit_posts
+		// capability as an unconditional first check, not the wider edit family, so discovery
+		// must match that exact floor - the family() approximation below was showing the tool
+		// to a caller (e.g. one holding only edit_others_posts) who could never actually call
+		// it. aafm_perm_geodirectory_update() has no such unconditional check - it is purely
+		// per-object (current_user_can( 'edit_post', $post->ID )) - so it keeps the same
+		// conservative family() approximation used for every other per-object content-edit
+		// ability, which can only ever show the tool to a caller who may or may not be able to
+		// touch a given object, never to one who is refused regardless of the object.
+		case 'aafm/geodirectory-get-listing':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+		case 'aafm/geodirectory-update-listing':
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// ACF integration, post fields: gates per-object on edit_post($id) (aafm_perm_acf_post ->
 		// aafm_can_edit_post_object), false with empty input - same floor as the SEO family above,
@@ -302,9 +468,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// the correct discovery answer.
 		case 'aafm/acf-get-post-fields':
 		case 'aafm/acf-update-post-fields':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// ACF integration, term fields: gates per-object on edit_term($term_id)
 		// (aafm_perm_acf_term), NOT edit_post - a genuinely different mechanism from the post-fields
@@ -326,14 +490,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// registered taxonomy, public or not, matching aafm_perm_acf_term()'s real, broader floor.
 		case 'aafm/acf-get-term-fields':
 		case 'aafm/acf-update-term-fields':
-			return static function (): bool {
-				foreach ( get_taxonomies( array(), 'objects' ) as $tax_object ) {
-					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->edit_terms ) ) {
-						return true;
-					}
-				}
-				return false;
-			};
+			return static fn(): bool => aafm_any_taxonomy_grants( array(), 'edit_terms' );
 
 		// ACF integration, user fields: gates per-object on edit_user($id) PLUS the object-
 		// independent edit_users floor (aafm_perm_acf_user requires both, mirroring
@@ -372,13 +529,9 @@ function aafm_ability_list_permission( string $name ): ?callable {
 
 		case 'aafm/get-block':
 		case 'aafm/update-block':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 		case 'aafm/delete-block':
-			return static fn(): bool => current_user_can( 'delete_posts' )
-				|| current_user_can( 'delete_others_posts' )
-				|| current_user_can( 'delete_published_posts' );
+			return static fn(): bool => aafm_can_delete_post_family();
 
 		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
 		// which is false with empty input - so the per-object permission_callback would
@@ -404,14 +557,10 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/update-post':
 		case 'aafm/replace-in-post':
 		case 'aafm/set-featured-image':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 		case 'aafm/trash-post':
 		case 'aafm/delete-post':
-			return static fn(): bool => current_user_can( 'delete_posts' )
-				|| current_user_can( 'delete_others_posts' )
-				|| current_user_can( 'delete_published_posts' );
+			return static fn(): bool => aafm_can_delete_post_family();
 
 		// CPT creation: the type isn't known at discovery time (empty input), and
 		// aafm_perm_create_cpt_item checks nothing beyond the type's own bare
@@ -473,9 +622,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/get-all-post-meta':
 		case 'aafm/update-post-meta':
 		case 'aafm/delete-post-meta':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// Governed user-meta (get/update/delete): all gate per-object on edit_user($id) -
 		// reads included, since user meta can hold private data. The user id is unknown at
@@ -587,9 +734,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/get-revision':
 		case 'aafm/restore-revision':
 		case 'aafm/delete-revision':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// Media writes: the attachment id is unknown at discovery (empty input), so use an
 		// object-independent floor. The reads (get-media-item/count-media) need NO case - like
@@ -614,21 +759,15 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// same "standalone arm that can never resolve" defect Finding 1 removed from update-page,
 		// just in a different family. Removed rather than widened.
 		case 'aafm/update-media':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 		case 'aafm/delete-media':
-			return static fn(): bool => current_user_can( 'delete_posts' )
-				|| current_user_can( 'delete_others_posts' )
-				|| current_user_can( 'delete_published_posts' );
+			return static fn(): bool => aafm_can_delete_post_family();
 
 		// add-post-terms gates per-object on edit_post on the target post
 		// (aafm_perm_add_post_terms -> aafm_can_edit_post_object); the post id is unknown at
 		// discovery (empty input), so use the same widened floor as update-post above.
 		case 'aafm/add-post-terms':
-			return static fn(): bool => current_user_can( 'edit_posts' )
-				|| current_user_can( 'edit_others_posts' )
-				|| current_user_can( 'edit_published_posts' );
+			return static fn(): bool => aafm_can_edit_post_family();
 
 		// Term writes gate on the TARGET taxonomy's own manage_terms cap (aafm_perm_manage_terms),
 		// and the taxonomy is unknown at discovery: with empty input the callback defaults to
@@ -640,14 +779,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// the execute-time gate.
 		case 'aafm/create-term':
 		case 'aafm/update-term':
-			return static function (): bool {
-				foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax_object ) {
-					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->manage_terms ) ) {
-						return true;
-					}
-				}
-				return false;
-			};
+			return static fn(): bool => aafm_any_taxonomy_grants( array( 'public' => true ), 'manage_terms' );
 
 		// Term-meta read/write/delete gate per-object on the term (edit_term - the read
 		// included, since term meta can hold private data) - the term id is unknown at
@@ -665,14 +797,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/get-term-meta':
 		case 'aafm/update-term-meta':
 		case 'aafm/delete-term-meta':
-			return static function (): bool {
-				foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax_object ) {
-					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->edit_terms ) ) {
-						return true;
-					}
-				}
-				return false;
-			};
+			return static fn(): bool => aafm_any_taxonomy_grants( array( 'public' => true ), 'edit_terms' );
 
 		default:
 			return null;
@@ -696,6 +821,18 @@ function aafm_ability_list_permission( string $name ): ?callable {
  * @throws \Throwable When the aafm_rethrow_ability_exceptions filter is on.
  */
 function aafm_user_can_discover_ability( string $ability_name ): bool {
+	// Allowlist scope check FIRST, before either branch below (228-allowlist-design.md,
+	// "Discovery-time chokepoint"): aafm_ability_list_permission() short-circuits past
+	// aafm_user_can_call_ability() for every ability with a per-object permission branch
+	// (update-post, trash-post, delete-post, and by the same shape most of this plan's own new
+	// mapped abilities), so a check placed only inside that function would never run for them.
+	// A principal who fails this layer can never discover the tool at all, regardless of which
+	// branch would otherwise decide visibility - no audit row, matching the raw-path,
+	// no-audit rationale a few lines below for the equivalent bridged-ability case.
+	if ( ! aafm_ability_allowed_for_principal( $ability_name, get_current_user_id(), aafm_oauth_current_client_id() ) ) {
+		return false;
+	}
+
 	$list_permission = aafm_ability_list_permission( $ability_name );
 	if ( null !== $list_permission ) {
 		// The short-circuit branch needs the same Throwable floor as the fallthrough, and for a
@@ -1241,6 +1378,13 @@ function aafm_reconcile_omitted_abilities( array $omitted ): void {
 		return;
 	}
 
+	// Bare update_option() is deliberate here (Codex round 5, R5-3 asked this call site to be
+	// checked against the option-cache rule): this option is not a security or configuration
+	// decision an operator makes, it is a diagnostic snapshot the plugin recomputes fresh on
+	// every registration pass from the real ability set. A stale cache can only make the admin
+	// notice this drives lag by one pass; the very next pass above compares against a fresh
+	// $stored read and corrects it, so nothing an agent can reach depends on this value being
+	// current the instant it is written.
 	update_option( AAFM_OMITTED_ABILITIES_OPTION, $omitted, true );
 
 	foreach ( $omitted as $name => $reason ) {
@@ -1323,6 +1467,8 @@ function aafm_omitted_reason_label( string $reason ): string {
 			return __( 'its schema could not be serialized', 'agent-abilities-for-mcp' );
 		case 'tool_cap':
 			return __( 'the enabled tool limit was reached', 'agent-abilities-for-mcp' );
+		case 'name_claimed':
+			return __( 'another plugin has already registered a tool under this name', 'agent-abilities-for-mcp' );
 		default:
 			return __( 'it exceeded a safety limit', 'agent-abilities-for-mcp' );
 	}
@@ -1349,11 +1495,28 @@ function aafm_register_mcp_server( $adapter ): void {
 	// breaches the measurement limits and cap the total tool count, so neither the adapter's
 	// recursive schema serialization nor the request-time per-tool permission loop can be driven
 	// into an uncatchable memory/time fatal by a pathological enabled+bridged set. Omissions are
-	// logged and surfaced (aafm_reconcile_omitted_abilities), never silently dropped.
-	$tools = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( aafm_all_server_ability_names() ) );
+	// logged and surfaced (aafm_reconcile_omitted_abilities), never silently dropped. This call
+	// already reconciles the option for THIS pass's schema/cap omissions before the name-claimed
+	// check below runs, so reading the option back afterward is always fresh, never stale.
+	$claimed = array();
+	$tools   = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( aafm_all_server_ability_names() ), $claimed );
+	// Codex round 9 R9-7: fold in any name-claimed omissions on top of the fresh schema/cap set
+	// just reconciled above, rather than a second unconditional write, so the common case (no
+	// collision) costs nothing beyond the one is-empty check.
+	if ( array() !== $claimed ) {
+		$current = get_option( AAFM_OMITTED_ABILITIES_OPTION, array() );
+		aafm_reconcile_omitted_abilities( array_merge( is_array( $current ) ? $current : array(), $claimed ) );
+	}
 
 	// Per-connection capability gate at request time (the user is anonymous here; see
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.
+	//
+	// Codex hunt F11: a separate plugin's own later-priority mcp_adapter_tools_list callback
+	// could still re-add a tool DTO this filter already removed - discovery narrowing here is
+	// best-effort, not the real gate. Execution stays authoritative and independent: every call
+	// still passes through aafm_user_can_call_ability() at the register.php chokepoint, so a
+	// tool restored to the listing this way is refused (and logged) the same as any other call
+	// to a hidden tool. Accepted as-is; not raising the priority.
 	add_filter( 'mcp_adapter_tools_list', 'aafm_filter_mcp_tools_list', 5, 2 );
 
 	// Advertise only the capabilities we actually implement (tools); strip prompts/resources.
@@ -1599,11 +1762,25 @@ function aafm_mcp_guard_unpersisted_session( $response, $server, $request ) {
 	}
 
 	// Read the adapter's own session store. The meta key mirrors
-	// WP\MCP\Transport\Infrastructure\SessionManager::SESSION_META_KEY, which is a private const
-	// and cannot be read from here; the literal is verified against the bundled adapter copy.
-	// MAINTENANCE: re-verify this key against SessionManager.php whenever the bundled adapter is
-	// updated (same maintenance surface as aafm_adapter_namespace_map()).
-	$sessions = get_user_meta( $user_id, 'mcp_adapter_sessions', true );
+	// WP\MCP\Transport\Infrastructure\SessionManager::session_meta_key(), which is private and
+	// cannot be called from here; the shape is verified against the bundled adapter copy.
+	// Single-site keeps the unsuffixed legacy key. On multisite (0.6.0+), user meta is
+	// network-global, so the adapter suffixes the key with the current blog ID
+	// ("mcp_adapter_sessions_{blog_id}") to scope a session to the site it was created on -
+	// falling back to the unsuffixed key when no positive blog ID is available yet, exactly
+	// mirroring SessionManager::session_meta_key_for_blog(). Getting this wrong in the OTHER
+	// direction (reading the unsuffixed key on multisite) is the false-positive mirror image of
+	// the bug this guard exists to catch: a genuinely persisted session gets reported as failed.
+	// MAINTENANCE: re-verify this key shape against SessionManager.php whenever the bundled
+	// adapter is updated (same maintenance surface as aafm_adapter_namespace_map()).
+	$session_meta_key = 'mcp_adapter_sessions';
+	if ( is_multisite() ) {
+		$current_blog_id = (int) get_current_blog_id();
+		if ( $current_blog_id >= 1 ) {
+			$session_meta_key .= '_' . $current_blog_id;
+		}
+	}
+	$sessions = get_user_meta( $user_id, $session_meta_key, true );
 	if ( is_array( $sessions ) && isset( $sessions[ $session_id ] ) ) {
 		return $response; // Persisted: the normal path. Byte-identical pass-through.
 	}

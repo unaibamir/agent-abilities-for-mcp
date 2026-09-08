@@ -83,6 +83,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The get-posts search term, passed as WP_Query\'s `s`. Query input only.',
 		),
+		'includes/abilities/tec/events.php::aafm_exec_tec_get_events::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
+			'reason' => 'The tec-get-events search term, passed to the Events Calendar ORM\'s ->search(). Query input only.',
+		),
 		'includes/abilities/search.php::aafm_exec_search_content::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) ( $input[\'search\'] ?? \'\' ) )',
@@ -190,23 +196,24 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The same client_id lookup on the grant-revocation path.',
 		),
+		'includes/admin/connection.php::aafm_ajax_set_client_agent_identity::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( (string) $_POST[\'client_id\'] ) )',
+				'sanitize_text_field( wp_unslash( (string) $_POST[\'is_agent_identity\'] ) )',
+			),
+			'reason' => 'The same client_id lookup pattern, plus a \'1\'/\'0\' truthy flag read as plain text and never written back as text (it is cast to a bool, then to an int, before the DB write).',
+		),
 		'includes/admin/page.php::aafm_sanitize_enabled_input::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $name )',
 			),
 			'reason' => 'Ability names ticked in the admin screen, intersected against array_keys( aafm_get_abilities_registry() ) two lines later, so only a name the registry already holds can be stored.',
 		),
-		'includes/admin/settings.php::aafm_count_dropped_ip_lines::sanitize_text_field' => array(
+		'includes/admin/settings.php::aafm_split_and_trim_lines::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $line )',
 			),
-			'reason' => 'The same parse run purely to count how many lines were rejected, so the save notice can say so. It returns an integer and stores nothing at all.',
-		),
-		'includes/admin/settings.php::aafm_sanitize_settings_input::sanitize_text_field' => array(
-			'calls'  => array(
-				'sanitize_text_field( (string) $line )',
-			),
-			'reason' => 'One line of the IP allowlist textarea. A line is stored only after aafm_is_valid_ip_or_cidr() accepts it, and no invisible character survives that.',
+			'reason' => 'Shared by aafm_sanitize_settings_input(), which stores a line only after aafm_is_valid_ip_or_cidr() accepts it (no invisible character survives that), and aafm_count_dropped_ip_lines(), which uses the same parse purely to count rejected lines for the save notice and stores nothing at all.',
 		),
 		'includes/audit/log.php::aafm_source_ip::sanitize_text_field' => array(
 			'calls'  => array(

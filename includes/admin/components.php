@@ -16,6 +16,25 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * Sanitize a space-separated extra-class string one class at a time, so a caller cannot
+ * smuggle a second attribute in through the class list. Shared by aafm_render_section() and
+ * aafm_render_set_row().
+ *
+ * @param string $extra_class Raw space-separated class list.
+ * @return string Each surviving class, space-prefixed (e.g. ' foo bar'), or '' if none survive.
+ */
+function aafm_sanitize_html_classes( string $extra_class ): string {
+	$extra = '';
+	foreach ( array_filter( explode( ' ', $extra_class ) ) as $one ) {
+		$one = sanitize_html_class( $one );
+		if ( '' !== $one ) {
+			$extra .= ' ' . $one;
+		}
+	}
+	return $extra;
+}
+
+/**
  * Echo a settings section wrapper.
  *
  * Non-collapsible (default) renders a `<section class="aafm-section aafm-card">`
@@ -52,15 +71,7 @@ function aafm_render_section( array $args ): void {
 
 	$id_attr = '' === $id ? '' : sprintf( ' id="%s"', esc_attr( $id ) );
 
-	// Each extra class goes through sanitize_html_class() individually, so a caller cannot smuggle
-	// a second attribute in through the class list.
-	$extra = '';
-	foreach ( array_filter( explode( ' ', $extra_class ) ) as $one ) {
-		$one = sanitize_html_class( $one );
-		if ( '' !== $one ) {
-			$extra .= ' ' . $one;
-		}
-	}
+	$extra = aafm_sanitize_html_classes( $extra_class );
 
 	if ( $collapsible ) {
 		$open_attr  = $open ? ' open' : '';
@@ -181,15 +192,7 @@ function aafm_render_set_row( array $args ): void {
 	$control     = isset( $args['control'] ) ? (string) $args['control'] : '';
 	$help        = isset( $args['help'] ) ? (string) $args['help'] : '';
 
-	// Same per-class sanitize as aafm_render_section(), so a caller cannot smuggle a second
-	// attribute in through the class list.
-	$extra = '';
-	foreach ( array_filter( explode( ' ', $extra_class ) ) as $one ) {
-		$one = sanitize_html_class( $one );
-		if ( '' !== $one ) {
-			$extra .= ' ' . $one;
-		}
-	}
+	$extra = aafm_sanitize_html_classes( $extra_class );
 
 	$opt_html  = '' === $opt
 		? ''

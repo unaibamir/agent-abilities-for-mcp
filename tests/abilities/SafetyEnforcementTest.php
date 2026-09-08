@@ -26,9 +26,6 @@ final class SafetyEnforcementTest extends TestCase {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 		$this->original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
 
-		// The transport denial path writes a 'denied' row to the custom log.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
 		$this->ensure_categories();
 	}
 

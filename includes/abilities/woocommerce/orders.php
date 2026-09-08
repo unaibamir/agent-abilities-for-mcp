@@ -300,24 +300,19 @@ function aafm_args_wc_list_orders(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'page'     => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => AAFM_LIST_PAGE_MAX,
-					'description' => __( 'Page number of results to return, starting at 1. Defaults to 1.', 'agent-abilities-for-mcp' ),
+			'properties'           => array_merge(
+				aafm_pagination_schema_props(
+					100,
+					__( 'Number of orders to return per page, from 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
+					__( 'Page number of results to return, starting at 1. Defaults to 1.', 'agent-abilities-for-mcp' )
 				),
-				'per_page' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'maximum'     => 100,
-					'description' => __( 'Number of orders to return per page, from 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
-				),
-				'status'   => array(
-					'type'        => 'string',
-					'enum'        => array( 'any', 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft' ),
-					'description' => "Order status to filter by; 'any' (the default) covers every registered order status - including custom ones - but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.",
-				),
+				array(
+					'status' => array(
+						'type'        => 'string',
+						'enum'        => array( 'any', 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft' ),
+						'description' => "Order status to filter by; 'any' (the default) covers every registered order status - including custom ones - but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.",
+					),
+				)
 			),
 			'additionalProperties' => false,
 		),
@@ -490,34 +485,12 @@ function aafm_args_wc_get_order(): array {
 				),
 				'billing'       => array(
 					'type'                 => 'object',
-					'properties'           => array(
-						'first_name' => array( 'type' => 'string' ),
-						'last_name'  => array( 'type' => 'string' ),
-						'company'    => array( 'type' => 'string' ),
-						'address_1'  => array( 'type' => 'string' ),
-						'address_2'  => array( 'type' => 'string' ),
-						'city'       => array( 'type' => 'string' ),
-						'state'      => array( 'type' => 'string' ),
-						'postcode'   => array( 'type' => 'string' ),
-						'country'    => array( 'type' => 'string' ),
-						'email'      => array( 'type' => 'string' ),
-						'phone'      => array( 'type' => 'string' ),
-					),
+					'properties'           => aafm_wc_address_schema_props( 'billing', false ),
 					'additionalProperties' => false,
 				),
 				'shipping'      => array(
 					'type'                 => 'object',
-					'properties'           => array(
-						'first_name' => array( 'type' => 'string' ),
-						'last_name'  => array( 'type' => 'string' ),
-						'company'    => array( 'type' => 'string' ),
-						'address_1'  => array( 'type' => 'string' ),
-						'address_2'  => array( 'type' => 'string' ),
-						'city'       => array( 'type' => 'string' ),
-						'state'      => array( 'type' => 'string' ),
-						'postcode'   => array( 'type' => 'string' ),
-						'country'    => array( 'type' => 'string' ),
-					),
+					'properties'           => aafm_wc_address_schema_props( 'shipping', false ),
 					'additionalProperties' => false,
 				),
 			),
@@ -585,96 +558,14 @@ function aafm_wc_order_write_properties(): array {
 			'description'          => __( 'Billing address to set on the order. Only the sub-fields included in the request are applied; other billing fields are left unchanged (on update) or blank (on create).', 'agent-abilities-for-mcp' ),
 			// MEDIUM-4: close the nested billing object -- a smuggled key (e.g. billing.role) is rejected.
 			'additionalProperties' => false,
-			'properties'           => array(
-				'first_name' => array(
-					'type'        => 'string',
-					'description' => __( 'First name for the billing address. Appears on invoices and order emails; does not need to match the account first name.', 'agent-abilities-for-mcp' ),
-				),
-				'last_name'  => array(
-					'type'        => 'string',
-					'description' => __( 'Last name for the billing address. Appears on invoices and order emails.', 'agent-abilities-for-mcp' ),
-				),
-				'company'    => array(
-					'type'        => 'string',
-					'description' => __( 'Company name for the billing address. Optional; leave blank for a personal, non-business address.', 'agent-abilities-for-mcp' ),
-				),
-				'address_1'  => array(
-					'type'        => 'string',
-					'description' => __( 'Primary billing street address (house or building number and street name).', 'agent-abilities-for-mcp' ),
-				),
-				'address_2'  => array(
-					'type'        => 'string',
-					'description' => __( 'Secondary billing address line for an apartment, suite, or unit number. Optional.', 'agent-abilities-for-mcp' ),
-				),
-				'city'       => array(
-					'type'        => 'string',
-					'description' => __( 'City or town for the billing address.', 'agent-abilities-for-mcp' ),
-				),
-				'state'      => array(
-					'type'        => 'string',
-					'description' => __( 'State, county, or province code for the billing address (e.g. "CA", not "California"). Only meaningful for countries WooCommerce tracks states for. Stored exactly as sent with no validation, so a full name will not match WooCommerce\'s state-based tax or shipping rules.', 'agent-abilities-for-mcp' ),
-				),
-				'postcode'   => array(
-					'type'        => 'string',
-					'description' => __( 'Postal or ZIP code for the billing address, in the format the destination country expects.', 'agent-abilities-for-mcp' ),
-				),
-				'country'    => array(
-					'type'        => 'string',
-					'description' => __( 'Two-letter ISO country code for the billing address (e.g. "US", not "United States"). Stored exactly as sent with no validation, so an unrecognized value will not match WooCommerce\'s country-based tax rates or shipping zones.', 'agent-abilities-for-mcp' ),
-				),
-				'email'      => array(
-					'type'        => 'string',
-					'description' => __( 'Billing email address. Shipping has no email field; the closed shipping schema rejects one if sent there.', 'agent-abilities-for-mcp' ),
-				),
-				'phone'      => array(
-					'type'        => 'string',
-					'description' => __( 'Billing phone number. Shipping has no phone field; the closed shipping schema rejects one if sent there.', 'agent-abilities-for-mcp' ),
-				),
-			),
+			'properties'           => aafm_wc_address_schema_props( 'billing' ),
 		),
 		'shipping'      => array(
 			'type'                 => 'object',
 			'description'          => __( 'Shipping address to set on the order (no email or phone; those are billing-only fields). Only the sub-fields included in the request are applied; other shipping fields are left unchanged (on update) or blank (on create).', 'agent-abilities-for-mcp' ),
 			// MEDIUM-4: close the nested shipping object.
 			'additionalProperties' => false,
-			'properties'           => array(
-				'first_name' => array(
-					'type'        => 'string',
-					'description' => __( 'First name for the shipping address. Appears on packing slips; does not need to match the account first name.', 'agent-abilities-for-mcp' ),
-				),
-				'last_name'  => array(
-					'type'        => 'string',
-					'description' => __( 'Last name for the shipping address. Appears on packing slips.', 'agent-abilities-for-mcp' ),
-				),
-				'company'    => array(
-					'type'        => 'string',
-					'description' => __( 'Company name for the shipping address. Optional; leave blank for a personal, non-business address.', 'agent-abilities-for-mcp' ),
-				),
-				'address_1'  => array(
-					'type'        => 'string',
-					'description' => __( 'Primary shipping street address (house or building number and street name).', 'agent-abilities-for-mcp' ),
-				),
-				'address_2'  => array(
-					'type'        => 'string',
-					'description' => __( 'Secondary shipping address line for an apartment, suite, or unit number. Optional.', 'agent-abilities-for-mcp' ),
-				),
-				'city'       => array(
-					'type'        => 'string',
-					'description' => __( 'City or town for the shipping address.', 'agent-abilities-for-mcp' ),
-				),
-				'state'      => array(
-					'type'        => 'string',
-					'description' => __( 'State, county, or province code for the shipping address (e.g. "CA", not "California"). Only meaningful for countries WooCommerce tracks states for. Stored exactly as sent with no validation, so a full name will not match WooCommerce\'s state-based tax or shipping rules.', 'agent-abilities-for-mcp' ),
-				),
-				'postcode'   => array(
-					'type'        => 'string',
-					'description' => __( 'Postal or ZIP code for the shipping address, in the format the destination country expects.', 'agent-abilities-for-mcp' ),
-				),
-				'country'    => array(
-					'type'        => 'string',
-					'description' => __( 'Two-letter ISO country code for the shipping address (e.g. "US", not "United States"). Stored exactly as sent with no validation, so an unrecognized value will not match WooCommerce\'s country-based tax rates or shipping zones.', 'agent-abilities-for-mcp' ),
-				),
-			),
+			'properties'           => aafm_wc_address_schema_props( 'shipping' ),
 		),
 		'line_items'    => array(
 			'type'        => 'array',
@@ -1626,34 +1517,12 @@ function aafm_wc_order_output_properties(): array {
 		),
 		'billing'       => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'first_name' => array( 'type' => 'string' ),
-				'last_name'  => array( 'type' => 'string' ),
-				'company'    => array( 'type' => 'string' ),
-				'address_1'  => array( 'type' => 'string' ),
-				'address_2'  => array( 'type' => 'string' ),
-				'city'       => array( 'type' => 'string' ),
-				'state'      => array( 'type' => 'string' ),
-				'postcode'   => array( 'type' => 'string' ),
-				'country'    => array( 'type' => 'string' ),
-				'email'      => array( 'type' => 'string' ),
-				'phone'      => array( 'type' => 'string' ),
-			),
+			'properties'           => aafm_wc_address_schema_props( 'billing', false ),
 			'additionalProperties' => false,
 		),
 		'shipping'      => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'first_name' => array( 'type' => 'string' ),
-				'last_name'  => array( 'type' => 'string' ),
-				'company'    => array( 'type' => 'string' ),
-				'address_1'  => array( 'type' => 'string' ),
-				'address_2'  => array( 'type' => 'string' ),
-				'city'       => array( 'type' => 'string' ),
-				'state'      => array( 'type' => 'string' ),
-				'postcode'   => array( 'type' => 'string' ),
-				'country'    => array( 'type' => 'string' ),
-			),
+			'properties'           => aafm_wc_address_schema_props( 'shipping', false ),
 			'additionalProperties' => false,
 		),
 	);

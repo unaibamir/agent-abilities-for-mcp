@@ -21,6 +21,26 @@
 			<directory>tests/coexistence</directory>
 			<file>tests/WireShapeTest.php</file>
 			<file>tests/BridgeObjectRefusalWireTest.php</file>
+			<file>tests/ServerToolsListExposureTest.php</file>
+			<file>tests/BridgeToolCallResultWireTest.php</file>
+			<file>tests/GetActivityLogWireTest.php</file>
+			<file>tests/GetMediaSearchWireTest.php</file>
+			<file>tests/GetPostContentLengthWireTest.php</file>
+			<file>tests/SlimSeoWireTest.php</file>
+			<file>tests/ReplaceSitewideWireTest.php</file>
+			<file>tests/PageBuilderGuardTest.php</file>
+			<file>tests/PageBuilderGuardSweepTest.php</file>
+			<file>tests/PageBuilderGuardWireTest.php</file>
+			<file>tests/AllowlistTest.php</file>
+			<file>tests/AllowlistWireTest.php</file>
+			<file>tests/AllowlistSweepTest.php</file>
+			<file>tests/TecEventsWireTest.php</file>
+			<file>tests/TecVenuesOrganizersWireTest.php</file>
+			<file>tests/TecTicketsWireTest.php</file>
+			<file>tests/UploadMediaFromUrlWireTest.php</file>
+			<file>tests/AvadaWireTest.php</file>
+			<file>tests/GeodirectoryWireTest.php</file>
+			<file>tests/AllNew174AbilitiesWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

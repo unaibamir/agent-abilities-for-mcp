@@ -428,6 +428,28 @@ final class RichPostTest extends TestCase {
 		$this->assertArrayHasKey( 'meta', $shape );
 	}
 
+	public function test_rich_post_reports_content_length_even_without_include_content(): void {
+		$post = self::factory()->post->create_and_get( array( 'post_content' => 'twelve bytes' ) );
+
+		$shape = aafm_rich_post( $post, array( 'include_content' => false ) );
+
+		$this->assertSame( 12, $shape['content_length'] );
+		$this->assertArrayNotHasKey( 'content', $shape );
+	}
+
+	public function test_rich_post_reports_zero_content_length_for_a_protected_post(): void {
+		$post = self::factory()->post->create_and_get(
+			array(
+				'post_content'  => 'secret body text',
+				'post_password' => 'hunter2',
+			)
+		);
+
+		$shape = aafm_rich_post( $post );
+
+		$this->assertSame( 0, $shape['content_length'] );
+	}
+
 	public function test_rich_post_includes_content_by_default(): void {
 		$post_id = self::factory()->post->create(
 			array(

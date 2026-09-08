@@ -17,12 +17,6 @@ use AAFM\Tests\TestCase;
 
 final class UserMetaTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
-	}
-
 	public function test_auth_keys_are_hard_blocked_for_everyone(): void {
 		global $wpdb;
 		$keys = array(
@@ -286,5 +280,80 @@ final class UserMetaTest extends TestCase {
 		$this->assertNull(
 			aafm_unreachable_user_meta_key_error( 'aafm/get-user-meta', array( 'key' => array( 'x' ) ) )
 		);
+	}
+
+	/**
+	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
+	 * update_user_meta(...)`, so a metadata filter that short-circuits update_user_metadata to a
+	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
+	 * success and returned the old stored value.
+	 */
+	public function test_update_user_meta_returns_an_error_when_the_write_is_vetoed(): void {
+		add_filter( 'aafm_allowed_user_meta_keys', static fn() => array( 'twitter' ) );
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$uid = self::factory()->user->create( array( 'role' => 'author' ) );
+		update_user_meta( $uid, 'twitter', 'old value' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_user_metadata', $veto, 10, 0 );
+		$out  = wp_get_ability( 'aafm/update-user-meta' )->execute(
+			array(
+				'user_id' => $uid,
+				'key'     => 'twitter',
+				'value'   => 'new value',
+			)
+		);
+		remove_filter( 'update_user_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$out,
+			'A vetoed user meta write must return an error, not a success reporting the old value.'
+		);
+	}
+
+	/**
+	 * Codex round 7 R7-3: the confirmation guard used to omit the object subtype (defaulting to
+	 * ''), but core's own get_object_subtype( 'user', $id ) (wp-includes/meta.php) resolves to
+	 * the literal string 'user' for any user that exists - the exact subtype update_metadata()
+	 * itself passes to sanitize_meta() at write time. A sanitizer registered on the
+	 * subtype-specific hook (register_meta()'s object_subtype => 'user', not the generic one)
+	 * must not be mistaken for a veto.
+	 */
+	public function test_update_user_meta_confirms_a_legitimate_subtype_specific_normalization(): void {
+		add_filter( 'aafm_allowed_user_meta_keys', static fn() => array( 'aafm_note' ) );
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$uid = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		register_meta(
+			'user',
+			'aafm_note',
+			array(
+				'single'            => true,
+				'object_subtype'    => 'user',
+				'sanitize_callback' => static fn( $value ) => $value . '-normalized',
+			)
+		);
+		$out = wp_get_ability( 'aafm/update-user-meta' )->execute(
+			array(
+				'user_id' => $uid,
+				'key'     => 'aafm_note',
+				'value'   => 'new value',
+			)
+		);
+		unregister_meta_key( 'user', 'aafm_note', 'user' );
+
+		$this->assertIsArray(
+			$out,
+			'A write that landed in its subtype-registered normalized form must not be reported as an unconfirmed write.'
+		);
+		$this->assertSame(
+			'new value-normalized',
+			get_user_meta( $uid, 'aafm_note', true ),
+			'precondition: the subtype-specific sanitizer must have actually normalized the stored value.'
+		);
+		$this->assertSame( 'new value-normalized', $out['value'] );
 	}
 }

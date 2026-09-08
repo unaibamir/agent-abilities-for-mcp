@@ -108,18 +108,11 @@ function aafm_args_get_terms(): array {
 						'type'        => 'string',
 						'description' => __( 'Free-text search term matched against the term name.', 'agent-abilities-for-mcp' ),
 					),
-					'page'     => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page' => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_TERMS_PER_PAGE_MAX,
-						'description' => __( 'Number of terms per page, clamped to the 1-100 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-					),
+				),
+				aafm_pagination_schema_props(
+					AAFM_TERMS_PER_PAGE_MAX,
+					__( 'Number of terms per page, clamped to the 1-100 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
 				),
 				aafm_lang_schema_fragment()
 			),
@@ -627,22 +620,32 @@ function aafm_exec_update_term_meta( array $input ) {
 	}
 	$term_id = absint( $input['term_id'] );
 	$key     = (string) $input['meta_key'];
-	$value   = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '' );
+	// Codex round 7 R7-3: pass the term's real taxonomy, not the empty default, so a
+	// sanitize_callback registered via register_term_meta() for that taxonomy is not invisible
+	// to the probe. Codex round 8 R8-2: resolve it through get_object_subtype(), the same
+	// filterable call core itself makes at write time, rather than the raw requested taxonomy - a
+	// get_object_subtype_term filter remapping the subtype is honoured here the same way it is
+	// at write time.
+	$subtype = (string) get_object_subtype( 'term', $term_id );
+	$value   = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '', $subtype );
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	if ( false === update_term_meta( $term_id, $key, wp_slash( $value ) ) ) {
-		// update_term_meta returns false on a same-value no-op too. Meta round-trips through a
-		// longtext column, so the stored value reads back as a string; compare stringified forms
-		// to avoid a false failure on a genuine no-op (e.g. re-sending an int or bool).
-		if ( (string) get_term_meta( $term_id, $key, true ) !== (string) $value ) {
-			return aafm_generic_error();
-		}
+	update_term_meta( $term_id, $key, wp_slash( $value ) );
+	$stored = get_term_meta( $term_id, $key, true );
+	// Codex round 5 R5-2: update_term_meta()'s return value only catches an outright failure. A
+	// metadata filter that short-circuits update_term_metadata to a truthy value bypasses the
+	// write while reporting success, so checking only `false === update_term_meta(...)` never
+	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
+	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
+	// sanitize callback's legitimate normalization is not mistaken for a veto.
+	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'term', $subtype ) ) {
+		return aafm_generic_error();
 	}
 	return array(
 		'term_id'  => $term_id,
 		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
-		'value'    => get_term_meta( $term_id, $key, true ),
+		'value'    => $stored,
 	);
 }
 

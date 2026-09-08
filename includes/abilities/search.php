@@ -43,33 +43,28 @@ function aafm_args_search_content(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'search'          => array(
+					'search'     => array(
 						'type'        => 'string',
 						'minLength'   => 1,
 						'description' => __( 'Free-text search term matched against title and content across every searched type, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
 					),
-					'post_types'      => array(
+					'post_types' => array(
 						'type'        => 'array',
 						'items'       => array( 'type' => 'string' ),
 						'description' => __( 'Content type slugs to narrow the search to. Only types already on the operator\'s exposed allowlist are searched; a requested type outside it is dropped rather than rejected. Omit to search every exposed type.', 'agent-abilities-for-mcp' ),
 					),
-					'status'          => array(
+					'status'     => array(
 						'type'        => 'string',
 						'default'     => 'publish',
 						'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'page'            => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PAGE_MAX,
-						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
-					),
-					'per_page'        => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'maximum'     => AAFM_LIST_PER_PAGE_MAX,
-						'description' => __( 'Number of results per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
-					),
+				),
+				aafm_pagination_schema_props(
+					AAFM_LIST_PER_PAGE_MAX,
+					__( 'Number of results per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				),
+				array(
 					'content_format'  => array(
 						'type'        => 'string',
 						'enum'        => array( 'rendered', 'raw' ),

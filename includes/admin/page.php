@@ -205,9 +205,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'abilitiesSearchNone'      => __( 'No abilities match.', 'agent-abilities-for-mcp' ),
 				// Ability allowlist picker (Connections tab).
 				'allowlistAll'             => __( 'All abilities (no narrowing)', 'agent-abilities-for-mcp' ),
-				'allowlistChoose'          => __( 'Choose abilities', 'agent-abilities-for-mcp' ),
 				'allowlistSearch'          => __( 'Search abilities…', 'agent-abilities-for-mcp' ),
-				'allowlistNoneSelected'    => __( 'No abilities selected - this scope can reach nothing.', 'agent-abilities-for-mcp' ),
+				'allowlistZeroSelected'    => __( 'No abilities selected. Saving now will block this scope from every ability.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: number of abilities selected in the allowlist picker. */
 				'allowlistSelectedCount'   => __( '%s selected', 'agent-abilities-for-mcp' ),
 				'pagerPrevious'            => __( 'Previous', 'agent-abilities-for-mcp' ),

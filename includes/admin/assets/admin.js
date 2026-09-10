@@ -2103,18 +2103,26 @@
 		}
 
 		/**
-		 * Build one allowlist row's ability picker: an "All abilities" checkbox plus a collapsible,
-		 * searchable, subject-grouped checkbox list - the same look the Abilities tab's own search
-		 * and grouping already give the operator, reused here instead of a free-text field of
-		 * ability names the rest of the admin never shows anywhere. Built entirely with DOM APIs
-		 * (createElement/textContent/value/checked), never innerHTML, matching this file's existing
-		 * convention for every dynamically-created allowlist cell.
+		 * Build one allowlist row's ability picker: an "All abilities" checkbox, and - visible only
+		 * while that checkbox is unchecked - a plain selected-count label, a warning for the
+		 * zero-selected state, a search field, and the searchable/subject-grouped checkbox list
+		 * itself. Built entirely with DOM APIs (createElement/textContent/value/checked), never
+		 * innerHTML, matching this file's existing convention for every dynamically-created
+		 * allowlist cell.
+		 *
+		 * The list used to sit behind a collapsed `<details>` an operator had to notice and click.
+		 * Verified working (three ticks correctly produced "3 selected"), but the operator could not
+		 * find it - a grey "Choose abilities 0 selected" under a bold "All abilities" label read as
+		 * disabled helper text. A chevron would only have signposted the hidden thing; the fix is to
+		 * not hide it: unchecking "All abilities" IS the request to narrow, so the list it would
+		 * narrow just appears there, no click, no disclosure to discover.
 		 *
 		 * "All" and an individual selection are mutually exclusive in the STORED shape (the server
-		 * accepts only the literal string "all" or an array), so checking "All" here only dims and
-		 * disables the checkbox list - it does not clear it - and #serializeAllowlistRow() below
+		 * accepts only the literal string "all" or an array), so checking "All" here only hides the
+		 * rest of the picker - it does not clear any ticked box - and #serializeAllowlistRow() below
 		 * reports "all" whenever the toggle is checked, ignoring whatever the individual boxes show
-		 * underneath. Unchecking "All" again restores exactly the selection that was there before.
+		 * underneath. Unchecking "All" again shows exactly the selection that was there before, with
+		 * nothing to re-open.
 		 *
 		 * @param {'all'|Array<string>} allowed Initial state: "all", or the array of allowed names.
 		 * @return {HTMLElement} The `.aafm-allowlist-picker` root, ready to append to a cell.
@@ -2134,23 +2142,33 @@
 			allToggle.checked = isAll;
 			allLabel.append( allToggle, document.createTextNode( ' ' + this.#t( 'allowlistAll', 'All abilities (no narrowing)' ) ) );
 
-			const details = document.createElement( 'details' );
-			details.className = 'aafm-allowlist-picker-details';
-			const summary = document.createElement( 'summary' );
-			const count = document.createElement( 'span' );
-			count.className = 'aafm-allowlist-picker-count aafm-muted';
-			summary.append( this.#t( 'allowlistChoose', 'Choose abilities' ) + ' ', count );
-			details.append( summary );
-
+			// Everything below is what "All abilities" narrows - hidden while there is genuinely
+			// nothing to choose (All is checked), visible with no further click the moment it isn't.
 			const bodyEl = document.createElement( 'div' );
 			bodyEl.className = 'aafm-allowlist-picker-body';
+			bodyEl.hidden = isAll;
+
+			const count = document.createElement( 'p' );
+			count.className = 'aafm-allowlist-picker-count aafm-muted';
+
+			// aafm_ability_allowed_for_principal() (includes/allowlist.php) fails a role or client
+			// closed against EVERY ability when its allowed set is a non-"all" empty array - correct,
+			// fail-closed behaviour that must not change, but nothing in the UI used to say so before
+			// a save. Warn plainly instead; this is advisory, never a block, since locking a scope out
+			// entirely can be exactly what the operator wants.
+			const warning = document.createElement( 'p' );
+			warning.className = 'aafm-notice aafm-notice-warning aafm-notice-inline aafm-allowlist-warning';
+			warning.textContent = this.#t(
+				'allowlistZeroSelected',
+				'No abilities selected. Saving now will block this scope from every ability.'
+			);
+			warning.hidden = true;
 
 			const searchInput = document.createElement( 'input' );
 			searchInput.type = 'search';
 			searchInput.className = 'aafm-allowlist-picker-search aafm-integration-search';
 			searchInput.placeholder = this.#t( 'allowlistSearch', 'Search abilities…' );
 			searchInput.autocomplete = 'off';
-			bodyEl.append( searchInput );
 
 			const groupsEl = document.createElement( 'div' );
 			groupsEl.className = 'aafm-allowlist-picker-groups';
@@ -2158,6 +2176,7 @@
 			const updateCount = () => {
 				const checked = groupsEl.querySelectorAll( '.aafm-allowlist-ability:checked' ).length;
 				count.textContent = this.#format( this.#t( 'allowlistSelectedCount', '%s selected' ), checked );
+				warning.hidden = 0 !== checked;
 			};
 
 			this.#allowlistCatalog().forEach( ( group ) => {
@@ -2201,18 +2220,15 @@
 				} );
 			} );
 
-			const setDisabled = ( disabled ) => {
-				details.classList.toggle( 'is-disabled', disabled );
-				groupsEl.querySelectorAll( '.aafm-allowlist-ability' ).forEach( ( box ) => {
-					box.disabled = disabled;
-				} );
-			};
-			allToggle.addEventListener( 'change', () => setDisabled( allToggle.checked ) );
-			setDisabled( isAll );
+			// Hiding the body is the whole mechanism now - a hidden checkbox is neither focusable
+			// nor clickable, so there is no need to also disable it, and leaving it enabled keeps its
+			// checked state intact for when "All" is unchecked again.
+			allToggle.addEventListener( 'change', () => {
+				bodyEl.hidden = allToggle.checked;
+			} );
 
-			bodyEl.append( groupsEl );
-			details.append( bodyEl );
-			picker.append( allLabel, details );
+			bodyEl.append( count, warning, searchInput, groupsEl );
+			picker.append( allLabel, bodyEl );
 			updateCount();
 
 			return picker;

@@ -590,6 +590,11 @@
 		background: var(--aafm-accent-tint);
 		color: #0a4b78;
 
+		/* An author-stylesheet `display: flex` beats the user-agent's `[hidden] { display: none }`
+		   regardless of specificity (the same trap documented on .aafm-ability-row elsewhere in
+		   this file), and the allowlist picker's zero-selected warning toggles via `hidden`. */
+		&[hidden] { display: none; }
+
 		& .aafm-notice-ic {
 			flex: 0 0 auto;
 			margin-block-start: 1px;
@@ -2312,9 +2317,10 @@
 			color: var(--aafm-text-subtle);
 		}
 
-		/* The "Allowed abilities" picker: an "All abilities" checkbox above a collapsible,
-		   searchable, subject-grouped checkbox list - admin.js builds this per row (see
-		   #buildAllowlistPicker()) from the same catalog every row's picker shares. */
+		/* The "Allowed abilities" picker: an "All abilities" checkbox, then - visible only while
+		   that checkbox is unchecked, no disclosure to open - a plain count, a zero-selected
+		   warning, a search field, and the subject-grouped checkbox list. admin.js builds this per
+		   row (see #buildAllowlistPicker()) from the same catalog every row's picker shares. */
 		.aafm-allowlist-picker {
 			min-inline-size: 240px;
 			max-inline-size: 360px;
@@ -2328,30 +2334,26 @@
 				margin-block-end: 6px;
 			}
 
-			.aafm-allowlist-picker-details {
-				> summary {
-					cursor: pointer;
-					list-style: none;
-					font-size: 12.5px;
-					color: var(--aafm-text-subtle);
-					user-select: none;
-
-					&::marker,
-					&::-webkit-details-marker { display: none; }
-				}
-
-				&.is-disabled {
-					opacity: 0.55;
-
-					> summary { pointer-events: none; }
-				}
-			}
-
 			.aafm-allowlist-picker-body {
 				margin-block-start: 8px;
 				display: flex;
 				flex-direction: column;
 				gap: 8px;
+
+				/* Same trap as .aafm-allowlist-item below: an author-stylesheet `display: flex`
+				   beats the user-agent's `[hidden] { display: none }` regardless of specificity,
+				   and this body toggles via `hidden` on the "All abilities" checkbox. */
+				&[hidden] { display: none; }
+			}
+
+			.aafm-allowlist-picker-count {
+				margin: 0;
+				font-size: 12.5px;
+				color: var(--aafm-text-subtle);
+			}
+
+			.aafm-allowlist-warning {
+				font-size: 12.5px;
 			}
 
 			.aafm-allowlist-picker-groups {

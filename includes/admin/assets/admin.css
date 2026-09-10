@@ -931,32 +931,38 @@
 		line-height: 1.6;
 		text-transform: uppercase;
 
-		&.aafm-badge-read {
-			background: #e7f5ea;
-			color: #1a7f37;
-		}
-
-		&.aafm-badge-write {
-			background: #fcf3d6;
-			/* #7a5f00 on #fcf3d6 clears WCAG AA (>= 4.5:1) for this 11px uppercase text;
-			   the previous #8a6d00 sat at ~4.44:1, just under the floor. */
-			color: #7a5f00;
-		}
-
-		&.aafm-badge-destructive {
-			background: #fce4e4;
-			color: #b32d2e;
-		}
-
+		/* Read and read-only mean the same thing in two contexts (an ability's own risk
+		   level vs. a whole integration's mode), so both now pull the same green pair.
+		   --aafm-green-text on --aafm-green-tint measures 5.86:1 for this 11px uppercase
+		   text - previously two different hand-picked hex pairs at 4.51:1 (read) and no
+		   measurement on record for readonly. 4.51 was one hundredth above the WCAG AA
+		   floor, so this is an accessibility repair, not tidying. */
+		&.aafm-badge-read,
 		&.aafm-badge-readonly {
-			background: #e6f0f7;
-			color: #0a4b78;
+			background: var(--aafm-green-tint);
+			color: var(--aafm-green-text);
 		}
 
-		/* Deliberately darker than the destructive badge sitting beside it: this one marks
-		   money and authority, and it has to read as the heavier of the two at a glance. */
+		/* --aafm-amber-text on --aafm-amber-tint measures 5.56:1, up from the previous
+		   hand-picked #7a5f00-on-#fcf3d6 pair's 5.46:1. */
+		&.aafm-badge-write {
+			background: var(--aafm-amber-tint);
+			color: var(--aafm-amber-text);
+		}
+
+		/* --aafm-red-text on --aafm-red-tint measures 5.67:1, up from the previous
+		   hand-picked #b32d2e-on-#fce4e4 pair's 5.21:1. */
+		&.aafm-badge-destructive {
+			background: var(--aafm-red-tint);
+			color: var(--aafm-red-text);
+		}
+
+		/* Deliberately heavier than the destructive badge sitting beside it: this one marks
+		   money and authority, and it has to read as the heavier of the two at a glance.
+		   Same red token as -destructive, just solid instead of tinted, rather than a
+		   fifth unrelated hex - the exact value it already shipped with. */
 		&.aafm-badge-high-risk {
-			background: #b32d2e;
+			background: var(--aafm-red-text);
 			color: #fff;
 		}
 	}

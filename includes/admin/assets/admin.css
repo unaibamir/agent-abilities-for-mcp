@@ -646,20 +646,27 @@
 		}
 	}
 
-	/* Container padding contract. .aafm-notice only ever sets a vertical margin, so it reads
-	   correctly wherever its container already supplies the horizontal inset (.aafm-card-pad,
-	   a settings row, a meta-keys card). The one place nothing supplies it is a bare <details>
-	   accordion (the app-password fallback pairs a notice straight after <summary> with no body
-	   wrapper) - there the notice ran edge to edge while its sibling .aafm-step rows already
-	   carry their own margin-inline. This targets the structural gap directly - "a notice that
-	   is a direct child of any <details>" - rather than one accordion's class name, so a future
-	   accordion that drops a notice straight inside it inherits the same inset with no wrapper
-	   and no author having to think about it. Scoped to .aafm-notice specifically: every other
-	   block that lands inside one of the plugin's <details> today (.aafm-step, .aafm-codeblock)
-	   already carries its own inline margin one level down, and a blanket rule here would double
-	   their inset instead of fixing a gap. */
-	details > .aafm-notice {
-		margin-inline: var(--aafm-space-5);
+	/* ---------- Accordion content contract ----------
+	   An accordion in this plugin comes in two shapes. Most wrap their content in a body
+	   element that supplies the horizontal inset (.aafm-section-body, .aafm-integration-body,
+	   .aafm-set-more-body, .aafm-help-body). Three do not, and put content directly inside
+	   the <details>: the app-password fallback, the bridge alternative, and the dashboard
+	   setup card. In those, anything dropped in ran edge to edge, which is how the
+	   app-password warning notice ended up flush against the card border while its sibling
+	   .aafm-step rows looked correct (they carried their own margin-inline, so the gap was
+	   invisible until something without one landed there).
+
+	   Rather than patch the one component that showed the symptom, give the bare shape the
+	   same gutter contract a body wrapper provides. Any direct child gets it, so a notice,
+	   a table or a plain paragraph added later lands correctly with no wrapper markup and no
+	   author having to know. Children that already supply their own inset are normalised onto
+	   the token below rather than left to double it. */
+	.aafm-app-password-fallback,
+	.aafm-bridge-alt,
+	.aafm-setup {
+		> *:not(summary) {
+			margin-inline: var(--aafm-space-5);
+		}
 	}
 
 	/* ---------- Tabs (top nav - restyle core .nav-tab to underline-active) ---------- */
@@ -2379,9 +2386,10 @@
 			border-block-end: 1px solid var(--aafm-border);
 		}
 
-		/* Inner steps keep their normal gap and are padded inside the fallback */
+		/* Inner steps take the same gutter as every other direct child (see the accordion
+		   content contract above); only their vertical rhythm is special here. */
 		.aafm-step {
-			margin-inline: 18px;
+			margin-inline: var(--aafm-space-5);
 
 			&:first-of-type { margin-block-start: 18px; }
 			&:last-of-type  { margin-block-end: 18px; }

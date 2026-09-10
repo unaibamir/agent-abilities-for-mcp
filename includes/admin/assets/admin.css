@@ -2401,7 +2401,8 @@
 			gap: 8px;
 			margin-block-end: 12px;
 
-			#aafm-allowlist-new-scope-id {
+			#aafm-allowlist-new-role,
+			#aafm-allowlist-new-client {
 				flex: 1 1 220px;
 				min-inline-size: 160px;
 			}

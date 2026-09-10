@@ -311,12 +311,49 @@ function aafm_render_allowlist_section(): void {
 		echo '</div>';
 	}
 
+	// The scope-id control offers only real values, following the scope-type select: a free-text
+	// field let the operator mistype a role slug, and offered no way at all to discover a client
+	// id. Both lists are already loaded on this page - $roles above, and aafm_oauth_list_clients()
+	// (used identically for the registered-clients table earlier on this tab) - so this is a
+	// second <select>, not new data. The value submitted is always the slug or client id, never
+	// the display text; server-side validation (aafm_allowlist_sanitize_row()) is unchanged and is
+	// still the real boundary, this only makes the common mistake unreachable through the UI.
+	$clients = aafm_oauth_list_clients();
+
 	echo '<div class="aafm-allowlist-add" id="aafm-allowlist-add">';
 	echo '<select id="aafm-allowlist-new-scope-type">';
 	echo '<option value="role">' . esc_html__( 'Role', 'agent-abilities-for-mcp' ) . '</option>';
 	echo '<option value="oauth_client">' . esc_html__( 'OAuth connection', 'agent-abilities-for-mcp' ) . '</option>';
 	echo '</select>';
-	echo '<input type="text" id="aafm-allowlist-new-scope-id" placeholder="' . esc_attr__( 'Role slug or client id', 'agent-abilities-for-mcp' ) . '">';
+
+	echo '<select id="aafm-allowlist-new-role">';
+	echo '<option value="">' . esc_html__( 'Choose a role…', 'agent-abilities-for-mcp' ) . '</option>';
+	foreach ( $roles as $role_slug => $role_label ) {
+		printf( '<option value="%1$s">%2$s</option>', esc_attr( $role_slug ), esc_html( $role_label ) );
+	}
+	echo '</select>';
+
+	echo '<select id="aafm-allowlist-new-client" hidden>';
+	if ( empty( $clients ) ) {
+		echo '<option value="">' . esc_html__( 'No OAuth connections registered yet', 'agent-abilities-for-mcp' ) . '</option>';
+	} else {
+		echo '<option value="">' . esc_html__( 'Choose a connection…', 'agent-abilities-for-mcp' ) . '</option>';
+		foreach ( $clients as $client ) {
+			$client_id       = (string) ( $client['client_id'] ?? '' );
+			$client_short_id = strlen( $client_id ) > 14 ? substr( $client_id, 0, 14 ) . '…' : $client_id;
+			// Same "(unnamed client)" fallback the registered-clients table already uses, so an
+			// unnamed connection is still identifiable rather than showing an empty option label.
+			$client_name = '' !== ( $client['client_name'] ?? '' ) ? (string) $client['client_name'] : __( '(unnamed client)', 'agent-abilities-for-mcp' );
+			printf(
+				'<option value="%1$s">%2$s</option>',
+				esc_attr( $client_id ),
+				/* translators: 1: client display name, 2: truncated client id. */
+				esc_html( sprintf( __( '%1$s (%2$s)', 'agent-abilities-for-mcp' ), $client_name, $client_short_id ) )
+			);
+		}
+	}
+	echo '</select>';
+
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-allowlist-add-row">' . esc_html__( 'Add scope', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '</div>';
 

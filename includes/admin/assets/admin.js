@@ -2290,6 +2290,26 @@
 			}
 			const status = document.getElementById( 'aafm-allowlist-status' );
 
+			// The scope-id control is two <select>s (real roles, real OAuth clients - both
+			// server-rendered from the same lists the rest of this tab already uses), toggled by
+			// which one the scope-type select currently means. Bound once, not just inside the
+			// "Add scope" handler, so a page that loads with a scope type already selected shows
+			// the matching list from the start.
+			const typeSelect = document.getElementById( 'aafm-allowlist-new-scope-type' );
+			const roleSelect = document.getElementById( 'aafm-allowlist-new-role' );
+			const clientSelect = document.getElementById( 'aafm-allowlist-new-client' );
+			const syncScopeIdControl = () => {
+				const isRole = 'role' === ( typeSelect?.value ?? 'role' );
+				if ( roleSelect ) {
+					roleSelect.hidden = ! isRole;
+				}
+				if ( clientSelect ) {
+					clientSelect.hidden = isRole;
+				}
+			};
+			typeSelect?.addEventListener( 'change', syncScopeIdControl );
+			syncScopeIdControl();
+
 			// Every row the server rendered starts as a data shell (a `data-allowed` JSON
 			// attribute plus a plain-text summary) - swap each one for the interactive picker now.
 			card.querySelectorAll( '.aafm-allowlist-allowed-cell' ).forEach( ( cell ) => {
@@ -2339,22 +2359,26 @@
 			};
 
 			addBtn.addEventListener( 'click', () => {
-				const typeSelect = document.getElementById( 'aafm-allowlist-new-scope-type' );
-				const idInput = document.getElementById( 'aafm-allowlist-new-scope-id' );
-				const scopeId = idInput?.value.trim() ?? '';
+				const isRole = 'role' === ( typeSelect?.value ?? 'role' );
+				const activeSelect = isRole ? roleSelect : clientSelect;
+				const scopeId = activeSelect?.value ?? '';
 				if ( ! scopeId ) {
-					idInput?.focus();
+					activeSelect?.focus();
 					return;
 				}
+				// Roles show their display name once saved (aafm_render_allowlist_section() looks
+				// it up by slug), so use the same text here rather than the slug. A connection row
+				// shows the raw client id even after a reload - there is no separate name column to
+				// read back from a stored row - so match that rather than inventing a new label.
+				const scopeLabel = isRole ? ( activeSelect.selectedOptions[ 0 ]?.textContent ?? scopeId ) : scopeId;
 
 				const row = document.createElement( 'tr' );
 				row.dataset.allowlistRow = '';
-				row.dataset.scopeType = typeSelect?.value ?? 'role';
+				row.dataset.scopeType = isRole ? 'role' : 'oauth_client';
 				row.dataset.scopeId = scopeId;
 
 				const labelCell = document.createElement( 'td' );
-				labelCell.textContent =
-					( typeSelect?.value ?? 'role' ) === 'role' ? `Role: ${ scopeId }` : `Connection: ${ scopeId }`;
+				labelCell.textContent = isRole ? `Role: ${ scopeLabel }` : `Connection: ${ scopeLabel }`;
 
 				const allowedCell = document.createElement( 'td' );
 				allowedCell.className = 'aafm-allowlist-allowed-cell';
@@ -2370,9 +2394,7 @@
 
 				row.append( labelCell, allowedCell, removeCell );
 				ensureAllowlistBody().append( row );
-				if ( idInput ) {
-					idInput.value = '';
-				}
+				activeSelect.value = '';
 			} );
 
 			// Delegated on the card (always present) rather than the table (not present until

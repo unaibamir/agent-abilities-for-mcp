@@ -2286,6 +2286,20 @@
 
 	/* ---------- Ability allowlist (Connections tab) ---------- */
 	.aafm-allowlist-card {
+		/* .aafm-section--collapsible sets padding-block: 0 16px on the body, so the
+		   description (now the first thing in the body, moved out of <summary>) needs its
+		   own top gap under the summary's bottom edge - the .aafm-card-head-desc rule that
+		   used to give it spacing is scoped to .aafm-card-head, which this body is not inside. */
+		.aafm-section-body {
+			padding-block-start: 12px;
+		}
+
+		.aafm-card-head-desc {
+			margin: 0 0 16px;
+			font-size: 12.5px;
+			color: var(--aafm-text-subtle);
+		}
+
 		.aafm-allowlist-table {
 			margin-block-end: 8px;
 		}

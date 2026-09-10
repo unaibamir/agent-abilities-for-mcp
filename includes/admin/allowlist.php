@@ -182,11 +182,16 @@ function aafm_render_allowlist_section(): void {
 	echo '<span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() ) . '</span>';
 	echo '<div class="aafm-card-head-text">';
 	echo '<h3 class="aafm-card-head-title">' . esc_html__( 'Ability allowlist', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="aafm-card-head-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div>';
 	echo '</summary>';
 
 	echo '<div class="aafm-section-body">';
+
+	// The description used to live inside <summary> alongside the title, per the shared
+	// component's non-collapsible shape copied here by mistake - the description then collided
+	// with the table below it, and being part of the summary's click target meant clicking the
+	// explanation toggled the card. It belongs in the body, as prose, not in the disclosure control.
+	echo '<p class="aafm-card-head-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	if ( empty( $rows ) ) {
 		echo '<p class="aafm-empty-state" id="aafm-allowlist-empty">' . esc_html__( 'No scopes narrowed yet. Every role and connection can reach everything enabled above.', 'agent-abilities-for-mcp' ) . '</p>';

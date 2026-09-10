@@ -1718,6 +1718,13 @@
 			font-size: 13px;
 		}
 
+		/* "Showing 1-10 of 28" - the OAuth tables' pagers add this ahead of Prev/Page X of
+		   Y/Next; pushed to the start of the row so the count and the controls read as two
+		   distinct groups rather than one long line. */
+		.aafm-oauth-pager-count {
+			margin-inline-end: auto;
+		}
+
 		.aafm-btn[disabled] {
 			opacity: 0.5;
 			cursor: default;

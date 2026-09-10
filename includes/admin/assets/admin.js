@@ -75,6 +75,7 @@
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
 			this.#bindOauthRevoke();
+			this.#bindOauthPagination();
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
@@ -1914,6 +1915,124 @@
 					}
 				}
 			} );
+		}
+
+		/**
+		 * Client-side pager for one OAuth management table (Registered clients or Active
+		 * grants). Both queries already run with no LIMIT and every row is already in the
+		 * DOM (aafm_oauth_list_clients()/aafm_oauth_list_grants()), so this only toggles
+		 * `hidden` on a rows-per-page slice - no second query, no AJAX round trip.
+		 *
+		 * A MutationObserver on the <tbody> re-derives the page count whenever a row is
+		 * removed, rather than the click handlers being the only thing that can trigger a
+		 * recompute: #bindOauthRevoke() calls row.remove() for a revoked grant with no
+		 * knowledge of pagination at all, and the observer means it does not need any. If
+		 * removing a row empties the current page (the last row on the last page), the
+		 * observer steps the page back and re-renders, so the pager never goes on showing a
+		 * page number or a Prev/Next state the live row set no longer has.
+		 *
+		 * @param {HTMLTableElement} table   The table to paginate.
+		 * @param {number}           perPage Rows per page.
+		 */
+		#paginateTable( table, perPage ) {
+			const tbody = table.querySelector( 'tbody' );
+			if ( ! tbody ) {
+				return;
+			}
+			const anchor = table.closest( '.aafm-table-wrap' ) ?? table;
+
+			const pager = document.createElement( 'div' );
+			pager.className = 'aafm-pager';
+
+			const count = document.createElement( 'span' );
+			count.className = 'aafm-pager-status aafm-oauth-pager-count';
+
+			const prev = document.createElement( 'button' );
+			prev.type = 'button';
+			prev.className = 'aafm-btn aafm-btn-secondary aafm-btn-sm';
+			prev.textContent = this.#t( 'pagerPrevious', 'Previous' );
+
+			const status = document.createElement( 'span' );
+			status.className = 'aafm-pager-status';
+			status.setAttribute( 'aria-live', 'polite' );
+
+			const next = document.createElement( 'button' );
+			next.type = 'button';
+			next.className = 'aafm-btn aafm-btn-secondary aafm-btn-sm';
+			next.textContent = this.#t( 'pagerNext', 'Next' );
+
+			pager.append( count, prev, status, next );
+			anchor.after( pager );
+
+			const fmt = new Intl.NumberFormat();
+			let page = 1;
+			let totalPages = 1;
+
+			const render = () => {
+				const rows = Array.from( tbody.rows );
+				const total = rows.length;
+				totalPages = Math.max( 1, Math.ceil( total / perPage ) );
+				if ( page > totalPages ) {
+					page = totalPages;
+				}
+
+				// A table that already fits on one page gets no pager at all.
+				pager.hidden = total <= perPage;
+
+				rows.forEach( ( row, i ) => {
+					row.hidden = Math.floor( i / perPage ) !== page - 1;
+				} );
+
+				const start = 0 === total ? 0 : ( page - 1 ) * perPage + 1;
+				const end = Math.min( page * perPage, total );
+				count.textContent = this.#format(
+					this.#t( 'oauthPagerCount', 'Showing %1$s-%2$s of %3$s' ),
+					fmt.format( start ),
+					fmt.format( end ),
+					fmt.format( total )
+				);
+				status.textContent = this.#format(
+					this.#t( 'pagerStatus', 'Page %1$s of %2$s' ),
+					fmt.format( page ),
+					fmt.format( totalPages )
+				);
+				prev.disabled = page <= 1;
+				next.disabled = page >= totalPages;
+			};
+
+			prev.addEventListener( 'click', () => {
+				if ( page > 1 ) {
+					page -= 1;
+					render();
+				}
+			} );
+			next.addEventListener( 'click', () => {
+				if ( page < totalPages ) {
+					page += 1;
+					render();
+				}
+			} );
+
+			new MutationObserver( render ).observe( tbody, { childList: true } );
+
+			render();
+		}
+
+		/**
+		 * Paginate the Connection tab's two OAuth tables, ten rows per page. Two
+		 * independent pagers over two unrelated datasets - Registered clients never
+		 * shares a page count with Active grants.
+		 */
+		#bindOauthPagination() {
+			const PER_PAGE = 10;
+			const clientsTable = document.querySelector( '.aafm-clients-table' );
+			const grantsTable = document.querySelector( '.aafm-grants-table' );
+			if ( clientsTable ) {
+				this.#paginateTable( clientsTable, PER_PAGE );
+			}
+			if ( grantsTable ) {
+				this.#paginateTable( grantsTable, PER_PAGE );
+			}
 		}
 
 		/**

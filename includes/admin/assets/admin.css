@@ -1,6 +1,22 @@
 /* Agent Abilities for MCP - admin settings page (Direction A).
    Tokens live on :root; every component is scoped under .aafm-wrap so it
-   never leaks into core admin chrome. WP-native neutrals, single accent. */
+   never leaks into core admin chrome. WP-native neutrals, single accent.
+
+   Before adding a new admin section:
+   1. Wrap it in <section class="aafm-card aafm-card-pad"> and put its title inside
+      <div class="aafm-card-head"> - never a bare <h2>. Copy an existing section rather
+      than writing new section markup.
+   2. Spacing comes from --aafm-space-*. Type comes from --aafm-fs-*. If your layout
+      needs a value that is not there, that is a signal to re-check the layout, not to
+      add a ninth padding value.
+   3. Form controls need no class. The control layer styles inputs, selects, textareas
+      and number fields inside .aafm-wrap automatically.
+   4. Tables of records use <table class="widefat striped aafm-*-table"> inside
+      .aafm-table-wrap. Configuration UI uses .aafm-card / .aafm-ability-row.
+   5. Any colour meaning safe/read, write/caution or destructive/danger MUST come from
+      --aafm-green/-amber/-red. Never write a new hex for a risk colour.
+   6. Before adding a component-scoped custom property, check whether an --aafm-* token
+      already carries that value. */
 
 :root {
   --aafm-surface:#fff; --aafm-surface-2:#f6f7f7; --aafm-text:#1d2327;

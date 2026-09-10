@@ -1271,6 +1271,11 @@ function aafm_render_connection_tab(): void {
 
 	echo '</section>';
 
+	// Moved above the app-password fallback per operator request: the allowlist governs both
+	// roles and OAuth clients regardless of which connection method is in use, so it belongs with
+	// the OAuth management tables rather than buried below the accordion.
+	aafm_render_allowlist_section();
+
 	// ---- 3. App-Password fallback: existing three-step wizard inside <details> ----
 	// Open by default when OAuth is off so the wizard is immediately visible; collapsed when
 	// OAuth is on because most operators will use the OAuth path above.
@@ -1537,8 +1542,6 @@ function aafm_render_connection_tab(): void {
 	echo '</div>'; // .aafm-step 3
 
 	echo '</details>'; // .aafm-app-password-fallback
-
-	aafm_render_allowlist_section();
 
 	echo '</div>'; // .aafm-connection
 }

@@ -1448,12 +1448,14 @@
 			font-weight: 600;
 		}
 
-		/* Checklist rows. */
+		/* Checklist rows. Inline inset comes from the accordion content contract, which
+		   lands on .aafm-setup-steps (the direct child of the <details>) - this used to
+		   carry its own padding-inline: 20px on top of that, doubling the gutter to ~40px
+		   once the contract started margining the wrapper too. */
 		.aafm-step {
 			display: flex;
 			gap: 14px;
 			padding-block: 15px;
-			padding-inline: 20px;
 			border-block-end: 1px solid var(--aafm-border);
 
 			&:last-child { border-block-end: 0; }

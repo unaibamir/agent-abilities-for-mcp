@@ -51,6 +51,7 @@
 			this.#bindClientPicker();
 			this.#bindOauthClientPicker();
 			this.#bindSubjectTabs();
+			this.#bindAbilitiesSearch();
 			this.#bindSectionToggles();
 			this.#bindEnableReads();
 			this.#bindEnableWrites();
@@ -352,6 +353,136 @@
 				tab.addEventListener( 'click', () => activate( tab ) );
 			} );
 			this.#wireTablistKeys( list, activate );
+		}
+
+		/**
+		 * Get-or-create the small subject label admin.js shows above a panel's own heading
+		 * while a cross-tab search has more than one panel visible at once. The panel's own
+		 * <h2> is only ever a count ("27 / 27 enabled"), never the subject name, so there is
+		 * nothing on the panel itself to point at - built from data-subject-label
+		 * (page.php), which page.php escapes and the browser decodes like any other
+		 * attribute, so this is textContent on trusted data, not a new HTML sink.
+		 *
+		 * @param {HTMLElement} panel A .aafm-subject-panel.
+		 * @return {HTMLElement|null} The label element, or null if the panel has no label to show.
+		 */
+		#abilitiesPanelLabel( panel ) {
+			const text = panel.dataset.subjectLabel;
+			if ( ! text ) {
+				return null;
+			}
+			let label = panel.querySelector( ':scope > .aafm-subject-search-label' );
+			if ( ! label ) {
+				label = document.createElement( 'p' );
+				label.className = 'aafm-subject-search-label';
+				label.textContent = text;
+				panel.prepend( label );
+			}
+			return label;
+		}
+
+		/**
+		 * Search field on the Abilities tab: filters every .aafm-ability-row across every
+		 * sub-tab by its own text, the same row.textContent match #bindBridgeFilter() already
+		 * uses for the bridge directory. Unlike that filter, a match here can live on a panel
+		 * other than the one currently open, so a query reveals every panel with at least one
+		 * match instead of only filtering within the active panel.
+		 *
+		 * Hiding is via the `hidden` attribute only, on rows and panels that already exist in
+		 * the DOM - never moved, cloned, or disabled - so a hidden-by-search checkbox keeps its
+		 * name and checked state and still submits with the rest of the form
+		 * (aafm_render_abilities_tab()'s own docblock states every panel submits regardless of
+		 * visibility).
+		 */
+		#bindAbilitiesSearch() {
+			const search = document.getElementById( 'aafm-abilities-search' );
+			const form = document.getElementById( 'aafm-abilities-form' );
+			if ( ! search || ! form ) {
+				return;
+			}
+			const status = document.getElementById( 'aafm-abilities-search-status' );
+			const panels = Array.from( form.querySelectorAll( '.aafm-subject-panel' ) );
+			const tabs = document.querySelectorAll( '.aafm-subject-tab' );
+
+			// The sub-tab a plain click would show right now, so clearing the query restores
+			// exactly that panel rather than whichever one a match happened to leave open.
+			const activeSubject = () =>
+				document.querySelector( '.aafm-subject-tab.is-active' )?.dataset.subject ?? null;
+
+			const setBulkButtonsDisabled = ( panel, disabled ) => {
+				panel.querySelectorAll( '.aafm-section-toggle button' ).forEach( ( btn ) => {
+					btn.disabled = disabled;
+				} );
+			};
+
+			const clear = () => {
+				const subject = activeSubject();
+				panels.forEach( ( panel ) => {
+					panel.hidden = panel.dataset.subject !== subject;
+					panel.querySelectorAll( '.aafm-ability-row' ).forEach( ( row ) => {
+						row.hidden = false;
+					} );
+					setBulkButtonsDisabled( panel, false );
+					const label = panel.querySelector( ':scope > .aafm-subject-search-label' );
+					if ( label ) {
+						label.hidden = true;
+					}
+				} );
+				if ( status ) {
+					status.textContent = '';
+				}
+			};
+
+			const apply = () => {
+				const query = search.value.trim().toLowerCase();
+				if ( '' === query ) {
+					clear();
+					return;
+				}
+
+				let matchCount = 0;
+				panels.forEach( ( panel ) => {
+					let panelMatches = 0;
+					panel.querySelectorAll( '.aafm-ability-row' ).forEach( ( row ) => {
+						const isMatch = row.textContent.toLowerCase().includes( query );
+						row.hidden = ! isMatch;
+						if ( isMatch ) {
+							panelMatches += 1;
+						}
+					} );
+					panel.hidden = 0 === panelMatches;
+					setBulkButtonsDisabled( panel, true );
+					const label = this.#abilitiesPanelLabel( panel );
+					if ( label ) {
+						label.hidden = 0 === panelMatches;
+					}
+					matchCount += panelMatches;
+				} );
+
+				if ( status ) {
+					status.textContent =
+						0 === matchCount
+							? this.#t( 'abilitiesSearchNone', 'No abilities match.' )
+							: this.#format(
+									this.#t( 'abilitiesSearchCount', '%s abilities match.' ),
+									new Intl.NumberFormat().format( matchCount )
+							  );
+				}
+			};
+
+			search.addEventListener( 'input', apply );
+
+			// A direct sub-tab click is a request to see only that one tab, the way it always
+			// has been - reconcile the search box with it rather than leaving a stale query
+			// active over a view that no longer matches what it filtered.
+			tabs.forEach( ( tab ) => {
+				tab.addEventListener( 'click', () => {
+					if ( '' !== search.value ) {
+						search.value = '';
+						clear();
+					}
+				} );
+			} );
 		}
 
 		#bindOsTabs() {

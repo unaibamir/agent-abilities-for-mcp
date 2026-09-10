@@ -1101,6 +1101,67 @@
 		}
 	}
 
+	/* Shared search + risk filter bar. Was scoped inside .aafm-integrations (the Integrations
+	   tab and, via .aafm-integration-body below, the Bridge directory); hoisted here so the
+	   Abilities tab's search field can reuse the same input geometry and layout instead of a
+	   copy. Not every user of this class carries the risk-pill children - the Abilities
+	   search renders the bare input, nothing breaks by their absence. */
+	.aafm-integration-filter {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px;
+		padding-block: 12px;
+		padding-inline: 0px;
+		align-items: stretch;
+
+		.aafm-integration-search {
+			flex: 1 1 220px;
+			min-inline-size: 160px;
+		}
+
+		.aafm-filter-risk {
+			display: inline-flex;
+			gap: 4px;
+		}
+
+		.aafm-filter-btn {
+			cursor: pointer;
+			font-size: 12px;
+			font-weight: 600;
+			padding-block: 5px;
+			padding-inline: 12px;
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			background: var(--aafm-surface);
+			color: var(--aafm-text-subtle);
+
+			&.is-active {
+				background: var(--aafm-accent);
+				border-color: var(--aafm-accent);
+				color: #fff;
+			}
+		}
+	}
+
+	/* The Abilities tab's search bar sits directly in the tab flow (no card around it), so
+	   it only needs a little breathing room from the stat grid above and the sub-tabs below;
+	   the bar's own layout comes from .aafm-integration-filter above. */
+	.aafm-abilities-search {
+		margin-block-end: 4px;
+	}
+
+	/* Shown above a panel's own heading only while a cross-tab search leaves more than one
+	   .aafm-subject-panel visible at once, naming which sub-tab that panel is. */
+	.aafm-subject-search-label {
+		margin-block: 0 4px;
+		font-size: 12px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		color: var(--aafm-text-subtle);
+	}
+
 	/* ---------- Integration cards (Integrations tab) ---------- */
 	.aafm-integrations {
 		.aafm-integrations-disclaimer {
@@ -1188,45 +1249,6 @@
 
 			.aafm-integration-filter {
 				padding-inline: 20px;
-			}
-		}
-
-		/* Per-card search + read/write filter. */
-		.aafm-integration-filter {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: 10px;
-			padding-block: 12px;
-			padding-inline: 0px;
-			align-items: stretch;
-
-			.aafm-integration-search {
-				flex: 1 1 220px;
-				min-inline-size: 160px;
-			}
-
-			.aafm-filter-risk {
-				display: inline-flex;
-				gap: 4px;
-			}
-
-			.aafm-filter-btn {
-				cursor: pointer;
-				font-size: 12px;
-				font-weight: 600;
-				padding-block: 5px;
-				padding-inline: 12px;
-				border: 1px solid var(--aafm-border);
-				border-radius: var(--aafm-radius-sm);
-				background: var(--aafm-surface);
-				color: var(--aafm-text-subtle);
-
-				&.is-active {
-					background: var(--aafm-accent);
-					border-color: var(--aafm-accent);
-					color: #fff;
-				}
 			}
 		}
 	}

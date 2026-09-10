@@ -196,6 +196,13 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
 				'statusRevoked'            => __( 'Revoked', 'agent-abilities-for-mcp' ),
 				'agentToggleFailed'        => __( 'Could not save. Please try again.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: number of abilities matching the current search. */
+				'abilitiesSearchCount'     => __( '%s abilities match.', 'agent-abilities-for-mcp' ),
+				'abilitiesSearchNone'      => __( 'No abilities match.', 'agent-abilities-for-mcp' ),
+				'pagerPrevious'            => __( 'Previous', 'agent-abilities-for-mcp' ),
+				'pagerNext'                => __( 'Next', 'agent-abilities-for-mcp' ),
+				/* translators: 1: first row number shown, 2: last row number shown, 3: total rows. */
+				'oauthPagerCount'          => __( 'Showing %1$s-%2$s of %3$s', 'agent-abilities-for-mcp' ),
 				// Quick Connect wizard.
 				'qcInProgress'             => __( 'In progress', 'agent-abilities-for-mcp' ),
 				'qcNotStarted'             => __( 'Not started', 'agent-abilities-for-mcp' ),
@@ -1626,6 +1633,20 @@ function aafm_render_abilities_tab(): void {
 	echo '</div>';
 	echo '</div>'; // .aafm-abilities-stats
 
+	// Search field only - not the Bridge tab's whole filter component (no risk pills: the
+	// operator asked for a search field, not a search tab, and this tab has a third risk
+	// tier - destructive - the two-pill All/Read Only/Write group has no slot for anyway).
+	// Reuses .aafm-integration-search for identical styling to the other tabs' search boxes.
+	// Kept OUTSIDE the form: the form has a type="submit" Save button, and a search field
+	// inside it would let Enter trigger a save instead of filtering.
+	echo '<div class="aafm-integration-filter aafm-abilities-search">';
+	printf(
+		'<input type="search" id="aafm-abilities-search" class="aafm-integration-search" placeholder="%s" autocomplete="off">',
+		esc_attr__( 'Search abilities…', 'agent-abilities-for-mcp' )
+	);
+	echo '<span id="aafm-abilities-search-status" class="aafm-muted" role="status" aria-live="polite"></span>';
+	echo '</div>';
+
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
@@ -1685,9 +1706,14 @@ function aafm_render_abilities_tab(): void {
 	foreach ( $display_tabs as $slug => $tab ) {
 		$is_active = ( $slug === $first );
 		$tab_rows  = $tab['rows'];
+		// data-subject-label: the panel's own heading below is just a count ("27 / 27 enabled"),
+		// never the subject name, so there is nothing on the panel itself to reuse when the
+		// abilities search reveals several panels at once. admin.js reads this to show which
+		// sub-tab a given panel is while more than one is visible.
 		printf(
-			'<div class="aafm-subject-panel" data-subject="%1$s" role="tabpanel" id="%2$s" aria-labelledby="%3$s" tabindex="0"%4$s>',
+			'<div class="aafm-subject-panel" data-subject="%1$s" data-subject-label="%2$s" role="tabpanel" id="%3$s" aria-labelledby="%4$s" tabindex="0"%5$s>',
 			esc_attr( $slug ),
+			esc_attr( $tab['label'] ),
 			esc_attr( 'aafm-subject-panel-' . $slug ),
 			esc_attr( 'aafm-subject-tab-' . $slug ),
 			$is_active ? '' : ' hidden'

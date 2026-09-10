@@ -834,6 +834,12 @@
 		margin-block: 0 8px;
 		font-size: 13px;
 		font-weight: 600;
+
+		/* Same trap as .aafm-ability-row below: an author-stylesheet `display: flex` beats the
+		   user-agent's `[hidden] { display: none }` regardless of specificity, and the abilities
+		   search's flat-list mode (admin.js) hides this heading via `hidden` while a query is
+		   active. */
+		&[hidden] { display: none; }
 	}
 
 	.aafm-count-badge {
@@ -996,6 +1002,11 @@
 		align-items: center;
 		gap: 10px;
 		margin-block: 24px 10px;
+
+		/* The abilities search's flat-list mode (admin.js) hides this via the `hidden`
+		   attribute. Same trap as .aafm-ability-row below: an author-stylesheet `display: flex`
+		   beats the user-agent's `[hidden] { display: none }` regardless of specificity. */
+		&[hidden] { display: none; }
 
 		h3 {
 			margin: 0;

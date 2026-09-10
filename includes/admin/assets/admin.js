@@ -405,6 +405,17 @@
 			const panels = Array.from( form.querySelectorAll( '.aafm-subject-panel' ) );
 			const tabs = document.querySelectorAll( '.aafm-subject-tab' );
 
+			// Everything in a panel that is not a row container (.aafm-ability-list, one per
+			// Reads/Writes group) or the subject label: the heading, the bulk-toggle buttons,
+			// the Reads/Writes group headings, and (on some panels) the post-types or meta-key
+			// cards. A query hides all of it, `hidden` only, on elements already in the DOM -
+			// never moved, cloned, or disabled - so what remains visible is a flat run of
+			// ability rows with nothing to separate one subject's matches from the next. Written
+			// as a query rather than a fixed class list so a future flat "All abilities" tab can
+			// reuse it without maintaining a second copy.
+			const panelChrome = ( panel ) =>
+				panel.querySelectorAll( ':scope > :not(.aafm-ability-list):not(.aafm-subject-search-label)' );
+
 			// The sub-tab a plain click would show right now, so clearing the query restores
 			// exactly that panel rather than whichever one a match happened to leave open.
 			const activeSubject = () =>
@@ -422,6 +433,9 @@
 					panel.hidden = panel.dataset.subject !== subject;
 					panel.querySelectorAll( '.aafm-ability-row' ).forEach( ( row ) => {
 						row.hidden = false;
+					} );
+					panelChrome( panel ).forEach( ( el ) => {
+						el.hidden = false;
 					} );
 					setBulkButtonsDisabled( panel, false );
 					const label = panel.querySelector( ':scope > .aafm-subject-search-label' );
@@ -452,6 +466,9 @@
 						}
 					} );
 					panel.hidden = 0 === panelMatches;
+					panelChrome( panel ).forEach( ( el ) => {
+						el.hidden = true;
+					} );
 					setBulkButtonsDisabled( panel, true );
 					const label = this.#abilitiesPanelLabel( panel );
 					if ( label ) {

@@ -1146,9 +1146,18 @@
 
 	/* The Abilities tab's search bar sits directly in the tab flow (no card around it), so
 	   it only needs a little breathing room from the stat grid above and the sub-tabs below;
-	   the bar's own layout comes from .aafm-integration-filter above. */
+	   the bar's own layout comes from .aafm-integration-filter above. Unlike the Integrations
+	   and Bridge filter bars, this one has no risk-pill group to share the row with, so the
+	   inherited flex: 1 1 220px stretched the input across the whole row and pushed the match
+	   count to the far edge. Capped here rather than on .aafm-integration-search itself, which
+	   those other two bars still rely on growing to fill the space next to their pills. */
 	.aafm-abilities-search {
 		margin-block-end: 4px;
+
+		.aafm-integration-search {
+			flex: 0 1 360px;
+			max-inline-size: 400px;
+		}
 	}
 
 	/* Shown above a panel's own heading only while a cross-tab search leaves more than one

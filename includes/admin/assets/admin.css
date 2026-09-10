@@ -2304,8 +2304,92 @@
 			margin-block-end: 8px;
 		}
 
-		textarea.aafm-allowlist-allowed {
-			min-inline-size: 220px;
+		/* No-JS-yet fallback text (aafm_render_allowlist_section()'s data shell), replaced by
+		   the interactive picker below as soon as admin.js hydrates the cell. */
+		.aafm-allowlist-allowed-summary {
+			margin: 0;
+			font-size: 12.5px;
+			color: var(--aafm-text-subtle);
+		}
+
+		/* The "Allowed abilities" picker: an "All abilities" checkbox above a collapsible,
+		   searchable, subject-grouped checkbox list - admin.js builds this per row (see
+		   #buildAllowlistPicker()) from the same catalog every row's picker shares. */
+		.aafm-allowlist-picker {
+			min-inline-size: 240px;
+			max-inline-size: 360px;
+
+			.aafm-allowlist-all {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				font-size: 13px;
+				font-weight: 600;
+				margin-block-end: 6px;
+			}
+
+			.aafm-allowlist-picker-details {
+				> summary {
+					cursor: pointer;
+					list-style: none;
+					font-size: 12.5px;
+					color: var(--aafm-text-subtle);
+					user-select: none;
+
+					&::marker,
+					&::-webkit-details-marker { display: none; }
+				}
+
+				&.is-disabled {
+					opacity: 0.55;
+
+					> summary { pointer-events: none; }
+				}
+			}
+
+			.aafm-allowlist-picker-body {
+				margin-block-start: 8px;
+				display: flex;
+				flex-direction: column;
+				gap: 8px;
+			}
+
+			.aafm-allowlist-picker-groups {
+				max-block-size: 220px;
+				overflow-y: auto;
+				border: 1px solid var(--aafm-border);
+				border-radius: var(--aafm-radius-sm);
+				padding-block: 4px;
+				padding-inline: 8px;
+			}
+
+			.aafm-allowlist-group {
+				border: none;
+				margin: 0;
+				padding-block: 4px;
+				padding-inline: 0;
+
+				legend {
+					font-size: 11px;
+					font-weight: 600;
+					text-transform: uppercase;
+					letter-spacing: 0.02em;
+					color: var(--aafm-text-subtle);
+					padding: 0;
+				}
+			}
+
+			.aafm-allowlist-item {
+				display: block;
+				font-size: 12.5px;
+				padding-block: 2px;
+
+				/* Same trap as .aafm-ability-row's own [hidden] rule elsewhere in this file: an
+				   author-stylesheet `display: block` beats the user-agent's
+				   `[hidden] { display: none }` regardless of specificity, so the per-picker
+				   search's `item.hidden = true` would otherwise do nothing visible. */
+				&[hidden] { display: none; }
+			}
 		}
 
 		.aafm-allowlist-add {

@@ -154,9 +154,13 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 		'aafm-admin',
 		'aafmAdmin',
 		array(
-			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-			'nonce'   => wp_create_nonce( 'aafm_admin' ),
-			'i18n'    => array(
+			'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
+			'nonce'            => wp_create_nonce( 'aafm_admin' ),
+			// Every row's ability picker (including one added client-side via "Add scope") is
+			// built from this one shared, subject-grouped list rather than duplicating the
+			// grouping in both PHP and JS - see aafm_allowlist_ability_catalog()'s own docblock.
+			'allowlistCatalog' => aafm_allowlist_ability_catalog(),
+			'i18n'             => array(
 				'saving'                   => __( 'Saving…', 'agent-abilities-for-mcp' ),
 				'saved'                    => __( 'Saved', 'agent-abilities-for-mcp' ),
 				'errorSaving'              => __( 'Error saving', 'agent-abilities-for-mcp' ),
@@ -199,6 +203,13 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				/* translators: %s: number of abilities matching the current search. */
 				'abilitiesSearchCount'     => __( '%s abilities match.', 'agent-abilities-for-mcp' ),
 				'abilitiesSearchNone'      => __( 'No abilities match.', 'agent-abilities-for-mcp' ),
+				// Ability allowlist picker (Connections tab).
+				'allowlistAll'             => __( 'All abilities (no narrowing)', 'agent-abilities-for-mcp' ),
+				'allowlistChoose'          => __( 'Choose abilities', 'agent-abilities-for-mcp' ),
+				'allowlistSearch'          => __( 'Search abilities…', 'agent-abilities-for-mcp' ),
+				'allowlistNoneSelected'    => __( 'No abilities selected - this scope can reach nothing.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: number of abilities selected in the allowlist picker. */
+				'allowlistSelectedCount'   => __( '%s selected', 'agent-abilities-for-mcp' ),
 				'pagerPrevious'            => __( 'Previous', 'agent-abilities-for-mcp' ),
 				'pagerNext'                => __( 'Next', 'agent-abilities-for-mcp' ),
 				/* translators: 1: first row number shown, 2: last row number shown, 3: total rows. */

@@ -2091,6 +2091,169 @@
 		}
 
 		/**
+		 * The abilities catalog the allowlist picker renders from, grouped by subject exactly the
+		 * way aafm_allowlist_ability_catalog() (PHP) built it - the same source
+		 * aafm_allowlist_sanitize_row() validates a save against, so a picker built from this can
+		 * never offer a name the server would refuse.
+		 *
+		 * @return {Array<{subject: string, label: string, abilities: Array<{name: string, label: string}>}>}
+		 */
+		#allowlistCatalog() {
+			return Array.isArray( aafmAdmin?.allowlistCatalog ) ? aafmAdmin.allowlistCatalog : [];
+		}
+
+		/**
+		 * Build one allowlist row's ability picker: an "All abilities" checkbox plus a collapsible,
+		 * searchable, subject-grouped checkbox list - the same look the Abilities tab's own search
+		 * and grouping already give the operator, reused here instead of a free-text field of
+		 * ability names the rest of the admin never shows anywhere. Built entirely with DOM APIs
+		 * (createElement/textContent/value/checked), never innerHTML, matching this file's existing
+		 * convention for every dynamically-created allowlist cell.
+		 *
+		 * "All" and an individual selection are mutually exclusive in the STORED shape (the server
+		 * accepts only the literal string "all" or an array), so checking "All" here only dims and
+		 * disables the checkbox list - it does not clear it - and #serializeAllowlistRow() below
+		 * reports "all" whenever the toggle is checked, ignoring whatever the individual boxes show
+		 * underneath. Unchecking "All" again restores exactly the selection that was there before.
+		 *
+		 * @param {'all'|Array<string>} allowed Initial state: "all", or the array of allowed names.
+		 * @return {HTMLElement} The `.aafm-allowlist-picker` root, ready to append to a cell.
+		 */
+		#buildAllowlistPicker( allowed ) {
+			const isAll = 'all' === allowed;
+			const names = new Set( isAll ? [] : allowed );
+
+			const picker = document.createElement( 'div' );
+			picker.className = 'aafm-allowlist-picker';
+
+			const allLabel = document.createElement( 'label' );
+			allLabel.className = 'aafm-allowlist-all';
+			const allToggle = document.createElement( 'input' );
+			allToggle.type = 'checkbox';
+			allToggle.className = 'aafm-allowlist-all-toggle';
+			allToggle.checked = isAll;
+			allLabel.append( allToggle, document.createTextNode( ' ' + this.#t( 'allowlistAll', 'All abilities (no narrowing)' ) ) );
+
+			const details = document.createElement( 'details' );
+			details.className = 'aafm-allowlist-picker-details';
+			const summary = document.createElement( 'summary' );
+			const count = document.createElement( 'span' );
+			count.className = 'aafm-allowlist-picker-count aafm-muted';
+			summary.append( this.#t( 'allowlistChoose', 'Choose abilities' ) + ' ', count );
+			details.append( summary );
+
+			const bodyEl = document.createElement( 'div' );
+			bodyEl.className = 'aafm-allowlist-picker-body';
+
+			const searchInput = document.createElement( 'input' );
+			searchInput.type = 'search';
+			searchInput.className = 'aafm-allowlist-picker-search aafm-integration-search';
+			searchInput.placeholder = this.#t( 'allowlistSearch', 'Search abilities…' );
+			searchInput.autocomplete = 'off';
+			bodyEl.append( searchInput );
+
+			const groupsEl = document.createElement( 'div' );
+			groupsEl.className = 'aafm-allowlist-picker-groups';
+
+			const updateCount = () => {
+				const checked = groupsEl.querySelectorAll( '.aafm-allowlist-ability:checked' ).length;
+				count.textContent = this.#format( this.#t( 'allowlistSelectedCount', '%s selected' ), checked );
+			};
+
+			this.#allowlistCatalog().forEach( ( group ) => {
+				const fieldset = document.createElement( 'fieldset' );
+				fieldset.className = 'aafm-allowlist-group';
+				fieldset.dataset.subject = group.subject;
+				const legend = document.createElement( 'legend' );
+				legend.textContent = group.label;
+				fieldset.append( legend );
+
+				( group.abilities ?? [] ).forEach( ( ability ) => {
+					const item = document.createElement( 'label' );
+					item.className = 'aafm-allowlist-item';
+					const box = document.createElement( 'input' );
+					box.type = 'checkbox';
+					box.className = 'aafm-allowlist-ability';
+					box.value = ability.name;
+					box.checked = names.has( ability.name );
+					box.addEventListener( 'change', updateCount );
+					item.append( box, document.createTextNode( ' ' + ability.label ) );
+					fieldset.append( item );
+				} );
+
+				groupsEl.append( fieldset );
+			} );
+
+			// Per-picker search: filters this row's own list only, the same substring-of-textContent
+			// match the Abilities tab search uses, hiding an emptied group's legend along with it.
+			searchInput.addEventListener( 'input', () => {
+				const query = searchInput.value.trim().toLowerCase();
+				groupsEl.querySelectorAll( '.aafm-allowlist-group' ).forEach( ( fieldset ) => {
+					let visible = 0;
+					fieldset.querySelectorAll( '.aafm-allowlist-item' ).forEach( ( item ) => {
+						const isMatch = '' === query || item.textContent.toLowerCase().includes( query );
+						item.hidden = ! isMatch;
+						if ( isMatch ) {
+							visible += 1;
+						}
+					} );
+					fieldset.hidden = 0 === visible;
+				} );
+			} );
+
+			const setDisabled = ( disabled ) => {
+				details.classList.toggle( 'is-disabled', disabled );
+				groupsEl.querySelectorAll( '.aafm-allowlist-ability' ).forEach( ( box ) => {
+					box.disabled = disabled;
+				} );
+			};
+			allToggle.addEventListener( 'change', () => setDisabled( allToggle.checked ) );
+			setDisabled( isAll );
+
+			bodyEl.append( groupsEl );
+			details.append( bodyEl );
+			picker.append( allLabel, details );
+			updateCount();
+
+			return picker;
+		}
+
+		/**
+		 * Read one allowlist row's picker back into the shape the server expects: the literal
+		 * string "all", or the array of checked ability names.
+		 *
+		 * @param {HTMLElement} row A `[data-allowlist-row]` element.
+		 * @return {'all'|Array<string>}
+		 */
+		#serializeAllowlistRow( row ) {
+			const allToggle = row.querySelector( '.aafm-allowlist-all-toggle' );
+			if ( allToggle?.checked ) {
+				return 'all';
+			}
+			return Array.from( row.querySelectorAll( '.aafm-allowlist-ability:checked' ) ).map(
+				( box ) => box.value
+			);
+		}
+
+		/**
+		 * Hydrate one server-rendered "Allowed abilities" cell: read its `data-allowed` (the literal
+		 * "all", or a JSON array of names - aafm_render_allowlist_section()'s data shell) and swap
+		 * the no-JS text summary for the interactive picker built from the same state.
+		 *
+		 * @param {HTMLElement} cell A `.aafm-allowlist-allowed-cell`.
+		 */
+		#hydrateAllowlistCell( cell ) {
+			let allowed = 'all';
+			try {
+				const parsed = JSON.parse( cell.dataset.allowed ?? '"all"' );
+				allowed = 'all' === parsed || Array.isArray( parsed ) ? parsed : 'all';
+			} catch {
+				allowed = 'all';
+			}
+			cell.replaceChildren( this.#buildAllowlistPicker( allowed ) );
+		}
+
+		/**
 		 * Wire the Connections tab's "Ability allowlist" card: add a scope row, remove a row,
 		 * and save the whole set as one AJAX call. Every dynamically-created cell is built with
 		 * DOM APIs (createElement/textContent/value), never innerHTML with interpolated input,
@@ -2110,6 +2273,12 @@
 				return;
 			}
 			const status = document.getElementById( 'aafm-allowlist-status' );
+
+			// Every row the server rendered starts as a data shell (a `data-allowed` JSON
+			// attribute plus a plain-text summary) - swap each one for the interactive picker now.
+			card.querySelectorAll( '.aafm-allowlist-allowed-cell' ).forEach( ( cell ) => {
+				this.#hydrateAllowlistCell( cell );
+			} );
 
 			const allowlistBody = () => document.getElementById( 'aafm-allowlist-table' )?.querySelector( 'tbody' ) ?? null;
 
@@ -2172,11 +2341,9 @@
 					( typeSelect?.value ?? 'role' ) === 'role' ? `Role: ${ scopeId }` : `Connection: ${ scopeId }`;
 
 				const allowedCell = document.createElement( 'td' );
-				const textarea = document.createElement( 'textarea' );
-				textarea.className = 'aafm-allowlist-allowed';
-				textarea.rows = 2;
-				textarea.value = 'all'; // Unrestricted until the operator narrows it - never starts as "deny everything".
-				allowedCell.append( textarea );
+				allowedCell.className = 'aafm-allowlist-allowed-cell';
+				// Unrestricted until the operator narrows it - never starts as "deny everything".
+				allowedCell.append( this.#buildAllowlistPicker( 'all' ) );
 
 				const removeCell = document.createElement( 'td' );
 				const removeBtn = document.createElement( 'button' );
@@ -2204,22 +2371,11 @@
 
 			saveBtn.addEventListener( 'click', async () => {
 				const body = allowlistBody();
-				const rows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).map( ( row ) => {
-					const raw = row.querySelector( '.aafm-allowlist-allowed' )?.value ?? '';
-					const trimmed = raw.trim();
-					const allowedAbilities =
-						trimmed.toLowerCase() === 'all'
-							? 'all'
-							: trimmed
-									.split( /[\n,]/ )
-									.map( ( name ) => name.trim() )
-									.filter( Boolean );
-					return {
-						scope_type: row.dataset.scopeType,
-						scope_id: row.dataset.scopeId,
-						allowed_abilities: allowedAbilities,
-					};
-				} );
+				const rows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).map( ( row ) => ( {
+					scope_type: row.dataset.scopeType,
+					scope_id: row.dataset.scopeId,
+					allowed_abilities: this.#serializeAllowlistRow( row ),
+				} ) );
 
 				saveBtn.disabled = true;
 				const json = await this.#post( 'aafm_save_allowlist', {

@@ -202,6 +202,61 @@
 		flex: 0 0 auto;
 	}
 
+	/* ---------- Form controls ----------
+	   Every text-like input, select, number field and textarea in the plugin matches
+	   .aafm-btn's geometry (--aafm-control-h, --aafm-radius-sm) with no class needed, so
+	   a field added later inherits this automatically. WP core's forms.css matches these
+	   with a bare selector such as `input[type=text], select, textarea` (specificity
+	   0,1,1); `.aafm-wrap input[type="text"]` etc. is 0,2,1 and wins without !important
+	   (checked against computed styles, not assumed).
+
+	   Font-family is deliberately left out here except on <select>. WP core's monospace
+	   rule for a code-style field is `.code, code { font-family: Consolas, Monaco,
+	   monospace; }` (specificity 0,1,0) - weaker than this block, so a blanket
+	   `font-family: inherit` on input/textarea would win and silently turn the IP
+	   allowlist field and both meta-key textareas back into the body font. <select> has
+	   no such class to protect, so it gets the explicit inherit on its own below. */
+	input[type="text"],
+	input[type="search"],
+	input[type="email"],
+	input[type="url"],
+	input[type="password"],
+	input[type="tel"],
+	input[type="number"],
+	select,
+	textarea {
+		/* WP core pins these to a 40px floor via `min-height`, a different property from
+		   `height`/`block-size` - specificity between the two rules never enters into it,
+		   min-height wins outright unless it is overridden on its own. Caught only by
+		   measuring the computed height after the first pass still came back 40px. */
+		block-size: var(--aafm-control-h);
+		min-block-size: var(--aafm-control-h);
+		padding-block: 0;
+		padding-inline: var(--aafm-space-3);
+		border: 1px solid var(--aafm-border-strong);
+		border-radius: var(--aafm-radius-sm);
+		background: var(--aafm-surface);
+		color: inherit;
+		font-size: var(--aafm-fs-base);
+
+		&:focus-visible {
+			outline: none;
+			border-color: var(--aafm-accent);
+			box-shadow: var(--aafm-ring);
+		}
+	}
+
+	select {
+		font-family: inherit;
+	}
+
+	/* Textareas size by rows, not the fixed control height; they still share the
+	   border, radius, background and focus ring above. */
+	textarea {
+		block-size: auto;
+		padding-block: var(--aafm-space-2);
+	}
+
 	/* ---------- Mini key/value list (Versions card) ----------
 	   Ported from app.css .kv. The dashboard outputs <dl class="aafm-kv">; this
 	   was previously unstyled (the Image #1 misalignment). */

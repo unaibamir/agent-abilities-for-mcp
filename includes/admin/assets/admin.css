@@ -11,6 +11,24 @@
   --aafm-amber:#dba617; --aafm-amber-text:#815f00; --aafm-amber-tint:#fcf9e8;
   --aafm-red:#d63638; --aafm-red-text:#b32d2e; --aafm-red-tint:#fcf0f1;
   --aafm-radius:8px; --aafm-radius-sm:5px; --aafm-shadow:0 1px 2px rgba(0,0,0,.04);
+
+  /* Spacing scale. Derived from the file's own dominant values:
+     padding-inline 18/20 (8 uses each), gap cluster 6/8/10/12 (9-11 uses each). */
+  --aafm-space-1:4px; --aafm-space-2:8px; --aafm-space-3:12px;
+  --aafm-space-4:16px; --aafm-space-5:20px; --aafm-space-6:24px;
+
+  /* Type scale. Each of the first three absorbs its half-pixel twin. */
+  --aafm-fs-xs:11px;   /* 11px + 11.5px */
+  --aafm-fs-sm:12px;   /* 12px + 12.5px */
+  --aafm-fs-base:13px; /* 13px + 13.5px */
+  --aafm-fs-body:14px; --aafm-fs-md:15px; --aafm-fs-lg:16px;
+  --aafm-fs-xl:18px; --aafm-fs-2xl:23px;
+
+  /* One pill radius, not two. */
+  --aafm-radius-pill:999px;
+
+  /* Control geometry, so a form control and a button can never disagree again. */
+  --aafm-control-h:34px;
 }
 
 /* Shared disclosure chevron: the solid-triangle affordance every <details>/<summary>
@@ -201,7 +219,7 @@
 	.aafm-progress {
 		inline-size: 130px;
 		block-size: 7px;
-		border-radius: 999px;
+		border-radius: var(--aafm-radius-pill);
 		background: var(--aafm-surface-2);
 		overflow: hidden;
 		border: 1px solid var(--aafm-border);
@@ -210,7 +228,7 @@
 			display: block;
 			block-size: 100%;
 			background: var(--aafm-accent);
-			border-radius: 999px;
+			border-radius: var(--aafm-radius-pill);
 		}
 	}
 
@@ -221,7 +239,7 @@
 		gap: 6px;
 		block-size: 24px;
 		padding-inline: 10px;
-		border-radius: 999px;
+		border-radius: var(--aafm-radius-pill);
 		font-size: 12px;
 		font-weight: 600;
 		white-space: nowrap;
@@ -673,7 +691,7 @@
 			gap: 7px;
 			block-size: 32px;
 			padding-inline: 13px;
-			border-radius: 999px;
+			border-radius: var(--aafm-radius-pill);
 			border: 1px solid var(--aafm-border-strong);
 			background: var(--aafm-surface);
 			color: var(--aafm-text-muted);
@@ -766,7 +784,7 @@
 		.aafm-switch-track {
 			position: absolute;
 			inset: 0;
-			border-radius: 999px;
+			border-radius: var(--aafm-radius-pill);
 			background: var(--aafm-border-strong);
 			transition: background 0.18s ease;
 			cursor: pointer;
@@ -2390,7 +2408,7 @@
 	& .aafm-qc-seg {
 		flex: 1;
 		height: 6px;
-		border-radius: 99px;
+		border-radius: var(--aafm-radius-pill);
 		background: var(--aafm-border);
 		overflow: hidden;
 		position: relative;
@@ -2399,7 +2417,7 @@
 		content: "";
 		position: absolute;
 		inset: 0;
-		border-radius: 99px;
+		border-radius: var(--aafm-radius-pill);
 		background: linear-gradient(90deg, var(--aafm-accent), var(--aafm-accent-hover));
 		transform: scaleX(0);
 		transform-origin: left;
@@ -2459,7 +2477,7 @@
 		font-size: 11px;
 		font-weight: 600;
 		padding: 3px 9px;
-		border-radius: 99px;
+		border-radius: var(--aafm-radius-pill);
 		white-space: nowrap;
 	}
 	& .aafm-qc-tag.done { background: var(--aafm-green-tint); color: var(--aafm-green-text); }
@@ -2693,7 +2711,7 @@
 		background: var(--aafm-surface-2);
 		border: 1px solid var(--aafm-border);
 		padding: 4px 10px;
-		border-radius: 99px;
+		border-radius: var(--aafm-radius-pill);
 	}
 	& .aafm-qc-chip svg { width: 12px; height: 12px; color: var(--aafm-green); flex: 0 0 auto; }
 

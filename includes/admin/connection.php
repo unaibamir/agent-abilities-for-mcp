@@ -856,7 +856,23 @@ function aafm_render_oauth_management(): void {
 
 			printf( '<tr data-client-row="%s">', esc_attr( $full_id ) );
 			printf( '<td>%s</td>', esc_html( $name ) );
-			printf( '<td><code title="%1$s">%2$s</code></td>', esc_attr( $full_id ), esc_html( $short_id ) );
+			// The cell cannot hold a full client id without breaking the table layout, so the
+			// column stays truncated; a copy control (the same .aafm-copy component used
+			// elsewhere on this tab, already bound in admin.js and already in the kses allowlist)
+			// carries the full id, since the title tooltip lets an operator see it but not copy it.
+			echo '<td>';
+			echo wp_kses(
+				sprintf(
+					'<span class="aafm-field-mono aafm-client-id-cell"><code title="%1$s">%2$s</code><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-copy" data-copy="%1$s" aria-label="%5$s">%3$s<span class="aafm-copy-label">%4$s</span></button></span>',
+					esc_attr( $full_id ),
+					esc_html( $short_id ),
+					aafm_icon( 'copy' ),
+					esc_html__( 'Copy', 'agent-abilities-for-mcp' ),
+					esc_attr__( 'Copy the full client ID', 'agent-abilities-for-mcp' )
+				),
+				aafm_admin_allowed_html()
+			);
+			echo '</td>';
 
 			echo '<td>';
 			if ( empty( $client['redirect_uris'] ) ) {

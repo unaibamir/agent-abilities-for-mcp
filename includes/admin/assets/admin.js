@@ -1828,16 +1828,63 @@
 		 * and save the whole set as one AJAX call. Every dynamically-created cell is built with
 		 * DOM APIs (createElement/textContent/value), never innerHTML with interpolated input,
 		 * so no separate escaping helper is needed for the values this card handles.
+		 *
+		 * The zero-row state renders a plain .aafm-empty-state paragraph instead of a table with
+		 * an empty <tbody>, so #aafm-allowlist-table does not exist until the first row lands.
+		 * Bind against the card itself (always rendered) rather than the table, delegate the
+		 * remove click to the card so it still works on a table built after bind time, and build
+		 * the table the first time "Add scope" needs somewhere to put a row.
 		 */
 		#bindAllowlist() {
-			const table = document.getElementById( 'aafm-allowlist-table' );
+			const card = document.querySelector( '.aafm-allowlist-card' );
 			const saveBtn = document.getElementById( 'aafm-allowlist-save' );
 			const addBtn = document.getElementById( 'aafm-allowlist-add-row' );
-			if ( ! table || ! saveBtn || ! addBtn ) {
+			if ( ! card || ! saveBtn || ! addBtn ) {
 				return;
 			}
 			const status = document.getElementById( 'aafm-allowlist-status' );
-			const body = table.querySelector( 'tbody' );
+
+			const allowlistBody = () => document.getElementById( 'aafm-allowlist-table' )?.querySelector( 'tbody' ) ?? null;
+
+			// Get the <tbody> to append a new row to, building the table wrap first if this is
+			// the first row added since page load.
+			const ensureAllowlistBody = () => {
+				const existing = allowlistBody();
+				if ( existing ) {
+					return existing;
+				}
+
+				document.getElementById( 'aafm-allowlist-empty' )?.remove();
+
+				const wrap = document.createElement( 'div' );
+				wrap.className = 'aafm-table-wrap';
+				wrap.id = 'aafm-allowlist-table-wrap';
+
+				const table = document.createElement( 'table' );
+				table.className = 'widefat striped aafm-oauth-table aafm-allowlist-table';
+				table.id = 'aafm-allowlist-table';
+
+				const thead = document.createElement( 'thead' );
+				const headRow = document.createElement( 'tr' );
+				[
+					this.#t( 'allowlistScope', 'Scope' ),
+					this.#t( 'allowlistAllowedHeading', 'Allowed abilities' ),
+					'',
+				].forEach( ( text ) => {
+					const th = document.createElement( 'th' );
+					th.textContent = text;
+					headRow.append( th );
+				} );
+				thead.append( headRow );
+
+				const tbody = document.createElement( 'tbody' );
+				table.append( thead, tbody );
+				wrap.append( table );
+
+				document.getElementById( 'aafm-allowlist-add' )?.before( wrap );
+
+				return tbody;
+			};
 
 			addBtn.addEventListener( 'click', () => {
 				const typeSelect = document.getElementById( 'aafm-allowlist-new-scope-type' );
@@ -1872,13 +1919,16 @@
 				removeCell.append( removeBtn );
 
 				row.append( labelCell, allowedCell, removeCell );
-				body?.append( row );
+				ensureAllowlistBody().append( row );
 				if ( idInput ) {
 					idInput.value = '';
 				}
 			} );
 
-			table.addEventListener( 'click', ( e ) => {
+			// Delegated on the card (always present) rather than the table (not present until
+			// the first row exists), so a remove button works whether its row came from the
+			// server or from a later "Add scope" click.
+			card.addEventListener( 'click', ( e ) => {
 				const btn = e.target.closest( '.aafm-allowlist-remove' );
 				if ( btn ) {
 					btn.closest( 'tr' )?.remove();
@@ -1886,6 +1936,7 @@
 			} );
 
 			saveBtn.addEventListener( 'click', async () => {
+				const body = allowlistBody();
 				const rows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).map( ( row ) => {
 					const raw = row.querySelector( '.aafm-allowlist-allowed' )?.value ?? '';
 					const trimmed = raw.trim();

@@ -2148,6 +2148,38 @@
 		}
 	}
 
+	/* Reusable "no rows yet" state for any table on the admin - the OAuth clients/grants
+	   tables and the ability allowlist all show the same dashed-box message when empty
+	   instead of a bare table with zero rows. Lived under .aafm-oauth-manage only; moved
+	   here so a second table (the allowlist) inherits it instead of duplicating it. */
+	.aafm-empty-state {
+		margin-block: 0 8px;
+		padding: 14px 16px;
+		border: 1px dashed var(--aafm-border-strong);
+		border-radius: var(--aafm-radius);
+		color: var(--aafm-text-muted);
+		background: var(--aafm-surface-2);
+		font-size: 13px;
+	}
+
+	/* Shared record-table look (widefat striped aafm-oauth-table): code cells at 12px,
+	   links that break rather than overflow, and buttons that never wrap. Named for its
+	   first use (the OAuth tables) but scoped generally so any "widefat striped
+	   aafm-oauth-table" - the allowlist included - picks it up without its own copy. */
+	.aafm-oauth-table {
+		code {
+			font-size: 12px;
+		}
+
+		a {
+			word-break: break-all;
+		}
+
+		.aafm-btn {
+			white-space: nowrap;
+		}
+	}
+
 	/* ---------- OAuth client/grant management (Connections OAuth card) ---------- */
 	.aafm-oauth-manage {
 		margin-block-start: 20px;
@@ -2167,32 +2199,32 @@
 			margin-block-end: 8px;
 		}
 
-		.aafm-oauth-table {
-			code {
-				font-size: 12px;
-			}
-
-			a {
-				word-break: break-all;
-			}
-
-			.aafm-btn {
-				white-space: nowrap;
-			}
-		}
-
 		.aafm-muted {
 			color: var(--aafm-text-subtle);
 		}
+	}
 
-		.aafm-empty-state {
-			margin-block: 0 8px;
-			padding: 14px 16px;
-			border: 1px dashed var(--aafm-border-strong);
-			border-radius: var(--aafm-radius);
-			color: var(--aafm-text-muted);
-			background: var(--aafm-surface-2);
-			font-size: 13px;
+	/* ---------- Ability allowlist (Connections tab) ---------- */
+	.aafm-allowlist-card {
+		.aafm-allowlist-table {
+			margin-block-end: 8px;
+		}
+
+		textarea.aafm-allowlist-allowed {
+			min-inline-size: 220px;
+		}
+
+		.aafm-allowlist-add {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 8px;
+			margin-block-end: 12px;
+
+			#aafm-allowlist-new-scope-id {
+				flex: 1 1 220px;
+				min-inline-size: 160px;
+			}
 		}
 	}
 }

@@ -163,39 +163,60 @@ function aafm_ajax_save_allowlist(): void {
  * (reusing the existing aafm_ability_toggle_row() component from the Abilities tab) if operators
  * report the plain-text list is hard to use.
  *
+ * Hand-matches the shared collapsible-section markup (aafm_render_section() with
+ * `collapsible => true`) rather than calling that function: the section component pipes its
+ * `body` argument through wp_kses( aafm_admin_allowed_html() ), whose data-* allowlist does not
+ * include data-allowlist-row/data-scope-type/data-scope-id - routing this card's rows through it
+ * would silently strip all three, and admin.js reads them to remove and save rows. This file
+ * already escapes every value it echoes per-leaf, so writing the same head/body markup directly
+ * carries no new security surface.
+ *
  * @return void
  */
 function aafm_render_allowlist_section(): void {
 	$rows  = aafm_allowlist_overrides();
 	$roles = wp_roles()->get_names();
 
-	echo '<section class="aafm-card aafm-card-pad aafm-allowlist-card">';
-	echo '<h2>' . esc_html__( 'Ability allowlist', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '<p class="sub">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card" open>';
+	echo '<summary class="aafm-card-head">';
+	echo '<span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() ) . '</span>';
+	echo '<div class="aafm-card-head-text">';
+	echo '<h3 class="aafm-card-head-title">' . esc_html__( 'Ability allowlist', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<p class="aafm-card-head-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div>';
+	echo '</summary>';
 
-	echo '<table class="aafm-allowlist-table" id="aafm-allowlist-table">';
-	echo '<thead><tr>';
-	echo '<th>' . esc_html__( 'Scope', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Allowed abilities', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th></th>';
-	echo '</tr></thead><tbody>';
-	foreach ( $rows as $i => $row ) {
-		$scope_type = (string) ( $row['scope_type'] ?? '' );
-		$scope_id   = (string) ( $row['scope_id'] ?? '' );
-		$allowed    = $row['allowed_abilities'] ?? array();
-		$allowed    = is_array( $allowed ) ? implode( "\n", $allowed ) : (string) $allowed;
-		$label      = 'role' === $scope_type
-			? sprintf( /* translators: %s: role display name. */ __( 'Role: %s', 'agent-abilities-for-mcp' ), $roles[ $scope_id ] ?? $scope_id )
-			: sprintf( /* translators: %s: OAuth client id. */ __( 'Connection: %s', 'agent-abilities-for-mcp' ), $scope_id );
-		echo '<tr data-allowlist-row data-scope-type="' . esc_attr( $scope_type ) . '" data-scope-id="' . esc_attr( $scope_id ) . '">';
-		echo '<td>' . esc_html( $label ) . '</td>';
-		echo '<td><textarea class="aafm-allowlist-allowed" rows="2">' . esc_textarea( $allowed ) . '</textarea></td>';
-		echo '<td><button type="button" class="aafm-btn aafm-btn-secondary aafm-allowlist-remove">' . esc_html__( 'Remove', 'agent-abilities-for-mcp' ) . '</button></td>';
-		echo '</tr>';
+	echo '<div class="aafm-section-body">';
+
+	if ( empty( $rows ) ) {
+		echo '<p class="aafm-empty-state" id="aafm-allowlist-empty">' . esc_html__( 'No scopes narrowed yet. Every role and connection can reach everything enabled above.', 'agent-abilities-for-mcp' ) . '</p>';
+	} else {
+		echo '<div class="aafm-table-wrap" id="aafm-allowlist-table-wrap">';
+		echo '<table class="widefat striped aafm-oauth-table aafm-allowlist-table" id="aafm-allowlist-table">';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__( 'Scope', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th>' . esc_html__( 'Allowed abilities', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th></th>';
+		echo '</tr></thead><tbody>';
+		foreach ( $rows as $row ) {
+			$scope_type = (string) ( $row['scope_type'] ?? '' );
+			$scope_id   = (string) ( $row['scope_id'] ?? '' );
+			$allowed    = $row['allowed_abilities'] ?? array();
+			$allowed    = is_array( $allowed ) ? implode( "\n", $allowed ) : (string) $allowed;
+			$label      = 'role' === $scope_type
+				? sprintf( /* translators: %s: role display name. */ __( 'Role: %s', 'agent-abilities-for-mcp' ), $roles[ $scope_id ] ?? $scope_id )
+				: sprintf( /* translators: %s: OAuth client id. */ __( 'Connection: %s', 'agent-abilities-for-mcp' ), $scope_id );
+			echo '<tr data-allowlist-row data-scope-type="' . esc_attr( $scope_type ) . '" data-scope-id="' . esc_attr( $scope_id ) . '">';
+			echo '<td>' . esc_html( $label ) . '</td>';
+			echo '<td><textarea class="aafm-allowlist-allowed" rows="2">' . esc_textarea( $allowed ) . '</textarea></td>';
+			echo '<td><button type="button" class="aafm-btn aafm-btn-secondary aafm-allowlist-remove">' . esc_html__( 'Remove', 'agent-abilities-for-mcp' ) . '</button></td>';
+			echo '</tr>';
+		}
+		echo '</tbody></table>';
+		echo '</div>';
 	}
-	echo '</tbody></table>';
 
-	echo '<div class="aafm-allowlist-add">';
+	echo '<div class="aafm-allowlist-add" id="aafm-allowlist-add">';
 	echo '<select id="aafm-allowlist-new-scope-type">';
 	echo '<option value="role">' . esc_html__( 'Role', 'agent-abilities-for-mcp' ) . '</option>';
 	echo '<option value="oauth_client">' . esc_html__( 'OAuth connection', 'agent-abilities-for-mcp' ) . '</option>';
@@ -204,7 +225,8 @@ function aafm_render_allowlist_section(): void {
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-allowlist-add-row">' . esc_html__( 'Add scope', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '</div>';
 
-	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-allowlist-save">' . esc_html__( 'Save allowlist', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<span id="aafm-allowlist-status" class="aafm-muted" role="status"></span>';
-	echo '</section>';
+	echo '<p><button type="button" class="aafm-btn aafm-btn-primary" id="aafm-allowlist-save">' . esc_html__( 'Save allowlist', 'agent-abilities-for-mcp' ) . '</button> <span id="aafm-allowlist-status" class="aafm-muted" role="status"></span></p>';
+
+	echo '</div>'; // .aafm-section-body
+	echo '</details>';
 }

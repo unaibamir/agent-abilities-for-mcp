@@ -630,6 +630,22 @@
 		}
 	}
 
+	/* Container padding contract. .aafm-notice only ever sets a vertical margin, so it reads
+	   correctly wherever its container already supplies the horizontal inset (.aafm-card-pad,
+	   a settings row, a meta-keys card). The one place nothing supplies it is a bare <details>
+	   accordion (the app-password fallback pairs a notice straight after <summary> with no body
+	   wrapper) - there the notice ran edge to edge while its sibling .aafm-step rows already
+	   carry their own margin-inline. This targets the structural gap directly - "a notice that
+	   is a direct child of any <details>" - rather than one accordion's class name, so a future
+	   accordion that drops a notice straight inside it inherits the same inset with no wrapper
+	   and no author having to think about it. Scoped to .aafm-notice specifically: every other
+	   block that lands inside one of the plugin's <details> today (.aafm-step, .aafm-codeblock)
+	   already carries its own inline margin one level down, and a blanket rule here would double
+	   their inset instead of fixing a gap. */
+	details > .aafm-notice {
+		margin-inline: var(--aafm-space-5);
+	}
+
 	/* ---------- Tabs (top nav - restyle core .nav-tab to underline-active) ---------- */
 	.nav-tab-wrapper {
 		display: flex;

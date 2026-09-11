@@ -2191,33 +2191,57 @@
 				warning.hidden = 0 !== checked;
 			};
 
-			this.#allowlistCatalog().forEach( ( group ) => {
-				const fieldset = document.createElement( 'fieldset' );
-				fieldset.className = 'aafm-allowlist-group';
-				fieldset.dataset.subject = group.subject;
-				const legend = document.createElement( 'legend' );
-				legend.textContent = group.label;
-				fieldset.append( legend );
+			// Codex admin-ui-r1 M4: at the supported cap (AAFM_ALLOWLIST_MAX_ROWS rows x the full
+			// catalog) building every row's grid eagerly means tens of thousands of checkboxes,
+			// labels and change listeners at page load - including rows stored as "all", whose
+			// picker body never becomes visible unless narrowed. Build the grid once, on first
+			// need (a row that starts narrowed needs it right away since its body starts visible;
+			// an "all" row defers the cost until "All abilities" is unchecked or its search is
+			// used), and bind one delegated change listener on the container instead of one per
+			// checkbox.
+			let groupsBuilt = false;
+			const buildGroups = () => {
+				if ( groupsBuilt ) {
+					return;
+				}
+				groupsBuilt = true;
+				this.#allowlistCatalog().forEach( ( group ) => {
+					const fieldset = document.createElement( 'fieldset' );
+					fieldset.className = 'aafm-allowlist-group';
+					fieldset.dataset.subject = group.subject;
+					const legend = document.createElement( 'legend' );
+					legend.textContent = group.label;
+					fieldset.append( legend );
 
-				( group.abilities ?? [] ).forEach( ( ability ) => {
-					const item = document.createElement( 'label' );
-					item.className = 'aafm-allowlist-item';
-					const box = document.createElement( 'input' );
-					box.type = 'checkbox';
-					box.className = 'aafm-allowlist-ability';
-					box.value = ability.name;
-					box.checked = names.has( ability.name );
-					box.addEventListener( 'change', updateCount );
-					item.append( box, document.createTextNode( ' ' + ability.label ) );
-					fieldset.append( item );
+					( group.abilities ?? [] ).forEach( ( ability ) => {
+						const item = document.createElement( 'label' );
+						item.className = 'aafm-allowlist-item';
+						const box = document.createElement( 'input' );
+						box.type = 'checkbox';
+						box.className = 'aafm-allowlist-ability';
+						box.value = ability.name;
+						box.checked = names.has( ability.name );
+						item.append( box, document.createTextNode( ' ' + ability.label ) );
+						fieldset.append( item );
+					} );
+
+					groupsEl.append( fieldset );
 				} );
-
-				groupsEl.append( fieldset );
+			};
+			groupsEl.addEventListener( 'change', ( e ) => {
+				if ( e.target.classList.contains( 'aafm-allowlist-ability' ) ) {
+					updateCount();
+				}
 			} );
+
+			if ( ! isAll ) {
+				buildGroups();
+			}
 
 			// Per-picker search: filters this row's own list only, the same substring-of-textContent
 			// match the Abilities tab search uses, hiding an emptied group's legend along with it.
 			searchInput.addEventListener( 'input', () => {
+				buildGroups();
 				const query = searchInput.value.trim().toLowerCase();
 				groupsEl.querySelectorAll( '.aafm-allowlist-group' ).forEach( ( fieldset ) => {
 					let visible = 0;
@@ -2237,6 +2261,9 @@
 			// checked state intact for when "All" is unchecked again.
 			allToggle.addEventListener( 'change', () => {
 				bodyEl.hidden = allToggle.checked;
+				if ( ! allToggle.checked ) {
+					buildGroups();
+				}
 			} );
 
 			bodyEl.append( count, warning, searchInput, groupsEl );

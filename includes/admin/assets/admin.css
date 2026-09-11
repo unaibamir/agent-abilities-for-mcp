@@ -1295,6 +1295,11 @@
 		box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 		position: sticky;
 		inset-block-end: 0;
+
+		/* A zero-match abilities search (admin.js) hides this via the `hidden` attribute. Same
+		   trap as .aafm-pager and the rest of this file: an author-stylesheet `display: flex`
+		   beats the user-agent's `[hidden] { display: none }` regardless of specificity. */
+		&[hidden] { display: none; }
 	}
 
 	/* ---------- Settings rows ---------- */

@@ -407,6 +407,7 @@
 				return;
 			}
 			const status = document.getElementById( 'aafm-abilities-search-status' );
+			const savebar = form.querySelector( '.aafm-savebar' );
 			const panels = Array.from( form.querySelectorAll( '.aafm-subject-panel' ) );
 
 			// Everything in a panel that is not a row container (.aafm-ability-list, one per
@@ -452,6 +453,9 @@
 						label.hidden = true;
 					}
 				} );
+				if ( savebar ) {
+					savebar.hidden = false;
+				}
 				if ( status ) {
 					status.textContent = '';
 				}
@@ -495,6 +499,13 @@
 					matchCount += panelMatches;
 				} );
 
+				// A zero-match query leaves the savebar as the only thing still rendered above
+				// "No abilities match." - a bare Save button with no rows, heading, or context
+				// above it. Hide it with the rest of the empty view and restore it in clear()
+				// or the moment a later keystroke matches again.
+				if ( savebar ) {
+					savebar.hidden = 0 === matchCount;
+				}
 				if ( status ) {
 					status.textContent =
 						0 === matchCount

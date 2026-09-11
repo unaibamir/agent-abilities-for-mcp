@@ -349,6 +349,11 @@
 					.forEach( ( panel ) => {
 						panel.hidden = panel.dataset.subject !== subject;
 					} );
+				// Codex admin-ui-r1 M2: a click and an Arrow/Home/End key both land here (the
+				// keydown handler wired by #wireTablistKeys() calls this same function), so
+				// dispatching from one place lets #bindAbilitiesSearch() clear a stale query on
+				// either input method instead of only on click.
+				document.dispatchEvent( new CustomEvent( 'aafm-subject-tab-change' ) );
 			};
 			list.forEach( ( tab ) => {
 				tab.addEventListener( 'click', () => activate( tab ) );
@@ -403,7 +408,6 @@
 			}
 			const status = document.getElementById( 'aafm-abilities-search-status' );
 			const panels = Array.from( form.querySelectorAll( '.aafm-subject-panel' ) );
-			const tabs = document.querySelectorAll( '.aafm-subject-tab' );
 
 			// Everything in a panel that is not a row container (.aafm-ability-list, one per
 			// Reads/Writes group) or the subject label: the heading, the bulk-toggle buttons,
@@ -490,16 +494,17 @@
 
 			search.addEventListener( 'input', apply );
 
-			// A direct sub-tab click is a request to see only that one tab, the way it always
-			// has been - reconcile the search box with it rather than leaving a stale query
-			// active over a view that no longer matches what it filtered.
-			tabs.forEach( ( tab ) => {
-				tab.addEventListener( 'click', () => {
-					if ( '' !== search.value ) {
-						search.value = '';
-						clear();
-					}
-				} );
+			// A sub-tab change - by click or by Arrow/Home/End (both dispatch this event from
+			// #bindSubjectTabs()'s shared activate(), Codex admin-ui-r1 M2) - is a request to see
+			// only that one tab, the way it always has been. Reconcile the search box with it
+			// rather than leaving a stale query active over a view that no longer matches what it
+			// filtered: before this fix, a keyboard move could reveal a panel with no matches
+			// while the search box and match count still claimed some existed.
+			document.addEventListener( 'aafm-subject-tab-change', () => {
+				if ( '' !== search.value ) {
+					search.value = '';
+					clear();
+				}
 			} );
 		}
 

@@ -2133,6 +2133,9 @@
 
 			const picker = document.createElement( 'div' );
 			picker.className = 'aafm-allowlist-picker';
+			// Codex admin-ui-r1 M1: the order this row was stored in, kept so
+			// #serializeAllowlistRow() can write it back unchanged instead of catalog order.
+			picker.originalOrder = isAll ? [] : Array.from( names );
 
 			const allLabel = document.createElement( 'label' );
 			allLabel.className = 'aafm-allowlist-all';
@@ -2250,9 +2253,16 @@
 			if ( allToggle?.checked ) {
 				return 'all';
 			}
-			return Array.from( row.querySelectorAll( '.aafm-allowlist-ability:checked' ) ).map(
-				( box ) => box.value
+			const picker = row.querySelector( '.aafm-allowlist-picker' );
+			const checked = new Set(
+				Array.from( row.querySelectorAll( '.aafm-allowlist-ability:checked' ) ).map(
+					( box ) => box.value
+				)
 			);
+			const retained = ( picker?.originalOrder ?? [] ).filter( ( name ) => checked.has( name ) );
+			const kept = new Set( retained );
+			const added = Array.from( checked ).filter( ( name ) => ! kept.has( name ) );
+			return [ ...retained, ...added ];
 		}
 
 		/**

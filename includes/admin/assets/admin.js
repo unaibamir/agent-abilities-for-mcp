@@ -2277,6 +2277,12 @@
 		 * Read one allowlist row's picker back into the shape the server expects: the literal
 		 * string "all", or the array of checked ability names.
 		 *
+		 * Codex admin-ui-r1 M1: checkboxes render in catalog order, so reading DOM order back
+		 * (Array.from(...checked)) would silently reorder a row's stored array on every save even
+		 * when nothing about its selection changed. Keep each retained name in the order
+		 * #buildAllowlistPicker() recorded as picker.originalOrder, then append any newly-checked
+		 * name (not part of that order) in the deterministic catalog/DOM order it was found in.
+		 *
 		 * @param {HTMLElement} row A `[data-allowlist-row]` element.
 		 * @return {'all'|Array<string>}
 		 */

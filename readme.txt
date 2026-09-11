@@ -307,6 +307,13 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 == Changelog ==
 
+= 1.7.5 =
+
+* **Feature:** The Abilities tab gained a searchable allowlist checkbox picker (replacing a free-text textarea) and a cross-sub-tab search field; the Connection tab gained real role and client selects, a Client ID copy control, and paginated tables.
+* **Fix:** A zero-match abilities search left the Save button stranded on a bare card with no context above it; the savebar now hides with the empty result and returns once matches come back.
+* **Fix:** The client picker's hover and selected states shared the same border and background, so a hovered card and the actually-selected one looked the same; hover now shows only a border outline.
+* **Fix:** Closed a batch of allowlist and search issues found in review: ability order round-trips on re-save, a stale search clears on keyboard tab navigation, a large allowlist no longer builds its full checkbox catalog at page load, and new controls carry accessible names and translated labels.
+
 = 1.7.4 =
 
 * **Feature:** 26 new abilities cover The Events Calendar, Event Tickets, Slim SEO, Avada, and GeoDirectory, plus uploading media straight from a URL. All of them stay off until you turn them on.

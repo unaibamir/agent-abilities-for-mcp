@@ -416,7 +416,9 @@
 			// never moved, cloned, or disabled - so what remains visible is a flat run of
 			// ability rows with nothing to separate one subject's matches from the next. Written
 			// as a query rather than a fixed class list so a future flat "All abilities" tab can
-			// reuse it without maintaining a second copy.
+			// reuse it without maintaining a second copy. .aafm-ability-list is excluded here on
+			// purpose - it holds rows, not chrome - and gets its own visibility pass in apply()/
+			// clear() below, hidden only once every row inside it is hidden (Codex admin-ui-r1 L2).
 			const panelChrome = ( panel ) =>
 				panel.querySelectorAll( ':scope > :not(.aafm-ability-list):not(.aafm-subject-search-label)' );
 
@@ -437,6 +439,9 @@
 					panel.hidden = panel.dataset.subject !== subject;
 					panel.querySelectorAll( '.aafm-ability-row' ).forEach( ( row ) => {
 						row.hidden = false;
+					} );
+					panel.querySelectorAll( '.aafm-ability-list' ).forEach( ( list ) => {
+						list.hidden = false;
 					} );
 					panelChrome( panel ).forEach( ( el ) => {
 						el.hidden = false;
@@ -468,6 +473,15 @@
 						if ( isMatch ) {
 							panelMatches += 1;
 						}
+					} );
+					// Codex admin-ui-r1 L2: a panel with both a Reads and a Writes list, where
+					// the query matches only one of them, used to leave the other as an empty
+					// bordered .aafm-card - panelChrome() deliberately skips .aafm-ability-list
+					// (it holds rows, not chrome), so nothing else here was hiding it. Hide a
+					// list once every row inside it is hidden; #clear() above already restores all
+					// of them.
+					panel.querySelectorAll( '.aafm-ability-list' ).forEach( ( list ) => {
+						list.hidden = 0 === list.querySelectorAll( '.aafm-ability-row:not([hidden])' ).length;
 					} );
 					panel.hidden = 0 === panelMatches;
 					panelChrome( panel ).forEach( ( el ) => {

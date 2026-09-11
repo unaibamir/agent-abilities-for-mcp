@@ -1738,6 +1738,13 @@
 		gap: 12px;
 		margin-block-start: 14px;
 
+		/* Codex admin-ui-r1 L1, the fifth instance of this trap on this branch (see
+		   LESSONS-LEARNED): an author-stylesheet `display: flex` beats the user-agent's
+		   `[hidden] { display: none }` regardless of specificity, and #paginateTable() (admin.js)
+		   toggles this pager via `hidden` at ten or fewer rows. Without this the pager stayed
+		   visible with dead Prev/Next and "Page 1 of 1" on a one-page table. */
+		&[hidden] { display: none; }
+
 		.aafm-pager-status {
 			color: var(--aafm-text-subtle);
 			font-size: 13px;

@@ -209,6 +209,13 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'allowlistZeroSelected'    => __( 'No abilities selected. Saving now will block this scope from every ability.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: number of abilities selected in the allowlist picker. */
 				'allowlistSelectedCount'   => __( '%s selected', 'agent-abilities-for-mcp' ),
+				// Codex admin-ui-r1 L3: a row added client-side (before reload) used to build this
+				// label from a hardcoded English template literal instead of these translated
+				// strings, which is what every server-rendered row already used.
+				/* translators: %s: role display name. */
+				'allowlistRoleLabel'       => __( 'Role: %s', 'agent-abilities-for-mcp' ),
+				/* translators: %s: OAuth client id or display name. */
+				'allowlistConnectionLabel' => __( 'Connection: %s', 'agent-abilities-for-mcp' ),
 				'pagerPrevious'            => __( 'Previous', 'agent-abilities-for-mcp' ),
 				'pagerNext'                => __( 'Next', 'agent-abilities-for-mcp' ),
 				/* translators: 1: first row number shown, 2: last row number shown, 3: total rows. */

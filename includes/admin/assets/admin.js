@@ -2443,8 +2443,15 @@
 				row.dataset.scopeType = isRole ? 'role' : 'oauth_client';
 				row.dataset.scopeId = scopeId;
 
+				// Codex admin-ui-r1 L3: these were hardcoded English template literals, so a newly
+				// added row showed English on a localized site until reload, when PHP rendered the
+				// same label through aafm_render_allowlist_section()'s translated strings. Route
+				// through the same aafmAdmin.i18n bag those PHP strings are localized from.
 				const labelCell = document.createElement( 'td' );
-				labelCell.textContent = isRole ? `Role: ${ scopeLabel }` : `Connection: ${ scopeLabel }`;
+				labelCell.textContent = this.#format(
+					this.#t( isRole ? 'allowlistRoleLabel' : 'allowlistConnectionLabel', isRole ? 'Role: %s' : 'Connection: %s' ),
+					scopeLabel
+				);
 
 				const allowedCell = document.createElement( 'td' );
 				allowedCell.className = 'aafm-allowlist-allowed-cell';

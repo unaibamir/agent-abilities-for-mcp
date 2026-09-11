@@ -31,4 +31,21 @@ final class SectionToggleTest extends TestCase {
 		$this->assertIsString( $data );
 		$this->assertStringContainsString( 'sectionToggleConfirm', $data );
 	}
+
+	/**
+	 * Codex admin-ui-r1 M3: the Abilities search field's only text was placeholder + status live
+	 * region text, neither of which is a persistent accessible name for a screen reader or voice
+	 * control user. A visually-hidden <label for> pointing at the field is the fix.
+	 */
+	public function test_the_abilities_search_field_has_a_persistent_label(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertMatchesRegularExpression(
+			'/<label class="screen-reader-text" for="aafm-abilities-search">[^<]+<\/label>\s*<input type="search" id="aafm-abilities-search"/',
+			$html
+		);
+	}
 }

@@ -320,12 +320,17 @@ function aafm_render_allowlist_section(): void {
 	// still the real boundary, this only makes the common mistake unreachable through the UI.
 	$clients = aafm_oauth_list_clients();
 
+	// Codex admin-ui-r1 M3: three adjacent selects with no visible label at all - the worst case
+	// the finding named - each got a visually-hidden <label for>, the same pattern the Abilities
+	// search field above now uses.
 	echo '<div class="aafm-allowlist-add" id="aafm-allowlist-add">';
+	echo '<label class="screen-reader-text" for="aafm-allowlist-new-scope-type">' . esc_html__( 'Scope type', 'agent-abilities-for-mcp' ) . '</label>';
 	echo '<select id="aafm-allowlist-new-scope-type">';
 	echo '<option value="role">' . esc_html__( 'Role', 'agent-abilities-for-mcp' ) . '</option>';
 	echo '<option value="oauth_client">' . esc_html__( 'OAuth connection', 'agent-abilities-for-mcp' ) . '</option>';
 	echo '</select>';
 
+	echo '<label class="screen-reader-text" for="aafm-allowlist-new-role">' . esc_html__( 'Role', 'agent-abilities-for-mcp' ) . '</label>';
 	echo '<select id="aafm-allowlist-new-role">';
 	echo '<option value="">' . esc_html__( 'Choose a role…', 'agent-abilities-for-mcp' ) . '</option>';
 	foreach ( $roles as $role_slug => $role_label ) {
@@ -333,6 +338,7 @@ function aafm_render_allowlist_section(): void {
 	}
 	echo '</select>';
 
+	echo '<label class="screen-reader-text" for="aafm-allowlist-new-client">' . esc_html__( 'OAuth connection', 'agent-abilities-for-mcp' ) . '</label>';
 	echo '<select id="aafm-allowlist-new-client" hidden>';
 	if ( empty( $clients ) ) {
 		echo '<option value="">' . esc_html__( 'No OAuth connections registered yet', 'agent-abilities-for-mcp' ) . '</option>';

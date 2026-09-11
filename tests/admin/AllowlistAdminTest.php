@@ -339,6 +339,22 @@ final class AllowlistAdminTest extends TestCase {
 		$this->assertStringContainsString( 'Row 2', (string) ( $json['data']['message'] ?? '' ) );
 	}
 
+	/**
+	 * Codex admin-ui-r1 M3: the scope-type, role and OAuth-connection selects had no <label>,
+	 * aria-label or aria-labelledby at all - the worst case of the finding, three adjacent
+	 * controls with no accessible name between them.
+	 */
+	public function test_the_new_scope_selects_have_persistent_labels(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		ob_start();
+		aafm_render_allowlist_section();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-scope-type">', $html );
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-role">', $html );
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-client">', $html );
+	}
+
 	public function test_more_than_the_row_cap_is_refused(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );

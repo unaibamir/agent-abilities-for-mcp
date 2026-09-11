@@ -2168,6 +2168,10 @@
 			searchInput.type = 'search';
 			searchInput.className = 'aafm-allowlist-picker-search aafm-integration-search';
 			searchInput.placeholder = this.#t( 'allowlistSearch', 'Search abilities…' );
+			// Codex admin-ui-r1 M3: this field is built entirely with createElement, so it has no
+			// <label> the way a server-rendered one gets - an aria-label is the only way to give it
+			// a persistent accessible name.
+			searchInput.setAttribute( 'aria-label', this.#t( 'allowlistSearch', 'Search abilities…' ) );
 			searchInput.autocomplete = 'off';
 
 			const groupsEl = document.createElement( 'div' );

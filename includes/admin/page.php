@@ -1650,6 +1650,14 @@ function aafm_render_abilities_tab(): void {
 	// Kept OUTSIDE the form: the form has a type="submit" Save button, and a search field
 	// inside it would let Enter trigger a save instead of filtering.
 	echo '<div class="aafm-integration-filter aafm-abilities-search">';
+	// Codex admin-ui-r1 M3: a placeholder is not a persistent accessible name - it disappears the
+	// moment the field has a value, so a screen reader or voice-control user loses the field's
+	// identity mid-search. Same visually-hidden <label for> pattern aafm_render_bridge_filter()
+	// already uses for the same control shape.
+	printf(
+		'<label class="screen-reader-text" for="aafm-abilities-search">%s</label>',
+		esc_html__( 'Search abilities', 'agent-abilities-for-mcp' )
+	);
 	printf(
 		'<input type="search" id="aafm-abilities-search" class="aafm-integration-search" placeholder="%s" autocomplete="off">',
 		esc_attr__( 'Search abilities…', 'agent-abilities-for-mcp' )

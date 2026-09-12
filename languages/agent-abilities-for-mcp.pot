@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-12T23:12:14+05:00\n"
+"POT-Creation-Date: 2026-09-13T00:30:02+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -318,17 +318,17 @@ msgid "ID of the post/page to read. The current user must have edit access to it
 msgstr ""
 
 #: includes/abilities/avada.php:172
-#: includes/abilities/posts.php:1331
+#: includes/abilities/posts.php:1337
 msgid "ID of the post to edit."
 msgstr ""
 
 #: includes/abilities/avada.php:177
-#: includes/abilities/posts.php:1336
+#: includes/abilities/posts.php:1342
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
 #: includes/abilities/avada.php:181
-#: includes/abilities/posts.php:1340
+#: includes/abilities/posts.php:1346
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
@@ -341,7 +341,7 @@ msgid "That replacement would change the Fusion Builder shortcode structure rath
 msgstr ""
 
 #: includes/abilities/avada.php:467
-#: includes/abilities/posts.php:1711
+#: includes/abilities/posts.php:1717
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
@@ -411,7 +411,7 @@ msgstr ""
 msgid "New title for the block. Sanitized as plain text. Omit to leave the current title unchanged."
 msgstr ""
 
-#: includes/abilities/blocks.php:496
+#: includes/abilities/blocks.php:498
 msgid "ID of the reusable block to move to the Trash. The caller must have delete access to this specific block. This is a Trash move, not a permanent delete, so it can be restored."
 msgstr ""
 
@@ -553,30 +553,30 @@ msgid "Update an existing listing's title, content, or address/coordinates. Fiel
 msgstr ""
 
 #. translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save".
-#: includes/abilities/geodirectory.php:755
+#: includes/abilities/geodirectory.php:758
 #, php-format
 msgid "The listing could not be created: %s. Nothing was created."
 msgstr ""
 
 #. translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save".
-#: includes/abilities/geodirectory.php:760
+#: includes/abilities/geodirectory.php:763
 #, php-format
 msgid "The listing could not be created: %s, and the incomplete listing could not be removed automatically. Delete it manually."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:836
+#: includes/abilities/geodirectory.php:839
 msgid "its title or content could not be confirmed as saved"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:843
+#: includes/abilities/geodirectory.php:846
 msgid "its address or location fields did not save"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:967
+#: includes/abilities/geodirectory.php:972
 msgid "The listing was updated, but its title or content could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:975
+#: includes/abilities/geodirectory.php:980
 msgid "The listing was updated, but its address or location fields did not save."
 msgstr ""
 
@@ -683,7 +683,7 @@ msgid "ID of an existing image attachment to use as the featured image. Must alr
 msgstr ""
 
 #: includes/abilities/media.php:672
-#: includes/abilities/media.php:1002
+#: includes/abilities/media.php:1005
 msgid "Filename to base the stored file's name on. Only the basename is kept and sanitized, and the extension is replaced with the one matching the file's actual detected type, not the extension supplied here."
 msgstr ""
 
@@ -692,7 +692,7 @@ msgid "Base64-encoded file bytes. The decoded content must be a real jpg, png, g
 msgstr ""
 
 #: includes/abilities/media.php:681
-#: includes/abilities/media.php:1006
+#: includes/abilities/media.php:1009
 msgid "Alt text to set on the uploaded image."
 msgstr ""
 
@@ -701,8 +701,8 @@ msgid "Invalid base64 payload."
 msgstr ""
 
 #: includes/abilities/media.php:832
-#: includes/abilities/media.php:1246
-#: includes/abilities/media.php:1251
+#: includes/abilities/media.php:1249
+#: includes/abilities/media.php:1254
 msgid "File exceeds the maximum upload size."
 msgstr ""
 
@@ -714,84 +714,84 @@ msgstr ""
 msgid "Unsupported or unsafe file type."
 msgstr ""
 
-#: includes/abilities/media.php:997
+#: includes/abilities/media.php:1000
 msgid "HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either."
 msgstr ""
 
-#: includes/abilities/media.php:1161
+#: includes/abilities/media.php:1164
 msgid "This server cannot safely fetch a remote URL for upload."
 msgstr ""
 
-#: includes/abilities/media.php:1165
+#: includes/abilities/media.php:1168
 msgid "This server routes outbound requests through a proxy, which this ability cannot safely pin to a validated address. Refusing."
 msgstr ""
 
-#: includes/abilities/media.php:1170
+#: includes/abilities/media.php:1173
 msgid "That is not a valid URL."
 msgstr ""
 
-#: includes/abilities/media.php:1173
+#: includes/abilities/media.php:1176
 msgid "Only https:// URLs may be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1178
+#: includes/abilities/media.php:1181
 msgid "A bare IP address may not be used as the upload URL host."
 msgstr ""
 
-#: includes/abilities/media.php:1185
+#: includes/abilities/media.php:1188
 msgid "The host could not be resolved."
 msgstr ""
 
-#: includes/abilities/media.php:1188
+#: includes/abilities/media.php:1191
 msgid "The host resolves to a private or reserved IP address."
 msgstr ""
 
-#: includes/abilities/media.php:1206
+#: includes/abilities/media.php:1209
 msgid "That port is not allowed for a remote fetch."
 msgstr ""
 
-#: includes/abilities/media.php:1229
-#: includes/abilities/media.php:1236
-#: includes/abilities/media.php:1376
-#: includes/abilities/media.php:1474
-#: includes/abilities/media.php:1484
-#: includes/abilities/media.php:1522
+#: includes/abilities/media.php:1232
+#: includes/abilities/media.php:1239
+#: includes/abilities/media.php:1379
+#: includes/abilities/media.php:1477
+#: includes/abilities/media.php:1487
+#: includes/abilities/media.php:1525
 msgid "The URL could not be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1254
+#: includes/abilities/media.php:1257
 msgid "The URL returned no data."
 msgstr ""
 
-#: includes/abilities/media.php:1554
+#: includes/abilities/media.php:1557
 msgid "ID of the attachment to update."
 msgstr ""
 
-#: includes/abilities/media.php:1558
+#: includes/abilities/media.php:1561
 msgid "New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given."
 msgstr ""
 
-#: includes/abilities/media.php:1562
+#: includes/abilities/media.php:1565
 msgid "New alt text for the image, sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/media.php:1566
+#: includes/abilities/media.php:1569
 msgid "New caption, sanitized as plain text with no HTML."
 msgstr ""
 
-#: includes/abilities/media.php:1570
+#: includes/abilities/media.php:1573
 msgid "New description. Basic HTML is allowed and sanitized."
 msgstr ""
 
-#: includes/abilities/media.php:1636
+#: includes/abilities/media.php:1639
 msgid "Provide at least one field to update."
 msgstr ""
 
-#: includes/abilities/media.php:1707
+#: includes/abilities/media.php:1716
 msgid "The media item could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/media.php:1730
+#: includes/abilities/media.php:1739
 msgid "ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo."
 msgstr ""
 
@@ -1022,11 +1022,11 @@ msgstr ""
 msgid "The scalar value to store. Only text, number, or boolean values are accepted; the value is plain-text sanitized (meta is not rendered as post content, so no markup is preserved) and then run through any registered sanitize_post_meta_{key} callback."
 msgstr ""
 
-#: includes/abilities/meta.php:391
+#: includes/abilities/meta.php:392
 msgid "ID of the post whose meta to delete. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/meta.php:396
+#: includes/abilities/meta.php:397
 msgid "The post-meta key to delete. Removes every stored value of this key, not just one. Must be on the operator's post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the delete runs. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it can never be deleted here. Call aafm-update-media with an empty alt to clear it. The featured image is stored under _thumbnail_id, also protected, and has no delete route: call aafm-set-featured-image to change it instead."
 msgstr ""
 
@@ -1294,56 +1294,56 @@ msgid "Unsupported or unauthorized post status."
 msgstr ""
 
 #: includes/abilities/posts.php:890
-#: includes/abilities/posts.php:1222
+#: includes/abilities/posts.php:1225
 #: includes/safety.php:343
 msgid "The title exceeds the maximum allowed length."
 msgstr ""
 
-#: includes/abilities/posts.php:1137
+#: includes/abilities/posts.php:1140
 msgid "ID of the post to update."
 msgstr ""
 
-#: includes/abilities/posts.php:1676
+#: includes/abilities/posts.php:1682
 msgid "That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly."
 msgstr ""
 
-#: includes/abilities/posts.php:1761
+#: includes/abilities/posts.php:1767
 msgid "Literal text to find. Matched as-is, not as a regular expression."
 msgstr ""
 
-#: includes/abilities/posts.php:1765
+#: includes/abilities/posts.php:1771
 msgid "Literal text to substitute for every match."
 msgstr ""
 
-#: includes/abilities/posts.php:1770
+#: includes/abilities/posts.php:1776
 msgid "Slug of an allowlisted content type to scope the replace to. Defaults to post."
 msgstr ""
 
-#: includes/abilities/posts.php:1775
+#: includes/abilities/posts.php:1781
 msgid "Post status to scope the replace to. Defaults to publish."
 msgstr ""
 
-#: includes/abilities/posts.php:1780
+#: includes/abilities/posts.php:1786
 msgid "When true (the default), previews the match without writing anything. Pass false to apply the change."
 msgstr ""
 
-#: includes/abilities/posts.php:1796
+#: includes/abilities/posts.php:1802
 msgid "Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content."
 msgstr ""
 
-#: includes/abilities/posts.php:1800
+#: includes/abilities/posts.php:1806
 msgid "Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal."
 msgstr ""
 
-#: includes/abilities/posts.php:2032
+#: includes/abilities/posts.php:2038
 msgid "ID of the content item to update."
 msgstr ""
 
-#: includes/abilities/posts.php:2117
+#: includes/abilities/posts.php:2123
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2184
+#: includes/abilities/posts.php:2190
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -1437,39 +1437,39 @@ msgstr ""
 msgid "The %s URL does not resolve to a media-library attachment, so Rank Math cannot render it. Add the image to the media library and pass its attachment URL."
 msgstr ""
 
-#: includes/abilities/rankmath.php:585
-#: includes/abilities/slim-seo.php:292
-#: includes/abilities/slim-seo.php:299
-#: includes/abilities/yoast.php:459
+#: includes/abilities/rankmath.php:592
+#: includes/abilities/slim-seo.php:317
+#: includes/abilities/slim-seo.php:323
+#: includes/abilities/yoast.php:466
 msgid "The SEO fields could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/rankmath.php:621
+#: includes/abilities/rankmath.php:628
 msgid "ID of the post whose Rank Math schema of this type to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/rankmath.php:626
-#: includes/abilities/rankmath.php:698
+#: includes/abilities/rankmath.php:633
+#: includes/abilities/rankmath.php:705
 msgid "The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase)."
 msgstr ""
 
-#: includes/abilities/rankmath.php:693
+#: includes/abilities/rankmath.php:700
 msgid "ID of the post whose Rank Math schema of this type to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/rankmath.php:702
+#: includes/abilities/rankmath.php:709
 msgid "The JSON-LD schema object to store for this type. Recursively sanitized: values under url-ish keys (url, image, logo, sameAs, @id) are treated as URLs and dropped if unsafe, other scalar leaves are stripped of markup, and the tree is depth-limited."
 msgstr ""
 
-#: includes/abilities/rankmath.php:774
+#: includes/abilities/rankmath.php:784
 msgid "The schema could not be saved. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/rankmath.php:803
+#: includes/abilities/rankmath.php:813
 msgid "ID of the post to render the Rank Math SEO head for."
 msgstr ""
 
-#: includes/abilities/rankmath.php:859
+#: includes/abilities/rankmath.php:869
 msgid "Rank Math could not render the SEO head for this post. This usually means the Rank Math setup wizard has not been completed or skipped, so its front-end head renderer is not initialised."
 msgstr ""
 
@@ -2075,7 +2075,7 @@ msgstr ""
 
 #: includes/abilities/terms.php:462
 #: includes/abilities/terms.php:556
-#: includes/abilities/terms.php:668
+#: includes/abilities/terms.php:669
 msgid "Slug of the public taxonomy the term belongs to. Defaults to category."
 msgstr ""
 
@@ -2099,59 +2099,59 @@ msgstr ""
 msgid "New value to store. Must be a string, number, or boolean; arrays and objects are rejected. Runs through WordPress's sanitize_meta filters for this key before saving."
 msgstr ""
 
-#: includes/abilities/terms.php:673
+#: includes/abilities/terms.php:674
 msgid "ID of the term to delete meta from. Requires edit access to this specific term."
 msgstr ""
 
-#: includes/abilities/terms.php:678
+#: includes/abilities/terms.php:679
 msgid "Meta key to delete. Removes every stored value under this key. Must clear this plugin's meta-key allow/deny gate."
 msgstr ""
 
-#: includes/abilities/terms.php:797
+#: includes/abilities/terms.php:798
 msgid "Slug of the public taxonomy to create the term in. Defaults to category. Creating requires that taxonomy's own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission. A WooCommerce product attribute taxonomy (pa_color, pa_size, and similar) is usually not public and is refused here; add a new option to an attribute in the WooCommerce admin under Products > Attributes (or the product's own Attributes tab for a custom attribute), then use wc-create-product-variation or wc-update-product-variation to build variations that use it."
 msgstr ""
 
-#: includes/abilities/terms.php:802
+#: includes/abilities/terms.php:803
 msgid "Term name. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/terms.php:806
+#: includes/abilities/terms.php:807
 msgid "Term description. Basic HTML is allowed and sanitized; omit to leave it blank."
 msgstr ""
 
-#: includes/abilities/terms.php:811
+#: includes/abilities/terms.php:812
 msgid "ID of the parent term, or 0 for no parent. Only accepted on a hierarchical taxonomy, and the parent must belong to the same taxonomy."
 msgstr ""
 
-#: includes/abilities/terms.php:849
+#: includes/abilities/terms.php:850
 msgid "This taxonomy does not support a parent term."
 msgstr ""
 
-#: includes/abilities/terms.php:852
+#: includes/abilities/terms.php:853
 msgid "The parent term does not belong to this taxonomy."
 msgstr ""
 
-#: includes/abilities/terms.php:916
+#: includes/abilities/terms.php:917
 msgid "Slug of the public taxonomy the term belongs to. Defaults to category. The term must belong to this taxonomy or the update is rejected. Updating requires that taxonomy's own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission."
 msgstr ""
 
-#: includes/abilities/terms.php:921
+#: includes/abilities/terms.php:922
 msgid "ID of the term to update."
 msgstr ""
 
-#: includes/abilities/terms.php:926
+#: includes/abilities/terms.php:927
 msgid "New term name. Sanitized as plain text; omit to leave the existing name unchanged."
 msgstr ""
 
-#: includes/abilities/terms.php:930
+#: includes/abilities/terms.php:931
 msgid "New term description; basic HTML is allowed and sanitized. Omit to leave the existing description unchanged."
 msgstr ""
 
-#: includes/abilities/terms.php:935
+#: includes/abilities/terms.php:936
 msgid "New parent term ID, or 0 to clear the parent. Must belong to the same taxonomy, and reparenting under one of the term's own descendants is rejected to prevent a circular hierarchy. Omit to leave the current parent unchanged."
 msgstr ""
 
-#: includes/abilities/terms.php:1000
+#: includes/abilities/terms.php:1001
 msgid "That parent would create a circular hierarchy."
 msgstr ""
 
@@ -3765,7 +3765,7 @@ msgstr ""
 msgid "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post."
 msgstr ""
 
-#: includes/abilities/yoast.php:483
+#: includes/abilities/yoast.php:490
 msgid "ID of the post to render the Yoast SEO head for."
 msgstr ""
 
@@ -5437,7 +5437,7 @@ msgstr ""
 
 #. translators: %s: the name of the setting, for example "Read-only mode".
 #: includes/admin/onboarding-pointer.php:102
-#: includes/helpers.php:2446
+#: includes/helpers.php:2512
 #, php-format
 msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7340,16 +7340,16 @@ msgstr ""
 msgid "The activity-log schema version"
 msgstr ""
 
-#: includes/audit/log.php:246
+#: includes/audit/log.php:254
 msgid "Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin retries automatically on the next admin or REST request."
 msgstr ""
 
-#: includes/audit/log.php:404
+#: includes/audit/log.php:412
 msgid "Invalid Application Password"
 msgstr ""
 
 #. translators: %s: human-readable label of the option that failed to persist.
-#: includes/audit/log.php:528
+#: includes/audit/log.php:536
 #, php-format
 msgid "%s could not be saved: object cache stale"
 msgstr ""
@@ -7543,18 +7543,18 @@ msgstr ""
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:2243
+#: includes/helpers.php:2309
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:2464
+#: includes/helpers.php:2530
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:2485
+#: includes/helpers.php:2551
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7769,18 +7769,24 @@ msgstr ""
 msgid "The authorization grant is invalid."
 msgstr ""
 
-#: includes/oauth/rest.php:660
-#: includes/oauth/tokens.php:100
+#: includes/oauth/rest.php:611
+#: includes/oauth/rest.php:673
+#: includes/oauth/rest.php:687
+#: includes/oauth/tokens.php:124
 msgid "The access token could not be issued."
 msgstr ""
 
-#: includes/oauth/rest.php:704
-#: includes/oauth/rest.php:720
+#: includes/oauth/rest.php:727
+#: includes/oauth/rest.php:743
 msgid "The refresh token grant is invalid."
 msgstr ""
 
-#: includes/oauth/rest.php:775
+#: includes/oauth/rest.php:798
 msgid "Too many revocation requests. Try again shortly."
+msgstr ""
+
+#: includes/oauth/rest.php:816
+msgid "The token could not be revoked."
 msgstr ""
 
 #: includes/oauth/schema.php:270
@@ -7791,28 +7797,32 @@ msgstr ""
 msgid "The OAuth schema version"
 msgstr ""
 
-#: includes/oauth/schema.php:401
+#: includes/oauth/schema.php:408
 msgid "Agent Abilities for MCP could not finish setting up its OAuth database tables. OAuth may not work correctly until the update completes; the plugin retries automatically on the next admin or REST request."
 msgstr ""
 
-#: includes/oauth/tokens.php:179
-#: includes/oauth/tokens.php:274
+#: includes/oauth/tokens.php:203
+#: includes/oauth/tokens.php:309
 msgid "The refresh token is invalid."
 msgstr ""
 
-#: includes/oauth/tokens.php:191
+#: includes/oauth/tokens.php:219
 msgid "The refresh token has already been used; the token chain has been revoked."
 msgstr ""
 
-#: includes/oauth/tokens.php:199
+#: includes/oauth/tokens.php:220
+msgid "The refresh token has already been used."
+msgstr ""
+
+#: includes/oauth/tokens.php:228
 msgid "The refresh token was issued to a different client."
 msgstr ""
 
-#: includes/oauth/tokens.php:208
+#: includes/oauth/tokens.php:237
 msgid "The client is no longer active."
 msgstr ""
 
-#: includes/oauth/tokens.php:218
+#: includes/oauth/tokens.php:247
 msgid "The refresh token has expired."
 msgstr ""
 

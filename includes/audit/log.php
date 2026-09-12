@@ -179,17 +179,25 @@ function aafm_activity_log_schema_verify(): bool {
  * not list, so existence is probed with a trivial select. The %i placeholder quotes the identifier
  * (an internal constant).
  *
+ * 1.7.5 round 4, R4-4: this used to read '' === $wpdb->last_error as its success signal.
+ * $wpdb->query() (wp-includes/class-wpdb.php) can return false, leaving last_error untouched at
+ * '', on paths that never actually ran the query - $wpdb->ready is false, the `query` filter
+ * returns an empty query, a failed reconnection after the server has gone away - the exact
+ * last_error pitfall aafm_wpdb_scalar()'s own docblock documents (R10-1) for the option-cache
+ * reads. Under that failure shape this returned true for an ABSENT table, and finalization could
+ * stamp the current schema version despite the table never having been verified. Delegating to
+ * aafm_wpdb_scalar(), which checks $wpdb->query()'s own return value instead, closes the same gap
+ * here.
+ *
  * @param string $table Fully-prefixed table name.
  * @return bool
  */
 function aafm_activity_log_table_present( string $table ): bool {
 	global $wpdb;
 	$suppressed = $wpdb->suppress_errors( true );
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
-	$error = $wpdb->last_error;
+	$result     = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
 	$wpdb->suppress_errors( $suppressed );
-	return '' === $error;
+	return $result['ok'];
 }
 
 /**

@@ -355,17 +355,24 @@ function aafm_oauth_schema_verify(): bool {
  * not list, so existence is probed with a trivial select that sees a temporary table the same way
  * the plugin's own queries do. The %i placeholder quotes the identifier (an internal constant).
  *
+ * 1.7.5 round 4, R4-4: this used to read '' === $wpdb->last_error as its success signal, which
+ * confuses a query that never ran (three of $wpdb->query()'s own false-returning paths never
+ * touch last_error - see aafm_wpdb_scalar()'s docblock, R10-1) with one that ran and found the
+ * table. Under that failure shape an absent table (the consents table, say, after an
+ * unsuccessful CREATE) reported present, and schema finalization could stamp the current version
+ * without the normal missing-table retry ever firing. Delegating to aafm_wpdb_scalar(), which
+ * checks $wpdb->query()'s own return value, closes the same gap the activity-log table's sibling
+ * probe closes.
+ *
  * @param string $table Fully-prefixed table name.
  * @return bool
  */
 function aafm_oauth_table_present( string $table ): bool {
 	global $wpdb;
 	$suppressed = $wpdb->suppress_errors( true );
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
-	$error = $wpdb->last_error;
+	$result     = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
 	$wpdb->suppress_errors( $suppressed );
-	return '' === $error;
+	return $result['ok'];
 }
 
 /**

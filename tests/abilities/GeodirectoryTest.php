@@ -104,8 +104,18 @@ final class GeodirectoryTest extends TestCase {
 	 *
 	 * What would break this: reverting the create path to confirm post_status against $status
 	 * makes this assert an error instead of an array, and the listing would not survive.
+	 *
+	 * R4-7 (1.7.5 deferred, round 4): "future" is outside the create-listing ability's own public
+	 * schema (geodirectory.php's status argument is `'enum' => array( 'publish', 'draft',
+	 * 'pending' )`), so no MCP agent request can actually reach this executor with that value -
+	 * this test reaches it only because it calls aafm_exec_geodirectory_create_listing() directly,
+	 * bypassing schema validation. Labelled explicitly as an executor-level regression test: it
+	 * still guards real behaviour (the same confirmation logic runs for every other caller of this
+	 * executor, and a site could still reach a publish<->future disagreement through a
+	 * `wp_insert_post_data` filter that rewrites a schema-valid "publish" into "future"), but it is
+	 * not evidence that a real agent request can submit status:"future" here.
 	 */
-	public function test_create_with_future_status_and_no_future_date_lands_at_publish(): void {
+	public function test_executor_normalizes_a_direct_future_status_request_without_a_future_date_to_publish(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
 
 		$created = aafm_exec_geodirectory_create_listing(

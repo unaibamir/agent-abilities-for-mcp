@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-11T22:03:56+05:00\n"
+"POT-Creation-Date: 2026-09-12T19:33:13+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -186,7 +186,7 @@ msgstr ""
 #: includes/abilities/activity-log.php:66
 #: includes/abilities/blocks.php:137
 #: includes/abilities/comments.php:104
-#: includes/abilities/comments.php:609
+#: includes/abilities/comments.php:623
 #: includes/abilities/media.php:111
 #: includes/abilities/pages.php:99
 #: includes/abilities/posts.php:172
@@ -318,17 +318,17 @@ msgid "ID of the post/page to read. The current user must have edit access to it
 msgstr ""
 
 #: includes/abilities/avada.php:172
-#: includes/abilities/posts.php:1274
+#: includes/abilities/posts.php:1343
 msgid "ID of the post to edit."
 msgstr ""
 
 #: includes/abilities/avada.php:177
-#: includes/abilities/posts.php:1279
+#: includes/abilities/posts.php:1348
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
 #: includes/abilities/avada.php:181
-#: includes/abilities/posts.php:1283
+#: includes/abilities/posts.php:1352
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
@@ -341,7 +341,7 @@ msgid "That replacement would change the Fusion Builder shortcode structure rath
 msgstr ""
 
 #: includes/abilities/avada.php:467
-#: includes/abilities/posts.php:1654
+#: includes/abilities/posts.php:1723
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
@@ -403,15 +403,15 @@ msgstr ""
 msgid "Title for the new reusable block. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/blocks.php:390
+#: includes/abilities/blocks.php:400
 msgid "ID of the reusable block to update. The caller must have edit access to this specific block."
 msgstr ""
 
-#: includes/abilities/blocks.php:394
+#: includes/abilities/blocks.php:404
 msgid "New title for the block. Sanitized as plain text. Omit to leave the current title unchanged."
 msgstr ""
 
-#: includes/abilities/blocks.php:474
+#: includes/abilities/blocks.php:496
 msgid "ID of the reusable block to move to the Trash. The caller must have delete access to this specific block. This is a Trash move, not a permanent delete, so it can be restored."
 msgstr ""
 
@@ -476,47 +476,47 @@ msgid "ID of the post to list comments for. Omit to list approved comments acros
 msgstr ""
 
 #: includes/abilities/comments.php:103
-#: includes/abilities/comments.php:608
+#: includes/abilities/comments.php:622
 msgid "Number of comments per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted."
 msgstr ""
 
-#: includes/abilities/comments.php:349
+#: includes/abilities/comments.php:363
 msgid "ID of the comment to read. An approved comment on a public, non-password-protected post is visible to any logged-in caller; anything else (pending, spam, trashed, or on a hidden post) requires moderation rights on this comment. An unknown ID returns a generic error rather than confirming which IDs exist."
 msgstr ""
 
-#: includes/abilities/comments.php:458
+#: includes/abilities/comments.php:472
 msgid "ID of the post to comment on. Must be a real post; creating the comment requires the moderate-comments capability regardless of who owns the post."
 msgstr ""
 
-#: includes/abilities/comments.php:468
+#: includes/abilities/comments.php:482
 msgid "Comment body. Sanitized with wp_kses_post, so scripts are stripped but basic HTML survives. The comment is always created pending; it is never auto-published, even for a caller who could otherwise approve comments."
 msgstr ""
 
-#: includes/abilities/comments.php:473
+#: includes/abilities/comments.php:487
 msgid "ID of an existing comment to reply to. Must already be a comment on the same post; a comment from a different post is refused. Omit for a top-level comment."
 msgstr ""
 
-#: includes/abilities/comments.php:699
+#: includes/abilities/comments.php:713
 msgid "ID of the comment to moderate. The caller must hold moderate-comments and be able to edit this specific comment."
 msgstr ""
 
-#: includes/abilities/comments.php:704
+#: includes/abilities/comments.php:718
 msgid "Moderation action: approve (publish the comment), unapprove (return it to the pending queue), spam (mark as spam), or trash (move to the Trash)."
 msgstr ""
 
-#: includes/abilities/comments.php:790
+#: includes/abilities/comments.php:804
 msgid "Unsupported moderation action."
 msgstr ""
 
-#: includes/abilities/comments.php:847
+#: includes/abilities/comments.php:861
 msgid "ID of the comment to edit. Requires moderate-comments plus edit access to this specific comment."
 msgstr ""
 
-#: includes/abilities/comments.php:857
+#: includes/abilities/comments.php:871
 msgid "New comment body. Sanitized with wp_kses_post. Only the body changes here; the parent post, author, email, and IP can never be altered through this ability."
 msgstr ""
 
-#: includes/abilities/comments.php:984
+#: includes/abilities/comments.php:998
 msgid "ID of the comment to permanently delete. This bypasses the Trash and cannot be undone; use moderate-comment's trash action instead for a recoverable delete."
 msgstr ""
 
@@ -683,7 +683,7 @@ msgid "ID of an existing image attachment to use as the featured image. Must alr
 msgstr ""
 
 #: includes/abilities/media.php:672
-#: includes/abilities/media.php:999
+#: includes/abilities/media.php:1002
 msgid "Filename to base the stored file's name on. Only the basename is kept and sanitized, and the extension is replaced with the one matching the file's actual detected type, not the extension supplied here."
 msgstr ""
 
@@ -692,7 +692,7 @@ msgid "Base64-encoded file bytes. The decoded content must be a real jpg, png, g
 msgstr ""
 
 #: includes/abilities/media.php:681
-#: includes/abilities/media.php:1003
+#: includes/abilities/media.php:1006
 msgid "Alt text to set on the uploaded image."
 msgstr ""
 
@@ -701,8 +701,8 @@ msgid "Invalid base64 payload."
 msgstr ""
 
 #: includes/abilities/media.php:832
-#: includes/abilities/media.php:1243
-#: includes/abilities/media.php:1248
+#: includes/abilities/media.php:1246
+#: includes/abilities/media.php:1251
 msgid "File exceeds the maximum upload size."
 msgstr ""
 
@@ -714,83 +714,84 @@ msgstr ""
 msgid "Unsupported or unsafe file type."
 msgstr ""
 
-#: includes/abilities/media.php:994
+#: includes/abilities/media.php:997
 msgid "HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either."
 msgstr ""
 
-#: includes/abilities/media.php:1158
+#: includes/abilities/media.php:1161
 msgid "This server cannot safely fetch a remote URL for upload."
 msgstr ""
 
-#: includes/abilities/media.php:1162
+#: includes/abilities/media.php:1165
 msgid "This server routes outbound requests through a proxy, which this ability cannot safely pin to a validated address. Refusing."
 msgstr ""
 
-#: includes/abilities/media.php:1167
+#: includes/abilities/media.php:1170
 msgid "That is not a valid URL."
 msgstr ""
 
-#: includes/abilities/media.php:1170
+#: includes/abilities/media.php:1173
 msgid "Only https:// URLs may be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1175
+#: includes/abilities/media.php:1178
 msgid "A bare IP address may not be used as the upload URL host."
 msgstr ""
 
-#: includes/abilities/media.php:1182
+#: includes/abilities/media.php:1185
 msgid "The host could not be resolved."
 msgstr ""
 
-#: includes/abilities/media.php:1185
+#: includes/abilities/media.php:1188
 msgid "The host resolves to a private or reserved IP address."
 msgstr ""
 
-#: includes/abilities/media.php:1203
+#: includes/abilities/media.php:1206
 msgid "That port is not allowed for a remote fetch."
 msgstr ""
 
-#: includes/abilities/media.php:1226
-#: includes/abilities/media.php:1233
-#: includes/abilities/media.php:1373
-#: includes/abilities/media.php:1451
-#: includes/abilities/media.php:1489
+#: includes/abilities/media.php:1229
+#: includes/abilities/media.php:1236
+#: includes/abilities/media.php:1376
+#: includes/abilities/media.php:1474
+#: includes/abilities/media.php:1484
+#: includes/abilities/media.php:1522
 msgid "The URL could not be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1251
+#: includes/abilities/media.php:1254
 msgid "The URL returned no data."
 msgstr ""
 
-#: includes/abilities/media.php:1521
+#: includes/abilities/media.php:1554
 msgid "ID of the attachment to update."
 msgstr ""
 
-#: includes/abilities/media.php:1525
+#: includes/abilities/media.php:1558
 msgid "New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given."
 msgstr ""
 
-#: includes/abilities/media.php:1529
+#: includes/abilities/media.php:1562
 msgid "New alt text for the image, sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/media.php:1533
+#: includes/abilities/media.php:1566
 msgid "New caption, sanitized as plain text with no HTML."
 msgstr ""
 
-#: includes/abilities/media.php:1537
+#: includes/abilities/media.php:1570
 msgid "New description. Basic HTML is allowed and sanitized."
 msgstr ""
 
-#: includes/abilities/media.php:1603
+#: includes/abilities/media.php:1636
 msgid "Provide at least one field to update."
 msgstr ""
 
-#: includes/abilities/media.php:1670
+#: includes/abilities/media.php:1707
 msgid "The media item could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/media.php:1693
+#: includes/abilities/media.php:1730
 msgid "ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo."
 msgstr ""
 
@@ -1293,56 +1294,56 @@ msgid "Unsupported or unauthorized post status."
 msgstr ""
 
 #: includes/abilities/posts.php:890
-#: includes/abilities/posts.php:1187
+#: includes/abilities/posts.php:1220
 #: includes/safety.php:343
 msgid "The title exceeds the maximum allowed length."
 msgstr ""
 
-#: includes/abilities/posts.php:1102
+#: includes/abilities/posts.php:1135
 msgid "ID of the post to update."
 msgstr ""
 
-#: includes/abilities/posts.php:1619
+#: includes/abilities/posts.php:1688
 msgid "That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly."
 msgstr ""
 
-#: includes/abilities/posts.php:1704
+#: includes/abilities/posts.php:1773
 msgid "Literal text to find. Matched as-is, not as a regular expression."
 msgstr ""
 
-#: includes/abilities/posts.php:1708
+#: includes/abilities/posts.php:1777
 msgid "Literal text to substitute for every match."
 msgstr ""
 
-#: includes/abilities/posts.php:1713
+#: includes/abilities/posts.php:1782
 msgid "Slug of an allowlisted content type to scope the replace to. Defaults to post."
 msgstr ""
 
-#: includes/abilities/posts.php:1718
+#: includes/abilities/posts.php:1787
 msgid "Post status to scope the replace to. Defaults to publish."
 msgstr ""
 
-#: includes/abilities/posts.php:1723
+#: includes/abilities/posts.php:1792
 msgid "When true (the default), previews the match without writing anything. Pass false to apply the change."
 msgstr ""
 
-#: includes/abilities/posts.php:1739
+#: includes/abilities/posts.php:1808
 msgid "Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content."
 msgstr ""
 
-#: includes/abilities/posts.php:1743
+#: includes/abilities/posts.php:1812
 msgid "Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal."
 msgstr ""
 
-#: includes/abilities/posts.php:1975
+#: includes/abilities/posts.php:2044
 msgid "ID of the content item to update."
 msgstr ""
 
-#: includes/abilities/posts.php:2060
+#: includes/abilities/posts.php:2129
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2127
+#: includes/abilities/posts.php:2196
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -1436,39 +1437,39 @@ msgstr ""
 msgid "The %s URL does not resolve to a media-library attachment, so Rank Math cannot render it. Add the image to the media library and pass its attachment URL."
 msgstr ""
 
-#: includes/abilities/rankmath.php:581
+#: includes/abilities/rankmath.php:585
 #: includes/abilities/slim-seo.php:292
 #: includes/abilities/slim-seo.php:299
-#: includes/abilities/yoast.php:455
+#: includes/abilities/yoast.php:459
 msgid "The SEO fields could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/rankmath.php:617
+#: includes/abilities/rankmath.php:621
 msgid "ID of the post whose Rank Math schema of this type to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/rankmath.php:622
-#: includes/abilities/rankmath.php:694
+#: includes/abilities/rankmath.php:626
+#: includes/abilities/rankmath.php:698
 msgid "The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase)."
 msgstr ""
 
-#: includes/abilities/rankmath.php:689
+#: includes/abilities/rankmath.php:693
 msgid "ID of the post whose Rank Math schema of this type to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/rankmath.php:698
+#: includes/abilities/rankmath.php:702
 msgid "The JSON-LD schema object to store for this type. Recursively sanitized: values under url-ish keys (url, image, logo, sameAs, @id) are treated as URLs and dropped if unsafe, other scalar leaves are stripped of markup, and the tree is depth-limited."
 msgstr ""
 
-#: includes/abilities/rankmath.php:763
+#: includes/abilities/rankmath.php:774
 msgid "The schema could not be saved. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/rankmath.php:792
+#: includes/abilities/rankmath.php:803
 msgid "ID of the post to render the Rank Math SEO head for."
 msgstr ""
 
-#: includes/abilities/rankmath.php:848
+#: includes/abilities/rankmath.php:859
 msgid "Rank Math could not render the SEO head for this post. This usually means the Rank Math setup wizard has not been completed or skipped, so its front-end head renderer is not initialised."
 msgstr ""
 
@@ -3764,7 +3765,7 @@ msgstr ""
 msgid "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post."
 msgstr ""
 
-#: includes/abilities/yoast.php:479
+#: includes/abilities/yoast.php:483
 msgid "ID of the post to render the Yoast SEO head for."
 msgstr ""
 
@@ -3790,9 +3791,9 @@ msgstr ""
 #: includes/admin/allowlist.php:180
 #: includes/admin/bridge-directory.php:793
 #: includes/admin/connection.php:586
-#: includes/admin/connection.php:629
-#: includes/admin/connection.php:664
-#: includes/admin/connection.php:720
+#: includes/admin/connection.php:637
+#: includes/admin/connection.php:672
+#: includes/admin/connection.php:734
 #: includes/admin/page.php:481
 #: includes/admin/page.php:534
 #: includes/admin/page.php:782
@@ -3808,7 +3809,7 @@ msgstr ""
 #: includes/admin/review-request.php:757
 #: includes/admin/review-request.php:793
 #: includes/admin/settings.php:131
-#: includes/admin/settings.php:596
+#: includes/admin/settings.php:600
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -3845,7 +3846,7 @@ msgid "No scopes narrowed yet. Every role and connection can reach everything en
 msgstr ""
 
 #: includes/admin/allowlist.php:288
-#: includes/admin/connection.php:954
+#: includes/admin/connection.php:968
 msgid "Scope"
 msgstr ""
 
@@ -3899,15 +3900,15 @@ msgid "Choose a connection…"
 msgstr ""
 
 #: includes/admin/allowlist.php:352
-#: includes/admin/connection.php:855
-#: includes/admin/connection.php:960
+#: includes/admin/connection.php:869
+#: includes/admin/connection.php:974
 msgid "(unnamed client)"
 msgstr ""
 
 #. translators: 1: client display name, 2: truncated client id.
 #. translators: 1: ability name, 2: human-readable reason it was left out.
 #: includes/admin/allowlist.php:357
-#: includes/server.php:1430
+#: includes/server.php:1497
 #, php-format
 msgid "%1$s (%2$s)"
 msgstr ""
@@ -4227,93 +4228,93 @@ msgid "You are not allowed to create users."
 msgstr ""
 
 #: includes/admin/connection.php:591
-#: includes/admin/connection.php:634
+#: includes/admin/connection.php:642
 msgid "Missing client."
 msgstr ""
 
-#: includes/admin/connection.php:606
+#: includes/admin/connection.php:614
 msgid "Could not fully revoke the client. Please try again."
 msgstr ""
 
-#: includes/admin/connection.php:641
+#: includes/admin/connection.php:649
 msgid "Client not found."
 msgstr ""
 
-#: includes/admin/connection.php:671
+#: includes/admin/connection.php:679
 msgid "Missing grant."
 msgstr ""
 
-#: includes/admin/connection.php:686
+#: includes/admin/connection.php:700
 msgid "Could not fully revoke the grant. Please try again."
 msgstr ""
 
-#: includes/admin/connection.php:822
+#: includes/admin/connection.php:836
 msgid "Registered clients"
 msgstr ""
 
 #. translators: %s: number of registered OAuth clients.
-#: includes/admin/connection.php:826
+#: includes/admin/connection.php:840
 #, php-format
 msgid "Registered clients (%s)"
 msgid_plural "Registered clients (%s)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/connection.php:831
+#: includes/admin/connection.php:845
 msgid "Apps that have registered to connect over OAuth. Revoking a client turns it off and ends its active sessions right away."
 msgstr ""
 
-#: includes/admin/connection.php:834
+#: includes/admin/connection.php:848
 msgid "No clients have registered yet."
 msgstr ""
 
-#: includes/admin/connection.php:838
-#: includes/admin/connection.php:953
+#: includes/admin/connection.php:852
+#: includes/admin/connection.php:967
 msgid "Client"
 msgstr ""
 
-#: includes/admin/connection.php:839
+#: includes/admin/connection.php:853
 msgid "Client ID"
 msgstr ""
 
-#: includes/admin/connection.php:840
+#: includes/admin/connection.php:854
 msgid "Redirect URIs"
 msgstr ""
 
-#: includes/admin/connection.php:841
+#: includes/admin/connection.php:855
 msgid "Created"
 msgstr ""
 
-#: includes/admin/connection.php:842
+#: includes/admin/connection.php:856
 msgid "Active tokens"
 msgstr ""
 
-#: includes/admin/connection.php:843
+#: includes/admin/connection.php:857
 #: includes/admin/page.php:1258
 msgid "Status"
 msgstr ""
 
-#: includes/admin/connection.php:846
+#: includes/admin/connection.php:860
 msgid "Marks this client as an AI agent connection rather than an ordinary human client, surfaced on the activity log."
 msgstr ""
 
-#: includes/admin/connection.php:847
+#: includes/admin/connection.php:861
 msgid "Agent"
 msgstr ""
 
-#: includes/admin/connection.php:849
-#: includes/admin/connection.php:956
+#: includes/admin/connection.php:863
+#: includes/admin/connection.php:970
 msgid "Action"
 msgstr ""
 
-#: includes/admin/connection.php:870
-#: includes/admin/connection.php:1068
-#: includes/admin/connection.php:1170
-#: includes/admin/connection.php:1211
-#: includes/admin/connection.php:1224
-#: includes/admin/connection.php:1427
-#: includes/admin/connection.php:1440
-#: includes/admin/connection.php:1495
+#: includes/admin/connection.php:884
+#: includes/admin/connection.php:1082
+#: includes/admin/connection.php:1184
+#: includes/admin/connection.php:1225
+#: includes/admin/connection.php:1238
+#: includes/admin/connection.php:1441
+#: includes/admin/connection.php:1454
+#: includes/admin/connection.php:1509
 #: includes/admin/dashboard.php:532
 #: includes/admin/page.php:2743
 #: includes/admin/quickconnect.php:491
@@ -4321,231 +4322,231 @@ msgstr ""
 msgid "Copy"
 msgstr ""
 
-#: includes/admin/connection.php:871
+#: includes/admin/connection.php:885
 msgid "Copy the full client ID"
 msgstr ""
 
-#: includes/admin/connection.php:879
+#: includes/admin/connection.php:893
 msgid "None"
 msgstr ""
 
-#: includes/admin/connection.php:894
+#: includes/admin/connection.php:908
 #: includes/admin/integrations.php:397
 msgid "Active"
 msgstr ""
 
-#: includes/admin/connection.php:896
-#: includes/admin/connection.php:915
+#: includes/admin/connection.php:910
+#: includes/admin/connection.php:929
 #: includes/admin/page.php:201
 msgid "Revoked"
 msgstr ""
 
-#: includes/admin/connection.php:904
+#: includes/admin/connection.php:918
 msgid "Agent identity"
 msgstr ""
 
-#: includes/admin/connection.php:912
-#: includes/admin/connection.php:1004
+#: includes/admin/connection.php:926
+#: includes/admin/connection.php:1018
 msgid "Revoke"
 msgstr ""
 
-#: includes/admin/connection.php:928
+#: includes/admin/connection.php:942
 msgid "Active grants"
 msgstr ""
 
 #. translators: %s: number of active OAuth grants.
-#: includes/admin/connection.php:932
+#: includes/admin/connection.php:946
 #, php-format
 msgid "Active grants (%s)"
 msgid_plural "Active grants (%s)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/connection.php:937
+#: includes/admin/connection.php:951
 msgid "People who have approved an app to act as them. Revoking a grant ends that connection; they would need to approve again to reconnect."
 msgstr ""
 
-#: includes/admin/connection.php:940
+#: includes/admin/connection.php:954
 msgid "No one has approved an OAuth connection yet."
 msgstr ""
 
-#: includes/admin/connection.php:942
+#: includes/admin/connection.php:956
 msgid "The app can only do what this user's role allows and what you have turned on under Abilities."
 msgstr ""
 
-#: includes/admin/connection.php:947
+#: includes/admin/connection.php:961
 msgid "User"
 msgstr ""
 
-#: includes/admin/connection.php:950
+#: includes/admin/connection.php:964
 msgid "The user's role right now, not necessarily what it was when they approved this connection. A token always acts with whatever this identity can currently do."
 msgstr ""
 
-#: includes/admin/connection.php:951
+#: includes/admin/connection.php:965
 msgid "Current role"
 msgstr ""
 
-#: includes/admin/connection.php:955
+#: includes/admin/connection.php:969
 msgid "Granted"
 msgstr ""
 
-#: includes/admin/connection.php:981
+#: includes/admin/connection.php:995
 msgid "No role"
 msgstr ""
 
-#: includes/admin/connection.php:985
+#: includes/admin/connection.php:999
 msgid "This connection currently acts with full administrator access."
 msgstr ""
 
-#: includes/admin/connection.php:997
+#: includes/admin/connection.php:1011
 msgid "Full access"
 msgstr ""
 
-#: includes/admin/connection.php:1060
+#: includes/admin/connection.php:1074
 #: includes/admin/dashboard.php:514
 msgid "MCP endpoint"
 msgstr ""
 
-#: includes/admin/connection.php:1069
-#: includes/admin/connection.php:1171
+#: includes/admin/connection.php:1083
+#: includes/admin/connection.php:1185
 msgid "Copy the MCP endpoint URL"
 msgstr ""
 
-#: includes/admin/connection.php:1079
+#: includes/admin/connection.php:1093
 msgid "Connect with OAuth"
 msgstr ""
 
-#: includes/admin/connection.php:1080
+#: includes/admin/connection.php:1094
 msgid "Recommended"
 msgstr ""
 
-#: includes/admin/connection.php:1084
+#: includes/admin/connection.php:1098
 msgid "Paste your site's MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file."
 msgstr ""
 
-#: includes/admin/connection.php:1094
+#: includes/admin/connection.php:1108
 msgid "If a security or membership plugin on this site restricts the WordPress REST API to logged-in users, OAuth connections will fail: an agent has to reach the sign-in and token steps before it is logged in. Application Passwords are not affected. If a connection never completes, check your REST API restrictions first."
 msgstr ""
 
-#: includes/admin/connection.php:1101
-#: includes/admin/connection.php:1370
+#: includes/admin/connection.php:1115
+#: includes/admin/connection.php:1384
 msgid "Your operating system"
 msgstr ""
 
-#: includes/admin/connection.php:1108
-#: includes/admin/connection.php:1376
+#: includes/admin/connection.php:1122
+#: includes/admin/connection.php:1390
 msgid "macOS / Linux"
 msgstr ""
 
-#: includes/admin/connection.php:1112
-#: includes/admin/connection.php:1380
-#: includes/admin/connection.php:1459
+#: includes/admin/connection.php:1126
+#: includes/admin/connection.php:1394
+#: includes/admin/connection.php:1473
 msgid "Windows"
 msgstr ""
 
-#: includes/admin/connection.php:1118
-#: includes/admin/connection.php:1386
+#: includes/admin/connection.php:1132
+#: includes/admin/connection.php:1400
 msgid "Your client"
 msgstr ""
 
-#: includes/admin/connection.php:1190
+#: includes/admin/connection.php:1204
 msgid "Your site looks local. If the client throws a certificate error, use the bridge snippet below and point NODE_EXTRA_CA_CERTS at your mkcert root CA."
 msgstr ""
 
-#: includes/admin/connection.php:1194
+#: includes/admin/connection.php:1208
 msgid "Need a local server instead? Use the mcp-remote bridge."
 msgstr ""
 
-#: includes/admin/connection.php:1245
+#: includes/admin/connection.php:1259
 msgid "OAuth is turned off. Enable it under Settings to use the browser-approval flow, or connect with an Application Password below."
 msgstr ""
 
 #. translators: %s: comma-separated list of hosted client names, e.g. "ChatGPT, Claude, and Manus".
-#: includes/admin/connection.php:1265
+#: includes/admin/connection.php:1279
 #, php-format
 msgid "%s connect over OAuth only, so they need OAuth turned on - the Application Password path below will not work for them."
 msgstr ""
 
-#: includes/admin/connection.php:1284
+#: includes/admin/connection.php:1298
 msgid "OAuth not working? Connect with an Application Password"
 msgstr ""
 
-#: includes/admin/connection.php:1292
+#: includes/admin/connection.php:1306
 msgid "An Application Password is a whole-site WordPress credential, not something this plugin can scope down. It authenticates the connected user across all of WordPress, including the REST API and XML-RPC, with everything that user's role allows, not only the abilities you turn on below. The allowlist, the high-risk floor, and the activity log on this plugin's tabs all apply to calls made through this MCP endpoint only, never to anything done with the same password elsewhere. OAuth above does not have this limit: a token this plugin issues only ever authenticates this one endpoint."
 msgstr ""
 
-#: includes/admin/connection.php:1324
+#: includes/admin/connection.php:1338
 #: includes/admin/quickconnect.php:511
 msgid "Create a dedicated agent user"
 msgstr ""
 
-#: includes/admin/connection.php:1325
+#: includes/admin/connection.php:1339
 msgid "Give the agent its own user with the least privilege it needs. It can only do what that user's role allows, and every ability is off until you turn it on."
 msgstr ""
 
-#: includes/admin/connection.php:1332
+#: includes/admin/connection.php:1346
 #: includes/admin/dashboard.php:332
 msgid "Done"
 msgstr ""
 
 #. translators: %s: the agent user's login.
-#: includes/admin/connection.php:1336
+#: includes/admin/connection.php:1350
 #, php-format
 msgid "The %s user already exists, so you can move straight to connecting your client."
 msgstr ""
 
-#: includes/admin/connection.php:1345
+#: includes/admin/connection.php:1359
 #: includes/admin/page.php:178
 msgid "Edit user"
 msgstr ""
 
-#: includes/admin/connection.php:1352
+#: includes/admin/connection.php:1366
 #: includes/admin/quickconnect.php:514
 msgid "Agent username"
 msgstr ""
 
-#: includes/admin/connection.php:1352
+#: includes/admin/connection.php:1366
 #: includes/admin/quickconnect.php:515
 msgid "Create agent user"
 msgstr ""
 
-#: includes/admin/connection.php:1360
+#: includes/admin/connection.php:1374
 msgid "Connect your client"
 msgstr ""
 
-#: includes/admin/connection.php:1361
+#: includes/admin/connection.php:1375
 msgid "Generate an Application Password for the agent user (Users → Profile → Application Passwords), pick your client, then copy the config."
 msgstr ""
 
-#: includes/admin/connection.php:1447
+#: includes/admin/connection.php:1461
 msgid "On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves - use the Windows tab above."
 msgstr ""
 
-#: includes/admin/connection.php:1449
+#: includes/admin/connection.php:1463
 msgid "If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>\"NODE_TLS_REJECT_UNAUTHORIZED\": \"0\"</code> to <code>env</code> for local testing only, never on a production site."
 msgstr ""
 
-#: includes/admin/connection.php:1451
+#: includes/admin/connection.php:1465
 msgid "This site looks local, so that line is already included above."
 msgstr ""
 
-#: includes/admin/connection.php:1464
+#: includes/admin/connection.php:1478
 msgid "Certificate"
 msgstr ""
 
-#: includes/admin/connection.php:1480
+#: includes/admin/connection.php:1494
 msgid "Show config for a specific client"
 msgstr ""
 
-#: includes/admin/connection.php:1513
+#: includes/admin/connection.php:1527
 msgid "Check the endpoint is reachable"
 msgstr ""
 
-#: includes/admin/connection.php:1514
+#: includes/admin/connection.php:1528
 msgid "This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view - your agent connects as the low-privilege user above and will usually see fewer tools."
 msgstr ""
 
-#: includes/admin/connection.php:1521
+#: includes/admin/connection.php:1535
 msgid "Check endpoint"
 msgstr ""
 
@@ -5430,7 +5431,18 @@ msgstr ""
 msgid "high-risk"
 msgstr ""
 
-#: includes/admin/onboarding-pointer.php:170
+#. translators: %s: the name of the setting, for example "Read-only mode".
+#: includes/admin/onboarding-pointer.php:102
+#: includes/helpers.php:2499
+#, php-format
+msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
+msgstr ""
+
+#: includes/admin/onboarding-pointer.php:103
+msgid "The first-activation pointer"
+msgstr ""
+
+#: includes/admin/onboarding-pointer.php:205
 #: includes/admin/page.php:40
 #: includes/admin/page.php:41
 #: includes/admin/page.php:945
@@ -5438,19 +5450,19 @@ msgstr ""
 #: includes/admin/quickconnect.php:435
 #: includes/catalog.php:105
 #: includes/oauth/consent-template.php:235
-#: includes/server.php:1549
+#: includes/server.php:1629
 msgid "Agent Abilities for MCP"
 msgstr ""
 
-#: includes/admin/onboarding-pointer.php:171
+#: includes/admin/onboarding-pointer.php:206
 msgid "Connect an AI agent to your site. It takes about two minutes."
 msgstr ""
 
-#: includes/admin/onboarding-pointer.php:172
+#: includes/admin/onboarding-pointer.php:207
 msgid "Start setup"
 msgstr ""
 
-#: includes/admin/onboarding-pointer.php:173
+#: includes/admin/onboarding-pointer.php:208
 msgid "Dismiss"
 msgstr ""
 
@@ -5674,7 +5686,7 @@ msgstr ""
 
 #: includes/admin/page.php:229
 #: includes/admin/quickconnect.php:701
-#: includes/admin/settings.php:675
+#: includes/admin/settings.php:679
 msgid "OAuth"
 msgstr ""
 
@@ -6584,14 +6596,14 @@ msgstr ""
 #: includes/admin/settings.php:227
 #: includes/admin/settings.php:231
 #: includes/admin/settings.php:312
-#: includes/admin/settings.php:647
+#: includes/admin/settings.php:651
 msgid "Enable OAuth"
 msgstr ""
 
 #: includes/admin/quickconnect.php:353
 #: includes/admin/settings.php:186
 #: includes/admin/settings.php:302
-#: includes/admin/settings.php:714
+#: includes/admin/settings.php:718
 msgid "Read-only mode"
 msgstr ""
 
@@ -6742,8 +6754,8 @@ msgid "Safety guarantees"
 msgstr ""
 
 #: includes/admin/quickconnect.php:624
-#: includes/admin/settings.php:715
-#: includes/admin/settings.php:755
+#: includes/admin/settings.php:719
+#: includes/admin/settings.php:759
 msgid "Off by default"
 msgstr ""
 
@@ -6854,6 +6866,7 @@ msgid "Unknown action."
 msgstr ""
 
 #: includes/admin/review-request.php:768
+#: includes/admin/review-request.php:806
 msgid "Your answer"
 msgstr ""
 
@@ -6865,7 +6878,7 @@ msgstr ""
 #: includes/admin/settings.php:226
 #: includes/admin/settings.php:227
 #: includes/admin/settings.php:319
-#: includes/admin/settings.php:659
+#: includes/admin/settings.php:663
 msgid "Enable dynamic client registration"
 msgstr ""
 
@@ -6882,17 +6895,17 @@ msgid "The activity log retention setting"
 msgstr ""
 
 #: includes/admin/settings.php:245
-#: includes/admin/settings.php:804
+#: includes/admin/settings.php:808
 msgid "Force draft on create"
 msgstr ""
 
 #: includes/admin/settings.php:246
-#: includes/admin/settings.php:815
+#: includes/admin/settings.php:819
 msgid "Strict block validation"
 msgstr ""
 
 #: includes/admin/settings.php:247
-#: includes/admin/settings.php:866
+#: includes/admin/settings.php:870
 msgid "Delete data on uninstall"
 msgstr ""
 
@@ -6921,227 +6934,227 @@ msgstr ""
 msgid "High-risk abilities could not be locked: object cache stale"
 msgstr ""
 
-#: includes/admin/settings.php:601
+#: includes/admin/settings.php:605
 msgid "Reset did not fully complete. Some settings, the activity log, or OAuth data may still hold their old state - please try again."
 msgstr ""
 
-#: includes/admin/settings.php:607
+#: includes/admin/settings.php:611
 msgid "Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone."
 msgstr ""
 
-#: includes/admin/settings.php:650
+#: includes/admin/settings.php:654
 msgid "Let agents connect by pasting your site URL."
 msgstr ""
 
-#: includes/admin/settings.php:651
+#: includes/admin/settings.php:655
 msgid "Let agents connect by pasting your site URL. Application Passwords keep working either way."
 msgstr ""
 
-#: includes/admin/settings.php:662
+#: includes/admin/settings.php:666
 msgid "Let agents self-register a client automatically."
 msgstr ""
 
-#: includes/admin/settings.php:663
+#: includes/admin/settings.php:667
 msgid "On by default, so ChatGPT and Claude can connect. Turn it off to require manual client setup."
 msgstr ""
 
-#: includes/admin/settings.php:669
+#: includes/admin/settings.php:673
 msgid "If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it."
 msgstr ""
 
-#: includes/admin/settings.php:685
+#: includes/admin/settings.php:689
 msgid "These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need."
 msgstr ""
 
-#: includes/admin/settings.php:698
+#: includes/admin/settings.php:702
 msgid "Let agents read this site, and nothing else."
 msgstr ""
 
-#: includes/admin/settings.php:699
+#: includes/admin/settings.php:703
 msgid "While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable."
 msgstr ""
 
-#: includes/admin/settings.php:703
+#: includes/admin/settings.php:707
 msgid "That covers this plugin's own abilities and any bridged in from other plugins. It never turns anything on for you: your selections are kept exactly as they are, so switching this back off restores them."
 msgstr ""
 
-#: includes/admin/settings.php:704
+#: includes/admin/settings.php:708
 msgid "A bridged ability counts as a read only when the plugin that wrote it says so. That is the same declaration this plugin already trusts elsewhere, but it is the other plugin making it, not this one."
 msgstr ""
 
-#: includes/admin/settings.php:705
+#: includes/admin/settings.php:709
 msgid "Every flip of this switch is recorded in the activity log, and those entries expire on the same retention schedule as everything else in it."
 msgstr ""
 
-#: includes/admin/settings.php:708
+#: includes/admin/settings.php:712
 msgid "See more about read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:734
+#: includes/admin/settings.php:738
 msgid "Read-only mode is on, so this does nothing right now. Every high-risk ability writes, and read-only mode is already holding all of them. Turn read-only mode off above to use this switch."
 msgstr ""
 
-#: includes/admin/settings.php:740
+#: includes/admin/settings.php:744
 msgid "Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually."
 msgstr ""
 
-#: includes/admin/settings.php:741
+#: includes/admin/settings.php:745
 msgid "While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab."
 msgstr ""
 
-#: includes/admin/settings.php:743
+#: includes/admin/settings.php:747
 msgid "Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart."
 msgstr ""
 
-#: includes/admin/settings.php:744
+#: includes/admin/settings.php:748
 msgid "This switch covers this plugin's own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately."
 msgstr ""
 
-#: includes/admin/settings.php:745
+#: includes/admin/settings.php:749
 msgid "The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting below if you want a longer record of when the category was opened."
 msgstr ""
 
-#: includes/admin/settings.php:748
+#: includes/admin/settings.php:752
 msgid "See more about the high-risk category"
 msgstr ""
 
-#: includes/admin/settings.php:754
+#: includes/admin/settings.php:758
 msgid "Unlock the category"
 msgstr ""
 
-#: includes/admin/settings.php:758
+#: includes/admin/settings.php:762
 msgid "Held by read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:770
+#: includes/admin/settings.php:774
 msgid "Rate limit"
 msgstr ""
 
-#: includes/admin/settings.php:771
+#: includes/admin/settings.php:775
 msgid "Per minute"
 msgstr ""
 
-#: includes/admin/settings.php:775
+#: includes/admin/settings.php:779
 msgid "Rate limit, per minute"
 msgstr ""
 
-#: includes/admin/settings.php:777
+#: includes/admin/settings.php:781
 msgid "How many agent calls one connection can make per minute. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter."
 msgstr ""
 
-#: includes/admin/settings.php:785
+#: includes/admin/settings.php:789
 msgid "Before you save a list with anything in it, add the IP address your AI client connects from. As soon as this list has one entry, any request from an address that is not on it is blocked, including your own agent. Get it wrong and every agent call stops."
 msgstr ""
 
-#: includes/admin/settings.php:790
+#: includes/admin/settings.php:794
 msgid "IP allowlist"
 msgstr ""
 
-#: includes/admin/settings.php:791
+#: includes/admin/settings.php:795
 msgid "One per line"
 msgstr ""
 
-#: includes/admin/settings.php:795
+#: includes/admin/settings.php:799
 msgid "IP allowlist, one per line"
 msgstr ""
 
-#: includes/admin/settings.php:796
+#: includes/admin/settings.php:800
 msgid "One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped."
 msgstr ""
 
-#: includes/admin/settings.php:806
+#: includes/admin/settings.php:810
 msgid "Save the content an agent creates as a draft, no matter what status the request asked for."
 msgstr ""
 
-#: includes/admin/settings.php:807
+#: includes/admin/settings.php:811
 msgid "Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Things without a draft state (media, menus, terms, comments, users, coupons, orders) and product variations are not affected."
 msgstr ""
 
-#: includes/admin/settings.php:817
+#: includes/admin/settings.php:821
 msgid "Reject an agent write when its block markup would show as invalid content in the editor."
 msgstr ""
 
-#: includes/admin/settings.php:818
+#: includes/admin/settings.php:822
 msgid "When this is off (the default), a write with questionable block markup still saves, and the agent is sent a warning so it can fix its next attempt. Turn it on to refuse the write instead, so nothing that could look broken in the editor is ever stored."
 msgstr ""
 
-#: includes/admin/settings.php:825
+#: includes/admin/settings.php:829
 msgid "Maximum title length"
 msgstr ""
 
-#: includes/admin/settings.php:826
+#: includes/admin/settings.php:830
 msgid "Characters"
 msgstr ""
 
-#: includes/admin/settings.php:830
+#: includes/admin/settings.php:834
 msgid "Maximum title length, in characters"
 msgstr ""
 
-#: includes/admin/settings.php:832
+#: includes/admin/settings.php:836
 msgid "The longest title, in characters, an agent can set. Set it to 0 to leave the limit off."
 msgstr ""
 
-#: includes/admin/settings.php:839
+#: includes/admin/settings.php:843
 msgid "Keep activity log for"
 msgstr ""
 
-#: includes/admin/settings.php:840
+#: includes/admin/settings.php:844
 msgid "Days"
 msgstr ""
 
-#: includes/admin/settings.php:844
+#: includes/admin/settings.php:848
 msgid "Keep activity log for, in days"
 msgstr ""
 
-#: includes/admin/settings.php:846
+#: includes/admin/settings.php:850
 msgid "How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry."
 msgstr ""
 
-#: includes/admin/settings.php:857
+#: includes/admin/settings.php:861
 msgid "Permanently remove all plugin data when the plugin is deleted."
 msgstr ""
 
-#: includes/admin/settings.php:858
+#: includes/admin/settings.php:862
 msgid "When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone."
 msgstr ""
 
-#: includes/admin/settings.php:860
+#: includes/admin/settings.php:864
 msgid "See more about deleting data on uninstall"
 msgstr ""
 
-#: includes/admin/settings.php:861
+#: includes/admin/settings.php:865
 msgid "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin."
 msgstr ""
 
-#: includes/admin/settings.php:875
+#: includes/admin/settings.php:879
 msgid "Safety controls"
 msgstr ""
 
-#: includes/admin/settings.php:882
+#: includes/admin/settings.php:886
 msgid "These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests."
 msgstr ""
 
-#: includes/admin/settings.php:894
+#: includes/admin/settings.php:898
 msgid "Save settings"
 msgstr ""
 
-#: includes/admin/settings.php:908
+#: includes/admin/settings.php:912
 msgid "Danger zone"
 msgstr ""
 
-#: includes/admin/settings.php:912
+#: includes/admin/settings.php:916
 msgid "Reset plugin"
 msgstr ""
 
-#: includes/admin/settings.php:912
+#: includes/admin/settings.php:916
 msgid "Cannot be undone"
 msgstr ""
 
-#: includes/admin/settings.php:914
+#: includes/admin/settings.php:918
 msgid "Reset plugin to defaults"
 msgstr ""
 
-#: includes/admin/settings.php:915
+#: includes/admin/settings.php:919
 msgid "Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone."
 msgstr ""
 
@@ -7526,24 +7539,18 @@ msgstr ""
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:2243
+#: includes/helpers.php:2296
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
-#. translators: %s: the name of the setting, for example "Read-only mode".
-#: includes/helpers.php:2446
-#, php-format
-msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
-msgstr ""
-
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:2464
+#: includes/helpers.php:2517
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:2485
+#: includes/helpers.php:2538
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7718,7 +7725,7 @@ msgstr ""
 msgid "The OAuth toggle migration marker"
 msgstr ""
 
-#: includes/oauth/discovery.php:249
+#: includes/oauth/discovery.php:277
 msgid "The DCR default-on migration marker"
 msgstr ""
 
@@ -7929,61 +7936,61 @@ msgstr ""
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 
-#: includes/server.php:932
+#: includes/server.php:978
 msgid "Authentication required."
 msgstr ""
 
-#: includes/server.php:951
+#: includes/server.php:997
 msgid "Your network address is not allowed to use this endpoint."
 msgstr ""
 
-#: includes/server.php:999
+#: includes/server.php:1045
 msgid "The MCP request body must be a JSON object."
 msgstr ""
 
-#: includes/server.php:1438
+#: includes/server.php:1505
 msgid "Agent Abilities for MCP left one ability out of the agent tool list because it exceeded a safety limit:"
 msgid_plural "Agent Abilities for MCP left some abilities out of the agent tool list because they exceeded a safety limit:"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/server.php:1459
+#: includes/server.php:1526
 msgid "its schema is nested too deeply"
 msgstr ""
 
-#: includes/server.php:1461
+#: includes/server.php:1528
 msgid "its schema has too many fields"
 msgstr ""
 
-#: includes/server.php:1463
+#: includes/server.php:1530
 msgid "its schema contains a value that is not valid JSON"
 msgstr ""
 
-#: includes/server.php:1465
+#: includes/server.php:1532
 msgid "its schema is too large"
 msgstr ""
 
-#: includes/server.php:1467
+#: includes/server.php:1534
 msgid "its schema could not be serialized"
 msgstr ""
 
-#: includes/server.php:1469
+#: includes/server.php:1536
 msgid "the enabled tool limit was reached"
 msgstr ""
 
-#: includes/server.php:1471
+#: includes/server.php:1538
 msgid "another plugin has already registered a tool under this name"
 msgstr ""
 
-#: includes/server.php:1473
+#: includes/server.php:1540
 msgid "it exceeded a safety limit"
 msgstr ""
 
-#: includes/server.php:1550
+#: includes/server.php:1630
 msgid "Curated, governed WordPress abilities for AI agents."
 msgstr ""
 
-#: includes/server.php:1808
+#: includes/server.php:1888
 msgid "Session could not be persisted; please retry."
 msgstr ""
 

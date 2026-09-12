@@ -170,8 +170,17 @@ final class AllowlistTest extends TestCase {
 			}
 		);
 
+		// The broken query above makes wpdb print its own HTML error block (the WP test bootstrap
+		// turns wpdb::$show_errors on), which PHPUnit's output-during-test strictness flags as
+		// risky even though the assertion below passes. Mirrors
+		// UpgradeMigrationTest::test_dcr_adoption_aborts_when_the_guard_read_fails(), which wraps
+		// the same fault-injection pattern the same way.
+		ob_start();
+		$result = aafm_ability_allowed_for_principal( 'aafm/delete-post', $user_id, null );
+		ob_end_clean();
+
 		$this->assertFalse(
-			aafm_ability_allowed_for_principal( 'aafm/delete-post', $user_id, null ),
+			$result,
 			'A read that itself fails must deny the call, not fall through to "no restriction".'
 		);
 	}

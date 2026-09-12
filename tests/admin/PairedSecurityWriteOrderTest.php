@@ -24,6 +24,10 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		remove_all_actions( 'added_option' );
 		remove_all_actions( 'updated_option' );
 		remove_all_actions( 'deleted_option' );
+		// fail_option_read() leaves its query filter in place; without removing it here, the
+		// deletes below hit the same broken query it set up and drag the leftover fault into
+		// every later test in this file.
+		remove_all_filters( 'query' );
 		unset(
 			$_POST['nonce'],
 			$_REQUEST['nonce'],
@@ -89,12 +93,19 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 
 	/**
 	 * Run an AJAX handler and return its captured JSON payload. Mirrors
-	 * PersistentObjectCacheSwitchTest::run_handler().
+	 * PersistentObjectCacheSwitchTest::run_handler(), plus hiding wpdb's own error output for the
+	 * duration: fail_option_read() below deliberately breaks a query to simulate a read failure,
+	 * and the WP test bootstrap turns wpdb::$show_errors on, so that broken query would otherwise
+	 * print an HTML error block straight into this same output buffer and corrupt the JSON body
+	 * being captured here - not a defect in the handler, just this file's own fault-injection
+	 * leaking into the response it is trying to read.
 	 *
 	 * @param callable $handler Handler function to invoke.
 	 * @return array<string,mixed>
 	 */
 	private function run_handler( callable $handler ): array {
+		global $wpdb;
+		$had_errors_shown = $wpdb->hide_errors();
 		ob_start();
 		try {
 			$handler();
@@ -102,6 +113,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 			unset( $e );
 		}
 		$body = (string) ob_get_clean();
+		$wpdb->show_errors( $had_errors_shown );
 		$json = json_decode( $body, true );
 		return is_array( $json ) ? $json : array();
 	}

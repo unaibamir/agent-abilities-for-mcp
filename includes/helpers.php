@@ -2139,6 +2139,31 @@ function aafm_generic_error(): WP_Error {
  * key (a serialized token list, for example) is compared by exact array equality instead, since
  * casting an array to string is a PHP warning, not a comparison.
  *
+ * 1.7.5 round 4, R4-1: replaying sanitize_meta() in-process cannot always reproduce what the
+ * REAL write actually stored, because not every registered sanitizer is a pure function of its
+ * input. A sanitizer keyed on invocation count, current time, or existing storage (an
+ * incrementing counter, for example) can legitimately return a different value on replay than it
+ * did during the real write, and this helper has no way to tell that apart from a genuine veto by
+ * comparing replayed output alone. So the canonical-replay comparison above is now the FIRST
+ * check, not the only one: when it matches, that is the strongest evidence and this returns true
+ * immediately. When it disagrees, this falls back to change detection against $old, the value
+ * read back BEFORE the write ran. If the requested $intended is identical to $old, nothing was
+ * actually asked to change, so there is nothing to verify a veto against (a no-op resubmission of
+ * the current value never has to survive a non-deterministic sanitizer's replay). Otherwise, a
+ * real change was requested: if $stored differs from $old, something genuinely landed - accepted
+ * even when it does not equal the replayed $expected form, since a non-deterministic or
+ * charset-dependent normalization is not distinguishable from any other legitimate landing this
+ * way. If $stored still equals $old, nothing moved: that is what a silent veto (a filter reverting
+ * to the OLD value, or an update_*_metadata short-circuit that never wrote at all) looks like, and
+ * it is still reported as unconfirmed.
+ *
+ * What this cannot detect: a veto that rewrites the value to some THIRD value (neither $old nor
+ * $intended) reads as a landed write, because state genuinely changed. That is an accepted,
+ * documented residual - the machinery here exists to catch "nothing happened", not "something
+ * unexpected happened instead"; the latter is caller-application-specific and out of scope for a
+ * shared, general-purpose confirmation helper.
+ *
+ * @param mixed  $old            The value read back from storage BEFORE the write ran.
  * @param mixed  $stored         The value read back from storage after the write.
  * @param mixed  $intended       The unslashed value the write attempted to store.
  * @param string $meta_key       Meta key.
@@ -2151,12 +2176,21 @@ function aafm_generic_error(): WP_Error {
  *                                sanitizer.
  * @return bool
  */
-function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
+function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
 	$expected = sanitize_meta( $meta_key, $intended, $object_type, $object_subtype );
-	if ( is_array( $expected ) || is_array( $stored ) ) {
-		return $stored === $expected;
+	// Any array-valued meta key (a serialized token list, e.g. Slim SEO's schema array) is
+	// compared by exact array equality throughout; casting an array to string is a PHP warning,
+	// not a comparison. A single is_array() check covers all four values consistently, since they
+	// all describe the same meta key and therefore share its shape.
+	$is_arr = is_array( $old ) || is_array( $stored ) || is_array( $intended ) || is_array( $expected );
+	if ( $is_arr ? $stored === $expected : (string) $stored === (string) $expected ) {
+		return true;
 	}
-	return (string) $stored === (string) $expected;
+	$nothing_asked = $is_arr ? $intended === $old : (string) $intended === (string) $old;
+	if ( $nothing_asked ) {
+		return true;
+	}
+	return $is_arr ? $stored !== $old : (string) $stored !== (string) $old;
 }
 
 /**
@@ -2188,10 +2222,35 @@ function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string
  * context (0) the real write used; it defaults to $post_id, matching every existing update-path
  * caller, which already sanitizes with the real, existing id and is unaffected by this parameter.
  *
+ * 1.7.5 round 4, R4-1: the in-process replay above cannot reproduce two more classes of
+ * legitimate, non-veto normalization. First, core's own wpdb layer transcodes emoji into their
+ * entity-encoded form for a title/content/excerpt column stored on a non-utf8mb4 charset
+ * (wp_encode_emoji(), applied by wp_insert_post()/wp_update_post() outside of
+ * sanitize_post_field()); replaying sanitize_post_field() alone never sees that step. Second, a
+ * save-time filter can be stateful (an incrementing counter, current-time-dependent output) and
+ * legitimately return a different value on this replay than it did during the real write. Neither
+ * is a veto. So: an exact match against the replayed $expected is accepted as the strongest
+ * evidence and returns true immediately; when it disagrees, this falls back to comparing $stored
+ * against $old, the field's value read BEFORE the write ran. If $intended equals $old, nothing was
+ * actually asked to change and there is nothing to verify. Otherwise, if $stored differs from
+ * $old, the field genuinely moved and the write is accepted even though its exact landed form
+ * could not be reproduced here. If $stored still equals $old, nothing moved - a silent veto (a
+ * filter reverting to the OLD value, or a short-circuited no-op) still reports as unconfirmed. On
+ * a CREATE, $old is always '' (the field never existed before), so a normal non-empty create is
+ * confirmed by the change alone once the exact replay disagrees, which is exactly the GeoDirectory
+ * emoji-title case this residual used to delete.
+ *
+ * What this cannot detect: a veto that rewrites the field to some THIRD value (neither $old nor
+ * $intended) still reads as a landed write, because state genuinely changed. That is an accepted,
+ * documented residual across every caller of this helper - see aafm_meta_write_confirmed()'s
+ * matching note.
+ *
  * @param int      $post_id             Post id, already saved (used for the read-back).
  * @param string   $field               Post field name (post_title, post_content, post_excerpt,
  *                                      post_status, ...).
  * @param string   $intended            The unslashed value the write attempted to persist.
+ * @param string   $old                 The field's value, read BEFORE the write ran. '' on a
+ *                                      CREATE, where the field never previously existed.
  * @param int|null $sanitize_context_id The id to recompute the canonical form with. Defaults to
  *                                      $post_id (an update, where the row already existed at
  *                                      sanitize time). Pass 0 for a create, matching what core's
@@ -2199,7 +2258,7 @@ function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string
  *                                      the row was inserted.
  * @return bool
  */
-function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended, ?int $sanitize_context_id = null ): bool {
+function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended, string $old, ?int $sanitize_context_id = null ): bool {
 	clean_post_cache( $post_id );
 	$context_id = $sanitize_context_id ?? $post_id;
 	$sanitized  = sanitize_post_field( $field, wp_slash( $intended ), $context_id, 'db' );
@@ -2208,7 +2267,14 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
 	// int and array-of-int fields) is guarded here rather than widening this function's contract.
 	$expected = wp_unslash( is_scalar( $sanitized ) ? (string) $sanitized : '' );
 	$stored   = get_post_field( $field, $post_id, 'raw' );
-	return ( is_scalar( $stored ) ? (string) $stored : '' ) === $expected;
+	$stored   = is_scalar( $stored ) ? (string) $stored : '';
+	if ( $stored === $expected ) {
+		return true;
+	}
+	if ( $intended === $old ) {
+		return true;
+	}
+	return $stored !== $old;
 }
 
 /**

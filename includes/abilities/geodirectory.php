@@ -830,8 +830,8 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 	// confirmed below.
 	$after = get_post( $post_id );
 	if ( ! $after instanceof WP_Post
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title, 0 )
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content, 0 )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title, '', 0 )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content, '', 0 )
 	) {
 		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title or content could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
 	}
@@ -957,10 +957,12 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		// address/location fields, extended to cover the core post fields too. Codex round 6
 		// B6-3: compare against each field's CANONICAL sanitize_post_field() form, not the
 		// pre-write intent, so a legitimate normalization is not mistaken for a veto.
+		// $post was read before wp_update_post() ran, so its fields are each field's genuine
+		// pre-write value.
 		$after = get_post( $id );
 		if ( ! $after instanceof WP_Post
-			|| ( array_key_exists( 'post_title', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_title', $update['post_title'] ) )
-			|| ( array_key_exists( 'post_content', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_content', $update['post_content'] ) )
+			|| ( array_key_exists( 'post_title', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_title', $update['post_title'], (string) $post->post_title ) )
+			|| ( array_key_exists( 'post_content', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_content', $update['post_content'], (string) $post->post_content ) )
 		) {
 			return new WP_Error(
 				'aafm_geodirectory_write_unconfirmed',

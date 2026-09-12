@@ -354,6 +354,7 @@ function aafm_exec_update_post_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
+	$old = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- single-key read of the pre-write value, not a meta query.
 	update_post_meta( $id, $key, wp_slash( $value ) );
 	$stored = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- single-key read-back of the just-written value, not a meta query.
 	// Codex round 5 R5-2: update_post_meta()'s return value only catches an outright failure. A
@@ -362,7 +363,7 @@ function aafm_exec_update_post_meta( array $input ) {
 	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
 	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'post', $subtype ) ) {
+	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'post', $subtype ) ) {
 		return aafm_generic_error();
 	}
 	return array(

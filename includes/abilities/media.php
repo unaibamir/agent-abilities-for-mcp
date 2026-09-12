@@ -946,7 +946,10 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 	// backslash in the alt text is stripped unless it is slashed first, exactly like the sibling
 	// meta writers.
 	if ( null !== $alt ) {
-		$alt_clean = aafm_sanitize_plain_text( $alt );
+		// Read before the write: media_handle_sideload() may already have seeded this key from
+		// the image's own EXIF/IPTC metadata, so '' is not a safe assumption for $old here.
+		$alt_before = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
+		$alt_clean  = aafm_sanitize_plain_text( $alt );
 		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $alt_clean ) );
 		// Codex round 5 R5-2: update_post_meta()'s return value was discarded outright, so a
 		// metadata filter vetoing the alt write would report success with the old alt text still
@@ -957,7 +960,7 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		// filterable call core itself makes at write time, rather than the literal 'attachment' -
 		// a get_object_subtype_post filter remapping the subtype is honoured here the same way it
 		// is at write time.
-		if ( ! aafm_meta_write_confirmed( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $attachment_id ) ) ) {
+		if ( ! aafm_meta_write_confirmed( $alt_before, get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $attachment_id ) ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
@@ -1656,8 +1659,12 @@ function aafm_exec_update_media( array $input ) {
 		}
 	}
 
-	$alt_clean = null;
+	$alt_clean  = null;
+	$alt_before = null;
 	if ( $has_alt ) {
+		// Read before the write, so the confirmation below can tell a landed change from a
+		// silent veto rather than only replaying sanitize_meta().
+		$alt_before = get_post_meta( $att_id, '_wp_attachment_image_alt', true );
 		// update_post_meta() unslashes its value, so slash here too (matches
 		// aafm_exec_update_post_meta) to preserve literal backslashes in alt text.
 		$alt_clean = aafm_sanitize_plain_text( (string) $input['alt'] );
@@ -1676,20 +1683,22 @@ function aafm_exec_update_media( array $input ) {
 	// round 6 B6-3: compare against each field's CANONICAL sanitize_post_field()/sanitize_meta()
 	// form, not the pre-write intent, so a legitimate normalization (kses for a user without
 	// unfiltered_html, the core `trim` on title) is not mistaken for a veto.
-	if ( $has_title && ! aafm_post_field_write_confirmed( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ) ) ) {
+	// $attachment was read before wp_update_post() ran, so its fields are each field's genuine
+	// pre-write value.
+	if ( $has_title && ! aafm_post_field_write_confirmed( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ), (string) $attachment->post_title ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_caption && ! aafm_post_field_write_confirmed( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ) ) ) {
+	if ( $has_caption && ! aafm_post_field_write_confirmed( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ), (string) $attachment->post_excerpt ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'] ) ) {
+	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'], (string) $attachment->post_content ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
 	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
 	// call core itself makes at write time, rather than the literal 'attachment' - a
 	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
 	// at write time.
-	if ( $has_alt && ! aafm_meta_write_confirmed( get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $att_id ) ) ) {
+	if ( $has_alt && ! aafm_meta_write_confirmed( $alt_before, get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $att_id ) ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
 

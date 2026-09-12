@@ -27,6 +27,24 @@ use AAFM\Tests\TestCase;
 class UpgradeMigrationTest extends TestCase {
 
 	/**
+	 * F9 (1.7.5 deferred): the clean test bootstrap loads the plugin on muplugins_loaded, so
+	 * aafm_oauth_dcr_adopt_on_by_default() already ran once for real before ANY test's own
+	 * fixture setup - certifying aafm_oauth_dcr_default_on_touched (its independent B2 sibling
+	 * signal) in the process. Deleting only aafm_oauth_dcr_default_on_migrated, as every DCR
+	 * adoption test here does, left that touched marker still set to '1' from bootstrap, so the
+	 * function's second guard returned early before ever reaching the DCR-enable write these
+	 * tests exercise. Clear both markers here so every test starts from a genuinely
+	 * not-yet-migrated state; a test that needs to simulate the sibling being already certified
+	 * (test_dcr_adoption_keeps_one_and_adopts_absent()'s first call) still does that explicitly
+	 * inline.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		delete_option( 'aafm_oauth_dcr_default_on_touched' );
+	}
+
+	/**
 	 * An install that updated in place from a pre-1.3.0 version has NO stored OAuth
 	 * toggle row and was running OAuth on the old on-by-default reader. The migration
 	 * writes '1' for OAuth so the surface (and any live connection) keeps working after

@@ -626,6 +626,21 @@ final class SecurityRegressionTest extends TestCase {
 					}
 					continue;
 				}
+				// R2-8 (1.7.5 deferred, round 2): a comment can legally appear ANYWHERE between
+				// import tokens, not only right after ',' or '{' (both already skip trivia only
+				// there) - one sitting between a member name and its "as" alias, e.g.
+				// `Requests /* transport */ as Net`, used to be appended into $entry verbatim,
+				// corrupting the parsed name past what record_use_alias()'s regex or
+				// trailing_name_segment() could recognise, and concealing every call through that
+				// alias from the scan. This is the general case: whitespace and comments are the
+				// only trivia PHP's grammar allows between import tokens at all, so skipping every
+				// comment here - while still appending ordinary whitespace, which is what keeps a
+				// required "<name> as <alias>" gap intact - closes it for any position, not just
+				// the two the previous two fixes happened to name.
+				if ( is_array( $t ) && in_array( $t[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) {
+					++$j;
+					continue;
+				}
 				$entry .= is_array( $t ) ? $t[1] : $t;
 				++$j;
 			}
@@ -1004,6 +1019,33 @@ final class SecurityRegressionTest extends TestCase {
 
 		$this->assertSame( 'Exception', $aliases['class']['exception'] ?? null );
 		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+	}
+
+	/**
+	 * R2-8 (1.7.5 deferred, round 2): a comment between a grouped member's name and its "as"
+	 * alias - legal PHP, `use WpOrg\Requests\{Exception, Requests /* transport *\/ as Net};` -
+	 * used to be appended into the parsed entry verbatim, so trailing_name_segment() returned
+	 * "Requests /* transport *\/" instead of "Requests" and the alias never resolved, concealing
+	 * every call through it. Also covers a comment right after "as", the other side of the same
+	 * gap. Fails if parse_use_aliases() stops discarding comment tokens mid-entry.
+	 */
+	public function test_scanner_counts_a_grouped_import_with_a_comment_around_its_alias(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\{Exception, Requests /* transport */ as Net};\nnew Exception();\nNet::get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 'Exception', $aliases['class']['exception'] ?? null );
+		$this->assertSame( 'Requests', $aliases['class']['net'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+
+		$tokens2  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\{Exception, Requests as /* transport */ Net};\nNet::get( \$url );"
+		);
+		$aliases2 = $this->parse_use_aliases( $tokens2 );
+
+		$this->assertSame( 'Requests', $aliases2['class']['net'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens2, 'Requests', $aliases2['class'] ) );
 	}
 
 	/**

@@ -1245,13 +1245,25 @@ function aafm_schema_bounds_violation( string $ability_name ): ?string {
  * only abilities that will actually register - "register up to the cap" is read literally. Every
  * omission (schema breach OR cap overflow) is recorded so it is never a silent drop.
  *
- * @param array<int,string> $tools Enabled native + bridged ability names (order preserved).
+ * $tools is expected to already be ownership-filtered by the caller (aafm_build_server_tools())
+ * before it reaches here (Codex round 10, R10-7): the cap must count only abilities this plugin
+ * actually owns, or a foreign name sitting inside the cap spends its budget and is then stripped
+ * anyway, stranding an owned ability beyond the cap for nothing. $extra_omitted carries omissions
+ * from that earlier ownership pass (name_claimed) so this call's single reconcile records the
+ * whole picture in one write rather than the caller reconciling a second time on top of it
+ * (R10-5 - see aafm_register_mcp_server()).
+ *
+ * @param array<int,string>    $tools         Ownership-filtered, enabled native + bridged ability
+ *                                              names (order preserved).
+ * @param array<string,string> $extra_omitted Ability name => reason for omissions already found
+ *                                              before this call (e.g. name_claimed), merged into
+ *                                              the single reconcile this function performs.
  * @return list<string> The bounded, still-ordered subset to register.
  */
-function aafm_preflight_bound_server_tools( array $tools ): array {
+function aafm_preflight_bound_server_tools( array $tools, array $extra_omitted = array() ): array {
 	$omitted = array();
 	$kept    = aafm_preflight_partition_server_tools( $tools, $omitted );
-	aafm_reconcile_omitted_abilities( $omitted );
+	aafm_reconcile_omitted_abilities( array_merge( $extra_omitted, $omitted ) );
 	return $kept;
 }
 
@@ -1315,10 +1327,19 @@ function aafm_preflight_cache_key( array $tools ): string {
  * hit. A modest TTL bounds the one residual staleness window (a foreign plugin altering an ability's
  * schema WITHOUT changing its name), after which the next request recomputes.
  *
- * @param array<int,string> $tools Enabled native + bridged ability names, in order.
+ * $tools is expected to already be ownership-filtered by the caller, same as the uncached
+ * function above, so the cache key and the cap both key off the owned set rather than the raw
+ * enabled set (Codex round 10, R10-7). $extra_omitted (the ownership pass's own name_claimed
+ * omissions) is merged in on both the hit and miss branches so every reconcile this function
+ * performs is the single, complete one for this pass (R10-5).
+ *
+ * @param array<int,string>    $tools         Ownership-filtered, enabled native + bridged ability
+ *                                              names, in order.
+ * @param array<string,string> $extra_omitted Ability name => reason for omissions already found
+ *                                              before this call, merged into the reconcile.
  * @return list<string> The bounded, still-ordered subset to register.
  */
-function aafm_preflight_bound_server_tools_cached( array $tools ): array {
+function aafm_preflight_bound_server_tools_cached( array $tools, array $extra_omitted = array() ): array {
 	$key    = aafm_preflight_cache_key( $tools );
 	$cached = get_transient( $key );
 	if ( is_array( $cached ) && isset( $cached['kept'], $cached['omitted'] )
@@ -1326,14 +1347,14 @@ function aafm_preflight_bound_server_tools_cached( array $tools ): array {
 	) {
 		// Cache hit: skip the walk, but still reconcile so the option/notice/log reflect the decision
 		// (cheap: one autoloaded read + compare, which early-returns when unchanged).
-		aafm_reconcile_omitted_abilities( $cached['omitted'] );
+		aafm_reconcile_omitted_abilities( array_merge( $extra_omitted, $cached['omitted'] ) );
 		return array_values( array_map( 'strval', $cached['kept'] ) );
 	}
 
 	// Cache miss: run the real walk once, reconcile as usual, then memoise the decision for this set.
 	$omitted = array();
 	$kept    = aafm_preflight_partition_server_tools( $tools, $omitted );
-	aafm_reconcile_omitted_abilities( $omitted );
+	aafm_reconcile_omitted_abilities( array_merge( $extra_omitted, $omitted ) );
 
 	set_transient(
 		$key,
@@ -1491,22 +1512,26 @@ function aafm_register_mcp_server( $adapter ): void {
 		return;
 	}
 
-	// Preflight bound the catalog before it becomes the server: drop any ability whose schema
-	// breaches the measurement limits and cap the total tool count, so neither the adapter's
-	// recursive schema serialization nor the request-time per-tool permission loop can be driven
-	// into an uncatchable memory/time fatal by a pathological enabled+bridged set. Omissions are
-	// logged and surfaced (aafm_reconcile_omitted_abilities), never silently dropped. This call
-	// already reconciles the option for THIS pass's schema/cap omissions before the name-claimed
-	// check below runs, so reading the option back afterward is always fresh, never stale.
+	// Ownership first, then the preflight bound, then one reconcile (Codex round 10, R10-5 and
+	// R10-7). Ownership filtering (aafm_build_server_tools()) is a cheap per-name lookup with no
+	// schema walk, so running it over the full enabled set here costs nothing worth capping; doing
+	// it before the preflight means the tool-count cap only ever spends its budget on abilities
+	// this plugin actually owns, instead of a foreign name occupying a slot and then being
+	// stripped anyway, stranding an owned ability beyond the cap (R10-7). The preflight bound then
+	// drops any ability whose schema breaches the measurement limits and caps the total tool count
+	// over that owned set, so neither the adapter's recursive schema serialization nor the
+	// request-time per-tool permission loop can be driven into an uncatchable memory/time fatal by
+	// a pathological enabled+bridged set. Both omission sources (name_claimed from ownership,
+	// schema/cap from the preflight) are merged into ONE reconcile call rather than the preflight
+	// reconciling first and a second pass reconciling again on top of it - the old order meant a
+	// stable name_claimed omission produced by ownership was invisible to the preflight's own
+	// reconcile, so that first call saw an empty omission map, deleted the stored option, and the
+	// second call then recreated it and re-logged the same ability as newly omitted, every request
+	// (R10-5). Omissions are logged and surfaced via aafm_reconcile_omitted_abilities, never
+	// silently dropped.
 	$claimed = array();
-	$tools   = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( aafm_all_server_ability_names() ), $claimed );
-	// Codex round 9 R9-7: fold in any name-claimed omissions on top of the fresh schema/cap set
-	// just reconciled above, rather than a second unconditional write, so the common case (no
-	// collision) costs nothing beyond the one is-empty check.
-	if ( array() !== $claimed ) {
-		$current = get_option( AAFM_OMITTED_ABILITIES_OPTION, array() );
-		aafm_reconcile_omitted_abilities( array_merge( is_array( $current ) ? $current : array(), $claimed ) );
-	}
+	$owned   = aafm_build_server_tools( aafm_all_server_ability_names(), $claimed );
+	$tools   = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
 
 	// Per-connection capability gate at request time (the user is anonymous here; see
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.

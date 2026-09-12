@@ -2161,7 +2161,12 @@ function aafm_generic_error(): WP_Error {
  * $intended) reads as a landed write, because state genuinely changed. That is an accepted,
  * documented residual - the machinery here exists to catch "nothing happened", not "something
  * unexpected happened instead"; the latter is caller-application-specific and out of scope for a
- * shared, general-purpose confirmation helper.
+ * shared, general-purpose confirmation helper. This fallback is safe here specifically because a
+ * meta veto has only one real shape: a sanitize_{type}_meta_{key} filter reverting the value, or
+ * an update_*_metadata short-circuit, both of which BLOCK the write outright and leave $stored at
+ * $old - neither can redirect the write to an attacker/filter-chosen replacement value the way a
+ * post field's wp_insert_post_data filter can (aafm_post_field_write_confirmed() does not carry
+ * this same fallback for exactly that reason - see its own docblock).
  *
  * @param mixed  $old            The value read back from storage BEFORE the write ran.
  * @param mixed  $stored         The value read back from storage after the write.

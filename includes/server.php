@@ -68,6 +68,61 @@ function aafm_mcp_tool_name( string $ability_name ): string {
  */
 function aafm_build_server_tools( array $enabled, array &$omitted = array() ): array {
 	$tools = array();
+	foreach ( aafm_ownership_filter_server_tools( $enabled, $omitted ) as $name ) {
+		// If a user is already resolved (e.g. unit tests, or a transport that resolves auth
+		// before rest_api_init), drop abilities this user cannot call. On the live HTTP path
+		// the user is anonymous here, so this is a no-op and the request-time filter does the
+		// real work - belt and suspenders, never advertising more than the catalog.
+		if ( is_user_logged_in() && ! aafm_user_can_discover_ability( $name ) ) {
+			continue;
+		}
+		$tools[] = $name;
+	}
+	return $tools;
+}
+
+/**
+ * The ownership-only half of aafm_build_server_tools(): every enabled name that resolves to an
+ * ability this plugin actually registered, with no discovery-permission check.
+ *
+ * F2 (1.7.5 deferred): aafm_register_mcp_server() used to run the combined ownership+discovery
+ * pass (aafm_build_server_tools()) over the FULL enabled set before the preflight cap, so a site
+ * with well over 1,000 enabled bridged abilities and a resolved user invoked every foreign
+ * permission callback on ordinary traffic, before the cap ever got a chance to bound the work.
+ * Splitting ownership out lets aafm_register_mcp_server() run this cheap, schema-free pass first,
+ * cap the result, and only then run the (potentially expensive) discovery check over the
+ * already-bounded set.
+ *
+ * Codex round 9 R9-7: a reserved enabled name is only safe to serve when the object registered
+ * under it is genuinely this plugin's own. aafm_register_enabled_abilities() (register.php)
+ * treats an already-registered name as an idempotent re-fire and skips re-registering it - the
+ * right call for a real re-fire, but wrong when a DIFFERENT plugin's ability claimed the name
+ * first: wp_get_ability() then resolves to the foreign object, which this function used to admit
+ * into the server with none of this plugin's permission, allowlist, rate-limit, or audit
+ * chokepoints behind it (those all live on AAFM's own decorated callbacks, never reached).
+ *
+ * Codex round 10 R10-4: the R9-7 fix first shipped as `instanceof AAFM_Rate_Limited_Ability`, but
+ * that class is public and non-final, and `wp_register_ability()` accepts a caller-chosen
+ * `ability_class`, so a foreign plugin can preclaim the name using this exact class with its own
+ * permissive callbacks and pass a class check. Object identity closes that: the object admitted
+ * here must be the SAME object aafm_register_ability_with_log() (register.php) actually returned
+ * for this name, not merely an instance of the class it happens to use.
+ *
+ * Codex round 11 R11-3: the record this check compares against used to be writable through a
+ * public setter that trusted whatever object it was handed - forgeable the same way the class
+ * check was. AAFM_Registration_Authority (includes/class-aafm-registration-authority.php) now
+ * owns that record and never accepts a ready-made object; see its docblock for the mechanism.
+ *
+ * @param array<int,string>    $enabled Enabled ability names.
+ * @param array<string,string> $omitted Receives name => reason for every enabled name left out
+ *                                       because it resolved to an object AAFM never registered,
+ *                                       so the operator can be told rather than served silently
+ *                                       (by reference, appended to, not reset - a caller that
+ *                                       does not pass one simply does not get this bookkeeping).
+ * @return list<string>
+ */
+function aafm_ownership_filter_server_tools( array $enabled, array &$omitted = array() ): array {
+	$owned = array();
 	foreach ( $enabled as $name ) {
 		$ability = wp_get_ability( $name );
 		if ( ! $ability instanceof WP_Ability ) {
@@ -85,18 +140,9 @@ function aafm_build_server_tools( array $enabled, array &$omitted = array() ): a
 			$omitted[ $name ] = 'name_claimed';
 			continue;
 		}
-		// If a user is already resolved (e.g. unit tests, or a transport that resolves auth
-		// before rest_api_init), drop abilities this user cannot call. On the live HTTP path
-		// the user is anonymous here, so this is a no-op and the request-time filter does the
-		// real work - belt and suspenders, never advertising more than the catalog.
-		if ( is_user_logged_in() ) {
-			if ( ! aafm_user_can_discover_ability( $name ) ) {
-				continue;
-			}
-		}
-		$tools[] = $name;
+		$owned[] = $name;
 	}
-	return $tools;
+	return $owned;
 }
 
 /**
@@ -1513,25 +1559,34 @@ function aafm_register_mcp_server( $adapter ): void {
 	}
 
 	// Ownership first, then the preflight bound, then one reconcile (Codex round 10, R10-5 and
-	// R10-7). Ownership filtering (aafm_build_server_tools()) is a cheap per-name lookup with no
-	// schema walk, so running it over the full enabled set here costs nothing worth capping; doing
-	// it before the preflight means the tool-count cap only ever spends its budget on abilities
-	// this plugin actually owns, instead of a foreign name occupying a slot and then being
-	// stripped anyway, stranding an owned ability beyond the cap (R10-7). The preflight bound then
-	// drops any ability whose schema breaches the measurement limits and caps the total tool count
-	// over that owned set, so neither the adapter's recursive schema serialization nor the
-	// request-time per-tool permission loop can be driven into an uncatchable memory/time fatal by
-	// a pathological enabled+bridged set. Both omission sources (name_claimed from ownership,
-	// schema/cap from the preflight) are merged into ONE reconcile call rather than the preflight
-	// reconciling first and a second pass reconciling again on top of it - the old order meant a
-	// stable name_claimed omission produced by ownership was invisible to the preflight's own
-	// reconcile, so that first call saw an empty omission map, deleted the stored option, and the
-	// second call then recreated it and re-logged the same ability as newly omitted, every request
-	// (R10-5). Omissions are logged and surfaced via aafm_reconcile_omitted_abilities, never
-	// silently dropped.
+	// R10-7). Ownership filtering (aafm_ownership_filter_server_tools()) is a cheap per-name
+	// lookup with no schema walk, so running it over the full enabled set here costs nothing worth
+	// capping; doing it before the preflight means the tool-count cap only ever spends its budget
+	// on abilities this plugin actually owns, instead of a foreign name occupying a slot and then
+	// being stripped anyway, stranding an owned ability beyond the cap (R10-7). The preflight
+	// bound then drops any ability whose schema breaches the measurement limits and caps the total
+	// tool count over that owned set, so neither the adapter's recursive schema serialization nor
+	// the request-time per-tool permission loop can be driven into an uncatchable memory/time
+	// fatal by a pathological enabled+bridged set. Both omission sources (name_claimed from
+	// ownership, schema/cap from the preflight) are merged into ONE reconcile call rather than the
+	// preflight reconciling first and a second pass reconciling again on top of it - the old order
+	// meant a stable name_claimed omission produced by ownership was invisible to the preflight's
+	// own reconcile, so that first call saw an empty omission map, deleted the stored option, and
+	// the second call then recreated it and re-logged the same ability as newly omitted, every
+	// request (R10-5). Omissions are logged and surfaced via aafm_reconcile_omitted_abilities,
+	// never silently dropped.
+	//
+	// F2 (1.7.5 deferred): the ownership pass above used to run through aafm_build_server_tools(),
+	// which ALSO runs the discovery-permission check (aafm_user_can_discover_ability()) on every
+	// resolved user - so a site with well over 1,000 enabled bridged abilities invoked every
+	// foreign permission callback on ordinary authenticated traffic, before the cap ever bounded
+	// the work. aafm_ownership_filter_server_tools() is the ownership-only half of that function;
+	// the full aafm_build_server_tools() call below now only ever walks the already-bounded,
+	// already-owned set, so the discovery check's cost is capped the same way the schema walk is.
 	$claimed = array();
-	$owned   = aafm_build_server_tools( aafm_all_server_ability_names(), $claimed );
-	$tools   = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
+	$owned   = aafm_ownership_filter_server_tools( aafm_all_server_ability_names(), $claimed );
+	$bounded = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
+	$tools   = aafm_build_server_tools( $bounded );
 
 	// Per-connection capability gate at request time (the user is anonymous here; see
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.

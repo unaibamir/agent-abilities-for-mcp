@@ -532,6 +532,65 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * 1.7.5 round 4, R4-3: a failed START TRANSACTION must refuse the rotation rather than run
+	 * the consume+mint pair unwrapped and report success anyway.
+	 */
+	public function test_rotate_refresh_returns_error_when_start_transaction_fails(): void {
+		aafm_install_oauth_tables();
+
+		$ctx    = $this->ctx();
+		$tokens = aafm_oauth_mint_tokens( $ctx );
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return 'START TRANSACTION' === $query ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$rejected = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertInstanceOf( WP_Error::class, $rejected, 'a failed START TRANSACTION must refuse rotation, not run it unwrapped' );
+
+		// The old refresh row must still be active: nothing was consumed.
+		$old_after = $this->row_by_refresh( $tokens['refresh_token'] );
+		$this->assertNotNull( $old_after );
+		$this->assertSame( 1, (int) $old_after['is_active'], 'a refused rotation must not consume the old refresh row' );
+	}
+
+	/**
+	 * 1.7.5 round 4, R4-3: a failed COMMIT must not report the minted tokens as issued - this
+	 * function cannot confirm the consumption and the new pair actually persisted together.
+	 */
+	public function test_rotate_refresh_returns_error_when_commit_fails(): void {
+		aafm_install_oauth_tables();
+
+		$ctx    = $this->ctx();
+		$tokens = aafm_oauth_mint_tokens( $ctx );
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return 'COMMIT' === $query ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$rejected = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertInstanceOf( WP_Error::class, $rejected, 'a failed COMMIT must not be reported as a successful rotation' );
+	}
+
+	/**
 	 * Mark a registered client inactive (is_active = 0) on its transaction-isolated row.
 	 *
 	 * @param string $client_id The client to deactivate.

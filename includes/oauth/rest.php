@@ -590,8 +590,6 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 		return $invalid_grant;
 	}
 
-	global $wpdb;
-
 	// Consume the code and mint the token pair as one atomic unit. aafm_oauth_redeem_code()'s
 	// single UPDATE still enforces one-time use under concurrency - its row lock blocks a second
 	// redeemer until this transaction resolves - so the transaction only governs whether a LATER
@@ -604,16 +602,24 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// nesting inside it, so the claim that used to sit here about it being a harmless no-op under
 	// the test harness was false. Read that comment before changing either site; both carry the
 	// same shape and the fix, if one is ever worth making, belongs to both at once.
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( 'START TRANSACTION' );
+	// R4-3: if the transaction itself never started, nothing below is actually wrapped - refuse
+	// the redemption rather than run the consume+mint pair unprotected. Same check tokens.php's
+	// aafm_oauth_rotate_refresh() uses for its own START TRANSACTION.
+	if ( ! aafm_oauth_txn( 'START TRANSACTION' ) ) {
+		return aafm_oauth_rest_protocol_error(
+			'server_error',
+			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+			500
+		);
+	}
 
 	// Atomic one-time redemption, with the client_id + redirect_uri binding
 	// enforced inside aafm_oauth_redeem_code().
 	$row = aafm_oauth_redeem_code( $code, $client_id, $redirect_uri );
 	if ( is_wp_error( $row ) ) {
-		// Nothing was consumed (0 rows affected), so rolling back is a clean no-op.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'ROLLBACK' );
+		// Nothing was consumed (0 rows affected), so rolling back is a clean no-op. A failed
+		// ROLLBACK here does not change this response - the code is being rejected either way.
+		aafm_oauth_txn( 'ROLLBACK' );
 		return $invalid_grant;
 	}
 
@@ -625,16 +631,22 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// the UI reported the revoke landed. The code is already consumed above (a legitimate one-time
 	// use), so COMMIT the burn and yield invalid_grant.
 	if ( ! aafm_oauth_has_consent( (int) $row['wp_user_id'], (string) $row['client_id'] ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'COMMIT' );
+		// A failed COMMIT here means the burn is not actually confirmed - the code could still be
+		// replayable - but this request is denied either way, so audit it distinctly rather than
+		// silently proceeding as if the burn landed.
+		if ( ! aafm_oauth_txn( 'COMMIT' ) && function_exists( 'aafm_oauth_log_event' ) ) {
+			aafm_oauth_log_event( 'token', 'error', array( 'client_id' => $client_id ) );
+		}
 		return $invalid_grant;
 	}
 
 	// PKCE: a failed verifier burns the (already-consumed) code, which is safe and stops a verifier
 	// brute-force, so COMMIT the consumption before rejecting.
 	if ( ! aafm_pkce_verify( $code_verifier, (string) $row['code_challenge'] ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'COMMIT' );
+		// Same unconfirmed-burn note as the consent-revoked branch above.
+		if ( ! aafm_oauth_txn( 'COMMIT' ) && function_exists( 'aafm_oauth_log_event' ) ) {
+			aafm_oauth_log_event( 'token', 'error', array( 'client_id' => $client_id ) );
+		}
 		return $invalid_grant;
 	}
 
@@ -653,8 +665,9 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// back so the consumption is undone and an unexpired code stays redeemable on a retry rather
 	// than being permanently burned by a transient error.
 	if ( is_wp_error( $tokens ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'ROLLBACK' );
+		// A failed ROLLBACK does not change this response - it is already a server_error - but it
+		// does mean the stated recovery (the code stays redeemable) is not established.
+		aafm_oauth_txn( 'ROLLBACK' );
 		return aafm_oauth_rest_protocol_error(
 			'server_error',
 			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
@@ -663,8 +676,18 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	}
 
 	// The token pair persisted: commit the consumption + mint together.
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( 'COMMIT' );
+	//
+	// R4-3: a failed COMMIT means this pipeline cannot confirm the consumption and the new tokens
+	// actually landed together. Reporting the minted tokens anyway would hand the caller
+	// credentials this function cannot confirm persisted - refuse instead of claiming success for
+	// a write that was never confirmed committed.
+	if ( ! aafm_oauth_txn( 'COMMIT' ) ) {
+		return aafm_oauth_rest_protocol_error(
+			'server_error',
+			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+			500
+		);
+	}
 
 	// Audit the mint: an access token now exists for this user + client. The raw token is never
 	// logged - only the actor and client, so the token's life is traceable from here.

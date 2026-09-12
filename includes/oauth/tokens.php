@@ -47,6 +47,30 @@ if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
 }
 
 /**
+ * Run one transaction-control statement (START TRANSACTION, COMMIT, ROLLBACK, or SAVEPOINT) and
+ * report whether it actually succeeded, using $wpdb->query()'s own return value.
+ *
+ * 1.7.5 round 4, R4-3: both OAuth grant pipelines (aafm_oauth_rotate_refresh() below and
+ * aafm_oauth_rest_token_authorization_code(), oauth/rest.php) used to fire these statements and
+ * discard the result outright. $wpdb->query() returns false on failure and an integer (often 0,
+ * since a transaction-control statement affects no rows) on success - a successful call must not
+ * be compared against a falsy check like `! $wpdb->query(...)`, only against the literal `false`
+ * that marks failure. A failed START TRANSACTION means nothing downstream is actually wrapped; a
+ * failed COMMIT means the pipeline cannot tell whether what it just did persisted; a failed
+ * ROLLBACK means the stated recovery ("the old row stays usable", "the chain was revoked") did
+ * not happen. All three need the same one-line check, so it lives here once rather than being
+ * reinvented at each site.
+ *
+ * @param string $sql The literal transaction-control statement to run.
+ * @return bool True when the statement itself succeeded.
+ */
+function aafm_oauth_txn( string $sql ): bool {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- transaction-control statements take no user input; every caller passes a fixed literal.
+	return false !== $wpdb->query( $sql );
+}
+
+/**
  * Mint an access/refresh token pair and store only their hashes.
  *
  * Access token is prefixed `aafm_oat_`; the refresh token has no prefix. Both
@@ -244,8 +268,11 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// stop, and the trigger needs another component to hold an open transaction across a REST
 	// dispatch. Stating the bound is the honest half; building the manager is not this
 	// release's change to make.
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( 'START TRANSACTION' );
+	// R4-3: if the transaction itself never started, nothing below is actually wrapped - refuse
+	// the rotation rather than run the consume+mint pair unprotected.
+	if ( ! aafm_oauth_txn( 'START TRANSACTION' ) ) {
+		return aafm_generic_error();
+	}
 
 	// Single-winner gate: deactivate the row only while it is still active. Under
 	// a concurrent race two presentations of the same refresh token both reach
@@ -266,8 +293,11 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	);
 
 	if ( 1 !== $consumed ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'ROLLBACK' );
+		// A failed ROLLBACK does not change this response - the token is being rejected either
+		// way - but it does mean the row may still be locked/consumed against a connection that
+		// never actually released it; there is nothing further this function can do about that,
+		// since it cannot force a rollback to succeed.
+		aafm_oauth_txn( 'ROLLBACK' );
 
 		return new WP_Error(
 			'invalid_grant',
@@ -289,13 +319,17 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// If the new pair did not persist, roll back the rotation so the old refresh row stays
 	// usable rather than committing a consumed parent with no child.
 	if ( is_wp_error( $new ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'ROLLBACK' );
+		aafm_oauth_txn( 'ROLLBACK' );
 		return $new;
 	}
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( 'COMMIT' );
+	// R4-3: a failed COMMIT means this pipeline cannot tell whether the consumption and the new
+	// pair actually persisted together. Reporting the minted tokens anyway would risk handing the
+	// caller a refresh token whose own row never committed - refuse instead of claiming success
+	// for a write this function cannot confirm landed.
+	if ( ! aafm_oauth_txn( 'COMMIT' ) ) {
+		return aafm_generic_error();
+	}
 
 	return $new;
 }

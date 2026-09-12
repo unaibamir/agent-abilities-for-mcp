@@ -365,44 +365,50 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
-	 * R2-4 (1.7.5 deferred, round 2): the toggle-preservation migration already completed, and the
-	 * operator has since turned OAuth off deliberately - a decision unrelated to the migration
-	 * itself. A transient failure reading the migration's OWN guard row must not be read as "never
-	 * migrated": that would fall through to the absence check, find the (present, '0') row, but -
-	 * before this fix - a failed read of THAT row also collapses to "absent" and rewrites it to
-	 * '1', clobbering the opt-out. Faulting only the guard read is enough to prove the abort: this
-	 * fails if aafm_oauth_preserve_toggle_on_upgrade() stops checking db_error on the guard read
-	 * and falls through toward the write below.
+	 * R2-4/R3-9 (1.7.5 deferred, rounds 2 and 3): the toggle-preservation migration already
+	 * completed for real, and 'aafm_oauth_enabled' was later deliberately deleted (e.g. an
+	 * uninstall-and-reinstall, or an operator reset) rather than merely left at '0' - that ABSENCE
+	 * is the one state that makes the function's own write path fire. R3-9 found the original
+	 * fixture here left 'aafm_oauth_enabled' PRESENT at '0', so removing the guard-read abort still
+	 * left the function's own "row already present" branch as a no-op, and this test passed either
+	 * way - it never actually exercised the abort it claimed to. Absence is the only fixture that
+	 * distinguishes: with the abort, the missing row stays missing; without it, the failed guard
+	 * read is misread as "never migrated" and this function creates it as '1'.
 	 */
 	public function test_toggle_preservation_aborts_when_the_guard_read_fails(): void {
 		update_option( 'aafm_oauth_toggle_migrated', '1' );
-		update_option( 'aafm_oauth_enabled', '0' );
+		delete_option( 'aafm_oauth_enabled' );
 
 		$this->fail_option_read( 'aafm_oauth_toggle_migrated' );
+		// The faulted query prints a wpdb error notice directly (this call goes straight to the
+		// migration function, not through an AJAX handler that already buffers output) - swallow
+		// it so PHPUnit's strict-output-during-tests check does not mark this test risky.
+		ob_start();
 		aafm_oauth_preserve_toggle_on_upgrade();
+		ob_end_clean();
 
-		$this->assertSame(
-			'0',
-			get_option( 'aafm_oauth_enabled' ),
-			'A guard read that itself failed must not be treated as "never migrated" and overwrite an operator\'s explicit opt-out.'
+		$this->assertFalse(
+			get_option( 'aafm_oauth_enabled', false ),
+			'A guard read that itself failed must not be treated as "never migrated" and create a row that was deliberately absent.'
 		);
 	}
 
 	/**
-	 * R2-4 (1.7.5 deferred, round 2): DCR adoption already completed (both markers certified) and
-	 * the operator has since turned DCR off deliberately. A transient failure reading the FIRST
-	 * guard row must not fall through toward re-flipping DCR back on - this is Codex's own named
-	 * reproduction: "fail the two initial marker reads... both guards fall through, and the
-	 * deliberate opt-out is rewritten to '1'." Fails if aafm_oauth_dcr_adopt_on_by_default() stops
-	 * checking db_error on the guard read.
+	 * R2-4/R3-9 (1.7.5 deferred, rounds 2 and 3): R3-9 found the original fixture here also set
+	 * the SECOND, independent 'aafm_oauth_dcr_default_on_touched' guard - which short-circuits the
+	 * function on its own, before the first guard's read failure is ever exercised, so this test
+	 * passed even with that failure's abort removed. Leaving the touched marker unset (set_up()
+	 * already deletes it every test) means the first guard's own abort is the only thing that can
+	 * still stop the write below.
 	 */
 	public function test_dcr_adoption_aborts_when_the_guard_read_fails(): void {
 		update_option( 'aafm_oauth_dcr_default_on_migrated', '1' );
-		aafm_persist_operator_switch( 'aafm_oauth_dcr_default_on_touched', true );
 		update_option( 'aafm_oauth_dcr_enabled', '0' );
 
 		$this->fail_option_read( 'aafm_oauth_dcr_default_on_migrated' );
+		ob_start();
 		aafm_oauth_dcr_adopt_on_by_default();
+		ob_end_clean();
 
 		$this->assertSame(
 			'0',

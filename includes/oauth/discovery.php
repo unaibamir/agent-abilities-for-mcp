@@ -213,6 +213,20 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
  * afterward is respected, and a developer who wants it off in code can use the
  * aafm_oauth_dcr_enabled filter regardless.
  *
+ * B2 (1.7.5 deferred): the guard row above used to be the ONLY signal this migration had ever
+ * run. If ITS OWN write kept failing to certify (a persistently stale cache entry for that one
+ * option, nothing else on the site), every request re-read the DCR value from scratch and could
+ * not tell "still the genuine pre-migration off default" from "an operator deliberately turned
+ * DCR back off after this migration already flipped it on once" - so it kept re-flipping the
+ * operator's own opt-out forever, exactly the failure this function's docblock above promises
+ * never happens. A second, independently keyed signal (aafm_oauth_dcr_default_on_touched, its
+ * own separate forget/certify/refresh cycle via aafm_persist_operator_switch(), not the same
+ * cache entry as the guard row) closes that: once EITHER signal certifies, the one-time
+ * "was this the old default" judgment never runs again, so a persistently failing GUARD write
+ * alone can no longer mean a persistently re-enabled toggle. It is set only once the DCR value
+ * itself is confirmed settled (already fine, or just written), never before, so a failed
+ * DCR-enable write still gets a normal retry on the next request.
+ *
  * Hooked on plugins_loaded (priority 1) alongside aafm_oauth_preserve_toggle_on_upgrade()
  * so the row is settled before any request-time read.
  *
@@ -225,6 +239,11 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_dcr_default_on_migrated' )['db_value'] ) {
 		return;
 	}
+	// B2: the second, independently keyed signal - see this function's docblock. Read the same
+	// way as the guard row above, direct from the database, for the identical reason.
+	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_dcr_default_on_touched' )['db_value'] ) {
+		return;
+	}
 
 	// Read the database row directly for the same reason as
 	// aafm_oauth_preserve_toggle_on_upgrade() above: a stale cached '1' over a database '0' (or
@@ -234,10 +253,17 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 	$off    = array( false, 0, '0', '', 'false', 'no', 'off' );
 	if ( in_array( $stored, $off, true ) ) {
 		if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '1' ) ) {
-			// Same reasoning as above: an uncertified write must not be followed by the guard.
+			// Same reasoning as above: an uncertified write must not be followed by either
+			// signal below - retry the whole decision, including this flip, next request.
 			return;
 		}
 	}
+
+	// B2: the DCR value is now confirmed settled - either it was already fine, or the write
+	// above just landed. Record the second signal BEFORE attempting the guard row below, so a
+	// persistently failing guard write is no longer the only thing standing between a later
+	// operator opt-out and this function silently overriding it again.
+	aafm_persist_operator_switch( 'aafm_oauth_dcr_default_on_touched', true );
 
 	if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_default_on_migrated', '1' ) ) {
 		// Codex round 8 R8-3: this return value used to be discarded. A failed marker write left
@@ -246,6 +272,8 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 		// default" state this function already flips on above, re-enabling DCR over the
 		// operator's deliberate opt-out and contradicting this function's own documented promise
 		// that a later opt-out is respected. Log the failure so it is visible instead of silent.
+		// B2: the second signal set just above is what actually stops this from repeating
+		// forever when this particular write keeps failing to certify.
 		aafm_log_ability_persist_failure( 'aafm_oauth_dcr_default_on_migrated', __( 'The DCR default-on migration marker', 'agent-abilities-for-mcp' ) );
 	}
 }

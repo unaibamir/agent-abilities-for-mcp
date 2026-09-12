@@ -71,7 +71,12 @@ class UpgradeMigrationTest extends TestCase {
 		aafm_oauth_dcr_adopt_on_by_default();
 		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
 
+		// B2 (1.7.5 deferred): resetting BOTH the guard row and its independent sibling to
+		// simulate a genuinely fresh, not-yet-migrated install for the second scenario below -
+		// the first call above already certified the sibling, and leaving it set would make the
+		// second call return early without ever adopting the absent row this scenario tests.
 		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		delete_option( 'aafm_oauth_dcr_default_on_touched' );
 		delete_option( 'aafm_oauth_dcr_enabled' );
 		aafm_oauth_dcr_adopt_on_by_default();
 		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
@@ -299,6 +304,37 @@ class UpgradeMigrationTest extends TestCase {
 			)
 		);
 		$this->assertNotEmpty( $rows, 'A failed marker write must be logged, not silently retried forever with no trace.' );
+	}
+
+	/**
+	 * B2 (1.7.5 deferred): the actual security property the second signal restores. The guard
+	 * row's own write keeps failing to certify forever (never recovers, unlike a one-off blip),
+	 * so under the old single-signal design every later request would re-read DCR from scratch
+	 * and re-flip an operator's own opt-out back on, since a stored '0' looked indistinguishable
+	 * from the untouched pre-migration default. With the independently keyed sibling signal
+	 * certifying on the first call (the marker sabotage only targets the guard row, not the
+	 * sibling), a later request must respect the opt-out even though the guard has still never
+	 * been set.
+	 */
+	public function test_dcr_adoption_respects_a_later_optout_even_when_the_guard_write_never_persists(): void {
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		$this->make_option_write_unpersistable( 'aafm_oauth_dcr_default_on_migrated', '0' );
+		aafm_oauth_dcr_adopt_on_by_default();
+		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ), 'Precondition: the first call still adopts DCR on.' );
+		$this->assertSame( '0', get_option( 'aafm_oauth_dcr_default_on_migrated', '0' ), 'Precondition: the guard write is still failing to certify.' );
+
+		// Operator deliberately turns it back off. The guard has STILL never been set.
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_enabled' ),
+			'A persistently failing guard write must not mean a persistently re-enabled toggle: the operator\'s opt-out survives.'
+		);
+		$this->assertFalse( aafm_oauth_dcr_enabled() );
 	}
 
 	/**

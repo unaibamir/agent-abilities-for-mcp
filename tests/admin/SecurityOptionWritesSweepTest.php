@@ -68,6 +68,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 						'aafm_ability_allowlist_overrides',
 						'aafm_oauth_toggle_migrated',
 						'aafm_oauth_dcr_default_on_migrated',
+						'aafm_oauth_dcr_default_on_touched',
 						'aafm_oauth_schema_version',
 						'aafm_activity_log_schema_version',
 						'aafm_delete_data_on_uninstall',

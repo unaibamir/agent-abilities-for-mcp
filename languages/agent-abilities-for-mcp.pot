@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-13T00:30:02+05:00\n"
+"POT-Creation-Date: 2026-09-13T03:29:58+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -683,7 +683,7 @@ msgid "ID of an existing image attachment to use as the featured image. Must alr
 msgstr ""
 
 #: includes/abilities/media.php:672
-#: includes/abilities/media.php:1005
+#: includes/abilities/media.php:1010
 msgid "Filename to base the stored file's name on. Only the basename is kept and sanitized, and the extension is replaced with the one matching the file's actual detected type, not the extension supplied here."
 msgstr ""
 
@@ -692,7 +692,7 @@ msgid "Base64-encoded file bytes. The decoded content must be a real jpg, png, g
 msgstr ""
 
 #: includes/abilities/media.php:681
-#: includes/abilities/media.php:1009
+#: includes/abilities/media.php:1014
 msgid "Alt text to set on the uploaded image."
 msgstr ""
 
@@ -701,8 +701,8 @@ msgid "Invalid base64 payload."
 msgstr ""
 
 #: includes/abilities/media.php:832
-#: includes/abilities/media.php:1249
 #: includes/abilities/media.php:1254
+#: includes/abilities/media.php:1259
 msgid "File exceeds the maximum upload size."
 msgstr ""
 
@@ -714,84 +714,84 @@ msgstr ""
 msgid "Unsupported or unsafe file type."
 msgstr ""
 
-#: includes/abilities/media.php:1000
+#: includes/abilities/media.php:1005
 msgid "HTTPS URL of an image to fetch and upload. Must resolve to a public IP address; private, loopback, and link-local ranges are refused, and redirects are not followed into them either."
 msgstr ""
 
-#: includes/abilities/media.php:1164
+#: includes/abilities/media.php:1169
 msgid "This server cannot safely fetch a remote URL for upload."
 msgstr ""
 
-#: includes/abilities/media.php:1168
+#: includes/abilities/media.php:1173
 msgid "This server routes outbound requests through a proxy, which this ability cannot safely pin to a validated address. Refusing."
 msgstr ""
 
-#: includes/abilities/media.php:1173
+#: includes/abilities/media.php:1178
 msgid "That is not a valid URL."
 msgstr ""
 
-#: includes/abilities/media.php:1176
+#: includes/abilities/media.php:1181
 msgid "Only https:// URLs may be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1181
+#: includes/abilities/media.php:1186
 msgid "A bare IP address may not be used as the upload URL host."
 msgstr ""
 
-#: includes/abilities/media.php:1188
+#: includes/abilities/media.php:1193
 msgid "The host could not be resolved."
 msgstr ""
 
-#: includes/abilities/media.php:1191
+#: includes/abilities/media.php:1196
 msgid "The host resolves to a private or reserved IP address."
 msgstr ""
 
-#: includes/abilities/media.php:1209
+#: includes/abilities/media.php:1214
 msgid "That port is not allowed for a remote fetch."
 msgstr ""
 
-#: includes/abilities/media.php:1232
-#: includes/abilities/media.php:1239
-#: includes/abilities/media.php:1379
-#: includes/abilities/media.php:1477
-#: includes/abilities/media.php:1487
-#: includes/abilities/media.php:1525
+#: includes/abilities/media.php:1237
+#: includes/abilities/media.php:1244
+#: includes/abilities/media.php:1384
+#: includes/abilities/media.php:1482
+#: includes/abilities/media.php:1492
+#: includes/abilities/media.php:1530
 msgid "The URL could not be fetched."
 msgstr ""
 
-#: includes/abilities/media.php:1257
+#: includes/abilities/media.php:1262
 msgid "The URL returned no data."
 msgstr ""
 
-#: includes/abilities/media.php:1557
+#: includes/abilities/media.php:1562
 msgid "ID of the attachment to update."
 msgstr ""
 
-#: includes/abilities/media.php:1561
+#: includes/abilities/media.php:1566
 msgid "New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given."
 msgstr ""
 
-#: includes/abilities/media.php:1565
+#: includes/abilities/media.php:1570
 msgid "New alt text for the image, sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/media.php:1569
+#: includes/abilities/media.php:1574
 msgid "New caption, sanitized as plain text with no HTML."
 msgstr ""
 
-#: includes/abilities/media.php:1573
+#: includes/abilities/media.php:1578
 msgid "New description. Basic HTML is allowed and sanitized."
 msgstr ""
 
-#: includes/abilities/media.php:1639
+#: includes/abilities/media.php:1644
 msgid "Provide at least one field to update."
 msgstr ""
 
-#: includes/abilities/media.php:1716
+#: includes/abilities/media.php:1721
 msgid "The media item could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/media.php:1739
+#: includes/abilities/media.php:1744
 msgid "ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo."
 msgstr ""
 
@@ -1438,8 +1438,8 @@ msgid "The %s URL does not resolve to a media-library attachment, so Rank Math c
 msgstr ""
 
 #: includes/abilities/rankmath.php:592
-#: includes/abilities/slim-seo.php:317
 #: includes/abilities/slim-seo.php:323
+#: includes/abilities/slim-seo.php:339
 #: includes/abilities/yoast.php:466
 msgid "The SEO fields could not be confirmed as saved."
 msgstr ""
@@ -5437,7 +5437,7 @@ msgstr ""
 
 #. translators: %s: the name of the setting, for example "Read-only mode".
 #: includes/admin/onboarding-pointer.php:102
-#: includes/helpers.php:2512
+#: includes/helpers.php:2539
 #, php-format
 msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7543,18 +7543,18 @@ msgstr ""
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:2309
+#: includes/helpers.php:2336
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:2530
+#: includes/helpers.php:2557
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:2551
+#: includes/helpers.php:2578
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7757,35 +7757,36 @@ msgstr ""
 msgid "The client name is too long."
 msgstr ""
 
-#: includes/oauth/rest.php:530
+#: includes/oauth/rest.php:541
 msgid "Too many token requests. Try again shortly."
 msgstr ""
 
-#: includes/oauth/rest.php:546
+#: includes/oauth/rest.php:557
 msgid "The grant type is missing or not supported."
 msgstr ""
 
-#: includes/oauth/rest.php:565
+#: includes/oauth/rest.php:576
 msgid "The authorization grant is invalid."
 msgstr ""
 
-#: includes/oauth/rest.php:611
-#: includes/oauth/rest.php:673
-#: includes/oauth/rest.php:687
-#: includes/oauth/tokens.php:124
+#: includes/oauth/rest.php:622
+#: includes/oauth/rest.php:691
+#: includes/oauth/rest.php:705
+#: includes/oauth/rest.php:770
+#: includes/oauth/tokens.php:130
 msgid "The access token could not be issued."
 msgstr ""
 
-#: includes/oauth/rest.php:727
-#: includes/oauth/rest.php:743
+#: includes/oauth/rest.php:745
+#: includes/oauth/rest.php:777
 msgid "The refresh token grant is invalid."
 msgstr ""
 
-#: includes/oauth/rest.php:798
+#: includes/oauth/rest.php:832
 msgid "Too many revocation requests. Try again shortly."
 msgstr ""
 
-#: includes/oauth/rest.php:816
+#: includes/oauth/rest.php:850
 msgid "The token could not be revoked."
 msgstr ""
 
@@ -7801,28 +7802,28 @@ msgstr ""
 msgid "Agent Abilities for MCP could not finish setting up its OAuth database tables. OAuth may not work correctly until the update completes; the plugin retries automatically on the next admin or REST request."
 msgstr ""
 
-#: includes/oauth/tokens.php:203
-#: includes/oauth/tokens.php:309
+#: includes/oauth/tokens.php:209
+#: includes/oauth/tokens.php:318
 msgid "The refresh token is invalid."
 msgstr ""
 
-#: includes/oauth/tokens.php:219
+#: includes/oauth/tokens.php:225
 msgid "The refresh token has already been used; the token chain has been revoked."
 msgstr ""
 
-#: includes/oauth/tokens.php:220
+#: includes/oauth/tokens.php:226
 msgid "The refresh token has already been used."
 msgstr ""
 
-#: includes/oauth/tokens.php:228
+#: includes/oauth/tokens.php:234
 msgid "The refresh token was issued to a different client."
 msgstr ""
 
-#: includes/oauth/tokens.php:237
+#: includes/oauth/tokens.php:243
 msgid "The client is no longer active."
 msgstr ""
 
-#: includes/oauth/tokens.php:247
+#: includes/oauth/tokens.php:253
 msgid "The refresh token has expired."
 msgstr ""
 

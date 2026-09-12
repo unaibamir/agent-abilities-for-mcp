@@ -338,7 +338,8 @@ function aafm_oauth_revoke_token( string $raw ): bool {
  * UPDATE, so a deactivated client's already-issued sessions stop validating at once.
  *
  * @param string $client_id The public client identifier.
- * @return int Number of token rows deactivated.
+ * @return int Number of token rows deactivated, or -1 when the query itself failed and the
+ *              count cannot be trusted - a caller must not read -1 as "nothing to revoke".
  */
 function aafm_oauth_revoke_client_tokens( string $client_id ): int {
 	if ( '' === $client_id ) {
@@ -348,16 +349,18 @@ function aafm_oauth_revoke_client_tokens( string $client_id ): int {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
+	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query(
+	$result = $wpdb->query(
 		$wpdb->prepare(
 			'UPDATE %i SET is_active = 0 WHERE client_id = %s AND is_active = 1',
 			$table,
 			$client_id
 		)
 	);
+	$wpdb->suppress_errors( $suppressed );
 
-	return (int) $wpdb->rows_affected;
+	return false === $result ? -1 : (int) $wpdb->rows_affected;
 }
 
 /**
@@ -368,7 +371,8 @@ function aafm_oauth_revoke_client_tokens( string $client_id ): int {
  *
  * @param int    $user_id   The WordPress user id whose tokens are revoked.
  * @param string $client_id The client the tokens belong to.
- * @return int Number of token rows deactivated.
+ * @return int Number of token rows deactivated, or -1 when the query itself failed and the
+ *              count cannot be trusted - a caller must not read -1 as "nothing to revoke".
  */
 function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id ): int {
 	if ( $user_id <= 0 || '' === $client_id ) {
@@ -378,8 +382,9 @@ function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id )
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
+	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query(
+	$result = $wpdb->query(
 		$wpdb->prepare(
 			'UPDATE %i SET is_active = 0 WHERE wp_user_id = %d AND client_id = %s AND is_active = 1',
 			$table,
@@ -387,8 +392,9 @@ function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id )
 			$client_id
 		)
 	);
+	$wpdb->suppress_errors( $suppressed );
 
-	return (int) $wpdb->rows_affected;
+	return false === $result ? -1 : (int) $wpdb->rows_affected;
 }
 
 /**

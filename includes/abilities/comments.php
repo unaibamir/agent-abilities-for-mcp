@@ -249,9 +249,8 @@ function aafm_exec_get_comments( array $input ): array {
 		);
 	}
 
-	$scan_cap  = aafm_comments_sitewide_scan_cap();
-	$truncated = $raw_total > $scan_cap;
-	$scanned   = get_comments(
+	$scan_cap = aafm_comments_sitewide_scan_cap();
+	$scanned  = get_comments(
 		array(
 			'status' => 'approve',
 			'number' => min( $raw_total, $scan_cap ),
@@ -265,6 +264,15 @@ function aafm_exec_get_comments( array $input ): array {
 				&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID )
 		)
 	);
+
+	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan
+	// (Codex round 10, R10-8): reporting it whenever the raw approved count crossed the scan cap
+	// told a caller with no readable comments at all - `comments: []`, `total: 0` - that hidden
+	// comment volume existed somewhere on the site, the exact channel `total` was already
+	// narrowed to avoid. An empty visible set has nothing to report as a floor, so it is never
+	// truncated; once at least one visible comment is in the scanned window, the existing
+	// floor-not-exact caveat below applies as before.
+	$truncated = $raw_total > $scan_cap && array() !== $visible;
 
 	$page_comments = array_slice( $visible, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );
 

@@ -309,7 +309,13 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 		}
 		$old_field      = (string) ( $old[ $field ] ?? '' );
 		$intended_field = (string) ( $stored[ $field ] ?? '' );
-		if ( $intended_field === $old_field || $confirmed[ $field ] !== $old_field ) {
+		$nothing_asked  = $intended_field === $old_field;
+		$unchanged      = $confirmed[ $field ] === $old_field;
+		// Codex round 5 R5-2: a no-op resubmission ($intended_field === $old_field) used to
+		// confirm on that basis alone, without checking $unchanged - so a filter redirecting an
+		// unchanged resubmission to some third value read as success. Mirrors the same fix in
+		// aafm_meta_write_confirmed(): a genuine no-op still confirms, a redirect does not.
+		if ( $nothing_asked ? $unchanged : ! $unchanged ) {
 			continue;
 		}
 		return new WP_Error(
@@ -317,11 +323,23 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 			__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
 		);
 	}
-	if ( array_key_exists( 'noindex', $input ) && ! empty( $canonical['noindex'] ) !== $confirmed['noindex'] ) {
-		return new WP_Error(
-			'aafm_slim_seo_write_unconfirmed',
-			__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
-		);
+	if ( array_key_exists( 'noindex', $input ) ) {
+		$canonical_noindex = ! empty( $canonical['noindex'] );
+		if ( $canonical_noindex !== $confirmed['noindex'] ) {
+			// R5-1: the boolean field had no fallback at all, unlike its string siblings above -
+			// any disagreement with the replayed canonical form failed confirmation outright, even
+			// a legitimate save-time normalization. Give it the same old/unchanged fallback.
+			$old_noindex      = ! empty( $old['noindex'] );
+			$intended_noindex = ! empty( $stored['noindex'] );
+			$nothing_asked    = $intended_noindex === $old_noindex;
+			$unchanged        = $confirmed['noindex'] === $old_noindex;
+			if ( ! ( $nothing_asked ? $unchanged : ! $unchanged ) ) {
+				return new WP_Error(
+					'aafm_slim_seo_write_unconfirmed',
+					__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+				);
+			}
+		}
 	}
 
 	return $confirmed;

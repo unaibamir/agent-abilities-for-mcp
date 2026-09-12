@@ -2192,10 +2192,13 @@ function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, 
 		return true;
 	}
 	$nothing_asked = $is_arr ? $intended === $old : (string) $intended === (string) $old;
-	if ( $nothing_asked ) {
-		return true;
-	}
-	return $is_arr ? $stored !== $old : (string) $stored !== (string) $old;
+	$unchanged     = $is_arr ? $stored === $old : (string) $stored === (string) $old;
+	// Codex round 5 R5-2: a no-op resubmission used to short-circuit to true purely because
+	// nothing was asked to change, without checking that storage actually stayed put. That let a
+	// filter that redirects an unchanged resubmission to some THIRD value (never $old, never
+	// $intended) report as confirmed. Requiring $unchanged too closes that: a genuine no-op still
+	// confirms, but a redirect on a no-op is caught the same way a redirect on a real change is.
+	return $nothing_asked ? $unchanged : ! $unchanged;
 }
 
 /**
@@ -2293,10 +2296,12 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
 	if ( $stored === $expected ) {
 		return true;
 	}
-	// A genuine no-op resubmission (the caller asked to "change" the field to the value it
-	// already held) needs no further verification - there is nothing a veto could revert to that
-	// would look any different from success.
-	return $intended === $old;
+	// Codex round 5 R5-2: a genuine no-op resubmission (the caller asked to "change" the field to
+	// the value it already held) used to be accepted on that basis alone, without checking that
+	// storage actually stayed at $old. That missed a wp_insert_post_data filter that redirects an
+	// unchanged resubmission to some THIRD value - a real, unrequested change the caller must
+	// know about, not a successful no-op. Requiring $stored === $old too closes that.
+	return $intended === $old && $stored === $old;
 }
 
 /**

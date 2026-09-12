@@ -556,10 +556,14 @@ PHP;
 	}
 
 	/**
+	 * Proves the exemption policy on one real (function, option) identity at a time.
+	 *
 	 * @dataProvider real_exemption_identities
+	 * @param string $function Exempt function name.
+	 * @param string $option   Accepted option name.
 	 */
 	public function test_exemption_policy_rejects_a_duplicate_or_aliased_duplicate_inside_the_exempt_function( string $function, string $option ): void {
-		$single = <<<PHP
+		$single         = <<<PHP
 <?php
 function {$function}() {
 	add_option( '{$option}', '1', '', true );
@@ -574,7 +578,7 @@ PHP;
 			"Baseline: exactly one accepted call to {$function}() naming {$option} must count as 1."
 		);
 
-		$duplicate = <<<PHP
+		$duplicate         = <<<PHP
 <?php
 function {$function}() {
 	add_option( '{$option}', '1', '', true );
@@ -598,9 +602,9 @@ function {$function}() {
 	seed( '{$option}', '1', '', true );
 }
 PHP;
-		$aliased_tokens  = token_get_all( $aliased_duplicate );
-		$aliased_aliases = $this->parse_use_function_aliases( $aliased_tokens );
-		$aliased_body    = token_get_all( '<?php ' . $this->extract_function_body( $aliased_duplicate, $function ) );
+		$aliased_tokens    = token_get_all( $aliased_duplicate );
+		$aliased_aliases   = $this->parse_use_function_aliases( $aliased_tokens );
+		$aliased_body      = token_get_all( '<?php ' . $this->extract_function_body( $aliased_duplicate, $function ) );
 		$this->assertSame(
 			2,
 			$this->count_bare_option_writes( $aliased_body, 'add_option', $option, $aliased_aliases ),
@@ -610,7 +614,7 @@ PHP;
 		// The outside-function reproduction: the exact same call sitting anywhere else in the
 		// file, outside the exempt function, must still fail the sweep's separate assertFalse()
 		// check - proven directly here rather than only by the earlier round's narrower fixture.
-		$outside = <<<PHP
+		$outside          = <<<PHP
 <?php
 function {$function}() {
 	add_option( '{$option}', '1', '', true );
@@ -692,7 +696,7 @@ PHP;
 				'options'  => array( 'aafm_menu_pointer_active' ),
 				'function' => 'aafm_quickconnect_flag_menu_pointer',
 			),
-			'includes/oauth/discovery.php'           => array(
+			'includes/oauth/discovery.php'          => array(
 				'options'  => array( 'aafm_oauth_enabled', 'aafm_oauth_dcr_enabled' ),
 				'function' => 'aafm_oauth_seed_default_options',
 			),
@@ -754,8 +758,8 @@ PHP;
 						// $body_matches at 1 (the original call only) even with a bypass alongside
 						// it. Resolve against $aliases, the whole file's real alias map computed
 						// above, not a re-parse of the isolated snippet that lost that context.
-						$body_tokens   = token_get_all( '<?php ' . $this->extract_function_body( $source, $pointer_exemption['function'] ) );
-						$body_matches  = $this->count_bare_option_writes( $body_tokens, $bare_call, $option, $aliases );
+						$body_tokens  = token_get_all( '<?php ' . $this->extract_function_body( $source, $pointer_exemption['function'] ) );
+						$body_matches = $this->count_bare_option_writes( $body_tokens, $bare_call, $option, $aliases );
 						$this->assertSame(
 							1,
 							$body_matches,

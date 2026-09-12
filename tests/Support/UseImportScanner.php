@@ -69,7 +69,7 @@ final class UseImportScanner {
 
 			if ( ! is_array( $token ) ) {
 				if ( '{' === $token ) {
-					$class_body[] = $pending_class;
+					$class_body[]  = $pending_class;
 					$pending_class = false;
 				} elseif ( '}' === $token ) {
 					array_pop( $class_body );
@@ -204,9 +204,9 @@ final class UseImportScanner {
 	 * every alias it declares into $aliases, and returning the index to resume scanning from - the
 	 * statement's terminating `;` (or, on malformed input, wherever parsing gave up).
 	 *
-	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Full token stream.
-	 * @param int                                            $use_index Index of the T_USE token.
-	 * @param int                                            $total Token count.
+	 * @param array<int,array{0:int,1:string,2:int}|string>                                              $tokens Full token stream.
+	 * @param int                                                                                        $use_index Index of the T_USE token.
+	 * @param int                                                                                        $total Token count.
 	 * @param array{class:array<string,string>,function:array<string,string>,const:array<string,string>} $aliases Mutated in place.
 	 * @return int
 	 */
@@ -240,10 +240,10 @@ final class UseImportScanner {
 	 * qualified name, or a qualified prefix followed by a `{ ... }` group whose own members may
 	 * each override the statement's import kind with a leading `function`/`const`.
 	 *
-	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Full token stream.
-	 * @param int                                            $pos Index to start parsing from.
-	 * @param int                                            $total Token count.
-	 * @param string                                         $kind Statement-level import kind ('class'|'function'|'const').
+	 * @param array<int,array{0:int,1:string,2:int}|string>                                              $tokens Full token stream.
+	 * @param int                                                                                        $pos Index to start parsing from.
+	 * @param int                                                                                        $total Token count.
+	 * @param string                                                                                     $kind Statement-level import kind ('class'|'function'|'const').
 	 * @param array{class:array<string,string>,function:array<string,string>,const:array<string,string>} $aliases Mutated in place.
 	 * @return int Index just past this member.
 	 */
@@ -265,12 +265,12 @@ final class UseImportScanner {
 	/**
 	 * Parse a `{ ... }` group of import members sharing $prefix, starting at the `{` itself.
 	 *
-	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Full token stream.
-	 * @param int                                            $pos Index of the opening `{`.
-	 * @param int                                            $total Token count.
-	 * @param string                                         $kind Statement-level import kind, the default for a member with no override.
-	 * @param string                                         $prefix The qualified name preceding the group - B6 (1.7.5 deferred round 1): every
-	 *                                                                member, not only the first, is resolved against this same prefix.
+	 * @param array<int,array{0:int,1:string,2:int}|string>                                              $tokens Full token stream.
+	 * @param int                                                                                        $pos Index of the opening `{`.
+	 * @param int                                                                                        $total Token count.
+	 * @param string                                                                                     $kind Statement-level import kind, the default for a member with no override.
+	 * @param string                                                                                     $prefix The qualified name preceding the group - B6 (1.7.5 deferred round 1): every
+	 *                                                                                                            member, not only the first, is resolved against this same prefix.
 	 * @param array{class:array<string,string>,function:array<string,string>,const:array<string,string>} $aliases Mutated in place.
 	 * @return int Index just past the closing `}`.
 	 */
@@ -315,9 +315,9 @@ final class UseImportScanner {
 	 * has to be special-cased: whatever is not T_AS or a name token is simply not part of this.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Full token stream.
-	 * @param int                                            $pos Index to start from.
-	 * @param int                                            $total Token count.
-	 * @param int                                            $out_pos Set to the index just past the alias (or unchanged if there is none).
+	 * @param int                                           $pos Index to start from.
+	 * @param int                                           $total Token count.
+	 * @param int                                           $out_pos Set to the index just past the alias (or unchanged if there is none).
 	 * @return string|null
 	 */
 	private static function parse_optional_alias( array $tokens, int $pos, int $total, int &$out_pos ): ?string {
@@ -342,9 +342,9 @@ final class UseImportScanner {
 	 * case-sensitive part of a call).
 	 *
 	 * @param array{class:array<string,string>,function:array<string,string>,const:array<string,string>} $aliases Mutated in place.
-	 * @param string $kind 'class'|'function'|'const'.
-	 * @param string $name Imported name, possibly qualified, possibly with a leading `\`.
-	 * @param string|null $alias Explicit alias, or null.
+	 * @param string                                                                                     $kind 'class'|'function'|'const'.
+	 * @param string                                                                                     $name Imported name, possibly qualified, possibly with a leading `\`.
+	 * @param string|null                                                                                $alias Explicit alias, or null.
 	 */
 	private static function record( array &$aliases, string $kind, string $name, ?string $alias ): void {
 		$full = ltrim( $name, '\\' );
@@ -365,9 +365,9 @@ final class UseImportScanner {
 	 * know which tokenization produced it.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Full token stream.
-	 * @param int                                            $pos Index to start from.
-	 * @param int                                            $total Token count.
-	 * @param string                                         $name Set to the concatenated name text.
+	 * @param int                                           $pos Index to start from.
+	 * @param int                                           $total Token count.
+	 * @param string                                        $name Set to the concatenated name text.
 	 * @return int Index just past the name.
 	 */
 	private static function consume_name( array $tokens, int $pos, int $total, string &$name ): int {
@@ -383,7 +383,7 @@ final class UseImportScanner {
 	 * Index of the previous significant (non-whitespace, non-comment) token before $index, or null.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Full token stream.
-	 * @param int                                            $index Index to look before.
+	 * @param int                                           $index Index to look before.
 	 * @return array{0:int,1:string,2:int}|string|null
 	 */
 	private static function previous_significant( array $tokens, int $index ) {
@@ -401,8 +401,8 @@ final class UseImportScanner {
 	 * Index of the next non-trivia (non-whitespace, non-comment) token at or after $pos.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Full token stream.
-	 * @param int                                            $pos Index to start from.
-	 * @param int                                            $total Token count.
+	 * @param int                                           $pos Index to start from.
+	 * @param int                                           $total Token count.
 	 * @return int
 	 */
 	private static function skip_trivia( array $tokens, int $pos, int $total ): int {

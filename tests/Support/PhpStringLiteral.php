@@ -35,7 +35,7 @@ final class PhpStringLiteral {
 	 * interpolation).
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Token stream.
-	 * @param int                                            $index Index to decode from.
+	 * @param int                                           $index Index to decode from.
 	 * @return array{0:string,1:int}|null Decoded value and the index just past the literal, or null.
 	 */
 	public static function decode_at( array $tokens, int $index ): ?array {
@@ -180,7 +180,7 @@ final class PhpStringLiteral {
 	 * matching T_END_HEREDOC.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Token stream.
-	 * @param int                                            $index Index of the T_START_HEREDOC token.
+	 * @param int                                           $index Index of the T_START_HEREDOC token.
 	 * @return array{0:string,1:int}|null
 	 */
 	private static function decode_heredoc( array $tokens, int $index ): ?array {

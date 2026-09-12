@@ -81,13 +81,27 @@ function aafm_quickconnect_activate_menu_pointer( bool $network_wide = false ): 
 	// caller directly; logging it is the only way this is ever visible rather than a silently
 	// missing first-run pointer (Codex round 10, R10-9 - the same "never report a change that
 	// did not take" rule as every other certified write in this plugin).
+	//
+	// F3 (1.7.5 deferred): this file is require_once'd at top level specifically so its
+	// activation callback is defined before plugins_loaded (see the require_once above this
+	// function's registration in agent-abilities-for-mcp.php), but
+	// aafm_switch_not_persisted_message() lives in includes/helpers.php, which is only loaded
+	// inside aafm_bootstrap() on plugins_loaded. Activating a previously inactive plugin runs
+	// this hook in the same request WITHOUT plugins_loaded ever firing, so calling that helper
+	// here was an undefined-function fatal instead of an audit entry. aafm_log_activity() itself
+	// is safe: includes/audit/log.php is required at top level too. The message text is inlined
+	// rather than moving the formatting helper's file into the top-level load order.
 	if ( ! aafm_quickconnect_flag_menu_pointer() ) {
 		aafm_log_activity(
 			array(
 				'ability'    => 'aafm/menu-pointer-not-flagged',
 				'status'     => 'error',
 				'event_type' => 'setting_changed',
-				'detail'     => aafm_switch_not_persisted_message( __( 'The first-activation pointer', 'agent-abilities-for-mcp' ) ),
+				'detail'     => sprintf(
+					/* translators: %s: the name of the setting, for example "Read-only mode". */
+					__( '%s could not be changed: the site\'s persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.', 'agent-abilities-for-mcp' ),
+					__( 'The first-activation pointer', 'agent-abilities-for-mcp' )
+				),
 			)
 		);
 	}

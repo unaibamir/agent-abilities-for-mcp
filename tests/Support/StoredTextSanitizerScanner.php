@@ -933,6 +933,11 @@ final class StoredTextSanitizerScanner {
 		exec( 'cd ' . escapeshellarg( rtrim( $root, '/' ) ) . ' && git archive HEAD 2>/dev/null | tar -t 2>/dev/null', $output, $status );
 
 		if ( 0 !== $status || array() === $output ) {
+			$unresolvable_worktree = self::unresolvable_worktree_gitdir_reason( $root );
+			if ( null !== $unresolvable_worktree ) {
+				\PHPUnit\Framework\Assert::markTestSkipped( $unresolvable_worktree );
+			}
+
 			throw new RuntimeException(
 				'Could not determine the shipped file list from "git archive HEAD". The sanitizer scan '
 				. 'covers whatever actually ships, so it must not fall back to a guess.'
@@ -958,6 +963,40 @@ final class StoredTextSanitizerScanner {
 		self::$shipped_cache = $files;
 
 		return $files;
+	}
+
+	/**
+	 * A linked git worktree's `.git` file records its main repository's gitdir as an absolute path,
+	 * fixed at the moment the worktree was created. Run that checkout inside a container whose bind
+	 * mount uses a different absolute path for the same files (any DDEV setup does) and the recorded
+	 * path resolves to nothing, so every git command here fails with "fatal: not a git repository" -
+	 * a container/host path mismatch, not a real problem with the shipped file list. CI never hits
+	 * this: it always runs off a plain checkout, never a worktree.
+	 *
+	 * @param string $root Plugin root to check.
+	 * @return string|null A skip reason once this specific mismatch is confirmed, null otherwise -
+	 *                      so the caller still throws loudly for any other kind of git failure.
+	 */
+	private static function unresolvable_worktree_gitdir_reason( string $root ): ?string {
+		$git_file = rtrim( $root, '/' ) . '/.git';
+		if ( ! is_file( $git_file ) ) {
+			return null; // A normal checkout has .git as a directory, not this worktree pointer file.
+		}
+		$contents = file_get_contents( $git_file );
+		if ( ! is_string( $contents ) || 1 !== preg_match( '/^gitdir:\s*(.+)$/m', $contents, $matches ) ) {
+			return null;
+		}
+		$gitdir = trim( $matches[1] );
+		if ( is_dir( $gitdir ) ) {
+			return null; // The recorded path resolves fine here; something else caused the failure.
+		}
+		return sprintf(
+			'Skipping the shipped-file sanitizer sweep: this checkout is a linked git worktree whose '
+			. 'recorded gitdir ("%s") does not exist from here, almost certainly a host/container path '
+			. 'mismatch rather than a real repository problem. CI runs off a plain checkout and never '
+			. 'hits this.',
+			$gitdir
+		);
 	}
 
 	/**

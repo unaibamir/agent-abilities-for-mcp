@@ -602,7 +602,15 @@ function aafm_ajax_oauth_revoke_client(): void {
 	// any single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to
 	// still send success; Codex round 10, R10-2 - the code-table delete above was never
 	// certified at all).
-	if ( ! $deactivated || aafm_oauth_client_has_active_tokens( $client_id ) || aafm_oauth_client_has_pending_codes( $client_id ) ) {
+	//
+	// F6 (1.7.5 deferred): aafm_oauth_revoke_client_tokens() reports a genuine query failure as
+	// -1 (N1), and the final-state read above can still find zero active tokens even when that
+	// UPDATE itself failed (there was nothing to update either way) - so this response used to
+	// send the -1 sentinel straight through as revoked_tokens. The admin JS reads it as
+	// Number(revoked_tokens) and subtracts it from the displayed count, so a -1 INCREASED the
+	// shown token count instead of decreasing it. A genuine query failure is refused the same as
+	// any other unconfirmed revoke.
+	if ( ! $deactivated || -1 === $revoked || aafm_oauth_client_has_active_tokens( $client_id ) || aafm_oauth_client_has_pending_codes( $client_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the client. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 
@@ -682,7 +690,13 @@ function aafm_ajax_oauth_revoke_grant(): void {
 	// single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to still
 	// send success while the bearer token kept validating; Codex round 10, R10-2 - the code-table
 	// delete above was never certified at all).
-	if ( ! $consent_deleted || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_pending_codes( $user_id, $client_id ) ) {
+	//
+	// F6 (1.7.5 deferred): same sentinel leak as aafm_ajax_oauth_revoke_client() above -
+	// aafm_oauth_revoke_user_client_tokens() reports a genuine query failure as -1 (N1), and the
+	// final-state read can still find zero active tokens even when that UPDATE itself failed, so
+	// this response used to send the -1 sentinel straight through as revoked_tokens, which the
+	// admin JS then subtracted, INCREASING the displayed count instead of decreasing it.
+	if ( ! $consent_deleted || -1 === $revoked || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_pending_codes( $user_id, $client_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the grant. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 

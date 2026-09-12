@@ -491,6 +491,46 @@ function aafm_log_activity( array $record ): int {
 }
 
 /**
+ * Record that an option write did not actually persist, instead of the usual success-style
+ * ability_enabled/ability_disabled/setting_changed diff a caller would otherwise log.
+ *
+ * Calling a success-style log entry unconditionally, before checking whether
+ * aafm_update_option_verified() (or an equivalent operator-switch persist) actually got the value
+ * into the database, would leave success-style rows on record for a write that a stale
+ * persistent object cache silently swallowed - the exact silent-wrong-answer class
+ * aafm_update_option_verified() exists to catch elsewhere. This is the one row written instead:
+ * status 'error', naming the option so the real cause (option-cache.php's stale-cache class of
+ * bug) is legible straight from the log, without implying any setting actually changed.
+ *
+ * R3-2 (1.7.5 deferred, round 3): originally defined in includes/admin/page.php, loaded inside
+ * aafm_bootstrap() at 'plugins_loaded' priority 10. Four failure paths call this function at or
+ * before priority 1 - the OAuth-preservation and DCR-adoption migration callbacks on
+ * 'plugins_loaded' priority 1 (includes/oauth/discovery.php), and the activity-log/OAuth schema
+ * version stamps run directly from aafm_activate() during plugin activation, before bootstrap has
+ * ever run. Moved here because this file is required at the plugin's top level (before
+ * aafm_bootstrap() exists at all), so it is defined before every one of those early callers can
+ * possibly run.
+ *
+ * @param string $option Option name that failed to persist.
+ * @param string $label  Human-readable label for the option, used in the detail message.
+ * @return void
+ */
+function aafm_log_ability_persist_failure( string $option, string $label ): void {
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => $option,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'error',
+			'event_type'        => 'setting_changed',
+			/* translators: %s: human-readable label of the option that failed to persist. */
+			'detail'            => sprintf( __( '%s could not be saved: object cache stale', 'agent-abilities-for-mcp' ), $label ),
+		)
+	);
+}
+
+/**
  * Delete activity rows older than the configured retention window.
  *
  * Driven by the daily `aafm_prune_activity_log_daily` cron event, not by the write

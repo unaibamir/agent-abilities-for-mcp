@@ -1065,37 +1065,6 @@ function aafm_log_ability_toggle_diff( array $before, array $after ): int {
 }
 
 /**
- * Record that an enabled-abilities write did not actually persist, instead of the usual
- * success-style ability_enabled/ability_disabled diff.
- *
- * The sibling aafm_log_ability_toggle_diff() logs the INTENDED before/after difference; calling
- * it unconditionally, before checking whether aafm_update_option_verified() actually got the
- * value into the database, would leave success-style rows on record for a toggle that a stale
- * persistent object cache silently swallowed - the exact silent-wrong-answer class
- * aafm_update_option_verified() exists to catch elsewhere. This is the one row written instead:
- * status 'error', naming the option so the real cause (option-cache.php's stale-cache class of
- * bug) is legible straight from the log, without implying any ability actually changed state.
- *
- * @param string $option Option name that failed to persist.
- * @param string $label  Human-readable label for the option, used in the detail message.
- * @return void
- */
-function aafm_log_ability_persist_failure( string $option, string $label ): void {
-	$user = wp_get_current_user();
-	aafm_log_activity(
-		array(
-			'ability'           => $option,
-			'principal_user_id' => (int) $user->ID,
-			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
-			'status'            => 'error',
-			'event_type'        => 'setting_changed',
-			/* translators: %s: human-readable label of the option that failed to persist. */
-			'detail'            => sprintf( __( '%s could not be saved: object cache stale', 'agent-abilities-for-mcp' ), $label ),
-		)
-	);
-}
-
-/**
  * Write one audit row per locked ability a save attempted to enable.
  *
  * Called by aafm_set_enabled_abilities() with the locked names it just stripped and that were

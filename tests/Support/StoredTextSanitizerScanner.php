@@ -982,7 +982,7 @@ final class StoredTextSanitizerScanner {
 		if ( ! is_file( $git_file ) ) {
 			return null; // A normal checkout has .git as a directory, not this worktree pointer file.
 		}
-		$contents = file_get_contents( $git_file );
+		$contents = file_get_contents( $git_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local .git file off disk, never a remote URL.
 		if ( ! is_string( $contents ) || 1 !== preg_match( '/^gitdir:\s*(.+)$/m', $contents, $matches ) ) {
 			return null;
 		}

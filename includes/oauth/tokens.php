@@ -550,11 +550,18 @@ function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_
  * still deactivated best-effort, since revoking a partial, known-bad set is strictly safer than
  * revoking nothing, but the return value reports the run as incomplete either way.
  *
+ * Codex round 5 R5-3: the walks above are a snapshot, not a lock. A refresh token can rotate
+ * mid-walk, minting a successor row whose refresh_parent_id points at a row this function is
+ * still in the middle of revoking; the DOWN walk already read that row's children as empty and
+ * never sees the new one. This function used to certify success in that case even though the
+ * successor stayed active. It now re-reads for exactly that shape after the deactivating UPDATE
+ * and refuses to report success when a still-active successor is found.
+ *
  * @param int $seed_id Any row id belonging to the lineage to revoke.
- * @return bool True when both walks completed within the hop cap and the deactivating UPDATE
- *              itself succeeded. False when a read or the write failed, or the hop cap was hit -
- *              some rows in the lineage may remain active and the caller must not report the
- *              chain as fully revoked.
+ * @return bool True when both walks completed within the hop cap, the deactivating UPDATE itself
+ *              succeeded, AND a post-revocation re-check found no active row whose parent is in
+ *              the revoked set. False when any of that is not the case - some rows in the lineage
+ *              may remain active and the caller must not report the chain as fully revoked.
  */
 function aafm_oauth_revoke_chain( int $seed_id ): bool {
 	global $wpdb;
@@ -676,7 +683,29 @@ function aafm_oauth_revoke_chain( int $seed_id ): bool {
 	);
 	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
-	return ! $cap_hit && ! $read_failed && false !== $updated;
+	// Codex round 5 R5-3: the walk above snapshots descendants before this UPDATE deactivates
+	// them, so a successor minted mid-walk - aafm_oauth_rotate_refresh() winning its single-winner
+	// gate against a row this function had not yet deactivated - is never discovered by the DOWN
+	// walk and survives it untouched, while the run still certifies as complete. Re-check for
+	// exactly that shape after the deactivating UPDATE: any row whose refresh_parent_id points into
+	// the set just revoked, but that is still active, is such a successor. This closes the window
+	// this function's own traversal leaves open; it does not close a second rotation racing this
+	// very re-check, which is why the contract stays "never claim complete success without proof"
+	// rather than "guaranteed complete" - a caller that needs the latter would need a lock, not a
+	// re-check.
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+	$successor = aafm_wpdb_scalar(
+		$wpdb->prepare(
+			"SELECT id FROM %i WHERE refresh_parent_id IN ( {$placeholders} ) AND is_active = 1 LIMIT 1",
+			array_merge( array( $table ), $ids )
+		)
+	);
+	// A failed verification read cannot back a "fully revoked" claim either, so it fails the
+	// certification the same way a concurrent successor would - never report success on a check
+	// that could not itself be confirmed.
+	$successor_survived = ! $successor['ok'] || null !== $successor['value'];
+
+	return ! $cap_hit && ! $read_failed && false !== $updated && ! $successor_survived;
 }
 
 /**

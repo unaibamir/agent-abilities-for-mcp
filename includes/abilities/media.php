@@ -934,8 +934,13 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		// reverts this resave, which would leave the un-renormalized, IPTC/EXIF-sourced caption in
 		// storage - exactly the security gap this resave exists to close. Confirm the sanitized
 		// content actually landed before trusting it, same orphan-cleanup discipline as above.
-		$confirmed_field = get_post_field( 'post_content', $attachment_id, 'raw' );
-		if ( ! is_string( $confirmed_field ) || $confirmed_field !== $sanitized_content ) {
+		// Codex round 5 R5-1: this used to be a raw stored/expected comparison, which cannot tell
+		// a legitimate save-time normalization (emoji/charset re-encoding, a registered
+		// content_save_pre callback) from a genuine veto - a successfully renormalized caption
+		// could fail this check and get its attachment permanently deleted. Route through the
+		// same shared confirmation helper every other post-field write in this codebase uses, so
+		// this sibling gets the identical normalization tolerance and veto detection.
+		if ( ! aafm_post_field_write_confirmed( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}

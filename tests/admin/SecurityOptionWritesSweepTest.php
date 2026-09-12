@@ -293,7 +293,24 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * @return bool
 	 */
 	private function has_bare_option_write( array $tokens, string $name, string $option, array $aliases ): bool {
-		$count = count( $tokens );
+		return $this->count_bare_option_writes( $tokens, $name, $option, $aliases ) > 0;
+	}
+
+	/**
+	 * R2-7 (1.7.5 deferred, round 2): the exact same matcher as has_bare_option_write(), but
+	 * counting every match rather than stopping at the first - F11's exemption needs to tell
+	 * "exactly the one accepted seed call" apart from "that call plus another one added later in
+	 * the same function," and a boolean existence check cannot make that distinction.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Tokens from token_get_all().
+	 * @param string                                        $name Bare function name to match.
+	 * @param string                                        $option Literal option name to match as the first argument.
+	 * @param array<string,string>                          $aliases Lower-cased alias => real bare name.
+	 * @return int
+	 */
+	private function count_bare_option_writes( array $tokens, string $name, string $option, array $aliases ): int {
+		$count   = count( $tokens );
+		$matches = 0;
 		foreach ( $tokens as $i => $token ) {
 			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! $this->resolves_to_option_write_target( $token[1], $name, $aliases ) ) {
 				continue;
@@ -313,10 +330,10 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			}
 			$first_arg = $this->significant_token( $tokens, $open_index, 1 );
 			if ( is_array( $first_arg ) && T_CONSTANT_ENCAPSED_STRING === $first_arg[0] && substr( $first_arg[1], 1, -1 ) === $option ) {
-				return true;
+				++$matches;
 			}
 		}
-		return false;
+		return $matches;
 	}
 
 	/**
@@ -367,6 +384,22 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 		$tokens = token_get_all( "<?php\nupdate_option( 'aafm_unrelated_option', '1' );\n" );
 
 		$this->assertFalse( $this->has_bare_option_write( $tokens, 'update_option', 'aafm_oauth_enabled', array() ) );
+	}
+
+	/**
+	 * R2-7 (1.7.5 deferred, round 2): count_bare_option_writes() must tell one matching call
+	 * apart from two - has_bare_option_write() (a plain existence check) cannot, which is exactly
+	 * what let a second, unreviewed add_option() inside the exempt function pass the sweep
+	 * unnoticed. Fails if the counter reverts to stopping at the first match.
+	 */
+	public function test_count_bare_option_writes_distinguishes_one_call_from_two(): void {
+		$one  = token_get_all( "<?php\nadd_option( 'aafm_menu_pointer_active', '1' );\n" );
+		$two  = token_get_all( "<?php\nadd_option( 'aafm_menu_pointer_active', '1' );\nadd_option( 'aafm_menu_pointer_active', '1' );\n" );
+		$none = token_get_all( "<?php\necho 'no write here';\n" );
+
+		$this->assertSame( 1, $this->count_bare_option_writes( $one, 'add_option', 'aafm_menu_pointer_active', array() ) );
+		$this->assertSame( 2, $this->count_bare_option_writes( $two, 'add_option', 'aafm_menu_pointer_active', array() ) );
+		$this->assertSame( 0, $this->count_bare_option_writes( $none, 'add_option', 'aafm_menu_pointer_active', array() ) );
 	}
 
 	/**
@@ -477,13 +510,17 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 							$this->has_bare_option_write( $outside_tokens, $bare_call, $option, $this->parse_use_function_aliases( $outside_tokens ) ),
 							"A bare {$bare_call}() naming {$option} was found in {$relative} outside {$pointer_exemption['function']}() - the accepted seed-once idiom is scoped to that one function only."
 						);
-						// And prove the exempted call actually exists inside that function, so a
-						// later removal of the seed call is still noticed by this test rather than
-						// the exemption silently covering nothing.
-						$body_tokens = token_get_all( '<?php ' . $this->extract_function_body( $source, $pointer_exemption['function'] ) );
-						$this->assertTrue(
-							$this->has_bare_option_write( $body_tokens, $bare_call, $option, $this->parse_use_function_aliases( $body_tokens ) ),
-							"Expected a bare {$bare_call}() naming {$option} inside {$pointer_exemption['function']}() in {$relative} - update this exemption if that seed call moved or was removed."
+						// And prove the exempted call exists EXACTLY ONCE inside that function
+						// (R2-7, 1.7.5 deferred round 2): a bare existence check would still pass
+						// if a second, unreviewed call to the same option were added alongside
+						// the accepted seed call, inside the same exempt function - the exemption
+						// is for one specific call, not an unlimited allowance for that function.
+						$body_tokens   = token_get_all( '<?php ' . $this->extract_function_body( $source, $pointer_exemption['function'] ) );
+						$body_matches  = $this->count_bare_option_writes( $body_tokens, $bare_call, $option, $this->parse_use_function_aliases( $body_tokens ) );
+						$this->assertSame(
+							1,
+							$body_matches,
+							"Expected exactly one bare {$bare_call}() naming {$option} inside {$pointer_exemption['function']}() in {$relative} - update this exemption if that seed call moved, was removed, or another one was added alongside it."
 						);
 						continue;
 					}

@@ -2213,26 +2213,38 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
 
 /**
  * The post_status a write will actually land at, replicating wp_insert_post()/wp_update_post()'s
- * own publish<->future transition (wp-includes/post.php) rather than the caller's raw requested
- * value. Core only rewrites 'future' to 'publish' when the effective GMT post date is not
- * genuinely ahead of now by at least a minute; neither this plugin's create nor update path ever
- * sets a post date, so a create always resolves against "now" and an update always resolves
- * against the row's own existing date.
+ * own publish<->future transition (wp-includes/post.php, the `'attachment' !== $post_type` block
+ * immediately after the date is resolved) rather than the caller's raw requested value. That block
+ * is the ENTIRE transformation core applies to status outside sanitize_post_field()'s pipeline:
+ * 'publish' becomes 'future' when the effective GMT date is at least a minute ahead of now, and
+ * 'future' becomes 'publish' when it is not (or has passed); nothing else touches post_status
+ * between there and the row write. Neither this plugin's create nor update path ever sets a post
+ * date, so a create always resolves against "now" and an update always resolves against the row's
+ * own existing date.
  *
  * F1 (1.7.5 deferred): a write-confirmation check that compared the stored status against the
  * literal requested 'future' failed every authorized future-post request, because core itself
  * had already normalized the row to 'publish' before this plugin ever read it back.
  *
+ * R2-2 (1.7.5 deferred, round 2): the first fix only replicated the future-to-publish half.
+ * Requesting 'publish' on a post whose (unchanged) date is still genuinely in the future hits the
+ * other half of the same core block and lands at 'future' instead - this now handles both
+ * directions, matching core's block exactly rather than one arm of it.
+ *
  * @param string $status        Requested (already authority-checked) status.
  * @param string $post_date_gmt The GMT date the write will actually use.
+ * @param string $post_type     Post type - core skips this whole transition for attachments.
  * @return string
  */
-function aafm_effective_post_status( string $status, string $post_date_gmt ): string {
-	if ( 'future' !== $status ) {
+function aafm_effective_post_status( string $status, string $post_date_gmt, string $post_type ): string {
+	if ( 'attachment' === $post_type || ( 'publish' !== $status && 'future' !== $status ) ) {
 		return $status;
 	}
 	$now = gmdate( 'Y-m-d H:i:s' );
-	return ( strtotime( $post_date_gmt ) - strtotime( $now ) < MINUTE_IN_SECONDS ) ? 'publish' : 'future';
+	// Both directions resolve to the same date test in core (wp-includes/post.php): 'publish'
+	// becomes 'future' when still due, 'future' becomes 'publish' when it is not - so the
+	// requested $status only decided which of the two conversions could apply, not the outcome.
+	return ( strtotime( $post_date_gmt ) - strtotime( $now ) >= MINUTE_IN_SECONDS ) ? 'future' : 'publish';
 }
 
 /**
@@ -2247,21 +2259,61 @@ function aafm_effective_post_status( string $status, string $post_date_gmt ): st
  * every authorized create/update that landed on an already-taken slug, because core had already
  * deduped it before this plugin ever read it back.
  *
- * @param int    $post_id            Post id (0 for a create - the row does not exist yet at the
- *                                    point core itself computes the unique slug).
+ * R2-1 (1.7.5 deferred, round 2): the first fix passed 0 (the create-time exclude id, matching the
+ * id core's own call used) as wp_unique_post_slug()'s exclude-id argument even when confirming
+ * AFTER the insert, once the row already exists under $read_id. wp_unique_post_slug()'s own
+ * uniqueness query then found the row this call had just created, treated it as a collision, and
+ * expected a "-2" suffix that was never actually needed - a false failure on every create with an
+ * unused slug. There is no longer a reason to pass a pre-insert id here at all: by the time this
+ * runs, the row exists under $read_id for both a create and an update, so $read_id is always the
+ * correct exclusion id, matching what a second, later wp_unique_post_slug() call against the same
+ * now-real row would use.
+ *
+ * R2-3 (1.7.5 deferred, round 2): wp_unique_post_slug() itself returns a pending post's slug
+ * unchanged (wp-includes/post.php) - the capability-based clearing of a pending post's slug is a
+ * SEPARATE step core runs before ever calling wp_unique_post_slug(), gated on
+ * current_user_can( $post_type_object->cap->publish_posts ) for a create or
+ * current_user_can( 'publish_post', $post_id ) for an update. That is the one other transformation
+ * core applies to post_name outside wp_unique_post_slug() on these write paths (trash-suffix and
+ * untrash-desired-slug handling never apply here - these executors never set status to/from
+ * 'trash'), so it is replicated here rather than left as an undetectable divergence: a slug
+ * confirmation for a 'pending' write now also accepts an empty stored slug, but ONLY when the
+ * capability core actually gates on is genuinely absent. Any other divergence - including an
+ * empty slug when the user DID hold that capability - still fails as a veto.
+ *
+ * What this still cannot detect: a `pre_wp_unique_post_slug` filter or a `wp_insert_post_data`
+ * filter that swaps in a different, still-plausible slug (e.g. still unique, still non-empty) is
+ * indistinguishable from a legitimate site-specific dedup policy and is not treated as a veto.
+ *
  * @param string $intended_slug      The sanitize_title()'d slug the write attempted to persist.
  * @param string $effective_status   The status aafm_effective_post_status() resolved.
  * @param string $post_type          Post type.
  * @param int    $post_parent        Post parent id (0 - this plugin never exposes reparenting on
  *                                    these write paths).
- * @param int    $read_id            Post id to read the stored value back from (the real id after
- *                                    a create; same as $post_id for an update).
+ * @param int    $read_id            The post's real id - the row already exists under this id by
+ *                                    the time this runs, for a create as much as an update.
+ * @param bool   $is_create          True for a create (core's publish-capability check on this
+ *                                    post type), false for an update (core's per-post
+ *                                    'publish_post' meta capability check).
  * @return bool
  */
-function aafm_post_slug_write_confirmed( int $post_id, string $intended_slug, string $effective_status, string $post_type, int $post_parent, int $read_id ): bool {
-	$expected = wp_unique_post_slug( $intended_slug, $post_id, $effective_status, $post_type, $post_parent );
+function aafm_post_slug_write_confirmed( string $intended_slug, string $effective_status, string $post_type, int $post_parent, int $read_id, bool $is_create ): bool {
+	$expected = wp_unique_post_slug( $intended_slug, $read_id, $effective_status, $post_type, $post_parent );
 	$stored   = get_post_field( 'post_name', $read_id, 'raw' );
-	return ( is_scalar( $stored ) ? (string) $stored : '' ) === $expected;
+	$stored   = is_scalar( $stored ) ? (string) $stored : '';
+	if ( $stored === $expected ) {
+		return true;
+	}
+	if ( 'pending' !== $effective_status ) {
+		return false;
+	}
+	if ( $is_create ) {
+		$post_type_object = get_post_type_object( $post_type );
+		$can_publish       = $post_type_object && current_user_can( $post_type_object->cap->publish_posts );
+	} else {
+		$can_publish = current_user_can( 'publish_post', $read_id );
+	}
+	return ! $can_publish && '' === $stored;
 }
 
 /**

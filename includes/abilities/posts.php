@@ -943,15 +943,17 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	//
 	// F1 (1.7.5 deferred): post_status and post_name are NOT confirmed through
 	// aafm_post_field_write_confirmed() - core resolves both through separate logic
-	// (wp_insert_post()'s date-based future->publish transition, and wp_unique_post_slug())
+	// (wp_insert_post()'s date-based future<->publish transition, and wp_unique_post_slug())
 	// that never runs through sanitize_post_field()'s save-filter pipeline, so comparing against
 	// the raw requested value there falsely reported a normal core normalization as a failure.
-	$effective_status = aafm_effective_post_status( $status, gmdate( 'Y-m-d H:i:s' ) );
+	// See both helpers' docblocks (includes/helpers.php) for R2-1/R2-2/R2-3's fixes and what they
+	// still cannot detect.
+	$effective_status = aafm_effective_post_status( $status, gmdate( 'Y-m-d H:i:s' ), $type );
 	if ( ! aafm_post_field_write_confirmed( (int) $id, 'post_status', $effective_status, 0 ) ) {
 		return aafm_generic_error();
 	}
 	if ( isset( $postarr['post_name'] )
-		&& ! aafm_post_slug_write_confirmed( 0, (string) $postarr['post_name'], $effective_status, $type, 0, (int) $id )
+		&& ! aafm_post_slug_write_confirmed( (string) $postarr['post_name'], $effective_status, $type, 0, (int) $id, true )
 	) {
 		return aafm_generic_error();
 	}
@@ -1293,18 +1295,20 @@ function aafm_exec_update_post( array $input ) {
 	// F1 (1.7.5 deferred): post_status and post_name are NOT confirmed through
 	// aafm_post_field_write_confirmed() - see the create path above for why. An update never
 	// touches post_date, so the row's own existing GMT date (read before this write) is the
-	// effective date core's future->publish transition resolves against.
+	// effective date core's future<->publish transition resolves against. See both helpers'
+	// docblocks (includes/helpers.php) for R2-1/R2-2/R2-3's fixes and what they still cannot
+	// detect.
 	if ( isset( $postarr['post_status'] ) ) {
-		$effective_status = aafm_effective_post_status( (string) $postarr['post_status'], $post->post_date_gmt );
+		$effective_status = aafm_effective_post_status( (string) $postarr['post_status'], $post->post_date_gmt, $post->post_type );
 		if ( ! aafm_post_field_write_confirmed( $id, 'post_status', $effective_status ) ) {
 			return aafm_generic_error();
 		}
 	}
 	if ( isset( $postarr['post_name'] ) ) {
 		$effective_status = isset( $postarr['post_status'] )
-			? aafm_effective_post_status( (string) $postarr['post_status'], $post->post_date_gmt )
+			? aafm_effective_post_status( (string) $postarr['post_status'], $post->post_date_gmt, $post->post_type )
 			: $post->post_status;
-		if ( ! aafm_post_slug_write_confirmed( $id, (string) $postarr['post_name'], $effective_status, $post->post_type, (int) $post->post_parent, $id ) ) {
+		if ( ! aafm_post_slug_write_confirmed( (string) $postarr['post_name'], $effective_status, $post->post_type, (int) $post->post_parent, $id, false ) ) {
 			return aafm_generic_error();
 		}
 	}

@@ -554,6 +554,67 @@ final class PostsWriteTest extends TestCase {
 		$this->assertSame( 'Sub', get_post_meta( $id, 'subtitle', true ) );
 	}
 
+	/**
+	 * R2-2 (1.7.5 deferred, round 2): a scheduled post's date does not change on this update, so
+	 * requesting status "publish" while that date is still genuinely in the future must land core
+	 * back at "future" (wp_insert_post()'s own publish->future half of the same transition), not
+	 * be rejected as a silent veto by a confirmation helper that only replicated the other half.
+	 *
+	 * What would break this: reverting aafm_effective_post_status() to only handle future->publish
+	 * makes it expect the stored status to be "publish", find "future" instead, and this call
+	 * returns a generic error instead of the array below.
+	 */
+	public function test_update_post_requesting_publish_on_a_still_future_post_lands_at_future(): void {
+		$this->acting_as( 'editor' );
+		$future = gmdate( 'Y-m-d H:i:s', strtotime( '+1 day' ) );
+		$post   = self::factory()->post->create(
+			array(
+				'post_status'   => 'future',
+				'post_date'     => $future,
+				'post_date_gmt' => $future,
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id' => $post,
+				'status'  => 'publish',
+			)
+		);
+
+		$this->assertIsArray( $out, 'A publish request on a still-scheduled post must succeed, not veto.' );
+		$this->assertSame( 'future', get_post_status( $post ), 'Core keeps a still-due post scheduled regardless of the requested status.' );
+	}
+
+	/**
+	 * R2-3 (1.7.5 deferred, round 2): a Contributor (no publish_posts) requesting a pending post
+	 * with an explicit slug must not be treated as a veto when core deliberately clears that slug
+	 * - wp_unique_post_slug() itself returns a pending post's slug UNCHANGED, so core's own
+	 * separate capability-based clearing (wp_insert_post()) is the only thing this can be
+	 * confirmed against.
+	 *
+	 * What would break this: reverting aafm_post_slug_write_confirmed() to stop accepting the
+	 * empty-slug outcome for "pending" makes it expect the requested slug verbatim, find an empty
+	 * post_name instead, and this call returns a generic error instead of the array below.
+	 */
+	public function test_create_draft_pending_from_a_non_publisher_clears_the_requested_slug(): void {
+		$this->acting_as( 'contributor' );
+
+		$out = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'Review me',
+				'content' => 'Body',
+				'status'  => 'pending',
+				'slug'    => 'review-me',
+			)
+		);
+
+		$this->assertIsArray( $out, 'A pending create from a non-publisher must succeed, not veto on the cleared slug.' );
+		$id = $out['post']['id'];
+		$this->assertSame( 'pending', get_post_status( $id ) );
+		$this->assertSame( '', get_post_field( 'post_name', $id ), "Core clears a pending post's slug when its author lacks publish_posts." );
+	}
+
 	public function test_create_rejects_bad_enrichment_and_writes_no_post(): void {
 		$this->acting_as( 'editor' );
 		$before = (int) wp_count_posts( 'post' )->publish;

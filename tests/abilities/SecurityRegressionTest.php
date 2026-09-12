@@ -637,7 +637,16 @@ final class SecurityRegressionTest extends TestCase {
 				// comment here - while still appending ordinary whitespace, which is what keeps a
 				// required "<name> as <alias>" gap intact - closes it for any position, not just
 				// the two the previous two fixes happened to name.
+				// R3-7 (1.7.5 deferred, round 3): dropping a comment token outright, with no
+				// replacement, loses whatever lexical separation it provided - `Requests/**/as Net`
+				// collapsed straight to "Requestsas Net" with the comment simply gone, which no
+				// longer matches record_use_alias()'s `\s+as\s+` pattern (it requires real
+				// whitespace around "as", and PHP's grammar allows a comment to BE that whitespace
+				// with none alongside it). A single space always stands in for the discarded
+				// comment - redundant next to real whitespace already on either side, but load-
+				// bearing when the comment was the ONLY separator, on either or both sides of "as".
 				if ( is_array( $t ) && in_array( $t[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) {
+					$entry .= ' ';
 					++$j;
 					continue;
 				}
@@ -1046,6 +1055,32 @@ final class SecurityRegressionTest extends TestCase {
 
 		$this->assertSame( 'Requests', $aliases2['class']['net'] ?? null );
 		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens2, 'Requests', $aliases2['class'] ) );
+	}
+
+	/**
+	 * R3-7 (1.7.5 deferred, round 3): the test above already covers a comment with real whitespace
+	 * on at least one side of "as". This covers the narrower case that broke: a comment with NO
+	 * whitespace on either side, which - before this fix - collapsed straight into "Requestsas" or
+	 * "asNet" with nothing standing in for the discarded comment token at all.
+	 *
+	 * What would break this: reverting the comment-skip in parse_use_aliases() to omit the
+	 * replacement space makes every alias below resolve to null, and the corresponding call count
+	 * drops to 0.
+	 */
+	public function test_scanner_counts_a_grouped_import_with_no_whitespace_around_its_comment(): void {
+		foreach (
+			array(
+				'use WpOrg\\Requests\\{Exception, Requests/**/as Net};',
+				'use WpOrg\\Requests\\{Exception, Requests as/**/Net};',
+				'use WpOrg\\Requests\\{Exception, Requests/**/as/**/Net};',
+			) as $source
+		) {
+			$tokens  = $this->collapsed_fixture_tokens( "{$source}\nNet::get( \$url );" );
+			$aliases = $this->parse_use_aliases( $tokens );
+
+			$this->assertSame( 'Requests', $aliases['class']['net'] ?? null, "Failed for: {$source}" );
+			$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ), "Failed for: {$source}" );
+		}
 	}
 
 	/**

@@ -404,4 +404,55 @@ final class CommentsReadTest extends TestCase {
 		$this->assertSame( $before['total'], $after['total'] );
 		$this->assertFalse( $after['truncated'] );
 	}
+
+	/**
+	 * R2-6 (1.7.5 deferred, round 2): the round-1 fix above stopped a HIDDEN comment inside the
+	 * scan window from leaking, but a window that is ENTIRELY visible still leaked: a raw count
+	 * crossing the cap flipped `truncated` true even when the one additional comment beyond the
+	 * window sat on a post this subscriber cannot read. `comments` and `total` are unaffected
+	 * either way - only the flag, and only because of a comment that does not exist to this
+	 * caller.
+	 *
+	 * Fails if the truncation lookahead below is removed or reverts to inferring truncation from
+	 * raw_total/scan_cap without checking readability - the same class of leak that already broke
+	 * this flag twice.
+	 */
+	public function test_get_comments_sitewide_truncated_does_not_leak_a_hidden_comment_beyond_a_fully_visible_window(): void {
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 3 );
+
+		$public_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		foreach ( array( '2020-03-10', '2020-03-09', '2020-03-08' ) as $date ) {
+			self::factory()->comment->create(
+				array(
+					'comment_post_ID'  => $public_post,
+					'comment_approved' => '1',
+					'comment_date'     => "{$date} 00:00:00",
+					'comment_date_gmt' => "{$date} 00:00:00",
+				)
+			);
+		}
+
+		// Older than all three above, so it falls just past the 3-wide scan window - and on a
+		// post this subscriber cannot read.
+		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-03-01 00:00:00',
+				'comment_date_gmt' => '2020-03-01 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( 3, $out['total'], 'The scanned window is entirely visible; total must reflect it.' );
+		$this->assertFalse(
+			$out['truncated'],
+			'A hidden comment just past a fully-visible window must not flip truncated - that only measures its existence, not anything this caller could otherwise learn.'
+		);
+	}
 }

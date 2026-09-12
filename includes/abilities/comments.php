@@ -249,36 +249,44 @@ function aafm_exec_get_comments( array $input ): array {
 		);
 	}
 
-	$scan_cap = aafm_comments_sitewide_scan_cap();
-	$scanned  = get_comments(
+	$scan_cap    = aafm_comments_sitewide_scan_cap();
+	$is_readable = static fn( $comment ): bool => $comment instanceof WP_Comment
+		&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID );
+	$scanned     = get_comments(
 		array(
 			'status' => 'approve',
 			'number' => min( $raw_total, $scan_cap ),
 		)
 	);
 
-	$visible = array_values(
-		array_filter(
-			(array) $scanned,
-			static fn( $comment ): bool => $comment instanceof WP_Comment
-				&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID )
-		)
-	);
+	$visible = array_values( array_filter( (array) $scanned, $is_readable ) );
 
 	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan
-	// (Codex round 10, R10-8, generalized at F7 in the 1.7.5 deferred batch). The R10-8 fix only
-	// covered the completely-empty-visible case; whenever at least one comment was visible, the
-	// raw approved count crossing the scan cap still passed straight through, so adding a single
-	// comment on a post this caller can never read flipped `truncated` from false to true while
-	// `comments` and `total` stayed byte-for-byte identical - a channel that measures hidden
-	// comment volume and nothing this caller could otherwise learn.
+	// (Codex round 10, R10-8, generalized at F7 in the 1.7.5 deferred batch, then again at R2-6
+	// in round 2). Two earlier predicates both still let a comment on a post this caller cannot
+	// read flip the flag either way - comparing raw_total against scan_cap measures hidden
+	// volume regardless of the window's contents, and requiring the WHOLE window to be visible
+	// still flips false the moment a single hidden comment lands anywhere inside it, even with a
+	// visible one waiting just past the cap.
 	//
-	// Only report truncation when EVERY comment the scan actually examined turned out to be
-	// visible: the caller's own visible haul filled the whole scan window, so more comments they
-	// could also see plausibly exist just past it. A scan window that contains even one invisible
-	// comment proves nothing about whether more visible ones exist beyond the cap - reporting
-	// truncated there would only ever measure hidden volume.
-	$truncated = $raw_total > $scan_cap && count( $visible ) === count( (array) $scanned );
+	// The only thing this flag can honestly promise: "a SPECIFIC comment this caller CAN read
+	// exists beyond what was returned." A hidden comment, anywhere in either scan below, can
+	// never by itself flip this in either direction - only turning up an actual visible one does.
+	// In exchange, `truncated`/`total` become an honest LOWER BOUND past a second full scan
+	// window: a visible comment sitting beyond that second window is not detected, and this
+	// never falsely reports truncation for one that exists there. That is a deliberate trade -
+	// silence about content this caller cannot see, over completeness past two scan windows.
+	$truncated = false;
+	if ( count( (array) $scanned ) < $raw_total ) {
+		$lookahead = get_comments(
+			array(
+				'status' => 'approve',
+				'number' => min( $raw_total - count( (array) $scanned ), $scan_cap ),
+				'offset' => count( (array) $scanned ),
+			)
+		);
+		$truncated = array() !== array_filter( (array) $lookahead, $is_readable );
+	}
 
 	$page_comments = array_slice( $visible, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );
 

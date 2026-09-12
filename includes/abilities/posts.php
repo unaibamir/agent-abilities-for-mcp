@@ -933,6 +933,28 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 		return aafm_generic_error();
 	}
 
+	// B3 (1.7.5 deferred): the reread above only proved the row exists, never that what came back
+	// matches what this create actually asked for - a wp_insert_post_data filter silently vetoing
+	// or normalizing a field would still report success while the response carried the caller's
+	// stale intent instead of what storage actually holds. Same shape as R5-2, closed at other
+	// write sites through these same shared helpers. $sanitize_context_id is 0, not (int) $id:
+	// core's own sanitize_post( $postarr, 'db' ) inside wp_insert_post() ran BEFORE this row
+	// existed, with ID defaulted to 0 (aafm_post_field_write_confirmed()'s own docblock, R7-4).
+	$fields_to_confirm = array(
+		'post_title'   => $title,
+		'post_content' => (string) $postarr['post_content'],
+		'post_excerpt' => (string) $postarr['post_excerpt'],
+		'post_status'  => $status,
+	);
+	if ( isset( $postarr['post_name'] ) ) {
+		$fields_to_confirm['post_name'] = (string) $postarr['post_name'];
+	}
+	foreach ( $fields_to_confirm as $field => $intended ) {
+		if ( ! aafm_post_field_write_confirmed( (int) $id, $field, $intended, 0 ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	// Apply the pre-validated enrichment now that the id exists.
 	aafm_apply_write_enrichment( (int) $id, $enrichment );
 
@@ -1248,6 +1270,23 @@ function aafm_exec_update_post( array $input ) {
 	if ( ! $updated instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
+
+	// B3 (1.7.5 deferred): the reread above only proved the post still exists, never that what
+	// came back matches this update's own request - a wp_insert_post_data filter silently
+	// vetoing or normalizing one of these fields would still report success while the response
+	// carried the caller's stale intent instead of what storage actually holds. Only the fields
+	// THIS call actually set are checked, each against its CANONICAL sanitize_post_field() form
+	// (aafm_post_field_write_confirmed()'s default $sanitize_context_id, the existing $id - this
+	// is an update, the row already existed at sanitize time).
+	foreach ( array( 'post_title', 'post_content', 'post_excerpt', 'post_name', 'post_status' ) as $field ) {
+		if ( ! isset( $postarr[ $field ] ) ) {
+			continue;
+		}
+		if ( ! aafm_post_field_write_confirmed( $id, $field, (string) $postarr[ $field ] ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	$response = array( 'post' => aafm_redact_post( $updated ) );
 	if ( ! empty( $guard['warnings'] ) ) {
 		$response['content_warnings'] = $guard['warnings'];

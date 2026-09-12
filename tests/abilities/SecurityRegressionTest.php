@@ -601,12 +601,29 @@ final class SecurityRegressionTest extends TestCase {
 						$group_prefix = '';
 					}
 					++$j;
+					// F10 (1.7.5 deferred): ordinary formatting whitespace after the ',' (or after
+					// a '{' below) was appended straight into $entry, same as any other token. For
+					// a grouped member that reset $entry to $group_prefix (which ends in a trailing
+					// namespace separator), that whitespace landed BETWEEN the separator and the
+					// next member's name - `use WpOrg\Requests\{Exception, Requests as Net};`
+					// produced "WpOrg\Requests\ Requests as Net", and trailing_name_segment()'s
+					// strrpos( '\\' ) still finds that same trailing separator, returning
+					// " Requests" (leading space) instead of "Requests". Skip trivia here the same
+					// way the leading skip-loop above already does right after `use`.
+					while ( $j < $total && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+						++$j;
+					}
 					continue;
 				}
 				if ( '{' === $t ) {
 					$in_group     = true;
 					$group_prefix = $entry;
 					++$j;
+					// F10 (1.7.5 deferred): same trivia skip as above, for a group written with a
+					// space right after its opening brace (`Foo\{ Bar, Baz }`).
+					while ( $j < $total && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+						++$j;
+					}
 					continue;
 				}
 				$entry .= is_array( $t ) ? $t[1] : $t;
@@ -968,6 +985,25 @@ final class SecurityRegressionTest extends TestCase {
 		$tokens = $this->collapsed_fixture_tokens( '\\WpOrg\\Requests\\Requests::get( $url );' );
 
 		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests' ) );
+	}
+
+	/**
+	 * F10 (1.7.5 deferred): the ordinary whitespace after the comma in a grouped import
+	 * (`{Exception, Requests as Net}` - a space is standard formatting, not an edge case) used to
+	 * land between the group's shared namespace prefix and the second member's own name, so
+	 * trailing_name_segment() returned " Requests" (a leading space) instead of "Requests" and the
+	 * alias never resolved. Both members of this group must resolve: the first is a bare import,
+	 * the second is aliased, exercising both the B6 prefix-carry-forward fix and this whitespace
+	 * fix together the way a real grouped Requests import actually reads.
+	 */
+	public function test_scanner_counts_both_members_of_a_grouped_import_with_ordinary_spacing(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\{Exception, Requests as Net};\nnew Exception();\nNet::get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 'Exception', $aliases['class']['exception'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
 	}
 
 	/**

@@ -547,8 +547,9 @@ final class SecurityRegressionTest extends TestCase {
 	 * that no longer matches any literal target this scan looks for. Map every imported alias
 	 * back to the real bare name it imports (function and class imports tracked separately, since
 	 * PHP resolves them in separate namespaces), so a call to the alias still counts as a call to
-	 * the primitive it actually resolves to. Only the single, non-grouped and simple grouped
-	 * `use ... {A, B as C};` forms are handled - this file does not use any other form today.
+	 * the primitive it actually resolves to. The single, non-grouped form and the grouped
+	 * `use Foo\{Bar, Baz as C};` form are both handled, every group member resolved against the
+	 * shared namespace prefix before the braces - this file does not use any other form today.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens (see
 	 *                                                               collapse_qualified_names()).
@@ -581,16 +582,30 @@ final class SecurityRegressionTest extends TestCase {
 				++$j; // `use const X;` never matches a primitive name - skip past it harmlessly.
 			}
 
-			$entry = '';
+			$entry        = '';
+			$in_group     = false;
+			$group_prefix = '';
 			while ( $j < $total && ';' !== $tokens[ $j ] ) {
 				$t = $tokens[ $j ];
 				if ( ',' === $t || '}' === $t ) {
 					$this->record_use_alias( $aliases[ $kind ], $entry );
-					$entry = '';
+					// B6 (1.7.5 deferred): a `use Foo\{Bar, Baz as Q};` group's shared namespace
+					// prefix was captured below when '{' was seen, but only the FIRST group member
+					// ever carried it forward - every member after a ',' restarted from '', so a
+					// later member's own qualifier lost the group's namespace. Re-seed $entry with
+					// the group's prefix on every ',' inside the group, and only really clear it
+					// once the group's closing '}' is reached.
+					$entry = ( $in_group && ',' === $t ) ? $group_prefix : '';
+					if ( '}' === $t ) {
+						$in_group     = false;
+						$group_prefix = '';
+					}
 					++$j;
 					continue;
 				}
 				if ( '{' === $t ) {
+					$in_group     = true;
+					$group_prefix = $entry;
 					++$j;
 					continue;
 				}

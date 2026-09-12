@@ -142,6 +142,63 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
+	 * The inverse of strip_function_body(): one named top-level function's body ALONE (opening
+	 * brace through its matching close), rather than the rest of the file with it removed.
+	 *
+	 * F11 (1.7.5 deferred): $allowed_add_option_calls below used to exempt a (file, option)
+	 * pair anywhere in that file, not one specific call site - a second, unreviewed
+	 * `add_option( 'aafm_menu_pointer_active', ... )` added in a different function would still
+	 * pass. Scanning this function's isolated body separately from the rest of the file (with
+	 * strip_function_body() removing it there) lets the exemption apply to exactly the one named
+	 * call site the accepted seed-once idiom actually lives in.
+	 *
+	 * @param string $source        Full file contents.
+	 * @param string $function_name Function name to extract, without parentheses.
+	 * @return string That one function's body, or '' if the function was not found.
+	 */
+	private function extract_function_body( string $source, string $function_name ): string {
+		$tokens = token_get_all( $source );
+		$count  = count( $tokens );
+		for ( $i = 0; $i < $count; ++$i ) {
+			if ( ! is_array( $tokens[ $i ] ) || T_FUNCTION !== $tokens[ $i ][0] ) {
+				continue;
+			}
+			$j = $i + 1;
+			while ( $j < $count && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				++$j;
+			}
+			if ( ! ( $j < $count && is_array( $tokens[ $j ] ) && T_STRING === $tokens[ $j ][0] && $function_name === $tokens[ $j ][1] ) ) {
+				continue;
+			}
+			$k = $j + 1;
+			while ( $k < $count && '{' !== $tokens[ $k ] ) {
+				++$k;
+			}
+			$start = $k;
+			$depth = 0;
+			while ( $k < $count ) {
+				$brace_token = $tokens[ $k ];
+				if ( '{' === $brace_token || ( is_array( $brace_token ) && in_array( $brace_token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+					++$depth;
+				} elseif ( '}' === $brace_token ) {
+					--$depth;
+					if ( 0 === $depth ) {
+						++$k; // Include the real closing brace in the extracted body.
+						break;
+					}
+				}
+				++$k;
+			}
+			$body = '';
+			for ( $n = $start; $n < $k; ++$n ) {
+				$body .= is_array( $tokens[ $n ] ) ? $tokens[ $n ][1] : $tokens[ $n ];
+			}
+			return $body;
+		}
+		return '';
+	}
+
+	/**
 	 * Find the next (direction 1) or previous (direction -1) significant token around a given
 	 * index, mirrors SecurityRegressionTest::significant_token(): whitespace, comments, and
 	 * docblocks never count as significant, so a comment sitting between a call's name and its
@@ -335,9 +392,17 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * hid more than the one safe call: the function's own certification logic (Codex round 10,
 	 * R10-9) sat inside the same stripped body, so a later edit that ripped the certification back
 	 * out - or pasted in an unrelated bare write to a different guarded option - would have left
-	 * this test green either way. $allowed_add_option_calls names the exact (file, option) pair
-	 * instead: only a bare add_option() naming that option in that file is let through, so the
-	 * function's full body, certification included, stays part of the scan.
+	 * this test green either way. $allowed_add_option_calls named the exact (file, option) pair
+	 * instead: only a bare add_option() naming that option in that file was let through, so the
+	 * function's full body, certification included, stayed part of the scan.
+	 *
+	 * F11 (1.7.5 deferred): that (file, option) pair was still too wide - it let a bare
+	 * add_option() naming the option through ANYWHERE in the file, not only the one accepted
+	 * call site, so a second, unreviewed occurrence pasted into a different function would have
+	 * passed too. $allowed_add_option_calls now also names the one function the exemption is
+	 * scoped to: any matching call found in the file with that function's body removed still
+	 * fails like any other guarded write, and the loop separately proves the exempted call
+	 * genuinely exists inside that function, so removing the seed call is still noticed.
 	 *
 	 * The scan is token-based rather than regex-based (Codex round 8, R8-6): the retired regex
 	 * was case-sensitive and required literal whitespace, never a comment, between the function
@@ -353,8 +418,17 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 		// is the accepted seed-once idiom (aafm_quickconnect_flag_menu_pointer(), includes/admin/
 		// onboarding-pointer.php) - never update_option() or delete_option(), and never any other
 		// guarded option, both of which stay violations anywhere in the file.
+		//
+		// F11 (1.7.5 deferred): this used to key only by (file, option), so a SECOND, unreviewed
+		// add_option() naming the same option in a DIFFERENT function of this same file would
+		// still pass. 'function' scopes the exemption to that one call site: the loop below
+		// verifies no matching call exists anywhere in the file OUTSIDE that function, and that
+		// one genuinely exists inside it (so removing the seed call is itself still noticed).
 		$allowed_add_option_calls = array(
-			'includes/admin/onboarding-pointer.php' => array( 'aafm_menu_pointer_active' ),
+			'includes/admin/onboarding-pointer.php' => array(
+				'options'  => array( 'aafm_menu_pointer_active' ),
+				'function' => 'aafm_quickconnect_flag_menu_pointer',
+			),
 		);
 
 		$includes_dir = AAFM_PLUGIN_DIR . 'includes';
@@ -387,12 +461,31 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			$tokens  = token_get_all( $scan_source );
 			$aliases = $this->parse_use_function_aliases( $tokens );
 
+			$pointer_exemption = $allowed_add_option_calls[ $relative ] ?? null;
+
 			foreach ( $guarded_options as $option ) {
 				foreach ( array( 'update_option', 'delete_option', 'add_option' ) as $bare_call ) {
-					if ( 'add_option' === $bare_call
-						&& in_array( $option, $allowed_add_option_calls[ $relative ] ?? array(), true )
+					if ( 'add_option' === $bare_call && null !== $pointer_exemption
+						&& in_array( $option, $pointer_exemption['options'], true )
 					) {
-						continue; // The one accepted seed-once call named above - never update/delete.
+						// F11 (1.7.5 deferred): exempt exactly the one accepted seed-once call
+						// site, not this (file, option) pair anywhere in the file. Check the file
+						// with that function's body removed - any matching call surviving there
+						// is a second, unreviewed occurrence and must still fail.
+						$outside_tokens = token_get_all( $this->strip_function_body( $source, $pointer_exemption['function'] ) );
+						$this->assertFalse(
+							$this->has_bare_option_write( $outside_tokens, $bare_call, $option, $this->parse_use_function_aliases( $outside_tokens ) ),
+							"A bare {$bare_call}() naming {$option} was found in {$relative} outside {$pointer_exemption['function']}() - the accepted seed-once idiom is scoped to that one function only."
+						);
+						// And prove the exempted call actually exists inside that function, so a
+						// later removal of the seed call is still noticed by this test rather than
+						// the exemption silently covering nothing.
+						$body_tokens = token_get_all( '<?php ' . $this->extract_function_body( $source, $pointer_exemption['function'] ) );
+						$this->assertTrue(
+							$this->has_bare_option_write( $body_tokens, $bare_call, $option, $this->parse_use_function_aliases( $body_tokens ) ),
+							"Expected a bare {$bare_call}() naming {$option} inside {$pointer_exemption['function']}() in {$relative} - update this exemption if that seed call moved or was removed."
+						);
+						continue;
 					}
 					$this->assertFalse(
 						$this->has_bare_option_write( $tokens, $bare_call, $option, $aliases ),

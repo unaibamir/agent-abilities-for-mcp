@@ -2277,6 +2277,13 @@
 				// front, the same cost M4 removed from the "all" case. observe() on a
 				// not-yet-attached element is safe: it simply reports nothing until the row is
 				// appended and laid out.
+				//
+				// R2-5 (1.7.5 deferred, round 2): the only prior disconnect() was inside the
+				// callback itself, so a row removed from the DOM before it ever scrolled into
+				// view (reconciled away as a duplicate, or removed by the operator) left this
+				// observer watching a detached element, and its callback closure (over picker,
+				// buildGroups, updateCount) alive, indefinitely. Recorded on the picker itself so
+				// #disconnectAllowlistObserver() can dispose of it from either removal site below.
 				const observer = new IntersectionObserver( ( entries ) => {
 					if ( entries.some( ( entry ) => entry.isIntersecting ) ) {
 						observer.disconnect();
@@ -2284,6 +2291,7 @@
 						updateCount();
 					}
 				} );
+				picker.lazyObserver = observer;
 				observer.observe( picker );
 			}
 
@@ -2320,6 +2328,18 @@
 			updateCount();
 
 			return picker;
+		}
+
+		/**
+		 * R2-5 (1.7.5 deferred, round 2): disconnect a removed allowlist row's lazy-build
+		 * IntersectionObserver, if it has one and never fired - see #buildAllowlistPicker()'s
+		 * IntersectionObserver above. Call before removing $row from the DOM.
+		 *
+		 * @param {HTMLElement} row A `[data-allowlist-row]` element about to be removed.
+		 * @return {void}
+		 */
+		#disconnectAllowlistObserver( row ) {
+			row.querySelector( '.aafm-allowlist-picker' )?.lazyObserver?.disconnect();
 		}
 
 		/**
@@ -2519,7 +2539,11 @@
 			card.addEventListener( 'click', ( e ) => {
 				const btn = e.target.closest( '.aafm-allowlist-remove' );
 				if ( btn ) {
-					btn.closest( 'tr' )?.remove();
+					const row = btn.closest( 'tr' );
+					if ( row ) {
+						this.#disconnectAllowlistObserver( row );
+						row.remove();
+					}
 				}
 			} );
 
@@ -2558,6 +2582,7 @@
 					domRows.forEach( ( row ) => {
 						const key = `${ row.dataset.scopeType }:${ row.dataset.scopeId }`;
 						if ( ! keptKeys.has( key ) || lastRowForKey.get( key ) !== row ) {
+							this.#disconnectAllowlistObserver( row );
 							row.remove();
 						}
 					} );

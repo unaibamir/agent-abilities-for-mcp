@@ -262,30 +262,57 @@ function aafm_exec_get_comments( array $input ): array {
 	$visible = array_values( array_filter( (array) $scanned, $is_readable ) );
 
 	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan
-	// (Codex round 10, R10-8, generalized at F7 in the 1.7.5 deferred batch, then again at R2-6
-	// in round 2). Two earlier predicates both still let a comment on a post this caller cannot
-	// read flip the flag either way - comparing raw_total against scan_cap measures hidden
-	// volume regardless of the window's contents, and requiring the WHOLE window to be visible
-	// still flips false the moment a single hidden comment lands anywhere inside it, even with a
-	// visible one waiting just past the cap.
+	// (Codex round 10, R10-8, generalized at F7, then R2-6, then R3-6 across three rounds of
+	// this batch). Every earlier predicate - comparing raw_total against scan_cap, requiring the
+	// whole window to be visible, a bounded second-window lookahead sized or OFFSET from a count
+	// that includes hidden rows - shared the same flaw: inserting or removing ONE hidden comment
+	// anywhere before a count-based boundary shifts every comment after it by one position, which
+	// can push a genuinely visible comment across whichever boundary the predicate was watching,
+	// flipping `truncated` on content the caller never saw and never asked about.
 	//
-	// The only thing this flag can honestly promise: "a SPECIFIC comment this caller CAN read
-	// exists beyond what was returned." A hidden comment, anywhere in either scan below, can
-	// never by itself flip this in either direction - only turning up an actual visible one does.
-	// In exchange, `truncated`/`total` become an honest LOWER BOUND past a second full scan
-	// window: a visible comment sitting beyond that second window is not detected, and this
-	// never falsely reports truncation for one that exists there. That is a deliberate trade -
-	// silence about content this caller cannot see, over completeness past two scan windows.
+	// R3-6's fix: probe by IDENTITY, not by count/offset. `comment__not_in` excludes exactly the
+	// comment ids already examined, so the next probe batch is always "whatever wasn't already
+	// looked at", regardless of how many hidden comments were inserted or removed anywhere in the
+	// approved set - unlike an offset, an id exclusion list cannot be shifted by unrelated rows.
+	// Walk forward in bounded batches (mirrors aafm_exec_geodirectory_get_listings()'s own
+	// keyset-based disambiguation probe) until a readable comment resolves this true, a batch
+	// comes back short of what was asked for (proving no more approved comments exist at all,
+	// resolving this false), or a small reserve of probe batches is exhausted without resolving
+	// either way - at which point, as with that same GeoDirectory probe, an unresolved state
+	// reports true rather than assert a "nothing more" the scan never actually confirmed.
 	$truncated = false;
 	if ( count( (array) $scanned ) < $raw_total ) {
-		$lookahead = get_comments(
-			array(
-				'status' => 'approve',
-				'number' => min( $raw_total - count( (array) $scanned ), $scan_cap ),
-				'offset' => count( (array) $scanned ),
-			)
+		$excluded  = array_map(
+			static fn( $comment ): int => $comment instanceof WP_Comment ? (int) $comment->comment_ID : 0,
+			(array) $scanned
 		);
-		$truncated = array() !== array_filter( (array) $lookahead, $is_readable );
+		$probe_cap = 2; // Small, fixed reserve - see the docblock above for why an unresolved probe defaults to true rather than growing without bound.
+		for ( $i = 0; $i < $probe_cap; $i++ ) {
+			$probe = get_comments(
+				array(
+					'status'          => 'approve',
+					'number'          => $scan_cap,
+					'comment__not_in' => $excluded,
+				)
+			);
+			if ( array() !== array_filter( (array) $probe, $is_readable ) ) {
+				$truncated = true;
+				break;
+			}
+			if ( count( (array) $probe ) < $scan_cap ) {
+				break; // A short batch proves no more approved comments exist at all: stays false.
+			}
+			$excluded = array_merge(
+				$excluded,
+				array_map(
+					static fn( $comment ): int => $comment instanceof WP_Comment ? (int) $comment->comment_ID : 0,
+					(array) $probe
+				)
+			);
+			if ( $i === $probe_cap - 1 ) {
+				$truncated = true; // Reserve exhausted without resolving either way: unknown, so assume yes.
+			}
+		}
 	}
 
 	$page_comments = array_slice( $visible, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );

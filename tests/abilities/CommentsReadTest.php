@@ -494,4 +494,79 @@ final class CommentsReadTest extends TestCase {
 			'A hidden comment just past a fully-visible window must not flip truncated - that only measures its existence, not anything this caller could otherwise learn.'
 		);
 	}
+
+	/**
+	 * R3-6 (1.7.5 deferred, round 3): the round-2 lookahead sized/offset its second window from a
+	 * count that included hidden comments, so inserting ONE hidden comment between the scanned
+	 * window and a genuinely visible comment shifted that visible comment out of the lookahead
+	 * window entirely - flipping truncated from true to false with the caller's own visible
+	 * results completely unchanged. This reproduces that exact insertion.
+	 *
+	 * What would break this: reverting the identity-based (comment__not_in) probe to a count/
+	 * offset-sized lookahead makes the second assertion fail - truncated would go back to false
+	 * once the extra hidden comment is inserted, even though READABLE_BEYOND still exists.
+	 */
+	public function test_get_comments_sitewide_truncated_survives_a_hidden_insertion_before_a_visible_comment(): void {
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 3 );
+
+		$public_post  = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
+
+		// The 3-wide scan window: A, B, C (newest three).
+		foreach ( array( '2020-04-10', '2020-04-09', '2020-04-08' ) as $date ) {
+			self::factory()->comment->create(
+				array(
+					'comment_post_ID'  => $public_post,
+					'comment_approved' => '1',
+					'comment_date'     => "{$date} 00:00:00",
+					'comment_date_gmt' => "{$date} 00:00:00",
+				)
+			);
+		}
+		// H1, H2: hidden, immediately past the window.
+		foreach ( array( '2020-04-07', '2020-04-06' ) as $date ) {
+			self::factory()->comment->create(
+				array(
+					'comment_post_ID'  => $private_post,
+					'comment_approved' => '1',
+					'comment_date'     => "{$date} 00:00:00",
+					'comment_date_gmt' => "{$date} 00:00:00",
+				)
+			);
+		}
+		// D: readable, past H1/H2 - what the old lookahead's single fixed-size window could still
+		// reach before an extra hidden comment pushed it out.
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $public_post,
+				'comment_approved' => '1',
+				'comment_content'  => 'READABLE_BEYOND',
+				'comment_date'     => '2020-04-05 00:00:00',
+				'comment_date_gmt' => '2020-04-05 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$args = array( 'per_page' => 50 );
+
+		$before = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+		$this->assertTrue( $before['truncated'], 'D is readable and beyond the scan window: truncated must be true.' );
+
+		// Insert one more hidden comment between C and H1 - shifting H1/H2/D by one position each.
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-04-07 12:00:00',
+				'comment_date_gmt' => '2020-04-07 12:00:00',
+			)
+		);
+
+		$after = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( $before['comments'], $after['comments'], 'The caller\'s own visible results must be unaffected by the insertion.' );
+		$this->assertTrue( $after['truncated'], 'D is still readable and still beyond the window - truncated must stay true, not flip false because of where a hidden comment landed.' );
+	}
 }

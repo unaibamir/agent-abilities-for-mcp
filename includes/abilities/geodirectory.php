@@ -517,6 +517,26 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 						// more" the scan never actually confirmed. Raise the reserve above (still
 						// bounded by $batch_cap) if a real directory legitimately needs to skip past
 						// more than two full invisible batches to disambiguate.
+						//
+						// R3-6 (1.7.5 deferred, round 3): exhausting this reserve is itself a
+						// caller-observable signal - exactly $probe_cap full batches of trailing
+						// invisible rows resolves false (the batch after them comes back short,
+						// proving real end-of-data), one full batch more resolves true (the reserve
+						// runs out first) - so a caller who can pad their OWN listings could learn
+						// which side of that one fixed threshold the trailing invisible count falls
+						// on. Accepted, not fixed: this cursor is already identity-based (keyset on
+						// ID, not a count/offset), so unlike aafm_exec_get_comments()'s pre-R3-6
+						// defect this is NOT walkable position-by-position - inserting or removing
+						// one invisible row only moves the threshold by one, it does not relocate
+						// where a genuinely visible row falls the way an offset-sized lookahead did.
+						// The only alternative is a bigger reserve, and test_get_listings_probe_
+						// draws_from_a_small_shared_reserve_not_a_second_full_budget() deliberately
+						// pins this reserve to a SMALL, fixed size specifically so a broken cap
+						// filter can never double the documented per-call query budget - widening it
+						// to close this one-bit threshold would reopen that larger, already-fixed
+						// problem for a narrower one. Same trade as F8's SSRF residual: safe
+						// direction always (never silently claims completeness), bounded and
+						// documented rather than unresolved.
 						$truncated = true;
 						break;
 					}

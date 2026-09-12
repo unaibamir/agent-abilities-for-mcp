@@ -559,52 +559,52 @@ PHP;
 	 * Proves the exemption policy on one real (function, option) identity at a time.
 	 *
 	 * @dataProvider real_exemption_identities
-	 * @param string $function Exempt function name.
+	 * @param string $function_name Exempt function name.
 	 * @param string $option   Accepted option name.
 	 */
-	public function test_exemption_policy_rejects_a_duplicate_or_aliased_duplicate_inside_the_exempt_function( string $function, string $option ): void {
+	public function test_exemption_policy_rejects_a_duplicate_or_aliased_duplicate_inside_the_exempt_function( string $function_name, string $option ): void {
 		$single         = <<<PHP
 <?php
-function {$function}() {
+function {$function_name}() {
 	add_option( '{$option}', '1', '', true );
 }
 PHP;
 		$single_tokens  = token_get_all( $single );
 		$single_aliases = $this->parse_use_function_aliases( $single_tokens );
-		$single_body    = token_get_all( '<?php ' . $this->extract_function_body( $single, $function ) );
+		$single_body    = token_get_all( '<?php ' . $this->extract_function_body( $single, $function_name ) );
 		$this->assertSame(
 			1,
 			$this->count_bare_option_writes( $single_body, 'add_option', $option, $single_aliases ),
-			"Baseline: exactly one accepted call to {$function}() naming {$option} must count as 1."
+			"Baseline: exactly one accepted call to {$function_name}() naming {$option} must count as 1."
 		);
 
 		$duplicate         = <<<PHP
 <?php
-function {$function}() {
+function {$function_name}() {
 	add_option( '{$option}', '1', '', true );
 	add_option( '{$option}', '1', '', true );
 }
 PHP;
 		$duplicate_tokens  = token_get_all( $duplicate );
 		$duplicate_aliases = $this->parse_use_function_aliases( $duplicate_tokens );
-		$duplicate_body    = token_get_all( '<?php ' . $this->extract_function_body( $duplicate, $function ) );
+		$duplicate_body    = token_get_all( '<?php ' . $this->extract_function_body( $duplicate, $function_name ) );
 		$this->assertSame(
 			2,
 			$this->count_bare_option_writes( $duplicate_body, 'add_option', $option, $duplicate_aliases ),
-			"A second, unreviewed add_option() naming {$option} inside {$function}() must be counted, not silently absorbed by the exemption."
+			"A second, unreviewed add_option() naming {$option} inside {$function_name}() must be counted, not silently absorbed by the exemption."
 		);
 
 		$aliased_duplicate = <<<PHP
 <?php
 use function add_option as seed;
-function {$function}() {
+function {$function_name}() {
 	add_option( '{$option}', '1', '', true );
 	seed( '{$option}', '1', '', true );
 }
 PHP;
 		$aliased_tokens    = token_get_all( $aliased_duplicate );
 		$aliased_aliases   = $this->parse_use_function_aliases( $aliased_tokens );
-		$aliased_body      = token_get_all( '<?php ' . $this->extract_function_body( $aliased_duplicate, $function ) );
+		$aliased_body      = token_get_all( '<?php ' . $this->extract_function_body( $aliased_duplicate, $function_name ) );
 		$this->assertSame(
 			2,
 			$this->count_bare_option_writes( $aliased_body, 'add_option', $option, $aliased_aliases ),
@@ -616,17 +616,17 @@ PHP;
 		// check - proven directly here rather than only by the earlier round's narrower fixture.
 		$outside          = <<<PHP
 <?php
-function {$function}() {
+function {$function_name}() {
 	add_option( '{$option}', '1', '', true );
 }
 
 add_option( '{$option}', '1', '', true );
 PHP;
-		$outside_stripped = $this->strip_function_body( $outside, $function );
+		$outside_stripped = $this->strip_function_body( $outside, $function_name );
 		$outside_tokens   = token_get_all( $outside_stripped );
 		$this->assertTrue(
 			$this->has_bare_option_write( $outside_tokens, 'add_option', $option, $this->parse_use_function_aliases( $outside_tokens ) ),
-			"A second add_option() naming {$option} OUTSIDE {$function}() must still be detected once that function's own body is removed."
+			"A second add_option() naming {$option} OUTSIDE {$function_name}() must still be detected once that function's own body is removed."
 		);
 	}
 

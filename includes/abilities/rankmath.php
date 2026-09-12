@@ -755,13 +755,20 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 	// Verify the write actually persisted. update_post_meta() itself returns truthy even when a
 	// consumer short-circuits the write via the documented update_post_metadata filter (a
 	// caching/compliance plugin's veto mechanism), so its return value cannot be trusted on its
-	// own - read the meta back and compare against what was sanitized, mirroring the -get-schema
-	// sibling's own read (aafm_exec_rankmath_get_schema(), above). Returning the RE-READ value
-	// rather than the sanitized input also means a successful response always reflects what
-	// storage genuinely holds, never what the caller merely asked for.
+	// own - read the meta back and compare, mirroring the -get-schema sibling's own read
+	// (aafm_exec_rankmath_get_schema(), above). Returning the RE-READ value rather than the
+	// sanitized input also means a successful response always reflects what storage genuinely
+	// holds, never what the caller merely asked for.
+	//
+	// F5 (1.7.5 deferred): the comparison used to be a direct wp_json_encode() equality check
+	// against $clean, this plugin's own pre-write intent, rather than aafm_meta_write_confirmed()'s
+	// canonical sanitize_meta() form - the same B6-3 class the sibling field writer above already
+	// closed. A registered sanitizer on this dynamic rank_math_schema_{Type} key that legitimately
+	// normalizes a value (for example a headline) reported as a write failure even though the
+	// write landed exactly as that sanitizer defines "landed".
 	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
 	$stored = is_array( $stored ) ? $stored : array();
-	if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
+	if ( ! aafm_meta_write_confirmed( $stored, $clean, 'rank_math_schema_' . $type, 'post', (string) get_object_subtype( 'post', $id ) ) ) {
 		return new WP_Error(
 			'aafm_rankmath_schema_write_failed',
 			__( 'The schema could not be saved. Nothing was changed.', 'agent-abilities-for-mcp' )

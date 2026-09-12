@@ -706,13 +706,14 @@ function aafm_oauth_revoke_chain( int $seed_id ): bool {
 	// very re-check, which is why the contract stays "never claim complete success without proof"
 	// rather than "guaranteed complete" - a caller that needs the latter would need a lock, not a
 	// re-check.
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- same reasoning as the UPDATE above: the table is bound via %i, every id via $ids, and only the interpolated %d list is left for these two sniffs to flag.
 	$successor = aafm_wpdb_scalar(
 		$wpdb->prepare(
 			"SELECT id FROM %i WHERE refresh_parent_id IN ( {$placeholders} ) AND is_active = 1 LIMIT 1",
 			array_merge( array( $table ), $ids )
 		)
 	);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 	// A failed verification read cannot back a "fully revoked" claim either, so it fails the
 	// certification the same way a concurrent successor would - never report success on a check
 	// that could not itself be confirmed.

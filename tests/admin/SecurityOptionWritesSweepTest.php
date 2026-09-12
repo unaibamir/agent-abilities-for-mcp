@@ -322,15 +322,22 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * The bare writes that really are safe are add_option() calls whose whole point is
 	 * add_option()'s no-op-if-present behaviour, never update_option()'s overwrite: the pair
 	 * inside aafm_oauth_seed_default_options() (includes/oauth/discovery.php), which run once at
-	 * activation and seed both OAuth options to their safe default, and the single call inside
-	 * aafm_quickconnect_flag_menu_pointer() (includes/admin/onboarding-pointer.php, Codex round 9,
-	 * R9-10), which seeds the first-activation pointer flag exactly once so a later
-	 * deactivate/reactivate cycle cannot re-arm a pointer the operator already dismissed. A
-	 * file-wide exemption for an option name used to cover the discovery.php case, but it also
-	 * silently permitted a bare write to that option ANYWHERE ELSE in the file (Codex round 6,
-	 * B6-7). Each exempt function's body is stripped out of its file's source before the scan
-	 * runs instead, so the exemption is scoped to the one call it actually covers, and every
-	 * other line in the file - including every guarded option - is checked like any other file.
+	 * activation and seed both OAuth options to their safe default. A file-wide exemption for an
+	 * option name used to cover this case, but it also silently permitted a bare write to that
+	 * option ANYWHERE ELSE in the file (Codex round 6, B6-7). The exempt function's body is
+	 * stripped out of its file's source before the scan runs instead, so the exemption is scoped
+	 * to the one call it actually covers, and every other line in the file - including every
+	 * guarded option - is checked like any other file.
+	 *
+	 * The single seed call inside aafm_quickconnect_flag_menu_pointer()
+	 * (includes/admin/onboarding-pointer.php) used to get the same whole-function strip, but that
+	 * hid more than the one safe call: the function's own certification logic (Codex round 10,
+	 * R10-9) sat inside the same stripped body, so a later edit that ripped the certification back
+	 * out - or pasted in an unrelated bare write to a different guarded option - would have left
+	 * this test green either way. $allowed_add_option_calls names the exact (file, option) pair
+	 * instead: only a bare add_option() naming that option in that file is let through, so the
+	 * function's full body, certification included, stays part of the scan.
+	 *
 	 * The scan is token-based rather than regex-based (Codex round 8, R8-6): the retired regex
 	 * was case-sensitive and required literal whitespace, never a comment, between the function
 	 * name and its opening paren, so `UPDATE_OPTION( ... )` or a call with an inline comment
@@ -339,8 +346,14 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	public function test_no_bare_option_write_names_a_security_allowlist_option(): void {
 		$guarded_options  = $this->guarded_security_options();
 		$exempt_functions = array(
-			'includes/oauth/discovery.php'          => 'aafm_oauth_seed_default_options',
-			'includes/admin/onboarding-pointer.php' => 'aafm_quickconnect_flag_menu_pointer',
+			'includes/oauth/discovery.php' => 'aafm_oauth_seed_default_options',
+		);
+		// Codex round 10, R10-9: a bare add_option() naming this exact option in this exact file
+		// is the accepted seed-once idiom (aafm_quickconnect_flag_menu_pointer(), includes/admin/
+		// onboarding-pointer.php) - never update_option() or delete_option(), and never any other
+		// guarded option, both of which stay violations anywhere in the file.
+		$allowed_add_option_calls = array(
+			'includes/admin/onboarding-pointer.php' => array( 'aafm_menu_pointer_active' ),
 		);
 
 		$includes_dir = AAFM_PLUGIN_DIR . 'includes';
@@ -375,6 +388,11 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 
 			foreach ( $guarded_options as $option ) {
 				foreach ( array( 'update_option', 'delete_option', 'add_option' ) as $bare_call ) {
+					if ( 'add_option' === $bare_call
+						&& in_array( $option, $allowed_add_option_calls[ $relative ] ?? array(), true )
+					) {
+						continue; // The one accepted seed-once call named above - never update/delete.
+					}
 					$this->assertFalse(
 						$this->has_bare_option_write( $tokens, $bare_call, $option, $aliases ),
 						"A bare {$bare_call}() naming {$option} was found in {$relative} - route it through aafm_update_option_verified() instead."

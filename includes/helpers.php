@@ -2212,6 +2212,59 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
 }
 
 /**
+ * The post_status a write will actually land at, replicating wp_insert_post()/wp_update_post()'s
+ * own publish<->future transition (wp-includes/post.php) rather than the caller's raw requested
+ * value. Core only rewrites 'future' to 'publish' when the effective GMT post date is not
+ * genuinely ahead of now by at least a minute; neither this plugin's create nor update path ever
+ * sets a post date, so a create always resolves against "now" and an update always resolves
+ * against the row's own existing date.
+ *
+ * F1 (1.7.5 deferred): a write-confirmation check that compared the stored status against the
+ * literal requested 'future' failed every authorized future-post request, because core itself
+ * had already normalized the row to 'publish' before this plugin ever read it back.
+ *
+ * @param string $status        Requested (already authority-checked) status.
+ * @param string $post_date_gmt The GMT date the write will actually use.
+ * @return string
+ */
+function aafm_effective_post_status( string $status, string $post_date_gmt ): string {
+	if ( 'future' !== $status ) {
+		return $status;
+	}
+	$now = gmdate( 'Y-m-d H:i:s' );
+	return ( strtotime( $post_date_gmt ) - strtotime( $now ) < MINUTE_IN_SECONDS ) ? 'publish' : 'future';
+}
+
+/**
+ * Whether a post_name write landed as core's own wp_unique_post_slug() would actually resolve it,
+ * rather than the plugin's pre-dedup sanitize_title() intent. wp_insert_post()/wp_update_post()
+ * call wp_unique_post_slug() directly (wp-includes/post.php) to dedupe against existing rows -
+ * that call never runs through sanitize_post_field()'s save-filter pipeline, so
+ * aafm_post_field_write_confirmed() cannot be reused here without always failing on a legitimate
+ * "-2" suffix.
+ *
+ * F1 (1.7.5 deferred): a write-confirmation check that expected the exact requested slug failed
+ * every authorized create/update that landed on an already-taken slug, because core had already
+ * deduped it before this plugin ever read it back.
+ *
+ * @param int    $post_id            Post id (0 for a create - the row does not exist yet at the
+ *                                    point core itself computes the unique slug).
+ * @param string $intended_slug      The sanitize_title()'d slug the write attempted to persist.
+ * @param string $effective_status   The status aafm_effective_post_status() resolved.
+ * @param string $post_type          Post type.
+ * @param int    $post_parent        Post parent id (0 - this plugin never exposes reparenting on
+ *                                    these write paths).
+ * @param int    $read_id            Post id to read the stored value back from (the real id after
+ *                                    a create; same as $post_id for an update).
+ * @return bool
+ */
+function aafm_post_slug_write_confirmed( int $post_id, string $intended_slug, string $effective_status, string $post_type, int $post_parent, int $read_id ): bool {
+	$expected = wp_unique_post_slug( $intended_slug, $post_id, $effective_status, $post_type, $post_parent );
+	$stored   = get_post_field( 'post_name', $read_id, 'raw' );
+	return ( is_scalar( $stored ) ? (string) $stored : '' ) === $expected;
+}
+
+/**
  * Whether WordPress will move trashed content to the Trash instead of deleting it.
  *
  * Core's wp_trash_post()/wp_trash_comment() force a permanent, unrecoverable delete

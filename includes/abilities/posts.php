@@ -940,15 +940,26 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	// write sites through these same shared helpers. $sanitize_context_id is 0, not (int) $id:
 	// core's own sanitize_post( $postarr, 'db' ) inside wp_insert_post() ran BEFORE this row
 	// existed, with ID defaulted to 0 (aafm_post_field_write_confirmed()'s own docblock, R7-4).
+	//
+	// F1 (1.7.5 deferred): post_status and post_name are NOT confirmed through
+	// aafm_post_field_write_confirmed() - core resolves both through separate logic
+	// (wp_insert_post()'s date-based future->publish transition, and wp_unique_post_slug())
+	// that never runs through sanitize_post_field()'s save-filter pipeline, so comparing against
+	// the raw requested value there falsely reported a normal core normalization as a failure.
+	$effective_status = aafm_effective_post_status( $status, gmdate( 'Y-m-d H:i:s' ) );
+	if ( ! aafm_post_field_write_confirmed( (int) $id, 'post_status', $effective_status, 0 ) ) {
+		return aafm_generic_error();
+	}
+	if ( isset( $postarr['post_name'] )
+		&& ! aafm_post_slug_write_confirmed( 0, (string) $postarr['post_name'], $effective_status, $type, 0, (int) $id )
+	) {
+		return aafm_generic_error();
+	}
 	$fields_to_confirm = array(
 		'post_title'   => $title,
 		'post_content' => (string) $postarr['post_content'],
 		'post_excerpt' => (string) $postarr['post_excerpt'],
-		'post_status'  => $status,
 	);
-	if ( isset( $postarr['post_name'] ) ) {
-		$fields_to_confirm['post_name'] = (string) $postarr['post_name'];
-	}
 	foreach ( $fields_to_confirm as $field => $intended ) {
 		if ( ! aafm_post_field_write_confirmed( (int) $id, $field, $intended, 0 ) ) {
 			return aafm_generic_error();
@@ -1278,7 +1289,26 @@ function aafm_exec_update_post( array $input ) {
 	// THIS call actually set are checked, each against its CANONICAL sanitize_post_field() form
 	// (aafm_post_field_write_confirmed()'s default $sanitize_context_id, the existing $id - this
 	// is an update, the row already existed at sanitize time).
-	foreach ( array( 'post_title', 'post_content', 'post_excerpt', 'post_name', 'post_status' ) as $field ) {
+	//
+	// F1 (1.7.5 deferred): post_status and post_name are NOT confirmed through
+	// aafm_post_field_write_confirmed() - see the create path above for why. An update never
+	// touches post_date, so the row's own existing GMT date (read before this write) is the
+	// effective date core's future->publish transition resolves against.
+	if ( isset( $postarr['post_status'] ) ) {
+		$effective_status = aafm_effective_post_status( (string) $postarr['post_status'], $post->post_date_gmt );
+		if ( ! aafm_post_field_write_confirmed( $id, 'post_status', $effective_status ) ) {
+			return aafm_generic_error();
+		}
+	}
+	if ( isset( $postarr['post_name'] ) ) {
+		$effective_status = isset( $postarr['post_status'] )
+			? aafm_effective_post_status( (string) $postarr['post_status'], $post->post_date_gmt )
+			: $post->post_status;
+		if ( ! aafm_post_slug_write_confirmed( $id, (string) $postarr['post_name'], $effective_status, $post->post_type, (int) $post->post_parent, $id ) ) {
+			return aafm_generic_error();
+		}
+	}
+	foreach ( array( 'post_title', 'post_content', 'post_excerpt' ) as $field ) {
 		if ( ! isset( $postarr[ $field ] ) ) {
 			continue;
 		}

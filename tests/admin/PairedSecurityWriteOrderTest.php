@@ -374,6 +374,57 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
+	 * R2-4 sibling (1.7.5 deferred, round 2): a query that itself FAILS reading the old deny row
+	 * is not the same as a genuinely absent/empty row - the stale-cache test above already proves
+	 * the read must consult the database, but a failed database read must not then be treated as
+	 * "nothing was denied before", which would build the stage-1 union from an empty old-deny list
+	 * and silently drop 'secret' the moment this request also removes it from the requested deny
+	 * list. This fails if aafm_paired_meta_write_three_stage() stops checking db_error on the old
+	 * deny read and falls through to treating the failed read as an empty list.
+	 */
+	public function test_post_meta_read_failure_on_old_deny_aborts_instead_of_narrowing(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_denied_meta_keys', array( 'secret' ) );
+		update_option( 'aafm_allowed_meta_keys', array() );
+		$this->fail_option_read( 'aafm_denied_meta_keys' );
+
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['aafm_meta_keys'] = 'secret';
+		unset( $_POST['aafm_deny_meta_keys'] ); // Request no longer denies 'secret'.
+
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the old deny row could not be certified.' );
+		$this->assertSame(
+			array( 'secret' ),
+			get_option( 'aafm_denied_meta_keys' ),
+			"A failed read of the old deny list must not be treated as empty - that would drop 'secret' instead of refusing the write."
+		);
+	}
+
+	/**
+	 * Makes the direct database SELECT aafm_read_option_views() issues for $option fail (not
+	 * merely read absent), by rewriting that one query to target a table that does not exist.
+	 * Mirrors OauthRevokeAjaxTest::fail_query_containing(), applied to a read instead of a write.
+	 *
+	 * @param string $option Option name whose row-fetch query should fail.
+	 * @return void
+	 */
+	private function fail_option_read( string $option ): void {
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $option ): string {
+				return false !== strpos( $query, "option_name = '{$option}'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+	}
+
+	/**
 	 * Codex round 6, B6-1's settings.php half: the IP allowlist write already runs before any
 	 * OAuth-on write in aafm_ajax_save_settings(), so if the allowlist write fails, OAuth must
 	 * never be turned on in the same request - even when the request explicitly asked for it.

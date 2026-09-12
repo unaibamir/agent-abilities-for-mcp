@@ -356,6 +356,72 @@ class UpgradeMigrationTest extends TestCase {
 	}
 
 	/**
+	 * R2-4 (1.7.5 deferred, round 2): the toggle-preservation migration already completed, and the
+	 * operator has since turned OAuth off deliberately - a decision unrelated to the migration
+	 * itself. A transient failure reading the migration's OWN guard row must not be read as "never
+	 * migrated": that would fall through to the absence check, find the (present, '0') row, but -
+	 * before this fix - a failed read of THAT row also collapses to "absent" and rewrites it to
+	 * '1', clobbering the opt-out. Faulting only the guard read is enough to prove the abort: this
+	 * fails if aafm_oauth_preserve_toggle_on_upgrade() stops checking db_error on the guard read
+	 * and falls through toward the write below.
+	 */
+	public function test_toggle_preservation_aborts_when_the_guard_read_fails(): void {
+		update_option( 'aafm_oauth_toggle_migrated', '1' );
+		update_option( 'aafm_oauth_enabled', '0' );
+
+		$this->fail_option_read( 'aafm_oauth_toggle_migrated' );
+		aafm_oauth_preserve_toggle_on_upgrade();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_enabled' ),
+			'A guard read that itself failed must not be treated as "never migrated" and overwrite an operator\'s explicit opt-out.'
+		);
+	}
+
+	/**
+	 * R2-4 (1.7.5 deferred, round 2): DCR adoption already completed (both markers certified) and
+	 * the operator has since turned DCR off deliberately. A transient failure reading the FIRST
+	 * guard row must not fall through toward re-flipping DCR back on - this is Codex's own named
+	 * reproduction: "fail the two initial marker reads... both guards fall through, and the
+	 * deliberate opt-out is rewritten to '1'." Fails if aafm_oauth_dcr_adopt_on_by_default() stops
+	 * checking db_error on the guard read.
+	 */
+	public function test_dcr_adoption_aborts_when_the_guard_read_fails(): void {
+		update_option( 'aafm_oauth_dcr_default_on_migrated', '1' );
+		aafm_persist_operator_switch( 'aafm_oauth_dcr_default_on_touched', true );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		$this->fail_option_read( 'aafm_oauth_dcr_default_on_migrated' );
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_enabled' ),
+			'A guard read that itself failed must not be treated as "never migrated" and overwrite an operator\'s explicit opt-out.'
+		);
+	}
+
+	/**
+	 * Makes the direct database SELECT aafm_read_option_views() issues for $option fail (not
+	 * merely read absent), by rewriting that one query to target a table that does not exist -
+	 * the same technique OauthRevokeAjaxTest uses for a write query, applied to this read.
+	 *
+	 * @param string $option Option name whose row-fetch query should fail.
+	 * @return void
+	 */
+	private function fail_option_read( string $option ): void {
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $option ): string {
+				return false !== strpos( $query, "option_name = '{$option}'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+	}
+
+	/**
 	 * Makes a single option write to $option uncertifiable by reverting the row back to
 	 * $stuck_raw_value immediately after WordPress writes it, so aafm_update_option_verified()'s
 	 * post-write database read never matches what was intended and the write is reported as

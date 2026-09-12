@@ -740,6 +740,14 @@ function aafm_detected_meta_keys(): array {
  * pre-request state. Reading the raw row directly, sentinel included, keeps the union at least
  * as strict as whatever is really in the database right now.
  *
+ * R2-4 sibling (1.7.5 deferred, round 2): the "old deny" read above must not treat a failed
+ * read (db_error) the same as a genuinely empty/absent row - that would build the stage-1 union
+ * from an empty old-deny list, silently dropping whatever was actually denied before this
+ * request, the same direction of mistake the OAuth migration reads had. This is a WRITE path, not
+ * a live authorization read, but the fail-safe direction is the same reasoning as
+ * aafm_ability_allowed_for_principal() (includes/allowlist.php): when the existing state cannot be
+ * certified, refuse rather than proceed on an assumed-empty state.
+ *
  * @param string            $deny_option    Deny-list option name.
  * @param string            $exposed_option Exposed-list option name.
  * @param array<int,string> $new_deny       Requested deny list.
@@ -747,7 +755,10 @@ function aafm_detected_meta_keys(): array {
  * @return int 0 on full success; 1, 2, or 3 naming the stage that failed to certify.
  */
 function aafm_paired_meta_write_three_stage( string $deny_option, string $exposed_option, array $new_deny, array $new_exposed ): int {
-	$views    = aafm_read_option_views( $deny_option );
+	$views = aafm_read_option_views( $deny_option );
+	if ( $views['db_error'] ) {
+		return 1;
+	}
 	$old_deny = ( $views['db_found'] && is_array( $views['db_value'] ) ) ? array_map( 'strval', $views['db_value'] ) : array();
 
 	$union = array_values( array_unique( array_merge( $old_deny, $new_deny ) ) );

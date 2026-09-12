@@ -119,6 +119,17 @@ function aafm_allowlist_set_permits( $set, string $ability_name ): bool {
  * layer ALONE - callers must still clear the global enabled-abilities list and every other
  * existing floor themselves; this function only evaluates the new override option.
  *
+ * R2-4 sibling (1.7.5 deferred, round 2): this is a LIVE AUTHORIZATION read, not a migration
+ * certification read, so it must fail in the OPPOSITE direction from
+ * aafm_oauth_dcr_adopt_on_by_default() (includes/oauth/discovery.php). aafm_allowlist_overrides()
+ * collapses "genuinely no rows" and "the query itself failed" to the same empty array, and an
+ * empty array here means "unrestricted" - so a transient read failure would silently grant every
+ * call through this layer instead of enforcing whatever restriction is actually stored. Reading
+ * the database view directly here (rather than through that lenient helper, which stays as-is for
+ * its own caller, an admin display with no security consequence) lets this deny the call when the
+ * restriction state cannot be determined, rather than reaching for one shared "safe" read that
+ * would have to serve both directions at once.
+ *
  * @param string      $ability_name    Ability name, e.g. 'aafm/update-post'.
  * @param int         $user_id         The calling user id (0 for none).
  * @param string|null $oauth_client_id The current request's OAuth client id, or null when the
@@ -126,7 +137,11 @@ function aafm_allowlist_set_permits( $set, string $ability_name ): bool {
  * @return bool
  */
 function aafm_ability_allowed_for_principal( string $ability_name, int $user_id, ?string $oauth_client_id ): bool {
-	$rows = aafm_allowlist_overrides();
+	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
+	if ( $views['db_error'] ) {
+		return false; // Cannot certify the restriction state: deny rather than fail open.
+	}
+	$rows = is_array( $views['db_value'] ) ? $views['db_value'] : array();
 	if ( array() === $rows ) {
 		return true; // No override rows at all: identical to today's behavior.
 	}

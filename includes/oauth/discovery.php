@@ -165,7 +165,18 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
 	// this migration think it already ran and skip preserving the pre-upgrade "on" state for
 	// good, while a stale cached '0' over a genuinely completed migration would rerun it and
 	// potentially re-force the toggle on over an operator's later opt-out.
-	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_toggle_migrated' )['db_value'] ) {
+	//
+	// R2-4 (1.7.5 deferred, round 2): a read the query itself could not complete (db_error) is
+	// NOT the same as a genuinely absent row - db_value/db_found both collapse to "not there"
+	// either way, so a transient read failure used to read exactly like "never migrated" and
+	// this function would proceed to overwrite aafm_oauth_enabled below, even when the row is
+	// actually present with an operator's own value that simply failed to read. Abort on any
+	// db_error instead of deciding from an unknown state; the next request tries again.
+	$migrated = aafm_read_option_views( 'aafm_oauth_toggle_migrated' );
+	if ( $migrated['db_error'] ) {
+		return;
+	}
+	if ( '1' === (string) $migrated['db_value'] ) {
 		return;
 	}
 
@@ -176,7 +187,15 @@ function aafm_oauth_preserve_toggle_on_upgrade(): void {
 	// mark itself done below - permanently, since the guard is never cleared (Codex round 5,
 	// R5-3). A stored toggle is always the string '0' or '1', so a genuinely absent row is the
 	// only case that needs preserving.
-	if ( ! aafm_read_option_views( 'aafm_oauth_enabled' )['db_found'] ) {
+	//
+	// R2-4: same reasoning as the guard read above - a failed read of the toggle itself must not
+	// be treated as "row is absent", which would overwrite an operator's own stored value
+	// (including an explicit '0') that merely failed to read.
+	$enabled = aafm_read_option_views( 'aafm_oauth_enabled' );
+	if ( $enabled['db_error'] ) {
+		return;
+	}
+	if ( ! $enabled['db_found'] ) {
 		if ( ! aafm_update_option_verified( 'aafm_oauth_enabled', '1' ) ) {
 			// The write could not be certified, so the guard below must NOT be set: leave the
 			// migration to try again on the next request rather than record one that never
@@ -236,12 +255,27 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 	// Same reasoning as aafm_oauth_preserve_toggle_on_upgrade() above (Codex round 7, R7-2): the
 	// guard is read from the database row, not a cache-trusting get_option(), so a stale cache in
 	// either direction cannot make this migration decide from the wrong "already ran" state.
-	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_dcr_default_on_migrated' )['db_value'] ) {
+	//
+	// R2-4 (1.7.5 deferred, round 2): all three reads in this function - both guards and the DCR
+	// value below - must abort the whole migration on a read that itself failed (db_error), not
+	// fall through as if the row were absent or falsy. B2 already stops a stuck WRITE from
+	// re-flipping an operator's opt-out forever; this closes the matching gap on the READ side,
+	// where a failed guard/value read used to read exactly like "off" and re-enable DCR over a
+	// deliberate opt-out that simply could not be read back at that moment.
+	$migrated = aafm_read_option_views( 'aafm_oauth_dcr_default_on_migrated' );
+	if ( $migrated['db_error'] ) {
+		return;
+	}
+	if ( '1' === (string) $migrated['db_value'] ) {
 		return;
 	}
 	// B2: the second, independently keyed signal - see this function's docblock. Read the same
 	// way as the guard row above, direct from the database, for the identical reason.
-	if ( '1' === (string) aafm_read_option_views( 'aafm_oauth_dcr_default_on_touched' )['db_value'] ) {
+	$touched = aafm_read_option_views( 'aafm_oauth_dcr_default_on_touched' );
+	if ( $touched['db_error'] ) {
+		return;
+	}
+	if ( '1' === (string) $touched['db_value'] ) {
 		return;
 	}
 
@@ -249,7 +283,11 @@ function aafm_oauth_dcr_adopt_on_by_default(): void {
 	// aafm_oauth_preserve_toggle_on_upgrade() above: a stale cached '1' over a database '0' (or
 	// a stale cached '0' when the plugin has just written '1') would make this migration decide
 	// from the wrong state and then mark itself done for good (Codex round 5, R5-3).
-	$stored = aafm_read_option_views( 'aafm_oauth_dcr_enabled' )['db_value'];
+	$dcr = aafm_read_option_views( 'aafm_oauth_dcr_enabled' );
+	if ( $dcr['db_error'] ) {
+		return;
+	}
+	$stored = $dcr['db_value'];
 	$off    = array( false, 0, '0', '', 'false', 'no', 'off' );
 	if ( in_array( $stored, $off, true ) ) {
 		if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '1' ) ) {

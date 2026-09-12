@@ -208,11 +208,16 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// was consumed by an earlier rotation and is now being replayed. Treat the
 	// replay as a compromise signal and revoke the entire lineage.
 	if ( 0 === (int) $row['is_active'] ) {
-		aafm_oauth_revoke_chain( (int) $row['id'] );
+		$chain_revoked = aafm_oauth_revoke_chain( (int) $row['id'] );
 
+		// R4-2: the request is denied either way - a replayed refresh token never rotates - but
+		// the message must not claim the chain was revoked when aafm_oauth_revoke_chain() could
+		// not certify that it was.
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token has already been used; the token chain has been revoked.', 'agent-abilities-for-mcp' )
+			$chain_revoked
+				? __( 'The refresh token has already been used; the token chain has been revoked.', 'agent-abilities-for-mcp' )
+				: __( 'The refresh token has already been used.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -341,16 +346,27 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
  * prefix). The value is hashed and matched against token_hash OR refresh_hash;
  * the matching row is marked inactive.
  *
+ * 1.7.5 round 4, R4-2: this used to discard $wpdb->query()'s own return value and derive success
+ * purely from $wpdb->rows_affected - a genuine query failure and "no matching active token"
+ * (an unknown token, an already-revoked one, or an expired one that some other path already
+ * deactivated) both left rows_affected at 0, and the REST caller reported the identical 200
+ * either way. RFC 7009 requires concealing whether a TOKEN is valid, never whether the SERVER
+ * could complete the request - so this now returns null on a genuine query failure, distinct
+ * from false ("ran fine, matched nothing").
+ *
  * @param string $raw The raw token presented for revocation.
- * @return bool True when a row was found and revoked, false otherwise.
+ * @return bool|null True when a row was found and revoked, false when the query ran but matched
+ *                    nothing, null when the query itself failed and revocation cannot be
+ *                    confirmed either way.
  */
-function aafm_oauth_revoke_token( string $raw ): bool {
+function aafm_oauth_revoke_token( string $raw ): ?bool {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 	$hash  = hash( 'sha256', $raw );
 
+	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query(
+	$result = $wpdb->query(
 		$wpdb->prepare(
 			'UPDATE %i
 			 SET is_active = 0
@@ -361,6 +377,11 @@ function aafm_oauth_revoke_token( string $raw ): bool {
 			$hash
 		)
 	);
+	$wpdb->suppress_errors( $suppressed );
+
+	if ( false === $result ) {
+		return null;
+	}
 
 	return (int) $wpdb->rows_affected > 0;
 }
@@ -515,10 +536,27 @@ function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_
  * never spin forever. After this runs, no token anywhere in the lineage
  * validates - which is the whole point of reuse detection.
  *
+ * 1.7.5 round 4, R4-2: this used to return void and never check a single query along either
+ * walk or the final UPDATE. $wpdb->get_var()/get_col() both return null/an empty array on a
+ * genuine query failure, exactly the same shape as "no parent" / "no children" - a failed
+ * upward read used to look like reaching the root, a failed downward read like a childless leaf,
+ * and the final UPDATE's result was discarded outright. The caller (aafm_oauth_rotate_refresh())
+ * nevertheless told the client "the token chain has been revoked" regardless. This now uses
+ * aafm_wpdb_scalar() for the upward read (the same query()-return-value fix documented on that
+ * helper), checks the downward read and the final UPDATE the same way, and reports failure
+ * through the return value so the caller can stop claiming a revocation that may not have
+ * happened. A read failure still stops traversal at that point (like reaching a genuine
+ * boundary), but does not silently mask the incompleteness: whatever ids were already found are
+ * still deactivated best-effort, since revoking a partial, known-bad set is strictly safer than
+ * revoking nothing, but the return value reports the run as incomplete either way.
+ *
  * @param int $seed_id Any row id belonging to the lineage to revoke.
- * @return void
+ * @return bool True when both walks completed within the hop cap and the deactivating UPDATE
+ *              itself succeeded. False when a read or the write failed, or the hop cap was hit -
+ *              some rows in the lineage may remain active and the caller must not report the
+ *              chain as fully revoked.
  */
-function aafm_oauth_revoke_chain( int $seed_id ): void {
+function aafm_oauth_revoke_chain( int $seed_id ): bool {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
@@ -530,11 +568,14 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 	// truncating the revocation, so an operator can investigate (and the cap can be raised).
 	$cap_hit = false;
 
+	// A read that itself failed (not merely "found nothing") stops that walk early, the same way
+	// reaching the root/a leaf does, but the run as a whole is no longer certified complete.
+	$read_failed = false;
+
 	// Walk UP: follow refresh_parent_id toward the root.
 	$cursor = $seed_id;
 	for ( $hop = 0; $hop < AAFM_OAUTH_CHAIN_MAX_HOPS; $hop++ ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$parent_id = $wpdb->get_var(
+		$parent = aafm_wpdb_scalar(
 			$wpdb->prepare(
 				'SELECT refresh_parent_id FROM %i WHERE id = %d',
 				$table,
@@ -542,7 +583,12 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 			)
 		);
 
-		$parent_id = null === $parent_id ? 0 : (int) $parent_id;
+		if ( ! $parent['ok'] ) {
+			$read_failed = true;
+			break;
+		}
+
+		$parent_id = null === $parent['value'] ? 0 : (int) $parent['value'];
 		if ( $parent_id <= 0 || in_array( $parent_id, $ids, true ) ) {
 			break;
 		}
@@ -565,18 +611,25 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 	// the same defense-in-depth this function's docblock already claims for a corrupt chain.
 	$queue = $ids;
 	$hops  = 0;
-	while ( ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
+	while ( ! $read_failed && ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
 		++$hops;
 		$current = array_shift( $queue );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$child_ids = $wpdb->get_col(
+		$result = $wpdb->query(
 			$wpdb->prepare(
 				'SELECT id FROM %i WHERE refresh_parent_id = %d',
 				$table,
 				$current
 			)
 		);
+
+		if ( false === $result ) {
+			$read_failed = true;
+			break;
+		}
+
+		$child_ids = wp_list_pluck( (array) $wpdb->last_result, 'id' );
 
 		foreach ( $child_ids as $child_id ) {
 			$child_id = (int) $child_id;
@@ -588,7 +641,7 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 	}
 
 	// The DOWN walk stopped with descendants still queued: the cap truncated the traversal.
-	if ( ! empty( $queue ) ) {
+	if ( ! $read_failed && ! empty( $queue ) ) {
 		$cap_hit = true;
 	}
 
@@ -600,7 +653,14 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 		do_action( 'aafm_oauth_chain_revocation_capped', $seed_id, count( $ids ) );
 	}
 
-	// Deactivate the whole lineage in a single bounded UPDATE.
+	if ( $read_failed ) {
+		// Surface the incomplete traversal the same way a cap hit is surfaced, under its own
+		// action name so a handler can tell the two apart.
+		do_action( 'aafm_oauth_chain_revocation_failed', $seed_id, count( $ids ) );
+	}
+
+	// Deactivate whatever was discovered in one bounded UPDATE, even when traversal itself did
+	// not complete: a partial, known-bad revocation is strictly safer than revoking nothing.
 	$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
 
 	// The table name is bound via the leading %i placeholder; $placeholders is a list
@@ -608,13 +668,15 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 	// fully prepared. The %d list is still interpolated, so the InterpolatedNotPrepared
 	// and UnfinishedPrepare ignores stay.
 	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-	$wpdb->query(
+	$updated = $wpdb->query(
 		$wpdb->prepare(
 			"UPDATE %i SET is_active = 0 WHERE id IN ( {$placeholders} )",
 			array_merge( array( $table ), $ids )
 		)
 	);
 	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+
+	return ! $cap_hit && ! $read_failed && false !== $updated;
 }
 
 /**

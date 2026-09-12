@@ -803,8 +803,23 @@ function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 	if ( '' !== $token ) {
 		$revoked = aafm_oauth_revoke_token( $token );
 
+		// R4-2: null means the query itself failed, not "no matching token" - RFC 7009 protects
+		// TOKEN VALIDITY from disclosure, never server operational state, so a genuine failure is
+		// reported distinctly rather than folded into the same 200 an unknown/already-revoked
+		// token gets. The raw token is never logged either way.
+		if ( null === $revoked ) {
+			if ( function_exists( 'aafm_oauth_log_event' ) ) {
+				aafm_oauth_log_event( 'revoke', 'error' );
+			}
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				__( 'The token could not be revoked.', 'agent-abilities-for-mcp' ),
+				500
+			);
+		}
+
 		// Audit only an actual revocation (a matched, still-active token), so a probe with a
-		// bogus token does not create noise. The raw token is never logged.
+		// bogus token does not create noise.
 		if ( $revoked && function_exists( 'aafm_oauth_log_event' ) ) {
 			aafm_oauth_log_event( 'revoke', 'success' );
 		}

@@ -728,4 +728,74 @@ class TokensTest extends TestCase {
 
 		$this->assertFalse( aafm_oauth_revoke_token( bin2hex( random_bytes( 32 ) ) ) );
 	}
+
+	/**
+	 * 1.7.5 round 4, R4-2: a genuine query failure must return null, not the same false a
+	 * legitimate "no matching token" gets - the REST caller uses this to avoid reporting a
+	 * database failure as an ordinary 200 revocation no-op.
+	 */
+	public function test_revoke_token_returns_null_when_the_update_query_fails(): void {
+		aafm_install_oauth_tables();
+
+		$tokens = aafm_oauth_mint_tokens( $this->ctx() );
+
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_revoke = false !== strpos( $query, 'UPDATE `' . $wpdb->prefix . 'aafm_oauth_access_tokens`' )
+					&& false !== strpos( $query, 'is_active = 0' );
+				return $is_revoke ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$result = aafm_oauth_revoke_token( $tokens['access_token'] );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertNull( $result, 'a failed revoke query must be distinguishable from "no matching token"' );
+
+		// The token must still validate: nothing was actually revoked.
+		$this->assertIsInt( aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+	}
+
+	/**
+	 * 1.7.5 round 4, R4-2: when the chain-revocation traversal cannot complete (a read fails
+	 * partway through), the reuse-detection error must not claim the chain was revoked.
+	 */
+	public function test_rotate_refresh_replay_does_not_overclaim_when_chain_traversal_fails(): void {
+		aafm_install_oauth_tables();
+
+		$ctx     = $this->ctx();
+		$tokens  = aafm_oauth_mint_tokens( $ctx );
+		$rotated = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $rotated );
+
+		// Replay the now-consumed original refresh token: reuse detection fires and walks the
+		// chain. Force the upward-walk read to fail so aafm_oauth_revoke_chain() cannot certify
+		// the traversal completed.
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_parent_walk = false !== strpos( $query, 'SELECT refresh_parent_id FROM `' . $wpdb->prefix . 'aafm_oauth_access_tokens`' );
+				return $is_parent_walk ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$replayed = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertInstanceOf( WP_Error::class, $replayed );
+		$this->assertSame(
+			'The refresh token has already been used.',
+			$replayed->get_error_message(),
+			'the message must not claim the chain was revoked when traversal could not be certified'
+		);
+	}
 }

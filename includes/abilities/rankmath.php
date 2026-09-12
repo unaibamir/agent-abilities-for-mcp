@@ -501,7 +501,11 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// update_post_meta(), not a display-shaped stand-in - sanitize_meta() (called by
 	// aafm_meta_write_confirmed() below) must see the same value type a registered sanitize
 	// callback actually ran against, an array for rank_math_robots, a scalar everywhere else.
-	$post_type     = (string) get_post_type( $id );
+	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
+	// call core itself makes at write time, rather than the raw get_post_type() - a
+	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
+	// at write time.
+	$post_type     = (string) get_object_subtype( 'post', $id );
 	$expected_meta = array();
 
 	$url_fields = aafm_rankmath_url_fields();

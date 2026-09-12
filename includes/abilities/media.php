@@ -953,8 +953,11 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		// in storage. Confirm it landed, same orphan-cleanup discipline as the branches above.
 		// Codex round 6 B6-3: compare against the CANONICAL sanitize_meta() form, not the pre-write
 		// intent, so a registered sanitize callback's legitimate normalization is not mistaken for
-		// a veto.
-		if ( ! aafm_meta_write_confirmed( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', 'attachment' ) ) {
+		// a veto. Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same
+		// filterable call core itself makes at write time, rather than the literal 'attachment' -
+		// a get_object_subtype_post filter remapping the subtype is honoured here the same way it
+		// is at write time.
+		if ( ! aafm_meta_write_confirmed( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $attachment_id ) ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
@@ -1652,7 +1655,11 @@ function aafm_exec_update_media( array $input ) {
 	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'] ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_alt && ! aafm_meta_write_confirmed( get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', 'attachment' ) ) {
+	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
+	// call core itself makes at write time, rather than the literal 'attachment' - a
+	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
+	// at write time.
+	if ( $has_alt && ! aafm_meta_write_confirmed( get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $att_id ) ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
 

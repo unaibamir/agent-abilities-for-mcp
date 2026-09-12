@@ -401,7 +401,11 @@ function aafm_exec_yoast_update_post( array $input ) {
 
 	// Tracked by real META KEY, not the unified field name, so the confirmation pass below runs
 	// sanitize_meta() against the exact key a registered sanitize callback would fire on.
-	$post_type     = (string) get_post_type( $id );
+	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
+	// call core itself makes at write time, rather than the raw get_post_type() - a
+	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
+	// at write time.
+	$post_type     = (string) get_object_subtype( 'post', $id );
 	$expected_meta = array();
 
 	$url_fields = aafm_yoast_url_fields();

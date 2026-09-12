@@ -513,9 +513,21 @@ final class GeodirectoryTest extends TestCase {
 			)
 		);
 
-		$pad = static function ( $posts, $query ) use ( $ids ) {
+		// B7 (1.7.5 deferred): a broken production clamp used to have nothing to stop this loop -
+		// the padding below reports a full batch forever, so a regression would run until PHP's
+		// own execution-time limit killed the test, not until an assertion failed. $query_count
+		// turns that into a bounded, diagnosable failure: 1010 comfortably covers the documented
+		// 1000-iteration enumeration ceiling plus the disambiguation probe's own small reserve
+		// (never more than 2, see the sibling test below), so a genuine regression trips the
+		// safety valve and then fails loudly on the assertion, rather than hanging.
+		$query_count = 0;
+		$pad         = static function ( $posts, $query ) use ( $ids, &$query_count ) {
 			if ( ! $query->get( 'aafm_query_marker' ) ) {
 				return $posts;
+			}
+			++$query_count;
+			if ( $query_count > 1010 ) {
+				return array();
 			}
 			// Always report a full batch of the same two real posts, exactly what a host filter
 			// that never runs dry would do - so only the executor's own clamp of the cap filter
@@ -533,6 +545,11 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertTrue(
 			$out['truncated'],
 			'The executor must stop at the hard 1000-iteration ceiling even when the cap filter tries to raise it past that.'
+		);
+		$this->assertLessThanOrEqual(
+			1002,
+			$query_count,
+			'A broken ceiling clamp must fail this test on this assertion, not run until PHP\'s own execution-time limit kills it.'
 		);
 	}
 

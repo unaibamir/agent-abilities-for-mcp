@@ -555,14 +555,17 @@ final class PostsWriteTest extends TestCase {
 	}
 
 	/**
-	 * R2-2 (1.7.5 deferred, round 2): a scheduled post's date does not change on this update, so
+	 * R2-2/R3-1 (1.7.5 deferred): a scheduled post's date does not change on this update, so
 	 * requesting status "publish" while that date is still genuinely in the future must land core
-	 * back at "future" (wp_insert_post()'s own publish->future half of the same transition), not
-	 * be rejected as a silent veto by a confirmation helper that only replicated the other half.
+	 * back at "future" (wp_insert_post()'s own publish->future half of the same transition). Three
+	 * rounds of trying to replicate that transition (and wp_unique_post_slug()'s dedup) in a
+	 * write-confirmation check kept finding another legitimate core normalization it misreported as
+	 * a veto, so post_status/post_name confirmation was dropped entirely (see posts.php's create
+	 * path) - this now exercises core's real behaviour with no confirmation gate in the way.
 	 *
-	 * What would break this: reverting aafm_effective_post_status() to only handle future->publish
-	 * makes it expect the stored status to be "publish", find "future" instead, and this call
-	 * returns a generic error instead of the array below.
+	 * What would break this: reintroducing a status/slug confirmation that expects the literal
+	 * requested "publish" would again reject this call with a generic error instead of the array
+	 * below.
 	 */
 	public function test_update_post_requesting_publish_on_a_still_future_post_lands_at_future(): void {
 		$this->acting_as( 'editor' );
@@ -587,15 +590,13 @@ final class PostsWriteTest extends TestCase {
 	}
 
 	/**
-	 * R2-3 (1.7.5 deferred, round 2): a Contributor (no publish_posts) requesting a pending post
-	 * with an explicit slug must not be treated as a veto when core deliberately clears that slug
-	 * - wp_unique_post_slug() itself returns a pending post's slug UNCHANGED, so core's own
-	 * separate capability-based clearing (wp_insert_post()) is the only thing this can be
-	 * confirmed against.
+	 * R2-3/R3-1 (1.7.5 deferred): a Contributor (no publish_posts) requesting a pending post with
+	 * an explicit slug must not be treated as a veto when core deliberately clears that slug - see
+	 * the note above the previous test for why post_name confirmation was dropped rather than
+	 * replicated a fourth time.
 	 *
-	 * What would break this: reverting aafm_post_slug_write_confirmed() to stop accepting the
-	 * empty-slug outcome for "pending" makes it expect the requested slug verbatim, find an empty
-	 * post_name instead, and this call returns a generic error instead of the array below.
+	 * What would break this: reintroducing a slug confirmation that expects the requested slug
+	 * verbatim would reject this call with a generic error instead of the array below.
 	 */
 	public function test_create_draft_pending_from_a_non_publisher_clears_the_requested_slug(): void {
 		$this->acting_as( 'contributor' );

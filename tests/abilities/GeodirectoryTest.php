@@ -96,6 +96,30 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertSame( 56.78, $fetched['longitude'] );
 	}
 
+	/**
+	 * R3-1 (1.7.5 deferred, round 3): this create never sets a post_date, so core's own
+	 * publish<->future date transition (wp_insert_post()) lands a status:"future" request at
+	 * "publish" - the confirmation used to compare against the literal requested "future",
+	 * disagree, and roll back (delete) the listing that had just been legitimately created.
+	 *
+	 * What would break this: reverting the create path to confirm post_status against $status
+	 * makes this assert an error instead of an array, and the listing would not survive.
+	 */
+	public function test_create_with_future_status_and_no_future_date_lands_at_publish(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		$created = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'   => 'Scheduled Cafe',
+				'content' => 'Not actually in the future.',
+				'status'  => 'future',
+			)
+		);
+
+		$this->assertIsArray( $created, 'Core normalizing future->publish must not be mistaken for a vetoed write.' );
+		$this->assertSame( 'publish', get_post_status( $created['listing_id'] ) );
+	}
+
 	public function test_create_requires_publish_posts_for_a_public_status(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'contributor' ) ) );
 

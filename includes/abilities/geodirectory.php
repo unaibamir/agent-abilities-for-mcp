@@ -820,13 +820,20 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 	// (the row did not exist yet) - recompute the canonical form the same way, not with the id
 	// just assigned, or an id-sensitive registered filter can disagree and this rolls back
 	// (deletes) an otherwise valid listing.
+	// R3-1 (1.7.5 deferred, round 3): post_status was confirmed here against the literal
+	// requested value, but wp_insert_post() can normalize it (its publish<->future date
+	// transition) before this reread - no post_date is ever set on this create, so a
+	// legitimately-authorized status:"future" request lands core at "publish" and this
+	// comparison falsely rolled back (deleted) an otherwise valid listing. See posts.php's
+	// create path for why status/slug confirmation was dropped batch-wide rather than
+	// replicated a fourth time: title/content have no such core-side transition and stay
+	// confirmed below.
 	$after = get_post( $post_id );
 	if ( ! $after instanceof WP_Post
 		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title, 0 )
 		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content, 0 )
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_status', $status, 0 )
 	) {
-		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title, content, or status could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
+		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title or content could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
 	}
 
 	if ( ! aafm_geodirectory_write_fields( (int) $post_id, $input ) ) {

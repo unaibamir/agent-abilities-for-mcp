@@ -941,22 +941,22 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	// core's own sanitize_post( $postarr, 'db' ) inside wp_insert_post() ran BEFORE this row
 	// existed, with ID defaulted to 0 (aafm_post_field_write_confirmed()'s own docblock, R7-4).
 	//
-	// F1 (1.7.5 deferred): post_status and post_name are NOT confirmed through
-	// aafm_post_field_write_confirmed() - core resolves both through separate logic
-	// (wp_insert_post()'s date-based future<->publish transition, and wp_unique_post_slug())
-	// that never runs through sanitize_post_field()'s save-filter pipeline, so comparing against
-	// the raw requested value there falsely reported a normal core normalization as a failure.
-	// See both helpers' docblocks (includes/helpers.php) for R2-1/R2-2/R2-3's fixes and what they
-	// still cannot detect.
-	$effective_status = aafm_effective_post_status( $status, gmdate( 'Y-m-d H:i:s' ), $type );
-	if ( ! aafm_post_field_write_confirmed( (int) $id, 'post_status', $effective_status, 0 ) ) {
-		return aafm_generic_error();
-	}
-	if ( isset( $postarr['post_name'] )
-		&& ! aafm_post_slug_write_confirmed( (string) $postarr['post_name'], $effective_status, $type, 0, (int) $id, true )
-	) {
-		return aafm_generic_error();
-	}
+	// F1/R2-1/R2-2/R2-3/R3-1 (1.7.5 deferred, three rounds): post_status and post_name are
+	// deliberately NOT confirmed here at all, not even through a replicated core pipeline. Three
+	// rounds of trying to replicate wp_insert_post()'s own status/slug resolution (the
+	// publish<->future date transition, wp_unique_post_slug()'s dedup, its filters, the
+	// pending-post capability clearing, Trash-restore metadata, emoji charset encoding, and the
+	// order those run in relative to each other and to the row's real id/date/parent) kept finding
+	// another legitimate core normalization that a strict comparison misreported as a vetoed
+	// write - see includes/helpers.php's git history for the discarded aafm_effective_post_status()
+	// and aafm_post_slug_write_confirmed() helpers. Replicating that pipeline correctly is
+	// replicating WordPress core; a wrong replication is worse than no confirmation, because it
+	// falsely rejects (and, on GeoDirectory's create path, deletes) an otherwise valid write.
+	// title/content/excerpt do not have this problem - they run through sanitize_post_field()'s
+	// ordinary save-filter pipeline with no separate core-side transition - so those stay
+	// confirmed below. Accepted blind spot: a wp_insert_post_data filter that swaps status or slug
+	// to another plausible value (still a real status, still non-empty/unique) is indistinguishable
+	// from legitimate core/site normalization and is not detected.
 	$fields_to_confirm = array(
 		'post_title'   => $title,
 		'post_content' => (string) $postarr['post_content'],
@@ -1292,26 +1292,10 @@ function aafm_exec_update_post( array $input ) {
 	// (aafm_post_field_write_confirmed()'s default $sanitize_context_id, the existing $id - this
 	// is an update, the row already existed at sanitize time).
 	//
-	// F1 (1.7.5 deferred): post_status and post_name are NOT confirmed through
-	// aafm_post_field_write_confirmed() - see the create path above for why. An update never
-	// touches post_date, so the row's own existing GMT date (read before this write) is the
-	// effective date core's future<->publish transition resolves against. See both helpers'
-	// docblocks (includes/helpers.php) for R2-1/R2-2/R2-3's fixes and what they still cannot
-	// detect.
-	if ( isset( $postarr['post_status'] ) ) {
-		$effective_status = aafm_effective_post_status( (string) $postarr['post_status'], $post->post_date_gmt, $post->post_type );
-		if ( ! aafm_post_field_write_confirmed( $id, 'post_status', $effective_status ) ) {
-			return aafm_generic_error();
-		}
-	}
-	if ( isset( $postarr['post_name'] ) ) {
-		$effective_status = isset( $postarr['post_status'] )
-			? aafm_effective_post_status( (string) $postarr['post_status'], $post->post_date_gmt, $post->post_type )
-			: $post->post_status;
-		if ( ! aafm_post_slug_write_confirmed( (string) $postarr['post_name'], $effective_status, $post->post_type, (int) $post->post_parent, $id, false ) ) {
-			return aafm_generic_error();
-		}
-	}
+	// F1/R2-1/R2-2/R2-3/R3-1 (1.7.5 deferred, three rounds): post_status and post_name are
+	// deliberately NOT confirmed here - see the create path above for the full reasoning. Same
+	// accepted blind spot on this path: a filter swapping status or slug to another plausible
+	// value is not detected.
 	foreach ( array( 'post_title', 'post_content', 'post_excerpt' ) as $field ) {
 		if ( ! isset( $postarr[ $field ] ) ) {
 			continue;

@@ -2222,35 +2222,40 @@ function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, 
  * context (0) the real write used; it defaults to $post_id, matching every existing update-path
  * caller, which already sanitizes with the real, existing id and is unaffected by this parameter.
  *
- * 1.7.5 round 4, R4-1: the in-process replay above cannot reproduce two more classes of
- * legitimate, non-veto normalization. First, core's own wpdb layer transcodes emoji into their
- * entity-encoded form for a title/content/excerpt column stored on a non-utf8mb4 charset
- * (wp_encode_emoji(), applied by wp_insert_post()/wp_update_post() outside of
- * sanitize_post_field()); replaying sanitize_post_field() alone never sees that step. Second, a
- * save-time filter can be stateful (an incrementing counter, current-time-dependent output) and
- * legitimately return a different value on this replay than it did during the real write. Neither
- * is a veto. So: an exact match against the replayed $expected is accepted as the strongest
- * evidence and returns true immediately; when it disagrees, this falls back to comparing $stored
- * against $old, the field's value read BEFORE the write ran. If $intended equals $old, nothing was
- * actually asked to change and there is nothing to verify. Otherwise, if $stored differs from
- * $old, the field genuinely moved and the write is accepted even though its exact landed form
- * could not be reproduced here. If $stored still equals $old, nothing moved - a silent veto (a
- * filter reverting to the OLD value, or a short-circuited no-op) still reports as unconfirmed. On
- * a CREATE, $old is always '' (the field never existed before), so a normal non-empty create is
- * confirmed by the change alone once the exact replay disagrees, which is exactly the GeoDirectory
- * emoji-title case this residual used to delete.
+ * 1.7.5 round 4, R4-1: the in-process replay above used to miss one concrete, legitimate
+ * normalization: core's own wpdb layer transcodes emoji into their entity-encoded form for a
+ * title/content/excerpt column stored on a non-utf8mb4 charset (wp_encode_emoji(), applied
+ * directly inside wp_insert_post()/wp_update_post(), wp-includes/post.php, on the already-slashed
+ * $data array - AFTER sanitize_post_field() has run and BEFORE the wp_insert_post_data filter and
+ * the final wp_unslash()). Replaying sanitize_post_field() alone never saw that step, so a
+ * genuinely successful emoji-title write reported as an unconfirmed one - on GeoDirectory's create
+ * path, that false failure rolled back and deleted a valid listing. This now applies the same
+ * charset check and wp_encode_emoji() call, in the same position in the pipeline, to the replayed
+ * value before unslashing it, so the replay matches what core actually stores.
  *
- * What this cannot detect: a veto that rewrites the field to some THIRD value (neither $old nor
- * $intended) still reads as a landed write, because state genuinely changed. That is an accepted,
- * documented residual across every caller of this helper - see aafm_meta_write_confirmed()'s
- * matching note.
+ * A second, more general concern was raised in the same round: a save-time filter could in
+ * principle be stateful (an incrementing counter, current-time-dependent output) and legitimately
+ * return a different value on this same-process replay than it did during the real write.
+ * Deliberately NOT accommodated by a fallback that accepts any change away from $old: an existing,
+ * intentional test (GeodirectoryTest::test_create_rolls_back_and_errors_when_the_title_write_is_vetoed)
+ * feeds a wp_insert_post_data filter that rewrites the title to a fixed THIRD value, neither the
+ * old one nor the requested one - exactly what such a fallback cannot tell apart from a legitimate
+ * stateful sanitizer, and exactly the shape of veto this function exists to catch for a post field
+ * (unlike a meta write's update_*_metadata short-circuit, which can only block a write outright,
+ * never redirect it to an attacker/filter-chosen replacement value - see
+ * aafm_meta_write_confirmed()'s own change-detection fallback, which is safe for that reason).
+ * Accepted, undressed residual: a genuinely non-deterministic save-time sanitizer registered by
+ * some other plugin could still misreport here. No concrete instance of one exists in this
+ * codebase's own write paths, and weakening detection to accommodate a hypothetical one would
+ * reopen the exact veto class this function is relied on to catch.
  *
  * @param int      $post_id             Post id, already saved (used for the read-back).
  * @param string   $field               Post field name (post_title, post_content, post_excerpt,
  *                                      post_status, ...).
  * @param string   $intended            The unslashed value the write attempted to persist.
  * @param string   $old                 The field's value, read BEFORE the write ran. '' on a
- *                                      CREATE, where the field never previously existed.
+ *                                      CREATE, where the field never previously existed. Used only
+ *                                      to short-circuit a genuine no-op resubmission; see below.
  * @param int|null $sanitize_context_id The id to recompute the canonical form with. Defaults to
  *                                      $post_id (an update, where the row already existed at
  *                                      sanitize time). Pass 0 for a create, matching what core's
@@ -2265,16 +2270,28 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
 	// This helper is only ever called for string post fields (post_title, post_content,
 	// post_excerpt, post_status); sanitize_post_field()'s broader return type (it also handles
 	// int and array-of-int fields) is guarded here rather than widening this function's contract.
-	$expected = wp_unslash( is_scalar( $sanitized ) ? (string) $sanitized : '' );
+	$sanitized = is_scalar( $sanitized ) ? (string) $sanitized : '';
+
+	// Match core's own post-sanitize, pre-unslash emoji/charset step for the three fields it
+	// actually applies to - see this function's docblock for the exact pipeline position.
+	if ( in_array( $field, array( 'post_title', 'post_content', 'post_excerpt' ), true ) ) {
+		global $wpdb;
+		$charset = $wpdb->get_col_charset( $wpdb->posts, $field );
+		if ( 'utf8' === $charset || 'utf8mb3' === $charset ) {
+			$sanitized = wp_encode_emoji( $sanitized );
+		}
+	}
+
+	$expected = wp_unslash( $sanitized );
 	$stored   = get_post_field( $field, $post_id, 'raw' );
 	$stored   = is_scalar( $stored ) ? (string) $stored : '';
 	if ( $stored === $expected ) {
 		return true;
 	}
-	if ( $intended === $old ) {
-		return true;
-	}
-	return $stored !== $old;
+	// A genuine no-op resubmission (the caller asked to "change" the field to the value it
+	// already held) needs no further verification - there is nothing a veto could revert to that
+	// would look any different from success.
+	return $intended === $old;
 }
 
 /**

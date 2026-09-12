@@ -417,8 +417,8 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw   = (string) $input[ $field ];
-		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw              = (string) $input[ $field ];
+		$clean            = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
 		$old_meta[ $key ] = get_post_meta( $id, $key, true );
 		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
 		// is stripped unless it is slashed first, exactly like the sibling meta writers.
@@ -441,8 +441,8 @@ function aafm_exec_yoast_update_post( array $input ) {
 			continue;
 		}
 		// adv: filter the CSV against the allowlist, drop unknown tokens, write the clean CSV.
-		$tokens = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
-		$kept   = array_values(
+		$tokens                   = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
+		$kept                     = array_values(
 			array_filter(
 				$tokens,
 				static fn( string $t ): bool => in_array( $t, $spec['allow'], true )

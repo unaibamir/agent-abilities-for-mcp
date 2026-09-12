@@ -451,7 +451,7 @@ function aafm_exec_update_template( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$content     = wp_kses_post( (string) ( $input['content'] ?? '' ) );
+	$content = wp_kses_post( (string) ( $input['content'] ?? '' ) );
 	// Read before the write: the raw post_content confirmation below reads back, matching the
 	// context aafm_post_field_write_confirmed()'s own read-back uses.
 	$content_was = get_post_field( 'post_content', $wp_id, 'raw' );

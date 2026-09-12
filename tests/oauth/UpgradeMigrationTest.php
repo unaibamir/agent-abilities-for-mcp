@@ -135,6 +135,15 @@ class UpgradeMigrationTest extends TestCase {
 		// Operator deliberately turns it back off after the one-time adoption.
 		update_option( 'aafm_oauth_dcr_enabled', '0' );
 
+		// R2-9 (1.7.5 deferred, round 2): the same adoption call above also certified the
+		// independent B2 touched marker, in the database, untouched by the cache poisoning below.
+		// Left in place, that marker's own guard reads its genuinely-'1' database row and returns
+		// early on its own, so this test would still pass even if the original guard under test
+		// (aafm_oauth_dcr_default_on_migrated) regressed back to a cache-trusting get_option()
+		// read. Delete the sibling marker's row here so the second guard is genuinely absent and
+		// this scenario isolates the FIRST guard's stale-cache-ignoring read.
+		delete_option( 'aafm_oauth_dcr_default_on_touched' );
+
 		// A stale cache layer still claims the guard has not run, even though the real row is '1'.
 		$all                                       = wp_load_alloptions( true );
 		$all['aafm_oauth_dcr_default_on_migrated'] = '0';

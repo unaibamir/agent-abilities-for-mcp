@@ -268,6 +268,14 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return false;
 	}
+	// R3-5 (1.7.5 deferred, round 3): the public-status shortcut below admitted a Contributor to
+	// another author's password-protected published listing (raw content included), because it
+	// never checked the password itself. Same fix as aafm_comment_post_is_readable() (comments.php)
+	// - a still-password-required post is gated on edit_post before the public-status shortcut
+	// ever runs.
+	if ( post_password_required( $post ) ) {
+		return current_user_can( 'edit_post', $post->ID );
+	}
 	// Codex round C finding 4: the object-independent edit_posts floor alone let an Author read
 	// another user's draft/private listing (raw content and coordinates included). Mirrors
 	// aafm_can_read_post_object()'s own public-status-or-per-object-edit rule.

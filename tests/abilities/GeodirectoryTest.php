@@ -170,6 +170,34 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * R3-5 (1.7.5 deferred, round 3): a password-protected published listing is still a PUBLIC
+	 * status, so it used to pass the public-status shortcut with no password check at all - a
+	 * Contributor could read another author's password-protected listing body. Mirrors the fix
+	 * in CommentsReadTest for the same class of bug.
+	 *
+	 * What would break this: reverting aafm_perm_geodirectory_get() to skip the
+	 * post_password_required() check makes the first assertion below fail (a non-owning
+	 * Contributor would be let through).
+	 */
+	public function test_get_listing_denies_a_password_protected_public_listing_the_caller_cannot_edit(): void {
+		$owner_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		$place_id = self::factory()->post->create(
+			array(
+				'post_type'     => 'gd_place',
+				'post_status'   => 'publish',
+				'post_author'   => $owner_id,
+				'post_password' => 'secret',
+			)
+		);
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'contributor' ) ) );
+		$this->assertFalse( aafm_perm_geodirectory_get( array( 'listing_id' => $place_id ) ) );
+
+		wp_set_current_user( $owner_id );
+		$this->assertTrue( aafm_perm_geodirectory_get( array( 'listing_id' => $place_id ) ) );
+	}
+
+	/**
 	 * The list query must not disclose another user's draft/private listing either - 'any'
 	 * status with no 'perm' argument returns every listing regardless of ownership (Codex round C
 	 * finding 4, second half).

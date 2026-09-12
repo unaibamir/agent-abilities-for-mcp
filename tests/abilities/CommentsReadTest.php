@@ -190,6 +190,45 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
+	 * R3-5 (1.7.5 deferred, round 3): a password-protected post is PUBLIC (its post_status object
+	 * has public=>true), so it used to fall through to the "any logged-in caller may read" branch
+	 * - the password itself was never checked. A Subscriber must not read approved comments on a
+	 * password-protected published post through either the post-scoped or sitewide entry point.
+	 *
+	 * What would break this: reverting aafm_comment_post_is_readable() to skip the
+	 * post_password_required() check (comparing only against post_status public-ness) makes both
+	 * assertions below fail - both calls would succeed instead of being denied.
+	 */
+	public function test_get_comments_denies_subscriber_on_password_protected_public_post(): void {
+		$post = self::factory()->post->create(
+			array(
+				'post_status'   => 'publish',
+				'post_password' => 'secret',
+			)
+		);
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '1',
+				'comment_content'  => 'SECRET_PASSWORD_PROTECTED_COMMENT_BODY',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/get-comments' )->check_permissions( array( 'post_id' => $post ) ),
+			'A Subscriber must not read comments on a post whose password they do not have.'
+		);
+
+		// The sitewide scan filters per-comment via the same predicate rather than denying the
+		// whole call, so the assertion here mirrors the sitewide-hiding tests above: the
+		// password-protected comment must never surface, and total must not count it.
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array() );
+		$this->assertNotContains( 'SECRET_PASSWORD_PROTECTED_COMMENT_BODY', wp_list_pluck( $out['comments'], 'content' ) );
+		$this->assertSame( 0, $out['total'] );
+	}
+
+	/**
 	 * The gate must not over-correct: approved comments on a PUBLIC post stay
 	 * readable for any logged-in caller, and an editor (who can read the private
 	 * post) is allowed to read its comments.

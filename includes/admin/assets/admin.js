@@ -2166,6 +2166,10 @@
 			// Codex admin-ui-r1 M1: the order this row was stored in, kept so
 			// #serializeAllowlistRow() can write it back unchanged instead of catalog order.
 			picker.originalOrder = isAll ? [] : Array.from( names );
+			// F4 (1.7.5 deferred): read by #serializeAllowlistRow() so an unmaterialized row (see
+			// buildGroups()/the IntersectionObserver below) serializes its untouched original
+			// selection instead of an empty DOM query.
+			picker.groupsBuilt = false;
 
 			const allLabel = document.createElement( 'label' );
 			allLabel.className = 'aafm-allowlist-all';
@@ -2211,25 +2215,32 @@
 			groupsEl.className = 'aafm-allowlist-picker-groups';
 
 			const updateCount = () => {
-				const checked = groupsEl.querySelectorAll( '.aafm-allowlist-ability:checked' ).length;
+				// F4 (1.7.5 deferred): before the grid is built there is nothing to query in the
+				// DOM - names.size (the row's untouched stored selection) is the correct count,
+				// not zero.
+				const checked = picker.groupsBuilt
+					? groupsEl.querySelectorAll( '.aafm-allowlist-ability:checked' ).length
+					: names.size;
 				count.textContent = this.#format( this.#t( 'allowlistSelectedCount', '%s selected' ), checked );
 				warning.hidden = 0 !== checked;
 			};
 
-			// Codex admin-ui-r1 M4: at the supported cap (AAFM_ALLOWLIST_MAX_ROWS rows x the full
-			// catalog) building every row's grid eagerly means tens of thousands of checkboxes,
-			// labels and change listeners at page load - including rows stored as "all", whose
-			// picker body never becomes visible unless narrowed. Build the grid once, on first
-			// need (a row that starts narrowed needs it right away since its body starts visible;
-			// an "all" row defers the cost until "All abilities" is unchecked or its search is
-			// used), and bind one delegated change listener on the container instead of one per
-			// checkbox.
+			// Codex admin-ui-r1 M4 / F4 (1.7.5 deferred): at the supported cap (AAFM_ALLOWLIST_MAX_ROWS
+			// rows x the full catalog) building every row's grid eagerly means tens of thousands of
+			// checkboxes, labels and change listeners at page load. An "all" row defers the cost
+			// until "All abilities" is unchecked or its search is used (below); a row that starts
+			// narrowed used to build right away instead, since its body starts visible - M4 only
+			// closed the "all" half, so a set of narrowed rows was still the worst case. Both now
+			// defer to first real need: an explicit interaction, or (for a narrowed row) the row
+			// actually scrolling into view (the IntersectionObserver below). One delegated change
+			// listener on the container replaces one per checkbox either way.
 			let groupsBuilt = false;
 			const buildGroups = () => {
 				if ( groupsBuilt ) {
 					return;
 				}
 				groupsBuilt = true;
+				picker.groupsBuilt = true;
 				this.#allowlistCatalog().forEach( ( group ) => {
 					const fieldset = document.createElement( 'fieldset' );
 					fieldset.className = 'aafm-allowlist-group';
@@ -2260,7 +2271,20 @@
 			} );
 
 			if ( ! isAll ) {
-				buildGroups();
+				// F4 (1.7.5 deferred): build a narrowed row's grid the first time it actually
+				// scrolls into view rather than unconditionally at page load - 200 narrowed rows
+				// against the full catalog otherwise still build roughly 35,800 checkboxes up
+				// front, the same cost M4 removed from the "all" case. observe() on a
+				// not-yet-attached element is safe: it simply reports nothing until the row is
+				// appended and laid out.
+				const observer = new IntersectionObserver( ( entries ) => {
+					if ( entries.some( ( entry ) => entry.isIntersecting ) ) {
+						observer.disconnect();
+						buildGroups();
+						updateCount();
+					}
+				} );
+				observer.observe( picker );
 			}
 
 			// Per-picker search: filters this row's own list only, the same substring-of-textContent
@@ -2317,6 +2341,14 @@
 				return 'all';
 			}
 			const picker = row.querySelector( '.aafm-allowlist-picker' );
+			// F4 (1.7.5 deferred): a narrowed row whose grid was never materialized (it never
+			// scrolled into view - see #buildAllowlistPicker()'s IntersectionObserver) has no
+			// checkboxes in the DOM at all. Querying them here would read back an empty
+			// selection and silently save "deny everything" for a row nobody touched; the row's
+			// own untouched originalOrder is the correct, unchanged answer.
+			if ( picker && ! picker.groupsBuilt ) {
+				return picker.originalOrder ?? [];
+			}
 			const checked = new Set(
 				Array.from( row.querySelectorAll( '.aafm-allowlist-ability:checked' ) ).map(
 					( box ) => box.value

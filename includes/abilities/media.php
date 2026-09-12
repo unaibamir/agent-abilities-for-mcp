@@ -1448,8 +1448,14 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	// that FAILS to apply; it cannot notice one a hooked callback removed from the array outright,
 	// since curl_setopt_array() only ever sees what is still present. Nothing in this codebase
 	// hooks this filter, but assert the DNS pin, proxy neutralization, TLS verification, redirect
-	// refusal, and byte-cap enforcement are all still keys in $options before trusting it, the
-	// same fail-closed instinct as the check below.
+	// refusal, transfer timeouts, and byte-cap enforcement are all still keys in $options before
+	// trusting it, the same fail-closed instinct as the check below.
+	//
+	// F8 (1.7.5 deferred): CURLOPT_TIMEOUT/CURLOPT_CONNECTTIMEOUT were missing from this list, so
+	// a hooked callback removing either one passed the guard, and a public HTTPS server could
+	// then stall the transfer past the intended ten-second bound. This still only catches the
+	// option being removed outright, not a callback that raises the value; no callback exists in
+	// this codebase's own source.
 	$required_options = array(
 		CURLOPT_FOLLOWLOCATION,
 		CURLOPT_SSL_VERIFYPEER,
@@ -1459,6 +1465,8 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 		CURLOPT_RESOLVE,
 		CURLOPT_HEADERFUNCTION,
 		CURLOPT_WRITEFUNCTION,
+		CURLOPT_TIMEOUT,
+		CURLOPT_CONNECTTIMEOUT,
 	);
 	foreach ( $required_options as $required_option ) {
 		if ( ! array_key_exists( $required_option, $options ) ) {

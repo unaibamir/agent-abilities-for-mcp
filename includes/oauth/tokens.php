@@ -61,6 +61,12 @@ if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
  * not happen. All three need the same one-line check, so it lives here once rather than being
  * reinvented at each site.
  *
+ * Codex round 5 R5-4: every production ROLLBACK call site discarded this return value outright,
+ * so a rollback that itself failed (the recovery the surrounding comment promised - "the old row
+ * stays usable", "the code stays redeemable" - not actually happening) went completely unobserved.
+ * Every ROLLBACK call site now checks it and fires 'aafm_oauth_rollback_failed' when it is false,
+ * so an operator can hook it rather than the failure vanishing silently.
+ *
  * @param string $sql The literal transaction-control statement to run.
  * @return bool True when the statement itself succeeded.
  */
@@ -301,8 +307,11 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		// A failed ROLLBACK does not change this response - the token is being rejected either
 		// way - but it does mean the row may still be locked/consumed against a connection that
 		// never actually released it; there is nothing further this function can do about that,
-		// since it cannot force a rollback to succeed.
-		aafm_oauth_txn( 'ROLLBACK' );
+		// since it cannot force a rollback to succeed. R5-4: fire an action so that failure is
+		// never silent, rather than discarding the return value outright.
+		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
+			do_action( 'aafm_oauth_rollback_failed', 'rotate_refresh_consume', (int) $row['id'] );
+		}
 
 		return new WP_Error(
 			'invalid_grant',
@@ -324,7 +333,11 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// If the new pair did not persist, roll back the rotation so the old refresh row stays
 	// usable rather than committing a consumed parent with no child.
 	if ( is_wp_error( $new ) ) {
-		aafm_oauth_txn( 'ROLLBACK' );
+		// R5-4: fire an action on a failed rollback rather than discarding the return value -
+		// the stated recovery ("the old refresh row stays usable") is not established otherwise.
+		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
+			do_action( 'aafm_oauth_rollback_failed', 'rotate_refresh_mint', (int) $row['id'] );
+		}
 		return $new;
 	}
 

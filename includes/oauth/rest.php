@@ -619,7 +619,11 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	if ( is_wp_error( $row ) ) {
 		// Nothing was consumed (0 rows affected), so rolling back is a clean no-op. A failed
 		// ROLLBACK here does not change this response - the code is being rejected either way.
-		aafm_oauth_txn( 'ROLLBACK' );
+		// R5-4: fire an action rather than discard the outcome outright, matching every other
+		// rollback site in this pipeline.
+		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
+			do_action( 'aafm_oauth_rollback_failed', 'token_redeem_code', $client_id );
+		}
 		return $invalid_grant;
 	}
 
@@ -666,8 +670,11 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// than being permanently burned by a transient error.
 	if ( is_wp_error( $tokens ) ) {
 		// A failed ROLLBACK does not change this response - it is already a server_error - but it
-		// does mean the stated recovery (the code stays redeemable) is not established.
-		aafm_oauth_txn( 'ROLLBACK' );
+		// does mean the stated recovery (the code stays redeemable) is not established. R5-4: fire
+		// an action rather than discard that outcome, matching every other rollback site here.
+		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
+			do_action( 'aafm_oauth_rollback_failed', 'token_mint', $client_id );
+		}
 		return aafm_oauth_rest_protocol_error(
 			'server_error',
 			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),

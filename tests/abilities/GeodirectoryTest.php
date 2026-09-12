@@ -578,12 +578,20 @@ final class GeodirectoryTest extends TestCase {
 			)
 		);
 
+		// F12 (1.7.5 deferred): the same escape as the sibling ceiling test above (B7) - a broken
+		// production clamp has nothing else to stop this loop, since the padding below reports a
+		// full batch forever with the cap filtered to PHP_INT_MAX. Without this, a regression here
+		// hangs until PHP's own execution-time limit kills the test instead of failing on the
+		// assertion below.
 		$query_count = 0;
 		$pad         = static function ( $posts, $query ) use ( $ids, &$query_count ) {
 			if ( ! $query->get( 'aafm_query_marker' ) ) {
 				return $posts;
 			}
 			++$query_count;
+			if ( $query_count > 1010 ) {
+				return array();
+			}
 			// Always report a full batch of the same two drafts, invisible to the current author -
 			// so neither the enumeration's own cap nor the probe's reserve can ever be ended early
 			// by finding a short batch or a visible row.

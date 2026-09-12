@@ -80,6 +80,9 @@ namespace AAFM\Tests\Support;
 
 use RuntimeException;
 
+// UseImportScanner lives in this same namespace (AAFM\Tests\Support), so no `use` import is
+// needed to reference it below.
+
 /**
  * Finds every raw use of the WordPress plain-text sanitizers in shipped first-party PHP, and
  * reports each one with the function that encloses it and the text of what it sanitizes.
@@ -362,51 +365,35 @@ final class StoredTextSanitizerScanner {
 	 * Local aliases imported for a tracked sanitizer via `use function`.
 	 *
 	 * `use function sanitize_text_field as clean;` makes every later `clean( $v )` a raw sanitizer
-	 * call under a name no grep would ever look for. The import is also recorded when the name is
-	 * NOT renamed, which is harmless (the local name equals the tracked one) and keeps the parser
-	 * simple.
+	 * call under a name no grep would ever look for.
+	 *
+	 * R4-6 (1.7.5 deferred, round 4): this used to be its own hand-rolled parser - one of three
+	 * near-identical copies across the test suite, each fixed for whichever single syntax case a
+	 * reviewer happened to quote and broken for the rest (comments inside the import, case
+	 * sensitivity, aliases leaking across namespace blocks). It now shares
+	 * UseImportScanner::parse_aliases() with the other two.
+	 *
+	 * The exact-match filter below is deliberately NOT the same "any qualifier, same trailing
+	 * name" matching the other two scanners use: `use function Vendor\sanitize_text_field as
+	 * clean;` imports somebody else's function of the same bare name, not the WordPress core
+	 * sanitizer, and must not be recorded here. Comparing the parser's full qualified name against
+	 * self::SANITIZERS (which holds only bare, unqualified names) keeps that distinction exact.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
-	 * @param int                                           $count  Token count.
+	 * @param int                                           $count  Token count (unused; kept so
+	 *                                                                the call site does not need
+	 *                                                                to change).
 	 * @return array<string,string> Local name => tracked sanitizer name.
 	 */
 	private static function collect_function_aliases( array $tokens, int $count ): array {
+		unset( $count );
+		$parsed  = UseImportScanner::parse_aliases( $tokens )['function'];
 		$aliases = array();
-
-		for ( $i = 0; $i < $count; $i++ ) {
-			$token = $tokens[ $i ];
-			if ( ! is_array( $token ) || T_USE !== $token[0] ) {
-				continue;
-			}
-
-			// Only `use function …`, never a class import or a closure's `use ( … )`.
-			$next = self::next_significant( $tokens, $i + 1, $count );
-			if ( null === $next || ! is_array( $tokens[ $next ] ) || T_FUNCTION !== $tokens[ $next ][0] ) {
-				continue;
-			}
-
-			// Collect the statement's text up to the terminating semicolon, then read the
-			// comma-separated `original as alias` clauses out of it.
-			$statement = '';
-			for ( $j = $next + 1; $j < $count; $j++ ) {
-				if ( ';' === $tokens[ $j ] ) {
-					break;
-				}
-				$statement .= is_array( $tokens[ $j ] ) ? $tokens[ $j ][1] : $tokens[ $j ];
-			}
-
-			foreach ( explode( ',', $statement ) as $clause ) {
-				$parts    = preg_split( '~\s+as\s+~i', trim( $clause ) );
-				$original = ltrim( trim( (string) ( $parts[0] ?? '' ) ), '\\' );
-				$local    = trim( (string) ( $parts[1] ?? $original ) );
-
-				if ( '' === $local || ! in_array( $original, self::SANITIZERS, true ) ) {
-					continue;
-				}
-				$aliases[ $local ] = $original;
+		foreach ( $parsed as $local => $full ) {
+			if ( in_array( $full, self::SANITIZERS, true ) ) {
+				$aliases[ $local ] = $full;
 			}
 		}
-
 		return $aliases;
 	}
 

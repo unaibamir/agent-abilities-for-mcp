@@ -519,12 +519,15 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 						// more than two full invisible batches to disambiguate.
 						//
 						// R3-6 (1.7.5 deferred, round 3): exhausting this reserve is itself a
-						// caller-observable signal - exactly $probe_cap full batches of trailing
-						// invisible rows resolves false (the batch after them comes back short,
-						// proving real end-of-data), one full batch more resolves true (the reserve
-						// runs out first) - so a caller who can pad their OWN listings could learn
-						// which side of that one fixed threshold the trailing invisible count falls
-						// on. Accepted, not fixed: this cursor is already identity-based (keyset on
+						// caller-observable signal. Codex round 4, R4-5: the boundary stated here in
+						// earlier rounds was off by one batch - this check runs BEFORE the probe
+						// query for the (probe_cap+1)th attempt, so exactly $probe_cap full batches
+						// of trailing invisible rows already resolves true here (the cap is hit
+						// before the extra query that would have proven a short, real end-of-data
+						// batch); one fewer full batch (any of the $probe_cap batches coming back
+						// short) resolves false. So a caller who can pad their OWN listings could
+						// learn which side of that one fixed threshold the trailing invisible count
+						// falls on. Accepted, not fixed: this cursor is already identity-based (keyset on
 						// ID, not a count/offset), so unlike aafm_exec_get_comments()'s pre-R3-6
 						// defect this is NOT walkable position-by-position - inserting or removing
 						// one invisible row only moves the threshold by one, it does not relocate

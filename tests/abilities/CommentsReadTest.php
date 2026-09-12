@@ -334,4 +334,74 @@ final class CommentsReadTest extends TestCase {
 		$this->assertTrue( $out['truncated'] );
 		$this->assertSame( 3, $out['total'] );
 	}
+
+	/**
+	 * F7 (1.7.5 deferred): `truncated` must never disclose hidden comment volume to a caller
+	 * whose own visible results are unaffected by it. Adding one more comment on a post this
+	 * subscriber can never read must not flip `truncated`, even though it pushes the raw
+	 * approved count past the scan cap, as long as the scanned window still contains at least
+	 * one invisible comment (proving nothing about whether more VISIBLE ones exist beyond it).
+	 */
+	public function test_get_comments_sitewide_truncated_does_not_leak_hidden_comment_growth(): void {
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 3 );
+
+		$public_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $public_post,
+				'comment_approved' => '1',
+				'comment_content'  => 'READABLE_COMMENT',
+				'comment_date'     => '2020-03-10 00:00:00',
+				'comment_date_gmt' => '2020-03-10 00:00:00',
+			)
+		);
+
+		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-03-09 00:00:00',
+				'comment_date_gmt' => '2020-03-09 00:00:00',
+			)
+		);
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-03-08 00:00:00',
+				'comment_date_gmt' => '2020-03-08 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$args = array( 'per_page' => 50 );
+
+		// Exactly at the cap (3 raw comments, cap 3): the scan window already covers everything,
+		// so this must not be truncated - the baseline both the old and new logic agree on.
+		$before = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+		$this->assertFalse( $before['truncated'] );
+		$this->assertSame( 1, $before['total'] );
+
+		// One more HIDDEN comment, older than all three above so it falls outside the 3-wide scan
+		// window - the caller's own visible results (content, total) are unchanged, only the raw
+		// site-wide count crossed the cap. The old `$raw_total > $scan_cap && [] !== $visible`
+		// logic flipped truncated to true here; it must stay false.
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-03-01 00:00:00',
+				'comment_date_gmt' => '2020-03-01 00:00:00',
+			)
+		);
+
+		$after = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( $before['comments'], $after['comments'] );
+		$this->assertSame( $before['total'], $after['total'] );
+		$this->assertFalse( $after['truncated'] );
+	}
 }

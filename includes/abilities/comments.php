@@ -266,13 +266,19 @@ function aafm_exec_get_comments( array $input ): array {
 	);
 
 	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan
-	// (Codex round 10, R10-8): reporting it whenever the raw approved count crossed the scan cap
-	// told a caller with no readable comments at all - `comments: []`, `total: 0` - that hidden
-	// comment volume existed somewhere on the site, the exact channel `total` was already
-	// narrowed to avoid. An empty visible set has nothing to report as a floor, so it is never
-	// truncated; once at least one visible comment is in the scanned window, the existing
-	// floor-not-exact caveat below applies as before.
-	$truncated = $raw_total > $scan_cap && array() !== $visible;
+	// (Codex round 10, R10-8, generalized at F7 in the 1.7.5 deferred batch). The R10-8 fix only
+	// covered the completely-empty-visible case; whenever at least one comment was visible, the
+	// raw approved count crossing the scan cap still passed straight through, so adding a single
+	// comment on a post this caller can never read flipped `truncated` from false to true while
+	// `comments` and `total` stayed byte-for-byte identical - a channel that measures hidden
+	// comment volume and nothing this caller could otherwise learn.
+	//
+	// Only report truncation when EVERY comment the scan actually examined turned out to be
+	// visible: the caller's own visible haul filled the whole scan window, so more comments they
+	// could also see plausibly exist just past it. A scan window that contains even one invisible
+	// comment proves nothing about whether more visible ones exist beyond the cap - reporting
+	// truncated there would only ever measure hidden volume.
+	$truncated = $raw_total > $scan_cap && count( $visible ) === count( (array) $scanned );
 
 	$page_comments = array_slice( $visible, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );
 

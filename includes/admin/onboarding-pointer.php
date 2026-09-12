@@ -46,10 +46,18 @@ function aafm_quickconnect_pointer_id(): string {
  *              this call created it or an earlier activation already had.
  */
 function aafm_quickconnect_flag_menu_pointer(): bool {
-	aafm_forget_option_caches( 'aafm_menu_pointer_active' );
+	// A rejected cache rewrite here (Codex round 10, R10-9) means the forget below may not have
+	// actually cleared a stale entry, the same gap aafm_update_option_verified() guards against -
+	// certifying against db_found alone, without checking this, could report the flag as set
+	// while a stale cache still hides it from the next get_option() read.
+	$caches_ok = aafm_forget_option_caches( 'aafm_menu_pointer_active' );
 	add_option( 'aafm_menu_pointer_active', '1' );
-	aafm_forget_option_caches( 'aafm_menu_pointer_active' );
+	$caches_ok = aafm_forget_option_caches( 'aafm_menu_pointer_active' ) && $caches_ok;
 	aafm_force_refresh_option_caches( 'aafm_menu_pointer_active' );
+
+	if ( ! $caches_ok ) {
+		return false;
+	}
 
 	return aafm_read_option_views( 'aafm_menu_pointer_active' )['db_found'];
 }
@@ -69,7 +77,20 @@ function aafm_quickconnect_flag_menu_pointer(): bool {
  * @return void
  */
 function aafm_quickconnect_activate_menu_pointer( bool $network_wide = false ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- signature required by register_activation_hook()'s callable(bool): void contract.
-	aafm_quickconnect_flag_menu_pointer();
+	// The hook contract is void, so a failed flag cannot be reported back to the activation
+	// caller directly; logging it is the only way this is ever visible rather than a silently
+	// missing first-run pointer (Codex round 10, R10-9 - the same "never report a change that
+	// did not take" rule as every other certified write in this plugin).
+	if ( ! aafm_quickconnect_flag_menu_pointer() ) {
+		aafm_log_activity(
+			array(
+				'ability'    => 'aafm/menu-pointer-not-flagged',
+				'status'     => 'error',
+				'event_type' => 'setting_changed',
+				'detail'     => aafm_switch_not_persisted_message( __( 'The first-activation pointer', 'agent-abilities-for-mcp' ) ),
+			)
+		);
+	}
 }
 
 /**

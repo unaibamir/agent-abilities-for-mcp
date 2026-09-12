@@ -259,7 +259,9 @@ function aafm_ajax_save_allowlist(): void {
  * @return void
  */
 function aafm_render_allowlist_section(): void {
-	$rows          = aafm_allowlist_overrides();
+	$read          = aafm_allowlist_overrides_for_display();
+	$read_failed   = ! $read['ok'];
+	$rows          = $read['rows'];
 	$roles         = wp_roles()->get_names();
 	$registry_full = aafm_get_abilities_registry_full();
 
@@ -279,7 +281,15 @@ function aafm_render_allowlist_section(): void {
 	// explanation toggled the card. It belongs in the body, as prose, not in the disclosure control.
 	echo '<p class="aafm-card-head-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
 
-	if ( empty( $rows ) ) {
+	// R3-3 (1.7.5 deferred, round 3): a failed read must never be rendered as "no restrictions
+	// exist" - this card is editable and Save replaces the whole option, so that lookalike empty
+	// state could otherwise be saved over the real, still-stored rows the moment the database
+	// recovers. Say the read failed and refuse to offer Add/Save until a reload gets a real read.
+	if ( $read_failed ) {
+		echo '<div class="notice notice-error inline"><p>' . esc_html__( 'The current allowlist could not be read, so it is not safe to show or edit here. Reload this page once the underlying issue clears before adding or saving a scope - saving now could silently erase the existing restrictions.', 'agent-abilities-for-mcp' ) . '</p></div>';
+	}
+
+	if ( empty( $rows ) && ! $read_failed ) {
 		echo '<p class="aafm-empty-state" id="aafm-allowlist-empty">' . esc_html__( 'No scopes narrowed yet. Every role and connection can reach everything enabled above.', 'agent-abilities-for-mcp' ) . '</p>';
 	} else {
 		echo '<div class="aafm-table-wrap" id="aafm-allowlist-table-wrap">';
@@ -360,10 +370,10 @@ function aafm_render_allowlist_section(): void {
 	}
 	echo '</select>';
 
-	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-allowlist-add-row">' . esc_html__( 'Add scope', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-allowlist-add-row"' . disabled( $read_failed, true, false ) . '>' . esc_html__( 'Add scope', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '</div>';
 
-	echo '<p><button type="button" class="aafm-btn aafm-btn-primary" id="aafm-allowlist-save">' . esc_html__( 'Save allowlist', 'agent-abilities-for-mcp' ) . '</button> <span id="aafm-allowlist-status" class="aafm-muted" role="status"></span></p>';
+	echo '<p><button type="button" class="aafm-btn aafm-btn-primary" id="aafm-allowlist-save"' . disabled( $read_failed, true, false ) . '>' . esc_html__( 'Save allowlist', 'agent-abilities-for-mcp' ) . '</button> <span id="aafm-allowlist-status" class="aafm-muted" role="status"></span></p>';
 
 	echo '</div>'; // .aafm-section-body
 	echo '</details>';

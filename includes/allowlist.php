@@ -63,6 +63,37 @@ function aafm_allowlist_overrides(): array {
 }
 
 /**
+ * The override rows for the admin display, alongside whether the read that produced them can be
+ * trusted - unlike aafm_allowlist_overrides() above, which collapses "genuinely no rows" and "the
+ * query itself failed" to the same empty array.
+ *
+ * R3-3 (1.7.5 deferred, round 3): that collapse is correct for aafm_ability_allowed_for_principal()'s
+ * fail-closed authorization read (a separate, direct read of the same option - see that function's
+ * own docblock for why it must fail the opposite direction) but wrong for a display the operator
+ * can then edit and Save from. A failed read rendered as "No scopes narrowed yet", with Add and
+ * Save still available, is not cosmetic: if the database recovers before the operator clicks Save,
+ * the empty editor submits a full replacement and silently erases every existing restriction. The
+ * caller here must be told the read failed, not handed an empty state that looks identical to a
+ * genuinely unrestricted site.
+ *
+ * @return array{ok: bool, rows: array<int,array<string,mixed>>}
+ */
+function aafm_allowlist_overrides_for_display(): array {
+	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
+	if ( $views['db_error'] ) {
+		return array(
+			'ok'   => false,
+			'rows' => array(),
+		);
+	}
+	$rows = $views['db_found'] ? $views['db_value'] : array();
+	return array(
+		'ok'   => true,
+		'rows' => is_array( $rows ) ? $rows : array(),
+	);
+}
+
+/**
  * The effective allowed set for one scope match: an array of ability names, or the literal
  * string 'all' meaning "no restriction from this row."
  *

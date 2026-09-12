@@ -403,6 +403,39 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
+	 * R3-8 (1.7.5 deferred, round 3): extract_function_body() returns only the function's own
+	 * tokens - a file-level `use function add_option as seed;` never survives that extraction, so
+	 * re-parsing aliases from the extracted body alone (the old call site inside
+	 * test_no_bare_option_write_names_a_security_allowlist_option()) always finds none, and an
+	 * aliased second call inside the function resolves to nothing recognisable. Resolving against
+	 * the WHOLE FILE's alias map (computed once, before extraction, and reused here) still counts
+	 * it.
+	 *
+	 * What would break this: passing an alias map parsed from $body_tokens alone (instead of the
+	 * whole-file $file_aliases below) makes this assert 1 instead of 2 - the exact bypass this
+	 * fixture reproduces.
+	 */
+	public function test_count_bare_option_writes_resolves_an_alias_only_the_whole_file_would_see(): void {
+		$source       = <<<'PHP'
+<?php
+use function add_option as seed;
+function aafm_oauth_seed_default_options() {
+	add_option( 'aafm_oauth_enabled', '0', '', true );
+	seed( 'aafm_oauth_enabled', '0', '', true );
+}
+PHP;
+		$file_tokens  = token_get_all( $source );
+		$file_aliases = $this->parse_use_function_aliases( $file_tokens );
+		$body_tokens  = token_get_all( '<?php ' . $this->extract_function_body( $source, 'aafm_oauth_seed_default_options' ) );
+
+		$this->assertSame(
+			2,
+			$this->count_bare_option_writes( $body_tokens, 'add_option', 'aafm_oauth_enabled', $file_aliases ),
+			'The aliased call must count too, using the whole file\'s alias map.'
+		);
+	}
+
+	/**
 	 * Static source scan, mirrors PageBuilderGuardSweepTest's mechanical approach, widened from
 	 * includes/admin/page.php alone to every file under includes/ (Codex round 5, R5-3): a bare
 	 * update_option()/delete_option()/add_option() call naming one of the guarded security
@@ -443,10 +476,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * before the paren evaded it entirely.
 	 */
 	public function test_no_bare_option_write_names_a_security_allowlist_option(): void {
-		$guarded_options  = $this->guarded_security_options();
-		$exempt_functions = array(
-			'includes/oauth/discovery.php' => 'aafm_oauth_seed_default_options',
-		);
+		$guarded_options = $this->guarded_security_options();
 		// Codex round 10, R10-9: a bare add_option() naming this exact option in this exact file
 		// is the accepted seed-once idiom (aafm_quickconnect_flag_menu_pointer(), includes/admin/
 		// onboarding-pointer.php) - never update_option() or delete_option(), and never any other
@@ -457,10 +487,23 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 		// still pass. 'function' scopes the exemption to that one call site: the loop below
 		// verifies no matching call exists anywhere in the file OUTSIDE that function, and that
 		// one genuinely exists inside it (so removing the seed call is itself still noticed).
+		//
+		// R3-8 (1.7.5 deferred, round 3): aafm_oauth_seed_default_options() (includes/oauth/
+		// discovery.php) used to get its own, separate, whole-function-body strip ($exempt_functions
+		// below, now removed) instead of this precise per-call exemption - the exact defect this
+		// file's own docblock above already explains onboarding-pointer.php was rescued from. That
+		// blanket strip hid EVERY write inside the function, not just its two accepted seed calls,
+		// so a duplicate seed or an unrelated bare write to a different guarded option pasted into
+		// the same function was invisible to this scan. Both accepted seeds now go through the
+		// exact same named-function, named-option, count-of-exactly-one exemption as the pointer's.
 		$allowed_add_option_calls = array(
 			'includes/admin/onboarding-pointer.php' => array(
 				'options'  => array( 'aafm_menu_pointer_active' ),
 				'function' => 'aafm_quickconnect_flag_menu_pointer',
+			),
+			'includes/oauth/discovery.php'           => array(
+				'options'  => array( 'aafm_oauth_enabled', 'aafm_oauth_dcr_enabled' ),
+				'function' => 'aafm_oauth_seed_default_options',
 			),
 		);
 
@@ -487,11 +530,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			$this->assertNotSame( '', $source, "The sweep must actually read {$relative} - an empty read would make this test pass by finding nothing." );
 			++$scanned;
 
-			$scan_source = isset( $exempt_functions[ $relative ] )
-				? $this->strip_function_body( $source, $exempt_functions[ $relative ] )
-				: $source;
-
-			$tokens  = token_get_all( $scan_source );
+			$tokens  = token_get_all( $source );
 			$aliases = $this->parse_use_function_aliases( $tokens );
 
 			$pointer_exemption = $allowed_add_option_calls[ $relative ] ?? null;
@@ -515,8 +554,17 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 						// if a second, unreviewed call to the same option were added alongside
 						// the accepted seed call, inside the same exempt function - the exemption
 						// is for one specific call, not an unlimited allowance for that function.
+						//
+						// R3-8 (1.7.5 deferred, round 3): extract_function_body() returns ONLY the
+						// body's own tokens - no file-level `use` statements survive the extraction,
+						// so re-parsing aliases from $body_tokens alone always finds none. A second
+						// call added via a file-level `use function add_option as seed;` then
+						// resolves to nothing recognisable and is silently missed, leaving
+						// $body_matches at 1 (the original call only) even with a bypass alongside
+						// it. Resolve against $aliases, the whole file's real alias map computed
+						// above, not a re-parse of the isolated snippet that lost that context.
 						$body_tokens   = token_get_all( '<?php ' . $this->extract_function_body( $source, $pointer_exemption['function'] ) );
-						$body_matches  = $this->count_bare_option_writes( $body_tokens, $bare_call, $option, $this->parse_use_function_aliases( $body_tokens ) );
+						$body_matches  = $this->count_bare_option_writes( $body_tokens, $bare_call, $option, $aliases );
 						$this->assertSame(
 							1,
 							$body_matches,

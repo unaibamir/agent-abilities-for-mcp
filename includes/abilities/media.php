@@ -1444,6 +1444,28 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	 * @param array<int,mixed> $options The cURL options this fetch is about to set.
 	 */
 	$options = apply_filters( 'aafm_media_fetch_curl_options', $options );
+	// B4 (1.7.5 deferred): the curl_setopt_array() fail-closed check below only catches an option
+	// that FAILS to apply; it cannot notice one a hooked callback removed from the array outright,
+	// since curl_setopt_array() only ever sees what is still present. Nothing in this codebase
+	// hooks this filter, but assert the DNS pin, proxy neutralization, TLS verification, redirect
+	// refusal, and byte-cap enforcement are all still keys in $options before trusting it, the
+	// same fail-closed instinct as the check below.
+	$required_options = array(
+		CURLOPT_FOLLOWLOCATION,
+		CURLOPT_SSL_VERIFYPEER,
+		CURLOPT_SSL_VERIFYHOST,
+		CURLOPT_PROXY,
+		CURLOPT_NOPROXY,
+		CURLOPT_RESOLVE,
+		CURLOPT_HEADERFUNCTION,
+		CURLOPT_WRITEFUNCTION,
+	);
+	foreach ( $required_options as $required_option ) {
+		if ( ! array_key_exists( $required_option, $options ) ) {
+			curl_close( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_close
+			return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
+		}
+	}
 	// Codex final round 4 HIGH: curl_setopt_array()'s return was ignored, so a single option this
 	// array cannot apply (it stops applying at the first failure) still let curl_exec() run with
 	// whichever security options DID make it through - possibly none of the DNS pin, proxy

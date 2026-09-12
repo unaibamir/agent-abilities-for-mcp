@@ -19,6 +19,8 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\PhpStringLiteral;
+use AAFM\Tests\Support\UseImportScanner;
 use AAFM\Tests\TestCase;
 
 final class SecurityOptionWritesSweepTest extends TestCase {
@@ -224,40 +226,46 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * `use function <name> as <alias>;` imports, mapped by lower-cased alias (Codex round 8,
-	 * R8-6: PHP resolves both function names and their aliases case-insensitively, so a call
-	 * through the alias in ANY case must still resolve). Only the single, non-grouped form is
-	 * handled - this codebase does not use the grouped `use function {A, B as C};` form today.
+	 * Same lookup as significant_token(), but returning the INDEX rather than the token itself -
+	 * needed wherever a caller must keep walking from that position (e.g. PhpStringLiteral::decode_at()).
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param int                                           $index Index to look around.
+	 * @param int                                           $direction 1 for next, -1 for previous.
+	 * @return int|null
+	 */
+	private function significant_index( array $tokens, int $index, int $direction ): ?int {
+		$i     = $index + $direction;
+		$total = count( $tokens );
+		while ( $i >= 0 && $i < $total ) {
+			$token = $tokens[ $i ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				$i += $direction;
+				continue;
+			}
+			return $i;
+		}
+		return null;
+	}
+
+	/**
+	 * `use function <name> as <alias>;` imports, mapped by lower-cased alias (Codex round 8,
+	 * R8-6: PHP resolves both function names and their aliases case-insensitively, so a call
+	 * through the alias in ANY case must still resolve).
+	 *
+	 * R4-6 (1.7.5 deferred, round 4): this used to be its own hand-rolled regex parser - one of
+	 * three near-identical copies across the test suite, each missing a different subset of legal
+	 * `use` syntax (comments anywhere in the import, comma-separated multiple imports, non-ASCII
+	 * aliases, PHP 8's combined name tokens). It now shares UseImportScanner::parse_aliases() with
+	 * the other two - see that class for the grammar - so every import form it understands is
+	 * understood here too.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output, raw or collapsed.
 	 * @return array<string,string> Lower-cased alias => real bare name.
 	 */
 	private function parse_use_function_aliases( array $tokens ): array {
-		$aliases = array();
-		$total   = count( $tokens );
-		foreach ( $tokens as $i => $token ) {
-			if ( ! is_array( $token ) || T_USE !== $token[0] ) {
-				continue;
-			}
-			$j = $i + 1;
-			while ( $j < $total && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
-				++$j;
-			}
-			if ( ! ( $j < $total && is_array( $tokens[ $j ] ) && T_FUNCTION === $tokens[ $j ][0] ) ) {
-				continue; // Only `use function ...;` imports matter for option-write call names.
-			}
-			$entry = '';
-			$k     = $j + 1;
-			while ( $k < $total && ';' !== $tokens[ $k ] ) {
-				$t      = $tokens[ $k ];
-				$entry .= is_array( $t ) ? $t[1] : $t;
-				++$k;
-			}
-			if ( preg_match( '/^\s*\\\\?([A-Za-z_][A-Za-z0-9_]*)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*$/i', $entry, $m ) ) {
-				$aliases[ strtolower( $m[2] ) ] = $m[1];
-			}
-		}
-		return $aliases;
+		$aliases = UseImportScanner::parse_aliases( UseImportScanner::collapse_qualified_names( $tokens ) );
+		return UseImportScanner::reduce_to_trailing( $aliases['function'] );
 	}
 
 	/**
@@ -266,12 +274,25 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * function names and `use` aliases case-insensitively, so a differently-cased call or alias
 	 * reference is still the same call.
 	 *
+	 * R4-6 (1.7.5 deferred, round 4): two fixes on top of the alias lookup itself. First, $tokens
+	 * is expected collapsed (see count_bare_option_writes()), so a PHP 8 fully qualified call like
+	 * `\add_option(...)` arrives here as one token whose text still carries its leading `\` -
+	 * stripped before comparing, since T_STRING-only matching used to miss it outright. Second, a
+	 * fully qualified reference bypasses every `use` import in real PHP, so an alias must never be
+	 * consulted for one - `use function add_option as seed; \add_option(...)` is a real bare call
+	 * to add_option(), not to whatever "add_option" was locally aliased to (which cannot happen
+	 * here anyway, since aliases are keyed by their LOCAL name, but the same bypass rule also
+	 * matters if a guarded primitive's own bare name were ever re-aliased to something else).
+	 *
 	 * @param string               $token_text Token text.
 	 * @param string               $target Bare target function name.
 	 * @param array<string,string> $aliases Lower-cased alias => real bare name.
 	 * @return bool
 	 */
 	private function resolves_to_option_write_target( string $token_text, string $target, array $aliases ): bool {
+		if ( UseImportScanner::is_fully_qualified( $token_text ) ) {
+			return 0 === strcasecmp( $target, ltrim( $token_text, '\\' ) );
+		}
 		$resolved = $aliases[ strtolower( $token_text ) ] ?? $token_text;
 		return 0 === strcasecmp( $target, $resolved );
 	}
@@ -302,6 +323,13 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * "exactly the one accepted seed call" apart from "that call plus another one added later in
 	 * the same function," and a boolean existence check cannot make that distinction.
 	 *
+	 * R4-6 (1.7.5 deferred, round 4): $tokens is collapsed here (rather than requiring every
+	 * caller to remember to) so a PHP 8 fully qualified call is matched the same as a bare one, and
+	 * the first argument's literal value is decoded with PhpStringLiteral, through a redundant
+	 * wrapping parenthesis if there is one, rather than compared as raw quoted token text - a
+	 * `b`-prefixed, escaped, or constant heredoc/nowdoc spelling of the same runtime string must
+	 * still be recognised as naming the option, exactly like the plain quoted form always was.
+	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Tokens from token_get_all().
 	 * @param string                                        $name Bare function name to match.
 	 * @param string                                        $option Literal option name to match as the first argument.
@@ -309,6 +337,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	 * @return int
 	 */
 	private function count_bare_option_writes( array $tokens, string $name, string $option, array $aliases ): int {
+		$tokens  = UseImportScanner::collapse_qualified_names( $tokens );
 		$count   = count( $tokens );
 		$matches = 0;
 		foreach ( $tokens as $i => $token ) {
@@ -328,8 +357,12 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 			while ( $open_index < $count && '(' !== $tokens[ $open_index ] ) {
 				++$open_index;
 			}
-			$first_arg = $this->significant_token( $tokens, $open_index, 1 );
-			if ( is_array( $first_arg ) && T_CONSTANT_ENCAPSED_STRING === $first_arg[0] && substr( $first_arg[1], 1, -1 ) === $option ) {
+			$arg_index = $this->significant_index( $tokens, $open_index, 1 );
+			while ( null !== $arg_index && '(' === $tokens[ $arg_index ] ) {
+				$arg_index = $this->significant_index( $tokens, $arg_index, 1 );
+			}
+			$decoded = null === $arg_index ? null : PhpStringLiteral::decode_at( $tokens, $arg_index );
+			if ( null !== $decoded && $option === $decoded[0] ) {
 				++$matches;
 			}
 		}
@@ -403,6 +436,66 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
+	 * R4-6 (1.7.5 deferred, round 4): PHP 8 tokenizes `\add_option(...)` as a single
+	 * T_NAME_FULLY_QUALIFIED token, never a bare T_STRING. count_bare_option_writes() used to
+	 * match T_STRING only, so this exact spelling of the same call was invisible to the sweep.
+	 */
+	public function test_count_bare_option_writes_matches_a_fully_qualified_call(): void {
+		$tokens = token_get_all( "<?php\n\\add_option( 'aafm_menu_pointer_active', '1' );\n" );
+
+		$this->assertSame( 1, $this->count_bare_option_writes( $tokens, 'add_option', 'aafm_menu_pointer_active', array() ) );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): a fully qualified call bypasses every `use` import - an
+	 * alias pointing the bare name "add_option" somewhere else must not stop `\add_option(...)`
+	 * from being recognised as the real global function.
+	 */
+	public function test_count_bare_option_writes_ignores_a_conflicting_alias_on_a_fully_qualified_call(): void {
+		$tokens  = token_get_all( "<?php\nuse function harmless as add_option;\n\\add_option( 'aafm_menu_pointer_active', '1' );\n" );
+		$aliases = $this->parse_use_function_aliases( $tokens );
+
+		$this->assertSame( 1, $this->count_bare_option_writes( $tokens, 'add_option', 'aafm_menu_pointer_active', $aliases ) );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): the retired regex-based alias parser only recognised a
+	 * single, comment-free, ASCII `use function <name> as <alias>;` statement. A comment anywhere
+	 * inside it, a second comma-separated import in the same statement, or a non-ASCII alias each
+	 * defeated it. All three now go through the shared UseImportScanner.
+	 */
+	public function test_parse_use_function_aliases_handles_comments_multiple_imports_and_non_ascii_aliases(): void {
+		$tokens  = token_get_all(
+			"<?php\nuse function /* audit */ add_option as persist, update_option as répéter;\n"
+				. "persist( 'aafm_menu_pointer_active', '1' );\nrépéter( 'aafm_oauth_enabled', '1' );\n"
+		);
+		$aliases = $this->parse_use_function_aliases( $tokens );
+
+		$this->assertSame( 1, $this->count_bare_option_writes( $tokens, 'add_option', 'aafm_menu_pointer_active', $aliases ) );
+		$this->assertSame( 1, $this->count_bare_option_writes( $tokens, 'update_option', 'aafm_oauth_enabled', $aliases ) );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): count_bare_option_writes()'s literal-argument comparison used
+	 * to be a raw `substr( $text, 1, -1 ) === $option`, which never decoded PHP's own escape
+	 * sequences - so a hex-escaped option name spelling `"aafm_oauth_\x65nabled"`, which is the
+	 * exact runtime string `aafm_oauth_enabled`, went unrecognised and could smuggle a guarded
+	 * write past the sweep undetected. It also missed a single redundant wrapping parenthesis
+	 * around an otherwise ordinary literal.
+	 */
+	public function test_count_bare_option_writes_decodes_an_escaped_option_literal(): void {
+		$tokens = token_get_all( "<?php\nadd_option( \"aafm_oauth_\\x65nabled\", '1' );\n" );
+
+		$this->assertSame( 1, $this->count_bare_option_writes( $tokens, 'add_option', 'aafm_oauth_enabled', array() ) );
+	}
+
+	public function test_count_bare_option_writes_unwraps_a_redundant_parenthesis_around_the_literal(): void {
+		$tokens = token_get_all( "<?php\nadd_option( ( 'aafm_oauth_enabled' ), '1' );\n" );
+
+		$this->assertSame( 1, $this->count_bare_option_writes( $tokens, 'add_option', 'aafm_oauth_enabled', array() ) );
+	}
+
+	/**
 	 * R3-8 (1.7.5 deferred, round 3): extract_function_body() returns only the function's own
 	 * tokens - a file-level `use function add_option as seed;` never survives that extraction, so
 	 * re-parsing aliases from the extracted body alone (the old call site inside
@@ -432,6 +525,104 @@ PHP;
 			2,
 			$this->count_bare_option_writes( $body_tokens, 'add_option', 'aafm_oauth_enabled', $file_aliases ),
 			'The aliased call must count too, using the whole file\'s alias map.'
+		);
+	}
+
+	/**
+	 * R2-7/R2-8/F11/R10-9 (1.7.5 deferred, rounds 2-4): the "duplicate-call fixture" every round
+	 * from R2-7 onward said was missing. The real exemption sweep below (`assertSame( 1,
+	 * $body_matches, ... )`) has, since round 3, correctly required EXACTLY one accepted call
+	 * inside each exempt function - but until now no test exercised that decision against a real
+	 * duplicate, so a sixth round could not have told "the exact-one policy still holds" from "the
+	 * production assertion silently regressed to existence-only" without re-deriving it from
+	 * scratch. This runs the identical helper chain (extract_function_body() +
+	 * count_bare_option_writes() with the whole-file alias map) the real sweep uses, against both
+	 * real exempt (function, option) identities, and proves it distinguishes:
+	 *
+	 * - exactly one accepted call (what the real files contain today - must count 1);
+	 * - a second, unreviewed literal call to the same option inside the same function (must
+	 *   count 2, which the real sweep's assertSame( 1, ... ) would reject);
+	 * - a second call reached only through a whole-file `use function add_option as seed;` alias
+	 *   (must also count 2 - a body-only alias re-parse, R3-8's bypass, would miss it and wrongly
+	 *   report 1).
+	 *
+	 * @return array<int,array{0:string,1:string}> Each row: [exempt function name, accepted option name].
+	 */
+	public function real_exemption_identities(): array {
+		return array(
+			array( 'aafm_quickconnect_flag_menu_pointer', 'aafm_menu_pointer_active' ),
+			array( 'aafm_oauth_seed_default_options', 'aafm_oauth_enabled' ),
+		);
+	}
+
+	/**
+	 * @dataProvider real_exemption_identities
+	 */
+	public function test_exemption_policy_rejects_a_duplicate_or_aliased_duplicate_inside_the_exempt_function( string $function, string $option ): void {
+		$single = <<<PHP
+<?php
+function {$function}() {
+	add_option( '{$option}', '1', '', true );
+}
+PHP;
+		$single_tokens  = token_get_all( $single );
+		$single_aliases = $this->parse_use_function_aliases( $single_tokens );
+		$single_body    = token_get_all( '<?php ' . $this->extract_function_body( $single, $function ) );
+		$this->assertSame(
+			1,
+			$this->count_bare_option_writes( $single_body, 'add_option', $option, $single_aliases ),
+			"Baseline: exactly one accepted call to {$function}() naming {$option} must count as 1."
+		);
+
+		$duplicate = <<<PHP
+<?php
+function {$function}() {
+	add_option( '{$option}', '1', '', true );
+	add_option( '{$option}', '1', '', true );
+}
+PHP;
+		$duplicate_tokens  = token_get_all( $duplicate );
+		$duplicate_aliases = $this->parse_use_function_aliases( $duplicate_tokens );
+		$duplicate_body    = token_get_all( '<?php ' . $this->extract_function_body( $duplicate, $function ) );
+		$this->assertSame(
+			2,
+			$this->count_bare_option_writes( $duplicate_body, 'add_option', $option, $duplicate_aliases ),
+			"A second, unreviewed add_option() naming {$option} inside {$function}() must be counted, not silently absorbed by the exemption."
+		);
+
+		$aliased_duplicate = <<<PHP
+<?php
+use function add_option as seed;
+function {$function}() {
+	add_option( '{$option}', '1', '', true );
+	seed( '{$option}', '1', '', true );
+}
+PHP;
+		$aliased_tokens  = token_get_all( $aliased_duplicate );
+		$aliased_aliases = $this->parse_use_function_aliases( $aliased_tokens );
+		$aliased_body    = token_get_all( '<?php ' . $this->extract_function_body( $aliased_duplicate, $function ) );
+		$this->assertSame(
+			2,
+			$this->count_bare_option_writes( $aliased_body, 'add_option', $option, $aliased_aliases ),
+			"A second call reached only through a whole-file alias must be counted too, using the whole file's alias map."
+		);
+
+		// The outside-function reproduction: the exact same call sitting anywhere else in the
+		// file, outside the exempt function, must still fail the sweep's separate assertFalse()
+		// check - proven directly here rather than only by the earlier round's narrower fixture.
+		$outside = <<<PHP
+<?php
+function {$function}() {
+	add_option( '{$option}', '1', '', true );
+}
+
+add_option( '{$option}', '1', '', true );
+PHP;
+		$outside_stripped = $this->strip_function_body( $outside, $function );
+		$outside_tokens   = token_get_all( $outside_stripped );
+		$this->assertTrue(
+			$this->has_bare_option_write( $outside_tokens, 'add_option', $option, $this->parse_use_function_aliases( $outside_tokens ) ),
+			"A second add_option() naming {$option} OUTSIDE {$function}() must still be detected once that function's own body is removed."
 		);
 	}
 

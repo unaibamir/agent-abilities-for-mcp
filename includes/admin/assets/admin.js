@@ -2555,6 +2555,15 @@
 					allowed_abilities: this.#serializeAllowlistRow( row ),
 				} ) );
 
+				// R3-4 (1.7.5 deferred, round 3): reconciliation below reads the DOM as it stands
+				// AFTER the request resolves, so any add/remove/checkbox edit made while the
+				// request was in flight was never part of `rows` above but still looked "Saved."
+				// Disabling only the Save button left every other control (Add scope, Remove,
+				// the ability picker's own checkboxes) live for the whole round trip. `inert`
+				// makes the entire card - every control in it, not just Save - unclickable and
+				// unfocusable for exactly that window, then hands interaction back once
+				// reconciliation itself is done, not merely once the request resolves.
+				card.inert = true;
 				saveBtn.disabled = true;
 				const json = await this.#post( 'aafm_save_allowlist', {
 					allowlist_json: JSON.stringify( rows ),
@@ -2597,6 +2606,7 @@
 					status.textContent =
 						json?.data?.message ?? this.#t( 'allowlistSaveFailed', 'Could not save. Please try again.' );
 				}
+				card.inert = false;
 			} );
 		}
 

@@ -466,6 +466,17 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	);
 
 	if ( is_wp_error( $result ) ) {
+		// Codex round 5 R5-4: aafm_oauth_register_client()'s 'registration_failed' code means the
+		// INSERT itself failed - an operational fault, not a problem with what the client sent.
+		// Folding it into invalid_client_metadata told a client with a perfectly valid request that
+		// its metadata was rejected, when the server was the one that failed.
+		if ( 'registration_failed' === $result->get_error_code() ) {
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				$result->get_error_message(),
+				500
+			);
+		}
 		return aafm_oauth_rest_protocol_error(
 			'invalid_redirect_uri' === $result->get_error_code() ? 'invalid_redirect_uri' : 'invalid_client_metadata',
 			$result->get_error_message(),
@@ -743,6 +754,22 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ): WP_REST_Resp
 		// replayed, already-consumed token), which is a compromise signal worth a trace row.
 		if ( function_exists( 'aafm_oauth_log_event' ) ) {
 			aafm_oauth_log_event( 'refresh', 'denied', array( 'client_id' => $client_id ) );
+		}
+
+		// Codex round 5 R5-4: aafm_oauth_rotate_refresh() returns 'invalid_grant' for every
+		// genuine grant-validity reason (unknown/expired/wrong-client/replayed token), but also
+		// returns an operational error - a failed START TRANSACTION, a failed successor mint, or a
+		// failed COMMIT - through the exact same is_wp_error() branch. Collapsing both into
+		// invalid_grant/400 told a client presenting a perfectly usable refresh token that its
+		// grant was rejected, when the server itself failed to process it. Only the genuine
+		// grant-validity code gets the client-facing message; anything else is this pipeline's own
+		// fault.
+		if ( 'invalid_grant' !== $tokens->get_error_code() ) {
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+				500
+			);
 		}
 
 		return aafm_oauth_rest_protocol_error(

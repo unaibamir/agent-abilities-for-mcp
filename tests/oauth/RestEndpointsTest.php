@@ -299,6 +299,48 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 5 R5-4: a refresh_token grant with a genuinely valid, usable token must not be
+	 * told its GRANT is invalid when the failure is this pipeline's own operational fault (here,
+	 * a COMMIT that fails after the rotation already consumed the old row and minted a successor).
+	 * That used to collapse into the same invalid_grant/400 a replayed or expired token gets.
+	 */
+	public function test_refresh_token_grant_reports_server_error_when_commit_fails(): void {
+		$redirect  = 'https://app.example/cb';
+		$verifier  = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+		$challenge = $this->challenge_for( $verifier );
+
+		$client_id     = $this->register_client( $redirect );
+		$code          = $this->mint_code( $client_id, $redirect, $challenge );
+		$first         = $this->token_code_request( $client_id, $code, $redirect, $verifier );
+		$refresh_token = (string) $first->get_data()['refresh_token'];
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return 'COMMIT' === $query ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
+		$request->set_body_params(
+			array(
+				'grant_type'    => 'refresh_token',
+				'refresh_token' => $refresh_token,
+				'client_id'     => $client_id,
+			)
+		);
+		$response = rest_do_request( $request );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertSame( 500, $response->get_status(), 'an operational COMMIT failure is the server\'s fault, not the grant\'s' );
+		$this->assertSame( 'server_error', $response->get_data()['error'] );
+	}
+
+	/**
 	 * Revocation always returns 200 with an empty body (RFC 7009).
 	 */
 	public function test_revoke_returns_ok(): void {

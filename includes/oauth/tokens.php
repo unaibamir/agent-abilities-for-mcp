@@ -250,11 +250,14 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 
 	// Deactivated client: refuse rotation so disabling a compromised client stops it from
 	// rolling its tokens forward. is_active is otherwise only checked at authorize-time.
-	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
-		// R6-2: is_deactivated() correctly fails closed (denies) on an unreadable clients table,
-		// but that is an operational fault, not a genuine "this client was disabled" finding -
-		// telling the client the latter when it is really the former misreports the cause.
-		if ( aafm_oauth_client_lookup_failed( $client_id ) ) {
+	$client_view = aafm_oauth_client_deactivation_view( $client_id );
+	if ( $client_view['deactivated'] ) {
+		// Codex round 6, R6-2, then round 7, R7-3: a failed read fails closed (denies), but that
+		// is an operational fault, not a genuine "this client was disabled" finding - telling the
+		// client the latter when it is really the former misreports the cause.
+		// aafm_oauth_client_deactivation_view() answers both from the one read (R7-3), replacing
+		// the query-per-decision pair this site used to run.
+		if ( ! $client_view['ok'] ) {
 			return new WP_Error(
 				'server_error',
 				__( 'The client could not be checked.', 'agent-abilities-for-mcp' )

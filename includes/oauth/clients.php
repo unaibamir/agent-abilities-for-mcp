@@ -228,7 +228,17 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
 }
 
 /**
- * Whether a client is anything other than a confirmed, currently-active registration.
+ * Whether a client is anything other than a confirmed, currently-active registration, and
+ * whether that read could even be completed - one query answering both.
+ *
+ * Codex round 7, R7-3: aafm_oauth_client_is_deactivated() plus the former
+ * aafm_oauth_client_lookup_failed() used to require two separate queries at the two call sites
+ * that need to tell a genuine deactivation apart from a read failure - the same query, run
+ * twice, with two chances to disagree. If the first read failed and the second succeeded, both
+ * callers still reported invalid_grant instead of the server_error the fault deserved. If the
+ * first read genuinely found the client missing or deactivated and the second read then failed,
+ * a real invalid_grant was reported as server_error instead. One read now answers both
+ * questions, the same shape aafm_oauth_consent_view() already uses for the consent check.
  *
  * Used to re-enforce a client's standing AFTER authorize-time, at three live authorization
  * gates - code redemption (rest.php), refresh rotation (tokens.php), and bearer validation
@@ -239,46 +249,74 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
  * as a standalone authorization decision (Codex round 12, R12-3 - an earlier docblock here
  * claimed every caller was a live gate, which was true of three but not that fourth).
  *
- * Fails closed in every direction regardless of which of those four callers is asking, because
- * certification reads go through a direct aafm_wpdb_scalar() read instead - see
- * aafm_oauth_deactivate_client() and aafm_oauth_delete_consent() - never through this function:
- * an unreadable clients table denies (Codex round 10, R10-10), and so does a row that is
- * missing entirely rather than confirmed inactive (Codex round 11, R11-2) - a client whose
- * row was removed by a partial table clear, a manual repair, or the abandoned-client reaper
- * must not keep authenticating just because there is nothing left to read as "deactivated".
- * Only a row read back with is_active = 1 counts as active; anything else - no row, a
- * non-1 value, or a failed read - denies. The events this denial feeds (aafm_oauth_log_event's
- * 'bearer'/'refresh' 'denied' rows, and the generic invalid_grant responses at code redemption
- * and refresh) are already worded as a plain denial rather than a claim that the client was
- * deactivated, so failing closed here does not misreport a missing row or a database error as
- * a revocation.
+ * Fails closed in every direction regardless of which caller is asking, because certification
+ * reads go through a direct aafm_wpdb_scalar() read instead - see aafm_oauth_deactivate_client()
+ * and aafm_oauth_delete_consent() - never through this function: an unreadable clients table
+ * denies (Codex round 10, R10-10), and so does a row that is missing entirely rather than
+ * confirmed inactive (Codex round 11, R11-2) - a client whose row was removed by a partial table
+ * clear, a manual repair, or the abandoned-client reaper must not keep authenticating just
+ * because there is nothing left to read as "deactivated". Only a row read back with
+ * is_active = 1 counts as active; anything else - no row, a non-1 value, or a failed read -
+ * denies. The events this denial feeds (aafm_oauth_log_event's 'bearer'/'refresh' 'denied' rows,
+ * and the generic invalid_grant responses at code redemption and refresh) are already worded as
+ * a plain denial rather than a claim that the client was deactivated, so failing closed here
+ * does not misreport a missing row or a database error as a revocation.
  *
  * @param string $client_id The client identifier carried by a code/token row.
- * @return bool True unless a client row is read back and confirmed active (is_active = 1).
+ * @return array{ok:bool,deactivated:bool} ok is false when the read itself failed - deactivated
+ *              is still the correct fail-closed answer (true) in that case, since every caller
+ *              must deny either way; ok exists only so a caller that needs to report the fault
+ *              honestly (server_error, not invalid_grant) can tell the two apart. An empty
+ *              client id is NOT a read failure - it reports ok=true, deactivated=true, the same
+ *              genuine no-client answer this has always given it.
  */
-function aafm_oauth_client_is_deactivated( string $client_id ): bool {
+function aafm_oauth_client_deactivation_view( string $client_id ): array {
 	if ( '' === $client_id ) {
-		return true; // No client id to authorize against: deny, this is a live auth gate.
+		return array(
+			'ok'          => true,
+			'deactivated' => true, // No client id to authorize against: deny, this is a live auth gate.
+		);
 	}
 
 	$view = aafm_oauth_client_active_row_view( $client_id );
 
 	if ( ! $view['ok'] ) {
-		return true; // Unreadable table: fail closed, this is a live auth gate.
+		return array(
+			'ok'          => false,
+			'deactivated' => true, // Unreadable table: fail closed, this is a live auth gate.
+		);
 	}
 
 	if ( null === $view['value'] ) {
-		return true; // No row: nothing to positively authorize against, fail closed.
+		return array(
+			'ok'          => true,
+			'deactivated' => true, // No row: nothing to positively authorize against, fail closed.
+		);
 	}
 
-	return 1 !== (int) $view['value'];
+	return array(
+		'ok'          => true,
+		'deactivated' => 1 !== (int) $view['value'],
+	);
 }
 
 /**
- * The raw is_active read aafm_oauth_client_is_deactivated() itself runs, factored out so
- * aafm_oauth_client_lookup_failed() below can ask the same question - did the READ succeed - as a
- * companion, independent probe, without duplicating the query or reaching into that function's
- * internals.
+ * Whether a client is anything other than a confirmed, currently-active registration.
+ *
+ * Fails closed (denies) on a read failure - callers that need to tell a genuine deactivation
+ * apart from "could not be checked" use aafm_oauth_client_deactivation_view() directly instead,
+ * the way refresh rotation (tokens.php) and code redemption (rest.php) do.
+ *
+ * @param string $client_id The client identifier carried by a code/token row.
+ * @return bool True unless a client row is read back and confirmed active (is_active = 1).
+ */
+function aafm_oauth_client_is_deactivated( string $client_id ): bool {
+	return aafm_oauth_client_deactivation_view( $client_id )['deactivated'];
+}
+
+/**
+ * The raw is_active read aafm_oauth_client_deactivation_view() runs, factored out so it stays a
+ * single query per decision without reaching into that function's internals.
  *
  * @param string $client_id The client identifier to look up. Caller-validated non-empty.
  * @return array{ok:bool,value:mixed} Same shape as aafm_wpdb_scalar().
@@ -293,31 +331,6 @@ function aafm_oauth_client_active_row_view( string $client_id ): array {
 			$client_id
 		)
 	);
-}
-
-/**
- * Whether aafm_oauth_client_is_deactivated()'s own read could not be completed - a query failure
- * or an unreadable table - as opposed to genuinely finding the client missing or deactivated.
- *
- * Codex round 6, R6-2: aafm_oauth_client_is_deactivated() correctly fails closed (denies) either
- * way, and this does not change that - a caller must still deny the request when this is true.
- * What it fixes is the client-facing REASON: two live call sites (aafm_oauth_rotate_refresh() and
- * the authorization_code token grant) used to tell the client its grant or its client was invalid
- * even when the true cause was this read failing, not a genuine authorization decision. A caller
- * that needs to report the fault honestly - as a server_error, not invalid_grant - checks this
- * FIRST, only after aafm_oauth_client_is_deactivated() has already returned true; it must never be
- * used as a substitute for that function's own fail-closed denial.
- *
- * @param string $client_id The client identifier to look up.
- * @return bool True when the underlying read itself failed. An empty client id is NOT a read
- *              failure - it is a genuine missing-client case, matching
- *              aafm_oauth_client_is_deactivated()'s own empty-string branch.
- */
-function aafm_oauth_client_lookup_failed( string $client_id ): bool {
-	if ( '' === $client_id ) {
-		return false;
-	}
-	return ! aafm_oauth_client_active_row_view( $client_id )['ok'];
 }
 
 /**

@@ -597,11 +597,14 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 
 	// A deactivated client cannot redeem a code minted before it was disabled - is_active is
 	// only checked at authorize-time otherwise, so re-check it here.
-	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
-		// R6-2: is_deactivated() correctly fails closed (denies) on an unreadable clients table,
-		// but reporting that to the client as invalid_grant misstates the cause - it is this
+	$client_view = aafm_oauth_client_deactivation_view( $client_id );
+	if ( $client_view['deactivated'] ) {
+		// Codex round 6, R6-2, then round 7, R7-3: a failed read fails closed (denies), but
+		// reporting that to the client as invalid_grant misstates the cause - it is this
 		// pipeline's own fault, not a finding about the client's registration.
-		if ( aafm_oauth_client_lookup_failed( $client_id ) ) {
+		// aafm_oauth_client_deactivation_view() answers both from the one read (R7-3), replacing
+		// the query-per-decision pair this site used to run.
+		if ( ! $client_view['ok'] ) {
 			return aafm_oauth_rest_protocol_error(
 				'server_error',
 				__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),

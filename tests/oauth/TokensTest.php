@@ -1056,4 +1056,86 @@ class TokensTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'server_error', $result->get_error_code(), 'an unreadable clients table is this pipeline\'s own fault, not a confirmed deactivation' );
 	}
+
+	/**
+	 * Codex round 7, R7-3: the client check above used to run as two separate queries -
+	 * aafm_oauth_client_is_deactivated() then, only when that returned true,
+	 * aafm_oauth_client_lookup_failed() - so a failed FIRST query followed by a SUCCESSFUL second
+	 * query could still read the client as genuinely deactivated rather than as a fault. Fails
+	 * only the first client-select query and lets any later one through, then asserts both the
+	 * correct result AND that only one such query ever ran - proving there is no second read for
+	 * a reverted two-query shape to fall back on.
+	 */
+	public function test_rotate_refresh_client_check_is_a_single_read_when_that_read_fails(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		$occurrences = 0;
+		add_filter(
+			'query',
+			function ( string $query ) use ( &$occurrences ): string {
+				$is_client_check = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_clients' );
+				if ( ! $is_client_check ) {
+					return $query;
+				}
+				++$occurrences;
+				return 1 === $occurrences ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed single read must be reported as a fault, never silently answered by a second query' );
+		$this->assertSame( 1, $occurrences, 'a second client-select query means the old two-query shape has come back' );
+	}
+
+	/**
+	 * Codex round 7, R7-3, opposite direction: a genuinely deactivated client found by the first
+	 * (and, under the fix, only) client-select query must report invalid_grant even though a
+	 * SECOND such query - the old aafm_oauth_client_lookup_failed() re-probe - would have failed.
+	 * Deactivates the client for real, then fails only a second occurrence of the client-select
+	 * query (the first is left to run normally); the fix never issues that second query, so the
+	 * genuine deactivation must still be reported correctly.
+	 */
+	public function test_rotate_refresh_client_check_reports_genuine_deactivation_even_if_a_second_read_would_fail(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+		$this->assertTrue( aafm_oauth_deactivate_client( $ctx['client_id'] ) );
+
+		$occurrences = 0;
+		add_filter(
+			'query',
+			function ( string $query ) use ( &$occurrences ): string {
+				$is_client_check = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_clients' );
+				if ( ! $is_client_check ) {
+					return $query;
+				}
+				++$occurrences;
+				return 2 === $occurrences ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'invalid_grant', $result->get_error_code(), 'a genuine deactivation found by the one real read must not be overridden by a second query that never runs' );
+		$this->assertSame( 1, $occurrences, 'a second client-select query means the old two-query shape has come back' );
+	}
 }

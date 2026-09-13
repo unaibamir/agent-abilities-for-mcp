@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-09-13T03:29:58+05:00\n"
+"POT-Creation-Date: 2026-09-13T12:28:40+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -553,30 +553,30 @@ msgid "Update an existing listing's title, content, or address/coordinates. Fiel
 msgstr ""
 
 #. translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save".
-#: includes/abilities/geodirectory.php:758
+#: includes/abilities/geodirectory.php:789
 #, php-format
 msgid "The listing could not be created: %s. Nothing was created."
 msgstr ""
 
 #. translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save".
-#: includes/abilities/geodirectory.php:763
+#: includes/abilities/geodirectory.php:794
 #, php-format
 msgid "The listing could not be created: %s, and the incomplete listing could not be removed automatically. Delete it manually."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:839
+#: includes/abilities/geodirectory.php:870
 msgid "its title or content could not be confirmed as saved"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:846
+#: includes/abilities/geodirectory.php:877
 msgid "its address or location fields did not save"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:972
+#: includes/abilities/geodirectory.php:1003
 msgid "The listing was updated, but its title or content could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:980
+#: includes/abilities/geodirectory.php:1011
 msgid "The listing was updated, but its address or location fields did not save."
 msgstr ""
 
@@ -5437,7 +5437,7 @@ msgstr ""
 
 #. translators: %s: the name of the setting, for example "Read-only mode".
 #: includes/admin/onboarding-pointer.php:102
-#: includes/helpers.php:2539
+#: includes/helpers.php:2574
 #, php-format
 msgid "%s could not be changed: the site's persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7539,22 +7539,22 @@ msgstr ""
 msgid "Byte length of the raw stored content (strlen of post_content), present even when include_content is false so a caller can preflight size before a full fetch. Reported as 0 for a password-protected post, regardless of its real length."
 msgstr ""
 
-#: includes/helpers.php:2109
+#: includes/helpers.php:2121
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:2336
+#: includes/helpers.php:2371
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:2557
+#: includes/helpers.php:2592
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. The site is now stricter than requested. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
 
 #. translators: 1: name of the value that saved, 2: name of the value that could not be.
-#: includes/helpers.php:2578
+#: includes/helpers.php:2613
 #, php-format
 msgid "%1$s was saved, but %2$s could not be changed: the site's persistent object cache is still returning the old value. Some of your changes did not take - re-check your settings rather than assuming this save either fully applied or fully failed. Flush the object cache (Redis, Memcached, or your host's cache) and save again."
 msgstr ""
@@ -7583,27 +7583,27 @@ msgstr ""
 msgid "The requested resource is not served by this server."
 msgstr ""
 
-#: includes/oauth/authorize.php:391
+#: includes/oauth/authorize.php:433
 msgid "Authorization error"
 msgstr ""
 
-#: includes/oauth/authorize.php:449
+#: includes/oauth/authorize.php:491
 msgid "Could not issue an authorization code. Please try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:601
+#: includes/oauth/authorize.php:643
 msgid "HTTPS is required for authorization."
 msgstr ""
 
-#: includes/oauth/authorize.php:667
+#: includes/oauth/authorize.php:709
 msgid "Your account does not have permission to authorize access."
 msgstr ""
 
-#: includes/oauth/authorize.php:681
+#: includes/oauth/authorize.php:723
 msgid "Your authorization session expired. Please start again."
 msgstr ""
 
-#: includes/oauth/authorize.php:726
+#: includes/oauth/authorize.php:768
 msgid "Could not record your approval. Please try again."
 msgstr ""
 
@@ -7627,11 +7627,15 @@ msgstr ""
 msgid "The authorization code could not be issued."
 msgstr ""
 
-#: includes/oauth/codes.php:122
+#: includes/oauth/codes.php:126
+msgid "The authorization code could not be redeemed."
+msgstr ""
+
+#: includes/oauth/codes.php:133
 msgid "The authorization code is invalid, expired, or already used."
 msgstr ""
 
-#: includes/oauth/codes.php:139
+#: includes/oauth/codes.php:151
 msgid "The authorization code could not be read back after redemption."
 msgstr ""
 
@@ -7769,24 +7773,27 @@ msgstr ""
 msgid "The authorization grant is invalid."
 msgstr ""
 
-#: includes/oauth/rest.php:622
-#: includes/oauth/rest.php:691
-#: includes/oauth/rest.php:705
-#: includes/oauth/rest.php:770
-#: includes/oauth/tokens.php:130
+#: includes/oauth/rest.php:607
+#: includes/oauth/rest.php:632
+#: includes/oauth/rest.php:657
+#: includes/oauth/rest.php:683
+#: includes/oauth/rest.php:730
+#: includes/oauth/rest.php:744
+#: includes/oauth/rest.php:809
+#: includes/oauth/tokens.php:142
 msgid "The access token could not be issued."
 msgstr ""
 
-#: includes/oauth/rest.php:745
-#: includes/oauth/rest.php:777
+#: includes/oauth/rest.php:784
+#: includes/oauth/rest.php:816
 msgid "The refresh token grant is invalid."
 msgstr ""
 
-#: includes/oauth/rest.php:832
+#: includes/oauth/rest.php:871
 msgid "Too many revocation requests. Try again shortly."
 msgstr ""
 
-#: includes/oauth/rest.php:850
+#: includes/oauth/rest.php:889
 msgid "The token could not be revoked."
 msgstr ""
 
@@ -7802,29 +7809,41 @@ msgstr ""
 msgid "Agent Abilities for MCP could not finish setting up its OAuth database tables. OAuth may not work correctly until the update completes; the plugin retries automatically on the next admin or REST request."
 msgstr ""
 
-#: includes/oauth/tokens.php:209
-#: includes/oauth/tokens.php:318
-msgid "The refresh token is invalid."
-msgstr ""
-
-#: includes/oauth/tokens.php:225
-msgid "The refresh token has already been used; the token chain has been revoked."
-msgstr ""
-
-#: includes/oauth/tokens.php:226
-msgid "The refresh token has already been used."
+#: includes/oauth/tokens.php:224
+msgid "The refresh token could not be looked up."
 msgstr ""
 
 #: includes/oauth/tokens.php:234
+#: includes/oauth/tokens.php:364
+msgid "The refresh token is invalid."
+msgstr ""
+
+#: includes/oauth/tokens.php:250
+msgid "The refresh token has already been used; the token chain has been revoked."
+msgstr ""
+
+#: includes/oauth/tokens.php:251
+msgid "The refresh token has already been used."
+msgstr ""
+
+#: includes/oauth/tokens.php:259
 msgid "The refresh token was issued to a different client."
 msgstr ""
 
-#: includes/oauth/tokens.php:243
+#: includes/oauth/tokens.php:272
+msgid "The client could not be checked."
+msgstr ""
+
+#: includes/oauth/tokens.php:277
 msgid "The client is no longer active."
 msgstr ""
 
-#: includes/oauth/tokens.php:253
+#: includes/oauth/tokens.php:287
 msgid "The refresh token has expired."
+msgstr ""
+
+#: includes/oauth/tokens.php:358
+msgid "The refresh token could not be consumed."
 msgstr ""
 
 #: includes/oauth/validator.php:188

@@ -38,6 +38,38 @@ final class UninstallTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7, R7-2: aafm_uninstall_should_delete_data() used to read the flag with a bare
+	 * $wpdb->get_var(), which returns the PREVIOUS query's row when the current query itself
+	 * fails. Plant a positive scalar from an unrelated query, then force the flag's own SELECT to
+	 * fail via one of $wpdb->query()'s no-flush paths (the `query` filter returning empty), and
+	 * confirm the failure is refused rather than certified as permission to delete every option,
+	 * the activity log, and the OAuth tables.
+	 */
+	public function test_uninstall_should_delete_data_fails_closed_when_the_read_fails_after_a_positive_prior_query(): void {
+		delete_option( 'aafm_delete_data_on_uninstall' );
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( 'SELECT 1' );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_flag_read = false !== strpos( $query, 'aafm_delete_data_on_uninstall' );
+				return $is_flag_read ? '' : $query;
+			}
+		);
+
+		try {
+			$result = aafm_uninstall_should_delete_data();
+		} finally {
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertFalse( $result, 'a failed read must never be certified as permission to delete site data' );
+	}
+
+	/**
 	 * Team-lead item A: the default (retain-data) uninstall path used to return before ever
 	 * reaching either wp_clear_scheduled_hook() call, leaving both daily cron events behind
 	 * with no plugin left to run their callbacks. Cron registrations are executable plugin

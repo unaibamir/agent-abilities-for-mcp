@@ -472,21 +472,28 @@ function aafm_config_option_names(): array {
  * that is allowed to cost a query it would not otherwise need, because what it gates cannot be
  * undone.
  *
+ * Codex round 7, R7-2: a bare $wpdb->get_var() returns the PREVIOUS query's row when the current
+ * query itself fails - $wpdb->query() returns false, without ever touching last_result, on some
+ * failure paths (see aafm_wpdb_scalar()'s docblock) - so a failed read here could inherit a
+ * leftover non-null value from whatever query ran just before it and authorize deletion on data
+ * that says nothing about this flag. Routed through aafm_wpdb_scalar() so a failed read is
+ * detected and refused rather than certified as permission to delete.
+ *
  * @return bool
  */
 function aafm_uninstall_should_delete_data(): bool {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache; see the docblock above.
-	$raw = $wpdb->get_var(
+	$view = aafm_wpdb_scalar(
 		$wpdb->prepare(
 			"SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1",
 			'aafm_delete_data_on_uninstall'
 		)
 	);
-	if ( null === $raw ) {
+	if ( ! $view['ok'] || null === $view['value'] ) {
 		return false;
 	}
-	return (bool) maybe_unserialize( $raw );
+	return (bool) maybe_unserialize( $view['value'] );
 }
 
 /**

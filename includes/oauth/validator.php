@@ -434,16 +434,23 @@ function aafm_oauth_read_bearer_token(): ?string {
  * validates also returns a row here, and one that does not validate returns
  * null. The row carries at least `resource` (the audience) and `wp_user_id`.
  *
+ * This gates authentication for every bearer request, so it is the highest-stakes instance of the
+ * stale-reader class (R8-1's sibling shape): a bare $wpdb->get_row() hands back the PREVIOUS
+ * query's row when this one fails, which here would authenticate the caller as whichever OTHER
+ * token happened to be looked up last on this connection - a cross-token identity confusion, not
+ * merely a missing row. Routed through aafm_wpdb_row() so a failed lookup denies, exactly like a
+ * genuinely absent/inactive/expired token already does.
+ *
  * @param string $raw The raw access token presented by the client.
- * @return array<string,mixed>|null The row as ARRAY_A, or null when not found / inactive / expired.
+ * @return array<string,mixed>|null The row as ARRAY_A, or null when not found / inactive / expired
+ *                                  / the lookup itself failed.
  */
 function aafm_oauth_get_access_token_row( string $raw ): ?array {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 	$now   = gmdate( 'Y-m-d H:i:s', time() );
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$row = $wpdb->get_row(
+	$view = aafm_wpdb_row(
 		$wpdb->prepare(
 			// Keep this WHERE clause in sync with aafm_oauth_validate_access_token() in tokens.php - the two must never disagree on the active/unexpired predicate.
 			'SELECT * FROM %i
@@ -453,11 +460,10 @@ function aafm_oauth_get_access_token_row( string $raw ): ?array {
 			$table,
 			hash( 'sha256', $raw ),
 			$now
-		),
-		ARRAY_A
+		)
 	);
 
-	return is_array( $row ) ? $row : null;
+	return ( $view['ok'] && is_array( $view['value'] ) ) ? $view['value'] : null;
 }
 
 /**

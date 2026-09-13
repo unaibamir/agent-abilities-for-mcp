@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\OAuth;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 /**
@@ -662,6 +663,47 @@ class ValidatorTest extends TestCase {
 		$this->assertSame( $uid, (int) $row['wp_user_id'] );
 
 		$this->assertNull( aafm_oauth_get_access_token_row( 'aafm_oat_unknown' ) );
+	}
+
+	/**
+	 * Decisive-path coverage: aafm_oauth_get_access_token_row() is, by its own docblock, the
+	 * highest-stakes instance of the stale-reader class in this plugin - a bare $wpdb->get_row()
+	 * would hand back whatever OTHER token's row a preceding query left in $wpdb->last_result,
+	 * authenticating the caller as a different principal entirely. Plants a real token lookup
+	 * immediately before the one under test (the exact "positive prior query" shape every other
+	 * instance of this defect class depends on), fails only the token's own row read, and proves
+	 * the resolver denies - returns null - rather than resolving to either token's row.
+	 */
+	public function test_get_access_token_row_fails_closed_when_its_own_read_fails_after_a_positive_prior_query(): void {
+		$owner_uid = self::factory()->user->create();
+		$other_uid = self::factory()->user->create();
+		$owner     = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $owner_uid,
+				'client_id'  => 'owner-client',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$unrelated = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $other_uid,
+				'client_id'  => 'other-client',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+
+		// Plants a real, non-null row in $wpdb->last_result - a genuinely successful, unrelated
+		// lookup, the exact precondition R7-2/R8-1's shared shape depends on.
+		$this->assertIsArray( aafm_oauth_get_access_token_row( $unrelated['access_token'] ) );
+
+		$row = QueryFaultInjector::fail_query(
+			'token_hash = ',
+			static function () use ( $owner ) {
+				return aafm_oauth_get_access_token_row( $owner['access_token'] );
+			}
+		);
+
+		$this->assertNull( $row, 'a failed row read must deny, never silently resolve to a stale prior lookup\'s token.' );
 	}
 
 	/**

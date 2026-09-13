@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\OAuth;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -247,19 +248,12 @@ class TokensTest extends TestCase {
 		);
 
 		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $wpdb ): string {
-				$is_read = false !== strpos( $query, 'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`' );
-				return $is_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+		$result = QueryFaultInjector::break_query_with_real_error(
+			'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`',
+			static function () use ( $tokens ) {
+				return aafm_oauth_validate_access_token( $tokens['access_token'] );
 			}
 		);
-		$suppressed = $wpdb->suppress_errors( true );
-
-		$result = aafm_oauth_validate_access_token( $tokens['access_token'] );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
 
 		$this->assertFalse( $result, 'An unreadable clients table must refuse the token, not accept it.' );
 	}
@@ -533,19 +527,12 @@ class TokensTest extends TestCase {
 		$this->assertIsArray( $tokens );
 
 		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $wpdb ): string {
-				$is_read = false !== strpos( $query, 'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`' );
-				return $is_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+		$rejected = QueryFaultInjector::break_query_with_real_error(
+			'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`',
+			static function () use ( $tokens, $client_id ) {
+				return aafm_oauth_rotate_refresh( $tokens['refresh_token'], $client_id );
 			}
 		);
-		$suppressed = $wpdb->suppress_errors( true );
-
-		$rejected = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $client_id );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
 
 		$this->assertInstanceOf( WP_Error::class, $rejected, 'an unreadable clients table must refuse rotation, not grant it' );
 	}
@@ -560,19 +547,14 @@ class TokensTest extends TestCase {
 		$ctx    = $this->ctx();
 		$tokens = aafm_oauth_mint_tokens( $ctx );
 
-		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ): string {
-				return 'START TRANSACTION' === $query ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
-			}
+		$rejected = QueryFaultInjector::break_query_with_real_error(
+			'START TRANSACTION',
+			static function () use ( $tokens, $ctx ) {
+				return aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+			},
+			0,
+			true
 		);
-		$suppressed = $wpdb->suppress_errors( true );
-
-		$rejected = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
 
 		$this->assertInstanceOf( WP_Error::class, $rejected, 'a failed START TRANSACTION must refuse rotation, not run it unwrapped' );
 
@@ -592,19 +574,14 @@ class TokensTest extends TestCase {
 		$ctx    = $this->ctx();
 		$tokens = aafm_oauth_mint_tokens( $ctx );
 
-		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ): string {
-				return 'COMMIT' === $query ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
-			}
+		$rejected = QueryFaultInjector::break_query_with_real_error(
+			'COMMIT',
+			static function () use ( $tokens, $ctx ) {
+				return aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+			},
+			0,
+			true
 		);
-		$suppressed = $wpdb->suppress_errors( true );
-
-		$rejected = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
 
 		$this->assertInstanceOf( WP_Error::class, $rejected, 'a failed COMMIT must not be reported as a successful rotation' );
 	}
@@ -759,20 +736,12 @@ class TokensTest extends TestCase {
 		$tokens = aafm_oauth_mint_tokens( $this->ctx() );
 
 		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $wpdb ): string {
-				$is_revoke = false !== strpos( $query, 'UPDATE `' . $wpdb->prefix . 'aafm_oauth_access_tokens`' )
-					&& false !== strpos( $query, 'is_active = 0' );
-				return $is_revoke ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+		$result = QueryFaultInjector::break_query_with_real_error(
+			array( 'UPDATE `' . $wpdb->prefix . 'aafm_oauth_access_tokens`', 'is_active = 0' ),
+			static function () use ( $tokens ) {
+				return aafm_oauth_revoke_token( $tokens['access_token'] );
 			}
 		);
-		$suppressed = $wpdb->suppress_errors( true );
-
-		$result = aafm_oauth_revoke_token( $tokens['access_token'] );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
 
 		$this->assertNull( $result, 'a failed revoke query must be distinguishable from "no matching token"' );
 
@@ -974,21 +943,12 @@ class TokensTest extends TestCase {
 		$ctx  = $this->ctx();
 		$gen0 = aafm_oauth_mint_tokens( $ctx );
 
-		add_filter(
-			'query',
-			static function ( string $query ): string {
-				return false !== strpos( $query, 'refresh_hash = ' ) ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+		$result = QueryFaultInjector::break_query_with_real_error(
+			'refresh_hash = ',
+			static function () use ( $gen0, $ctx ) {
+				return aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
 			}
 		);
-		global $wpdb;
-		$suppressed = $wpdb->suppress_errors( true );
-
-		try {
-			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
-		} finally {
-			$wpdb->suppress_errors( $suppressed );
-			remove_all_filters( 'query' );
-		}
 
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed lookup is this pipeline\'s own fault, not an invalid grant' );

@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class PairedSecurityWriteOrderTest extends TestCase {
@@ -419,21 +420,14 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 
 	/**
 	 * Makes the direct database SELECT aafm_read_option_views() issues for $option fail (not
-	 * merely read absent), by rewriting that one query to target a table that does not exist.
-	 * Mirrors OauthRevokeAjaxTest::fail_query_containing(), applied to a read instead of a write.
+	 * merely read absent), via QueryFaultInjector's real-error path. Mirrors
+	 * OauthRevokeAjaxTest::fail_query_containing(), applied to a read instead of a write.
 	 *
 	 * @param string $option Option name whose row-fetch query should fail.
 	 * @return void
 	 */
 	private function fail_option_read( string $option ): void {
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $option ): string {
-				return false !== strpos( $query, "option_name = '{$option}'" )
-					? 'SELECT * FROM aafm_missing_table_for_test'
-					: $query;
-			}
-		);
+		add_filter( 'query', QueryFaultInjector::real_error_filter( "option_name = '{$option}'" ) );
 	}
 
 	/**

@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Unit;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 use WP_Post;
@@ -726,24 +727,16 @@ final class HelpersTest extends TestCase {
 		$id = self::factory()->post->create( array( 'post_title' => 'old' ) );
 
 		global $wpdb;
-		$posts_table = $wpdb->posts;
-		$fail_once   = true;
-		$filter      = static function ( $query ) use ( &$fail_once, $posts_table, $id ) {
-			if ( $fail_once && false !== strpos( $query, $posts_table ) && false !== strpos( $query, "ID = {$id}" ) ) {
-				$fail_once = false;
-				return '';
-			}
-			return $query;
-		};
-		add_filter( 'query', $filter );
 
 		// No real write runs here: storage staying at 'old' IS the simulated persistence veto -
 		// the caller asked to clear the title to ''.
-		try {
-			$confirmed = aafm_post_field_write_confirmed( $id, 'post_title', '', 'old', 0 );
-		} finally {
-			remove_filter( 'query', $filter );
-		}
+		$confirmed = QueryFaultInjector::fail_nth_query(
+			array( $wpdb->posts, "ID = {$id}" ),
+			1,
+			static function () use ( $id ) {
+				return aafm_post_field_write_confirmed( $id, 'post_title', '', 'old', 0 );
+			}
+		);
 
 		$this->assertSame( 'old', get_post_field( 'post_title', $id, 'raw' ), 'sanity: the title was never actually cleared.' );
 		$this->assertFalse( $confirmed, 'a failed confirming read must never be reported as a confirmed write.' );

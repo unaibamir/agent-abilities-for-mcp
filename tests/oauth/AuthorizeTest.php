@@ -15,6 +15,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\OAuth;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -211,20 +212,12 @@ class AuthorizeTest extends TestCase {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$wpdb->query( 'SELECT 1' );
 
-		add_filter(
-			'query',
-			static function ( string $query ): string {
-				$is_consent_check = false !== strpos( $query, 'aafm_oauth_consents' );
-				return $is_consent_check ? '' : $query;
+		list( $view, $has ) = QueryFaultInjector::fail_query(
+			'aafm_oauth_consents',
+			static function () use ( $user, $client ) {
+				return array( aafm_oauth_consent_view( $user, $client ), aafm_oauth_has_consent( $user, $client ) );
 			}
 		);
-
-		try {
-			$view = aafm_oauth_consent_view( $user, $client );
-			$has  = aafm_oauth_has_consent( $user, $client );
-		} finally {
-			remove_all_filters( 'query' );
-		}
 
 		$this->assertFalse( $view['ok'], 'the read itself failed and must be reported as such, not silently answered from a stale prior query' );
 		$this->assertFalse( $has, 'a failed read must fail closed, never certify stale data as consent' );
@@ -551,23 +544,15 @@ class AuthorizeTest extends TestCase {
 		$client = $this->register_client();
 
 		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $wpdb ): string {
-				return false !== strpos( $query, 'REPLACE INTO `' . $wpdb->prefix . 'aafm_oauth_consents`' )
-					? 'SELECT * FROM aafm_missing_table_for_test'
-					: $query;
-			}
-		);
-		$suppressed = $wpdb->suppress_errors( true );
-
 		$params                        = $this->valid_params( $client );
 		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent' );
 		$params['aafm_oauth_decision'] = 'approve';
-		$result                        = $this->run_authorize_post( $params );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
+		$result                        = QueryFaultInjector::break_query_with_real_error(
+			'REPLACE INTO `' . $wpdb->prefix . 'aafm_oauth_consents`',
+			function () use ( $params ) {
+				return $this->run_authorize_post( $params );
+			}
+		);
 
 		$this->assertNull( $result['redirect'], 'A failed consent write must not redirect back to the client with a code.' );
 		$this->assertSame( 500, $result['status'], 'A failed consent write must render a local error, not proceed.' );

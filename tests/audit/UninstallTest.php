@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Audit;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class UninstallTest extends TestCase {
@@ -52,19 +53,12 @@ final class UninstallTest extends TestCase {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		$wpdb->query( 'SELECT 1' );
 
-		add_filter(
-			'query',
-			static function ( string $query ): string {
-				$is_flag_read = false !== strpos( $query, 'aafm_delete_data_on_uninstall' );
-				return $is_flag_read ? '' : $query;
+		$result = QueryFaultInjector::fail_query(
+			'aafm_delete_data_on_uninstall',
+			static function () {
+				return aafm_uninstall_should_delete_data();
 			}
 		);
-
-		try {
-			$result = aafm_uninstall_should_delete_data();
-		} finally {
-			remove_all_filters( 'query' );
-		}
 
 		$this->assertFalse( $result, 'a failed read must never be certified as permission to delete site data' );
 	}

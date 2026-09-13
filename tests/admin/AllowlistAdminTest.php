@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class AllowlistAdminTest extends TestCase {
@@ -357,21 +358,15 @@ final class AllowlistAdminTest extends TestCase {
 
 	/**
 	 * Makes the direct database SELECT aafm_read_option_views() issues for $option fail (not
-	 * merely read absent), by rewriting that one query to target a table that does not exist.
-	 * Mirrors OauthRevokeAjaxTest::fail_query_containing() / PairedSecurityWriteOrderTest::fail_option_read().
+	 * merely read absent), via QueryFaultInjector's real-error path. Mirrors
+	 * OauthRevokeAjaxTest::fail_query_containing() / PairedSecurityWriteOrderTest::fail_option_read()
+	 * / UpgradeMigrationTest::fail_option_read(), all now the same underlying filter.
 	 *
 	 * @param string $option Option name whose row-fetch query should fail.
 	 * @return void
 	 */
 	private function fail_option_read( string $option ): void {
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $option ): string {
-				return false !== strpos( $query, "option_name = '{$option}'" )
-					? 'SELECT * FROM aafm_missing_table_for_test'
-					: $query;
-			}
-		);
+		add_filter( 'query', QueryFaultInjector::real_error_filter( "option_name = '{$option}'" ) );
 	}
 
 	/**
@@ -412,24 +407,20 @@ final class AllowlistAdminTest extends TestCase {
 
 	/**
 	 * Makes the ONE query containing $needle fail via wpdb::query()'s OTHER false-without-a-real-
-	 * error path: the 'query' filter itself returning an empty string. wp-includes/class-wpdb.php's
-	 * query() checks `if ( ! $query )` and returns false immediately - BEFORE its own $this->flush()
-	 * call that would otherwise reset last_result - so, unlike redirecting a query to a nonexistent
-	 * table (which fails for real, but only after flush() has already run), this leaves
-	 * $wpdb->last_result holding whatever the PREVIOUS successful query left there. That is the
-	 * exact precondition R8-1 exploits, and the only one of $wpdb->query()'s two "false without
-	 * clearing last_result" paths a test can trigger without also faking wpdb::ready.
+	 * error path (QueryFaultInjector's no-flush filter): the 'query' filter itself returning an
+	 * empty string. wp-includes/class-wpdb.php's query() checks `if ( ! $query )` and returns
+	 * false immediately - BEFORE its own $this->flush() call that would otherwise reset
+	 * last_result - so, unlike redirecting a query to a nonexistent table (which fails for real,
+	 * but only after flush() has already run), this leaves $wpdb->last_result holding whatever
+	 * the PREVIOUS successful query left there. That is the exact precondition R8-1 exploits, and
+	 * the only one of $wpdb->query()'s two "false without clearing last_result" paths a test can
+	 * trigger without also faking wpdb::ready.
 	 *
 	 * @param string $needle Substring identifying the one query to suppress.
 	 * @return void
 	 */
 	private function suppress_query_containing( string $needle ): void {
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $needle ): string {
-				return false !== strpos( $query, $needle ) ? '' : $query;
-			}
-		);
+		add_filter( 'query', QueryFaultInjector::no_flush_filter( $needle ) );
 	}
 
 	/**

@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class OauthRevokeAjaxTest extends TestCase {
@@ -238,21 +239,14 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * Make one query fail by rewriting it to target a table that does not exist, so
+	 * Make one query fail via QueryFaultInjector's real-error path, so
 	 * $wpdb->query()/update()/delete() report failure the same way a real SQL error would.
 	 *
 	 * @param string $needle Substring identifying the one query to break.
 	 * @return void
 	 */
 	private function fail_query_containing( string $needle ): void {
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $needle ): string {
-				return false !== strpos( $query, $needle )
-					? 'SELECT * FROM aafm_missing_table_for_test'
-					: $query;
-			}
-		);
+		add_filter( 'query', QueryFaultInjector::real_error_filter( $needle ) );
 	}
 
 	/**

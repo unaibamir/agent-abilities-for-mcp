@@ -1664,9 +1664,21 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// surfacing allowlisted meta here unconditionally would leak editor-only meta to
 	// any authenticated reader. Gate the block on the same per-object edit check the
 	// meta ability uses; readers who cannot edit this post get no meta block at all.
+	//
+	// Codex round 6, R6-5: edit permission is a DIFFERENT axis from the operator's meta
+	// exposure policy, and this loop used to iterate aafm_allowed_meta_keys() directly -
+	// the raw allow list, with no deny/deny-`*`/hard-block applied. An editable post with
+	// an explicitly denied key, or a site with the deny-`*` kill switch on, still had that
+	// key returned here even though the dedicated meta-reading abilities correctly refuse
+	// it. Every candidate key now goes through aafm_validate_meta_key(), the same
+	// chokepoint the bulk reader (aafm_exec_get_all_post_meta(), meta.php) already uses,
+	// so hard-block/deny/deny-`*` are honoured here exactly as they are everywhere else.
 	$meta = array();
 	if ( aafm_can_edit_post_object( $post ) ) {
 		foreach ( aafm_allowed_meta_keys() as $meta_key ) {
+			if ( ! is_string( aafm_validate_meta_key( (string) $meta_key ) ) ) {
+				continue; // hard-blocked, denied, or deny-`*`: never surfaced here either.
+			}
 			$value = get_post_meta( $post->ID, $meta_key, true );
 			// Skip empty strings (absent keys) and never expose non-scalar blobs.
 			if ( is_scalar( $value ) && '' !== $value ) {

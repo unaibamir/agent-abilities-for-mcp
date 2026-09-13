@@ -224,6 +224,12 @@ function aafm_activity_log_has_column( string $table, string $column ): bool {
 /**
  * Whether a named index exists on the activity-log table. Works on the harness's TEMPORARY table.
  *
+ * Same stale-read class as aafm_activity_log_has_column() above: a bare $wpdb->get_results()
+ * hands back the PREVIOUS query's rows when this one fails, so a failed SHOW INDEX could inherit
+ * an unrelated result set and report a missing index as present. Routed through
+ * aafm_wpdb_results() so a failed read reports absent, the same fail-closed direction the column
+ * check already takes.
+ *
  * @param string $table    Fully-prefixed table name (an internal constant).
  * @param string $key_name Index name to look for.
  * @return bool
@@ -231,11 +237,14 @@ function aafm_activity_log_has_column( string $table, string $column ): bool {
 function aafm_activity_log_has_index( string $table, string $key_name ): bool {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$rows = $wpdb->get_results( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ) );
-	foreach ( (array) $rows as $row ) {
+	$view = aafm_wpdb_results( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ) );
+	if ( ! $view['ok'] ) {
+		return false;
+	}
+	foreach ( (array) $view['value'] as $row ) {
 		// Key_name is MySQL's own SHOW INDEX column name, not a plugin property.
 		// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
-		if ( isset( $row->Key_name ) && $key_name === $row->Key_name ) {
+		if ( is_array( $row ) && isset( $row['Key_name'] ) && $key_name === $row['Key_name'] ) {
 			return true;
 		}
 	}
@@ -655,8 +664,14 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 	// column and never lands here; a crashed call does, because aafm_log_ability_exception() has
 	// already set the row to 'error'.
 	if ( 0 === $updated ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', $table, $row_id ) );
+		// This confirming read used to be a bare $wpdb->get_var(), which hands back the PREVIOUS
+		// query's value when this one fails - a stale truthy id left over from an earlier,
+		// unrelated lookup could then be misread as proof this row still exists. Routed through
+		// aafm_wpdb_scalar() so a failed confirming read reports failure (the row is treated as
+		// gone), the same direction as a genuinely pruned row - never the opposite mistake of
+		// certifying a resolve this call could not actually confirm.
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', $table, $row_id ) );
+		return $view['ok'] && null !== $view['value'];
 	}
 
 	return false !== $updated;

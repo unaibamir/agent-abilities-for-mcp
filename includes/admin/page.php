@@ -701,8 +701,15 @@ function aafm_detected_meta_keys(): array {
 	// the result is identical, matching the "sample" this list has always been. A derived table is
 	// used, not an IN (... LIMIT), because a LIMIT inside an IN subquery is not portable across the
 	// supported MySQL/MariaDB versions.
+	//
+	// This used to be a bare $wpdb->get_col(), which hands back the PREVIOUS query's column when
+	// this one fails. Routed through aafm_wpdb_col(): a failed read reports no keys rather than a
+	// stale, unrelated set - this list is only ever an admin-side suggestion an operator narrows
+	// from, never a gate, so the safe direction on failure is the same "suggest nothing" an
+	// ineligible post-type list already returns above.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-	$rows = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT pm.meta_key FROM {$wpdb->postmeta} pm INNER JOIN ( SELECT ID FROM {$wpdb->posts} WHERE post_type IN ($ph) ORDER BY ID DESC LIMIT 5000 ) p ON p.ID = pm.post_id ORDER BY pm.meta_key ASC LIMIT 200", $types ) );
+	$view = aafm_wpdb_col( $wpdb->prepare( "SELECT DISTINCT pm.meta_key FROM {$wpdb->postmeta} pm INNER JOIN ( SELECT ID FROM {$wpdb->posts} WHERE post_type IN ($ph) ORDER BY ID DESC LIMIT 5000 ) p ON p.ID = pm.post_id ORDER BY pm.meta_key ASC LIMIT 200", $types ) );
+	$rows = $view['ok'] ? $view['value'] : array();
 	$keys = array_map( 'strval', (array) $rows );
 	$keys = array_values( array_filter( $keys, static fn( string $k ): bool => ! aafm_hard_blocked_meta_key( $k ) ) );
 	$keys = array_slice( $keys, 0, 50 );

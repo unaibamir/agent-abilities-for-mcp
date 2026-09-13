@@ -471,6 +471,11 @@ function aafm_oauth_get_access_token_row( string $raw ): ?array {
  * at will, so the denial audit is gated on this existence check. token_hash is a UNIQUE key, so this
  * is a single indexed lookup.
  *
+ * Codex round 7, R7-2: routed through aafm_wpdb_scalar() rather than a bare get_var() - a failed
+ * query here could otherwise inherit a stale non-null value left over from an unrelated earlier
+ * query in the same request and wrongly report a fabricated bearer as a real, once-issued token,
+ * defeating the anti-flood gate this existence check exists to enforce.
+ *
  * @param string $raw The raw access token presented by the client.
  * @return bool True when a row with this token hash exists, regardless of its active/expiry state.
  */
@@ -478,8 +483,7 @@ function aafm_oauth_access_token_row_exists( string $raw ): bool {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$id = $wpdb->get_var(
+	$view = aafm_wpdb_scalar(
 		$wpdb->prepare(
 			'SELECT id FROM %i WHERE token_hash = %s LIMIT 1',
 			$table,
@@ -487,5 +491,5 @@ function aafm_oauth_access_token_row_exists( string $raw ): bool {
 		)
 	);
 
-	return null !== $id;
+	return $view['ok'] && null !== $view['value'];
 }

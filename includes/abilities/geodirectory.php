@@ -150,6 +150,13 @@ function aafm_geodirectory_read_fields( int $post_id ): array {
  * read's own success is now part of the return value, so the caller can fail confirmation
  * instead of certifying against a default it never actually observed.
  *
+ * Codex round 7, R7-2: that R6-6 fix still ran the read through a bare $wpdb->get_row(), which
+ * returns the PREVIOUS query's row - not null - when the CURRENT query itself fails. `is_array()`
+ * is true for that stale row too, so a failed read could pass this function's own ok check and
+ * hand the caller an unrelated row's values as if they were this listing's. Routed through
+ * aafm_wpdb_row(), which checks $wpdb->query()'s own return value, so a genuine failure is
+ * reported as such rather than certified against a stale row.
+ *
  * @param int $post_id Listing (gd_place) post id.
  * @return array{ok: bool, fields: array<string,mixed>} ok is false when the SELECT itself failed
  *         or no row exists for this post id - the shaped fields are still returned in that case
@@ -161,9 +168,10 @@ function aafm_geodirectory_read_fields_unfiltered( int $post_id ): array {
 	// %i is this codebase's own convention for an identifier placeholder in $wpdb->prepare().
 	$table = ( is_string( $plugin_prefix ) ? $plugin_prefix : $wpdb->prefix . 'geodir_' ) . 'gd_place_detail';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a fresh, uncached, unfiltered read is the entire point (see docblock above).
-	$row = $wpdb->get_row( $wpdb->prepare( 'SELECT street, street2, city, region, country, zip, latitude, longitude FROM %i WHERE post_id = %d', $table, $post_id ), ARRAY_A );
+	$view = aafm_wpdb_row( $wpdb->prepare( 'SELECT street, street2, city, region, country, zip, latitude, longitude FROM %i WHERE post_id = %d', $table, $post_id ) );
+	$row  = $view['value'];
 	return array(
-		'ok'     => is_array( $row ),
+		'ok'     => $view['ok'] && is_array( $row ),
 		'fields' => aafm_geodirectory_shape_row( is_array( $row ) ? (object) $row : null ),
 	);
 }

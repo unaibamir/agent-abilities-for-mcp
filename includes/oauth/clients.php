@@ -442,6 +442,14 @@ function aafm_oauth_validate_redirect_uri( string $uri ): bool {
  * non-array value decodes to an empty array so the caller never has to guard it.
  * Ordered newest first. Read-only, prepared queries against the plugin's own tables.
  *
+ * Codex round 7, R7-2: both reads below used to go through a bare $wpdb->get_results(), which
+ * always returns $wpdb->last_result after calling query() regardless of whether that call
+ * succeeded (wp-includes/class-wpdb.php) - so a failed query here could hand back an EARLIER,
+ * unrelated query's rows rather than the empty result the `! is_array()` guard expected. Routed
+ * through aafm_wpdb_results(), which checks $wpdb->query()'s own return value, so a genuine
+ * failure now falls into the same "tolerate a not-yet-installed table" empty-list path a failure
+ * was always meant to take, instead of silently displaying stale rows or stale counts.
+ *
  * @return array<int,array{client_id:string,client_name:string,redirect_uris:string[],created_at:string,is_active:bool,active_tokens:int,is_agent_identity:bool}>
  */
 function aafm_oauth_list_clients(): array {
@@ -454,31 +462,29 @@ function aafm_oauth_list_clients(): array {
 	// (a brand-new install before activation finishes) by returning an empty list
 	// instead of surfacing a DB error.
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT client_id, client_name, redirect_uris, created_at, is_active, is_agent_identity FROM %i ORDER BY created_at DESC, id DESC', $clients_table ), ARRAY_A );
+	$view       = aafm_wpdb_results( $wpdb->prepare( 'SELECT client_id, client_name, redirect_uris, created_at, is_active, is_agent_identity FROM %i ORDER BY created_at DESC, id DESC', $clients_table ) );
 	$wpdb->suppress_errors( $suppressed );
 
-	if ( ! is_array( $rows ) ) {
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
 		return array();
 	}
+	$rows = $view['value'];
 
 	// One grouped pass over the tokens table builds a client_id => active-token-count map, so
 	// the listing never runs a COUNT per client (an N+1 that scanned the token table once per row).
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count_rows = $wpdb->get_results(
+	$count_view = aafm_wpdb_results(
 		$wpdb->prepare(
 			'SELECT client_id, COUNT(*) AS active_tokens FROM %i WHERE is_active = 1 AND ( expires_at IS NULL OR expires_at > %s ) GROUP BY client_id',
 			$tokens_table,
 			$now
-		),
-		ARRAY_A
+		)
 	);
 	$wpdb->suppress_errors( $suppressed );
 
 	$counts = array();
-	if ( is_array( $count_rows ) ) {
-		foreach ( $count_rows as $count_row ) {
+	if ( $count_view['ok'] && is_array( $count_view['value'] ) ) {
+		foreach ( $count_view['value'] as $count_row ) {
 			$counts[ (string) $count_row['client_id'] ] = (int) $count_row['active_tokens'];
 		}
 	}
@@ -530,9 +536,11 @@ function aafm_oauth_list_grants(): array {
 	// Read-only listing for the admin table: tolerate a not-yet-installed table
 	// by returning an empty list instead of surfacing a DB error. Both table names are
 	// bound as %i identifiers; the LEFT JOIN keeps a consent whose client row was removed.
+	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
+	// see aafm_oauth_list_clients()'s docblock for why a failed query must not be allowed to
+	// return an earlier, unrelated query's rows here.
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$rows = $wpdb->get_results(
+	$view       = aafm_wpdb_results(
 		$wpdb->prepare(
 			'SELECT c.wp_user_id, c.client_id, c.granted_at, cl.client_name
 			 FROM %i c
@@ -540,17 +548,16 @@ function aafm_oauth_list_grants(): array {
 			 ORDER BY c.granted_at DESC, c.id DESC',
 			$consents_table,
 			$clients_table
-		),
-		ARRAY_A
+		)
 	);
 	$wpdb->suppress_errors( $suppressed );
 
-	if ( ! is_array( $rows ) ) {
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
 		return array();
 	}
 
 	$out = array();
-	foreach ( $rows as $row ) {
+	foreach ( $view['value'] as $row ) {
 		$user_id = (int) $row['wp_user_id'];
 		$user    = get_userdata( $user_id );
 		if ( ! $user ) {

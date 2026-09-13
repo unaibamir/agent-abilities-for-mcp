@@ -144,13 +144,18 @@ function aafm_wc_tax_rate_shape( array $row ): array {
  *
  * Uses a direct DB query, the same strategy as the WooCommerce REST API v3 /taxes endpoint.
  *
+ * Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
+ * see aafm_oauth_list_clients()'s docblock for why a failed query must not be allowed to return
+ * an earlier, unrelated query's rows here, which an agent could otherwise act on as if they were
+ * this store's real tax rates.
+ *
  * @return array<int,array<string,mixed>>
  */
 function aafm_wc_get_all_tax_rates(): array {
 	global $wpdb;
 	$table = $wpdb->prefix . 'woocommerce_tax_rates';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- direct read of WC's own woocommerce_tax_rates table; no caching layer for admin-driven reads.
-	$rows = $wpdb->get_results(
+	$view = aafm_wpdb_results(
 		$wpdb->prepare(
 			'SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
 			tax_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
@@ -158,12 +163,12 @@ function aafm_wc_get_all_tax_rates(): array {
 			tax_rate_order AS `order`, tax_rate_class AS class
 			FROM %i ORDER BY tax_rate_order, tax_rate_id',
 			$table
-		),
-		ARRAY_A
+		)
 	);
-	if ( ! is_array( $rows ) ) {
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
 		return array();
 	}
+	$rows = $view['value'];
 	return array_values( array_map( 'aafm_wc_tax_rate_shape', $rows ) );
 }
 

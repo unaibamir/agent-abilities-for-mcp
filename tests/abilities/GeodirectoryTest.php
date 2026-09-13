@@ -1090,6 +1090,68 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 6, R6-6: the confirmation SELECT in aafm_geodirectory_read_fields_unfiltered()
+	 * used to shape a failed read or a missing row into the same display defaults ('', 0.0) as a
+	 * row that legitimately has an empty street - so a request to CLEAR the street, combined with
+	 * a verification read that fails for an unrelated reason, used to certify success even though
+	 * the real UPDATE never ran and the old, non-empty street is still what is actually stored.
+	 * Forces exactly that: the vendor write for 'street' silently fails (the existing stub
+	 * failure filter), AND the confirmation SELECT that would normally catch the mismatch is
+	 * intercepted so it finds no row at all, mirroring a verification read that itself fails.
+	 */
+	public function test_update_errors_when_the_verification_read_fails_even_for_a_cleared_field(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$created = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'  => 'Existing listing',
+				'street' => '123 Old Address',
+			)
+		);
+		$this->assertIsArray( $created );
+		$listing_id = $created['listing_id'];
+		$this->assertSame( '123 Old Address', $created['street'] );
+
+		// Fails the vendor write for 'street' (same stub hook the sibling test above uses) AND
+		// makes the confirmation SELECT find no row, by redirecting it to a post id that does not
+		// exist. The marker column list is unique to aafm_geodirectory_read_fields_unfiltered()'s
+		// own query, so this does not touch geodir_save_post_meta()'s or geodir_get_post_info()'s
+		// unrelated SELECTs against the same table.
+		add_filter(
+			'aafm_geodir_stub_simulate_write_failure',
+			static fn( $simulate, $field ) => 'street' === $field,
+			10,
+			2
+		);
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $listing_id ): string {
+				if ( false !== strpos( $query, 'SELECT street, street2, city, region, country, zip, latitude, longitude FROM' ) ) {
+					return str_replace( "post_id = {$listing_id}", 'post_id = 0', $query );
+				}
+				return $query;
+			}
+		);
+
+		try {
+			$out = aafm_exec_geodirectory_update_listing(
+				array(
+					'listing_id' => $listing_id,
+					'street'     => '',
+				)
+			);
+		} finally {
+			remove_all_filters( 'aafm_geodir_stub_simulate_write_failure' );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $out, 'a verification read that finds no row must never certify the write as successful' );
+		$this->assertSame( 'aafm_geodirectory_write_unconfirmed', $out->get_error_code() );
+
+		// The listing itself must be untouched - the old street is still what is really stored.
+		$this->assertSame( '123 Old Address', aafm_geodirectory_read_fields( $listing_id )['street'] );
+	}
+
+	/**
 	 * Codex final round 9 MEDIUM: aafm_exec_geodirectory_create_listing() built its own
 	 * wp_insert_post() call instead of routing through aafm_insert_post(), so none of the
 	 * operator's three global content-safety settings ever applied to it.

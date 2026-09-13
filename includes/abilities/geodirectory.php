@@ -142,8 +142,18 @@ function aafm_geodirectory_read_fields( int $post_id ): array {
  * silently discarded on restore. A direct read of GeoDirectory's own table - the exact query
  * geodir_get_post_info() would run before either filter touches it - has neither problem.
  *
+ * Codex round 6, R6-6: $wpdb->get_row() returns null for a failed SELECT and for a genuinely
+ * missing row alike, and this used to collapse both into the same display defaults ('', 0.0)
+ * as a row that legitimately has an empty street or zero coordinates. The caller compared those
+ * defaults against the request and certified success whenever they happened to match, even
+ * though a failed read or a missing row proves nothing about what is actually stored. The
+ * read's own success is now part of the return value, so the caller can fail confirmation
+ * instead of certifying against a default it never actually observed.
+ *
  * @param int $post_id Listing (gd_place) post id.
- * @return array<string,mixed>
+ * @return array{ok: bool, fields: array<string,mixed>} ok is false when the SELECT itself failed
+ *         or no row exists for this post id - the shaped fields are still returned in that case
+ *         (all empty-string/zero display defaults) but must not be read as real stored values.
  */
 function aafm_geodirectory_read_fields_unfiltered( int $post_id ): array {
 	global $wpdb, $plugin_prefix;
@@ -152,7 +162,10 @@ function aafm_geodirectory_read_fields_unfiltered( int $post_id ): array {
 	$table = ( is_string( $plugin_prefix ) ? $plugin_prefix : $wpdb->prefix . 'geodir_' ) . 'gd_place_detail';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a fresh, uncached, unfiltered read is the entire point (see docblock above).
 	$row = $wpdb->get_row( $wpdb->prepare( 'SELECT street, street2, city, region, country, zip, latitude, longitude FROM %i WHERE post_id = %d', $table, $post_id ), ARRAY_A );
-	return aafm_geodirectory_shape_row( is_array( $row ) ? (object) $row : null );
+	return array(
+		'ok'     => is_array( $row ),
+		'fields' => aafm_geodirectory_shape_row( is_array( $row ) ? (object) $row : null ),
+	);
 }
 
 /**
@@ -191,20 +204,38 @@ function aafm_geodirectory_shape_row( $info ): array {
  * @return bool True when every field the caller supplied reads back with the value written.
  */
 function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
+	$supplied_any_field = false;
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
+		$supplied_any_field = true;
 		geodir_save_post_meta( $post_id, $field, esc_sql( aafm_sanitize_plain_text( (string) $input[ $field ] ) ) );
 	}
 	if ( array_key_exists( 'latitude', $input ) ) {
+		$supplied_any_field = true;
 		geodir_save_post_meta( $post_id, 'latitude', (float) $input['latitude'] );
 	}
 	if ( array_key_exists( 'longitude', $input ) ) {
+		$supplied_any_field = true;
 		geodir_save_post_meta( $post_id, 'longitude', (float) $input['longitude'] );
 	}
 
-	$stored = aafm_geodirectory_read_fields_unfiltered( $post_id );
+	// Nothing to confirm - skip the read rather than run it needlessly, and (R6-6) so a read
+	// that fails for an unrelated reason can never block a caller who never touched these fields.
+	if ( ! $supplied_any_field ) {
+		return true;
+	}
+
+	$read = aafm_geodirectory_read_fields_unfiltered( $post_id );
+	if ( ! $read['ok'] ) {
+		// R6-6: a failed SELECT or a still-missing detail row cannot certify anything the caller
+		// just wrote - fail the same direction aafm_post_field_write_confirmed() and
+		// aafm_meta_write_confirmed() already fail when their own confirmation read comes back
+		// unusable, rather than falling through to defaults that can coincidentally match.
+		return false;
+	}
+	$stored = $read['fields'];
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
 		if ( array_key_exists( $field, $input )
 			&& aafm_sanitize_plain_text( (string) $input[ $field ] ) !== $stored[ $field ] ) {

@@ -2180,6 +2180,14 @@ function aafm_generic_error(): WP_Error {
  * post field's wp_insert_post_data filter can (aafm_post_field_write_confirmed() does not carry
  * this same fallback for exactly that reason - see its own docblock).
  *
+ * Codex round 6, R6-4: the "nothing asked" branch above used to compare $intended against $old
+ * directly (their raw forms), which cannot tell "$old is already canonical, so resubmitting it is
+ * a genuine no-op" apart from "$old is NOT canonical, so resubmitting it should still trigger the
+ * same canonicalization a changed value would" - both look identical as raw values. The second
+ * shape let a veto that blocks canonicalization (keeping a non-canonical $old in place) read as a
+ * confirmed no-op purely because the caller's literal input matched what was already stored. See
+ * $old_is_canonical below.
+ *
  * @param mixed  $old            The value read back from storage BEFORE the write ran.
  * @param mixed  $stored         The value read back from storage after the write.
  * @param mixed  $intended       The unslashed value the write attempted to store.
@@ -2203,7 +2211,22 @@ function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, 
 	if ( $is_arr ? $stored === $expected : (string) $stored === (string) $expected ) {
 		return true;
 	}
-	$nothing_asked = $is_arr ? $intended === $old : (string) $intended === (string) $old;
+
+	// Codex round 6, R6-4: "nothing was asked to change" used to be judged purely from the raw
+	// values - $intended === $old - which is blind to the site's OWN sanitizer. When $old was not
+	// already in its canonical form (sanitize_meta() would legitimately transform it if resaved),
+	// resubmitting that same raw value is NOT actually a no-op: the real write is still expected to
+	// land on $expected, the same canonical form a genuinely different intended value would have to
+	// reach. A persistence veto that instead leaves storage at the old, non-canonical value used to
+	// read as a confirmed no-op purely because the raw input matched $old, silently accepting a
+	// blocked canonicalization as success. Recomputing whether $old itself survives a resave
+	// through the same sanitizer closes that: the common case (a value already stored in its
+	// canonical form) is completely unaffected, since re-sanitizing an already-canonical value
+	// through an idempotent sanitizer reproduces it exactly.
+	$expected_old     = sanitize_meta( $meta_key, $old, $object_type, $object_subtype );
+	$old_is_canonical = $is_arr ? $old === $expected_old : (string) $old === (string) $expected_old;
+
+	$nothing_asked = $old_is_canonical && ( $is_arr ? $intended === $old : (string) $intended === (string) $old );
 	$unchanged     = $is_arr ? $stored === $old : (string) $stored === (string) $old;
 	// Codex round 5 R5-2: a no-op resubmission used to short-circuit to true purely because
 	// nothing was asked to change, without checking that storage actually stayed put. That let a

@@ -712,4 +712,40 @@ final class HelpersTest extends TestCase {
 
 		$this->assertFalse( $confirmed, 'a veto that blocks the canonicalization of a same-value resubmission must not be reported as a confirmed no-op.' );
 	}
+
+	/**
+	 * Codex round 8, R8-2: get_post_field() returns '' both when a field is genuinely empty and
+	 * when the read that was meant to confirm it failed - get_post() (wp-includes/post.php)
+	 * returns null on a failed query the same way it does on a real "no such row", and
+	 * get_post_field() maps that null to '' exactly like it maps a real empty field to ''. A
+	 * clearing write (post_title/content/excerpt -> "") was therefore indistinguishable from an
+	 * unconfirmable read: a persistence veto that left the old value in place, combined with a
+	 * failed confirming read, used to be reported as a confirmed clear.
+	 */
+	public function test_post_field_write_confirmed_fails_closed_when_the_confirming_read_itself_fails(): void {
+		$id = self::factory()->post->create( array( 'post_title' => 'old' ) );
+
+		global $wpdb;
+		$posts_table = $wpdb->posts;
+		$fail_once   = true;
+		$filter      = static function ( $query ) use ( &$fail_once, $posts_table, $id ) {
+			if ( $fail_once && false !== strpos( $query, $posts_table ) && false !== strpos( $query, "ID = {$id}" ) ) {
+				$fail_once = false;
+				return '';
+			}
+			return $query;
+		};
+		add_filter( 'query', $filter );
+
+		// No real write runs here: storage staying at 'old' IS the simulated persistence veto -
+		// the caller asked to clear the title to ''.
+		try {
+			$confirmed = aafm_post_field_write_confirmed( $id, 'post_title', '', 'old', 0 );
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+
+		$this->assertSame( 'old', get_post_field( 'post_title', $id, 'raw' ), 'sanity: the title was never actually cleared.' );
+		$this->assertFalse( $confirmed, 'a failed confirming read must never be reported as a confirmed write.' );
+	}
 }

@@ -2318,12 +2318,26 @@ function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, 
  * @return bool
  */
 function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended, string $old, ?int $sanitize_context_id = null ): bool {
+	global $wpdb;
+
 	clean_post_cache( $post_id );
 	$context_id = $sanitize_context_id ?? $post_id;
 	$expected   = aafm_post_field_canonical_replay( $field, $intended, $context_id );
 
-	$stored = get_post_field( $field, $post_id, 'raw' );
-	$stored = is_scalar( $stored ) ? (string) $stored : '';
+	// Codex round 8, R8-2: get_post_field() cannot tell "the field is genuinely empty" apart
+	// from "the read meant to confirm it failed" - get_post() (wp-includes/post.php) returns
+	// null on a failed query exactly the same way it does on a real cache miss with no matching
+	// row, and get_post_field() maps that null to '' just like it maps a real empty field to ''.
+	// A clearing write (post_title/content/excerpt -> "") is indistinguishable from an
+	// unconfirmable read, so a failed confirming read used to certify as a successful clear. Read
+	// through the same {ok,value} wpdb helper this codebase already uses everywhere else a
+	// failed/stale query result must not be mistaken for a real value (aafm_wpdb_row(), see
+	// option-cache.php), so a failed read fails the write instead of certifying it.
+	$view = aafm_wpdb_row( $wpdb->prepare( 'SELECT %i AS value FROM %i WHERE ID = %d', $field, $wpdb->posts, $post_id ) );
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
+		return false;
+	}
+	$stored = is_scalar( $view['value']['value'] ) ? (string) $view['value']['value'] : '';
 	if ( $stored === $expected ) {
 		return true;
 	}

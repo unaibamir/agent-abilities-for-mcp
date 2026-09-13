@@ -203,6 +203,13 @@ function aafm_activity_log_table_present( string $table ): bool {
 /**
  * Whether a named column exists on the activity-log table. Works on the harness's TEMPORARY table.
  *
+ * Codex round 7, R7-2: a bare $wpdb->get_var() returns the PREVIOUS query's row when the current
+ * query itself fails, so a failed SHOW COLUMNS could inherit an unrelated non-empty value left
+ * over from an earlier, successful check and report a missing column as present - letting schema
+ * finalization stamp the current version over an incomplete upgrade. Routed through
+ * aafm_wpdb_scalar() so a failed read reports absent, the same fail-closed direction this
+ * function already took for a genuinely missing column.
+ *
  * @param string $table  Fully-prefixed table name (an internal constant).
  * @param string $column Column name to look for (no wildcards; matched exactly by SHOW COLUMNS).
  * @return bool
@@ -210,8 +217,8 @@ function aafm_activity_log_table_present( string $table ): bool {
 function aafm_activity_log_has_column( string $table, string $column ): bool {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $column ) );
-	return null !== $found && '' !== $found;
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $column ) );
+	return $view['ok'] && null !== $view['value'] && '' !== $view['value'];
 }
 
 /**
@@ -815,10 +822,14 @@ function aafm_query_activity( array $args ): array {
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 	$sql = "SELECT * FROM %i WHERE {$where} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
+	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
+	// a failed query here could otherwise return an EARLIER, unrelated query's rows (see
+	// aafm_oauth_list_clients()'s docblock for the mechanism), silently showing the admin a
+	// different page/filter's log rows instead of an empty result.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-	$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $params ) );
 
-	return is_array( $rows ) ? $rows : array();
+	return $view['ok'] && is_array( $view['value'] ) ? $view['value'] : array();
 }
 
 /**
@@ -835,15 +846,16 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
 	global $wpdb;
 	$table = aafm_activity_log_table();
 
+	// Codex round 7, R7-2: both reads routed through aafm_wpdb_scalar() - see
+	// aafm_activity_count()'s docblock for why a bare get_var() risks displaying an adjacent
+	// count's stale value when this one's own query fails.
 	if ( null === $status || '' === $status ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
-		return max( 0, (int) $count );
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+		return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 	}
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE status = %s', $table, $status ) );
-	return max( 0, (int) $count );
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE status = %s', $table, $status ) );
+	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
 /**
@@ -916,9 +928,11 @@ function aafm_agent_call_count( ?string $status = null ): int {
 	// whose every value is a placeholder, the only thing ever appended is the constant literal
 	// ' AND status = %s', and all five or six values reach the query through $params - the table
 	// name via %i, and $status, the one caller-influenced value, via %s. Nothing is interpolated.
+	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
+	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-	$count = $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
-	return max( 0, (int) $count );
+	$view = aafm_wpdb_scalar( $wpdb->prepare( $sql, $params ) );
+	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
 /**
@@ -928,14 +942,18 @@ function aafm_agent_call_count( ?string $status = null ): int {
  * this once, before the first page runs, and passes it back as max_id on every page - so a row
  * inserted mid-run can never shift an OFFSET window and be exported twice.
  *
+ * Codex round 7, R7-2: routed through aafm_wpdb_scalar() rather than a bare get_var() - the
+ * exporter treats this as the snapshot bound for every page it fetches, so a failed query
+ * inheriting a stale MAX(id) from an earlier, different-sized snapshot would silently mis-bound
+ * the whole export rather than fail visibly.
+ *
  * @return int
  */
 function aafm_activity_max_id(): int {
 	global $wpdb;
 	$table = aafm_activity_log_table();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$max = $wpdb->get_var( $wpdb->prepare( 'SELECT MAX(id) FROM %i', $table ) );
-	return null === $max ? 0 : max( 0, (int) $max );
+	$view  = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT MAX(id) FROM %i', $table ) );
+	return ( ! $view['ok'] || null === $view['value'] ) ? 0 : max( 0, (int) $view['value'] );
 }
 
 /**

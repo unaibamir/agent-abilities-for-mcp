@@ -190,6 +190,47 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 7, R7-2: a failed query leaves the PREVIOUS query's row sitting in
+	 * $wpdb->last_result, so a consent check built on a bare $wpdb->get_var() could not tell "this
+	 * query itself failed" apart from "the previous query found something". At the live
+	 * authorization-code redemption call site, the query immediately before the consent check is
+	 * the code lookup, which just found a real row - so a failed consent read there used to inherit
+	 * that unrelated, non-null value and report consent as granted. This reproduces the shape in
+	 * isolation: plant a positive scalar result from an unrelated query, then force the consent
+	 * SELECT itself to fail via one of $wpdb->query()'s two no-flush failure paths (the `query`
+	 * filter returning empty - see aafm_wpdb_scalar()'s docblock), and prove the failure is
+	 * reported honestly rather than silently answered from the stale prior row.
+	 */
+	public function test_has_consent_fails_closed_when_the_read_fails_after_a_positive_prior_query(): void {
+		$client = $this->register_client();
+		$user   = self::factory()->user->create();
+
+		global $wpdb;
+		// Plants a real, non-null row in $wpdb->last_result - the exact shape a preceding, genuinely
+		// successful OAuth lookup leaves behind.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( 'SELECT 1' );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_consent_check = false !== strpos( $query, 'aafm_oauth_consents' );
+				return $is_consent_check ? '' : $query;
+			}
+		);
+
+		try {
+			$view = aafm_oauth_consent_view( $user, $client );
+			$has  = aafm_oauth_has_consent( $user, $client );
+		} finally {
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertFalse( $view['ok'], 'the read itself failed and must be reported as such, not silently answered from a stale prior query' );
+		$this->assertFalse( $has, 'a failed read must fail closed, never certify stale data as consent' );
+	}
+
+	/**
 	 * Recording consent twice for the same pair stays a single row (idempotent upsert).
 	 */
 	public function test_record_consent_is_idempotent(): void {

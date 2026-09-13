@@ -122,6 +122,25 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * Count rows whose refresh_parent_id equals a given row id - used to prove a rotation attempt
+	 * against an already-deactivated node left no successor row behind at all.
+	 *
+	 * @param int $parent_id The refresh_parent_id to match.
+	 * @return int
+	 */
+	private function count_children_of( int $parent_id ): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_access_tokens WHERE refresh_parent_id = %d",
+				$parent_id
+			)
+		);
+	}
+
+	/**
 	 * T1-7: when the row insert fails, mint returns a WP_Error rather than phantom tokens -
 	 * a client must never get a successful token response for a grant that was never stored.
 	 */
@@ -800,18 +819,17 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-3, superseded by round 6 R6-1: a refresh token can rotate into a successor
-	 * while aafm_oauth_revoke_chain() is mid-walk. The DOWN walk reads a lineage member's children
-	 * before that member is deactivated, so a rotation that wins its single-winner gate in that
-	 * window mints a successor the first pass never sees.
+	 * Codex round 7, R7-1: three prior fixes (a one-shot post-UPDATE re-check, then a bounded
+	 * convergence loop) each collected the lineage first and deactivated it in one UPDATE at the
+	 * end, so a successor minted after the last read but before that final UPDATE was invisible
+	 * and the function still reported success. The round 7 fix inverts the walk: every node is
+	 * deactivated BEFORE its children are read, so a concurrent rotation attempt aimed at a node
+	 * already visited by this walk finds that node already inactive and cannot mint at all - there
+	 * is no successor for a later read to miss.
 	 *
-	 * R5-3's fix only detected this shape (a read-only re-check after the deactivating UPDATE) and
-	 * refused to report success, leaving the successor itself active. R6-1 replaced that one-shot
-	 * re-check with a DOWN walk that repeats until a full pass finds nothing new, and only then
-	 * runs the single deactivating UPDATE - so the successor minted in this exact window is now
-	 * discovered by the walk itself, on the very next pass, and revoked along with everything else
-	 * before this function ever reports a result. This test now pins that stronger, corrected
-	 * behaviour rather than the detect-but-do-not-revoke residual it used to prove.
+	 * This proves that shape directly: the injected rotation fires in the gap right after gen1 is
+	 * deactivated (and before its children are read), and must fail outright rather than merely
+	 * get caught and revoked afterward.
 	 */
 	public function test_rotate_refresh_replay_revokes_a_successor_minted_mid_walk(): void {
 		aafm_install_oauth_tables();
@@ -825,24 +843,23 @@ class TokensTest extends TestCase {
 		$this->assertNotNull( $gen1_row );
 		$gen1_id = (int) $gen1_row['id'];
 
-		// Fires once the first DOWN pass has read gen1's children (finding none, since gen2 does
-		// not exist yet) and the next pass is about to re-walk from the top. Mints gen2 as a child
-		// of gen1 right in that window, simulating a concurrent request winning the rotation race
-		// for gen1 between the first pass's read and the second pass's re-read.
-		$marker = 'refresh_parent_id = ' . $gen1_id;
-		$armed  = false;
-		$fired  = false;
-		$gen2   = null;
+		// Arms on the query that deactivates gen1 (letting it run normally), then fires on the
+		// VERY NEXT query - the read of gen1's children - injecting a concurrent rotation attempt
+		// for gen1 into that exact gap. Simulates a concurrent request racing to rotate gen1 right
+		// as this walk finishes deactivating it.
+		$marker   = 'is_active = 0 WHERE id = ' . $gen1_id;
+		$armed    = false;
+		$fired    = false;
+		$injected = null;
 
 		add_filter(
 			'query',
-			function ( string $query ) use ( $marker, $gen1, $ctx, &$armed, &$fired, &$gen2 ): string {
+			function ( string $query ) use ( $marker, $gen1, $ctx, &$armed, &$fired, &$injected ): string {
 				if ( $armed ) {
 					$armed = false;
 					$fired = true;
 					remove_all_filters( 'query' );
-					$gen2 = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
-					$this->assertIsArray( $gen2, 'the injected mid-walk rotation must itself succeed' );
+					$injected = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
 					return $query;
 				}
 				if ( false !== strpos( $query, $marker ) ) {
@@ -861,60 +878,55 @@ class TokensTest extends TestCase {
 		}
 
 		$this->assertTrue( $fired, 'the injected mid-walk rotation never ran; this test did not exercise the race' );
+
+		// The injected rotation must fail outright - gen1 is already inactive by the time it
+		// runs, so its own single-winner gate matches zero rows and no successor is ever minted.
+		$this->assertInstanceOf( WP_Error::class, $injected, 'a rotation attempt against an already-deactivated node must not succeed' );
+		$this->assertSame( 'invalid_grant', $injected->get_error_code() );
+		$this->assertSame( 0, $this->count_children_of( $gen1_id ), 'no successor row may exist for a rotation the revocation walk already closed the window on' );
+
 		$this->assertInstanceOf( WP_Error::class, $replay );
 		$this->assertSame(
 			'The refresh token has already been used; the token chain has been revoked.',
 			$replay->get_error_message(),
-			'the repeated DOWN walk should have found and revoked the mid-walk successor too'
+			'gen1 had no surviving descendant, so the walk should report the chain fully revoked'
 		);
-
-		// The successor itself must actually be revoked now, not merely reported as a gap.
-		$this->assertIsArray( $gen2 );
-		$gen2_row = $this->row_by_refresh( $gen2['refresh_token'] );
-		$this->assertNotNull( $gen2_row );
-		$this->assertSame( 0, (int) $gen2_row['is_active'], 'the concurrent successor must have been revoked by the next DOWN pass' );
 	}
 
 	/**
-	 * Codex round 6, R6-1: the round 5 fix above only re-checks for one extra generation. This
-	 * proves the deeper gap it left open - a successor of a successor - and that the repeated
-	 * DOWN walk closes it.
+	 * Codex round 7, R7-1: the per-node deactivate-before-read guarantee the test above proves for
+	 * the first hop off the seed must hold at any depth, not just one hop in. This builds a real
+	 * three-generation chain (gen0 -> gen1 -> gen2, all pre-existing, not injected) and injects a
+	 * concurrent rotation attempt against gen2 - the deepest node - in the same gap: right after
+	 * the walk deactivates it, right before it reads gen2's children. It must fail the same way.
 	 */
-	public function test_rotate_refresh_replay_reports_complete_when_a_successor_of_a_successor_is_minted_mid_walk(): void {
+	public function test_rotate_refresh_replay_closes_the_window_at_any_depth(): void {
 		aafm_install_oauth_tables();
 
 		$ctx  = $this->ctx();
 		$gen0 = aafm_oauth_mint_tokens( $ctx );
 		$gen1 = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
 		$this->assertIsArray( $gen1 );
+		$gen2 = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $gen2 );
 
-		$gen1_row = $this->row_by_refresh( $gen1['refresh_token'] );
-		$this->assertNotNull( $gen1_row );
-		$gen1_id = (int) $gen1_row['id'];
+		$gen2_row = $this->row_by_refresh( $gen2['refresh_token'] );
+		$this->assertNotNull( $gen2_row );
+		$gen2_id = (int) $gen2_row['id'];
 
-		// Fires once the first DOWN pass has read gen1's children (finding none, since gen2 does
-		// not exist yet). Mints gen2 as a child of gen1, then immediately rotates gen2 into gen3 -
-		// simulating two concurrent requests each winning a rotation race in succession while this
-		// function is still walking. By the time a one-generation re-check would run, gen2 is
-		// inactive (consumed by its own rotation) and gen3's parent is gen2, outside the originally
-		// collected set either way - the exact shape R5-3's fix could not see.
-		$marker = 'refresh_parent_id = ' . $gen1_id;
-		$armed  = false;
-		$fired  = false;
-		$gen2   = null;
-		$gen3   = null;
+		$marker   = 'is_active = 0 WHERE id = ' . $gen2_id;
+		$armed    = false;
+		$fired    = false;
+		$injected = null;
 
 		add_filter(
 			'query',
-			function ( string $query ) use ( $marker, $gen1, $ctx, &$armed, &$fired, &$gen2, &$gen3 ): string {
+			function ( string $query ) use ( $marker, $gen2, $ctx, &$armed, &$fired, &$injected ): string {
 				if ( $armed ) {
 					$armed = false;
 					$fired = true;
 					remove_all_filters( 'query' );
-					$gen2 = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
-					$this->assertIsArray( $gen2, 'the injected mid-walk rotation of gen1 must itself succeed' );
-					$gen3 = aafm_oauth_rotate_refresh( $gen2['refresh_token'], $ctx['client_id'] );
-					$this->assertIsArray( $gen3, 'the injected mid-walk rotation of gen2 must itself succeed' );
+					$injected = aafm_oauth_rotate_refresh( $gen2['refresh_token'], $ctx['client_id'] );
 					return $query;
 				}
 				if ( false !== strpos( $query, $marker ) ) {
@@ -925,29 +937,32 @@ class TokensTest extends TestCase {
 		);
 
 		try {
-			// Replaying gen0 triggers reuse detection, revoking the lineage the walk can find.
+			// Replaying gen0 triggers reuse detection; the walk must reach gen2 (two hops down)
+			// before this test's assertions mean anything.
 			$replay = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
 		} finally {
 			remove_all_filters( 'query' );
 		}
 
-		$this->assertTrue( $fired, 'the injected mid-walk rotations never ran; this test did not exercise the race' );
-		$this->assertIsArray( $gen3 );
-
-		$gen3_row = $this->row_by_refresh( $gen3['refresh_token'] );
-		$this->assertNotNull( $gen3_row );
-		$this->assertSame(
-			0,
-			(int) $gen3_row['is_active'],
-			'the second-generation successor must have been revoked too - a one-generation re-check misses it'
-		);
+		$this->assertTrue( $fired, 'the injected rotation never ran; the walk did not reach gen2' );
+		$this->assertInstanceOf( WP_Error::class, $injected, 'a rotation attempt against an already-deactivated node must not succeed, at any depth' );
+		$this->assertSame( 'invalid_grant', $injected->get_error_code() );
+		$this->assertSame( 0, $this->count_children_of( $gen2_id ), 'no successor row may exist for gen2 once the walk has deactivated it' );
 
 		$this->assertInstanceOf( WP_Error::class, $replay );
 		$this->assertSame(
 			'The refresh token has already been used; the token chain has been revoked.',
-			$replay->get_error_message(),
-			'gen3 was actually revoked, so the response must say so, not just that the token was reused'
+			$replay->get_error_message()
 		);
+
+		// Every real row in the lineage must actually be inactive, not merely reported as such.
+		// Re-read both rows - the copies captured above predate the revocation.
+		$gen1_row = $this->row_by_refresh( $gen1['refresh_token'] );
+		$this->assertNotNull( $gen1_row );
+		$this->assertSame( 0, (int) $gen1_row['is_active'] );
+		$gen2_row = $this->row_by_refresh( $gen2['refresh_token'] );
+		$this->assertNotNull( $gen2_row );
+		$this->assertSame( 0, (int) $gen2_row['is_active'] );
 	}
 
 	/**

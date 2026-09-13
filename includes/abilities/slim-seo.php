@@ -297,9 +297,25 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 	// When it disagrees, fall back per field to whether the value actually moved away from its
 	// pre-write state in $old: a genuine veto (a filter reverting to the OLD value) still resolves
 	// as unconfirmed; any other landed value is accepted.
-	$canonical = sanitize_meta( 'slim_seo', $stored, 'post', (string) get_object_subtype( 'post', $id ) );
-	$canonical = is_array( $canonical ) ? $canonical : array();
-	$confirmed = aafm_slim_seo_read_fields( $id );
+	//
+	// Codex round 7, R7-4: that old/unchanged fallback used to judge "nothing was asked to
+	// change" from the raw $old alone ($intended_field === $old_field), blind to whether $old
+	// itself was already in its canonical (sanitized) form - the same defect
+	// aafm_meta_write_confirmed()'s round 6, R6-4 fix (2781422) closed for a scalar meta value.
+	// When $old was not canonical, resubmitting it is still a real ask: the write is expected to
+	// land on the canonical form a genuinely different value would have to reach, and a
+	// persistence veto that instead keeps storage at the non-canonical $old must not read as a
+	// confirmed no-op purely because the caller's literal input matched it. $canonical_old
+	// replays the WHOLE pre-write array through the same one whole-array sanitize_meta() call
+	// $canonical already uses for $stored, for the same reason documented above: this meta key is
+	// one array-shaped value, and a per-field scalar reapplication of the hook would misfire
+	// against a filter that expects its normal array shape.
+	$subtype       = (string) get_object_subtype( 'post', $id );
+	$canonical     = sanitize_meta( 'slim_seo', $stored, 'post', $subtype );
+	$canonical     = is_array( $canonical ) ? $canonical : array();
+	$canonical_old = sanitize_meta( 'slim_seo', $old, 'post', $subtype );
+	$canonical_old = is_array( $canonical_old ) ? $canonical_old : array();
+	$confirmed     = aafm_slim_seo_read_fields( $id );
 	foreach ( aafm_slim_seo_fields() as $field ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
@@ -307,10 +323,11 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 		if ( (string) ( $canonical[ $field ] ?? '' ) === $confirmed[ $field ] ) {
 			continue;
 		}
-		$old_field      = (string) ( $old[ $field ] ?? '' );
-		$intended_field = (string) ( $stored[ $field ] ?? '' );
-		$nothing_asked  = $intended_field === $old_field;
-		$unchanged      = $confirmed[ $field ] === $old_field;
+		$old_field        = (string) ( $old[ $field ] ?? '' );
+		$intended_field   = (string) ( $stored[ $field ] ?? '' );
+		$old_is_canonical = (string) ( $canonical_old[ $field ] ?? '' ) === $old_field;
+		$nothing_asked    = $old_is_canonical && $intended_field === $old_field;
+		$unchanged        = $confirmed[ $field ] === $old_field;
 		// Codex round 5 R5-2: a no-op resubmission ($intended_field === $old_field) used to
 		// confirm on that basis alone, without checking $unchanged - so a filter redirecting an
 		// unchanged resubmission to some third value read as success. Mirrors the same fix in
@@ -331,8 +348,13 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 			// a legitimate save-time normalization. Give it the same old/unchanged fallback.
 			$old_noindex      = ! empty( $old['noindex'] );
 			$intended_noindex = ! empty( $stored['noindex'] );
-			$nothing_asked    = $intended_noindex === $old_noindex;
-			$unchanged        = $confirmed['noindex'] === $old_noindex;
+			// R7-4: same canonical-$old requirement as the string fields above - a boolean has
+			// only two values, so "canonical" here just means the sanitizer's own bool coercion
+			// agrees with the stored bool, but the principle (and the veto class it closes) is
+			// identical.
+			$old_noindex_canonical = ! empty( $canonical_old['noindex'] ) === $old_noindex;
+			$nothing_asked         = $old_noindex_canonical && $intended_noindex === $old_noindex;
+			$unchanged             = $confirmed['noindex'] === $old_noindex;
 			if ( ! ( $nothing_asked ? $unchanged : ! $unchanged ) ) {
 				return new WP_Error(
 					'aafm_slim_seo_write_unconfirmed',

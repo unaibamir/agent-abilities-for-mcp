@@ -166,6 +166,98 @@ final class SlimSeoTest extends TestCase {
 		$this->assertSame( "O'Reilly", $out['title'] );
 	}
 
+	/**
+	 * Codex round 7, R7-4: the string-field "nothing asked" fallback used to be judged from the
+	 * raw $old alone ($intended_field === $old_field), blind to whether $old was already in its
+	 * canonical (sanitized) form. Resubmitting a non-canonical title is a real ask - the write is
+	 * still expected to land on the canonical form a genuinely different title would have to
+	 * reach - so a persistence veto that instead keeps storage at the non-canonical title must not
+	 * read as a confirmed no-op purely because the caller's literal input matched it.
+	 */
+	public function test_update_post_string_field_rejects_a_veto_that_blocks_canonicalization_of_a_same_value_resubmission(): void {
+		$post = self::factory()->post->create_and_get();
+
+		// Stored title is deliberately NOT canonical: written before the normalizer below is
+		// registered.
+		update_post_meta( $post->ID, 'slim_seo', array( 'title' => 'old title' ) );
+
+		$normalize = static function ( $value ) {
+			if ( is_array( $value ) && isset( $value['title'] ) && is_string( $value['title'] ) ) {
+				$value['title'] = strtoupper( $value['title'] );
+			}
+			return $value;
+		};
+		add_filter( 'sanitize_post_meta_slim_seo', $normalize );
+
+		// A persistence veto blocks the write outright, so storage never moves off the
+		// non-canonical title - canonicalization included.
+		$veto = static fn() => false;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$out = aafm_exec_slim_seo_update_post(
+			array(
+				'post_id' => $post->ID,
+				'title'   => 'old title',
+			)
+		);
+
+		remove_filter( 'update_post_metadata', $veto, 10 );
+		remove_filter( 'sanitize_post_meta_slim_seo', $normalize );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$out,
+			'A veto that blocks the canonicalization of a same-value title resubmission must not be reported as a confirmed no-op.'
+		);
+		$stored = get_post_meta( $post->ID, 'slim_seo', true );
+		$this->assertSame( 'old title', $stored['title'], 'precondition: the veto must have genuinely kept the non-canonical title in place.' );
+	}
+
+	/**
+	 * Codex round 7, R7-4: the boolean noindex fallback carried the identical raw-$old defect as
+	 * the string fields above.
+	 */
+	public function test_update_post_noindex_rejects_a_veto_that_blocks_canonicalization_of_a_same_value_resubmission(): void {
+		$post = self::factory()->post->create_and_get();
+
+		// Stored noindex is deliberately NOT canonical: written before the normalizer below is
+		// registered, which always forces it true.
+		update_post_meta( $post->ID, 'slim_seo', array( 'noindex' => false ) );
+
+		$normalize = static function ( $value ) {
+			if ( is_array( $value ) ) {
+				$value['noindex'] = true;
+			}
+			return $value;
+		};
+		add_filter( 'sanitize_post_meta_slim_seo', $normalize );
+
+		// A persistence veto blocks the write outright, so storage never moves off the
+		// non-canonical false - canonicalization included.
+		$veto = static fn() => false;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$out = aafm_exec_slim_seo_update_post(
+			array(
+				'post_id' => $post->ID,
+				'noindex' => false,
+			)
+		);
+
+		remove_filter( 'update_post_metadata', $veto, 10 );
+		remove_filter( 'sanitize_post_meta_slim_seo', $normalize );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$out,
+			'A veto that blocks the canonicalization of a same-value noindex resubmission must not be reported as a confirmed no-op.'
+		);
+		$stored = get_post_meta( $post->ID, 'slim_seo', true );
+		$this->assertFalse( $stored['noindex'], 'precondition: the veto must have genuinely kept the non-canonical false in place.' );
+	}
+
 	public function test_update_post_requires_edit_access(): void {
 		$post = self::factory()->post->create();
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );

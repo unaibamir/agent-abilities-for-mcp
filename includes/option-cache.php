@@ -226,6 +226,85 @@ function aafm_wpdb_row( string $sql ): array {
 }
 
 /**
+ * Run one already-prepared, multi-row SELECT and report whether the query itself succeeded, the
+ * same way aafm_wpdb_row() does for a single row - via $wpdb->query()'s own return value, never
+ * $wpdb->last_error.
+ *
+ * Codex round 7, R7-2: $wpdb->get_results() always returns $wpdb->last_result after calling
+ * query(), regardless of whether that call succeeded (wp-includes/class-wpdb.php) - so a caller
+ * that only checked `is_array( $rows )` could not tell a genuinely empty result apart from a
+ * failed query that left the PREVIOUS query's rows sitting in last_result. This closes that the
+ * same way aafm_wpdb_row() already closes it for a single row.
+ *
+ * @param string $sql A fully prepared SQL statement ($wpdb->prepare()'s output).
+ * @return array{ok:bool,value:array<int,array<string,mixed>>|null} ok is false when the query
+ *              itself failed - value is not trustworthy either way in that case. value is every
+ *              matched row as an associative array, or an empty array when the query succeeded but
+ *              matched nothing.
+ */
+function aafm_wpdb_results( string $sql ): array {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- $sql is required by this function's own contract to already be $wpdb->prepare()'s output; every caller in this codebase passes a prepare() call directly.
+	$result = $wpdb->query( $sql );
+	if ( false === $result ) {
+		return array(
+			'ok'    => false,
+			'value' => null,
+		);
+	}
+
+	$rows = array();
+	foreach ( (array) $wpdb->last_result as $row ) {
+		$rows[] = get_object_vars( $row );
+	}
+
+	return array(
+		'ok'    => true,
+		'value' => $rows,
+	);
+}
+
+/**
+ * Run one already-prepared, single-column, multi-row SELECT and report whether the query itself
+ * succeeded, the same way aafm_wpdb_scalar() does for a single value - via $wpdb->query()'s own
+ * return value, never $wpdb->last_error.
+ *
+ * Codex round 7, R7-2: $wpdb->get_col() shares get_results()'s defect - it always reads
+ * $wpdb->last_result after calling query(), regardless of success, so a failed query hands back
+ * the PREVIOUS query's column values rather than an empty list.
+ *
+ * @param string $sql A fully prepared SQL statement ($wpdb->prepare()'s output), expected to be a
+ *                     single-column SELECT.
+ * @return array{ok:bool,value:list<mixed>|null} ok is false when the query itself failed - value
+ *              is not trustworthy either way in that case. value is every matched row's first
+ *              column, or an empty array when the query succeeded but matched nothing.
+ */
+function aafm_wpdb_col( string $sql ): array {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- $sql is required by this function's own contract to already be $wpdb->prepare()'s output; every caller in this codebase passes a prepare() call directly.
+	$result = $wpdb->query( $sql );
+	if ( false === $result ) {
+		return array(
+			'ok'    => false,
+			'value' => null,
+		);
+	}
+
+	$col = array();
+	foreach ( (array) $wpdb->last_result as $row ) {
+		$values = array_values( get_object_vars( $row ) );
+		$col[]  = $values[0] ?? null;
+	}
+
+	return array(
+		'ok'    => true,
+		'value' => $col,
+	);
+}
+
+/**
  * Read $option as two independent, uninterpreted views - the object cache's and the database's -
  * instead of folding them into `get_option()`'s single, cache-trusting answer.
  *

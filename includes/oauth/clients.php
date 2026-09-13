@@ -117,9 +117,18 @@ function aafm_oauth_register_client( array $req ) {
 /**
  * Fetch a single OAuth client row by its public client_id.
  *
+ * Codex round 8, R8-1: this used to run a bare $wpdb->get_row(), which hands back the PREVIOUS
+ * query's row when the current one fails ($wpdb->query() returning false without clearing
+ * last_result - see includes/option-cache.php). A caller saving an allowlist row for client A
+ * followed by nonexistent client B could have B's lookup fail and silently inherit A's row,
+ * accepting a scope for a client that does not exist. Routed through aafm_wpdb_row() so a failed
+ * lookup reports null, the same fail-closed answer a genuinely missing row already gives -
+ * "client not found" and "could not check" must be indistinguishable to every caller here, both
+ * of which treat null as "cannot accept this client_id".
+ *
  * @param string $client_id The public client identifier.
  * @return array{client_id:string,client_name:string,is_active:bool,is_agent_identity:bool}|null
- *               Null when no row exists.
+ *               Null when no row exists, or the lookup itself failed.
  */
 function aafm_oauth_get_client( string $client_id ): ?array {
 	if ( '' === $client_id ) {
@@ -127,19 +136,18 @@ function aafm_oauth_get_client( string $client_id ): ?array {
 	}
 
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$row = $wpdb->get_row(
+	$view = aafm_wpdb_row(
 		$wpdb->prepare(
 			'SELECT client_id, client_name, is_active, is_agent_identity FROM %i WHERE client_id = %s',
 			$wpdb->prefix . 'aafm_oauth_clients',
 			$client_id
-		),
-		ARRAY_A
+		)
 	);
 
-	if ( ! is_array( $row ) ) {
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
 		return null;
 	}
+	$row = $view['value'];
 
 	return array(
 		'client_id'         => (string) $row['client_id'],

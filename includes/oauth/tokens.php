@@ -700,7 +700,7 @@ function aafm_oauth_revoke_chain( int $seed_id ): bool {
 		$queue           = $ids;
 		$hops            = 0;
 
-		while ( ! $read_failed && ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
+		while ( ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
 			++$hops;
 			$current = array_shift( $queue );
 

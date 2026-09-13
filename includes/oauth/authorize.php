@@ -56,8 +56,15 @@ function aafm_oauth_local_error( string $code, string $message ): WP_Error {
 /**
  * Look up an active OAuth client row by client_id.
  *
+ * Same stale-read class as R8-1 (aafm_oauth_get_client() in oauth/clients.php): a bare
+ * $wpdb->get_row() hands back the PREVIOUS query's row when this one fails, which here would let
+ * a failed lookup for one client authorize the request as whichever OTHER client the connection
+ * happened to look up last. This gates the whole authorize flow, so a failed lookup must DENY,
+ * the same way a genuinely missing/inactive client already does - never fall back to some other
+ * client's row.
+ *
  * @param string $client_id The public client identifier.
- * @return array<string,mixed>|null The client row, or null when missing/inactive.
+ * @return array<string,mixed>|null The client row, or null when missing/inactive/unreadable.
  */
 function aafm_oauth_get_active_client( string $client_id ): ?array {
 	if ( '' === $client_id ) {
@@ -65,17 +72,15 @@ function aafm_oauth_get_active_client( string $client_id ): ?array {
 	}
 
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$row = $wpdb->get_row(
+	$view = aafm_wpdb_row(
 		$wpdb->prepare(
 			'SELECT * FROM %i WHERE client_id = %s AND is_active = 1',
 			$wpdb->prefix . 'aafm_oauth_clients',
 			$client_id
-		),
-		ARRAY_A
+		)
 	);
 
-	return is_array( $row ) ? $row : null;
+	return ( $view['ok'] && is_array( $view['value'] ) ) ? $view['value'] : null;
 }
 
 /**

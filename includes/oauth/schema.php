@@ -579,7 +579,8 @@ function aafm_oauth_cleanup(): void {
  * no token rows of any state - is dead weight. This removes such rows once they are older than
  * the TTL (default 7 days), keeping a generous window for a legitimate register-then-approve
  * flow that spans a session. A client with at least one consent OR any token row is kept, so a
- * live or revoked-but-historical client is never reaped. Deletes the matching codes too.
+ * live or revoked-but-historical client is never reaped - the deletion re-checks that condition
+ * itself rather than trusting the scan that found the candidates. Deletes the matching codes too.
  *
  * The TTL is filterable via `aafm_oauth_client_reap_ttl` (seconds). All three tables are
  * internal constants; the cutoff is bound.
@@ -626,17 +627,32 @@ function aafm_oauth_reap_abandoned_clients(): int {
 
 	$placeholders = implode( ', ', array_fill( 0, count( $abandoned ), '%s' ) );
 
-	// Remove the abandoned clients and any stray (unredeemed, now-expired) codes they minted.
+	// Delete the clients, but re-certify abandonment in the DELETE's own WHERE clause rather
+	// than trusting the candidate list above (Codex round 8, R8-3): that list can go stale
+	// between the scan and this delete if a candidate is approved in the meantime - consent
+	// recorded, a code minted, a token issued - and a blind IN-list delete would then remove a
+	// registration that just went live, orphaning the token issued seconds earlier. Carrying the
+	// scan's exact predicate here means the database decides from current data at delete time,
+	// not PHP from a stale snapshot, the same fix shape as R7-1's row-locked UPDATE.
 	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-	$wpdb->query(
-		$wpdb->prepare(
-			"DELETE FROM {$codes_table} WHERE client_id IN ( {$placeholders} )",
-			$abandoned
-		)
-	);
 	$deleted = (int) $wpdb->query(
 		$wpdb->prepare(
-			"DELETE FROM {$clients_table} WHERE client_id IN ( {$placeholders} )",
+			"DELETE FROM {$clients_table} WHERE client_id IN ( {$placeholders} )
+			   AND created_at < %s
+			   AND NOT EXISTS ( SELECT 1 FROM {$consents_table} co WHERE co.client_id = {$clients_table}.client_id )
+			   AND NOT EXISTS ( SELECT 1 FROM {$tokens_table} t WHERE t.client_id = {$clients_table}.client_id )",
+			array_merge( $abandoned, array( $cutoff ) )
+		)
+	);
+
+	// Only now delete the stray codes - scoped to client_ids that no longer have a client row
+	// at all, derived from the delete that just happened rather than from the stale candidate
+	// list. A candidate that survived the recheck above (freshly approved, consent and a code
+	// both just minted) keeps its client row and, by the same token, its live code.
+	$wpdb->query(
+		$wpdb->prepare(
+			"DELETE FROM {$codes_table} WHERE client_id IN ( {$placeholders} )
+			   AND NOT EXISTS ( SELECT 1 FROM {$clients_table} cl WHERE cl.client_id = {$codes_table}.client_id )",
 			$abandoned
 		)
 	);

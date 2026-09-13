@@ -47,6 +47,18 @@ if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
 }
 
 /**
+ * Bounds how many times aafm_oauth_revoke_chain() re-walks the DOWN direction looking for a
+ * descendant minted concurrently with the revocation itself - distinct from
+ * AAFM_OAUTH_CHAIN_MAX_HOPS, which bounds lineage LENGTH, not how many times it is re-checked.
+ * Every pass both discovers and immediately deactivates everything it finds, so a concurrent
+ * rotation would have to keep winning a fresh race against every single pass to still be active
+ * once passes run out. Five is generous headroom over that; it is a bounded retry, not a proof.
+ */
+if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_CONVERGENCE_PASSES' ) ) {
+	define( 'AAFM_OAUTH_CHAIN_MAX_CONVERGENCE_PASSES', 5 );
+}
+
+/**
  * Run one transaction-control statement (START TRANSACTION, COMMIT, ROLLBACK, or SAVEPOINT) and
  * report whether it actually succeeded, using $wpdb->query()'s own return value.
  *
@@ -566,15 +578,28 @@ function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_
  * Codex round 5 R5-3: the walks above are a snapshot, not a lock. A refresh token can rotate
  * mid-walk, minting a successor row whose refresh_parent_id points at a row this function is
  * still in the middle of revoking; the DOWN walk already read that row's children as empty and
- * never sees the new one. This function used to certify success in that case even though the
- * successor stayed active. It now re-reads for exactly that shape after the deactivating UPDATE
- * and refuses to report success when a still-active successor is found.
+ * never sees the new one. A single post-UPDATE re-check for exactly that one-generation shape
+ * closed that gap, but only that one: a successor of a successor (the newly minted row itself
+ * rotating again before the re-check runs) points at a row still outside the originally collected
+ * set, so the one-level re-check does not see it either (round 6, R6-1).
+ *
+ * Round 6, R6-1: rather than add a third narrow one-generation check, the DOWN walk now repeats
+ * in full until a pass discovers nothing it did not already know about. Each pass re-walks every
+ * id collected so far - including rows already found inactive, since an inactive row (already
+ * consumed by its own rotation) can still have gained an active child since the last pass read
+ * it - so a chain of any number of concurrent rotations is caught as long as it stops within
+ * AAFM_OAUTH_CHAIN_MAX_CONVERGENCE_PASSES passes. This is a bounded retry, not a lock: a rotation
+ * that keeps winning the race against every single pass could in principle outrun it forever. That
+ * case is indistinguishable from a genuinely corrupt/cyclical chain from this function's point of
+ * view, so both are reported identically - as an incomplete run - rather than ever claiming success
+ * on a lineage this function could not prove closed.
  *
  * @param int $seed_id Any row id belonging to the lineage to revoke.
- * @return bool True when both walks completed within the hop cap, the deactivating UPDATE itself
- *              succeeded, AND a post-revocation re-check found no active row whose parent is in
- *              the revoked set. False when any of that is not the case - some rows in the lineage
- *              may remain active and the caller must not report the chain as fully revoked.
+ * @return bool True when the UP walk and every DOWN pass completed within their hop caps, the DOWN
+ *              walk converged (a pass found no descendant it did not already know about) within
+ *              AAFM_OAUTH_CHAIN_MAX_CONVERGENCE_PASSES passes, and the deactivating UPDATE itself
+ *              succeeded. False when any of that is not the case - some rows in the lineage may
+ *              remain active and the caller must not report the chain as fully revoked.
  */
 function aafm_oauth_revoke_chain( int $seed_id ): bool {
 	global $wpdb;
@@ -629,46 +654,73 @@ function aafm_oauth_revoke_chain( int $seed_id ): bool {
 	// corrupted row CAN branch. A queue keeps the cap counting total descendants discovered
 	// (not just depth) and revokes every branch it finds, not just one arbitrary line of them -
 	// the same defense-in-depth this function's docblock already claims for a corrupt chain.
-	$queue = $ids;
-	$hops  = 0;
-	while ( ! $read_failed && ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
-		++$hops;
-		$current = array_shift( $queue );
+	//
+	// Round 6, R6-1: one such walk is a snapshot, so it can miss a row minted after it read that
+	// row's would-be parent's children. The outer loop below repeats the whole walk - re-reading
+	// every id already collected, not just new ones, since an id already found inactive can still
+	// have gained an active child since it was last read - until a full pass adds nothing this
+	// function did not already know about. See AAFM_OAUTH_CHAIN_MAX_CONVERGENCE_PASSES.
+	$converged = false;
+	for ( $pass = 0; $pass < AAFM_OAUTH_CHAIN_MAX_CONVERGENCE_PASSES && ! $read_failed && ! $cap_hit; $pass++ ) {
+		$ids_before_pass = count( $ids );
+		$queue           = $ids;
+		$hops            = 0;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$result = $wpdb->query(
-			$wpdb->prepare(
-				'SELECT id FROM %i WHERE refresh_parent_id = %d',
-				$table,
-				$current
-			)
-		);
+		while ( ! $read_failed && ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
+			++$hops;
+			$current = array_shift( $queue );
 
-		if ( false === $result ) {
-			$read_failed = true;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$result = $wpdb->query(
+				$wpdb->prepare(
+					'SELECT id FROM %i WHERE refresh_parent_id = %d',
+					$table,
+					$current
+				)
+			);
+
+			if ( false === $result ) {
+				$read_failed = true;
+				break;
+			}
+
+			$child_ids = wp_list_pluck( (array) $wpdb->last_result, 'id' );
+
+			foreach ( $child_ids as $child_id ) {
+				$child_id = (int) $child_id;
+				if ( $child_id > 0 && ! in_array( $child_id, $ids, true ) ) {
+					$ids[]   = $child_id;
+					$queue[] = $child_id;
+				}
+			}
+		}
+
+		// This pass's walk stopped with descendants still queued: the cap truncated it mid-pass.
+		if ( ! $read_failed && ! empty( $queue ) ) {
+			$cap_hit = true;
 			break;
 		}
 
-		$child_ids = wp_list_pluck( (array) $wpdb->last_result, 'id' );
-
-		foreach ( $child_ids as $child_id ) {
-			$child_id = (int) $child_id;
-			if ( $child_id > 0 && ! in_array( $child_id, $ids, true ) ) {
-				$ids[]   = $child_id;
-				$queue[] = $child_id;
-			}
+		// Nothing new turned up on a full re-walk of everything collected so far: converged.
+		if ( ! $read_failed && count( $ids ) === $ids_before_pass ) {
+			$converged = true;
+			break;
 		}
 	}
 
-	// The DOWN walk stopped with descendants still queued: the cap truncated the traversal.
-	if ( ! $read_failed && ! empty( $queue ) ) {
+	// The passes ran out while a re-walk kept turning up ids it had not seen before: either a
+	// sustained concurrent-rotation race outrunning every pass, or a pathologically long/cyclical
+	// chain. Both are reported the same way - the run cannot certify complete - so they share the
+	// same action below.
+	if ( ! $read_failed && ! $cap_hit && ! $converged ) {
 		$cap_hit = true;
 	}
 
-	// A cap hit means we revoked only the first AAFM_OAUTH_CHAIN_MAX_HOPS rows of a longer lineage;
-	// the remainder stays active. Fire an action so the truncation is never silent: an operator can
-	// hook it to log, alert, or schedule a follow-up sweep, or raise the cap. The seed id and the
-	// number of rows revoked are passed so the handler can investigate the pathological chain.
+	// A cap hit means the traversal could not be certified complete - either the lineage is longer
+	// than AAFM_OAUTH_CHAIN_MAX_HOPS, or concurrent rotations kept outrunning every convergence
+	// pass - and the remainder may stay active. Fire an action so this is never silent: an operator
+	// can hook it to log, alert, or schedule a follow-up sweep, or raise either cap. The seed id and
+	// the number of rows revoked so far are passed so the handler can investigate.
 	if ( $cap_hit ) {
 		do_action( 'aafm_oauth_chain_revocation_capped', $seed_id, count( $ids ) );
 	}
@@ -696,30 +748,7 @@ function aafm_oauth_revoke_chain( int $seed_id ): bool {
 	);
 	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 
-	// Codex round 5 R5-3: the walk above snapshots descendants before this UPDATE deactivates
-	// them, so a successor minted mid-walk - aafm_oauth_rotate_refresh() winning its single-winner
-	// gate against a row this function had not yet deactivated - is never discovered by the DOWN
-	// walk and survives it untouched, while the run still certifies as complete. Re-check for
-	// exactly that shape after the deactivating UPDATE: any row whose refresh_parent_id points into
-	// the set just revoked, but that is still active, is such a successor. This closes the window
-	// this function's own traversal leaves open; it does not close a second rotation racing this
-	// very re-check, which is why the contract stays "never claim complete success without proof"
-	// rather than "guaranteed complete" - a caller that needs the latter would need a lock, not a
-	// re-check.
-	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- same reasoning as the UPDATE above: the table is bound via %i, every id via $ids, and only the interpolated %d list is left for these two sniffs to flag.
-	$successor = aafm_wpdb_scalar(
-		$wpdb->prepare(
-			"SELECT id FROM %i WHERE refresh_parent_id IN ( {$placeholders} ) AND is_active = 1 LIMIT 1",
-			array_merge( array( $table ), $ids )
-		)
-	);
-	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-	// A failed verification read cannot back a "fully revoked" claim either, so it fails the
-	// certification the same way a concurrent successor would - never report success on a check
-	// that could not itself be confirmed.
-	$successor_survived = ! $successor['ok'] || null !== $successor['value'];
-
-	return ! $cap_hit && ! $read_failed && false !== $updated && ! $successor_survived;
+	return ! $cap_hit && ! $read_failed && false !== $updated;
 }
 
 /**

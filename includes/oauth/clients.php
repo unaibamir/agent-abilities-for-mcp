@@ -261,15 +261,7 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 		return true; // No client id to authorize against: deny, this is a live auth gate.
 	}
 
-	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$view = aafm_wpdb_scalar(
-		$wpdb->prepare(
-			'SELECT is_active FROM %i WHERE client_id = %s',
-			$wpdb->prefix . 'aafm_oauth_clients',
-			$client_id
-		)
-	);
+	$view = aafm_oauth_client_active_row_view( $client_id );
 
 	if ( ! $view['ok'] ) {
 		return true; // Unreadable table: fail closed, this is a live auth gate.
@@ -280,6 +272,52 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 	}
 
 	return 1 !== (int) $view['value'];
+}
+
+/**
+ * The raw is_active read aafm_oauth_client_is_deactivated() itself runs, factored out so
+ * aafm_oauth_client_lookup_failed() below can ask the same question - did the READ succeed - as a
+ * companion, independent probe, without duplicating the query or reaching into that function's
+ * internals.
+ *
+ * @param string $client_id The client identifier to look up. Caller-validated non-empty.
+ * @return array{ok:bool,value:mixed} Same shape as aafm_wpdb_scalar().
+ */
+function aafm_oauth_client_active_row_view( string $client_id ): array {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	return aafm_wpdb_scalar(
+		$wpdb->prepare(
+			'SELECT is_active FROM %i WHERE client_id = %s',
+			$wpdb->prefix . 'aafm_oauth_clients',
+			$client_id
+		)
+	);
+}
+
+/**
+ * Whether aafm_oauth_client_is_deactivated()'s own read could not be completed - a query failure
+ * or an unreadable table - as opposed to genuinely finding the client missing or deactivated.
+ *
+ * Codex round 6, R6-2: aafm_oauth_client_is_deactivated() correctly fails closed (denies) either
+ * way, and this does not change that - a caller must still deny the request when this is true.
+ * What it fixes is the client-facing REASON: two live call sites (aafm_oauth_rotate_refresh() and
+ * the authorization_code token grant) used to tell the client its grant or its client was invalid
+ * even when the true cause was this read failing, not a genuine authorization decision. A caller
+ * that needs to report the fault honestly - as a server_error, not invalid_grant - checks this
+ * FIRST, only after aafm_oauth_client_is_deactivated() has already returned true; it must never be
+ * used as a substitute for that function's own fail-closed denial.
+ *
+ * @param string $client_id The client identifier to look up.
+ * @return bool True when the underlying read itself failed. An empty client id is NOT a read
+ *              failure - it is a genuine missing-client case, matching
+ *              aafm_oauth_client_is_deactivated()'s own empty-string branch.
+ */
+function aafm_oauth_client_lookup_failed( string $client_id ): bool {
+	if ( '' === $client_id ) {
+		return false;
+	}
+	return ! aafm_oauth_client_active_row_view( $client_id )['ok'];
 }
 
 /**

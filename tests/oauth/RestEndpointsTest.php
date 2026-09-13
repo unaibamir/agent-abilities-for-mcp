@@ -341,6 +341,86 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 6, R6-2 (site 4): the authorization_code grant re-checks the client's live
+	 * standing before redeeming. aafm_oauth_client_is_deactivated() correctly fails closed on an
+	 * unreadable clients table, but this site used to report invalid_grant regardless - telling a
+	 * client with a perfectly valid registration that its grant was rejected, when this pipeline
+	 * itself could not even check.
+	 */
+	public function test_authorization_code_grant_reports_server_error_when_the_client_check_fails(): void {
+		$redirect  = 'https://app.example/cb';
+		$verifier  = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+		$challenge = $this->challenge_for( $verifier );
+
+		$client_id = $this->register_client( $redirect );
+		$code      = $this->mint_code( $client_id, $redirect, $challenge );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_client_check = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_clients' );
+				return $is_client_check ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$response = $this->token_code_request( $client_id, $code, $redirect, $verifier );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertSame( 500, $response->get_status(), 'an unreadable clients table is this pipeline\'s own fault, not a confirmed deactivation' );
+		$this->assertSame( 'server_error', $response->get_data()['error'] );
+	}
+
+	/**
+	 * Codex round 6, R6-2 (site 7): redemption re-checks consent, since it can be revoked in the
+	 * window between authorize and redeem. aafm_oauth_has_consent() correctly fails closed on a
+	 * read failure, but this site used to COMMIT the code's consumption and report invalid_grant
+	 * regardless of the reason - permanently burning an otherwise-valid, unexpired code over a
+	 * transient fault. It must instead roll back the consumption and report the fault honestly,
+	 * leaving the code redeemable on retry.
+	 */
+	public function test_authorization_code_grant_rolls_back_and_reports_server_error_when_the_consent_check_fails(): void {
+		$redirect  = 'https://app.example/cb';
+		$verifier  = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+		$challenge = $this->challenge_for( $verifier );
+
+		$client_id = $this->register_client( $redirect );
+		$code      = $this->mint_code( $client_id, $redirect, $challenge );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_consent_check = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_consents' );
+				return $is_consent_check ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$response = $this->token_code_request( $client_id, $code, $redirect, $verifier );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertSame( 500, $response->get_status(), 'a failed consent read is this pipeline\'s own fault, not a revoked grant' );
+		$this->assertSame( 'server_error', $response->get_data()['error'] );
+
+		// The rollback must have genuinely un-burned the code: redeeming it again, with the fault
+		// gone, must still succeed.
+		$retry = $this->token_code_request( $client_id, $code, $redirect, $verifier );
+		$this->assertSame( 200, $retry->get_status(), 'the code must still be redeemable after the fault is rolled back' );
+	}
+
+	/**
 	 * Revocation always returns 200 with an empty body (RFC 7009).
 	 */
 	public function test_revoke_returns_ok(): void {

@@ -204,15 +204,28 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$row = $wpdb->get_row(
+	$lookup = aafm_wpdb_row(
 		$wpdb->prepare(
 			'SELECT * FROM %i WHERE refresh_hash = %s',
 			$table,
 			hash( 'sha256', $raw )
-		),
-		ARRAY_A
+		)
 	);
+
+	// R6-2: a failed SELECT and a genuinely unknown token both used to read as $row === null,
+	// reported to the client as "your refresh token is invalid" either way - telling a client
+	// presenting a perfectly usable token that its grant was rejected when this pipeline could not
+	// even look it up. aafm_oauth_rest_token_refresh() already maps any code other than
+	// 'invalid_grant' to a 500 server_error, so returning that code here is enough to fix the
+	// client-visible response.
+	if ( ! $lookup['ok'] ) {
+		return new WP_Error(
+			'server_error',
+			__( 'The refresh token could not be looked up.', 'agent-abilities-for-mcp' )
+		);
+	}
+
+	$row = $lookup['value'];
 
 	// Unknown refresh token: nothing to rotate, nothing to revoke.
 	if ( ! is_array( $row ) ) {
@@ -250,6 +263,15 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// Deactivated client: refuse rotation so disabling a compromised client stops it from
 	// rolling its tokens forward. is_active is otherwise only checked at authorize-time.
 	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
+		// R6-2: is_deactivated() correctly fails closed (denies) on an unreadable clients table,
+		// but that is an operational fault, not a genuine "this client was disabled" finding -
+		// telling the client the latter when it is really the former misreports the cause.
+		if ( aafm_oauth_client_lookup_failed( $client_id ) ) {
+			return new WP_Error(
+				'server_error',
+				__( 'The client could not be checked.', 'agent-abilities-for-mcp' )
+			);
+		}
 		return new WP_Error(
 			'invalid_grant',
 			__( 'The client is no longer active.', 'agent-abilities-for-mcp' )
@@ -323,6 +345,18 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		// never silent, rather than discarding the return value outright.
 		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
 			do_action( 'aafm_oauth_rollback_failed', 'rotate_refresh_consume', (int) $row['id'] );
+		}
+
+		// R6-2: $wpdb->update() returns false on a genuine query failure and an integer (0 when the
+		// single-winner gate lost the race, because the token was already consumed by a concurrent
+		// request) on success - both used to collapse into the same invalid_grant response. Losing
+		// the race is a real grant-validity answer; the query itself failing is this pipeline's own
+		// fault and must not be told to the client as "your token is invalid".
+		if ( false === $consumed ) {
+			return new WP_Error(
+				'server_error',
+				__( 'The refresh token could not be consumed.', 'agent-abilities-for-mcp' )
+			);
 		}
 
 		return new WP_Error(

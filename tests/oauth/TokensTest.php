@@ -949,4 +949,96 @@ class TokensTest extends TestCase {
 			'gen3 was actually revoked, so the response must say so, not just that the token was reused'
 		);
 	}
+
+	/**
+	 * Codex round 6, R6-2 (site 1): a failed refresh-token lookup used to read exactly like an
+	 * unknown token, both reported as invalid_grant. A database fault is this pipeline's own
+	 * fault, not evidence the presented token is bad.
+	 */
+	public function test_rotate_refresh_reports_server_error_when_the_lookup_query_fails(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, 'refresh_hash = ' ) ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed lookup is this pipeline\'s own fault, not an invalid grant' );
+	}
+
+	/**
+	 * Codex round 6, R6-2 (site 2): the single-winner consumption UPDATE returns false on a
+	 * genuine query failure and an integer (0 on a lost race) on success - both used to report
+	 * invalid_grant. Only the race-loss case is a real grant-validity answer.
+	 */
+	public function test_rotate_refresh_reports_server_error_when_the_consuming_update_fails(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_consuming_update = 0 === strpos( trim( $query ), 'UPDATE' )
+					&& false !== strpos( $query, 'aafm_oauth_access_tokens' );
+				return $is_consuming_update ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed consuming UPDATE is this pipeline\'s own fault, not an invalid grant' );
+	}
+
+	/**
+	 * Codex round 6, R6-2 (site 3): aafm_oauth_client_is_deactivated() correctly fails closed on
+	 * an unreadable clients table, but the caller used to always report "the client is no longer
+	 * active" - true only when the client was genuinely confirmed inactive, not when this
+	 * pipeline simply could not check.
+	 */
+	public function test_rotate_refresh_reports_server_error_when_the_client_check_fails(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_client_check = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_clients' );
+				return $is_client_check ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'an unreadable clients table is this pipeline\'s own fault, not a confirmed deactivation' );
+	}
 }

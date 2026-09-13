@@ -2292,6 +2292,17 @@ function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, 
  * codebase's own write paths, and weakening detection to accommodate a hypothetical one would
  * reopen the exact veto class this function is relied on to catch.
  *
+ * Codex round 7, R7-4: mirrors aafm_meta_write_confirmed()'s own round 6, R6-4 fix - the
+ * "nothing asked" branch below used to compare $intended against $old directly (their raw forms),
+ * which cannot tell "$old is already canonical, so resubmitting it is a genuine no-op" apart from
+ * "$old is NOT canonical, so resubmitting it should still trigger the same canonicalization a
+ * changed value would". A persistence veto that instead left storage at the old, non-canonical
+ * value used to read as a confirmed no-op purely because the caller's literal input matched what
+ * was already stored. Replaying $old through the exact same pipeline this function already runs
+ * for $intended closes that; a value already in canonical form, the overwhelmingly common case, is
+ * unaffected, since replaying an idempotent sanitizer against an already-canonical value
+ * reproduces it exactly.
+ *
  * @param int      $post_id             Post id, already saved (used for the read-back).
  * @param string   $field               Post field name (post_title, post_content, post_excerpt,
  *                                      post_status, ...).
@@ -2309,14 +2320,50 @@ function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, 
 function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended, string $old, ?int $sanitize_context_id = null ): bool {
 	clean_post_cache( $post_id );
 	$context_id = $sanitize_context_id ?? $post_id;
-	$sanitized  = sanitize_post_field( $field, wp_slash( $intended ), $context_id, 'db' );
+	$expected   = aafm_post_field_canonical_replay( $field, $intended, $context_id );
+
+	$stored = get_post_field( $field, $post_id, 'raw' );
+	$stored = is_scalar( $stored ) ? (string) $stored : '';
+	if ( $stored === $expected ) {
+		return true;
+	}
+
+	// R7-4: $old itself must survive the same replay unchanged before a resubmission of it counts
+	// as "nothing asked" - see the docblock above.
+	$old_is_canonical = aafm_post_field_canonical_replay( $field, $old, $context_id ) === $old;
+
+	// Codex round 5 R5-2: a genuine no-op resubmission (the caller asked to "change" the field to
+	// the value it already held) used to be accepted on that basis alone, without checking that
+	// storage actually stayed at $old. That missed a wp_insert_post_data filter that redirects an
+	// unchanged resubmission to some THIRD value - a real, unrequested change the caller must
+	// know about, not a successful no-op. Requiring $stored === $old too closes that.
+	return $old_is_canonical && $intended === $old && $stored === $old;
+}
+
+/**
+ * Replay a single post-field value through the exact pipeline core's own
+ * wp_insert_post()/wp_update_post() applies before storage: sanitize_post_field() at 'db' context,
+ * then, for the three charset-sensitive fields, the same emoji-encoding step core runs before its
+ * final wp_unslash(). Factored out of aafm_post_field_write_confirmed() so it can replay both
+ * $intended (the real change-detection read) and $old (the R7-4 canonical-no-op check) through
+ * one identical pipeline rather than keeping two copies of it in sync by hand.
+ *
+ * @param string $field      Post field name (post_title, post_content, post_excerpt, post_status, ...).
+ * @param string $value      The unslashed value to replay.
+ * @param int    $context_id The id to sanitize with - see aafm_post_field_write_confirmed()'s own
+ *                            $sanitize_context_id parameter.
+ * @return string The value as core itself would store it.
+ */
+function aafm_post_field_canonical_replay( string $field, string $value, int $context_id ): string {
+	$sanitized = sanitize_post_field( $field, wp_slash( $value ), $context_id, 'db' );
 	// This helper is only ever called for string post fields (post_title, post_content,
 	// post_excerpt, post_status); sanitize_post_field()'s broader return type (it also handles
 	// int and array-of-int fields) is guarded here rather than widening this function's contract.
 	$sanitized = is_scalar( $sanitized ) ? (string) $sanitized : '';
 
 	// Match core's own post-sanitize, pre-unslash emoji/charset step for the three fields it
-	// actually applies to - see this function's docblock for the exact pipeline position.
+	// actually applies to - see aafm_post_field_write_confirmed()'s docblock for the exact
+	// pipeline position.
 	if ( in_array( $field, array( 'post_title', 'post_content', 'post_excerpt' ), true ) ) {
 		global $wpdb;
 		$charset = $wpdb->get_col_charset( $wpdb->posts, $field );
@@ -2325,18 +2372,7 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
 		}
 	}
 
-	$expected = wp_unslash( $sanitized );
-	$stored   = get_post_field( $field, $post_id, 'raw' );
-	$stored   = is_scalar( $stored ) ? (string) $stored : '';
-	if ( $stored === $expected ) {
-		return true;
-	}
-	// Codex round 5 R5-2: a genuine no-op resubmission (the caller asked to "change" the field to
-	// the value it already held) used to be accepted on that basis alone, without checking that
-	// storage actually stayed at $old. That missed a wp_insert_post_data filter that redirects an
-	// unchanged resubmission to some THIRD value - a real, unrequested change the caller must
-	// know about, not a successful no-op. Requiring $stored === $old too closes that.
-	return $intended === $old && $stored === $old;
+	return wp_unslash( $sanitized );
 }
 
 /**

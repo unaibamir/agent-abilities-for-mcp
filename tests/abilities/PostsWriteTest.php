@@ -554,6 +554,68 @@ final class PostsWriteTest extends TestCase {
 		$this->assertSame( 'Sub', get_post_meta( $id, 'subtitle', true ) );
 	}
 
+	/**
+	 * R2-2/R3-1 (1.7.5 deferred): a scheduled post's date does not change on this update, so
+	 * requesting status "publish" while that date is still genuinely in the future must land core
+	 * back at "future" (wp_insert_post()'s own publish->future half of the same transition). Three
+	 * rounds of trying to replicate that transition (and wp_unique_post_slug()'s dedup) in a
+	 * write-confirmation check kept finding another legitimate core normalization it misreported as
+	 * a veto, so post_status/post_name confirmation was dropped entirely (see posts.php's create
+	 * path) - this now exercises core's real behaviour with no confirmation gate in the way.
+	 *
+	 * What would break this: reintroducing a status/slug confirmation that expects the literal
+	 * requested "publish" would again reject this call with a generic error instead of the array
+	 * below.
+	 */
+	public function test_update_post_requesting_publish_on_a_still_future_post_lands_at_future(): void {
+		$this->acting_as( 'editor' );
+		$future = gmdate( 'Y-m-d H:i:s', strtotime( '+1 day' ) );
+		$post   = self::factory()->post->create(
+			array(
+				'post_status'   => 'future',
+				'post_date'     => $future,
+				'post_date_gmt' => $future,
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id' => $post,
+				'status'  => 'publish',
+			)
+		);
+
+		$this->assertIsArray( $out, 'A publish request on a still-scheduled post must succeed, not veto.' );
+		$this->assertSame( 'future', get_post_status( $post ), 'Core keeps a still-due post scheduled regardless of the requested status.' );
+	}
+
+	/**
+	 * R2-3/R3-1 (1.7.5 deferred): a Contributor (no publish_posts) requesting a pending post with
+	 * an explicit slug must not be treated as a veto when core deliberately clears that slug - see
+	 * the note above the previous test for why post_name confirmation was dropped rather than
+	 * replicated a fourth time.
+	 *
+	 * What would break this: reintroducing a slug confirmation that expects the requested slug
+	 * verbatim would reject this call with a generic error instead of the array below.
+	 */
+	public function test_create_draft_pending_from_a_non_publisher_clears_the_requested_slug(): void {
+		$this->acting_as( 'contributor' );
+
+		$out = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'Review me',
+				'content' => 'Body',
+				'status'  => 'pending',
+				'slug'    => 'review-me',
+			)
+		);
+
+		$this->assertIsArray( $out, 'A pending create from a non-publisher must succeed, not veto on the cleared slug.' );
+		$id = $out['post']['id'];
+		$this->assertSame( 'pending', get_post_status( $id ) );
+		$this->assertSame( '', get_post_field( 'post_name', $id ), "Core clears a pending post's slug when its author lacks publish_posts." );
+	}
+
 	public function test_create_rejects_bad_enrichment_and_writes_no_post(): void {
 		$this->acting_as( 'editor' );
 		$before = (int) wp_count_posts( 'post' )->publish;

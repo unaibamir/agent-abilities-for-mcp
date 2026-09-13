@@ -339,6 +339,77 @@ final class AllowlistAdminTest extends TestCase {
 		$this->assertStringContainsString( 'Row 2', (string) ( $json['data']['message'] ?? '' ) );
 	}
 
+	/**
+	 * Codex admin-ui-r1 M3: the scope-type, role and OAuth-connection selects had no <label>,
+	 * aria-label or aria-labelledby at all - the worst case of the finding, three adjacent
+	 * controls with no accessible name between them.
+	 */
+	public function test_the_new_scope_selects_have_persistent_labels(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		ob_start();
+		aafm_render_allowlist_section();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-scope-type">', $html );
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-role">', $html );
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-client">', $html );
+	}
+
+	/**
+	 * Makes the direct database SELECT aafm_read_option_views() issues for $option fail (not
+	 * merely read absent), by rewriting that one query to target a table that does not exist.
+	 * Mirrors OauthRevokeAjaxTest::fail_query_containing() / PairedSecurityWriteOrderTest::fail_option_read().
+	 *
+	 * @param string $option Option name whose row-fetch query should fail.
+	 * @return void
+	 */
+	private function fail_option_read( string $option ): void {
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $option ): string {
+				return false !== strpos( $query, "option_name = '{$option}'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+	}
+
+	/**
+	 * R3-3 (1.7.5 deferred, round 3): a failed read of the allowlist option must never render as
+	 * "No scopes narrowed yet" with Add/Save still available - that lookalike empty state is
+	 * exactly what let a transient read failure turn into real data loss (see
+	 * aafm_allowlist_overrides_for_display()'s docblock). Existing stored rows must survive
+	 * untouched, the card must say the read failed, and Add/Save must be disabled rather than
+	 * offering an editable empty table.
+	 *
+	 * What would break this: reverting the renderer to call aafm_allowlist_overrides() (or
+	 * otherwise treat a failed read as an empty array) makes it print the ordinary empty-state
+	 * paragraph with both controls enabled, and this test's assertions fail.
+	 */
+	public function test_a_failed_read_shows_an_error_and_disables_editing_instead_of_an_empty_table(): void {
+		update_option(
+			'aafm_ability_allowlist_overrides',
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'editor',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->fail_option_read( 'aafm_ability_allowlist_overrides' );
+		ob_start();
+		aafm_render_allowlist_section();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'No scopes narrowed yet', $html, 'A read failure must not look like a genuinely empty allowlist.' );
+		$this->assertStringContainsString( 'could not be read', $html, 'The card must say the read failed.' );
+		$this->assertMatchesRegularExpression( '/id="aafm-allowlist-add-row"[^>]*\bdisabled\b/', $html, 'Add scope must be disabled while the read state is unknown.' );
+		$this->assertMatchesRegularExpression( '/id="aafm-allowlist-save"[^>]*\bdisabled\b/', $html, 'Save must be disabled while the read state is unknown.' );
+	}
+
 	public function test_more_than_the_row_cap_is_refused(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );

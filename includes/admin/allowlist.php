@@ -3,10 +3,10 @@
  * Admin UX for the per-role/per-connection ability allowlist (includes/allowlist.php).
  *
  * Rendered as its own card on the Connections tab, per 228-allowlist-design.md section 5 ("the
- * operator is already looking at connections there"). The row editor is a plain textarea of
- * ability names (one per line, or the literal "all") rather than a full checkbox grid per scope -
- * a deliberate simplification given the size of the full ability catalog; see the docblock on
- * aafm_render_allowlist_section() for the upgrade path.
+ * operator is already looking at connections there"). The row editor is a searchable, grouped
+ * checkbox picker (see aafm_render_allowlist_section()) rather than a free-text field: the raw
+ * ability names it would have asked for are never shown anywhere else in the admin, and one bad
+ * name used to reject the whole save.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -83,6 +83,89 @@ function aafm_allowlist_sanitize_row( $row ) {
 }
 
 /**
+ * Build the abilities catalog the allowlist's ability picker renders from, grouped by subject.
+ *
+ * Localized to admin.js as aafmAdmin.allowlistCatalog (aafm_enqueue_admin_assets()) so every
+ * row's picker, including one added client-side via "Add scope", is built from one shared list
+ * instead of duplicating this grouping in both PHP and JS. Reads the FULL registry - the same
+ * one aafm_allowlist_sanitize_row() validates a save against - so the picker can never offer,
+ * and the validator can never refuse, a name the other side disagrees about.
+ *
+ * Grouped by subject the way the Abilities tab groups its own sub-tabs, reusing
+ * aafm_abilities_subjects()'s labels for the core subjects and aafm_integration_cards()'s
+ * labels for everything else (WooCommerce, ACF, the SEO plugins, …) - the full registry carries
+ * both, and the allowlist has to offer both.
+ *
+ * @return list<array{subject:string,label:string,abilities:list<array{name:string,label:string}>}>
+ */
+function aafm_allowlist_ability_catalog(): array {
+	$registry = aafm_get_abilities_registry_full();
+
+	$labels = aafm_abilities_subjects();
+	foreach ( aafm_integration_cards() as $slug => $card ) {
+		if ( ! isset( $labels[ $slug ] ) ) {
+			$labels[ $slug ] = (string) ( $card['label'] ?? $slug );
+		}
+	}
+
+	$groups = array();
+	foreach ( $registry as $name => $meta ) {
+		$subject = (string) ( $meta['subject'] ?? '' );
+		if ( '' === $subject ) {
+			continue;
+		}
+		if ( ! isset( $groups[ $subject ] ) ) {
+			$groups[ $subject ] = array(
+				'subject'   => $subject,
+				'label'     => $labels[ $subject ] ?? ucwords( str_replace( array( '_', '-' ), ' ', $subject ) ),
+				'abilities' => array(),
+			);
+		}
+		$groups[ $subject ]['abilities'][] = array(
+			'name'  => (string) $name,
+			'label' => (string) ( $meta['label'] ?? $name ),
+		);
+	}
+
+	// Declared subjects first, in their declared display order (matching the Abilities and
+	// Integrations tabs), then any remaining subject alphabetically by label.
+	$ordered = array();
+	foreach ( array_keys( $labels ) as $slug ) {
+		if ( isset( $groups[ $slug ] ) ) {
+			$ordered[] = $groups[ $slug ];
+			unset( $groups[ $slug ] );
+		}
+	}
+	uasort( $groups, static fn( array $a, array $b ): int => strcasecmp( $a['label'], $b['label'] ) );
+
+	return array_values( array_merge( $ordered, array_values( $groups ) ) );
+}
+
+/**
+ * Human-readable summary of a row's stored allowed-abilities value, for the no-JS-yet fallback
+ * text the picker cell renders before admin.js hydrates it into the interactive control.
+ *
+ * @param bool                              $is_all True when the row is the literal string "all".
+ * @param array<int,string>                 $names  Ability names when not "all".
+ * @param array<string,array<string,mixed>> $registry_full The full ability registry, for labels.
+ * @return string
+ */
+function aafm_allowlist_allowed_summary( bool $is_all, array $names, array $registry_full ): string {
+	if ( $is_all ) {
+		return __( 'All abilities (no narrowing)', 'agent-abilities-for-mcp' );
+	}
+	if ( empty( $names ) ) {
+		return __( 'No abilities selected - this scope can reach nothing.', 'agent-abilities-for-mcp' );
+	}
+	$labels = array_map(
+		static fn( string $name ): string => (string) ( $registry_full[ $name ]['label'] ?? $name ),
+		$names
+	);
+	sort( $labels );
+	return implode( ', ', $labels );
+}
+
+/**
  * AJAX handler: save the full set of allowlist override rows.
  *
  * Mirrors aafm_ajax_save_settings()'s nonce/capability shape. The client posts the WHOLE rows
@@ -156,55 +239,142 @@ function aafm_ajax_save_allowlist(): void {
 /**
  * Render the "Ability allowlist" card on the Connections tab.
  *
- * A plain per-row textarea of ability names (or the literal "all") rather than a checkbox grid
- * per scope: the full catalog runs to well over a hundred abilities, and a grid repeated once per
- * role and once per OAuth client would be a large amount of markup for a feature most sites will
- * touch rarely. ponytail: textarea-based row editor, not a full checkbox grid; upgrade to a grid
- * (reusing the existing aafm_ability_toggle_row() component from the Abilities tab) if operators
- * report the plain-text list is hard to use.
+ * Each row's "Allowed abilities" cell renders as a data shell only: a JSON-encoded
+ * `data-allowed` attribute (the literal string "all", or the array of ability names) and a
+ * human-readable text summary as a no-JS fallback. admin.js hydrates every such cell into the
+ * interactive searchable/grouped checkbox picker at bind time, from the same
+ * aafmAdmin.allowlistCatalog data a client-side "Add scope" row also builds its picker from -
+ * one shared list rather than duplicating the grouped-checkbox markup in both PHP and JS. This
+ * mirrors the rest of the card, which is already entirely JS-driven (add/remove/save have no
+ * non-JS path either).
+ *
+ * Hand-matches the shared collapsible-section markup (aafm_render_section() with
+ * `collapsible => true`) rather than calling that function: the section component pipes its
+ * `body` argument through wp_kses( aafm_admin_allowed_html() ), whose data-* allowlist does not
+ * include data-allowlist-row/data-scope-type/data-scope-id/data-allowed - routing this card's
+ * rows through it would silently strip all four, and admin.js reads them to remove, hydrate, and
+ * save rows. This file already escapes every value it echoes per-leaf, so writing the same
+ * head/body markup directly carries no new security surface.
  *
  * @return void
  */
 function aafm_render_allowlist_section(): void {
-	$rows  = aafm_allowlist_overrides();
-	$roles = wp_roles()->get_names();
+	$read          = aafm_allowlist_overrides_for_display();
+	$read_failed   = ! $read['ok'];
+	$rows          = $read['rows'];
+	$roles         = wp_roles()->get_names();
+	$registry_full = aafm_get_abilities_registry_full();
 
-	echo '<section class="aafm-card aafm-card-pad aafm-allowlist-card">';
-	echo '<h2>' . esc_html__( 'Ability allowlist', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '<p class="sub">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card" open>';
+	echo '<summary class="aafm-card-head">';
+	echo '<span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() ) . '</span>';
+	echo '<div class="aafm-card-head-text">';
+	echo '<h3 class="aafm-card-head-title">' . esc_html__( 'Ability allowlist', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '</div>';
+	echo '</summary>';
 
-	echo '<table class="aafm-allowlist-table" id="aafm-allowlist-table">';
-	echo '<thead><tr>';
-	echo '<th>' . esc_html__( 'Scope', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Allowed abilities', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th></th>';
-	echo '</tr></thead><tbody>';
-	foreach ( $rows as $i => $row ) {
-		$scope_type = (string) ( $row['scope_type'] ?? '' );
-		$scope_id   = (string) ( $row['scope_id'] ?? '' );
-		$allowed    = $row['allowed_abilities'] ?? array();
-		$allowed    = is_array( $allowed ) ? implode( "\n", $allowed ) : (string) $allowed;
-		$label      = 'role' === $scope_type
-			? sprintf( /* translators: %s: role display name. */ __( 'Role: %s', 'agent-abilities-for-mcp' ), $roles[ $scope_id ] ?? $scope_id )
-			: sprintf( /* translators: %s: OAuth client id. */ __( 'Connection: %s', 'agent-abilities-for-mcp' ), $scope_id );
-		echo '<tr data-allowlist-row data-scope-type="' . esc_attr( $scope_type ) . '" data-scope-id="' . esc_attr( $scope_id ) . '">';
-		echo '<td>' . esc_html( $label ) . '</td>';
-		echo '<td><textarea class="aafm-allowlist-allowed" rows="2">' . esc_textarea( $allowed ) . '</textarea></td>';
-		echo '<td><button type="button" class="aafm-btn aafm-btn-secondary aafm-allowlist-remove">' . esc_html__( 'Remove', 'agent-abilities-for-mcp' ) . '</button></td>';
-		echo '</tr>';
+	echo '<div class="aafm-section-body">';
+
+	// The description used to live inside <summary> alongside the title, per the shared
+	// component's non-collapsible shape copied here by mistake - the description then collided
+	// with the table below it, and being part of the summary's click target meant clicking the
+	// explanation toggled the card. It belongs in the body, as prose, not in the disclosure control.
+	echo '<p class="aafm-card-head-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	// R3-3 (1.7.5 deferred, round 3): a failed read must never be rendered as "no restrictions
+	// exist" - this card is editable and Save replaces the whole option, so that lookalike empty
+	// state could otherwise be saved over the real, still-stored rows the moment the database
+	// recovers. Say the read failed and refuse to offer Add/Save until a reload gets a real read.
+	if ( $read_failed ) {
+		echo '<div class="notice notice-error inline"><p>' . esc_html__( 'The current allowlist could not be read, so it is not safe to show or edit here. Reload this page once the underlying issue clears before adding or saving a scope - saving now could silently erase the existing restrictions.', 'agent-abilities-for-mcp' ) . '</p></div>';
 	}
-	echo '</tbody></table>';
 
-	echo '<div class="aafm-allowlist-add">';
+	if ( empty( $rows ) && ! $read_failed ) {
+		echo '<p class="aafm-empty-state" id="aafm-allowlist-empty">' . esc_html__( 'No scopes narrowed yet. Every role and connection can reach everything enabled above.', 'agent-abilities-for-mcp' ) . '</p>';
+	} else {
+		echo '<div class="aafm-table-wrap" id="aafm-allowlist-table-wrap">';
+		echo '<table class="widefat striped aafm-oauth-table aafm-allowlist-table" id="aafm-allowlist-table">';
+		echo '<thead><tr>';
+		echo '<th>' . esc_html__( 'Scope', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th>' . esc_html__( 'Allowed abilities', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th></th>';
+		echo '</tr></thead><tbody>';
+		foreach ( $rows as $row ) {
+			$scope_type  = (string) ( $row['scope_type'] ?? '' );
+			$scope_id    = (string) ( $row['scope_id'] ?? '' );
+			$allowed_raw = $row['allowed_abilities'] ?? array();
+			$is_all      = ! is_array( $allowed_raw ) && 'all' === $allowed_raw;
+			$names       = $is_all ? array() : array_values( array_map( 'strval', (array) $allowed_raw ) );
+			$summary     = aafm_allowlist_allowed_summary( $is_all, $names, $registry_full );
+			$label       = 'role' === $scope_type
+				? sprintf( /* translators: %s: role display name. */ __( 'Role: %s', 'agent-abilities-for-mcp' ), $roles[ $scope_id ] ?? $scope_id )
+				: sprintf( /* translators: %s: OAuth client id. */ __( 'Connection: %s', 'agent-abilities-for-mcp' ), $scope_id );
+			echo '<tr data-allowlist-row data-scope-type="' . esc_attr( $scope_type ) . '" data-scope-id="' . esc_attr( $scope_id ) . '">';
+			echo '<td>' . esc_html( $label ) . '</td>';
+			echo '<td class="aafm-allowlist-allowed-cell" data-allowed="' . esc_attr( (string) wp_json_encode( $is_all ? 'all' : $names ) ) . '">';
+			echo '<p class="aafm-allowlist-allowed-summary">' . esc_html( $summary ) . '</p>';
+			echo '</td>';
+			echo '<td><button type="button" class="aafm-btn aafm-btn-secondary aafm-allowlist-remove">' . esc_html__( 'Remove', 'agent-abilities-for-mcp' ) . '</button></td>';
+			echo '</tr>';
+		}
+		echo '</tbody></table>';
+		echo '</div>';
+	}
+
+	// The scope-id control offers only real values, following the scope-type select: a free-text
+	// field let the operator mistype a role slug, and offered no way at all to discover a client
+	// id. Both lists are already loaded on this page - $roles above, and aafm_oauth_list_clients()
+	// (used identically for the registered-clients table earlier on this tab) - so this is a
+	// second <select>, not new data. The value submitted is always the slug or client id, never
+	// the display text; server-side validation (aafm_allowlist_sanitize_row()) is unchanged and is
+	// still the real boundary, this only makes the common mistake unreachable through the UI.
+	$clients = aafm_oauth_list_clients();
+
+	// Codex admin-ui-r1 M3: three adjacent selects with no visible label at all - the worst case
+	// the finding named - each got a visually-hidden <label for>, the same pattern the Abilities
+	// search field above now uses.
+	echo '<div class="aafm-allowlist-add" id="aafm-allowlist-add">';
+	echo '<label class="screen-reader-text" for="aafm-allowlist-new-scope-type">' . esc_html__( 'Scope type', 'agent-abilities-for-mcp' ) . '</label>';
 	echo '<select id="aafm-allowlist-new-scope-type">';
 	echo '<option value="role">' . esc_html__( 'Role', 'agent-abilities-for-mcp' ) . '</option>';
 	echo '<option value="oauth_client">' . esc_html__( 'OAuth connection', 'agent-abilities-for-mcp' ) . '</option>';
 	echo '</select>';
-	echo '<input type="text" id="aafm-allowlist-new-scope-id" placeholder="' . esc_attr__( 'Role slug or client id', 'agent-abilities-for-mcp' ) . '">';
-	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-allowlist-add-row">' . esc_html__( 'Add scope', 'agent-abilities-for-mcp' ) . '</button>';
+
+	echo '<label class="screen-reader-text" for="aafm-allowlist-new-role">' . esc_html__( 'Role', 'agent-abilities-for-mcp' ) . '</label>';
+	echo '<select id="aafm-allowlist-new-role">';
+	echo '<option value="">' . esc_html__( 'Choose a role…', 'agent-abilities-for-mcp' ) . '</option>';
+	foreach ( $roles as $role_slug => $role_label ) {
+		printf( '<option value="%1$s">%2$s</option>', esc_attr( $role_slug ), esc_html( $role_label ) );
+	}
+	echo '</select>';
+
+	echo '<label class="screen-reader-text" for="aafm-allowlist-new-client">' . esc_html__( 'OAuth connection', 'agent-abilities-for-mcp' ) . '</label>';
+	echo '<select id="aafm-allowlist-new-client" hidden>';
+	if ( empty( $clients ) ) {
+		echo '<option value="">' . esc_html__( 'No OAuth connections registered yet', 'agent-abilities-for-mcp' ) . '</option>';
+	} else {
+		echo '<option value="">' . esc_html__( 'Choose a connection…', 'agent-abilities-for-mcp' ) . '</option>';
+		foreach ( $clients as $client ) {
+			$client_id       = (string) ( $client['client_id'] ?? '' );
+			$client_short_id = strlen( $client_id ) > 14 ? substr( $client_id, 0, 14 ) . '…' : $client_id;
+			// Same "(unnamed client)" fallback the registered-clients table already uses, so an
+			// unnamed connection is still identifiable rather than showing an empty option label.
+			$client_name = '' !== ( $client['client_name'] ?? '' ) ? (string) $client['client_name'] : __( '(unnamed client)', 'agent-abilities-for-mcp' );
+			printf(
+				'<option value="%1$s">%2$s</option>',
+				esc_attr( $client_id ),
+				/* translators: 1: client display name, 2: truncated client id. */
+				esc_html( sprintf( __( '%1$s (%2$s)', 'agent-abilities-for-mcp' ), $client_name, $client_short_id ) )
+			);
+		}
+	}
+	echo '</select>';
+
+	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-allowlist-add-row"' . disabled( $read_failed, true, false ) . '>' . esc_html__( 'Add scope', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '</div>';
 
-	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-allowlist-save">' . esc_html__( 'Save allowlist', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<span id="aafm-allowlist-status" class="aafm-muted" role="status"></span>';
-	echo '</section>';
+	echo '<p><button type="button" class="aafm-btn aafm-btn-primary" id="aafm-allowlist-save"' . disabled( $read_failed, true, false ) . '>' . esc_html__( 'Save allowlist', 'agent-abilities-for-mcp' ) . '</button> <span id="aafm-allowlist-status" class="aafm-muted" role="status"></span></p>';
+
+	echo '</div>'; // .aafm-section-body
+	echo '</details>';
 }

@@ -24,6 +24,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\UseImportScanner;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -500,32 +501,7 @@ final class SecurityRegressionTest extends TestCase {
 	 * @return array<int,array{0:int,1:string,2:int}|string>
 	 */
 	private function collapse_qualified_names( array $tokens ): array {
-		$name_ids = array( T_STRING, T_NS_SEPARATOR );
-		foreach ( array( 'T_NAME_QUALIFIED', 'T_NAME_FULLY_QUALIFIED', 'T_NAME_RELATIVE' ) as $const ) {
-			if ( defined( $const ) ) {
-				$name_ids[] = constant( $const );
-			}
-		}
-
-		$collapsed = array();
-		$total     = count( $tokens );
-		$i         = 0;
-		while ( $i < $total ) {
-			$token = $tokens[ $i ];
-			if ( ! is_array( $token ) || ! in_array( $token[0], $name_ids, true ) ) {
-				$collapsed[] = $token;
-				++$i;
-				continue;
-			}
-			$text = '';
-			$line = $token[2];
-			while ( $i < $total && is_array( $tokens[ $i ] ) && in_array( $tokens[ $i ][0], $name_ids, true ) ) {
-				$text .= $tokens[ $i ][1];
-				++$i;
-			}
-			$collapsed[] = array( T_STRING, $text, $line );
-		}
-		return $collapsed;
+		return UseImportScanner::collapse_qualified_names( $tokens );
 	}
 
 	/**
@@ -537,8 +513,7 @@ final class SecurityRegressionTest extends TestCase {
 	 * @return string
 	 */
 	private function trailing_name_segment( string $text ): string {
-		$pos = strrpos( $text, '\\' );
-		return false === $pos ? $text : substr( $text, $pos + 1 );
+		return UseImportScanner::trailing_name_segment( $text );
 	}
 
 	/**
@@ -547,82 +522,29 @@ final class SecurityRegressionTest extends TestCase {
 	 * that no longer matches any literal target this scan looks for. Map every imported alias
 	 * back to the real bare name it imports (function and class imports tracked separately, since
 	 * PHP resolves them in separate namespaces), so a call to the alias still counts as a call to
-	 * the primitive it actually resolves to. Only the single, non-grouped and simple grouped
-	 * `use ... {A, B as C};` forms are handled - this file does not use any other form today.
+	 * the primitive it actually resolves to.
+	 *
+	 * R4-6 (1.7.5 deferred, round 4): this used to be its own hand-rolled parser, one of three
+	 * near-duplicates across the test suite that each accreted a fix for whichever single syntax
+	 * case the last review round happened to quote - group prefixes, then whitespace, then
+	 * comments - and stayed broken for every case nobody had quoted yet (non-ASCII aliases,
+	 * `use const`, mixed grouped `function`/`const` members, trait-use-in-a-class-body mistaken
+	 * for an import, aliases leaking across namespace blocks, a fully-qualified call wrongly
+	 * resolved through an unrelated alias). All three now share one parser,
+	 * UseImportScanner::parse_aliases() - see that class for the grammar and the fixtures proving
+	 * each case. reduce_to_trailing() keeps this file's existing "same bare trailing name,
+	 * regardless of which namespace it came from" matching behaviour.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens (see
 	 *                                                               collapse_qualified_names()).
 	 * @return array{function:array<string,string>,class:array<string,string>}
 	 */
 	private function parse_use_aliases( array $tokens ): array {
-		$aliases = array(
-			'function' => array(),
-			'class'    => array(),
+		$aliases = UseImportScanner::parse_aliases( $tokens );
+		return array(
+			'function' => UseImportScanner::reduce_to_trailing( $aliases['function'] ),
+			'class'    => UseImportScanner::reduce_to_trailing( $aliases['class'] ),
 		);
-		$total   = count( $tokens );
-		foreach ( $tokens as $i => $token ) {
-			if ( ! is_array( $token ) || T_USE !== $token[0] ) {
-				continue;
-			}
-			$next = $this->significant_token( $tokens, $i, 1 );
-			if ( is_string( $next ) && '(' === $next ) {
-				continue; // A closure's `use (&$x)` capture, not an import.
-			}
-
-			$kind = 'class';
-			$j    = $i + 1;
-			while ( $j < $total && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
-				++$j;
-			}
-			if ( $j < $total && is_array( $tokens[ $j ] ) && T_FUNCTION === $tokens[ $j ][0] ) {
-				$kind = 'function';
-				++$j;
-			} elseif ( $j < $total && is_array( $tokens[ $j ] ) && T_CONST === $tokens[ $j ][0] ) {
-				++$j; // `use const X;` never matches a primitive name - skip past it harmlessly.
-			}
-
-			$entry = '';
-			while ( $j < $total && ';' !== $tokens[ $j ] ) {
-				$t = $tokens[ $j ];
-				if ( ',' === $t || '}' === $t ) {
-					$this->record_use_alias( $aliases[ $kind ], $entry );
-					$entry = '';
-					++$j;
-					continue;
-				}
-				if ( '{' === $t ) {
-					++$j;
-					continue;
-				}
-				$entry .= is_array( $t ) ? $t[1] : $t;
-				++$j;
-			}
-			$this->record_use_alias( $aliases[ $kind ], $entry );
-		}
-		return $aliases;
-	}
-
-	/**
-	 * Records one parsed `use` alias into the given map.
-	 *
-	 * Codex round 8, R8-5: the map key is lower-cased on write - PHP resolves both function and
-	 * class names case-insensitively, so `use function wp_safe_remote_get as fetch;` must still be
-	 * found by a call written `FETCH(...)`. resolves_to() lower-cases the same way on lookup.
-	 *
-	 * @param array<string,string> $map Lower-cased alias => real bare name, mutated in place.
-	 * @param string               $entry Raw "Qualified\Name" or "Qualified\Name as Alias" text.
-	 */
-	private function record_use_alias( array &$map, string $entry ): void {
-		$entry = trim( $entry );
-		if ( '' === $entry ) {
-			return;
-		}
-		if ( preg_match( '/^(.*?)\s+as\s+(\w+)$/i', $entry, $m ) ) {
-			$map[ strtolower( $m[2] ) ] = $this->trailing_name_segment( trim( $m[1] ) );
-			return;
-		}
-		$real                       = $this->trailing_name_segment( $entry );
-		$map[ strtolower( $real ) ] = $real;
 	}
 
 	/**
@@ -633,8 +555,12 @@ final class SecurityRegressionTest extends TestCase {
 	 * case-insensitively (class constants and property/method names on an object are the only
 	 * case-sensitive parts of a call). A prior case-sensitive variant here missed a call written in
 	 * a different case, or through an alias whose declared case did not match the call site's - the
-	 * alias lookup is now keyed by lower case (see record_use_alias()) and the final comparison
-	 * always uses strcasecmp().
+	 * alias lookup is now keyed by lower case and the final comparison always uses strcasecmp().
+	 *
+	 * R4-6 (1.7.5 deferred, round 4): a call written fully qualified (`\wp_remote_get()`) resolves
+	 * to the literal global name in real PHP, regardless of any local `use ... as wp_remote_get;`
+	 * pointing that bare name somewhere else - an alias never applies to a fully qualified
+	 * reference. The alias lookup below is skipped entirely for one, closing that bypass.
 	 *
 	 * @param string               $token_text Collapsed token text.
 	 * @param string               $target Bare target name to match.
@@ -643,7 +569,7 @@ final class SecurityRegressionTest extends TestCase {
 	 */
 	private function resolves_to( string $token_text, string $target, array $aliases ): bool {
 		$bare     = $this->trailing_name_segment( $token_text );
-		$resolved = $aliases[ strtolower( $bare ) ] ?? $bare;
+		$resolved = UseImportScanner::is_fully_qualified( $token_text ) ? $bare : ( $aliases[ strtolower( $bare ) ] ?? $bare );
 		return 0 === strcasecmp( $target, $resolved );
 	}
 
@@ -953,6 +879,210 @@ final class SecurityRegressionTest extends TestCase {
 		$tokens = $this->collapsed_fixture_tokens( '\\WpOrg\\Requests\\Requests::get( $url );' );
 
 		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests' ) );
+	}
+
+	/**
+	 * F10 (1.7.5 deferred): the ordinary whitespace after the comma in a grouped import
+	 * (`{Exception, Requests as Net}` - a space is standard formatting, not an edge case) used to
+	 * land between the group's shared namespace prefix and the second member's own name, so
+	 * trailing_name_segment() returned " Requests" (a leading space) instead of "Requests" and the
+	 * alias never resolved. Both members of this group must resolve: the first is a bare import,
+	 * the second is aliased, exercising both the B6 prefix-carry-forward fix and this whitespace
+	 * fix together the way a real grouped Requests import actually reads.
+	 */
+	public function test_scanner_counts_both_members_of_a_grouped_import_with_ordinary_spacing(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\{Exception, Requests as Net};\nnew Exception();\nNet::get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 'Exception', $aliases['class']['exception'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+
+		// R4-7 (1.7.5 deferred, round 4): the two assertions above only ever compare bare trailing
+		// names, so they cannot tell "the group's namespace prefix was actually carried forward
+		// onto the second member" apart from "the prefix was dropped and the bare name matched by
+		// coincidence" - removing the prefix-reseeding fix (B6) does not change either assertion's
+		// result. Asserting the fully qualified identity here - straight from
+		// UseImportScanner::parse_aliases(), before reduce_to_trailing() throws the namespace
+		// away - is what actually distinguishes the two: only the version with the prefix carried
+		// forward resolves to the real qualified name.
+		$qualified = UseImportScanner::parse_aliases( $tokens );
+		$this->assertSame( 'WpOrg\\Requests\\Exception', $qualified['class']['exception'] ?? null );
+		$this->assertSame( 'WpOrg\\Requests\\Requests', $qualified['class']['net'] ?? null );
+	}
+
+	/**
+	 * R2-8 (1.7.5 deferred, round 2): a comment between a grouped member's name and its "as"
+	 * alias - legal PHP, `use WpOrg\Requests\{Exception, Requests /* transport *\/ as Net};` -
+	 * used to be appended into the parsed entry verbatim, so trailing_name_segment() returned
+	 * "Requests /* transport *\/" instead of "Requests" and the alias never resolved, concealing
+	 * every call through it. Also covers a comment right after "as", the other side of the same
+	 * gap. Fails if parse_use_aliases() stops discarding comment tokens mid-entry.
+	 */
+	public function test_scanner_counts_a_grouped_import_with_a_comment_around_its_alias(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\{Exception, Requests /* transport */ as Net};\nnew Exception();\nNet::get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 'Exception', $aliases['class']['exception'] ?? null );
+		$this->assertSame( 'Requests', $aliases['class']['net'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+
+		$tokens2  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\{Exception, Requests as /* transport */ Net};\nNet::get( \$url );"
+		);
+		$aliases2 = $this->parse_use_aliases( $tokens2 );
+
+		$this->assertSame( 'Requests', $aliases2['class']['net'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens2, 'Requests', $aliases2['class'] ) );
+	}
+
+	/**
+	 * R3-7 (1.7.5 deferred, round 3): the test above already covers a comment with real whitespace
+	 * on at least one side of "as". This covers the narrower case that broke: a comment with NO
+	 * whitespace on either side, which - before this fix - collapsed straight into "Requestsas" or
+	 * "asNet" with nothing standing in for the discarded comment token at all.
+	 *
+	 * What would break this: reverting the comment-skip in parse_use_aliases() to omit the
+	 * replacement space makes every alias below resolve to null, and the corresponding call count
+	 * drops to 0.
+	 */
+	public function test_scanner_counts_a_grouped_import_with_no_whitespace_around_its_comment(): void {
+		foreach (
+			array(
+				'use WpOrg\\Requests\\{Exception, Requests/**/as Net};',
+				'use WpOrg\\Requests\\{Exception, Requests as/**/Net};',
+				'use WpOrg\\Requests\\{Exception, Requests/**/as/**/Net};',
+			) as $source
+		) {
+			$tokens  = $this->collapsed_fixture_tokens( "{$source}\nNet::get( \$url );" );
+			$aliases = $this->parse_use_aliases( $tokens );
+
+			$this->assertSame( 'Requests', $aliases['class']['net'] ?? null, "Failed for: {$source}" );
+			$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ), "Failed for: {$source}" );
+		}
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): a non-ASCII alias identifier, e.g. imported as `Réseau`. The
+	 * retired parser matched aliases with `\w+`, an ASCII-only character class, so this alias was
+	 * never recognised and the call through it went uncounted. What would break this: reverting
+	 * UseImportScanner::parse_optional_alias() to a `\w+`-style regex over reassembled text.
+	 */
+	public function test_scanner_counts_a_call_through_a_non_ascii_alias(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\Requests as Réseau;\nRéseau::get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 'Requests', $aliases['class']['réseau'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): `use const` must never populate the class or function alias
+	 * maps - the retired parser's default 'class' kind stuck whenever a `const` clause was not
+	 * separately recognised, so a constant named after a tracked primitive could poison the class
+	 * alias map. What would break this: UseImportScanner treating `T_CONST` the same as no keyword
+	 * at all.
+	 */
+	public function test_scanner_does_not_treat_a_use_const_import_as_a_class_or_function_alias(): void {
+		$tokens  = $this->collapsed_fixture_tokens( "use const Foo\\Bar\\Requests;\n" );
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertArrayNotHasKey( 'requests', $aliases['class'] );
+		$this->assertArrayNotHasKey( 'requests', $aliases['function'] );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): a group whose members individually override the statement's
+	 * default kind with a leading `function`/`const` keyword. What would break this: a parser that
+	 * applies one kind to every member of a group regardless of these per-member keywords.
+	 */
+	public function test_scanner_resolves_a_mixed_grouped_import_by_each_members_own_kind(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use WpOrg\\Requests\\{Requests as Net, function wp_safe_remote_get as fetch, const SOME_CONST};\n"
+				. "Net::get( \$url );\nfetch( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 'Requests', $aliases['class']['net'] ?? null );
+		$this->assertSame( 'wp_safe_remote_get', $aliases['function']['fetch'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+		$this->assertSame( 1, $this->count_function_call_tokens( $tokens, 'wp_safe_remote_get', $aliases['function'] ) );
+
+		$full = UseImportScanner::parse_aliases( $tokens );
+		$this->assertSame( 'WpOrg\\Requests\\SOME_CONST', $full['const']['some_const'] ?? null );
+		$this->assertArrayNotHasKey( 'some_const', $full['class'] );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): a trait-use statement inside a class body is not a namespace
+	 * import and must not be parsed as one - `use SomeTrait;` here names a trait, not an alias for
+	 * anything callable, and a parser that mistook it for an import could have a trait sharing a
+	 * tracked primitive's bare name silently "import" that name into the class alias map. A real
+	 * `use` import declared after the class must still resolve normally. What would break this:
+	 * UseImportScanner treating every T_USE token the same regardless of whether it sits inside a
+	 * class-like body.
+	 */
+	public function test_scanner_does_not_treat_trait_use_inside_a_class_body_as_an_import(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"class Wrapper {\n\tuse SomeTrait;\n\tuse A, B { A::x insteadof B; B::y as protected z; }\n}\n"
+				. "use WpOrg\\Requests\\Requests as Net;\nNet::get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertArrayNotHasKey( 'sometrait', $aliases['class'] );
+		$this->assertArrayNotHasKey( 'a', $aliases['class'] );
+		$this->assertSame( 'Requests', $aliases['class']['net'] ?? null );
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): `use` imports are scoped to the namespace block they appear
+	 * in - an alias declared in one namespace block must not leak into the next one, which the
+	 * retired parser's single running map could not tell apart. What would break this:
+	 * UseImportScanner::parse_aliases() no longer resetting on T_NAMESPACE.
+	 */
+	public function test_scanner_does_not_carry_an_alias_across_a_namespace_boundary(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"namespace A;\nuse WpOrg\\Requests\\Requests as Net;\n"
+				. "namespace B;\nuse Some\\Other\\Thing;\nNet::get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertArrayNotHasKey( 'net', $aliases['class'] );
+		$this->assertSame( 'Thing', $aliases['class']['thing'] ?? null );
+		// Without the namespace-A alias, the bare "Net::get()" call from namespace B cannot
+		// resolve to Requests through it.
+		$this->assertSame( 0, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): a fully qualified call bypasses every `use` import - PHP
+	 * resolves `\wp_remote_get()` to the literal global function regardless of any local
+	 * `use function harmless as wp_remote_get;` re-pointing that bare name elsewhere. The retired
+	 * resolver looked the bare trailing name up in the alias map unconditionally, so an alias could
+	 * override an explicitly fully qualified reference and hide the real call from the scan. What
+	 * would break this: resolves_to() no longer checking UseImportScanner::is_fully_qualified()
+	 * before consulting the alias map.
+	 */
+	public function test_scanner_does_not_let_an_alias_override_an_explicitly_fully_qualified_call(): void {
+		$tokens  = $this->collapsed_fixture_tokens(
+			"use function harmless as wp_remote_get;\n\\wp_remote_get( \$url );"
+		);
+		$aliases = $this->parse_use_aliases( $tokens );
+
+		$this->assertSame( 1, $this->count_function_call_tokens( $tokens, 'wp_remote_get', $aliases['function'] ) );
+
+		$class_tokens  = $this->collapsed_fixture_tokens(
+			"use Safe as Requests;\n\\WpOrg\\Requests\\Requests::get( \$url );"
+		);
+		$class_aliases = $this->parse_use_aliases( $class_tokens );
+
+		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $class_tokens, 'Requests', $class_aliases['class'] ) );
 	}
 
 	/**

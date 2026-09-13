@@ -401,16 +401,25 @@ function aafm_exec_yoast_update_post( array $input ) {
 
 	// Tracked by real META KEY, not the unified field name, so the confirmation pass below runs
 	// sanitize_meta() against the exact key a registered sanitize callback would fire on.
-	$post_type     = (string) get_post_type( $id );
+	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
+	// call core itself makes at write time, rather than the raw get_post_type() - a
+	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
+	// at write time.
+	$post_type     = (string) get_object_subtype( 'post', $id );
 	$expected_meta = array();
+
+	// Read before each write below, so aafm_meta_write_confirmed() can tell a landed change from
+	// a silent veto rather than only replaying sanitize_meta() against a same-process recompute.
+	$old_meta = array();
 
 	$url_fields = aafm_yoast_url_fields();
 	foreach ( aafm_yoast_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw   = (string) $input[ $field ];
-		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw              = (string) $input[ $field ];
+		$clean            = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$old_meta[ $key ] = get_post_meta( $id, $key, true );
 		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
 		// is stripped unless it is slashed first, exactly like the sibling meta writers.
 		update_post_meta( $id, $key, wp_slash( $clean ) );
@@ -425,19 +434,21 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( isset( $spec['enum'] ) ) {
 			// An out-of-enum value is dropped (not written), so a bad directive cannot persist.
 			if ( in_array( $raw, $spec['enum'], true ) ) {
+				$old_meta[ $spec['key'] ] = get_post_meta( $id, $spec['key'], true );
 				update_post_meta( $id, $spec['key'], wp_slash( $raw ) );
 				$expected_meta[ $spec['key'] ] = $raw;
 			}
 			continue;
 		}
 		// adv: filter the CSV against the allowlist, drop unknown tokens, write the clean CSV.
-		$tokens = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
-		$kept   = array_values(
+		$tokens                   = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
+		$kept                     = array_values(
 			array_filter(
 				$tokens,
 				static fn( string $t ): bool => in_array( $t, $spec['allow'], true )
 			)
 		);
+		$old_meta[ $spec['key'] ] = get_post_meta( $id, $spec['key'], true );
 		update_post_meta( $id, $spec['key'], wp_slash( implode( ',', $kept ) ) );
 		$expected_meta[ $spec['key'] ] = implode( ',', $kept );
 	}
@@ -449,7 +460,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 	// not its pre-write intent, so a registered sanitize callback's legitimate normalization is not
 	// mistaken for a veto (matches the sibling meta writers in meta.php, terms.php, user-meta.php).
 	foreach ( $expected_meta as $key => $value ) {
-		if ( ! aafm_meta_write_confirmed( get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
+		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
 			return new WP_Error(
 				'aafm_yoast_write_unconfirmed',
 				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )

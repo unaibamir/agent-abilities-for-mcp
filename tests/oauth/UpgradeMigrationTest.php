@@ -27,6 +27,24 @@ use AAFM\Tests\TestCase;
 class UpgradeMigrationTest extends TestCase {
 
 	/**
+	 * F9 (1.7.5 deferred): the clean test bootstrap loads the plugin on muplugins_loaded, so
+	 * aafm_oauth_dcr_adopt_on_by_default() already ran once for real before ANY test's own
+	 * fixture setup - certifying aafm_oauth_dcr_default_on_touched (its independent B2 sibling
+	 * signal) in the process. Deleting only aafm_oauth_dcr_default_on_migrated, as every DCR
+	 * adoption test here does, left that touched marker still set to '1' from bootstrap, so the
+	 * function's second guard returned early before ever reaching the DCR-enable write these
+	 * tests exercise. Clear both markers here so every test starts from a genuinely
+	 * not-yet-migrated state; a test that needs to simulate the sibling being already certified
+	 * (test_dcr_adoption_keeps_one_and_adopts_absent()'s first call) still does that explicitly
+	 * inline.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		delete_option( 'aafm_oauth_dcr_default_on_touched' );
+	}
+
+	/**
 	 * An install that updated in place from a pre-1.3.0 version has NO stored OAuth
 	 * toggle row and was running OAuth on the old on-by-default reader. The migration
 	 * writes '1' for OAuth so the surface (and any live connection) keeps working after
@@ -71,7 +89,12 @@ class UpgradeMigrationTest extends TestCase {
 		aafm_oauth_dcr_adopt_on_by_default();
 		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
 
+		// B2 (1.7.5 deferred): resetting BOTH the guard row and its independent sibling to
+		// simulate a genuinely fresh, not-yet-migrated install for the second scenario below -
+		// the first call above already certified the sibling, and leaving it set would make the
+		// second call return early without ever adopting the absent row this scenario tests.
 		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		delete_option( 'aafm_oauth_dcr_default_on_touched' );
 		delete_option( 'aafm_oauth_dcr_enabled' );
 		aafm_oauth_dcr_adopt_on_by_default();
 		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ) );
@@ -111,6 +134,15 @@ class UpgradeMigrationTest extends TestCase {
 
 		// Operator deliberately turns it back off after the one-time adoption.
 		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		// R2-9 (1.7.5 deferred, round 2): the same adoption call above also certified the
+		// independent B2 touched marker, in the database, untouched by the cache poisoning below.
+		// Left in place, that marker's own guard reads its genuinely-'1' database row and returns
+		// early on its own, so this test would still pass even if the original guard under test
+		// (aafm_oauth_dcr_default_on_migrated) regressed back to a cache-trusting get_option()
+		// read. Delete the sibling marker's row here so the second guard is genuinely absent and
+		// this scenario isolates the FIRST guard's stale-cache-ignoring read.
+		delete_option( 'aafm_oauth_dcr_default_on_touched' );
 
 		// A stale cache layer still claims the guard has not run, even though the real row is '1'.
 		$all                                       = wp_load_alloptions( true );
@@ -299,6 +331,109 @@ class UpgradeMigrationTest extends TestCase {
 			)
 		);
 		$this->assertNotEmpty( $rows, 'A failed marker write must be logged, not silently retried forever with no trace.' );
+	}
+
+	/**
+	 * B2 (1.7.5 deferred): the actual security property the second signal restores. The guard
+	 * row's own write keeps failing to certify forever (never recovers, unlike a one-off blip),
+	 * so under the old single-signal design every later request would re-read DCR from scratch
+	 * and re-flip an operator's own opt-out back on, since a stored '0' looked indistinguishable
+	 * from the untouched pre-migration default. With the independently keyed sibling signal
+	 * certifying on the first call (the marker sabotage only targets the guard row, not the
+	 * sibling), a later request must respect the opt-out even though the guard has still never
+	 * been set.
+	 */
+	public function test_dcr_adoption_respects_a_later_optout_even_when_the_guard_write_never_persists(): void {
+		delete_option( 'aafm_oauth_dcr_default_on_migrated' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		$this->make_option_write_unpersistable( 'aafm_oauth_dcr_default_on_migrated', '0' );
+		aafm_oauth_dcr_adopt_on_by_default();
+		$this->assertSame( '1', get_option( 'aafm_oauth_dcr_enabled' ), 'Precondition: the first call still adopts DCR on.' );
+		$this->assertSame( '0', get_option( 'aafm_oauth_dcr_default_on_migrated', '0' ), 'Precondition: the guard write is still failing to certify.' );
+
+		// Operator deliberately turns it back off. The guard has STILL never been set.
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		aafm_oauth_dcr_adopt_on_by_default();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_enabled' ),
+			'A persistently failing guard write must not mean a persistently re-enabled toggle: the operator\'s opt-out survives.'
+		);
+		$this->assertFalse( aafm_oauth_dcr_enabled() );
+	}
+
+	/**
+	 * R2-4/R3-9 (1.7.5 deferred, rounds 2 and 3): the toggle-preservation migration already
+	 * completed for real, and 'aafm_oauth_enabled' was later deliberately deleted (e.g. an
+	 * uninstall-and-reinstall, or an operator reset) rather than merely left at '0' - that ABSENCE
+	 * is the one state that makes the function's own write path fire. R3-9 found the original
+	 * fixture here left 'aafm_oauth_enabled' PRESENT at '0', so removing the guard-read abort still
+	 * left the function's own "row already present" branch as a no-op, and this test passed either
+	 * way - it never actually exercised the abort it claimed to. Absence is the only fixture that
+	 * distinguishes: with the abort, the missing row stays missing; without it, the failed guard
+	 * read is misread as "never migrated" and this function creates it as '1'.
+	 */
+	public function test_toggle_preservation_aborts_when_the_guard_read_fails(): void {
+		update_option( 'aafm_oauth_toggle_migrated', '1' );
+		delete_option( 'aafm_oauth_enabled' );
+
+		$this->fail_option_read( 'aafm_oauth_toggle_migrated' );
+		// The faulted query prints a wpdb error notice directly (this call goes straight to the
+		// migration function, not through an AJAX handler that already buffers output) - swallow
+		// it so PHPUnit's strict-output-during-tests check does not mark this test risky.
+		ob_start();
+		aafm_oauth_preserve_toggle_on_upgrade();
+		ob_end_clean();
+
+		$this->assertFalse(
+			get_option( 'aafm_oauth_enabled', false ),
+			'A guard read that itself failed must not be treated as "never migrated" and create a row that was deliberately absent.'
+		);
+	}
+
+	/**
+	 * R2-4/R3-9 (1.7.5 deferred, rounds 2 and 3): R3-9 found the original fixture here also set
+	 * the SECOND, independent 'aafm_oauth_dcr_default_on_touched' guard - which short-circuits the
+	 * function on its own, before the first guard's read failure is ever exercised, so this test
+	 * passed even with that failure's abort removed. Leaving the touched marker unset (set_up()
+	 * already deletes it every test) means the first guard's own abort is the only thing that can
+	 * still stop the write below.
+	 */
+	public function test_dcr_adoption_aborts_when_the_guard_read_fails(): void {
+		update_option( 'aafm_oauth_dcr_default_on_migrated', '1' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+
+		$this->fail_option_read( 'aafm_oauth_dcr_default_on_migrated' );
+		ob_start();
+		aafm_oauth_dcr_adopt_on_by_default();
+		ob_end_clean();
+
+		$this->assertSame(
+			'0',
+			get_option( 'aafm_oauth_dcr_enabled' ),
+			'A guard read that itself failed must not be treated as "never migrated" and overwrite an operator\'s explicit opt-out.'
+		);
+	}
+
+	/**
+	 * Makes the direct database SELECT aafm_read_option_views() issues for $option fail (not
+	 * merely read absent), by rewriting that one query to target a table that does not exist -
+	 * the same technique OauthRevokeAjaxTest uses for a write query, applied to this read.
+	 *
+	 * @param string $option Option name whose row-fetch query should fail.
+	 * @return void
+	 */
+	private function fail_option_read( string $option ): void {
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $option ): string {
+				return false !== strpos( $query, "option_name = '{$option}'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
 	}
 
 	/**

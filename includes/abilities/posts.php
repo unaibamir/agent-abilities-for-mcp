@@ -933,6 +933,44 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 		return aafm_generic_error();
 	}
 
+	// B3 (1.7.5 deferred): the reread above only proved the row exists, never that what came back
+	// matches what this create actually asked for - a wp_insert_post_data filter silently vetoing
+	// or normalizing a field would still report success while the response carried the caller's
+	// stale intent instead of what storage actually holds. Same shape as R5-2, closed at other
+	// write sites through these same shared helpers. $sanitize_context_id is 0, not (int) $id:
+	// core's own sanitize_post( $postarr, 'db' ) inside wp_insert_post() ran BEFORE this row
+	// existed, with ID defaulted to 0 (aafm_post_field_write_confirmed()'s own docblock, R7-4).
+	//
+	// F1/R2-1/R2-2/R2-3/R3-1 (1.7.5 deferred, three rounds): post_status and post_name are
+	// deliberately NOT confirmed here at all, not even through a replicated core pipeline. Three
+	// rounds of trying to replicate wp_insert_post()'s own status/slug resolution (the
+	// publish<->future date transition, wp_unique_post_slug()'s dedup, its filters, the
+	// pending-post capability clearing, Trash-restore metadata, emoji charset encoding, and the
+	// order those run in relative to each other and to the row's real id/date/parent) kept finding
+	// another legitimate core normalization that a strict comparison misreported as a vetoed
+	// write - see includes/helpers.php's git history for the discarded aafm_effective_post_status()
+	// and aafm_post_slug_write_confirmed() helpers. Replicating that pipeline correctly is
+	// replicating WordPress core; a wrong replication is worse than no confirmation, because it
+	// falsely rejects (and, on GeoDirectory's create path, deletes) an otherwise valid write.
+	// title/content/excerpt do not have this problem - they run through sanitize_post_field()'s
+	// ordinary save-filter pipeline with no separate core-side transition - so those stay
+	// confirmed below. Accepted blind spot: a wp_insert_post_data filter that swaps status or slug
+	// to another plausible value (still a real status, still non-empty/unique) is indistinguishable
+	// from legitimate core/site normalization and is not detected.
+	$fields_to_confirm = array(
+		'post_title'   => $title,
+		'post_content' => (string) $postarr['post_content'],
+		'post_excerpt' => (string) $postarr['post_excerpt'],
+	);
+	foreach ( $fields_to_confirm as $field => $intended ) {
+		// A CREATE: the field never existed before this row did, so its pre-write value is
+		// always ''. See aafm_post_field_write_confirmed()'s docblock for why the exact-replay
+		// check is no longer the only signal.
+		if ( ! aafm_post_field_write_confirmed( (int) $id, $field, $intended, '', 0 ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	// Apply the pre-validated enrichment now that the id exists.
 	aafm_apply_write_enrichment( (int) $id, $enrichment );
 
@@ -1248,6 +1286,31 @@ function aafm_exec_update_post( array $input ) {
 	if ( ! $updated instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
+
+	// B3 (1.7.5 deferred): the reread above only proved the post still exists, never that what
+	// came back matches this update's own request - a wp_insert_post_data filter silently
+	// vetoing or normalizing one of these fields would still report success while the response
+	// carried the caller's stale intent instead of what storage actually holds. Only the fields
+	// THIS call actually set are checked, each against its CANONICAL sanitize_post_field() form
+	// (aafm_post_field_write_confirmed()'s default $sanitize_context_id, the existing $id - this
+	// is an update, the row already existed at sanitize time).
+	//
+	// F1/R2-1/R2-2/R2-3/R3-1 (1.7.5 deferred, three rounds): post_status and post_name are
+	// deliberately NOT confirmed here - see the create path above for the full reasoning. Same
+	// accepted blind spot on this path: a filter swapping status or slug to another plausible
+	// value is not detected.
+	// $post was read before wp_update_post() ran (get_post()'s default 'raw' filter, same
+	// context aafm_post_field_write_confirmed()'s own read-back uses), so its fields are each
+	// field's genuine pre-write value.
+	foreach ( array( 'post_title', 'post_content', 'post_excerpt' ) as $field ) {
+		if ( ! isset( $postarr[ $field ] ) ) {
+			continue;
+		}
+		if ( ! aafm_post_field_write_confirmed( $id, $field, (string) $postarr[ $field ], (string) $post->$field ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	$response = array( 'post' => aafm_redact_post( $updated ) );
 	if ( ! empty( $guard['warnings'] ) ) {
 		$response['content_warnings'] = $guard['warnings'];
@@ -1648,7 +1711,7 @@ function aafm_exec_replace_in_post( array $input ) {
 	// CANONICAL sanitize_post_field() form, not $new itself, so a legitimate normalization (kses
 	// for a user without unfiltered_html re-running over the whole assembled document) is not
 	// mistaken for a veto.
-	if ( ! $updated instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new ) ) {
+	if ( ! $updated instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new, $content ) ) {
 		return new WP_Error(
 			'aafm_replace_write_unconfirmed',
 			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )
@@ -1942,7 +2005,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
 		// mistaken for a veto.
 		$after = get_post( (int) $result );
-		if ( ! $after instanceof WP_Post || ! aafm_post_field_write_confirmed( $post->ID, 'post_content', $new ) ) {
+		if ( ! $after instanceof WP_Post || ! aafm_post_field_write_confirmed( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
 			++$failed;
 			continue;
 		}

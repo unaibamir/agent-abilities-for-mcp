@@ -195,6 +195,48 @@ function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
 }
 
 /**
+ * Whether aafm_oauth_has_consent()'s own read could not be completed, as opposed to genuinely
+ * finding no consent row for this user/client pair.
+ *
+ * Codex round 6, R6-2: aafm_oauth_has_consent() correctly fails closed (reports no consent)
+ * either way, and this does not change that. What it fixes is the one live call site that
+ * re-checks consent at authorization-code redemption (rest.php): it used to COMMIT the code's
+ * consumption and tell the client its grant was invalid even when the true cause was this read
+ * failing, permanently burning an otherwise-valid, unexpired code over a transient database
+ * fault. A caller that needs to report the fault honestly and roll back the consumption instead
+ * checks this FIRST, only after aafm_oauth_has_consent() has already returned false; it must
+ * never be used as a substitute for that function's own fail-closed answer.
+ *
+ * Deliberately a separate, narrower probe rather than a change to aafm_oauth_has_consent()'s own
+ * contract - that function has other callers (the authorize-screen consent check, the consent
+ * REST controller) that have no need to distinguish the reason.
+ *
+ * @param int    $user_id   WordPress user ID.
+ * @param string $client_id The public client identifier.
+ * @return bool True when the underlying read itself failed. An invalid user id or empty client id
+ *              is NOT a read failure - it is a genuine no-consent case, matching
+ *              aafm_oauth_has_consent()'s own guard.
+ */
+function aafm_oauth_consent_lookup_failed( int $user_id, string $client_id ): bool {
+	if ( $user_id <= 0 || '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$view = aafm_wpdb_scalar(
+		$wpdb->prepare(
+			'SELECT id FROM %i WHERE wp_user_id = %d AND client_id = %s',
+			$wpdb->prefix . 'aafm_oauth_consents',
+			$user_id,
+			$client_id
+		)
+	);
+
+	return ! $view['ok'];
+}
+
+/**
  * Record (or refresh) the user's consent for a client.
  *
  * The consents table has a UNIQUE (wp_user_id, client_id) key, so $wpdb->replace()

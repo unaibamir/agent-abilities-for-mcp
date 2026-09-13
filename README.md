@@ -9,7 +9,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.7.4 |
+| **Stable tag** | 1.7.5 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -295,6 +295,14 @@ It makes two kinds of outbound HTTP request on its own: the Connection tab's rea
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), run on your own machine and not bundled with this plugin.
 
 ## Changelog
+### 1.7.5
+
+* **Feature:** The Connection tab gained a searchable allowlist checkbox picker (replacing a free-text textarea), real role and client selects, a Client ID copy control, and paginated tables; the Abilities tab gained a cross-sub-tab search field.
+* **Fix:** A zero-match abilities search left the Save button stranded on a bare card with no context above it; the savebar now hides with the empty result and returns once matches come back.
+* **Fix:** The client picker's hover and selected states shared the same border and background, so a hovered card and the actually-selected one looked the same; hover now shows only a border outline.
+* **Fix:** Closed a batch of allowlist and search issues found in review: ability order round-trips on re-save, a stale search clears on keyboard tab navigation, a large allowlist no longer builds its full checkbox catalog at page load, and new controls carry accessible names and translated labels.
+* **Fix:** Post, block, and template writes now confirm against what actually landed in the database, and a stuck OAuth registration migration can no longer re-enable a switch you turned off. Comment counts no longer hint at comments you cannot see, and a failed token revoke no longer reports success.
+
 ### 1.7.4
 
 * **Feature:** 26 new abilities cover The Events Calendar, Event Tickets, Slim SEO, Avada, and GeoDirectory, plus uploading media straight from a URL. All of them stay off until you turn them on.

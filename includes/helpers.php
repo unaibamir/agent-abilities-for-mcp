@@ -1664,9 +1664,21 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// surfacing allowlisted meta here unconditionally would leak editor-only meta to
 	// any authenticated reader. Gate the block on the same per-object edit check the
 	// meta ability uses; readers who cannot edit this post get no meta block at all.
+	//
+	// Codex round 6, R6-5: edit permission is a DIFFERENT axis from the operator's meta
+	// exposure policy, and this loop used to iterate aafm_allowed_meta_keys() directly -
+	// the raw allow list, with no deny/deny-`*`/hard-block applied. An editable post with
+	// an explicitly denied key, or a site with the deny-`*` kill switch on, still had that
+	// key returned here even though the dedicated meta-reading abilities correctly refuse
+	// it. Every candidate key now goes through aafm_validate_meta_key(), the same
+	// chokepoint the bulk reader (aafm_exec_get_all_post_meta(), meta.php) already uses,
+	// so hard-block/deny/deny-`*` are honoured here exactly as they are everywhere else.
 	$meta = array();
 	if ( aafm_can_edit_post_object( $post ) ) {
 		foreach ( aafm_allowed_meta_keys() as $meta_key ) {
+			if ( ! is_string( aafm_validate_meta_key( (string) $meta_key ) ) ) {
+				continue; // hard-blocked, denied, or deny-`*`: never surfaced here either.
+			}
 			$value = get_post_meta( $post->ID, $meta_key, true );
 			// Skip empty strings (absent keys) and never expose non-scalar blobs.
 			if ( is_scalar( $value ) && '' !== $value ) {
@@ -2139,6 +2151,44 @@ function aafm_generic_error(): WP_Error {
  * key (a serialized token list, for example) is compared by exact array equality instead, since
  * casting an array to string is a PHP warning, not a comparison.
  *
+ * 1.7.5 round 4, R4-1: replaying sanitize_meta() in-process cannot always reproduce what the
+ * REAL write actually stored, because not every registered sanitizer is a pure function of its
+ * input. A sanitizer keyed on invocation count, current time, or existing storage (an
+ * incrementing counter, for example) can legitimately return a different value on replay than it
+ * did during the real write, and this helper has no way to tell that apart from a genuine veto by
+ * comparing replayed output alone. So the canonical-replay comparison above is now the FIRST
+ * check, not the only one: when it matches, that is the strongest evidence and this returns true
+ * immediately. When it disagrees, this falls back to change detection against $old, the value
+ * read back BEFORE the write ran. If the requested $intended is identical to $old, nothing was
+ * actually asked to change, so there is nothing to verify a veto against (a no-op resubmission of
+ * the current value never has to survive a non-deterministic sanitizer's replay). Otherwise, a
+ * real change was requested: if $stored differs from $old, something genuinely landed - accepted
+ * even when it does not equal the replayed $expected form, since a non-deterministic or
+ * charset-dependent normalization is not distinguishable from any other legitimate landing this
+ * way. If $stored still equals $old, nothing moved: that is what a silent veto (a filter reverting
+ * to the OLD value, or an update_*_metadata short-circuit that never wrote at all) looks like, and
+ * it is still reported as unconfirmed.
+ *
+ * What this cannot detect: a veto that rewrites the value to some THIRD value (neither $old nor
+ * $intended) reads as a landed write, because state genuinely changed. That is an accepted,
+ * documented residual - the machinery here exists to catch "nothing happened", not "something
+ * unexpected happened instead"; the latter is caller-application-specific and out of scope for a
+ * shared, general-purpose confirmation helper. This fallback is safe here specifically because a
+ * meta veto has only one real shape: a sanitize_{type}_meta_{key} filter reverting the value, or
+ * an update_*_metadata short-circuit, both of which BLOCK the write outright and leave $stored at
+ * $old - neither can redirect the write to an attacker/filter-chosen replacement value the way a
+ * post field's wp_insert_post_data filter can (aafm_post_field_write_confirmed() does not carry
+ * this same fallback for exactly that reason - see its own docblock).
+ *
+ * Codex round 6, R6-4: the "nothing asked" branch above used to compare $intended against $old
+ * directly (their raw forms), which cannot tell "$old is already canonical, so resubmitting it is
+ * a genuine no-op" apart from "$old is NOT canonical, so resubmitting it should still trigger the
+ * same canonicalization a changed value would" - both look identical as raw values. The second
+ * shape let a veto that blocks canonicalization (keeping a non-canonical $old in place) read as a
+ * confirmed no-op purely because the caller's literal input matched what was already stored. See
+ * $old_is_canonical below.
+ *
+ * @param mixed  $old            The value read back from storage BEFORE the write ran.
  * @param mixed  $stored         The value read back from storage after the write.
  * @param mixed  $intended       The unslashed value the write attempted to store.
  * @param string $meta_key       Meta key.
@@ -2151,12 +2201,39 @@ function aafm_generic_error(): WP_Error {
  *                                sanitizer.
  * @return bool
  */
-function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
+function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
 	$expected = sanitize_meta( $meta_key, $intended, $object_type, $object_subtype );
-	if ( is_array( $expected ) || is_array( $stored ) ) {
-		return $stored === $expected;
+	// Any array-valued meta key (a serialized token list, e.g. Slim SEO's schema array) is
+	// compared by exact array equality throughout; casting an array to string is a PHP warning,
+	// not a comparison. A single is_array() check covers all four values consistently, since they
+	// all describe the same meta key and therefore share its shape.
+	$is_arr = is_array( $old ) || is_array( $stored ) || is_array( $intended ) || is_array( $expected );
+	if ( $is_arr ? $stored === $expected : (string) $stored === (string) $expected ) {
+		return true;
 	}
-	return (string) $stored === (string) $expected;
+
+	// Codex round 6, R6-4: "nothing was asked to change" used to be judged purely from the raw
+	// values - $intended === $old - which is blind to the site's OWN sanitizer. When $old was not
+	// already in its canonical form (sanitize_meta() would legitimately transform it if resaved),
+	// resubmitting that same raw value is NOT actually a no-op: the real write is still expected to
+	// land on $expected, the same canonical form a genuinely different intended value would have to
+	// reach. A persistence veto that instead leaves storage at the old, non-canonical value used to
+	// read as a confirmed no-op purely because the raw input matched $old, silently accepting a
+	// blocked canonicalization as success. Recomputing whether $old itself survives a resave
+	// through the same sanitizer closes that: the common case (a value already stored in its
+	// canonical form) is completely unaffected, since re-sanitizing an already-canonical value
+	// through an idempotent sanitizer reproduces it exactly.
+	$expected_old     = sanitize_meta( $meta_key, $old, $object_type, $object_subtype );
+	$old_is_canonical = $is_arr ? $old === $expected_old : (string) $old === (string) $expected_old;
+
+	$nothing_asked = $old_is_canonical && ( $is_arr ? $intended === $old : (string) $intended === (string) $old );
+	$unchanged     = $is_arr ? $stored === $old : (string) $stored === (string) $old;
+	// Codex round 5 R5-2: a no-op resubmission used to short-circuit to true purely because
+	// nothing was asked to change, without checking that storage actually stayed put. That let a
+	// filter that redirects an unchanged resubmission to some THIRD value (never $old, never
+	// $intended) report as confirmed. Requiring $unchanged too closes that: a genuine no-op still
+	// confirms, but a redirect on a no-op is caught the same way a redirect on a real change is.
+	return $nothing_asked ? $unchanged : ! $unchanged;
 }
 
 /**
@@ -2188,10 +2265,40 @@ function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string
  * context (0) the real write used; it defaults to $post_id, matching every existing update-path
  * caller, which already sanitizes with the real, existing id and is unaffected by this parameter.
  *
+ * 1.7.5 round 4, R4-1: the in-process replay above used to miss one concrete, legitimate
+ * normalization: core's own wpdb layer transcodes emoji into their entity-encoded form for a
+ * title/content/excerpt column stored on a non-utf8mb4 charset (wp_encode_emoji(), applied
+ * directly inside wp_insert_post()/wp_update_post(), wp-includes/post.php, on the already-slashed
+ * $data array - AFTER sanitize_post_field() has run and BEFORE the wp_insert_post_data filter and
+ * the final wp_unslash()). Replaying sanitize_post_field() alone never saw that step, so a
+ * genuinely successful emoji-title write reported as an unconfirmed one - on GeoDirectory's create
+ * path, that false failure rolled back and deleted a valid listing. This now applies the same
+ * charset check and wp_encode_emoji() call, in the same position in the pipeline, to the replayed
+ * value before unslashing it, so the replay matches what core actually stores.
+ *
+ * A second, more general concern was raised in the same round: a save-time filter could in
+ * principle be stateful (an incrementing counter, current-time-dependent output) and legitimately
+ * return a different value on this same-process replay than it did during the real write.
+ * Deliberately NOT accommodated by a fallback that accepts any change away from $old: an existing,
+ * intentional test (GeodirectoryTest::test_create_rolls_back_and_errors_when_the_title_write_is_vetoed)
+ * feeds a wp_insert_post_data filter that rewrites the title to a fixed THIRD value, neither the
+ * old one nor the requested one - exactly what such a fallback cannot tell apart from a legitimate
+ * stateful sanitizer, and exactly the shape of veto this function exists to catch for a post field
+ * (unlike a meta write's update_*_metadata short-circuit, which can only block a write outright,
+ * never redirect it to an attacker/filter-chosen replacement value - see
+ * aafm_meta_write_confirmed()'s own change-detection fallback, which is safe for that reason).
+ * Accepted, undressed residual: a genuinely non-deterministic save-time sanitizer registered by
+ * some other plugin could still misreport here. No concrete instance of one exists in this
+ * codebase's own write paths, and weakening detection to accommodate a hypothetical one would
+ * reopen the exact veto class this function is relied on to catch.
+ *
  * @param int      $post_id             Post id, already saved (used for the read-back).
  * @param string   $field               Post field name (post_title, post_content, post_excerpt,
  *                                      post_status, ...).
  * @param string   $intended            The unslashed value the write attempted to persist.
+ * @param string   $old                 The field's value, read BEFORE the write ran. '' on a
+ *                                      CREATE, where the field never previously existed. Used only
+ *                                      to short-circuit a genuine no-op resubmission; see below.
  * @param int|null $sanitize_context_id The id to recompute the canonical form with. Defaults to
  *                                      $post_id (an update, where the row already existed at
  *                                      sanitize time). Pass 0 for a create, matching what core's
@@ -2199,16 +2306,37 @@ function aafm_meta_write_confirmed( $stored, $intended, string $meta_key, string
  *                                      the row was inserted.
  * @return bool
  */
-function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended, ?int $sanitize_context_id = null ): bool {
+function aafm_post_field_write_confirmed( int $post_id, string $field, string $intended, string $old, ?int $sanitize_context_id = null ): bool {
 	clean_post_cache( $post_id );
 	$context_id = $sanitize_context_id ?? $post_id;
 	$sanitized  = sanitize_post_field( $field, wp_slash( $intended ), $context_id, 'db' );
 	// This helper is only ever called for string post fields (post_title, post_content,
 	// post_excerpt, post_status); sanitize_post_field()'s broader return type (it also handles
 	// int and array-of-int fields) is guarded here rather than widening this function's contract.
-	$expected = wp_unslash( is_scalar( $sanitized ) ? (string) $sanitized : '' );
+	$sanitized = is_scalar( $sanitized ) ? (string) $sanitized : '';
+
+	// Match core's own post-sanitize, pre-unslash emoji/charset step for the three fields it
+	// actually applies to - see this function's docblock for the exact pipeline position.
+	if ( in_array( $field, array( 'post_title', 'post_content', 'post_excerpt' ), true ) ) {
+		global $wpdb;
+		$charset = $wpdb->get_col_charset( $wpdb->posts, $field );
+		if ( 'utf8' === $charset || 'utf8mb3' === $charset ) {
+			$sanitized = wp_encode_emoji( $sanitized );
+		}
+	}
+
+	$expected = wp_unslash( $sanitized );
 	$stored   = get_post_field( $field, $post_id, 'raw' );
-	return ( is_scalar( $stored ) ? (string) $stored : '' ) === $expected;
+	$stored   = is_scalar( $stored ) ? (string) $stored : '';
+	if ( $stored === $expected ) {
+		return true;
+	}
+	// Codex round 5 R5-2: a genuine no-op resubmission (the caller asked to "change" the field to
+	// the value it already held) used to be accepted on that basis alone, without checking that
+	// storage actually stayed at $old. That missed a wp_insert_post_data filter that redirects an
+	// unchanged resubmission to some THIRD value - a real, unrequested change the caller must
+	// know about, not a successful no-op. Requiring $stored === $old too closes that.
+	return $intended === $old && $stored === $old;
 }
 
 /**

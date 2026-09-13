@@ -603,6 +603,82 @@ PHP;
 	}
 
 	/**
+	 * R4-6 (1.7.5 deferred, round 4): a comment inside the `use function` statement, or a
+	 * non-ASCII alias identifier, used to defeat this scanner's own hand-rolled import parser
+	 * (a `preg_split( '~\s+as\s+~i', ... )` over the whole statement's text, comments and all).
+	 * Both now go through the shared UseImportScanner.
+	 */
+	public function test_the_scanner_resolves_an_aliased_import_with_a_comment_and_a_non_ascii_alias(): void {
+		$source = <<<'PHP'
+<?php
+use function /* audit */ sanitize_text_field as nettoyer;
+
+function aafm_probe_aliased_comment( array $input ) {
+	return nettoyer( (string) $input['title'] );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 1, $records, 'A comment inside the import must not hide the alias.' );
+		$this->assertSame( 'sanitize_text_field', $records[0]['sanitizer'] );
+
+		$source_non_ascii = <<<'PHP'
+<?php
+use function sanitize_text_field as nettoyér;
+
+function aafm_probe_aliased_non_ascii( array $input ) {
+	return nettoyér( (string) $input['title'] );
+}
+PHP;
+
+		$records_non_ascii = StoredTextSanitizerScanner::scan_source( $source_non_ascii, 'probe.php' );
+
+		$this->assertCount( 1, $records_non_ascii, 'A non-ASCII alias must not hide the call.' );
+		$this->assertSame( 'sanitize_text_field', $records_non_ascii[0]['sanitizer'] );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): `use function Vendor\sanitize_text_field as clean;` imports
+	 * SOMEBODY ELSE'S function of the same bare name, not the WordPress core sanitizer - this
+	 * scanner's exact-match filter (unlike the other two scanners' intentionally imprecise
+	 * trailing-name matching) must not record it as a tracked alias.
+	 */
+	public function test_the_scanner_does_not_alias_a_namespaced_function_of_the_same_bare_name(): void {
+		$source = <<<'PHP'
+<?php
+use function Vendor\sanitize_text_field as clean;
+
+function aafm_probe_vendor_alias( array $input ) {
+	return clean( (string) $input['title'] );
+}
+PHP;
+
+		$this->assertSame( array(), StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+	}
+
+	/**
+	 * R4-6 (1.7.5 deferred, round 4): `use` imports are scoped to the namespace block they appear
+	 * in - an alias declared before a `namespace` boundary must not still resolve after it.
+	 */
+	public function test_the_scanner_does_not_carry_an_alias_across_a_namespace_boundary(): void {
+		$source = <<<'PHP'
+<?php
+namespace AAFM\Probe\A;
+
+use function sanitize_text_field as clean;
+
+namespace AAFM\Probe\B;
+
+function aafm_probe_namespace_boundary( array $input ) {
+	return clean( (string) $input['title'] );
+}
+PHP;
+
+		$this->assertSame( array(), StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+	}
+
+	/**
 	 * A method reached through `?->` is still a method, not WordPress's function.
 	 *
 	 * The lookbehind used to name `->` and `::` inline and miss the nullsafe operator, so this was

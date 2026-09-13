@@ -139,6 +139,52 @@ final class AllowlistTest extends TestCase {
 		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/delete-post', $user_id, null ) );
 	}
 
+	/**
+	 * R2-4 sibling (1.7.5 deferred, round 2): this is a live authorization read, the opposite
+	 * direction from a migration's certification read - a query that itself fails must not be
+	 * read the same as "no override rows", which permits every call below. Restrictive rows are
+	 * in place; faulting the direct SELECT aafm_read_option_views() issues must deny rather than
+	 * silently grant unrestricted access for the duration of the outage. Fails if
+	 * aafm_ability_allowed_for_principal() stops checking db_error and falls through to treating
+	 * the failed read as an empty (unrestricted) row set.
+	 */
+	public function test_a_failed_read_denies_rather_than_grants_unrestricted_access(): void {
+		update_option(
+			'aafm_ability_allowlist_overrides',
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'author',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+		$user_id = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, "option_name = 'aafm_ability_allowlist_overrides'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
+		);
+
+		// The broken query above makes wpdb print its own HTML error block (the WP test bootstrap
+		// turns wpdb::$show_errors on), which PHPUnit's output-during-test strictness flags as
+		// risky even though the assertion below passes. Mirrors
+		// UpgradeMigrationTest::test_dcr_adoption_aborts_when_the_guard_read_fails(), which wraps
+		// the same fault-injection pattern the same way.
+		ob_start();
+		$result = aafm_ability_allowed_for_principal( 'aafm/delete-post', $user_id, null );
+		ob_end_clean();
+
+		$this->assertFalse(
+			$result,
+			'A read that itself fails must deny the call, not fall through to "no restriction".'
+		);
+	}
+
 	public function test_an_unrestricted_all_row_permits_everything_from_that_scope(): void {
 		update_option(
 			'aafm_ability_allowlist_overrides',

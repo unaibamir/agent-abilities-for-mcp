@@ -934,8 +934,13 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		// reverts this resave, which would leave the un-renormalized, IPTC/EXIF-sourced caption in
 		// storage - exactly the security gap this resave exists to close. Confirm the sanitized
 		// content actually landed before trusting it, same orphan-cleanup discipline as above.
-		$confirmed_field = get_post_field( 'post_content', $attachment_id, 'raw' );
-		if ( ! is_string( $confirmed_field ) || $confirmed_field !== $sanitized_content ) {
+		// Codex round 5 R5-1: this used to be a raw stored/expected comparison, which cannot tell
+		// a legitimate save-time normalization (emoji/charset re-encoding, a registered
+		// content_save_pre callback) from a genuine veto - a successfully renormalized caption
+		// could fail this check and get its attachment permanently deleted. Route through the
+		// same shared confirmation helper every other post-field write in this codebase uses, so
+		// this sibling gets the identical normalization tolerance and veto detection.
+		if ( ! aafm_post_field_write_confirmed( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
@@ -946,15 +951,21 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 	// backslash in the alt text is stripped unless it is slashed first, exactly like the sibling
 	// meta writers.
 	if ( null !== $alt ) {
-		$alt_clean = aafm_sanitize_plain_text( $alt );
+		// Read before the write: media_handle_sideload() may already have seeded this key from
+		// the image's own EXIF/IPTC metadata, so '' is not a safe assumption for $old here.
+		$alt_before = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
+		$alt_clean  = aafm_sanitize_plain_text( $alt );
 		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $alt_clean ) );
 		// Codex round 5 R5-2: update_post_meta()'s return value was discarded outright, so a
 		// metadata filter vetoing the alt write would report success with the old alt text still
 		// in storage. Confirm it landed, same orphan-cleanup discipline as the branches above.
 		// Codex round 6 B6-3: compare against the CANONICAL sanitize_meta() form, not the pre-write
 		// intent, so a registered sanitize callback's legitimate normalization is not mistaken for
-		// a veto.
-		if ( ! aafm_meta_write_confirmed( get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', 'attachment' ) ) {
+		// a veto. Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same
+		// filterable call core itself makes at write time, rather than the literal 'attachment' -
+		// a get_object_subtype_post filter remapping the subtype is honoured here the same way it
+		// is at write time.
+		if ( ! aafm_meta_write_confirmed( $alt_before, get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $attachment_id ) ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
@@ -1441,6 +1452,36 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	 * @param array<int,mixed> $options The cURL options this fetch is about to set.
 	 */
 	$options = apply_filters( 'aafm_media_fetch_curl_options', $options );
+	// B4 (1.7.5 deferred): the curl_setopt_array() fail-closed check below only catches an option
+	// that FAILS to apply; it cannot notice one a hooked callback removed from the array outright,
+	// since curl_setopt_array() only ever sees what is still present. Nothing in this codebase
+	// hooks this filter, but assert the DNS pin, proxy neutralization, TLS verification, redirect
+	// refusal, transfer timeouts, and byte-cap enforcement are all still keys in $options before
+	// trusting it, the same fail-closed instinct as the check below.
+	//
+	// F8 (1.7.5 deferred): CURLOPT_TIMEOUT/CURLOPT_CONNECTTIMEOUT were missing from this list, so
+	// a hooked callback removing either one passed the guard, and a public HTTPS server could
+	// then stall the transfer past the intended ten-second bound. This still only catches the
+	// option being removed outright, not a callback that raises the value; no callback exists in
+	// this codebase's own source.
+	$required_options = array(
+		CURLOPT_FOLLOWLOCATION,
+		CURLOPT_SSL_VERIFYPEER,
+		CURLOPT_SSL_VERIFYHOST,
+		CURLOPT_PROXY,
+		CURLOPT_NOPROXY,
+		CURLOPT_RESOLVE,
+		CURLOPT_HEADERFUNCTION,
+		CURLOPT_WRITEFUNCTION,
+		CURLOPT_TIMEOUT,
+		CURLOPT_CONNECTTIMEOUT,
+	);
+	foreach ( $required_options as $required_option ) {
+		if ( ! array_key_exists( $required_option, $options ) ) {
+			curl_close( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_close
+			return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
+		}
+	}
 	// Codex final round 4 HIGH: curl_setopt_array()'s return was ignored, so a single option this
 	// array cannot apply (it stops applying at the first failure) still let curl_exec() run with
 	// whichever security options DID make it through - possibly none of the DNS pin, proxy
@@ -1623,8 +1664,12 @@ function aafm_exec_update_media( array $input ) {
 		}
 	}
 
-	$alt_clean = null;
+	$alt_clean  = null;
+	$alt_before = null;
 	if ( $has_alt ) {
+		// Read before the write, so the confirmation below can tell a landed change from a
+		// silent veto rather than only replaying sanitize_meta().
+		$alt_before = get_post_meta( $att_id, '_wp_attachment_image_alt', true );
 		// update_post_meta() unslashes its value, so slash here too (matches
 		// aafm_exec_update_post_meta) to preserve literal backslashes in alt text.
 		$alt_clean = aafm_sanitize_plain_text( (string) $input['alt'] );
@@ -1643,16 +1688,22 @@ function aafm_exec_update_media( array $input ) {
 	// round 6 B6-3: compare against each field's CANONICAL sanitize_post_field()/sanitize_meta()
 	// form, not the pre-write intent, so a legitimate normalization (kses for a user without
 	// unfiltered_html, the core `trim` on title) is not mistaken for a veto.
-	if ( $has_title && ! aafm_post_field_write_confirmed( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ) ) ) {
+	// $attachment was read before wp_update_post() ran, so its fields are each field's genuine
+	// pre-write value.
+	if ( $has_title && ! aafm_post_field_write_confirmed( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ), (string) $attachment->post_title ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_caption && ! aafm_post_field_write_confirmed( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ) ) ) {
+	if ( $has_caption && ! aafm_post_field_write_confirmed( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ), (string) $attachment->post_excerpt ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'] ) ) {
+	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'], (string) $attachment->post_content ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_alt && ! aafm_meta_write_confirmed( get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', 'attachment' ) ) {
+	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
+	// call core itself makes at write time, rather than the literal 'attachment' - a
+	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
+	// at write time.
+	if ( $has_alt && ! aafm_meta_write_confirmed( $alt_before, get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $att_id ) ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
 

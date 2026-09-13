@@ -466,6 +466,17 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	);
 
 	if ( is_wp_error( $result ) ) {
+		// Codex round 5 R5-4: aafm_oauth_register_client()'s 'registration_failed' code means the
+		// INSERT itself failed - an operational fault, not a problem with what the client sent.
+		// Folding it into invalid_client_metadata told a client with a perfectly valid request that
+		// its metadata was rejected, when the server was the one that failed.
+		if ( 'registration_failed' === $result->get_error_code() ) {
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				$result->get_error_message(),
+				500
+			);
+		}
 		return aafm_oauth_rest_protocol_error(
 			'invalid_redirect_uri' === $result->get_error_code() ? 'invalid_redirect_uri' : 'invalid_client_metadata',
 			$result->get_error_message(),
@@ -587,10 +598,18 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// A deactivated client cannot redeem a code minted before it was disabled - is_active is
 	// only checked at authorize-time otherwise, so re-check it here.
 	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
+		// R6-2: is_deactivated() correctly fails closed (denies) on an unreadable clients table,
+		// but reporting that to the client as invalid_grant misstates the cause - it is this
+		// pipeline's own fault, not a finding about the client's registration.
+		if ( aafm_oauth_client_lookup_failed( $client_id ) ) {
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+				500
+			);
+		}
 		return $invalid_grant;
 	}
-
-	global $wpdb;
 
 	// Consume the code and mint the token pair as one atomic unit. aafm_oauth_redeem_code()'s
 	// single UPDATE still enforces one-time use under concurrency - its row lock blocks a second
@@ -604,16 +623,41 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// nesting inside it, so the claim that used to sit here about it being a harmless no-op under
 	// the test harness was false. Read that comment before changing either site; both carry the
 	// same shape and the fix, if one is ever worth making, belongs to both at once.
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( 'START TRANSACTION' );
+	// R4-3: if the transaction itself never started, nothing below is actually wrapped - refuse
+	// the redemption rather than run the consume+mint pair unprotected. Same check tokens.php's
+	// aafm_oauth_rotate_refresh() uses for its own START TRANSACTION.
+	if ( ! aafm_oauth_txn( 'START TRANSACTION' ) ) {
+		return aafm_oauth_rest_protocol_error(
+			'server_error',
+			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+			500
+		);
+	}
 
 	// Atomic one-time redemption, with the client_id + redirect_uri binding
 	// enforced inside aafm_oauth_redeem_code().
 	$row = aafm_oauth_redeem_code( $code, $client_id, $redirect_uri );
 	if ( is_wp_error( $row ) ) {
-		// Nothing was consumed (0 rows affected), so rolling back is a clean no-op.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'ROLLBACK' );
+		// Nothing was consumed (0 rows affected) or the consuming UPDATE/readback itself failed -
+		// rolling back is safe either way: a clean no-op in the first case, and in the second it
+		// un-burns a code this pipeline could not confirm was actually redeemed, so an otherwise-
+		// valid code stays usable on retry instead of being lost to an operational fault. R5-4:
+		// fire an action rather than discard the outcome outright, matching every other rollback
+		// site in this pipeline.
+		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
+			do_action( 'aafm_oauth_rollback_failed', 'token_redeem_code', $client_id );
+		}
+		// R6-2: aafm_oauth_redeem_code() used to signal every failure as invalid_grant, so this
+		// site could not tell a genuinely bad code from its own database fault. It now
+		// distinguishes the two through the returned error code, the same way the mint failure
+		// below is already handled.
+		if ( 'invalid_grant' !== $row->get_error_code() ) {
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+				500
+			);
+		}
 		return $invalid_grant;
 	}
 
@@ -625,16 +669,38 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// the UI reported the revoke landed. The code is already consumed above (a legitimate one-time
 	// use), so COMMIT the burn and yield invalid_grant.
 	if ( ! aafm_oauth_has_consent( (int) $row['wp_user_id'], (string) $row['client_id'] ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'COMMIT' );
+		// R6-2: aafm_oauth_has_consent() correctly fails closed (reports no consent) when its own
+		// read fails, but this site used to COMMIT the code's consumption and tell the client its
+		// grant was invalid regardless of why - permanently burning an otherwise-valid, unexpired
+		// code over a transient read failure that says nothing real about consent. Roll back
+		// instead so the code survives, and report the fault honestly.
+		if ( aafm_oauth_consent_lookup_failed( (int) $row['wp_user_id'], (string) $row['client_id'] ) ) {
+			if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
+				do_action( 'aafm_oauth_rollback_failed', 'token_check_consent', $client_id );
+			}
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+				500
+			);
+		}
+
+		// A failed COMMIT here means the burn is not actually confirmed - the code could still be
+		// replayable - but this request is denied either way, so audit it distinctly rather than
+		// silently proceeding as if the burn landed.
+		if ( ! aafm_oauth_txn( 'COMMIT' ) && function_exists( 'aafm_oauth_log_event' ) ) {
+			aafm_oauth_log_event( 'token', 'error', array( 'client_id' => $client_id ) );
+		}
 		return $invalid_grant;
 	}
 
 	// PKCE: a failed verifier burns the (already-consumed) code, which is safe and stops a verifier
 	// brute-force, so COMMIT the consumption before rejecting.
 	if ( ! aafm_pkce_verify( $code_verifier, (string) $row['code_challenge'] ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'COMMIT' );
+		// Same unconfirmed-burn note as the consent-revoked branch above.
+		if ( ! aafm_oauth_txn( 'COMMIT' ) && function_exists( 'aafm_oauth_log_event' ) ) {
+			aafm_oauth_log_event( 'token', 'error', array( 'client_id' => $client_id ) );
+		}
 		return $invalid_grant;
 	}
 
@@ -653,8 +719,12 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// back so the consumption is undone and an unexpired code stays redeemable on a retry rather
 	// than being permanently burned by a transient error.
 	if ( is_wp_error( $tokens ) ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$wpdb->query( 'ROLLBACK' );
+		// A failed ROLLBACK does not change this response - it is already a server_error - but it
+		// does mean the stated recovery (the code stays redeemable) is not established. R5-4: fire
+		// an action rather than discard that outcome, matching every other rollback site here.
+		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
+			do_action( 'aafm_oauth_rollback_failed', 'token_mint', $client_id );
+		}
 		return aafm_oauth_rest_protocol_error(
 			'server_error',
 			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
@@ -663,8 +733,18 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	}
 
 	// The token pair persisted: commit the consumption + mint together.
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( 'COMMIT' );
+	//
+	// R4-3: a failed COMMIT means this pipeline cannot confirm the consumption and the new tokens
+	// actually landed together. Reporting the minted tokens anyway would hand the caller
+	// credentials this function cannot confirm persisted - refuse instead of claiming success for
+	// a write that was never confirmed committed.
+	if ( ! aafm_oauth_txn( 'COMMIT' ) ) {
+		return aafm_oauth_rest_protocol_error(
+			'server_error',
+			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+			500
+		);
+	}
 
 	// Audit the mint: an access token now exists for this user + client. The raw token is never
 	// logged - only the actor and client, so the token's life is traceable from here.
@@ -713,6 +793,22 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ): WP_REST_Resp
 		// replayed, already-consumed token), which is a compromise signal worth a trace row.
 		if ( function_exists( 'aafm_oauth_log_event' ) ) {
 			aafm_oauth_log_event( 'refresh', 'denied', array( 'client_id' => $client_id ) );
+		}
+
+		// Codex round 5 R5-4: aafm_oauth_rotate_refresh() returns 'invalid_grant' for every
+		// genuine grant-validity reason (unknown/expired/wrong-client/replayed token), but also
+		// returns an operational error - a failed START TRANSACTION, a failed successor mint, or a
+		// failed COMMIT - through the exact same is_wp_error() branch. Collapsing both into
+		// invalid_grant/400 told a client presenting a perfectly usable refresh token that its
+		// grant was rejected, when the server itself failed to process it. Only the genuine
+		// grant-validity code gets the client-facing message; anything else is this pipeline's own
+		// fault.
+		if ( 'invalid_grant' !== $tokens->get_error_code() ) {
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+				500
+			);
 		}
 
 		return aafm_oauth_rest_protocol_error(
@@ -780,8 +876,23 @@ function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 	if ( '' !== $token ) {
 		$revoked = aafm_oauth_revoke_token( $token );
 
+		// R4-2: null means the query itself failed, not "no matching token" - RFC 7009 protects
+		// TOKEN VALIDITY from disclosure, never server operational state, so a genuine failure is
+		// reported distinctly rather than folded into the same 200 an unknown/already-revoked
+		// token gets. The raw token is never logged either way.
+		if ( null === $revoked ) {
+			if ( function_exists( 'aafm_oauth_log_event' ) ) {
+				aafm_oauth_log_event( 'revoke', 'error' );
+			}
+			return aafm_oauth_rest_protocol_error(
+				'server_error',
+				__( 'The token could not be revoked.', 'agent-abilities-for-mcp' ),
+				500
+			);
+		}
+
 		// Audit only an actual revocation (a matched, still-active token), so a probe with a
-		// bogus token does not create noise. The raw token is never logged.
+		// bogus token does not create noise.
 		if ( $revoked && function_exists( 'aafm_oauth_log_event' ) ) {
 			aafm_oauth_log_event( 'revoke', 'success' );
 		}

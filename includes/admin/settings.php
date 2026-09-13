@@ -532,6 +532,10 @@ function aafm_uninstall_site_data(): void {
 	// re-run and could flip a toggle back on.
 	aafm_delete_option_cache_safe( 'aafm_oauth_toggle_migrated' );
 	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_migrated' );
+	// The second, independently keyed DCR migration signal (B2, 1.7.5 deferred) - see
+	// aafm_oauth_dcr_adopt_on_by_default()'s docblock. Same non-reset, uninstall-only treatment
+	// as the guard row above.
+	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_touched' );
 	aafm_delete_option_cache_safe( 'aafm_delete_data_on_uninstall' );
 }
 

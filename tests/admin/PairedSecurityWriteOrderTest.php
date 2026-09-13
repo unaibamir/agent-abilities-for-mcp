@@ -24,6 +24,10 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 		remove_all_actions( 'added_option' );
 		remove_all_actions( 'updated_option' );
 		remove_all_actions( 'deleted_option' );
+		// fail_option_read() leaves its query filter in place; without removing it here, the
+		// deletes below hit the same broken query it set up and drag the leftover fault into
+		// every later test in this file.
+		remove_all_filters( 'query' );
 		unset(
 			$_POST['nonce'],
 			$_REQUEST['nonce'],
@@ -89,12 +93,19 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 
 	/**
 	 * Run an AJAX handler and return its captured JSON payload. Mirrors
-	 * PersistentObjectCacheSwitchTest::run_handler().
+	 * PersistentObjectCacheSwitchTest::run_handler(), plus hiding wpdb's own error output for the
+	 * duration: fail_option_read() below deliberately breaks a query to simulate a read failure,
+	 * and the WP test bootstrap turns wpdb::$show_errors on, so that broken query would otherwise
+	 * print an HTML error block straight into this same output buffer and corrupt the JSON body
+	 * being captured here - not a defect in the handler, just this file's own fault-injection
+	 * leaking into the response it is trying to read.
 	 *
 	 * @param callable $handler Handler function to invoke.
 	 * @return array<string,mixed>
 	 */
 	private function run_handler( callable $handler ): array {
+		global $wpdb;
+		$had_errors_shown = $wpdb->hide_errors();
 		ob_start();
 		try {
 			$handler();
@@ -102,6 +113,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 			unset( $e );
 		}
 		$body = (string) ob_get_clean();
+		$wpdb->show_errors( $had_errors_shown );
 		$json = json_decode( $body, true );
 		return is_array( $json ) ? $json : array();
 	}
@@ -370,6 +382,57 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 			array( 'secret' ),
 			get_option( 'aafm_denied_meta_keys' ),
 			'The union must be built from the real database row, not a stale cache value that hides the live deny entry.'
+		);
+	}
+
+	/**
+	 * R2-4 sibling (1.7.5 deferred, round 2): a query that itself FAILS reading the old deny row
+	 * is not the same as a genuinely absent/empty row - the stale-cache test above already proves
+	 * the read must consult the database, but a failed database read must not then be treated as
+	 * "nothing was denied before", which would build the stage-1 union from an empty old-deny list
+	 * and silently drop 'secret' the moment this request also removes it from the requested deny
+	 * list. This fails if aafm_paired_meta_write_three_stage() stops checking db_error on the old
+	 * deny read and falls through to treating the failed read as an empty list.
+	 */
+	public function test_post_meta_read_failure_on_old_deny_aborts_instead_of_narrowing(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_denied_meta_keys', array( 'secret' ) );
+		update_option( 'aafm_allowed_meta_keys', array() );
+		$this->fail_option_read( 'aafm_denied_meta_keys' );
+
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['aafm_meta_keys'] = 'secret';
+		unset( $_POST['aafm_deny_meta_keys'] ); // Request no longer denies 'secret'.
+
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_save_meta_keys' );
+
+		$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The save must report an error: the old deny row could not be certified.' );
+		$this->assertSame(
+			array( 'secret' ),
+			get_option( 'aafm_denied_meta_keys' ),
+			"A failed read of the old deny list must not be treated as empty - that would drop 'secret' instead of refusing the write."
+		);
+	}
+
+	/**
+	 * Makes the direct database SELECT aafm_read_option_views() issues for $option fail (not
+	 * merely read absent), by rewriting that one query to target a table that does not exist.
+	 * Mirrors OauthRevokeAjaxTest::fail_query_containing(), applied to a read instead of a write.
+	 *
+	 * @param string $option Option name whose row-fetch query should fail.
+	 * @return void
+	 */
+	private function fail_option_read( string $option ): void {
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $option ): string {
+				return false !== strpos( $query, "option_name = '{$option}'" )
+					? 'SELECT * FROM aafm_missing_table_for_test'
+					: $query;
+			}
 		);
 	}
 

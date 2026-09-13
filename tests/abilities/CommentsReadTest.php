@@ -190,6 +190,45 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
+	 * R3-5 (1.7.5 deferred, round 3): a password-protected post is PUBLIC (its post_status object
+	 * has public=>true), so it used to fall through to the "any logged-in caller may read" branch
+	 * - the password itself was never checked. A Subscriber must not read approved comments on a
+	 * password-protected published post through either the post-scoped or sitewide entry point.
+	 *
+	 * What would break this: reverting aafm_comment_post_is_readable() to skip the
+	 * post_password_required() check (comparing only against post_status public-ness) makes both
+	 * assertions below fail - both calls would succeed instead of being denied.
+	 */
+	public function test_get_comments_denies_subscriber_on_password_protected_public_post(): void {
+		$post = self::factory()->post->create(
+			array(
+				'post_status'   => 'publish',
+				'post_password' => 'secret',
+			)
+		);
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '1',
+				'comment_content'  => 'SECRET_PASSWORD_PROTECTED_COMMENT_BODY',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/get-comments' )->check_permissions( array( 'post_id' => $post ) ),
+			'A Subscriber must not read comments on a post whose password they do not have.'
+		);
+
+		// The sitewide scan filters per-comment via the same predicate rather than denying the
+		// whole call, so the assertion here mirrors the sitewide-hiding tests above: the
+		// password-protected comment must never surface, and total must not count it.
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array() );
+		$this->assertNotContains( 'SECRET_PASSWORD_PROTECTED_COMMENT_BODY', wp_list_pluck( $out['comments'], 'content' ) );
+		$this->assertSame( 0, $out['total'] );
+	}
+
+	/**
 	 * The gate must not over-correct: approved comments on a PUBLIC post stay
 	 * readable for any logged-in caller, and an editor (who can read the private
 	 * post) is allowed to read its comments.
@@ -333,5 +372,201 @@ final class CommentsReadTest extends TestCase {
 
 		$this->assertTrue( $out['truncated'] );
 		$this->assertSame( 3, $out['total'] );
+	}
+
+	/**
+	 * F7 (1.7.5 deferred): `truncated` must never disclose hidden comment volume to a caller
+	 * whose own visible results are unaffected by it. Adding one more comment on a post this
+	 * subscriber can never read must not flip `truncated`, even though it pushes the raw
+	 * approved count past the scan cap, as long as the scanned window still contains at least
+	 * one invisible comment (proving nothing about whether more VISIBLE ones exist beyond it).
+	 */
+	public function test_get_comments_sitewide_truncated_does_not_leak_hidden_comment_growth(): void {
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 3 );
+
+		$public_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $public_post,
+				'comment_approved' => '1',
+				'comment_content'  => 'READABLE_COMMENT',
+				'comment_date'     => '2020-03-10 00:00:00',
+				'comment_date_gmt' => '2020-03-10 00:00:00',
+			)
+		);
+
+		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-03-09 00:00:00',
+				'comment_date_gmt' => '2020-03-09 00:00:00',
+			)
+		);
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-03-08 00:00:00',
+				'comment_date_gmt' => '2020-03-08 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$args = array( 'per_page' => 50 );
+
+		// Exactly at the cap (3 raw comments, cap 3): the scan window already covers everything,
+		// so this must not be truncated - the baseline both the old and new logic agree on.
+		$before = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+		$this->assertFalse( $before['truncated'] );
+		$this->assertSame( 1, $before['total'] );
+
+		// One more HIDDEN comment, older than all three above so it falls outside the 3-wide scan
+		// window - the caller's own visible results (content, total) are unchanged, only the raw
+		// site-wide count crossed the cap. The old `$raw_total > $scan_cap && [] !== $visible`
+		// logic flipped truncated to true here; it must stay false.
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-03-01 00:00:00',
+				'comment_date_gmt' => '2020-03-01 00:00:00',
+			)
+		);
+
+		$after = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( $before['comments'], $after['comments'] );
+		$this->assertSame( $before['total'], $after['total'] );
+		$this->assertFalse( $after['truncated'] );
+	}
+
+	/**
+	 * R2-6 (1.7.5 deferred, round 2): the round-1 fix above stopped a HIDDEN comment inside the
+	 * scan window from leaking, but a window that is ENTIRELY visible still leaked: a raw count
+	 * crossing the cap flipped `truncated` true even when the one additional comment beyond the
+	 * window sat on a post this subscriber cannot read. `comments` and `total` are unaffected
+	 * either way - only the flag, and only because of a comment that does not exist to this
+	 * caller.
+	 *
+	 * Fails if the truncation lookahead below is removed or reverts to inferring truncation from
+	 * raw_total/scan_cap without checking readability - the same class of leak that already broke
+	 * this flag twice.
+	 */
+	public function test_get_comments_sitewide_truncated_does_not_leak_a_hidden_comment_beyond_a_fully_visible_window(): void {
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 3 );
+
+		$public_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		foreach ( array( '2020-03-10', '2020-03-09', '2020-03-08' ) as $date ) {
+			self::factory()->comment->create(
+				array(
+					'comment_post_ID'  => $public_post,
+					'comment_approved' => '1',
+					'comment_date'     => "{$date} 00:00:00",
+					'comment_date_gmt' => "{$date} 00:00:00",
+				)
+			);
+		}
+
+		// Older than all three above, so it falls just past the 3-wide scan window - and on a
+		// post this subscriber cannot read.
+		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-03-01 00:00:00',
+				'comment_date_gmt' => '2020-03-01 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( 3, $out['total'], 'The scanned window is entirely visible; total must reflect it.' );
+		$this->assertFalse(
+			$out['truncated'],
+			'A hidden comment just past a fully-visible window must not flip truncated - that only measures its existence, not anything this caller could otherwise learn.'
+		);
+	}
+
+	/**
+	 * R3-6 (1.7.5 deferred, round 3): the round-2 lookahead sized/offset its second window from a
+	 * count that included hidden comments, so inserting ONE hidden comment between the scanned
+	 * window and a genuinely visible comment shifted that visible comment out of the lookahead
+	 * window entirely - flipping truncated from true to false with the caller's own visible
+	 * results completely unchanged. This reproduces that exact insertion.
+	 *
+	 * What would break this: reverting the identity-based (comment__not_in) probe to a count/
+	 * offset-sized lookahead makes the second assertion fail - truncated would go back to false
+	 * once the extra hidden comment is inserted, even though READABLE_BEYOND still exists.
+	 */
+	public function test_get_comments_sitewide_truncated_survives_a_hidden_insertion_before_a_visible_comment(): void {
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 3 );
+
+		$public_post  = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$private_post = self::factory()->post->create( array( 'post_status' => 'private' ) );
+
+		// The 3-wide scan window: A, B, C (newest three).
+		foreach ( array( '2020-04-10', '2020-04-09', '2020-04-08' ) as $date ) {
+			self::factory()->comment->create(
+				array(
+					'comment_post_ID'  => $public_post,
+					'comment_approved' => '1',
+					'comment_date'     => "{$date} 00:00:00",
+					'comment_date_gmt' => "{$date} 00:00:00",
+				)
+			);
+		}
+		// H1, H2: hidden, immediately past the window.
+		foreach ( array( '2020-04-07', '2020-04-06' ) as $date ) {
+			self::factory()->comment->create(
+				array(
+					'comment_post_ID'  => $private_post,
+					'comment_approved' => '1',
+					'comment_date'     => "{$date} 00:00:00",
+					'comment_date_gmt' => "{$date} 00:00:00",
+				)
+			);
+		}
+		// D: readable, past H1/H2 - what the old lookahead's single fixed-size window could still
+		// reach before an extra hidden comment pushed it out.
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $public_post,
+				'comment_approved' => '1',
+				'comment_content'  => 'READABLE_BEYOND',
+				'comment_date'     => '2020-04-05 00:00:00',
+				'comment_date_gmt' => '2020-04-05 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$args = array( 'per_page' => 50 );
+
+		$before = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+		$this->assertTrue( $before['truncated'], 'D is readable and beyond the scan window: truncated must be true.' );
+
+		// Insert one more hidden comment between C and H1 - shifting H1/H2/D by one position each.
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $private_post,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-04-07 12:00:00',
+				'comment_date_gmt' => '2020-04-07 12:00:00',
+			)
+		);
+
+		$after = wp_get_ability( 'aafm/get-comments' )->execute( $args );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( $before['comments'], $after['comments'], 'The caller\'s own visible results must be unaffected by the insertion.' );
+		$this->assertTrue( $after['truncated'], 'D is still readable and still beyond the window - truncated must stay true, not flip false because of where a hidden comment landed.' );
 	}
 }

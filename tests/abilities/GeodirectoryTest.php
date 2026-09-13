@@ -96,6 +96,40 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertSame( 56.78, $fetched['longitude'] );
 	}
 
+	/**
+	 * R3-1 (1.7.5 deferred, round 3): this create never sets a post_date, so core's own
+	 * publish<->future date transition (wp_insert_post()) lands a status:"future" request at
+	 * "publish" - the confirmation used to compare against the literal requested "future",
+	 * disagree, and roll back (delete) the listing that had just been legitimately created.
+	 *
+	 * What would break this: reverting the create path to confirm post_status against $status
+	 * makes this assert an error instead of an array, and the listing would not survive.
+	 *
+	 * R4-7 (1.7.5 deferred, round 4): "future" is outside the create-listing ability's own public
+	 * schema (geodirectory.php's status argument is `'enum' => array( 'publish', 'draft',
+	 * 'pending' )`), so no MCP agent request can actually reach this executor with that value -
+	 * this test reaches it only because it calls aafm_exec_geodirectory_create_listing() directly,
+	 * bypassing schema validation. Labelled explicitly as an executor-level regression test: it
+	 * still guards real behaviour (the same confirmation logic runs for every other caller of this
+	 * executor, and a site could still reach a publish<->future disagreement through a
+	 * `wp_insert_post_data` filter that rewrites a schema-valid "publish" into "future"), but it is
+	 * not evidence that a real agent request can submit status:"future" here.
+	 */
+	public function test_executor_normalizes_a_direct_future_status_request_without_a_future_date_to_publish(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		$created = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'   => 'Scheduled Cafe',
+				'content' => 'Not actually in the future.',
+				'status'  => 'future',
+			)
+		);
+
+		$this->assertIsArray( $created, 'Core normalizing future->publish must not be mistaken for a vetoed write.' );
+		$this->assertSame( 'publish', get_post_status( $created['listing_id'] ) );
+	}
+
 	public function test_create_requires_publish_posts_for_a_public_status(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'contributor' ) ) );
 
@@ -166,6 +200,34 @@ final class GeodirectoryTest extends TestCase {
 		);
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
 
+		$this->assertTrue( aafm_perm_geodirectory_get( array( 'listing_id' => $place_id ) ) );
+	}
+
+	/**
+	 * R3-5 (1.7.5 deferred, round 3): a password-protected published listing is still a PUBLIC
+	 * status, so it used to pass the public-status shortcut with no password check at all - a
+	 * Contributor could read another author's password-protected listing body. Mirrors the fix
+	 * in CommentsReadTest for the same class of bug.
+	 *
+	 * What would break this: reverting aafm_perm_geodirectory_get() to skip the
+	 * post_password_required() check makes the first assertion below fail (a non-owning
+	 * Contributor would be let through).
+	 */
+	public function test_get_listing_denies_a_password_protected_public_listing_the_caller_cannot_edit(): void {
+		$owner_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		$place_id = self::factory()->post->create(
+			array(
+				'post_type'     => 'gd_place',
+				'post_status'   => 'publish',
+				'post_author'   => $owner_id,
+				'post_password' => 'secret',
+			)
+		);
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'contributor' ) ) );
+		$this->assertFalse( aafm_perm_geodirectory_get( array( 'listing_id' => $place_id ) ) );
+
+		wp_set_current_user( $owner_id );
 		$this->assertTrue( aafm_perm_geodirectory_get( array( 'listing_id' => $place_id ) ) );
 	}
 
@@ -513,9 +575,21 @@ final class GeodirectoryTest extends TestCase {
 			)
 		);
 
-		$pad = static function ( $posts, $query ) use ( $ids ) {
+		// B7 (1.7.5 deferred): a broken production clamp used to have nothing to stop this loop -
+		// the padding below reports a full batch forever, so a regression would run until PHP's
+		// own execution-time limit killed the test, not until an assertion failed. $query_count
+		// turns that into a bounded, diagnosable failure: 1010 comfortably covers the documented
+		// 1000-iteration enumeration ceiling plus the disambiguation probe's own small reserve
+		// (never more than 2, see the sibling test below), so a genuine regression trips the
+		// safety valve and then fails loudly on the assertion, rather than hanging.
+		$query_count = 0;
+		$pad         = static function ( $posts, $query ) use ( $ids, &$query_count ) {
 			if ( ! $query->get( 'aafm_query_marker' ) ) {
 				return $posts;
+			}
+			++$query_count;
+			if ( $query_count > 1010 ) {
+				return array();
 			}
 			// Always report a full batch of the same two real posts, exactly what a host filter
 			// that never runs dry would do - so only the executor's own clamp of the cap filter
@@ -533,6 +607,11 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertTrue(
 			$out['truncated'],
 			'The executor must stop at the hard 1000-iteration ceiling even when the cap filter tries to raise it past that.'
+		);
+		$this->assertLessThanOrEqual(
+			1002,
+			$query_count,
+			'A broken ceiling clamp must fail this test on this assertion, not run until PHP\'s own execution-time limit kills it.'
 		);
 	}
 
@@ -561,12 +640,20 @@ final class GeodirectoryTest extends TestCase {
 			)
 		);
 
+		// F12 (1.7.5 deferred): the same escape as the sibling ceiling test above (B7) - a broken
+		// production clamp has nothing else to stop this loop, since the padding below reports a
+		// full batch forever with the cap filtered to PHP_INT_MAX. Without this, a regression here
+		// hangs until PHP's own execution-time limit kills the test instead of failing on the
+		// assertion below.
 		$query_count = 0;
 		$pad         = static function ( $posts, $query ) use ( $ids, &$query_count ) {
 			if ( ! $query->get( 'aafm_query_marker' ) ) {
 				return $posts;
 			}
 			++$query_count;
+			if ( $query_count > 1010 ) {
+				return array();
+			}
 			// Always report a full batch of the same two drafts, invisible to the current author -
 			// so neither the enumeration's own cap nor the probe's reserve can ever be ended early
 			// by finding a short batch or a visible row.
@@ -1000,6 +1087,68 @@ final class GeodirectoryTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $out );
 		$this->assertSame( 'aafm_geodirectory_write_unconfirmed', $out->get_error_code() );
+	}
+
+	/**
+	 * Codex round 6, R6-6: the confirmation SELECT in aafm_geodirectory_read_fields_unfiltered()
+	 * used to shape a failed read or a missing row into the same display defaults ('', 0.0) as a
+	 * row that legitimately has an empty street - so a request to CLEAR the street, combined with
+	 * a verification read that fails for an unrelated reason, used to certify success even though
+	 * the real UPDATE never ran and the old, non-empty street is still what is actually stored.
+	 * Forces exactly that: the vendor write for 'street' silently fails (the existing stub
+	 * failure filter), AND the confirmation SELECT that would normally catch the mismatch is
+	 * intercepted so it finds no row at all, mirroring a verification read that itself fails.
+	 */
+	public function test_update_errors_when_the_verification_read_fails_even_for_a_cleared_field(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$created = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'  => 'Existing listing',
+				'street' => '123 Old Address',
+			)
+		);
+		$this->assertIsArray( $created );
+		$listing_id = $created['listing_id'];
+		$this->assertSame( '123 Old Address', $created['street'] );
+
+		// Fails the vendor write for 'street' (same stub hook the sibling test above uses) AND
+		// makes the confirmation SELECT find no row, by redirecting it to a post id that does not
+		// exist. The marker column list is unique to aafm_geodirectory_read_fields_unfiltered()'s
+		// own query, so this does not touch geodir_save_post_meta()'s or geodir_get_post_info()'s
+		// unrelated SELECTs against the same table.
+		add_filter(
+			'aafm_geodir_stub_simulate_write_failure',
+			static fn( $simulate, $field ) => 'street' === $field,
+			10,
+			2
+		);
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $listing_id ): string {
+				if ( false !== strpos( $query, 'SELECT street, street2, city, region, country, zip, latitude, longitude FROM' ) ) {
+					return str_replace( "post_id = {$listing_id}", 'post_id = 0', $query );
+				}
+				return $query;
+			}
+		);
+
+		try {
+			$out = aafm_exec_geodirectory_update_listing(
+				array(
+					'listing_id' => $listing_id,
+					'street'     => '',
+				)
+			);
+		} finally {
+			remove_all_filters( 'aafm_geodir_stub_simulate_write_failure' );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $out, 'a verification read that finds no row must never certify the write as successful' );
+		$this->assertSame( 'aafm_geodirectory_write_unconfirmed', $out->get_error_code() );
+
+		// The listing itself must be untouched - the old street is still what is really stored.
+		$this->assertSame( '123 Old Address', aafm_geodirectory_read_fields( $listing_id )['street'] );
 	}
 
 	/**

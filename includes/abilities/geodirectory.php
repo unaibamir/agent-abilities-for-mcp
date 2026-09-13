@@ -142,8 +142,18 @@ function aafm_geodirectory_read_fields( int $post_id ): array {
  * silently discarded on restore. A direct read of GeoDirectory's own table - the exact query
  * geodir_get_post_info() would run before either filter touches it - has neither problem.
  *
+ * Codex round 6, R6-6: $wpdb->get_row() returns null for a failed SELECT and for a genuinely
+ * missing row alike, and this used to collapse both into the same display defaults ('', 0.0)
+ * as a row that legitimately has an empty street or zero coordinates. The caller compared those
+ * defaults against the request and certified success whenever they happened to match, even
+ * though a failed read or a missing row proves nothing about what is actually stored. The
+ * read's own success is now part of the return value, so the caller can fail confirmation
+ * instead of certifying against a default it never actually observed.
+ *
  * @param int $post_id Listing (gd_place) post id.
- * @return array<string,mixed>
+ * @return array{ok: bool, fields: array<string,mixed>} ok is false when the SELECT itself failed
+ *         or no row exists for this post id - the shaped fields are still returned in that case
+ *         (all empty-string/zero display defaults) but must not be read as real stored values.
  */
 function aafm_geodirectory_read_fields_unfiltered( int $post_id ): array {
 	global $wpdb, $plugin_prefix;
@@ -152,7 +162,10 @@ function aafm_geodirectory_read_fields_unfiltered( int $post_id ): array {
 	$table = ( is_string( $plugin_prefix ) ? $plugin_prefix : $wpdb->prefix . 'geodir_' ) . 'gd_place_detail';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- a fresh, uncached, unfiltered read is the entire point (see docblock above).
 	$row = $wpdb->get_row( $wpdb->prepare( 'SELECT street, street2, city, region, country, zip, latitude, longitude FROM %i WHERE post_id = %d', $table, $post_id ), ARRAY_A );
-	return aafm_geodirectory_shape_row( is_array( $row ) ? (object) $row : null );
+	return array(
+		'ok'     => is_array( $row ),
+		'fields' => aafm_geodirectory_shape_row( is_array( $row ) ? (object) $row : null ),
+	);
 }
 
 /**
@@ -191,20 +204,38 @@ function aafm_geodirectory_shape_row( $info ): array {
  * @return bool True when every field the caller supplied reads back with the value written.
  */
 function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
+	$supplied_any_field = false;
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
+		$supplied_any_field = true;
 		geodir_save_post_meta( $post_id, $field, esc_sql( aafm_sanitize_plain_text( (string) $input[ $field ] ) ) );
 	}
 	if ( array_key_exists( 'latitude', $input ) ) {
+		$supplied_any_field = true;
 		geodir_save_post_meta( $post_id, 'latitude', (float) $input['latitude'] );
 	}
 	if ( array_key_exists( 'longitude', $input ) ) {
+		$supplied_any_field = true;
 		geodir_save_post_meta( $post_id, 'longitude', (float) $input['longitude'] );
 	}
 
-	$stored = aafm_geodirectory_read_fields_unfiltered( $post_id );
+	// Nothing to confirm - skip the read rather than run it needlessly, and (R6-6) so a read
+	// that fails for an unrelated reason can never block a caller who never touched these fields.
+	if ( ! $supplied_any_field ) {
+		return true;
+	}
+
+	$read = aafm_geodirectory_read_fields_unfiltered( $post_id );
+	if ( ! $read['ok'] ) {
+		// R6-6: a failed SELECT or a still-missing detail row cannot certify anything the caller
+		// just wrote - fail the same direction aafm_post_field_write_confirmed() and
+		// aafm_meta_write_confirmed() already fail when their own confirmation read comes back
+		// unusable, rather than falling through to defaults that can coincidentally match.
+		return false;
+	}
+	$stored = $read['fields'];
 	foreach ( aafm_geodirectory_address_fields() as $field ) {
 		if ( array_key_exists( $field, $input )
 			&& aafm_sanitize_plain_text( (string) $input[ $field ] ) !== $stored[ $field ] ) {
@@ -267,6 +298,14 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 	$post = $id ? get_post( $id ) : null;
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return false;
+	}
+	// R3-5 (1.7.5 deferred, round 3): the public-status shortcut below admitted a Contributor to
+	// another author's password-protected published listing (raw content included), because it
+	// never checked the password itself. Same fix as aafm_comment_post_is_readable() (comments.php)
+	// - a still-password-required post is gated on edit_post before the public-status shortcut
+	// ever runs.
+	if ( post_password_required( $post ) ) {
+		return current_user_can( 'edit_post', $post->ID );
 	}
 	// Codex round C finding 4: the object-independent edit_posts floor alone let an Author read
 	// another user's draft/private listing (raw content and coordinates included). Mirrors
@@ -509,6 +548,29 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 						// more" the scan never actually confirmed. Raise the reserve above (still
 						// bounded by $batch_cap) if a real directory legitimately needs to skip past
 						// more than two full invisible batches to disambiguate.
+						//
+						// R3-6 (1.7.5 deferred, round 3): exhausting this reserve is itself a
+						// caller-observable signal. Codex round 4, R4-5: the boundary stated here in
+						// earlier rounds was off by one batch - this check runs BEFORE the probe
+						// query for the (probe_cap+1)th attempt, so exactly $probe_cap full batches
+						// of trailing invisible rows already resolves true here (the cap is hit
+						// before the extra query that would have proven a short, real end-of-data
+						// batch); one fewer full batch (any of the $probe_cap batches coming back
+						// short) resolves false. So a caller who can pad their OWN listings could
+						// learn which side of that one fixed threshold the trailing invisible count
+						// falls on. Accepted, not fixed: this cursor is already identity-based (keyset on
+						// ID, not a count/offset), so unlike aafm_exec_get_comments()'s pre-R3-6
+						// defect this is NOT walkable position-by-position - inserting or removing
+						// one invisible row only moves the threshold by one, it does not relocate
+						// where a genuinely visible row falls the way an offset-sized lookahead did.
+						// The only alternative is a bigger reserve, and test_get_listings_probe_
+						// draws_from_a_small_shared_reserve_not_a_second_full_budget() deliberately
+						// pins this reserve to a SMALL, fixed size specifically so a broken cap
+						// filter can never double the documented per-call query budget - widening it
+						// to close this one-bit threshold would reopen that larger, already-fixed
+						// problem for a narrower one. Same trade as F8's SSRF residual: safe
+						// direction always (never silently claims completeness), bounded and
+						// documented rather than unresolved.
 						$truncated = true;
 						break;
 					}
@@ -792,13 +854,20 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 	// (the row did not exist yet) - recompute the canonical form the same way, not with the id
 	// just assigned, or an id-sensitive registered filter can disagree and this rolls back
 	// (deletes) an otherwise valid listing.
+	// R3-1 (1.7.5 deferred, round 3): post_status was confirmed here against the literal
+	// requested value, but wp_insert_post() can normalize it (its publish<->future date
+	// transition) before this reread - no post_date is ever set on this create, so a
+	// legitimately-authorized status:"future" request lands core at "publish" and this
+	// comparison falsely rolled back (deleted) an otherwise valid listing. See posts.php's
+	// create path for why status/slug confirmation was dropped batch-wide rather than
+	// replicated a fourth time: title/content have no such core-side transition and stay
+	// confirmed below.
 	$after = get_post( $post_id );
 	if ( ! $after instanceof WP_Post
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title, 0 )
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content, 0 )
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_status', $status, 0 )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title, '', 0 )
+		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content, '', 0 )
 	) {
-		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title, content, or status could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
+		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title or content could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
 	}
 
 	if ( ! aafm_geodirectory_write_fields( (int) $post_id, $input ) ) {
@@ -922,10 +991,12 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		// address/location fields, extended to cover the core post fields too. Codex round 6
 		// B6-3: compare against each field's CANONICAL sanitize_post_field() form, not the
 		// pre-write intent, so a legitimate normalization is not mistaken for a veto.
+		// $post was read before wp_update_post() ran, so its fields are each field's genuine
+		// pre-write value.
 		$after = get_post( $id );
 		if ( ! $after instanceof WP_Post
-			|| ( array_key_exists( 'post_title', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_title', $update['post_title'] ) )
-			|| ( array_key_exists( 'post_content', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_content', $update['post_content'] ) )
+			|| ( array_key_exists( 'post_title', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_title', $update['post_title'], (string) $post->post_title ) )
+			|| ( array_key_exists( 'post_content', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_content', $update['post_content'], (string) $post->post_content ) )
 		) {
 			return new WP_Error(
 				'aafm_geodirectory_write_unconfirmed',

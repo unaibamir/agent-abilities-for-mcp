@@ -179,17 +179,25 @@ function aafm_activity_log_schema_verify(): bool {
  * not list, so existence is probed with a trivial select. The %i placeholder quotes the identifier
  * (an internal constant).
  *
+ * 1.7.5 round 4, R4-4: this used to read '' === $wpdb->last_error as its success signal.
+ * $wpdb->query() (wp-includes/class-wpdb.php) can return false, leaving last_error untouched at
+ * '', on paths that never actually ran the query - $wpdb->ready is false, the `query` filter
+ * returns an empty query, a failed reconnection after the server has gone away - the exact
+ * last_error pitfall aafm_wpdb_scalar()'s own docblock documents (R10-1) for the option-cache
+ * reads. Under that failure shape this returned true for an ABSENT table, and finalization could
+ * stamp the current schema version despite the table never having been verified. Delegating to
+ * aafm_wpdb_scalar(), which checks $wpdb->query()'s own return value instead, closes the same gap
+ * here.
+ *
  * @param string $table Fully-prefixed table name.
  * @return bool
  */
 function aafm_activity_log_table_present( string $table ): bool {
 	global $wpdb;
 	$suppressed = $wpdb->suppress_errors( true );
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
-	$error = $wpdb->last_error;
+	$result     = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
 	$wpdb->suppress_errors( $suppressed );
-	return '' === $error;
+	return $result['ok'];
 }
 
 /**
@@ -488,6 +496,46 @@ function aafm_log_activity( array $record ): int {
 	do_action( 'aafm_ability_called', $record );
 
 	return $row_id;
+}
+
+/**
+ * Record that an option write did not actually persist, instead of the usual success-style
+ * ability_enabled/ability_disabled/setting_changed diff a caller would otherwise log.
+ *
+ * Calling a success-style log entry unconditionally, before checking whether
+ * aafm_update_option_verified() (or an equivalent operator-switch persist) actually got the value
+ * into the database, would leave success-style rows on record for a write that a stale
+ * persistent object cache silently swallowed - the exact silent-wrong-answer class
+ * aafm_update_option_verified() exists to catch elsewhere. This is the one row written instead:
+ * status 'error', naming the option so the real cause (option-cache.php's stale-cache class of
+ * bug) is legible straight from the log, without implying any setting actually changed.
+ *
+ * R3-2 (1.7.5 deferred, round 3): originally defined in includes/admin/page.php, loaded inside
+ * aafm_bootstrap() at 'plugins_loaded' priority 10. Four failure paths call this function at or
+ * before priority 1 - the OAuth-preservation and DCR-adoption migration callbacks on
+ * 'plugins_loaded' priority 1 (includes/oauth/discovery.php), and the activity-log/OAuth schema
+ * version stamps run directly from aafm_activate() during plugin activation, before bootstrap has
+ * ever run. Moved here because this file is required at the plugin's top level (before
+ * aafm_bootstrap() exists at all), so it is defined before every one of those early callers can
+ * possibly run.
+ *
+ * @param string $option Option name that failed to persist.
+ * @param string $label  Human-readable label for the option, used in the detail message.
+ * @return void
+ */
+function aafm_log_ability_persist_failure( string $option, string $label ): void {
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => $option,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'error',
+			'event_type'        => 'setting_changed',
+			/* translators: %s: human-readable label of the option that failed to persist. */
+			'detail'            => sprintf( __( '%s could not be saved: object cache stale', 'agent-abilities-for-mcp' ), $label ),
+		)
+	);
 }
 
 /**

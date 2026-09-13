@@ -207,4 +207,71 @@ class CodesTest extends TestCase {
 		$res = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
+
+	/**
+	 * Codex round 6, R6-2 (site 5): the consuming UPDATE's own query result used to be discarded,
+	 * so a genuine query failure and a code that is simply invalid/expired/used both fell through
+	 * $wpdb->rows_affected to the same invalid_grant answer. Only the latter is a real
+	 * grant-validity finding.
+	 */
+	public function test_redeem_reports_server_error_when_the_consuming_update_fails(): void {
+		aafm_install_oauth_tables();
+
+		$ctx = $this->ctx();
+		$raw = aafm_oauth_mint_code( $ctx );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_consuming_update = 0 === strpos( trim( $query ), 'UPDATE' )
+					&& false !== strpos( $query, 'aafm_oauth_codes' );
+				return $is_consuming_update ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed consuming UPDATE is this pipeline\'s own fault, not an invalid grant' );
+	}
+
+	/**
+	 * Codex round 6, R6-2 (site 6): the consuming UPDATE just stamped exactly one row by this
+	 * exact hash, so a failed readback immediately after can never be a genuine grant-validity
+	 * finding - it used to report invalid_grant anyway.
+	 */
+	public function test_redeem_reports_server_error_when_the_readback_fails(): void {
+		aafm_install_oauth_tables();
+
+		$ctx = $this->ctx();
+		$raw = aafm_oauth_mint_code( $ctx );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_readback = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_codes' );
+				return $is_readback ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed readback right after a successful consumption is this pipeline\'s own fault, not an invalid grant' );
+	}
 }

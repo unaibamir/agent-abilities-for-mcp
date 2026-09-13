@@ -631,6 +631,7 @@ function aafm_exec_update_term_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
+	$old = get_term_meta( $term_id, $key, true );
 	update_term_meta( $term_id, $key, wp_slash( $value ) );
 	$stored = get_term_meta( $term_id, $key, true );
 	// Codex round 5 R5-2: update_term_meta()'s return value only catches an outright failure. A
@@ -639,7 +640,7 @@ function aafm_exec_update_term_meta( array $input ) {
 	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
 	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'term', $subtype ) ) {
+	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'term', $subtype ) ) {
 		return aafm_generic_error();
 	}
 	return array(

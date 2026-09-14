@@ -230,6 +230,67 @@ final class CommentsCrudTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out, 'a pending-pin write whose own confirming read never lands must not be reported as a confirmed pending create.' );
 	}
 
+	/**
+	 * Codex round 9, R9-2: same gap as the moderate-comment path, same shape here - the
+	 * pending-pin confirming read at line ~655 never busts the comment object cache first, so it
+	 * can trust a stale cached object instead of the row it just tried (and failed) to pin. This
+	 * plants a stale cached "pending" object over a database row that a hook already flipped to
+	 * "approved", then fails the pin's own UPDATE the same no-flush way as the sibling test above
+	 * so core's own cache-clearing never runs. A confirming read that trusts the stale cache sees
+	 * pending == pending and hands back an "approved" comment as a confirmed pending create.
+	 */
+	public function test_create_comment_confirms_against_the_database_not_a_stale_cache_entry(): void {
+		global $wpdb;
+
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create();
+
+		$comment_id        = null;
+		$approve_on_insert = static function ( $id ) use ( &$comment_id, $wpdb ) {
+			$comment_id = $id;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update( $wpdb->comments, array( 'comment_approved' => '1' ), array( 'comment_ID' => $id ) );
+
+			// A stale cached copy claiming "pending" over a row the hook just flipped to
+			// "approved" - the shape a prior failed, non-flushing write leaves behind.
+			$stale                   = clone get_comment( $id );
+			$stale->comment_approved = '0';
+			wp_cache_set( $id, $stale, 'comment' );
+		};
+		add_action( 'wp_insert_comment', $approve_on_insert );
+
+		$fail_pin_update = static function ( $query ) use ( &$comment_id, $wpdb ) {
+			if ( null !== $comment_id
+				&& false !== strpos( $query, "UPDATE `{$wpdb->comments}` SET `comment_approved` = '0'" )
+				&& false !== strpos( $query, "`comment_ID` = {$comment_id}" )
+			) {
+				return '';
+			}
+			return $query;
+		};
+		add_filter( 'query', $fail_pin_update );
+
+		try {
+			$out = wp_get_ability( 'aafm/create-comment' )->execute(
+				array(
+					'post_id' => $post,
+					'content' => 'Sneak me past moderation via a stale cache',
+				)
+			);
+		} finally {
+			remove_action( 'wp_insert_comment', $approve_on_insert );
+			remove_filter( 'query', $fail_pin_update );
+		}
+
+		$this->assertNotNull( $comment_id, 'the insert hook must have run for this test to prove anything.' );
+		// Bypass the cache entirely for this check - a raw read is the only way to see the row's
+		// real state independent of whatever the code under test trusted.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$db_status = $wpdb->get_var( $wpdb->prepare( "SELECT comment_approved FROM {$wpdb->comments} WHERE comment_ID = %d", $comment_id ) );
+		$this->assertSame( '1', $db_status, 'the pin update must have actually failed and left the comment approved for this test to prove anything.' );
+		$this->assertInstanceOf( WP_Error::class, $out, 'a stale cached "pending" object must not let the confirming read report a create that is actually approved as a confirmed pending one.' );
+	}
+
 	public function test_create_comment_sanitizes_script_content(): void {
 		$this->acting_as( 'editor' );
 		$post = self::factory()->post->create();

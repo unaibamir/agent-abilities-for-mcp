@@ -652,6 +652,13 @@ function aafm_exec_create_comment( array $input ) {
 	// contradicting the pending-queue guarantee this function exists to enforce. Read the actual
 	// stored status back and require it to be pending ('0', the literal value wp_set_comment_status()
 	// itself writes for 'hold' - wp-includes/comment.php) rather than trusting the call succeeded.
+	//
+	// Codex round 9, R9-2: that read-back is get_comment(), which serves the object cache before
+	// ever touching the database - so a stale cached entry (an earlier failed, non-flushing write
+	// leaves one behind on a persistent cache) could match the pending check while the row itself
+	// held something else. clean_comment_cache() first forces the read past it, exactly the way
+	// wp_set_comment_status() itself does before firing its own action.
+	clean_comment_cache( $comment_id );
 	$created = get_comment( $comment_id );
 	if ( ! $created instanceof WP_Comment || '0' !== $created->comment_approved ) {
 		return aafm_generic_error();
@@ -869,6 +876,13 @@ function aafm_exec_moderate_comment( array $input ) {
 	// return value true while the actual stored status is something else entirely. The only signal
 	// this function can trust is a fresh read taken after every hook has already run, compared
 	// against what was actually requested - never a return value from mid-pipeline.
+	//
+	// Codex round 9, R9-2: "fresh" only holds if the read actually reaches the database. get_comment()
+	// checks the object cache first, so a stale entry (the shape an earlier failed, non-flushing
+	// write leaves on a persistent cache) can still answer here even though every hook above already
+	// ran. clean_comment_cache() first forces the read past it, exactly the way wp_set_comment_status()
+	// itself does before firing its own action.
+	clean_comment_cache( $id );
 	$comment = get_comment( $id );
 	if ( ! $comment instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue (a wp_set_comment_status hook can delete the row after the guard above)
 		return aafm_generic_error();

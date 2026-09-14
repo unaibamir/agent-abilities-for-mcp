@@ -20,6 +20,25 @@
  * query() did not return false, giving every caller an explicit {ok, value} pair instead of a
  * single value that means three different things.
  *
+ * Codex round 9, R9-5: the matcher above only recognized the literal shape
+ * `$wpdb->methodName(...)`. Three PHP 7.4-compatible forms reach the identical stale-read bug
+ * while emitting none of those tokens in that order: a braced method name
+ * (`$wpdb->{'get_row'}(...)`), a variable method name (`$method = 'get_row';
+ * $wpdb->$method(...)`), and copying the object into another variable first (`$db = $wpdb;
+ * $db->get_row(...)`), which never re-mentions the literal `$wpdb` token at the call site. The
+ * matcher now also bans any braced or variable method dispatch on `$wpdb` unconditionally - no
+ * legitimate reader call ever needs one - and bans copying the bare `$wpdb` reference into
+ * anything else (`$anything = $wpdb;`) outright, since that copy is the one step every alias hop
+ * needs first; closing the copy closes every hop that could follow it.
+ *
+ * This still cannot be a complete defense against a dynamic language, and does not try to be. It
+ * does not follow $wpdb through a function parameter (`function f( $db ) { $db->get_row(...); }`
+ * called as `f( $wpdb )`), a `call_user_func( array( $wpdb, 'get_row' ) )` / `array( $wpdb,
+ * 'get_row' )` callable, a variable-variable (`$$name`), or `compact()`/`extract()`. Those need
+ * real data-flow analysis, not a token walk, and none of them exist under includes/ today. This
+ * test is a regression gate against the concrete evasions Codex has actually demonstrated, not a
+ * proof that no bare $wpdb read can ever exist.
+ *
  * @package AgentAbilitiesForMCP
  */
 
@@ -55,14 +74,62 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 	}
 
 	/**
-	 * Every bare `$wpdb->get_var()/get_row()/get_col()/get_results()` call in $source. A real
-	 * token walk, not a regex: it tolerates a comment sitting between `$wpdb`, `->`, and the
-	 * method name, and matches the method name case-insensitively, since PHP resolves both that
-	 * way. Text inside a comment or docblock is never mistaken for a call, because token_get_all()
-	 * classifies it as T_COMMENT/T_DOC_COMMENT rather than T_VARIABLE/T_OBJECT_OPERATOR/T_STRING.
+	 * Mirror of significant_token() that walks backward from $index instead of forward - needed
+	 * only to look at the token immediately before a `$wpdb` mention (is it a bare `=`?). Returns
+	 * the found token's own index, or null when the start of the file is reached first.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param int                                           $index  Index to start looking from.
+	 */
+	private function previous_significant_index( array $tokens, int $index ): ?int {
+		while ( $index >= 0 ) {
+			$token = $tokens[ $index ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				--$index;
+				continue;
+			}
+			return $index;
+		}
+		return null;
+	}
+
+	/**
+	 * Index of the `}` that closes the `{` at $open_index, tracking nesting depth so an inner
+	 * brace pair (unlikely inside a method-name expression, but not impossible) doesn't return
+	 * early. Null if the file ends before the brace closes (malformed source; never matches).
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens     token_get_all() output.
+	 * @param int                                           $open_index Index of the opening `{`.
+	 */
+	private function matching_brace_index( array $tokens, int $open_index ): ?int {
+		$depth = 0;
+		$total = count( $tokens );
+		for ( $j = $open_index; $j < $total; $j++ ) {
+			$token = $tokens[ $j ];
+			if ( '{' === $token || ( is_array( $token ) && T_CURLY_OPEN === $token[0] ) ) {
+				++$depth;
+			} elseif ( '}' === $token ) {
+				--$depth;
+				if ( 0 === $depth ) {
+					return $j;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Every bare `$wpdb->get_var()/get_row()/get_col()/get_results()` call in $source, plus every
+	 * shape that reaches the identical bug while dodging that literal token pattern - see the
+	 * R9-5 paragraph in this file's own header docblock for what each variant is and why it's
+	 * banned unconditionally, and for the honest limits of a token walk. A real token walk, not a
+	 * regex: it tolerates a comment sitting between `$wpdb`, `->`, and the method name, and
+	 * matches the method name case-insensitively, since PHP resolves both that way. Text inside a
+	 * comment or docblock is never mistaken for a call, because token_get_all() classifies it as
+	 * T_COMMENT/T_DOC_COMMENT rather than T_VARIABLE/T_OBJECT_OPERATOR/T_STRING.
 	 *
 	 * @param string $source Full file contents.
-	 * @return list<array{line:int,method:string}>
+	 * @return list<array{line:int,description:string}>
 	 */
 	private function find_bare_wpdb_reads( string $source ): array {
 		$tokens = token_get_all( $source );
@@ -72,30 +139,69 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 			if ( ! is_array( $token ) || T_VARIABLE !== $token[0] || '$wpdb' !== $token[1] ) {
 				continue;
 			}
+			$line = $token[2];
 
 			list( $arrow, $arrow_index ) = $this->significant_token( $tokens, $i + 1 );
-			if ( ! is_array( $arrow ) || T_OBJECT_OPERATOR !== $arrow[0] ) {
-				continue;
+			if ( is_array( $arrow ) && T_OBJECT_OPERATOR === $arrow[0] ) {
+				list( $next, $next_index ) = $this->significant_token( $tokens, $arrow_index + 1 );
+
+				if ( is_array( $next ) && T_STRING === $next[0] ) {
+					// $wpdb->methodName(...) - the original, literal shape.
+					$name = strtolower( $next[1] );
+					if ( in_array( $name, self::BANNED_METHODS, true ) ) {
+						list( $paren ) = $this->significant_token( $tokens, $next_index + 1 );
+						if ( is_string( $paren ) && '(' === $paren ) {
+							$found[] = array(
+								'line'        => $line,
+								'description' => sprintf( '$wpdb->%s()', $next[1] ),
+							);
+						}
+					}
+				} elseif ( is_string( $next ) && '{' === $next ) {
+					// $wpdb->{'get_row'}(...) - braced method name. Banned unconditionally
+					// regardless of what the brace contains: no legitimate reader call on $wpdb
+					// ever needs a computed method name.
+					$close_index = $this->matching_brace_index( $tokens, $next_index );
+					if ( null !== $close_index ) {
+						list( $paren ) = $this->significant_token( $tokens, $close_index + 1 );
+						if ( is_string( $paren ) && '(' === $paren ) {
+							$found[] = array(
+								'line'        => $line,
+								'description' => '$wpdb->{...}() (braced method name)',
+							);
+						}
+					}
+				} elseif ( is_array( $next ) && T_VARIABLE === $next[0] ) {
+					// $method = 'get_row'; $wpdb->$method(...) - variable method dispatch. Same
+					// unconditional ban, same reasoning.
+					list( $paren ) = $this->significant_token( $tokens, $next_index + 1 );
+					if ( is_string( $paren ) && '(' === $paren ) {
+						$found[] = array(
+							'line'        => $line,
+							'description' => sprintf( '$wpdb->%s() (dynamic method dispatch)', $next[1] ),
+						);
+					}
+				}
 			}
 
-			list( $method, $method_index ) = $this->significant_token( $tokens, $arrow_index + 1 );
-			if ( ! is_array( $method ) || T_STRING !== $method[0] ) {
-				continue;
+			// $anything = $wpdb; - copying the bare object reference into a variable, property,
+			// or array element (any assignment target token_get_all() might emit) defeats every
+			// check above, since none of them ever look past the literal `$wpdb` token. Ban the
+			// copy itself: previous significant token is a bare `=` (comparison/compound-assign
+			// operators are their own token types, never the plain string '='), and the very next
+			// significant token is the statement terminator `;`, so the right-hand side is
+			// exactly `$wpdb` alone - `$wpdb->prop` or `$wpdb . 'x'` on the right doesn't match,
+			// only a bare copy does.
+			$prev_index         = $this->previous_significant_index( $tokens, $i - 1 );
+			list( $after_wpdb ) = $this->significant_token( $tokens, $i + 1 );
+			$prev_is_assign     = null !== $prev_index && is_string( $tokens[ $prev_index ] ) && '=' === $tokens[ $prev_index ];
+			$next_is_semicolon  = is_string( $after_wpdb ) && ';' === $after_wpdb;
+			if ( $prev_is_assign && $next_is_semicolon ) {
+				$found[] = array(
+					'line'        => $line,
+					'description' => '$wpdb copied into another variable here (aliasing defeats the literal $wpdb matcher above)',
+				);
 			}
-			$name = strtolower( $method[1] );
-			if ( ! in_array( $name, self::BANNED_METHODS, true ) ) {
-				continue;
-			}
-
-			list( $paren ) = $this->significant_token( $tokens, $method_index + 1 );
-			if ( ! is_string( $paren ) || '(' !== $paren ) {
-				continue;
-			}
-
-			$found[] = array(
-				'line'   => $token[2],
-				'method' => $method[1],
-			);
 		}
 
 		return $found;
@@ -111,8 +217,79 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 		$found = $this->find_bare_wpdb_reads( $source );
 
 		$this->assertCount( 1, $found );
-		$this->assertSame( 'get_var', $found[0]['method'] );
+		$this->assertSame( '$wpdb->get_var()', $found[0]['description'] );
 		$this->assertSame( 4, $found[0]['line'] );
+	}
+
+	/**
+	 * R9-5, evasion 1: a braced method name never emits the literal T_STRING token the original
+	 * matcher looked for, but reaches the identical stale-read bug and must still be flagged.
+	 */
+	public function test_find_bare_wpdb_reads_flags_a_braced_method_name(): void {
+		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n\t\$row = \$wpdb->{'get_row'}( 'SELECT 1' );\n}\n";
+
+		$found = $this->find_bare_wpdb_reads( $source );
+
+		$this->assertCount( 1, $found );
+		$this->assertSame( 4, $found[0]['line'] );
+	}
+
+	/**
+	 * R9-5, evasion 2: dispatching through a variable method name never emits a T_STRING method
+	 * token either, and must still be flagged.
+	 */
+	public function test_find_bare_wpdb_reads_flags_a_dynamic_method_dispatch(): void {
+		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n\t\$method = 'get_row';\n\t\$row = \$wpdb->\$method( 'SELECT 1' );\n}\n";
+
+		$found = $this->find_bare_wpdb_reads( $source );
+
+		$this->assertCount( 1, $found );
+		$this->assertSame( 5, $found[0]['line'] );
+	}
+
+	/**
+	 * R9-5, evasion 3: aliasing $wpdb into another variable, then calling the banned method
+	 * through the alias, never re-mentions the literal `$wpdb` token at the call site - so the
+	 * matcher instead has to catch the alias being created, on the line it's created.
+	 */
+	public function test_find_bare_wpdb_reads_flags_an_alias_assignment(): void {
+		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n\t\$db = \$wpdb;\n\t\$row = \$db->get_row( 'SELECT 1' );\n}\n";
+
+		$found = $this->find_bare_wpdb_reads( $source );
+
+		$this->assertCount( 1, $found );
+		$this->assertSame( 4, $found[0]['line'] );
+	}
+
+	/**
+	 * The alias ban must not fire on the extremely common `$table = $wpdb->prefix . '...';`
+	 * shape - the right-hand side isn't a bare copy of $wpdb, so this must stay unflagged, or the
+	 * sweep would self-detonate across dozens of real, safe call sites under includes/.
+	 */
+	public function test_find_bare_wpdb_reads_ignores_a_property_read_assignment(): void {
+		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n\t\$table = \$wpdb->prefix . 'aafm_oauth_codes';\n}\n";
+
+		$this->assertSame( array(), $this->find_bare_wpdb_reads( $source ) );
+	}
+
+	/**
+	 * `$wpdb->$table` used as a dynamic PROPERTY read (a real, safe pattern in
+	 * includes/helpers.php, building a table name like `$wpdb->postmeta`) must stay unflagged -
+	 * only a following `(` turns dynamic dispatch into a call.
+	 */
+	public function test_find_bare_wpdb_reads_ignores_a_dynamic_property_read(): void {
+		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n\t\$table = \$wpdb->\$table_var;\n}\n";
+
+		$this->assertSame( array(), $this->find_bare_wpdb_reads( $source ) );
+	}
+
+	/**
+	 * `global $wpdb;` itself must never be mistaken for an alias assignment.
+	 */
+	public function test_find_bare_wpdb_reads_ignores_a_global_declaration(): void {
+		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n}\n";
+
+		$this->assertSame( array(), $this->find_bare_wpdb_reads( $source ) );
 	}
 
 	/**
@@ -177,7 +354,7 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 			++$scanned;
 
 			foreach ( $this->find_bare_wpdb_reads( $source ) as $hit ) {
-				$violations[] = sprintf( '%s:%d $wpdb->%s()', $relative, $hit['line'], $hit['method'] );
+				$violations[] = sprintf( '%s:%d %s', $relative, $hit['line'], $hit['description'] );
 			}
 		}
 

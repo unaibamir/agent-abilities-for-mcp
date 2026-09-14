@@ -586,7 +586,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// callback's legitimate normalization is not mistaken for a veto - a robots array runs through
 	// the same sanitize_meta() call a scalar field does, keeping the comparison correct for both.
 	foreach ( $expected_meta as $key => $value ) {
-		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
+		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', $id, $value, $key, 'post', $post_type ) ) {
 			return new WP_Error(
 				'aafm_rankmath_write_unconfirmed',
 				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
@@ -778,7 +778,7 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 	// write landed exactly as that sanitizer defines "landed".
 	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
 	$stored = is_array( $stored ) ? $stored : array();
-	if ( ! aafm_meta_write_confirmed( $old, $stored, $clean, 'rank_math_schema_' . $type, 'post', (string) get_object_subtype( 'post', $id ) ) ) {
+	if ( ! aafm_meta_write_confirmed( $old, $id, $clean, 'rank_math_schema_' . $type, 'post', (string) get_object_subtype( 'post', $id ) ) ) {
 		return new WP_Error(
 			'aafm_rankmath_schema_write_failed',
 			__( 'The schema could not be saved. Nothing was changed.', 'agent-abilities-for-mcp' )

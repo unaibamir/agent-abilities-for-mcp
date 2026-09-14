@@ -415,4 +415,65 @@ final class CommentsWriteTest extends TestCase {
 		$this->assertSame( 'unapproved', wp_get_comment_status( $comment ), 'The hook must have actually reverted the status for this test to prove anything.' );
 		$this->assertInstanceOf( WP_Error::class, $out, 'A status the hook reverted away from what was requested must not be reported as a successful approval.' );
 	}
+
+	/**
+	 * Codex round 9, R9-2: the confirming get_comment() call R8-4 added never busts the comment
+	 * object cache first, so it can serve a stale cached object instead of the real row. This
+	 * plants that exact divergence directly - a cached "pending" object sitting over a database
+	 * row that genuinely still says "approved" - the state a prior failed, non-flushing write
+	 * would plausibly leave behind, then fails the moderation call's own UPDATE the same no-flush
+	 * way so it never reaches core's own cache-clearing. A read that trusts the stale cache
+	 * confirms the requested unapprove against pending == pending and reports success while the
+	 * database never moved off approved.
+	 */
+	public function test_moderate_comment_confirms_against_the_database_not_a_stale_cache_entry(): void {
+		global $wpdb;
+
+		$this->acting_as( 'editor' );
+		$post       = self::factory()->post->create();
+		$comment_id = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '1',
+			)
+		);
+
+		// A stale cached copy claiming "pending" while the row underneath still says "approved" -
+		// the shape a plugin's earlier failed, non-flushing write leaves behind on a persistent
+		// object cache.
+		$stale                   = clone get_comment( $comment_id );
+		$stale->comment_approved = '0';
+		wp_cache_set( $comment_id, $stale, 'comment' );
+
+		// wp_set_comment_status()'s own UPDATE (approved '1' -> '0') fails via the no-flush
+		// query-filter path, so it returns before ever reaching its own clean_comment_cache()
+		// call - the stale entry above survives untouched into the confirming read.
+		$fail_pin_update = static function ( $query ) use ( $comment_id, $wpdb ) {
+			if ( false !== strpos( $query, "UPDATE `{$wpdb->comments}` SET `comment_approved` = '0'" )
+				&& false !== strpos( $query, "`comment_ID` = {$comment_id}" )
+			) {
+				return '';
+			}
+			return $query;
+		};
+		add_filter( 'query', $fail_pin_update );
+
+		try {
+			$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
+				array(
+					'comment_id' => $comment_id,
+					'action'     => 'unapprove',
+				)
+			);
+		} finally {
+			remove_filter( 'query', $fail_pin_update );
+		}
+
+		// Bypass the cache entirely for this check - a raw read is the only way to see the row's
+		// real state independent of whatever the code under test trusted.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$db_status = $wpdb->get_var( $wpdb->prepare( "SELECT comment_approved FROM {$wpdb->comments} WHERE comment_ID = %d", $comment_id ) );
+		$this->assertSame( '1', $db_status, 'the pin update must have actually failed and left the database approved for this test to prove anything.' );
+		$this->assertInstanceOf( WP_Error::class, $out, 'a stale cached "pending" object must not let the confirming read report success while the database still holds "approved".' );
+	}
 }

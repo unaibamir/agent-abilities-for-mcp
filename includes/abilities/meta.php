@@ -363,7 +363,7 @@ function aafm_exec_update_post_meta( array $input ) {
 	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
 	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'post', $subtype ) ) {
+	if ( ! aafm_meta_write_confirmed( $old, $id, $value, $key, 'post', $subtype ) ) {
 		return aafm_generic_error();
 	}
 	return array(

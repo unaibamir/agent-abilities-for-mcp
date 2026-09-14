@@ -965,7 +965,7 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		// filterable call core itself makes at write time, rather than the literal 'attachment' -
 		// a get_object_subtype_post filter remapping the subtype is honoured here the same way it
 		// is at write time.
-		if ( ! aafm_meta_write_confirmed( $alt_before, get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $attachment_id ) ) ) {
+		if ( ! aafm_meta_write_confirmed( $alt_before, $attachment_id, $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $attachment_id ) ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
@@ -1703,7 +1703,7 @@ function aafm_exec_update_media( array $input ) {
 	// call core itself makes at write time, rather than the literal 'attachment' - a
 	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
 	// at write time.
-	if ( $has_alt && ! aafm_meta_write_confirmed( $alt_before, get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $att_id ) ) ) {
+	if ( $has_alt && ! aafm_meta_write_confirmed( $alt_before, $att_id, $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $att_id ) ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
 

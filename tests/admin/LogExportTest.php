@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class LogExportTest extends TestCase {
@@ -34,6 +35,89 @@ final class LogExportTest extends TestCase {
 		// 205 rows + the header line. Proves the exporter paginates past aafm_query_activity()'s
 		// 200-row cap rather than silently truncating at it.
 		$this->assertSame( 206, substr_count( $this->capture_export(), "\n" ) );
+	}
+
+	/**
+	 * R9-3: a failed page read used to be indistinguishable from "reached the end of the
+	 * table" - both came back as an empty/short page, so the export loop stopped and the
+	 * download completed looking whole while everything after the failure was silently
+	 * missing. Fails the SECOND page's read (of a 205-row export, so a genuine third page
+	 * would otherwise follow) and proves the export ends with an unmistakable failure marker
+	 * instead of quietly closing the file after only the first 200 rows.
+	 */
+	public function test_a_failed_page_read_marks_the_export_incomplete_instead_of_truncating_silently(): void {
+		for ( $i = 0; $i < 205; $i++ ) {
+			aafm_log_activity(
+				array(
+					'ability' => 'aafm/get-posts',
+					'status'  => 'success',
+				)
+			);
+		}
+
+		$csv = QueryFaultInjector::fail_nth_query(
+			'ORDER BY created_at DESC, id DESC',
+			2,
+			fn() => $this->capture_export()
+		);
+
+		$lines = array_values( array_filter( explode( "\n", trim( $csv ) ) ) );
+		array_shift( $lines ); // Drop the header row.
+
+		$this->assertCount( 201, $lines, 'The first (successful) page of 200 rows plus one failure-marker line.' );
+		$this->assertStringContainsString( 'EXPORT INCOMPLETE', $csv, 'A failed page read must leave an unmistakable marker in the file.' );
+		$this->assertStringContainsString( 'Re-run the export', $csv );
+	}
+
+	/**
+	 * R9-3, the sibling failure: the export's pagination snapshot (aafm_activity_max_id_result())
+	 * used to collapse a failed read to 0, the same value an empty table produces, so every page's
+	 * `id <= 0` filter came back empty and the export finished looking like a genuinely empty log
+	 * instead of a failed one.
+	 */
+	public function test_a_failed_max_id_snapshot_marks_the_export_incomplete_instead_of_looking_empty(): void {
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+			)
+		);
+
+		$csv = QueryFaultInjector::fail_query(
+			'SELECT MAX(id) FROM',
+			fn() => $this->capture_export()
+		);
+
+		$lines = array_values( array_filter( explode( "\n", trim( $csv ) ) ) );
+		array_shift( $lines ); // Drop the header row.
+
+		$this->assertStringContainsString( 'EXPORT INCOMPLETE', $csv, 'A failed max-id snapshot must not produce a file that looks like a complete, empty export.' );
+		$this->assertCount( 1, $lines, 'Only the failure marker should be present - the real row was never reachable once the snapshot failed.' );
+	}
+
+	/**
+	 * The termination fix (count($rows) < 200, replacing the old `200 === $row_count` check) has
+	 * to keep behaving exactly as before for an export that legitimately ends on a page boundary:
+	 * an off-by-one here would either drop the last full page or spin an extra empty page into a
+	 * spurious failure marker. Exactly 200 seeded rows means the first page comes back full and
+	 * the second page's genuinely-empty (ok=true) result is what ends the loop.
+	 */
+	public function test_an_export_ending_exactly_on_a_page_boundary_completes_normally(): void {
+		for ( $i = 0; $i < 200; $i++ ) {
+			aafm_log_activity(
+				array(
+					'ability' => 'aafm/get-posts',
+					'status'  => 'success',
+				)
+			);
+		}
+
+		$csv   = $this->capture_export();
+		$lines = array_values( array_filter( explode( "\n", trim( $csv ) ) ) );
+		array_shift( $lines ); // Drop the header row.
+
+		$this->assertCount( 200, $lines, 'Every seeded row must be exported, no more and no fewer.' );
+		$this->assertStringNotContainsString( 'EXPORT INCOMPLETE', $csv, 'A boundary-exact, fully successful export must never be flagged incomplete.' );
 	}
 
 	public function test_it_honours_the_status_filter(): void {

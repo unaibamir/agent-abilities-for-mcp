@@ -801,6 +801,28 @@ function aafm_log_ability_exception( int $row_id, \Throwable $e ): string {
  * @return array<int,array<string,mixed>>
  */
 function aafm_query_activity( array $args ): array {
+	$view = aafm_query_activity_result( $args );
+	return $view['ok'] ? $view['rows'] : array();
+}
+
+/**
+ * Same read as aafm_query_activity(), but honest about a failed query instead of collapsing it
+ * to an empty result.
+ *
+ * The plain wrapper above can never tell its caller "zero rows because the table is
+ * empty/exhausted" apart from "zero rows because the query failed" - both read as `array()`. That
+ * is fine for a caller that only ever renders what it gets back, but the CSV exporter
+ * (aafm_export_activity_csv()) uses "fewer than a full page came back" as its own loop-termination
+ * signal, so a failed read looked exactly like reaching the end of the table and the export
+ * completed - silently missing every row after the failure (R9-3). This gives that caller the
+ * ok/rows split it needs to tell the two apart, without changing aafm_query_activity()'s existing
+ * contract for its many other callers.
+ *
+ * @param array<string,mixed> $args Same shape as aafm_query_activity().
+ * @return array{ok:bool,rows:array<int,array<string,mixed>>} ok is false when the query itself
+ *              failed - rows is empty either way in that case.
+ */
+function aafm_query_activity_result( array $args ): array {
 	global $wpdb;
 
 	$per_page = isset( $args['per_page'] ) ? min( 200, max( 1, (int) $args['per_page'] ) ) : 50;
@@ -844,7 +866,10 @@ function aafm_query_activity( array $args ): array {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $params ) );
 
-	return $view['ok'] && is_array( $view['value'] ) ? $view['value'] : array();
+	return array(
+		'ok'   => $view['ok'],
+		'rows' => ( $view['ok'] && is_array( $view['value'] ) ) ? $view['value'] : array(),
+	);
 }
 
 /**
@@ -965,10 +990,31 @@ function aafm_agent_call_count( ?string $status = null ): int {
  * @return int
  */
 function aafm_activity_max_id(): int {
+	$view = aafm_activity_max_id_result();
+	return $view['ok'] ? $view['value'] : 0;
+}
+
+/**
+ * Same read as aafm_activity_max_id(), but honest about a failed query instead of collapsing it
+ * to 0 - the same value an empty table produces.
+ *
+ * The CSV exporter takes this as its pagination snapshot before its first page runs (R9-3): if the
+ * read fails, folding that into 0 makes every page's `id <= 0` filter come back empty, and the
+ * export completes looking like a genuinely empty log instead of a failed one. Collapsing failure
+ * into 0 here is exactly the mistake aafm_query_activity_result()'s docblock describes for the row
+ * read; this closes the matching case for the MAX(id) read the exporter pairs it with.
+ *
+ * @return array{ok:bool,value:int} ok is false when the query itself failed - value is 0 either
+ *              way in that case.
+ */
+function aafm_activity_max_id_result(): array {
 	global $wpdb;
 	$table = aafm_activity_log_table();
 	$view  = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT MAX(id) FROM %i', $table ) );
-	return ( ! $view['ok'] || null === $view['value'] ) ? 0 : max( 0, (int) $view['value'] );
+	return array(
+		'ok'    => $view['ok'],
+		'value' => ( ! $view['ok'] || null === $view['value'] ) ? 0 : max( 0, (int) $view['value'] ),
+	);
 }
 
 /**

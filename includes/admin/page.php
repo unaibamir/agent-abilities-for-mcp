@@ -2483,6 +2483,32 @@ function aafm_csv_cell( string $value ): string {
 }
 
 /**
+ * Append one unmistakable CSV row flagging that the export stopped early because a database read
+ * failed, rather than because the log was exhausted (R9-3).
+ *
+ * A failed page read and "no more rows" both surface as an empty result from
+ * aafm_query_activity() - a caller that cannot tell them apart writes a file that LOOKS complete
+ * but silently drops every row after the failure. An audit export is evidence; a truncated one
+ * that claims completeness is worse than no export at all, so a failure has to be visible in the
+ * file itself rather than swallowed. The row content deliberately overflows and skews the normal
+ * column shape (a status no real row ever carries, an all-caps message repeated into more than
+ * one cell) so it reads as an anomaly at a glance rather than blending into ordinary data.
+ *
+ * @param resource $out The open php://output stream.
+ * @return void
+ */
+function aafm_write_export_failure_row( $out ): void {
+	$message = __( 'EXPORT INCOMPLETE - a database read failed partway through. Rows after this point were NOT exported. Re-run the export.', 'agent-abilities-for-mcp' );
+	fputcsv(
+		$out,
+		array( 'EXPORT INCOMPLETE', 'export_failed', 'EXPORT INCOMPLETE', $message, 'error', '', '', '', '', '', '' ),
+		',',
+		'"',
+		''
+	);
+}
+
+/**
  * Stream the activity log to php://output as CSV.
  *
  * Batched at aafm_query_activity()'s existing 200-row page cap rather than pulling the whole
@@ -2494,6 +2520,14 @@ function aafm_csv_cell( string $value ): string {
  * just an OFFSET into "however many rows exist right now". Without that bound, a row inserted
  * while the export is mid-run shifts the OFFSET window and the same row can be written twice -
  * nothing is skipped, but a duplicate in a compliance export is still a real defect.
+ *
+ * A failed read - the id snapshot, or any page - is never treated as "nothing left to export"
+ * (R9-3): both aafm_activity_max_id_result() and aafm_query_activity_result() report ok=false
+ * separately from a genuine empty result, and either one stops the export and appends an
+ * unmistakable failure row via aafm_write_export_failure_row() rather than completing quietly.
+ * Headers (admin-post.php's handler) are already sent by the time this runs, so an HTTP-level
+ * refusal is not on the table - marking the file itself is the only way to keep the operator from
+ * mistaking a truncated download for a complete one.
  *
  * Time limits and connection-abort handling are lifted for the same reason a partial export is
  * dangerous here: an operator relying on a compliance export getting cut off with a file that
@@ -2535,31 +2569,45 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 	// just double-doubled quotes around an embedded enclosure character.
 	fputcsv( $out, $columns, ',', '"', '' );
 
-	$max_id    = aafm_activity_max_id();
-	$page      = 1;
-	$row_count = 200;
-	while ( 200 === $row_count ) {
-		$rows      = aafm_query_activity(
-			array(
-				'per_page' => 200,
-				'page'     => $page,
-				'status'   => $status,
-				'max_id'   => $max_id,
-			)
-		);
-		$row_count = count( $rows );
-		foreach ( $rows as $row ) {
-			$line = array();
-			foreach ( $columns as $column ) {
-				$line[] = aafm_csv_cell( (string) ( $row[ $column ] ?? '' ) );
+	$max_id_view = aafm_activity_max_id_result();
+	$max_id      = $max_id_view['value'];
+
+	if ( ! $max_id_view['ok'] ) {
+		aafm_write_export_failure_row( $out );
+	} else {
+		$page = 1;
+		while ( true ) {
+			$view = aafm_query_activity_result(
+				array(
+					'per_page' => 200,
+					'page'     => $page,
+					'status'   => $status,
+					'max_id'   => $max_id,
+				)
+			);
+			if ( ! $view['ok'] ) {
+				aafm_write_export_failure_row( $out );
+				break;
 			}
-			fputcsv( $out, $line, ',', '"', '' );
+
+			$rows = $view['rows'];
+			foreach ( $rows as $row ) {
+				$line = array();
+				foreach ( $columns as $column ) {
+					$line[] = aafm_csv_cell( (string) ( $row[ $column ] ?? '' ) );
+				}
+				fputcsv( $out, $line, ',', '"', '' );
+			}
+			// Testing hook: lets the test suite insert rows between batches to prove the max_id
+			// snapshot above keeps them out of this export instead of shifting the OFFSET window.
+			do_action( 'aafm_activity_export_batch', $page, $rows );
+			flush();
+
+			if ( count( $rows ) < 200 ) {
+				break; // A genuinely-short page: the log is exhausted, not a failed read.
+			}
+			++$page;
 		}
-		// Testing hook: lets the test suite insert rows between batches to prove the max_id
-		// snapshot above keeps them out of this export instead of shifting the OFFSET window.
-		do_action( 'aafm_activity_export_batch', $page, $rows );
-		flush();
-		++$page;
 	}
 
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose

@@ -297,11 +297,11 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 ## Changelog
 ### 1.7.5
 
-* **Feature:** The Connection tab gained a searchable allowlist checkbox picker (replacing a free-text textarea), real role and client selects, a Client ID copy control, and paginated tables; the Abilities tab gained a cross-sub-tab search field.
-* **Fix:** A zero-match abilities search left the Save button stranded on a bare card with no context above it; the savebar now hides with the empty result and returns once matches come back.
-* **Fix:** The client picker's hover and selected states shared the same border and background, so a hovered card and the actually-selected one looked the same; hover now shows only a border outline.
-* **Fix:** Closed a batch of allowlist and search issues found in review: ability order round-trips on re-save, a stale search clears on keyboard tab navigation, a large allowlist no longer builds its full checkbox catalog at page load, and new controls carry accessible names and translated labels.
-* **Fix:** Post, block, and template writes now confirm against what actually landed in the database, and a stuck OAuth registration migration can no longer re-enable a switch you turned off. Comment counts no longer hint at comments you cannot see, and a failed token revoke no longer reports success.
+* **Feature:** The Connection tab swaps the allowlist textarea for a searchable checkbox picker and adds role and client selects, a Client ID copy control, paginated tables, and cross-tab abilities search.
+* **Fix:** A zero-match abilities search left the Save button stranded on an empty card; the savebar now hides and returns with the results.
+* **Fix:** The client picker's hover and selected states looked identical; hover is now a border outline only.
+* **Fix:** Ability order now survives a re-save, a stale search clears on keyboard navigation, a large allowlist no longer renders every checkbox at load, and new controls have accessible names and translations.
+* **Fix:** Post, block and template writes now confirm what landed, a stuck OAuth migration can no longer re-enable a switch you disabled, comment counts no longer hint at hidden comments, and a failed token revoke no longer reports success.
 
 ### 1.7.4
 

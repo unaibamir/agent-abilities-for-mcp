@@ -460,7 +460,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 	// not its pre-write intent, so a registered sanitize callback's legitimate normalization is not
 	// mistaken for a veto (matches the sibling meta writers in meta.php, terms.php, user-meta.php).
 	foreach ( $expected_meta as $key => $value ) {
-		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
+		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', $id, $value, $key, 'post', $post_type ) ) {
 			return new WP_Error(
 				'aafm_yoast_write_unconfirmed',
 				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )

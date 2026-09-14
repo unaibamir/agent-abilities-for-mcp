@@ -640,7 +640,7 @@ function aafm_exec_update_term_meta( array $input ) {
 	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
 	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'term', $subtype ) ) {
+	if ( ! aafm_meta_write_confirmed( $old, $term_id, $value, $key, 'term', $subtype ) ) {
 		return aafm_generic_error();
 	}
 	return array(

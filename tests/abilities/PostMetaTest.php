@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -586,5 +587,94 @@ final class PostMetaTest extends TestCase {
 			$out,
 			'A sanitize_callback registered for a get_object_subtype_post-remapped subtype must be caught, not missed because the probe read get_post_type() instead of following the filter.'
 		);
+	}
+
+	/**
+	 * Codex round 9, R9-1: get_post_meta() returns '' identically for "the meta is genuinely
+	 * empty" and "the confirming read itself failed". Reproduces the finding's exact repro: an
+	 * ordinary stored value, a metadata veto that ALSO evicts the object's meta cache (so the
+	 * following read cannot just serve the primed runtime cache), and a failed follow-up SELECT.
+	 * The pre-write read (which must stay correct so $old is genuine) is query occurrence 1 in
+	 * this window; the now-evicted post-write confirming read is occurrence 2 - only that one is
+	 * made to fail. Before the fix this let the veto certify as a landed write;
+	 * aafm_meta_write_confirmed() now reads the confirming value itself through a failure-aware
+	 * read, so a genuine query failure fails the confirmation closed instead.
+	 */
+	public function test_update_meta_fails_closed_when_a_veto_evicts_cache_and_the_confirming_read_fails(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'aafm_note', 'old value' );
+
+		global $wpdb;
+
+		// The veto blocks the write outright (storage stays at 'old value') AND evicts the
+		// object's meta cache, exactly like a short-circuiting update_post_metadata filter
+		// combined with a cache backend that invalidates before confirming the remote write - the
+		// scenario the finding's repro names, so the confirming read below cannot just serve the
+		// runtime cache the pre-write read already primed.
+		$veto = static function () use ( $id ) {
+			wp_cache_delete( $id, 'post_meta' );
+			return true;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		// A no-flush query failure alone does not expose this: occurrence 1 and 2 are the exact
+		// same SQL (both read the whole post's meta row set with no WHERE change), so the
+		// no-flush path's stale $wpdb->last_result already holds the right answer by coincidence.
+		// A genuine SQL error (real_error) is what actually empties the result the way a real
+		// database fault would.
+		$out = QueryFaultInjector::break_query_with_real_error(
+			$wpdb->postmeta,
+			static function () use ( $id ) {
+				return aafm_exec_update_post_meta(
+					array(
+						'post_id'  => $id,
+						'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+						'value'    => 'new value',
+					)
+				);
+			},
+			2
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A failed confirming read must never certify a vetoed write as landed.'
+		);
+		// The injected real SQL error also left core's own object cache believing this post has
+		// no meta at all (a genuinely failed query caches as "no rows" the same way a real one
+		// would) - bust it before this sanity read so it reflects the database, not that
+		// fault-poisoned cache entry.
+		wp_cache_delete( $id, 'post_meta' );
+		$this->assertSame( 'old value', get_post_meta( $id, 'aafm_note', true ), 'sanity: the write was never actually applied.' );
+	}
+
+	/**
+	 * Companion to the fault-injection test above: a genuinely empty stored value must still
+	 * confirm normally. The failure branch must fire only on a real query failure, never on a
+	 * legitimate empty/missing meta row - conflating the two would report a successful
+	 * clear-to-empty write as an error on every working site.
+	 */
+	public function test_update_meta_confirms_a_genuinely_empty_value(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'aafm_note', 'old value' );
+
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => '',
+			)
+		);
+
+		$this->assertIsArray( $out, 'a genuine clear-to-empty write must confirm, not be mistaken for a failed read.' );
+		$this->assertSame( '', $out['value'] );
+		$this->assertSame( '', get_post_meta( $id, 'aafm_note', true ) );
 	}
 }

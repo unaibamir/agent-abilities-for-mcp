@@ -2188,11 +2188,27 @@ function aafm_generic_error(): WP_Error {
  * confirmed no-op purely because the caller's literal input matched what was already stored. See
  * $old_is_canonical below.
  *
+ * Codex round 9, R9-1: this used to take the confirming read as a $stored parameter, sourced by
+ * every call site from get_post_meta()/get_term_meta()/get_user_meta(). Those getters cannot tell
+ * "the meta is genuinely empty" apart from "the confirming read itself failed" - both return ''
+ * (an evicted object-cache entry plus a failed follow-up SELECT lands on the same '' a real empty
+ * value would). Comparing that unsignalled '' against $old and $intended could satisfy the
+ * "something changed" branch and certify a vetoed write - the same class of bug R8-2 closed one
+ * layer further in, at the direct database reader. This now reads the confirming value itself,
+ * straight from the object's own meta table, through the same failure-aware {ok,value} shape the
+ * direct-reader class already uses everywhere else (aafm_wpdb_row(), option-cache.php): a genuine
+ * query failure now fails the confirmation closed, while a legitimate empty or missing row (the
+ * query succeeded and simply found nothing) still reads as '', exactly what the getter would have
+ * returned for that same real state. This is not a reimplementation of core's cache/error
+ * internals - it is one authoritative read replacing an unsignalled one, mirroring
+ * aafm_post_field_write_confirmed()'s own R8-2 fix rather than inventing a new mechanism.
+ *
  * @param mixed  $old            The value read back from storage BEFORE the write ran.
- * @param mixed  $stored         The value read back from storage after the write.
+ * @param int    $object_id      The post/term/user id the meta is stored against.
  * @param mixed  $intended       The unslashed value the write attempted to store.
  * @param string $meta_key       Meta key.
- * @param string $object_type    'post', 'term', or 'user'.
+ * @param string $object_type    'post', 'term', or 'user' - also the wpdb table/column prefix
+ *                                ({$object_type}meta, {$object_type}_id) the confirming read uses.
  * @param string $object_subtype The post type / taxonomy the meta key is registered under. For
  *                                user meta this is the literal string 'user' (core's own
  *                                get_object_subtype( 'user', $id ), wp-includes/meta.php, resolves
@@ -2201,13 +2217,46 @@ function aafm_generic_error(): WP_Error {
  *                                sanitizer.
  * @return bool
  */
-function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
+function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
+	global $wpdb;
+
+	$table  = $object_type . 'meta';
+	$id_col = $object_type . '_id';
+	$view   = aafm_wpdb_row(
+		$wpdb->prepare(
+			'SELECT %i AS value FROM %i WHERE %i = %d AND meta_key = %s LIMIT 1',
+			'meta_value',
+			$wpdb->$table,
+			$id_col,
+			$object_id,
+			$meta_key
+		)
+	);
+	if ( ! $view['ok'] ) {
+		return false;
+	}
+	$row = $view['value'];
+	// maybe_unserialize() mirrors core's own update_meta_cache() (wp-includes/meta.php), which
+	// unserializes each raw meta_value column before it ever reaches a getter - an array-valued
+	// meta key (a serialized token list, e.g. Rank Math's schema array) must be compared in that
+	// real shape, not as the raw serialized string a direct column read returns.
+	$stored = ( is_array( $row ) && isset( $row['value'] ) ) ? maybe_unserialize( (string) $row['value'] ) : '';
+
 	$expected = sanitize_meta( $meta_key, $intended, $object_type, $object_subtype );
 	// Any array-valued meta key (a serialized token list, e.g. Slim SEO's schema array) is
 	// compared by exact array equality throughout; casting an array to string is a PHP warning,
 	// not a comparison. A single is_array() check covers all four values consistently, since they
 	// all describe the same meta key and therefore share its shape.
 	$is_arr = is_array( $old ) || is_array( $stored ) || is_array( $intended ) || is_array( $expected );
+	// Every call site normalizes a missing/non-array $old and $intended to array() for an
+	// array-shaped key (get_post_meta()'s own '' default coerced the same way, e.g.
+	// aafm_exec_rankmath_update_schema()'s `is_array( $old ) ? $old : array()`). A missing row
+	// from the read above is '' - the scalar-key convention - so it must be coerced to array()
+	// here too once $is_arr is known, or a genuinely absent array value never equals the
+	// caller's own array()-shaped $old and a landed no-op change reads as a real one.
+	if ( $is_arr && ! is_array( $stored ) ) {
+		$stored = array();
+	}
 	if ( $is_arr ? $stored === $expected : (string) $stored === (string) $expected ) {
 		return true;
 	}

@@ -537,9 +537,14 @@ function aafm_with_named_lock( string $name, callable $callback ) {
 	$lock     = 'aafm_' . md5( $name );
 	$acquired = false;
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$got = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock, 5 ) );
-	if ( '1' === (string) $got ) {
+	// A bare $wpdb->get_var() used to sit here, which hands back the PREVIOUS query's value when
+	// this one fails - a stale truthy '1' left over from an earlier, successful GET_LOCK() call
+	// could then be misread as "acquired" for a lock this call never actually took. Routed through
+	// aafm_wpdb_scalar() so a failed check falls through to $acquired staying false, the same
+	// best-effort "run the callback unlocked" path a genuine timeout already takes (see the
+	// docblock above): this can only ever make the lock weaker, never falsely stronger.
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock, 5 ) );
+	if ( $view['ok'] && '1' === (string) $view['value'] ) {
 		$acquired = true;
 	}
 

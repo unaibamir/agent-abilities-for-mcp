@@ -349,6 +349,16 @@ function aafm_exec_create_block( array $input ) {
 	if ( ! $saved instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
+	// B3 (1.7.5 deferred): the reread above only proved the row exists, never that what came
+	// back matches what this create actually asked for - a wp_insert_post_data filter silently
+	// vetoing or normalizing a field would still report success on the caller's stale intent.
+	// $sanitize_context_id is 0, not (int) $id: core's own sanitize_post( $postarr, 'db' ) inside
+	// wp_insert_post() ran BEFORE this row existed, with ID defaulted to 0 (R7-4).
+	if ( ! aafm_post_field_write_confirmed( (int) $id, 'post_title', $title, '', 0 )
+		|| ! aafm_post_field_write_confirmed( (int) $id, 'post_content', $content, '', 0 )
+	) {
+		return aafm_generic_error();
+	}
 	return aafm_block_with_warnings( aafm_rich_block( $saved ), $guard['warnings'] );
 }
 
@@ -452,6 +462,20 @@ function aafm_exec_update_block( array $input ) {
 	$saved = get_post( (int) $result );
 	if ( ! $saved instanceof WP_Post ) {
 		return aafm_generic_error();
+	}
+	// B3 (1.7.5 deferred): only the fields THIS update actually set are checked, each against
+	// its CANONICAL sanitize_post_field() form - same shape as create-block above, but the
+	// default $sanitize_context_id (the existing $id: this is an update, the row already
+	// existed at sanitize time).
+	// $block was read before wp_update_post() ran, so its fields are each field's genuine
+	// pre-write value.
+	foreach ( array( 'post_title', 'post_content' ) as $field ) {
+		if ( ! isset( $update[ $field ] ) ) {
+			continue;
+		}
+		if ( ! aafm_post_field_write_confirmed( $id, $field, (string) $update[ $field ], (string) $block->$field ) ) {
+			return aafm_generic_error();
+		}
 	}
 	return aafm_block_with_warnings( aafm_rich_block( $saved ), $guard['warnings'] );
 }

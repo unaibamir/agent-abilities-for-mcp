@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\OAuth;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -122,6 +123,25 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * Count rows whose refresh_parent_id equals a given row id - used to prove a rotation attempt
+	 * against an already-deactivated node left no successor row behind at all.
+	 *
+	 * @param int $parent_id The refresh_parent_id to match.
+	 * @return int
+	 */
+	private function count_children_of( int $parent_id ): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_access_tokens WHERE refresh_parent_id = %d",
+				$parent_id
+			)
+		);
+	}
+
+	/**
 	 * T1-7: when the row insert fails, mint returns a WP_Error rather than phantom tokens -
 	 * a client must never get a successful token response for a grant that was never stored.
 	 */
@@ -228,19 +248,12 @@ class TokensTest extends TestCase {
 		);
 
 		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $wpdb ): string {
-				$is_read = false !== strpos( $query, 'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`' );
-				return $is_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+		$result = QueryFaultInjector::break_query_with_real_error(
+			'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`',
+			static function () use ( $tokens ) {
+				return aafm_oauth_validate_access_token( $tokens['access_token'] );
 			}
 		);
-		$suppressed = $wpdb->suppress_errors( true );
-
-		$result = aafm_oauth_validate_access_token( $tokens['access_token'] );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
 
 		$this->assertFalse( $result, 'An unreadable clients table must refuse the token, not accept it.' );
 	}
@@ -514,21 +527,63 @@ class TokensTest extends TestCase {
 		$this->assertIsArray( $tokens );
 
 		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $wpdb ): string {
-				$is_read = false !== strpos( $query, 'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`' );
-				return $is_read ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+		$rejected = QueryFaultInjector::break_query_with_real_error(
+			'SELECT is_active FROM `' . $wpdb->prefix . 'aafm_oauth_clients`',
+			static function () use ( $tokens, $client_id ) {
+				return aafm_oauth_rotate_refresh( $tokens['refresh_token'], $client_id );
 			}
 		);
-		$suppressed = $wpdb->suppress_errors( true );
-
-		$rejected = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $client_id );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
 
 		$this->assertInstanceOf( WP_Error::class, $rejected, 'an unreadable clients table must refuse rotation, not grant it' );
+	}
+
+	/**
+	 * 1.7.5 round 4, R4-3: a failed START TRANSACTION must refuse the rotation rather than run
+	 * the consume+mint pair unwrapped and report success anyway.
+	 */
+	public function test_rotate_refresh_returns_error_when_start_transaction_fails(): void {
+		aafm_install_oauth_tables();
+
+		$ctx    = $this->ctx();
+		$tokens = aafm_oauth_mint_tokens( $ctx );
+
+		$rejected = QueryFaultInjector::break_query_with_real_error(
+			'START TRANSACTION',
+			static function () use ( $tokens, $ctx ) {
+				return aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+			},
+			0,
+			true
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $rejected, 'a failed START TRANSACTION must refuse rotation, not run it unwrapped' );
+
+		// The old refresh row must still be active: nothing was consumed.
+		$old_after = $this->row_by_refresh( $tokens['refresh_token'] );
+		$this->assertNotNull( $old_after );
+		$this->assertSame( 1, (int) $old_after['is_active'], 'a refused rotation must not consume the old refresh row' );
+	}
+
+	/**
+	 * 1.7.5 round 4, R4-3: a failed COMMIT must not report the minted tokens as issued - this
+	 * function cannot confirm the consumption and the new pair actually persisted together.
+	 */
+	public function test_rotate_refresh_returns_error_when_commit_fails(): void {
+		aafm_install_oauth_tables();
+
+		$ctx    = $this->ctx();
+		$tokens = aafm_oauth_mint_tokens( $ctx );
+
+		$rejected = QueryFaultInjector::break_query_with_real_error(
+			'COMMIT',
+			static function () use ( $tokens, $ctx ) {
+				return aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+			},
+			0,
+			true
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $rejected, 'a failed COMMIT must not be reported as a successful rotation' );
 	}
 
 	/**
@@ -668,5 +723,379 @@ class TokensTest extends TestCase {
 		aafm_install_oauth_tables();
 
 		$this->assertFalse( aafm_oauth_revoke_token( bin2hex( random_bytes( 32 ) ) ) );
+	}
+
+	/**
+	 * 1.7.5 round 4, R4-2: a genuine query failure must return null, not the same false a
+	 * legitimate "no matching token" gets - the REST caller uses this to avoid reporting a
+	 * database failure as an ordinary 200 revocation no-op.
+	 */
+	public function test_revoke_token_returns_null_when_the_update_query_fails(): void {
+		aafm_install_oauth_tables();
+
+		$tokens = aafm_oauth_mint_tokens( $this->ctx() );
+
+		global $wpdb;
+		$result = QueryFaultInjector::break_query_with_real_error(
+			array( 'UPDATE `' . $wpdb->prefix . 'aafm_oauth_access_tokens`', 'is_active = 0' ),
+			static function () use ( $tokens ) {
+				return aafm_oauth_revoke_token( $tokens['access_token'] );
+			}
+		);
+
+		$this->assertNull( $result, 'a failed revoke query must be distinguishable from "no matching token"' );
+
+		// The token must still validate: nothing was actually revoked.
+		$this->assertIsInt( aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+	}
+
+	/**
+	 * 1.7.5 round 4, R4-2: when the chain-revocation traversal cannot complete (a read fails
+	 * partway through), the reuse-detection error must not claim the chain was revoked.
+	 */
+	public function test_rotate_refresh_replay_does_not_overclaim_when_chain_traversal_fails(): void {
+		aafm_install_oauth_tables();
+
+		$ctx     = $this->ctx();
+		$tokens  = aafm_oauth_mint_tokens( $ctx );
+		$rotated = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $rotated );
+
+		// Replay the now-consumed original refresh token: reuse detection fires and walks the
+		// chain. Force the upward-walk read to fail so aafm_oauth_revoke_chain() cannot certify
+		// the traversal completed.
+		global $wpdb;
+		add_filter(
+			'query',
+			static function ( string $query ) use ( $wpdb ): string {
+				$is_parent_walk = false !== strpos( $query, 'SELECT refresh_parent_id FROM `' . $wpdb->prefix . 'aafm_oauth_access_tokens`' );
+				return $is_parent_walk ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+
+		$replayed = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertInstanceOf( WP_Error::class, $replayed );
+		$this->assertSame(
+			'The refresh token has already been used.',
+			$replayed->get_error_message(),
+			'the message must not claim the chain was revoked when traversal could not be certified'
+		);
+	}
+
+	/**
+	 * Codex round 7, R7-1: three prior fixes (a one-shot post-UPDATE re-check, then a bounded
+	 * convergence loop) each collected the lineage first and deactivated it in one UPDATE at the
+	 * end, so a successor minted after the last read but before that final UPDATE was invisible
+	 * and the function still reported success. The round 7 fix inverts the walk: every node is
+	 * deactivated BEFORE its children are read, so a concurrent rotation attempt aimed at a node
+	 * already visited by this walk finds that node already inactive and cannot mint at all - there
+	 * is no successor for a later read to miss.
+	 *
+	 * This proves that shape directly: the injected rotation fires in the gap right after gen1 is
+	 * deactivated (and before its children are read), and must fail outright rather than merely
+	 * get caught and revoked afterward.
+	 */
+	public function test_rotate_refresh_replay_revokes_a_successor_minted_mid_walk(): void {
+		aafm_install_oauth_tables();
+
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+		$gen1 = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $gen1 );
+
+		$gen1_row = $this->row_by_refresh( $gen1['refresh_token'] );
+		$this->assertNotNull( $gen1_row );
+		$gen1_id = (int) $gen1_row['id'];
+
+		// Arms on the query that deactivates gen1 (letting it run normally), then fires on the
+		// VERY NEXT query - the read of gen1's children - injecting a concurrent rotation attempt
+		// for gen1 into that exact gap. Simulates a concurrent request racing to rotate gen1 right
+		// as this walk finishes deactivating it.
+		$marker   = 'is_active = 0 WHERE id = ' . $gen1_id;
+		$armed    = false;
+		$fired    = false;
+		$injected = null;
+
+		add_filter(
+			'query',
+			function ( string $query ) use ( $marker, $gen1, $ctx, &$armed, &$fired, &$injected ): string {
+				if ( $armed ) {
+					$armed = false;
+					$fired = true;
+					remove_all_filters( 'query' );
+					$injected = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
+					return $query;
+				}
+				if ( false !== strpos( $query, $marker ) ) {
+					$armed = true;
+				}
+				return $query;
+			}
+		);
+
+		try {
+			// Replaying gen0 (already consumed by its own rotation into gen1) triggers reuse
+			// detection, which revokes the whole lineage the walk can find starting at gen0.
+			$replay = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertTrue( $fired, 'the injected mid-walk rotation never ran; this test did not exercise the race' );
+
+		// The injected rotation must fail outright - gen1 is already inactive by the time it
+		// runs, so its own single-winner gate matches zero rows and no successor is ever minted.
+		$this->assertInstanceOf( WP_Error::class, $injected, 'a rotation attempt against an already-deactivated node must not succeed' );
+		$this->assertSame( 'invalid_grant', $injected->get_error_code() );
+		$this->assertSame( 0, $this->count_children_of( $gen1_id ), 'no successor row may exist for a rotation the revocation walk already closed the window on' );
+
+		$this->assertInstanceOf( WP_Error::class, $replay );
+		$this->assertSame(
+			'The refresh token has already been used; the token chain has been revoked.',
+			$replay->get_error_message(),
+			'gen1 had no surviving descendant, so the walk should report the chain fully revoked'
+		);
+	}
+
+	/**
+	 * Codex round 7, R7-1: the per-node deactivate-before-read guarantee the test above proves for
+	 * the first hop off the seed must hold at any depth, not just one hop in. This builds a real
+	 * three-generation chain (gen0 -> gen1 -> gen2, all pre-existing, not injected) and injects a
+	 * concurrent rotation attempt against gen2 - the deepest node - in the same gap: right after
+	 * the walk deactivates it, right before it reads gen2's children. It must fail the same way.
+	 */
+	public function test_rotate_refresh_replay_closes_the_window_at_any_depth(): void {
+		aafm_install_oauth_tables();
+
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+		$gen1 = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $gen1 );
+		$gen2 = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $gen2 );
+
+		$gen2_row = $this->row_by_refresh( $gen2['refresh_token'] );
+		$this->assertNotNull( $gen2_row );
+		$gen2_id = (int) $gen2_row['id'];
+
+		$marker   = 'is_active = 0 WHERE id = ' . $gen2_id;
+		$armed    = false;
+		$fired    = false;
+		$injected = null;
+
+		add_filter(
+			'query',
+			function ( string $query ) use ( $marker, $gen2, $ctx, &$armed, &$fired, &$injected ): string {
+				if ( $armed ) {
+					$armed = false;
+					$fired = true;
+					remove_all_filters( 'query' );
+					$injected = aafm_oauth_rotate_refresh( $gen2['refresh_token'], $ctx['client_id'] );
+					return $query;
+				}
+				if ( false !== strpos( $query, $marker ) ) {
+					$armed = true;
+				}
+				return $query;
+			}
+		);
+
+		try {
+			// Replaying gen0 triggers reuse detection; the walk must reach gen2 (two hops down)
+			// before this test's assertions mean anything.
+			$replay = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertTrue( $fired, 'the injected rotation never ran; the walk did not reach gen2' );
+		$this->assertInstanceOf( WP_Error::class, $injected, 'a rotation attempt against an already-deactivated node must not succeed, at any depth' );
+		$this->assertSame( 'invalid_grant', $injected->get_error_code() );
+		$this->assertSame( 0, $this->count_children_of( $gen2_id ), 'no successor row may exist for gen2 once the walk has deactivated it' );
+
+		$this->assertInstanceOf( WP_Error::class, $replay );
+		$this->assertSame(
+			'The refresh token has already been used; the token chain has been revoked.',
+			$replay->get_error_message()
+		);
+
+		// Every real row in the lineage must actually be inactive, not merely reported as such.
+		// Re-read both rows - the copies captured above predate the revocation.
+		$gen1_row = $this->row_by_refresh( $gen1['refresh_token'] );
+		$this->assertNotNull( $gen1_row );
+		$this->assertSame( 0, (int) $gen1_row['is_active'] );
+		$gen2_row = $this->row_by_refresh( $gen2['refresh_token'] );
+		$this->assertNotNull( $gen2_row );
+		$this->assertSame( 0, (int) $gen2_row['is_active'] );
+	}
+
+	/**
+	 * Codex round 6, R6-2 (site 1): a failed refresh-token lookup used to read exactly like an
+	 * unknown token, both reported as invalid_grant. A database fault is this pipeline's own
+	 * fault, not evidence the presented token is bad.
+	 */
+	public function test_rotate_refresh_reports_server_error_when_the_lookup_query_fails(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		$result = QueryFaultInjector::break_query_with_real_error(
+			'refresh_hash = ',
+			static function () use ( $gen0, $ctx ) {
+				return aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+			}
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed lookup is this pipeline\'s own fault, not an invalid grant' );
+	}
+
+	/**
+	 * Codex round 6, R6-2 (site 2): the single-winner consumption UPDATE returns false on a
+	 * genuine query failure and an integer (0 on a lost race) on success - both used to report
+	 * invalid_grant. Only the race-loss case is a real grant-validity answer.
+	 */
+	public function test_rotate_refresh_reports_server_error_when_the_consuming_update_fails(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_consuming_update = 0 === strpos( trim( $query ), 'UPDATE' )
+					&& false !== strpos( $query, 'aafm_oauth_access_tokens' );
+				return $is_consuming_update ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed consuming UPDATE is this pipeline\'s own fault, not an invalid grant' );
+	}
+
+	/**
+	 * Codex round 6, R6-2 (site 3): aafm_oauth_client_is_deactivated() correctly fails closed on
+	 * an unreadable clients table, but the caller used to always report "the client is no longer
+	 * active" - true only when the client was genuinely confirmed inactive, not when this
+	 * pipeline simply could not check.
+	 */
+	public function test_rotate_refresh_reports_server_error_when_the_client_check_fails(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				$is_client_check = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_clients' );
+				return $is_client_check ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'an unreadable clients table is this pipeline\'s own fault, not a confirmed deactivation' );
+	}
+
+	/**
+	 * Codex round 7, R7-3: the client check above used to run as two separate queries -
+	 * aafm_oauth_client_is_deactivated() then, only when that returned true,
+	 * aafm_oauth_client_lookup_failed() - so a failed FIRST query followed by a SUCCESSFUL second
+	 * query could still read the client as genuinely deactivated rather than as a fault. Fails
+	 * only the first client-select query and lets any later one through, then asserts both the
+	 * correct result AND that only one such query ever ran - proving there is no second read for
+	 * a reverted two-query shape to fall back on.
+	 */
+	public function test_rotate_refresh_client_check_is_a_single_read_when_that_read_fails(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		$occurrences = 0;
+		add_filter(
+			'query',
+			function ( string $query ) use ( &$occurrences ): string {
+				$is_client_check = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_clients' );
+				if ( ! $is_client_check ) {
+					return $query;
+				}
+				++$occurrences;
+				return 1 === $occurrences ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'server_error', $result->get_error_code(), 'a failed single read must be reported as a fault, never silently answered by a second query' );
+		$this->assertSame( 1, $occurrences, 'a second client-select query means the old two-query shape has come back' );
+	}
+
+	/**
+	 * Codex round 7, R7-3, opposite direction: a genuinely deactivated client found by the first
+	 * (and, under the fix, only) client-select query must report invalid_grant even though a
+	 * SECOND such query - the old aafm_oauth_client_lookup_failed() re-probe - would have failed.
+	 * Deactivates the client for real, then fails only a second occurrence of the client-select
+	 * query (the first is left to run normally); the fix never issues that second query, so the
+	 * genuine deactivation must still be reported correctly.
+	 */
+	public function test_rotate_refresh_client_check_reports_genuine_deactivation_even_if_a_second_read_would_fail(): void {
+		$ctx  = $this->ctx();
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+		$this->assertTrue( aafm_oauth_deactivate_client( $ctx['client_id'] ) );
+
+		$occurrences = 0;
+		add_filter(
+			'query',
+			function ( string $query ) use ( &$occurrences ): string {
+				$is_client_check = 0 === strpos( trim( $query ), 'SELECT' )
+					&& false !== strpos( $query, 'aafm_oauth_clients' );
+				if ( ! $is_client_check ) {
+					return $query;
+				}
+				++$occurrences;
+				return 2 === $occurrences ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+
+		try {
+			$result = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+			remove_all_filters( 'query' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'invalid_grant', $result->get_error_code(), 'a genuine deactivation found by the one real read must not be overridden by a second query that never runs' );
+		$this->assertSame( 1, $occurrences, 'a second client-select query means the old two-query shape has come back' );
 	}
 }

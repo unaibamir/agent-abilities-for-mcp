@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class OauthRevokeAjaxTest extends TestCase {
@@ -238,21 +239,14 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * Make one query fail by rewriting it to target a table that does not exist, so
+	 * Make one query fail via QueryFaultInjector's real-error path, so
 	 * $wpdb->query()/update()/delete() report failure the same way a real SQL error would.
 	 *
 	 * @param string $needle Substring identifying the one query to break.
 	 * @return void
 	 */
 	private function fail_query_containing( string $needle ): void {
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $needle ): string {
-				return false !== strpos( $query, $needle )
-					? 'SELECT * FROM aafm_missing_table_for_test'
-					: $query;
-			}
-		);
+		add_filter( 'query', QueryFaultInjector::real_error_filter( $needle ) );
 	}
 
 	/**
@@ -582,6 +576,123 @@ final class OauthRevokeAjaxTest extends TestCase {
 		$this->assertNotNull(
 			aafm_oauth_get_access_token_row( $tokens['access_token'] ),
 			'The token row was never actually reachable; it must still read active.'
+		);
+	}
+
+	/**
+	 * R2-10 (1.7.5 deferred, round 2): the two AJAX-level tests above fault BOTH the token
+	 * UPDATE and the confirming COUNT, but aafm_ajax_oauth_revoke_client()'s guard is
+	 * `-1 === $revoked || aafm_oauth_client_has_active_tokens(...) || ...` - PHP's `||`
+	 * short-circuits on the already-true `-1 === $revoked`, so the confirming reader is never
+	 * even called and its own fault injection above never actually ran. This asserts
+	 * aafm_oauth_client_has_active_tokens()'s fail-closed contract directly, with nothing else
+	 * able to short-circuit around it. Fails if that reader reverts to treating a failed COUNT
+	 * read as "no active tokens" (0), the R10-2 regression this reader's own docblock names.
+	 */
+	public function test_client_active_tokens_reader_fails_closed_when_its_count_query_fails(): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_abc',
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
+		aafm_oauth_mint_tokens(
+			array(
+				'client_id'  => 'client_abc',
+				'wp_user_id' => 7,
+				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			)
+		);
+
+		$this->fail_query_containing( 'SELECT COUNT(*) FROM `' . $wpdb->prefix . 'aafm_oauth_access_tokens` WHERE client_id' );
+		$suppressed = $wpdb->suppress_errors( true );
+		$has_active = aafm_oauth_client_has_active_tokens( 'client_abc' );
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertTrue( $has_active, 'A confirming count read that itself fails must report "still has active tokens", not "none".' );
+	}
+
+	/**
+	 * Same gap as above, scoped to aafm_oauth_user_client_has_active_tokens() and the per-grant
+	 * revoke handler's identical short-circuit.
+	 */
+	public function test_user_client_active_tokens_reader_fails_closed_when_its_count_query_fails(): void {
+		global $wpdb;
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_abc',
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
+		aafm_oauth_mint_tokens(
+			array(
+				'client_id'  => 'client_abc',
+				'wp_user_id' => $admin,
+				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			)
+		);
+
+		$this->fail_query_containing( 'SELECT COUNT(*) FROM `' . $wpdb->prefix . 'aafm_oauth_access_tokens` WHERE wp_user_id' );
+		$suppressed = $wpdb->suppress_errors( true );
+		$has_active = aafm_oauth_user_client_has_active_tokens( $admin, 'client_abc' );
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertTrue( $has_active, 'A confirming count read that itself fails must report "still has active tokens", not "none".' );
+	}
+
+	/**
+	 * R2-10 (1.7.5 deferred, round 2): F6's fix (refuse success on `-1 === $revoked`) has never
+	 * had a fixture where there is genuinely nothing left to "survive" - every existing fault
+	 * test also mints a real active token, so a regression that dropped the `-1` check entirely
+	 * would still be caught by that token's own confirming read, never by the -1 check itself.
+	 * Here the client has zero tokens to begin with: the confirming reader correctly (and
+	 * genuinely) finds none active either way, so only the `-1 === $revoked` check can be
+	 * standing between a failed UPDATE and a false "success" response.
+	 */
+	public function test_revoke_client_reports_failure_when_the_update_fails_with_no_tokens_to_revoke(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'   => 'client_abc',
+				'client_name' => 'Test',
+				'is_active'   => 1,
+			),
+			array( '%s', '%s', '%d' )
+		);
+		// Deliberately no aafm_oauth_mint_tokens() call: this client has zero token rows.
+
+		$nonce              = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']     = $nonce;
+		$_REQUEST['nonce']  = $nonce;
+		$_POST['client_id'] = 'client_abc';
+
+		$this->fail_query_containing( 'UPDATE `' . $wpdb->prefix . 'aafm_oauth_access_tokens` SET is_active = 0 WHERE client_id' );
+		$suppressed = $wpdb->suppress_errors( true );
+		$this->intercept_die();
+		$json = $this->run_handler( 'aafm_ajax_oauth_revoke_client' );
+		$wpdb->suppress_errors( $suppressed );
+		remove_all_filters( 'query' );
+
+		$this->assertFalse(
+			$json['success'] ?? true,
+			'A failed revoke UPDATE must not report success just because there was nothing active left to confirm either way.'
 		);
 	}
 }

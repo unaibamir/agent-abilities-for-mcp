@@ -135,16 +135,20 @@ function aafm_mcp_protocol_version(): string {
 /**
  * Total number of rows in the activity log.
  *
+ * Codex round 7, R7-2: routed through aafm_wpdb_scalar() rather than a bare get_var() - the
+ * dashboard renders several of these counts back to back, so a failed query here could
+ * otherwise inherit whichever OTHER count's query ran just before it and display a plausible
+ * but wrong number instead of the real (or a failure-signalling) count.
+ *
  * @return int Non-negative row count.
  */
 function aafm_activity_count(): int {
 	global $wpdb;
 	// The table name is an internal constant ($wpdb->prefix . 'aafm_activity_log'),
 	// never user input; the %i identifier placeholder passes it through $wpdb->prepare().
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', aafm_activity_log_table() ) );
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', aafm_activity_log_table() ) );
 
-	return max( 0, (int) $count );
+	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
 /**
@@ -163,10 +167,11 @@ function aafm_recent_agent_count(): int {
 	$table  = aafm_activity_log_table();
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s', $table, $cutoff ) );
+	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
+	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s', $table, $cutoff ) );
 
-	return max( 0, (int) $count );
+	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
 /**

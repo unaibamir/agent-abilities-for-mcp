@@ -461,7 +461,7 @@ function aafm_exec_avada_replace_text( array $input ) {
 	// intended content actually landed before reporting success. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_post_field() form, not $new itself, so a legitimate
 	// normalization is not mistaken for a veto.
-	if ( ! $fresh instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new ) ) {
+	if ( ! $fresh instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new, $content ) ) {
 		return new WP_Error(
 			'aafm_avada_write_unconfirmed',
 			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )

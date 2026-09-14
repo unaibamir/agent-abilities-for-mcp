@@ -284,6 +284,7 @@ function aafm_exec_update_user_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
+	$old = get_user_meta( $id, $key, true );
 	update_user_meta( $id, $key, wp_slash( $value ) );
 	$stored = get_user_meta( $id, $key, true );
 	// Codex round 5 R5-2: update_user_meta()'s return value only catches an outright failure. A
@@ -292,7 +293,7 @@ function aafm_exec_update_user_meta( array $input ) {
 	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
 	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $stored, $value, $key, 'user', $subtype ) ) {
+	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'user', $subtype ) ) {
 		return aafm_generic_error();
 	}
 	return array(

@@ -375,6 +375,56 @@ final class RichPostTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 6, R6-5: edit permission and the operator's meta exposure policy are different
+	 * axes. This proves an explicitly DENIED key is withheld here even though the requester can
+	 * edit the post and the key is on the allow list - the exact bypass the finding describes.
+	 */
+	public function test_rich_post_meta_omits_an_explicitly_denied_key_even_for_an_editor(): void {
+		$this->acting_as( 'administrator' );
+
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		update_post_meta( $post_id, 'subtitle', 'A Governed Subtitle' );
+		update_post_meta( $post_id, 'secret_note', 'confidential' );
+
+		add_filter(
+			'aafm_allowed_meta_keys',
+			static fn(): array => array( 'subtitle', 'secret_note' )
+		);
+		update_option( 'aafm_denied_meta_keys', array( 'secret_note' ) );
+
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertSame( 'A Governed Subtitle', $shape['meta']['subtitle'] );
+		$this->assertArrayNotHasKey( 'secret_note', $shape['meta'] );
+		$this->assertStringNotContainsString( 'confidential', (string) wp_json_encode( $shape ) );
+	}
+
+	/**
+	 * Codex round 6, R6-5: the deny-`*` kill switch must also be honoured here, not just by the
+	 * dedicated metadata-reading abilities.
+	 */
+	public function test_rich_post_meta_is_empty_under_the_deny_all_kill_switch(): void {
+		$this->acting_as( 'administrator' );
+
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		update_post_meta( $post_id, 'subtitle', 'A Governed Subtitle' );
+
+		add_filter(
+			'aafm_allowed_meta_keys',
+			static fn(): array => array( 'subtitle' )
+		);
+		update_option( 'aafm_denied_meta_keys', array( '*' ) );
+
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertSame(
+			'{}',
+			wp_json_encode( $shape['meta'] ),
+			'The deny-all kill switch must empty the meta block even though the key is allowlisted and the post is editable.'
+		);
+	}
+
+	/**
 	 * SECURITY (M3): the allowlisted-meta block is withheld from a reader who cannot edit the post.
 	 *
 	 * The dedicated get-post-meta ability gates on edit_post; surfacing the same allowlisted meta

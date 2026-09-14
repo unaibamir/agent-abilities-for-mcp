@@ -80,6 +80,9 @@ namespace AAFM\Tests\Support;
 
 use RuntimeException;
 
+// UseImportScanner lives in this same namespace (AAFM\Tests\Support), so no `use` import is
+// needed to reference it below.
+
 /**
  * Finds every raw use of the WordPress plain-text sanitizers in shipped first-party PHP, and
  * reports each one with the function that encloses it and the text of what it sanitizes.
@@ -362,51 +365,35 @@ final class StoredTextSanitizerScanner {
 	 * Local aliases imported for a tracked sanitizer via `use function`.
 	 *
 	 * `use function sanitize_text_field as clean;` makes every later `clean( $v )` a raw sanitizer
-	 * call under a name no grep would ever look for. The import is also recorded when the name is
-	 * NOT renamed, which is harmless (the local name equals the tracked one) and keeps the parser
-	 * simple.
+	 * call under a name no grep would ever look for.
+	 *
+	 * R4-6 (1.7.5 deferred, round 4): this used to be its own hand-rolled parser - one of three
+	 * near-identical copies across the test suite, each fixed for whichever single syntax case a
+	 * reviewer happened to quote and broken for the rest (comments inside the import, case
+	 * sensitivity, aliases leaking across namespace blocks). It now shares
+	 * UseImportScanner::parse_aliases() with the other two.
+	 *
+	 * The exact-match filter below is deliberately NOT the same "any qualifier, same trailing
+	 * name" matching the other two scanners use: `use function Vendor\sanitize_text_field as
+	 * clean;` imports somebody else's function of the same bare name, not the WordPress core
+	 * sanitizer, and must not be recorded here. Comparing the parser's full qualified name against
+	 * self::SANITIZERS (which holds only bare, unqualified names) keeps that distinction exact.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
-	 * @param int                                           $count  Token count.
+	 * @param int                                           $count  Token count (unused; kept so
+	 *                                                                the call site does not need
+	 *                                                                to change).
 	 * @return array<string,string> Local name => tracked sanitizer name.
 	 */
 	private static function collect_function_aliases( array $tokens, int $count ): array {
+		unset( $count );
+		$parsed  = UseImportScanner::parse_aliases( $tokens )['function'];
 		$aliases = array();
-
-		for ( $i = 0; $i < $count; $i++ ) {
-			$token = $tokens[ $i ];
-			if ( ! is_array( $token ) || T_USE !== $token[0] ) {
-				continue;
-			}
-
-			// Only `use function …`, never a class import or a closure's `use ( … )`.
-			$next = self::next_significant( $tokens, $i + 1, $count );
-			if ( null === $next || ! is_array( $tokens[ $next ] ) || T_FUNCTION !== $tokens[ $next ][0] ) {
-				continue;
-			}
-
-			// Collect the statement's text up to the terminating semicolon, then read the
-			// comma-separated `original as alias` clauses out of it.
-			$statement = '';
-			for ( $j = $next + 1; $j < $count; $j++ ) {
-				if ( ';' === $tokens[ $j ] ) {
-					break;
-				}
-				$statement .= is_array( $tokens[ $j ] ) ? $tokens[ $j ][1] : $tokens[ $j ];
-			}
-
-			foreach ( explode( ',', $statement ) as $clause ) {
-				$parts    = preg_split( '~\s+as\s+~i', trim( $clause ) );
-				$original = ltrim( trim( (string) ( $parts[0] ?? '' ) ), '\\' );
-				$local    = trim( (string) ( $parts[1] ?? $original ) );
-
-				if ( '' === $local || ! in_array( $original, self::SANITIZERS, true ) ) {
-					continue;
-				}
-				$aliases[ $local ] = $original;
+		foreach ( $parsed as $local => $full ) {
+			if ( in_array( $full, self::SANITIZERS, true ) ) {
+				$aliases[ $local ] = $full;
 			}
 		}
-
 		return $aliases;
 	}
 
@@ -946,6 +933,11 @@ final class StoredTextSanitizerScanner {
 		exec( 'cd ' . escapeshellarg( rtrim( $root, '/' ) ) . ' && git archive HEAD 2>/dev/null | tar -t 2>/dev/null', $output, $status );
 
 		if ( 0 !== $status || array() === $output ) {
+			$unresolvable_worktree = self::unresolvable_worktree_gitdir_reason( $root );
+			if ( null !== $unresolvable_worktree ) {
+				\PHPUnit\Framework\Assert::markTestSkipped( $unresolvable_worktree );
+			}
+
 			throw new RuntimeException(
 				'Could not determine the shipped file list from "git archive HEAD". The sanitizer scan '
 				. 'covers whatever actually ships, so it must not fall back to a guess.'
@@ -971,6 +963,40 @@ final class StoredTextSanitizerScanner {
 		self::$shipped_cache = $files;
 
 		return $files;
+	}
+
+	/**
+	 * A linked git worktree's `.git` file records its main repository's gitdir as an absolute path,
+	 * fixed at the moment the worktree was created. Run that checkout inside a container whose bind
+	 * mount uses a different absolute path for the same files (any DDEV setup does) and the recorded
+	 * path resolves to nothing, so every git command here fails with "fatal: not a git repository" -
+	 * a container/host path mismatch, not a real problem with the shipped file list. CI never hits
+	 * this: it always runs off a plain checkout, never a worktree.
+	 *
+	 * @param string $root Plugin root to check.
+	 * @return string|null A skip reason once this specific mismatch is confirmed, null otherwise -
+	 *                      so the caller still throws loudly for any other kind of git failure.
+	 */
+	private static function unresolvable_worktree_gitdir_reason( string $root ): ?string {
+		$git_file = rtrim( $root, '/' ) . '/.git';
+		if ( ! is_file( $git_file ) ) {
+			return null; // A normal checkout has .git as a directory, not this worktree pointer file.
+		}
+		$contents = file_get_contents( $git_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local .git file off disk, never a remote URL.
+		if ( ! is_string( $contents ) || 1 !== preg_match( '/^gitdir:\s*(.+)$/m', $contents, $matches ) ) {
+			return null;
+		}
+		$gitdir = trim( $matches[1] );
+		if ( is_dir( $gitdir ) ) {
+			return null; // The recorded path resolves fine here; something else caused the failure.
+		}
+		return sprintf(
+			'Skipping the shipped-file sanitizer sweep: this checkout is a linked git worktree whose '
+			. 'recorded gitdir ("%s") does not exist from here, almost certainly a host/container path '
+			. 'mismatch rather than a real repository problem. CI runs off a plain checkout and never '
+			. 'hits this.',
+			$gitdir
+		);
 	}
 
 	/**

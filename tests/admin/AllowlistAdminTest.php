@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class AllowlistAdminTest extends TestCase {
@@ -337,6 +338,137 @@ final class AllowlistAdminTest extends TestCase {
 
 		$this->assertFalse( $json['success'] ?? true );
 		$this->assertStringContainsString( 'Row 2', (string) ( $json['data']['message'] ?? '' ) );
+	}
+
+	/**
+	 * Codex admin-ui-r1 M3: the scope-type, role and OAuth-connection selects had no <label>,
+	 * aria-label or aria-labelledby at all - the worst case of the finding, three adjacent
+	 * controls with no accessible name between them.
+	 */
+	public function test_the_new_scope_selects_have_persistent_labels(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		ob_start();
+		aafm_render_allowlist_section();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-scope-type">', $html );
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-role">', $html );
+		$this->assertStringContainsString( '<label class="screen-reader-text" for="aafm-allowlist-new-client">', $html );
+	}
+
+	/**
+	 * Makes the direct database SELECT aafm_read_option_views() issues for $option fail (not
+	 * merely read absent), via QueryFaultInjector's real-error path. Mirrors
+	 * OauthRevokeAjaxTest::fail_query_containing() / PairedSecurityWriteOrderTest::fail_option_read()
+	 * / UpgradeMigrationTest::fail_option_read(), all now the same underlying filter.
+	 *
+	 * @param string $option Option name whose row-fetch query should fail.
+	 * @return void
+	 */
+	private function fail_option_read( string $option ): void {
+		add_filter( 'query', QueryFaultInjector::real_error_filter( "option_name = '{$option}'" ) );
+	}
+
+	/**
+	 * R3-3 (1.7.5 deferred, round 3): a failed read of the allowlist option must never render as
+	 * "No scopes narrowed yet" with Add/Save still available - that lookalike empty state is
+	 * exactly what let a transient read failure turn into real data loss (see
+	 * aafm_allowlist_overrides_for_display()'s docblock). Existing stored rows must survive
+	 * untouched, the card must say the read failed, and Add/Save must be disabled rather than
+	 * offering an editable empty table.
+	 *
+	 * What would break this: reverting the renderer to call aafm_allowlist_overrides() (or
+	 * otherwise treat a failed read as an empty array) makes it print the ordinary empty-state
+	 * paragraph with both controls enabled, and this test's assertions fail.
+	 */
+	public function test_a_failed_read_shows_an_error_and_disables_editing_instead_of_an_empty_table(): void {
+		update_option(
+			'aafm_ability_allowlist_overrides',
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'editor',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->fail_option_read( 'aafm_ability_allowlist_overrides' );
+		ob_start();
+		aafm_render_allowlist_section();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'No scopes narrowed yet', $html, 'A read failure must not look like a genuinely empty allowlist.' );
+		$this->assertStringContainsString( 'could not be read', $html, 'The card must say the read failed.' );
+		$this->assertMatchesRegularExpression( '/id="aafm-allowlist-add-row"[^>]*\bdisabled\b/', $html, 'Add scope must be disabled while the read state is unknown.' );
+		$this->assertMatchesRegularExpression( '/id="aafm-allowlist-save"[^>]*\bdisabled\b/', $html, 'Save must be disabled while the read state is unknown.' );
+	}
+
+	/**
+	 * Makes the ONE query containing $needle fail via wpdb::query()'s OTHER false-without-a-real-
+	 * error path (QueryFaultInjector's no-flush filter): the 'query' filter itself returning an
+	 * empty string. wp-includes/class-wpdb.php's query() checks `if ( ! $query )` and returns
+	 * false immediately - BEFORE its own $this->flush() call that would otherwise reset
+	 * last_result - so, unlike redirecting a query to a nonexistent table (which fails for real,
+	 * but only after flush() has already run), this leaves $wpdb->last_result holding whatever
+	 * the PREVIOUS successful query left there. That is the exact precondition R8-1 exploits, and
+	 * the only one of $wpdb->query()'s two "false without clearing last_result" paths a test can
+	 * trigger without also faking wpdb::ready.
+	 *
+	 * @param string $needle Substring identifying the one query to suppress.
+	 * @return void
+	 */
+	private function suppress_query_containing( string $needle ): void {
+		add_filter( 'query', QueryFaultInjector::no_flush_filter( $needle ) );
+	}
+
+	/**
+	 * Codex round 8, R8-1: aafm_oauth_get_client() used to run a bare $wpdb->get_row(), which
+	 * hands back the PREVIOUS query's row when the current one fails without clearing last_result.
+	 * Reproduces the exact shape Codex described: an allowlist save naming a real client FIRST (so
+	 * its lookup succeeds and populates $wpdb->last_result), then a second, nonexistent client
+	 * whose OWN lookup query is suppressed - before the fix, the bare get_row() would silently
+	 * hand back the first client's row for the second's, is_array() would accept it, and the whole
+	 * save (including a row for the nonexistent client) would persist with a success response.
+	 *
+	 * What would break this: reverting aafm_oauth_get_client() to a bare $wpdb->get_row() makes
+	 * $json['success'] true and a row for the nonexistent client lands in
+	 * aafm_allowlist_overrides().
+	 */
+	public function test_a_failed_client_lookup_rejects_the_whole_save_rather_than_reusing_a_prior_row(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		$real_client_id = $this->register_real_oauth_client();
+		// Syntactically identical to a real client_id (32-char hex) but never stored - so its
+		// lookup query is unique in the whole request and only ITS query gets suppressed below.
+		$phantom_client_id = bin2hex( random_bytes( 16 ) );
+
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['allowlist_json'] = wp_json_encode(
+			array(
+				array(
+					'scope_type'        => 'oauth_client',
+					'scope_id'          => $real_client_id,
+					'allowed_abilities' => 'all',
+				),
+				array(
+					'scope_type'        => 'oauth_client',
+					'scope_id'          => $phantom_client_id,
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+
+		$this->suppress_query_containing( "client_id = '{$phantom_client_id}'" );
+		$this->intercept_die();
+		$json = $this->run_handler();
+		remove_all_filters( 'query' );
+
+		$this->assertFalse( $json['success'] ?? true, 'A save containing a client whose lookup itself failed must be rejected, not reported as saved.' );
+		$this->assertSame( array(), aafm_allowlist_overrides(), 'Nothing may persist - not even the valid first row - when a later row\'s lookup could not be certified.' );
 	}
 
 	public function test_more_than_the_row_cap_is_refused(): void {

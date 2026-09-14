@@ -15,6 +15,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\OAuth;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -187,6 +188,39 @@ class AuthorizeTest extends TestCase {
 
 		$this->assertTrue( aafm_oauth_has_consent( $user, $client ) );
 		$this->assertFalse( aafm_oauth_has_consent( $user, 'some_other_client' ) );
+	}
+
+	/**
+	 * Codex round 7, R7-2: a failed query leaves the PREVIOUS query's row sitting in
+	 * $wpdb->last_result, so a consent check built on a bare $wpdb->get_var() could not tell "this
+	 * query itself failed" apart from "the previous query found something". At the live
+	 * authorization-code redemption call site, the query immediately before the consent check is
+	 * the code lookup, which just found a real row - so a failed consent read there used to inherit
+	 * that unrelated, non-null value and report consent as granted. This reproduces the shape in
+	 * isolation: plant a positive scalar result from an unrelated query, then force the consent
+	 * SELECT itself to fail via one of $wpdb->query()'s two no-flush failure paths (the `query`
+	 * filter returning empty - see aafm_wpdb_scalar()'s docblock), and prove the failure is
+	 * reported honestly rather than silently answered from the stale prior row.
+	 */
+	public function test_has_consent_fails_closed_when_the_read_fails_after_a_positive_prior_query(): void {
+		$client = $this->register_client();
+		$user   = self::factory()->user->create();
+
+		global $wpdb;
+		// Plants a real, non-null row in $wpdb->last_result - the exact shape a preceding, genuinely
+		// successful OAuth lookup leaves behind.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( 'SELECT 1' );
+
+		list( $view, $has ) = QueryFaultInjector::fail_query(
+			'aafm_oauth_consents',
+			static function () use ( $user, $client ) {
+				return array( aafm_oauth_consent_view( $user, $client ), aafm_oauth_has_consent( $user, $client ) );
+			}
+		);
+
+		$this->assertFalse( $view['ok'], 'the read itself failed and must be reported as such, not silently answered from a stale prior query' );
+		$this->assertFalse( $has, 'a failed read must fail closed, never certify stale data as consent' );
 	}
 
 	/**
@@ -510,23 +544,15 @@ class AuthorizeTest extends TestCase {
 		$client = $this->register_client();
 
 		global $wpdb;
-		add_filter(
-			'query',
-			static function ( string $query ) use ( $wpdb ): string {
-				return false !== strpos( $query, 'REPLACE INTO `' . $wpdb->prefix . 'aafm_oauth_consents`' )
-					? 'SELECT * FROM aafm_missing_table_for_test'
-					: $query;
-			}
-		);
-		$suppressed = $wpdb->suppress_errors( true );
-
 		$params                        = $this->valid_params( $client );
 		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent' );
 		$params['aafm_oauth_decision'] = 'approve';
-		$result                        = $this->run_authorize_post( $params );
-
-		$wpdb->suppress_errors( $suppressed );
-		remove_all_filters( 'query' );
+		$result                        = QueryFaultInjector::break_query_with_real_error(
+			'REPLACE INTO `' . $wpdb->prefix . 'aafm_oauth_consents`',
+			function () use ( $params ) {
+				return $this->run_authorize_post( $params );
+			}
+		);
 
 		$this->assertNull( $result['redirect'], 'A failed consent write must not redirect back to the client with a code.' );
 		$this->assertSame( 500, $result['status'], 'A failed consent write must render a local error, not proceed.' );

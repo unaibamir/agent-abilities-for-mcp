@@ -179,21 +179,36 @@ function aafm_activity_log_schema_verify(): bool {
  * not list, so existence is probed with a trivial select. The %i placeholder quotes the identifier
  * (an internal constant).
  *
+ * 1.7.5 round 4, R4-4: this used to read '' === $wpdb->last_error as its success signal.
+ * $wpdb->query() (wp-includes/class-wpdb.php) can return false, leaving last_error untouched at
+ * '', on paths that never actually ran the query - $wpdb->ready is false, the `query` filter
+ * returns an empty query, a failed reconnection after the server has gone away - the exact
+ * last_error pitfall aafm_wpdb_scalar()'s own docblock documents (R10-1) for the option-cache
+ * reads. Under that failure shape this returned true for an ABSENT table, and finalization could
+ * stamp the current schema version despite the table never having been verified. Delegating to
+ * aafm_wpdb_scalar(), which checks $wpdb->query()'s own return value instead, closes the same gap
+ * here.
+ *
  * @param string $table Fully-prefixed table name.
  * @return bool
  */
 function aafm_activity_log_table_present( string $table ): bool {
 	global $wpdb;
 	$suppressed = $wpdb->suppress_errors( true );
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
-	$error = $wpdb->last_error;
+	$result     = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
 	$wpdb->suppress_errors( $suppressed );
-	return '' === $error;
+	return $result['ok'];
 }
 
 /**
  * Whether a named column exists on the activity-log table. Works on the harness's TEMPORARY table.
+ *
+ * Codex round 7, R7-2: a bare $wpdb->get_var() returns the PREVIOUS query's row when the current
+ * query itself fails, so a failed SHOW COLUMNS could inherit an unrelated non-empty value left
+ * over from an earlier, successful check and report a missing column as present - letting schema
+ * finalization stamp the current version over an incomplete upgrade. Routed through
+ * aafm_wpdb_scalar() so a failed read reports absent, the same fail-closed direction this
+ * function already took for a genuinely missing column.
  *
  * @param string $table  Fully-prefixed table name (an internal constant).
  * @param string $column Column name to look for (no wildcards; matched exactly by SHOW COLUMNS).
@@ -202,12 +217,18 @@ function aafm_activity_log_table_present( string $table ): bool {
 function aafm_activity_log_has_column( string $table, string $column ): bool {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $column ) );
-	return null !== $found && '' !== $found;
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $column ) );
+	return $view['ok'] && null !== $view['value'] && '' !== $view['value'];
 }
 
 /**
  * Whether a named index exists on the activity-log table. Works on the harness's TEMPORARY table.
+ *
+ * Same stale-read class as aafm_activity_log_has_column() above: a bare $wpdb->get_results()
+ * hands back the PREVIOUS query's rows when this one fails, so a failed SHOW INDEX could inherit
+ * an unrelated result set and report a missing index as present. Routed through
+ * aafm_wpdb_results() so a failed read reports absent, the same fail-closed direction the column
+ * check already takes.
  *
  * @param string $table    Fully-prefixed table name (an internal constant).
  * @param string $key_name Index name to look for.
@@ -216,11 +237,14 @@ function aafm_activity_log_has_column( string $table, string $column ): bool {
 function aafm_activity_log_has_index( string $table, string $key_name ): bool {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$rows = $wpdb->get_results( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ) );
-	foreach ( (array) $rows as $row ) {
+	$view = aafm_wpdb_results( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ) );
+	if ( ! $view['ok'] ) {
+		return false;
+	}
+	foreach ( (array) $view['value'] as $row ) {
 		// Key_name is MySQL's own SHOW INDEX column name, not a plugin property.
 		// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
-		if ( isset( $row->Key_name ) && $key_name === $row->Key_name ) {
+		if ( is_array( $row ) && isset( $row['Key_name'] ) && $key_name === $row['Key_name'] ) {
 			return true;
 		}
 	}
@@ -491,6 +515,46 @@ function aafm_log_activity( array $record ): int {
 }
 
 /**
+ * Record that an option write did not actually persist, instead of the usual success-style
+ * ability_enabled/ability_disabled/setting_changed diff a caller would otherwise log.
+ *
+ * Calling a success-style log entry unconditionally, before checking whether
+ * aafm_update_option_verified() (or an equivalent operator-switch persist) actually got the value
+ * into the database, would leave success-style rows on record for a write that a stale
+ * persistent object cache silently swallowed - the exact silent-wrong-answer class
+ * aafm_update_option_verified() exists to catch elsewhere. This is the one row written instead:
+ * status 'error', naming the option so the real cause (option-cache.php's stale-cache class of
+ * bug) is legible straight from the log, without implying any setting actually changed.
+ *
+ * R3-2 (1.7.5 deferred, round 3): originally defined in includes/admin/page.php, loaded inside
+ * aafm_bootstrap() at 'plugins_loaded' priority 10. Four failure paths call this function at or
+ * before priority 1 - the OAuth-preservation and DCR-adoption migration callbacks on
+ * 'plugins_loaded' priority 1 (includes/oauth/discovery.php), and the activity-log/OAuth schema
+ * version stamps run directly from aafm_activate() during plugin activation, before bootstrap has
+ * ever run. Moved here because this file is required at the plugin's top level (before
+ * aafm_bootstrap() exists at all), so it is defined before every one of those early callers can
+ * possibly run.
+ *
+ * @param string $option Option name that failed to persist.
+ * @param string $label  Human-readable label for the option, used in the detail message.
+ * @return void
+ */
+function aafm_log_ability_persist_failure( string $option, string $label ): void {
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => $option,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'error',
+			'event_type'        => 'setting_changed',
+			/* translators: %s: human-readable label of the option that failed to persist. */
+			'detail'            => sprintf( __( '%s could not be saved: object cache stale', 'agent-abilities-for-mcp' ), $label ),
+		)
+	);
+}
+
+/**
  * Delete activity rows older than the configured retention window.
  *
  * Driven by the daily `aafm_prune_activity_log_daily` cron event, not by the write
@@ -600,8 +664,14 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 	// column and never lands here; a crashed call does, because aafm_log_ability_exception() has
 	// already set the row to 'error'.
 	if ( 0 === $updated ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', $table, $row_id ) );
+		// This confirming read used to be a bare $wpdb->get_var(), which hands back the PREVIOUS
+		// query's value when this one fails - a stale truthy id left over from an earlier,
+		// unrelated lookup could then be misread as proof this row still exists. Routed through
+		// aafm_wpdb_scalar() so a failed confirming read reports failure (the row is treated as
+		// gone), the same direction as a genuinely pruned row - never the opposite mistake of
+		// certifying a resolve this call could not actually confirm.
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', $table, $row_id ) );
+		return $view['ok'] && null !== $view['value'];
 	}
 
 	return false !== $updated;
@@ -731,6 +801,28 @@ function aafm_log_ability_exception( int $row_id, \Throwable $e ): string {
  * @return array<int,array<string,mixed>>
  */
 function aafm_query_activity( array $args ): array {
+	$view = aafm_query_activity_result( $args );
+	return $view['ok'] ? $view['rows'] : array();
+}
+
+/**
+ * Same read as aafm_query_activity(), but honest about a failed query instead of collapsing it
+ * to an empty result.
+ *
+ * The plain wrapper above can never tell its caller "zero rows because the table is
+ * empty/exhausted" apart from "zero rows because the query failed" - both read as `array()`. That
+ * is fine for a caller that only ever renders what it gets back, but the CSV exporter
+ * (aafm_export_activity_csv()) uses "fewer than a full page came back" as its own loop-termination
+ * signal, so a failed read looked exactly like reaching the end of the table and the export
+ * completed - silently missing every row after the failure (R9-3). This gives that caller the
+ * ok/rows split it needs to tell the two apart, without changing aafm_query_activity()'s existing
+ * contract for its many other callers.
+ *
+ * @param array<string,mixed> $args Same shape as aafm_query_activity().
+ * @return array{ok:bool,rows:array<int,array<string,mixed>>} ok is false when the query itself
+ *              failed - rows is empty either way in that case.
+ */
+function aafm_query_activity_result( array $args ): array {
 	global $wpdb;
 
 	$per_page = isset( $args['per_page'] ) ? min( 200, max( 1, (int) $args['per_page'] ) ) : 50;
@@ -767,10 +859,17 @@ function aafm_query_activity( array $args ): array {
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 	$sql = "SELECT * FROM %i WHERE {$where} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
+	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
+	// a failed query here could otherwise return an EARLIER, unrelated query's rows (see
+	// aafm_oauth_list_clients()'s docblock for the mechanism), silently showing the admin a
+	// different page/filter's log rows instead of an empty result.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-	$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $params ) );
 
-	return is_array( $rows ) ? $rows : array();
+	return array(
+		'ok'   => $view['ok'],
+		'rows' => ( $view['ok'] && is_array( $view['value'] ) ) ? $view['value'] : array(),
+	);
 }
 
 /**
@@ -787,15 +886,16 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
 	global $wpdb;
 	$table = aafm_activity_log_table();
 
+	// Codex round 7, R7-2: both reads routed through aafm_wpdb_scalar() - see
+	// aafm_activity_count()'s docblock for why a bare get_var() risks displaying an adjacent
+	// count's stale value when this one's own query fails.
 	if ( null === $status || '' === $status ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
-		return max( 0, (int) $count );
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
+		return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 	}
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE status = %s', $table, $status ) );
-	return max( 0, (int) $count );
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE status = %s', $table, $status ) );
+	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
 /**
@@ -868,9 +968,11 @@ function aafm_agent_call_count( ?string $status = null ): int {
 	// whose every value is a placeholder, the only thing ever appended is the constant literal
 	// ' AND status = %s', and all five or six values reach the query through $params - the table
 	// name via %i, and $status, the one caller-influenced value, via %s. Nothing is interpolated.
+	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
+	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-	$count = $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
-	return max( 0, (int) $count );
+	$view = aafm_wpdb_scalar( $wpdb->prepare( $sql, $params ) );
+	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
 /**
@@ -880,14 +982,39 @@ function aafm_agent_call_count( ?string $status = null ): int {
  * this once, before the first page runs, and passes it back as max_id on every page - so a row
  * inserted mid-run can never shift an OFFSET window and be exported twice.
  *
+ * Codex round 7, R7-2: routed through aafm_wpdb_scalar() rather than a bare get_var() - the
+ * exporter treats this as the snapshot bound for every page it fetches, so a failed query
+ * inheriting a stale MAX(id) from an earlier, different-sized snapshot would silently mis-bound
+ * the whole export rather than fail visibly.
+ *
  * @return int
  */
 function aafm_activity_max_id(): int {
+	$view = aafm_activity_max_id_result();
+	return $view['ok'] ? $view['value'] : 0;
+}
+
+/**
+ * Same read as aafm_activity_max_id(), but honest about a failed query instead of collapsing it
+ * to 0 - the same value an empty table produces.
+ *
+ * The CSV exporter takes this as its pagination snapshot before its first page runs (R9-3): if the
+ * read fails, folding that into 0 makes every page's `id <= 0` filter come back empty, and the
+ * export completes looking like a genuinely empty log instead of a failed one. Collapsing failure
+ * into 0 here is exactly the mistake aafm_query_activity_result()'s docblock describes for the row
+ * read; this closes the matching case for the MAX(id) read the exporter pairs it with.
+ *
+ * @return array{ok:bool,value:int} ok is false when the query itself failed - value is 0 either
+ *              way in that case.
+ */
+function aafm_activity_max_id_result(): array {
 	global $wpdb;
 	$table = aafm_activity_log_table();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$max = $wpdb->get_var( $wpdb->prepare( 'SELECT MAX(id) FROM %i', $table ) );
-	return null === $max ? 0 : max( 0, (int) $max );
+	$view  = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT MAX(id) FROM %i', $table ) );
+	return array(
+		'ok'    => $view['ok'],
+		'value' => ( ! $view['ok'] || null === $view['value'] ) ? 0 : max( 0, (int) $view['value'] ),
+	);
 }
 
 /**

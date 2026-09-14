@@ -171,6 +171,65 @@ final class CommentsCrudTest extends TestCase {
 		$this->assertSame( 'unapproved', wp_get_comment_status( $out['comment']['id'] ) );
 	}
 
+	/**
+	 * Codex round 8, R8-4: the post-insert wp_set_comment_status( $id, 'hold' ) pin's return
+	 * value used to be discarded, and only the comment's existence was checked afterward - so if
+	 * a 'wp_set_comment_status' hook (fired synchronously, AFTER that pin's own DB update
+	 * succeeds but BEFORE it returns) moved the comment away from pending again, creation still
+	 * reported success, contradicting the pending-queue guarantee this ability exists to enforce.
+	 */
+	public function test_create_comment_errors_when_a_hook_undoes_the_pending_pin(): void {
+		global $wpdb;
+
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create();
+
+		// wp_insert_comment() applies no filter to comment_approved on this path (the ability
+		// bypasses wp_allow_comment()/wp_new_comment() by design - see the docblock above); the
+		// only way a real install ends up with an approved-on-insert comment here is a plugin
+		// hook on the post-insert action forcing it directly, which this simulates with a raw
+		// update - the same shape as "an insert filter approves the new comment" in the finding.
+		$comment_id        = null;
+		$approve_on_insert = static function ( $id ) use ( &$comment_id, $wpdb ) {
+			$comment_id = $id;
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update( $wpdb->comments, array( 'comment_approved' => '1' ), array( 'comment_ID' => $id ) );
+			clean_comment_cache( $id );
+		};
+		add_action( 'wp_insert_comment', $approve_on_insert );
+
+		// Now the pending-status pin's own UPDATE (approved '1' -> '0') is a real, non-no-op
+		// write - fail that one query so its return value is false, the same fault-injection
+		// shape R8-2's repro uses: suppress a single targeted query via the 'query' filter, never
+		// the whole request.
+		$fail_pin_update = static function ( $query ) use ( &$comment_id, $wpdb ) {
+			if ( null !== $comment_id
+				&& false !== strpos( $query, "UPDATE `{$wpdb->comments}` SET `comment_approved` = '0'" )
+				&& false !== strpos( $query, "`comment_ID` = {$comment_id}" )
+			) {
+				return '';
+			}
+			return $query;
+		};
+		add_filter( 'query', $fail_pin_update );
+
+		try {
+			$out = wp_get_ability( 'aafm/create-comment' )->execute(
+				array(
+					'post_id' => $post,
+					'content' => 'Sneak me past moderation',
+				)
+			);
+		} finally {
+			remove_action( 'wp_insert_comment', $approve_on_insert );
+			remove_filter( 'query', $fail_pin_update );
+		}
+
+		$this->assertNotNull( $comment_id, 'the insert hook must have run for this test to prove anything.' );
+		$this->assertSame( 'approved', wp_get_comment_status( $comment_id ), 'the pin update must have actually failed and left the comment approved for this test to prove anything.' );
+		$this->assertInstanceOf( WP_Error::class, $out, 'a pending-pin write whose own confirming read never lands must not be reported as a confirmed pending create.' );
+	}
+
 	public function test_create_comment_sanitizes_script_content(): void {
 		$this->acting_as( 'editor' );
 		$post = self::factory()->post->create();

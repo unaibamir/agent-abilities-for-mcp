@@ -154,9 +154,13 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 		'aafm-admin',
 		'aafmAdmin',
 		array(
-			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-			'nonce'   => wp_create_nonce( 'aafm_admin' ),
-			'i18n'    => array(
+			'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
+			'nonce'            => wp_create_nonce( 'aafm_admin' ),
+			// Every row's ability picker (including one added client-side via "Add scope") is
+			// built from this one shared, subject-grouped list rather than duplicating the
+			// grouping in both PHP and JS - see aafm_allowlist_ability_catalog()'s own docblock.
+			'allowlistCatalog' => aafm_allowlist_ability_catalog(),
+			'i18n'             => array(
 				'saving'                   => __( 'Saving…', 'agent-abilities-for-mcp' ),
 				'saved'                    => __( 'Saved', 'agent-abilities-for-mcp' ),
 				'errorSaving'              => __( 'Error saving', 'agent-abilities-for-mcp' ),
@@ -196,6 +200,26 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
 				'statusRevoked'            => __( 'Revoked', 'agent-abilities-for-mcp' ),
 				'agentToggleFailed'        => __( 'Could not save. Please try again.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: number of abilities matching the current search. */
+				'abilitiesSearchCount'     => __( '%s abilities match.', 'agent-abilities-for-mcp' ),
+				'abilitiesSearchNone'      => __( 'No abilities match.', 'agent-abilities-for-mcp' ),
+				// Ability allowlist picker (Connections tab).
+				'allowlistAll'             => __( 'All abilities (no narrowing)', 'agent-abilities-for-mcp' ),
+				'allowlistSearch'          => __( 'Search abilities…', 'agent-abilities-for-mcp' ),
+				'allowlistZeroSelected'    => __( 'No abilities selected. Saving now will block this scope from every ability.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: number of abilities selected in the allowlist picker. */
+				'allowlistSelectedCount'   => __( '%s selected', 'agent-abilities-for-mcp' ),
+				// Codex admin-ui-r1 L3: a row added client-side (before reload) used to build this
+				// label from a hardcoded English template literal instead of these translated
+				// strings, which is what every server-rendered row already used.
+				/* translators: %s: role display name. */
+				'allowlistRoleLabel'       => __( 'Role: %s', 'agent-abilities-for-mcp' ),
+				/* translators: %s: OAuth client id or display name. */
+				'allowlistConnectionLabel' => __( 'Connection: %s', 'agent-abilities-for-mcp' ),
+				'pagerPrevious'            => __( 'Previous', 'agent-abilities-for-mcp' ),
+				'pagerNext'                => __( 'Next', 'agent-abilities-for-mcp' ),
+				/* translators: 1: first row number shown, 2: last row number shown, 3: total rows. */
+				'oauthPagerCount'          => __( 'Showing %1$s-%2$s of %3$s', 'agent-abilities-for-mcp' ),
 				// Quick Connect wizard.
 				'qcInProgress'             => __( 'In progress', 'agent-abilities-for-mcp' ),
 				'qcNotStarted'             => __( 'Not started', 'agent-abilities-for-mcp' ),
@@ -677,8 +701,15 @@ function aafm_detected_meta_keys(): array {
 	// the result is identical, matching the "sample" this list has always been. A derived table is
 	// used, not an IN (... LIMIT), because a LIMIT inside an IN subquery is not portable across the
 	// supported MySQL/MariaDB versions.
+	//
+	// This used to be a bare $wpdb->get_col(), which hands back the PREVIOUS query's column when
+	// this one fails. Routed through aafm_wpdb_col(): a failed read reports no keys rather than a
+	// stale, unrelated set - this list is only ever an admin-side suggestion an operator narrows
+	// from, never a gate, so the safe direction on failure is the same "suggest nothing" an
+	// ineligible post-type list already returns above.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-	$rows = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT pm.meta_key FROM {$wpdb->postmeta} pm INNER JOIN ( SELECT ID FROM {$wpdb->posts} WHERE post_type IN ($ph) ORDER BY ID DESC LIMIT 5000 ) p ON p.ID = pm.post_id ORDER BY pm.meta_key ASC LIMIT 200", $types ) );
+	$view = aafm_wpdb_col( $wpdb->prepare( "SELECT DISTINCT pm.meta_key FROM {$wpdb->postmeta} pm INNER JOIN ( SELECT ID FROM {$wpdb->posts} WHERE post_type IN ($ph) ORDER BY ID DESC LIMIT 5000 ) p ON p.ID = pm.post_id ORDER BY pm.meta_key ASC LIMIT 200", $types ) );
+	$rows = $view['ok'] ? $view['value'] : array();
 	$keys = array_map( 'strval', (array) $rows );
 	$keys = array_values( array_filter( $keys, static fn( string $k ): bool => ! aafm_hard_blocked_meta_key( $k ) ) );
 	$keys = array_slice( $keys, 0, 50 );
@@ -716,6 +747,14 @@ function aafm_detected_meta_keys(): array {
  * pre-request state. Reading the raw row directly, sentinel included, keeps the union at least
  * as strict as whatever is really in the database right now.
  *
+ * R2-4 sibling (1.7.5 deferred, round 2): the "old deny" read above must not treat a failed
+ * read (db_error) the same as a genuinely empty/absent row - that would build the stage-1 union
+ * from an empty old-deny list, silently dropping whatever was actually denied before this
+ * request, the same direction of mistake the OAuth migration reads had. This is a WRITE path, not
+ * a live authorization read, but the fail-safe direction is the same reasoning as
+ * aafm_ability_allowed_for_principal() (includes/allowlist.php): when the existing state cannot be
+ * certified, refuse rather than proceed on an assumed-empty state.
+ *
  * @param string            $deny_option    Deny-list option name.
  * @param string            $exposed_option Exposed-list option name.
  * @param array<int,string> $new_deny       Requested deny list.
@@ -723,7 +762,10 @@ function aafm_detected_meta_keys(): array {
  * @return int 0 on full success; 1, 2, or 3 naming the stage that failed to certify.
  */
 function aafm_paired_meta_write_three_stage( string $deny_option, string $exposed_option, array $new_deny, array $new_exposed ): int {
-	$views    = aafm_read_option_views( $deny_option );
+	$views = aafm_read_option_views( $deny_option );
+	if ( $views['db_error'] ) {
+		return 1;
+	}
 	$old_deny = ( $views['db_found'] && is_array( $views['db_value'] ) ) ? array_map( 'strval', $views['db_value'] ) : array();
 
 	$union = array_values( array_unique( array_merge( $old_deny, $new_deny ) ) );
@@ -1027,37 +1069,6 @@ function aafm_log_ability_toggle_diff( array $before, array $after ): int {
 	}
 
 	return $written;
-}
-
-/**
- * Record that an enabled-abilities write did not actually persist, instead of the usual
- * success-style ability_enabled/ability_disabled diff.
- *
- * The sibling aafm_log_ability_toggle_diff() logs the INTENDED before/after difference; calling
- * it unconditionally, before checking whether aafm_update_option_verified() actually got the
- * value into the database, would leave success-style rows on record for a toggle that a stale
- * persistent object cache silently swallowed - the exact silent-wrong-answer class
- * aafm_update_option_verified() exists to catch elsewhere. This is the one row written instead:
- * status 'error', naming the option so the real cause (option-cache.php's stale-cache class of
- * bug) is legible straight from the log, without implying any ability actually changed state.
- *
- * @param string $option Option name that failed to persist.
- * @param string $label  Human-readable label for the option, used in the detail message.
- * @return void
- */
-function aafm_log_ability_persist_failure( string $option, string $label ): void {
-	$user = wp_get_current_user();
-	aafm_log_activity(
-		array(
-			'ability'           => $option,
-			'principal_user_id' => (int) $user->ID,
-			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
-			'status'            => 'error',
-			'event_type'        => 'setting_changed',
-			/* translators: %s: human-readable label of the option that failed to persist. */
-			'detail'            => sprintf( __( '%s could not be saved: object cache stale', 'agent-abilities-for-mcp' ), $label ),
-		)
-	);
 }
 
 /**
@@ -1626,6 +1637,28 @@ function aafm_render_abilities_tab(): void {
 	echo '</div>';
 	echo '</div>'; // .aafm-abilities-stats
 
+	// Search field only - not the Bridge tab's whole filter component (no risk pills: the
+	// operator asked for a search field, not a search tab, and this tab has a third risk
+	// tier - destructive - the two-pill All/Read Only/Write group has no slot for anyway).
+	// Reuses .aafm-integration-search for identical styling to the other tabs' search boxes.
+	// Kept OUTSIDE the form: the form has a type="submit" Save button, and a search field
+	// inside it would let Enter trigger a save instead of filtering.
+	echo '<div class="aafm-integration-filter aafm-abilities-search">';
+	// Codex admin-ui-r1 M3: a placeholder is not a persistent accessible name - it disappears the
+	// moment the field has a value, so a screen reader or voice-control user loses the field's
+	// identity mid-search. Same visually-hidden <label for> pattern aafm_render_bridge_filter()
+	// already uses for the same control shape.
+	printf(
+		'<label class="screen-reader-text" for="aafm-abilities-search">%s</label>',
+		esc_html__( 'Search abilities', 'agent-abilities-for-mcp' )
+	);
+	printf(
+		'<input type="search" id="aafm-abilities-search" class="aafm-integration-search" placeholder="%s" autocomplete="off">',
+		esc_attr__( 'Search abilities…', 'agent-abilities-for-mcp' )
+	);
+	echo '<span id="aafm-abilities-search-status" class="aafm-muted" role="status" aria-live="polite"></span>';
+	echo '</div>';
+
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
@@ -1685,9 +1718,14 @@ function aafm_render_abilities_tab(): void {
 	foreach ( $display_tabs as $slug => $tab ) {
 		$is_active = ( $slug === $first );
 		$tab_rows  = $tab['rows'];
+		// data-subject-label: the panel's own heading below is just a count ("27 / 27 enabled"),
+		// never the subject name, so there is nothing on the panel itself to reuse when the
+		// abilities search reveals several panels at once. admin.js reads this to show which
+		// sub-tab a given panel is while more than one is visible.
 		printf(
-			'<div class="aafm-subject-panel" data-subject="%1$s" role="tabpanel" id="%2$s" aria-labelledby="%3$s" tabindex="0"%4$s>',
+			'<div class="aafm-subject-panel" data-subject="%1$s" data-subject-label="%2$s" role="tabpanel" id="%3$s" aria-labelledby="%4$s" tabindex="0"%5$s>',
 			esc_attr( $slug ),
+			esc_attr( $tab['label'] ),
 			esc_attr( 'aafm-subject-panel-' . $slug ),
 			esc_attr( 'aafm-subject-tab-' . $slug ),
 			$is_active ? '' : ' hidden'
@@ -2445,6 +2483,32 @@ function aafm_csv_cell( string $value ): string {
 }
 
 /**
+ * Append one unmistakable CSV row flagging that the export stopped early because a database read
+ * failed, rather than because the log was exhausted (R9-3).
+ *
+ * A failed page read and "no more rows" both surface as an empty result from
+ * aafm_query_activity() - a caller that cannot tell them apart writes a file that LOOKS complete
+ * but silently drops every row after the failure. An audit export is evidence; a truncated one
+ * that claims completeness is worse than no export at all, so a failure has to be visible in the
+ * file itself rather than swallowed. The row content deliberately overflows and skews the normal
+ * column shape (a status no real row ever carries, an all-caps message repeated into more than
+ * one cell) so it reads as an anomaly at a glance rather than blending into ordinary data.
+ *
+ * @param resource $out The open php://output stream.
+ * @return void
+ */
+function aafm_write_export_failure_row( $out ): void {
+	$message = __( 'EXPORT INCOMPLETE - a database read failed partway through. Rows after this point were NOT exported. Re-run the export.', 'agent-abilities-for-mcp' );
+	fputcsv(
+		$out,
+		array( 'EXPORT INCOMPLETE', 'export_failed', 'EXPORT INCOMPLETE', $message, 'error', '', '', '', '', '', '' ),
+		',',
+		'"',
+		''
+	);
+}
+
+/**
  * Stream the activity log to php://output as CSV.
  *
  * Batched at aafm_query_activity()'s existing 200-row page cap rather than pulling the whole
@@ -2456,6 +2520,14 @@ function aafm_csv_cell( string $value ): string {
  * just an OFFSET into "however many rows exist right now". Without that bound, a row inserted
  * while the export is mid-run shifts the OFFSET window and the same row can be written twice -
  * nothing is skipped, but a duplicate in a compliance export is still a real defect.
+ *
+ * A failed read - the id snapshot, or any page - is never treated as "nothing left to export"
+ * (R9-3): both aafm_activity_max_id_result() and aafm_query_activity_result() report ok=false
+ * separately from a genuine empty result, and either one stops the export and appends an
+ * unmistakable failure row via aafm_write_export_failure_row() rather than completing quietly.
+ * Headers (admin-post.php's handler) are already sent by the time this runs, so an HTTP-level
+ * refusal is not on the table - marking the file itself is the only way to keep the operator from
+ * mistaking a truncated download for a complete one.
  *
  * Time limits and connection-abort handling are lifted for the same reason a partial export is
  * dangerous here: an operator relying on a compliance export getting cut off with a file that
@@ -2497,31 +2569,45 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 	// just double-doubled quotes around an embedded enclosure character.
 	fputcsv( $out, $columns, ',', '"', '' );
 
-	$max_id    = aafm_activity_max_id();
-	$page      = 1;
-	$row_count = 200;
-	while ( 200 === $row_count ) {
-		$rows      = aafm_query_activity(
-			array(
-				'per_page' => 200,
-				'page'     => $page,
-				'status'   => $status,
-				'max_id'   => $max_id,
-			)
-		);
-		$row_count = count( $rows );
-		foreach ( $rows as $row ) {
-			$line = array();
-			foreach ( $columns as $column ) {
-				$line[] = aafm_csv_cell( (string) ( $row[ $column ] ?? '' ) );
+	$max_id_view = aafm_activity_max_id_result();
+	$max_id      = $max_id_view['value'];
+
+	if ( ! $max_id_view['ok'] ) {
+		aafm_write_export_failure_row( $out );
+	} else {
+		$page = 1;
+		while ( true ) {
+			$view = aafm_query_activity_result(
+				array(
+					'per_page' => 200,
+					'page'     => $page,
+					'status'   => $status,
+					'max_id'   => $max_id,
+				)
+			);
+			if ( ! $view['ok'] ) {
+				aafm_write_export_failure_row( $out );
+				break;
 			}
-			fputcsv( $out, $line, ',', '"', '' );
+
+			$rows = $view['rows'];
+			foreach ( $rows as $row ) {
+				$line = array();
+				foreach ( $columns as $column ) {
+					$line[] = aafm_csv_cell( (string) ( $row[ $column ] ?? '' ) );
+				}
+				fputcsv( $out, $line, ',', '"', '' );
+			}
+			// Testing hook: lets the test suite insert rows between batches to prove the max_id
+			// snapshot above keeps them out of this export instead of shifting the OFFSET window.
+			do_action( 'aafm_activity_export_batch', $page, $rows );
+			flush();
+
+			if ( count( $rows ) < 200 ) {
+				break; // A genuinely-short page: the log is exhausted, not a failed read.
+			}
+			++$page;
 		}
-		// Testing hook: lets the test suite insert rows between batches to prove the max_id
-		// snapshot above keeps them out of this export instead of shifting the OFFSET window.
-		do_action( 'aafm_activity_export_batch', $page, $rows );
-		flush();
-		++$page;
 	}
 
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose

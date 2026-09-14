@@ -1,6 +1,22 @@
 /* Agent Abilities for MCP - admin settings page (Direction A).
    Tokens live on :root; every component is scoped under .aafm-wrap so it
-   never leaks into core admin chrome. WP-native neutrals, single accent. */
+   never leaks into core admin chrome. WP-native neutrals, single accent.
+
+   Before adding a new admin section:
+   1. Wrap it in <section class="aafm-card aafm-card-pad"> and put its title inside
+      <div class="aafm-card-head"> - never a bare <h2>. Copy an existing section rather
+      than writing new section markup.
+   2. Spacing comes from --aafm-space-*. Type comes from --aafm-fs-*. If your layout
+      needs a value that is not there, that is a signal to re-check the layout, not to
+      add a ninth padding value.
+   3. Form controls need no class. The control layer styles inputs, selects, textareas
+      and number fields inside .aafm-wrap automatically.
+   4. Tables of records use <table class="widefat striped aafm-*-table"> inside
+      .aafm-table-wrap. Configuration UI uses .aafm-card / .aafm-ability-row.
+   5. Any colour meaning safe/read, write/caution or destructive/danger MUST come from
+      --aafm-green/-amber/-red. Never write a new hex for a risk colour.
+   6. Before adding a component-scoped custom property, check whether an --aafm-* token
+      already carries that value. */
 
 :root {
   --aafm-surface:#fff; --aafm-surface-2:#f6f7f7; --aafm-text:#1d2327;
@@ -11,6 +27,24 @@
   --aafm-amber:#dba617; --aafm-amber-text:#815f00; --aafm-amber-tint:#fcf9e8;
   --aafm-red:#d63638; --aafm-red-text:#b32d2e; --aafm-red-tint:#fcf0f1;
   --aafm-radius:8px; --aafm-radius-sm:5px; --aafm-shadow:0 1px 2px rgba(0,0,0,.04);
+
+  /* Spacing scale. Derived from the file's own dominant values:
+     padding-inline 18/20 (8 uses each), gap cluster 6/8/10/12 (9-11 uses each). */
+  --aafm-space-1:4px; --aafm-space-2:8px; --aafm-space-3:12px;
+  --aafm-space-4:16px; --aafm-space-5:20px; --aafm-space-6:24px;
+
+  /* Type scale. Each of the first three absorbs its half-pixel twin. */
+  --aafm-fs-xs:11px;   /* 11px + 11.5px */
+  --aafm-fs-sm:12px;   /* 12px + 12.5px */
+  --aafm-fs-base:13px; /* 13px + 13.5px */
+  --aafm-fs-body:14px; --aafm-fs-md:15px; --aafm-fs-lg:16px;
+  --aafm-fs-xl:18px; --aafm-fs-2xl:23px;
+
+  /* One pill radius, not two. */
+  --aafm-radius-pill:999px;
+
+  /* Control geometry, so a form control and a button can never disagree again. */
+  --aafm-control-h:34px;
 }
 
 /* Shared disclosure chevron: the solid-triangle affordance every <details>/<summary>
@@ -184,6 +218,61 @@
 		flex: 0 0 auto;
 	}
 
+	/* ---------- Form controls ----------
+	   Every text-like input, select, number field and textarea in the plugin matches
+	   .aafm-btn's geometry (--aafm-control-h, --aafm-radius-sm) with no class needed, so
+	   a field added later inherits this automatically. WP core's forms.css matches these
+	   with a bare selector such as `input[type=text], select, textarea` (specificity
+	   0,1,1); `.aafm-wrap input[type="text"]` etc. is 0,2,1 and wins without !important
+	   (checked against computed styles, not assumed).
+
+	   Font-family is deliberately left out here except on <select>. WP core's monospace
+	   rule for a code-style field is `.code, code { font-family: Consolas, Monaco,
+	   monospace; }` (specificity 0,1,0) - weaker than this block, so a blanket
+	   `font-family: inherit` on input/textarea would win and silently turn the IP
+	   allowlist field and both meta-key textareas back into the body font. <select> has
+	   no such class to protect, so it gets the explicit inherit on its own below. */
+	input[type="text"],
+	input[type="search"],
+	input[type="email"],
+	input[type="url"],
+	input[type="password"],
+	input[type="tel"],
+	input[type="number"],
+	select,
+	textarea {
+		/* WP core pins these to a 40px floor via `min-height`, a different property from
+		   `height`/`block-size` - specificity between the two rules never enters into it,
+		   min-height wins outright unless it is overridden on its own. Caught only by
+		   measuring the computed height after the first pass still came back 40px. */
+		block-size: var(--aafm-control-h);
+		min-block-size: var(--aafm-control-h);
+		padding-block: 0;
+		padding-inline: var(--aafm-space-3);
+		border: 1px solid var(--aafm-border-strong);
+		border-radius: var(--aafm-radius-sm);
+		background: var(--aafm-surface);
+		color: inherit;
+		font-size: var(--aafm-fs-base);
+
+		&:focus-visible {
+			outline: none;
+			border-color: var(--aafm-accent);
+			box-shadow: var(--aafm-ring);
+		}
+	}
+
+	select {
+		font-family: inherit;
+	}
+
+	/* Textareas size by rows, not the fixed control height; they still share the
+	   border, radius, background and focus ring above. */
+	textarea {
+		block-size: auto;
+		padding-block: var(--aafm-space-2);
+	}
+
 	/* ---------- Mini key/value list (Versions card) ----------
 	   Ported from app.css .kv. The dashboard outputs <dl class="aafm-kv">; this
 	   was previously unstyled (the Image #1 misalignment). */
@@ -201,7 +290,7 @@
 	.aafm-progress {
 		inline-size: 130px;
 		block-size: 7px;
-		border-radius: 999px;
+		border-radius: var(--aafm-radius-pill);
 		background: var(--aafm-surface-2);
 		overflow: hidden;
 		border: 1px solid var(--aafm-border);
@@ -210,7 +299,7 @@
 			display: block;
 			block-size: 100%;
 			background: var(--aafm-accent);
-			border-radius: 999px;
+			border-radius: var(--aafm-radius-pill);
 		}
 	}
 
@@ -221,7 +310,7 @@
 		gap: 6px;
 		block-size: 24px;
 		padding-inline: 10px;
-		border-radius: 999px;
+		border-radius: var(--aafm-radius-pill);
 		font-size: 12px;
 		font-weight: 600;
 		white-space: nowrap;
@@ -501,6 +590,11 @@
 		background: var(--aafm-accent-tint);
 		color: #0a4b78;
 
+		/* An author-stylesheet `display: flex` beats the user-agent's `[hidden] { display: none }`
+		   regardless of specificity (the same trap documented on .aafm-ability-row elsewhere in
+		   this file), and the allowlist picker's zero-selected warning toggles via `hidden`. */
+		&[hidden] { display: none; }
+
 		& .aafm-notice-ic {
 			flex: 0 0 auto;
 			margin-block-start: 1px;
@@ -554,6 +648,29 @@
 		&.aafm-notice-inline {
 			margin: 6px 0;
 			padding: 6px 10px;
+		}
+	}
+
+	/* ---------- Accordion content contract ----------
+	   An accordion in this plugin comes in two shapes. Most wrap their content in a body
+	   element that supplies the horizontal inset (.aafm-section-body, .aafm-integration-body,
+	   .aafm-set-more-body, .aafm-help-body). Three do not, and put content directly inside
+	   the <details>: the app-password fallback, the bridge alternative, and the dashboard
+	   setup card. In those, anything dropped in ran edge to edge, which is how the
+	   app-password warning notice ended up flush against the card border while its sibling
+	   .aafm-step rows looked correct (they carried their own margin-inline, so the gap was
+	   invisible until something without one landed there).
+
+	   Rather than patch the one component that showed the symptom, give the bare shape the
+	   same gutter contract a body wrapper provides. Any direct child gets it, so a notice,
+	   a table or a plain paragraph added later lands correctly with no wrapper markup and no
+	   author having to know. Children that already supply their own inset are normalised onto
+	   the token below rather than left to double it. */
+	.aafm-app-password-fallback,
+	.aafm-bridge-alt,
+	.aafm-setup {
+		> *:not(summary) {
+			margin-inline: var(--aafm-space-5);
 		}
 	}
 
@@ -673,7 +790,7 @@
 			gap: 7px;
 			block-size: 32px;
 			padding-inline: 13px;
-			border-radius: 999px;
+			border-radius: var(--aafm-radius-pill);
 			border: 1px solid var(--aafm-border-strong);
 			background: var(--aafm-surface);
 			color: var(--aafm-text-muted);
@@ -722,6 +839,12 @@
 		margin-block: 0 8px;
 		font-size: 13px;
 		font-weight: 600;
+
+		/* Same trap as .aafm-ability-row below: an author-stylesheet `display: flex` beats the
+		   user-agent's `[hidden] { display: none }` regardless of specificity, and the abilities
+		   search's flat-list mode (admin.js) hides this heading via `hidden` while a query is
+		   active. */
+		&[hidden] { display: none; }
 	}
 
 	.aafm-count-badge {
@@ -766,7 +889,7 @@
 		.aafm-switch-track {
 			position: absolute;
 			inset: 0;
-			border-radius: 999px;
+			border-radius: var(--aafm-radius-pill);
 			background: var(--aafm-border-strong);
 			transition: background 0.18s ease;
 			cursor: pointer;
@@ -842,32 +965,38 @@
 		line-height: 1.6;
 		text-transform: uppercase;
 
-		&.aafm-badge-read {
-			background: #e7f5ea;
-			color: #1a7f37;
-		}
-
-		&.aafm-badge-write {
-			background: #fcf3d6;
-			/* #7a5f00 on #fcf3d6 clears WCAG AA (>= 4.5:1) for this 11px uppercase text;
-			   the previous #8a6d00 sat at ~4.44:1, just under the floor. */
-			color: #7a5f00;
-		}
-
-		&.aafm-badge-destructive {
-			background: #fce4e4;
-			color: #b32d2e;
-		}
-
+		/* Read and read-only mean the same thing in two contexts (an ability's own risk
+		   level vs. a whole integration's mode), so both now pull the same green pair.
+		   --aafm-green-text on --aafm-green-tint measures 5.86:1 for this 11px uppercase
+		   text - previously two different hand-picked hex pairs at 4.51:1 (read) and no
+		   measurement on record for readonly. 4.51 was one hundredth above the WCAG AA
+		   floor, so this is an accessibility repair, not tidying. */
+		&.aafm-badge-read,
 		&.aafm-badge-readonly {
-			background: #e6f0f7;
-			color: #0a4b78;
+			background: var(--aafm-green-tint);
+			color: var(--aafm-green-text);
 		}
 
-		/* Deliberately darker than the destructive badge sitting beside it: this one marks
-		   money and authority, and it has to read as the heavier of the two at a glance. */
+		/* --aafm-amber-text on --aafm-amber-tint measures 5.56:1, up from the previous
+		   hand-picked #7a5f00-on-#fcf3d6 pair's 5.46:1. */
+		&.aafm-badge-write {
+			background: var(--aafm-amber-tint);
+			color: var(--aafm-amber-text);
+		}
+
+		/* --aafm-red-text on --aafm-red-tint measures 5.67:1, up from the previous
+		   hand-picked #b32d2e-on-#fce4e4 pair's 5.21:1. */
+		&.aafm-badge-destructive {
+			background: var(--aafm-red-tint);
+			color: var(--aafm-red-text);
+		}
+
+		/* Deliberately heavier than the destructive badge sitting beside it: this one marks
+		   money and authority, and it has to read as the heavier of the two at a glance.
+		   Same red token as -destructive, just solid instead of tinted, rather than a
+		   fifth unrelated hex - the exact value it already shipped with. */
 		&.aafm-badge-high-risk {
-			background: #b32d2e;
+			background: var(--aafm-red-text);
 			color: #fff;
 		}
 	}
@@ -878,6 +1007,11 @@
 		align-items: center;
 		gap: 10px;
 		margin-block: 24px 10px;
+
+		/* The abilities search's flat-list mode (admin.js) hides this via the `hidden`
+		   attribute. Same trap as .aafm-ability-row below: an author-stylesheet `display: flex`
+		   beats the user-agent's `[hidden] { display: none }` regardless of specificity. */
+		&[hidden] { display: none; }
 
 		h3 {
 			margin: 0;
@@ -983,6 +1117,76 @@
 		}
 	}
 
+	/* Shared search + risk filter bar. Was scoped inside .aafm-integrations (the Integrations
+	   tab and, via .aafm-integration-body below, the Bridge directory); hoisted here so the
+	   Abilities tab's search field can reuse the same input geometry and layout instead of a
+	   copy. Not every user of this class carries the risk-pill children - the Abilities
+	   search renders the bare input, nothing breaks by their absence. */
+	.aafm-integration-filter {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px;
+		padding-block: 12px;
+		padding-inline: 0px;
+		align-items: stretch;
+
+		.aafm-integration-search {
+			flex: 1 1 220px;
+			min-inline-size: 160px;
+		}
+
+		.aafm-filter-risk {
+			display: inline-flex;
+			gap: 4px;
+		}
+
+		.aafm-filter-btn {
+			cursor: pointer;
+			font-size: 12px;
+			font-weight: 600;
+			padding-block: 5px;
+			padding-inline: 12px;
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			background: var(--aafm-surface);
+			color: var(--aafm-text-subtle);
+
+			&.is-active {
+				background: var(--aafm-accent);
+				border-color: var(--aafm-accent);
+				color: #fff;
+			}
+		}
+	}
+
+	/* The Abilities tab's search bar sits directly in the tab flow (no card around it), so
+	   it only needs a little breathing room from the stat grid above and the sub-tabs below;
+	   the bar's own layout comes from .aafm-integration-filter above. Unlike the Integrations
+	   and Bridge filter bars, this one has no risk-pill group to share the row with, so the
+	   inherited flex: 1 1 220px stretched the input across the whole row and pushed the match
+	   count to the far edge. Capped here rather than on .aafm-integration-search itself, which
+	   those other two bars still rely on growing to fill the space next to their pills. */
+	.aafm-abilities-search {
+		margin-block-end: 4px;
+
+		.aafm-integration-search {
+			flex: 0 1 360px;
+			max-inline-size: 400px;
+		}
+	}
+
+	/* Shown above a panel's own heading only while a cross-tab search leaves more than one
+	   .aafm-subject-panel visible at once, naming which sub-tab that panel is. */
+	.aafm-subject-search-label {
+		margin-block: 0 4px;
+		font-size: 12px;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		color: var(--aafm-text-subtle);
+	}
+
 	/* ---------- Integration cards (Integrations tab) ---------- */
 	.aafm-integrations {
 		.aafm-integrations-disclaimer {
@@ -1072,45 +1276,6 @@
 				padding-inline: 20px;
 			}
 		}
-
-		/* Per-card search + read/write filter. */
-		.aafm-integration-filter {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: 10px;
-			padding-block: 12px;
-			padding-inline: 0px;
-			align-items: stretch;
-
-			.aafm-integration-search {
-				flex: 1 1 220px;
-				min-inline-size: 160px;
-			}
-
-			.aafm-filter-risk {
-				display: inline-flex;
-				gap: 4px;
-			}
-
-			.aafm-filter-btn {
-				cursor: pointer;
-				font-size: 12px;
-				font-weight: 600;
-				padding-block: 5px;
-				padding-inline: 12px;
-				border: 1px solid var(--aafm-border);
-				border-radius: var(--aafm-radius-sm);
-				background: var(--aafm-surface);
-				color: var(--aafm-text-subtle);
-
-				&.is-active {
-					background: var(--aafm-accent);
-					border-color: var(--aafm-accent);
-					color: #fff;
-				}
-			}
-		}
 	}
 
 	/* ---------- Save bar (sticky-feel action bar under the abilities form) ---------- */
@@ -1130,6 +1295,11 @@
 		box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 		position: sticky;
 		inset-block-end: 0;
+
+		/* A zero-match abilities search (admin.js) hides this via the `hidden` attribute. Same
+		   trap as .aafm-pager and the rest of this file: an author-stylesheet `display: flex`
+		   beats the user-agent's `[hidden] { display: none }` regardless of specificity. */
+		&[hidden] { display: none; }
 	}
 
 	/* ---------- Settings rows ---------- */
@@ -1330,12 +1500,14 @@
 			font-weight: 600;
 		}
 
-		/* Checklist rows. */
+		/* Checklist rows. Inline inset comes from the accordion content contract, which
+		   lands on .aafm-setup-steps (the direct child of the <details>) - this used to
+		   carry its own padding-inline: 20px on top of that, doubling the gutter to ~40px
+		   once the contract started margining the wrapper too. */
 		.aafm-step {
 			display: flex;
 			gap: 14px;
 			padding-block: 15px;
-			padding-inline: 20px;
 			border-block-end: 1px solid var(--aafm-border);
 
 			&:last-child { border-block-end: 0; }
@@ -1571,9 +1743,23 @@
 		gap: 12px;
 		margin-block-start: 14px;
 
+		/* Codex admin-ui-r1 L1, the fifth instance of this trap on this branch (see
+		   LESSONS-LEARNED): an author-stylesheet `display: flex` beats the user-agent's
+		   `[hidden] { display: none }` regardless of specificity, and #paginateTable() (admin.js)
+		   toggles this pager via `hidden` at ten or fewer rows. Without this the pager stayed
+		   visible with dead Prev/Next and "Page 1 of 1" on a one-page table. */
+		&[hidden] { display: none; }
+
 		.aafm-pager-status {
 			color: var(--aafm-text-subtle);
 			font-size: 13px;
+		}
+
+		/* "Showing 1-10 of 28" - the OAuth tables' pagers add this ahead of Prev/Page X of
+		   Y/Next; pushed to the start of the row so the count and the controls read as two
+		   distinct groups rather than one long line. */
+		.aafm-oauth-pager-count {
+			margin-inline-end: auto;
 		}
 
 		.aafm-btn[disabled] {
@@ -1655,9 +1841,11 @@
 			box-shadow: inset 0 0 0 1px var(--aafm-accent), var(--aafm-ring);
 		}
 
+		/* Border-only on hover, kept apart from .on's filled background and ring below - the two
+		   used to share the same border-color and background, so a hovered unselected card and
+		   the actually-selected one read as the same state at a glance. */
 		&:hover {
 			border-color: var(--aafm-accent);
-			background: var(--aafm-accent-tint);
 		}
 
 		&.on {
@@ -2059,6 +2247,38 @@
 		}
 	}
 
+	/* Reusable "no rows yet" state for any table on the admin - the OAuth clients/grants
+	   tables and the ability allowlist all show the same dashed-box message when empty
+	   instead of a bare table with zero rows. Lived under .aafm-oauth-manage only; moved
+	   here so a second table (the allowlist) inherits it instead of duplicating it. */
+	.aafm-empty-state {
+		margin-block: 0 8px;
+		padding: 14px 16px;
+		border: 1px dashed var(--aafm-border-strong);
+		border-radius: var(--aafm-radius);
+		color: var(--aafm-text-muted);
+		background: var(--aafm-surface-2);
+		font-size: 13px;
+	}
+
+	/* Shared record-table look (widefat striped aafm-oauth-table): code cells at 12px,
+	   links that break rather than overflow, and buttons that never wrap. Named for its
+	   first use (the OAuth tables) but scoped generally so any "widefat striped
+	   aafm-oauth-table" - the allowlist included - picks it up without its own copy. */
+	.aafm-oauth-table {
+		code {
+			font-size: 12px;
+		}
+
+		a {
+			word-break: break-all;
+		}
+
+		.aafm-btn {
+			white-space: nowrap;
+		}
+	}
+
 	/* ---------- OAuth client/grant management (Connections OAuth card) ---------- */
 	.aafm-oauth-manage {
 		margin-block-start: 20px;
@@ -2078,32 +2298,128 @@
 			margin-block-end: 8px;
 		}
 
-		.aafm-oauth-table {
-			code {
-				font-size: 12px;
-			}
-
-			a {
-				word-break: break-all;
-			}
-
-			.aafm-btn {
-				white-space: nowrap;
-			}
-		}
-
 		.aafm-muted {
 			color: var(--aafm-text-subtle);
 		}
+	}
 
-		.aafm-empty-state {
-			margin-block: 0 8px;
-			padding: 14px 16px;
-			border: 1px dashed var(--aafm-border-strong);
-			border-radius: var(--aafm-radius);
-			color: var(--aafm-text-muted);
-			background: var(--aafm-surface-2);
-			font-size: 13px;
+	/* ---------- Ability allowlist (Connections tab) ---------- */
+	.aafm-allowlist-card {
+		/* .aafm-section--collapsible sets padding-block: 0 16px on the body, so the
+		   description (now the first thing in the body, moved out of <summary>) needs its
+		   own top gap under the summary's bottom edge - the .aafm-card-head-desc rule that
+		   used to give it spacing is scoped to .aafm-card-head, which this body is not inside. */
+		.aafm-section-body {
+			padding-block-start: 12px;
+		}
+
+		.aafm-card-head-desc {
+			margin: 0 0 16px;
+			font-size: 12.5px;
+			color: var(--aafm-text-subtle);
+		}
+
+		.aafm-allowlist-table {
+			margin-block-end: 8px;
+		}
+
+		/* No-JS-yet fallback text (aafm_render_allowlist_section()'s data shell), replaced by
+		   the interactive picker below as soon as admin.js hydrates the cell. */
+		.aafm-allowlist-allowed-summary {
+			margin: 0;
+			font-size: 12.5px;
+			color: var(--aafm-text-subtle);
+		}
+
+		/* The "Allowed abilities" picker: an "All abilities" checkbox, then - visible only while
+		   that checkbox is unchecked, no disclosure to open - a plain count, a zero-selected
+		   warning, a search field, and the subject-grouped checkbox list. admin.js builds this per
+		   row (see #buildAllowlistPicker()) from the same catalog every row's picker shares. */
+		.aafm-allowlist-picker {
+			min-inline-size: 240px;
+			max-inline-size: 360px;
+
+			.aafm-allowlist-all {
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				font-size: 13px;
+				font-weight: 600;
+				margin-block-end: 6px;
+			}
+
+			.aafm-allowlist-picker-body {
+				margin-block-start: 8px;
+				display: flex;
+				flex-direction: column;
+				gap: 8px;
+
+				/* Same trap as .aafm-allowlist-item below: an author-stylesheet `display: flex`
+				   beats the user-agent's `[hidden] { display: none }` regardless of specificity,
+				   and this body toggles via `hidden` on the "All abilities" checkbox. */
+				&[hidden] { display: none; }
+			}
+
+			.aafm-allowlist-picker-count {
+				margin: 0;
+				font-size: 12.5px;
+				color: var(--aafm-text-subtle);
+			}
+
+			.aafm-allowlist-warning {
+				font-size: 12.5px;
+			}
+
+			.aafm-allowlist-picker-groups {
+				max-block-size: 220px;
+				overflow-y: auto;
+				border: 1px solid var(--aafm-border);
+				border-radius: var(--aafm-radius-sm);
+				padding-block: 4px;
+				padding-inline: 8px;
+			}
+
+			.aafm-allowlist-group {
+				border: none;
+				margin: 0;
+				padding-block: 4px;
+				padding-inline: 0;
+
+				legend {
+					font-size: 11px;
+					font-weight: 600;
+					text-transform: uppercase;
+					letter-spacing: 0.02em;
+					color: var(--aafm-text-subtle);
+					padding: 0;
+				}
+			}
+
+			.aafm-allowlist-item {
+				display: block;
+				font-size: 12.5px;
+				padding-block: 2px;
+
+				/* Same trap as .aafm-ability-row's own [hidden] rule elsewhere in this file: an
+				   author-stylesheet `display: block` beats the user-agent's
+				   `[hidden] { display: none }` regardless of specificity, so the per-picker
+				   search's `item.hidden = true` would otherwise do nothing visible. */
+				&[hidden] { display: none; }
+			}
+		}
+
+		.aafm-allowlist-add {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 8px;
+			margin-block-end: 12px;
+
+			#aafm-allowlist-new-role,
+			#aafm-allowlist-new-client {
+				flex: 1 1 220px;
+				min-inline-size: 160px;
+			}
 		}
 	}
 }
@@ -2236,9 +2552,10 @@
 			border-block-end: 1px solid var(--aafm-border);
 		}
 
-		/* Inner steps keep their normal gap and are padded inside the fallback */
+		/* Inner steps take the same gutter as every other direct child (see the accordion
+		   content contract above); only their vertical rhythm is special here. */
 		.aafm-step {
-			margin-inline: 18px;
+			margin-inline: var(--aafm-space-5);
 
 			&:first-of-type { margin-block-start: 18px; }
 			&:last-of-type  { margin-block-end: 18px; }
@@ -2390,7 +2707,7 @@
 	& .aafm-qc-seg {
 		flex: 1;
 		height: 6px;
-		border-radius: 99px;
+		border-radius: var(--aafm-radius-pill);
 		background: var(--aafm-border);
 		overflow: hidden;
 		position: relative;
@@ -2399,7 +2716,7 @@
 		content: "";
 		position: absolute;
 		inset: 0;
-		border-radius: 99px;
+		border-radius: var(--aafm-radius-pill);
 		background: linear-gradient(90deg, var(--aafm-accent), var(--aafm-accent-hover));
 		transform: scaleX(0);
 		transform-origin: left;
@@ -2459,7 +2776,7 @@
 		font-size: 11px;
 		font-weight: 600;
 		padding: 3px 9px;
-		border-radius: 99px;
+		border-radius: var(--aafm-radius-pill);
 		white-space: nowrap;
 	}
 	& .aafm-qc-tag.done { background: var(--aafm-green-tint); color: var(--aafm-green-text); }
@@ -2693,7 +3010,7 @@
 		background: var(--aafm-surface-2);
 		border: 1px solid var(--aafm-border);
 		padding: 4px 10px;
-		border-radius: 99px;
+		border-radius: var(--aafm-radius-pill);
 	}
 	& .aafm-qc-chip svg { width: 12px; height: 12px; color: var(--aafm-green); flex: 0 0 auto; }
 

@@ -501,16 +501,24 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// update_post_meta(), not a display-shaped stand-in - sanitize_meta() (called by
 	// aafm_meta_write_confirmed() below) must see the same value type a registered sanitize
 	// callback actually ran against, an array for rank_math_robots, a scalar everywhere else.
-	$post_type     = (string) get_post_type( $id );
+	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
+	// call core itself makes at write time, rather than the raw get_post_type() - a
+	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
+	// at write time.
+	$post_type     = (string) get_object_subtype( 'post', $id );
 	$expected_meta = array();
+	// Read before each write below, so aafm_meta_write_confirmed() can tell a landed change from
+	// a silent veto rather than only replaying sanitize_meta() against a same-process recompute.
+	$old_meta = array();
 
 	$url_fields = aafm_rankmath_url_fields();
 	foreach ( aafm_rankmath_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw   = (string) $input[ $field ];
-		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw              = (string) $input[ $field ];
+		$clean            = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$old_meta[ $key ] = get_post_meta( $id, $key, true );
 		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
 		// is stripped unless it is slashed first. Every sibling meta writer (meta.php, terms.php,
 		// user-meta.php) slashes; these SEO writers must too.
@@ -525,6 +533,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	foreach ( $resolved_ids as $field => $attachment_id ) {
 		$companion_value                             = $attachment_id > 0 ? $attachment_id : '';
 		$expected_meta[ $image_id_fields[ $field ] ] = $companion_value;
+		$old_meta[ $image_id_fields[ $field ] ]      = get_post_meta( $id, $image_id_fields[ $field ], true );
 		update_post_meta( $id, $image_id_fields[ $field ], $companion_value );
 	}
 
@@ -534,19 +543,21 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// Rank Math's normalize_data() (includes/helpers/class-options.php:51-62) reads only the exact
 	// string 'off' as false; an empty string, '0', or boolean false falls back to the truthy default.
 	if ( aafm_rankmath_twitter_fields_provided( $input ) ) {
+		$old_meta['rank_math_twitter_use_facebook'] = get_post_meta( $id, 'rank_math_twitter_use_facebook', true );
 		update_post_meta( $id, 'rank_math_twitter_use_facebook', 'off' );
 		$expected_meta['rank_math_twitter_use_facebook'] = 'off';
 	}
 
 	if ( array_key_exists( 'robots', $input ) ) {
-		$allowed = aafm_rankmath_robots_tokens();
-		$tokens  = array_filter( array_map( 'trim', explode( ',', (string) $input['robots'] ) ) );
-		$kept    = array_values(
+		$allowed                      = aafm_rankmath_robots_tokens();
+		$tokens                       = array_filter( array_map( 'trim', explode( ',', (string) $input['robots'] ) ) );
+		$kept                         = array_values(
 			array_filter(
 				$tokens,
 				static fn( string $t ): bool => in_array( $t, $allowed, true )
 			)
 		);
+		$old_meta['rank_math_robots'] = get_post_meta( $id, 'rank_math_robots', true );
 		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
 		$expected_meta['rank_math_robots'] = $kept;
 
@@ -575,7 +586,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// callback's legitimate normalization is not mistaken for a veto - a robots array runs through
 	// the same sanitize_meta() call a scalar field does, keeping the comparison correct for both.
 	foreach ( $expected_meta as $key => $value ) {
-		if ( ! aafm_meta_write_confirmed( get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
+		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
 			return new WP_Error(
 				'aafm_rankmath_write_unconfirmed',
 				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
@@ -744,6 +755,9 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 		return aafm_generic_error();
 	}
 	$clean = aafm_sanitize_schema_array( $schema );
+	// Read before the write, matching the field writer above.
+	$old = get_post_meta( $id, 'rank_math_schema_' . $type, true );
+	$old = is_array( $old ) ? $old : array();
 	// update_post_meta() unslashes the value, so a backslash inside the schema is stripped unless
 	// it is slashed first (see the field writer above and the sibling meta writers).
 	update_post_meta( $id, 'rank_math_schema_' . $type, wp_slash( $clean ) );
@@ -751,13 +765,20 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 	// Verify the write actually persisted. update_post_meta() itself returns truthy even when a
 	// consumer short-circuits the write via the documented update_post_metadata filter (a
 	// caching/compliance plugin's veto mechanism), so its return value cannot be trusted on its
-	// own - read the meta back and compare against what was sanitized, mirroring the -get-schema
-	// sibling's own read (aafm_exec_rankmath_get_schema(), above). Returning the RE-READ value
-	// rather than the sanitized input also means a successful response always reflects what
-	// storage genuinely holds, never what the caller merely asked for.
+	// own - read the meta back and compare, mirroring the -get-schema sibling's own read
+	// (aafm_exec_rankmath_get_schema(), above). Returning the RE-READ value rather than the
+	// sanitized input also means a successful response always reflects what storage genuinely
+	// holds, never what the caller merely asked for.
+	//
+	// F5 (1.7.5 deferred): the comparison used to be a direct wp_json_encode() equality check
+	// against $clean, this plugin's own pre-write intent, rather than aafm_meta_write_confirmed()'s
+	// canonical sanitize_meta() form - the same B6-3 class the sibling field writer above already
+	// closed. A registered sanitizer on this dynamic rank_math_schema_{Type} key that legitimately
+	// normalizes a value (for example a headline) reported as a write failure even though the
+	// write landed exactly as that sanitizer defines "landed".
 	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
 	$stored = is_array( $stored ) ? $stored : array();
-	if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
+	if ( ! aafm_meta_write_confirmed( $old, $stored, $clean, 'rank_math_schema_' . $type, 'post', (string) get_object_subtype( 'post', $id ) ) ) {
 		return new WP_Error(
 			'aafm_rankmath_schema_write_failed',
 			__( 'The schema could not be saved. Nothing was changed.', 'agent-abilities-for-mcp' )

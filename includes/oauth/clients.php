@@ -117,9 +117,18 @@ function aafm_oauth_register_client( array $req ) {
 /**
  * Fetch a single OAuth client row by its public client_id.
  *
+ * Codex round 8, R8-1: this used to run a bare $wpdb->get_row(), which hands back the PREVIOUS
+ * query's row when the current one fails ($wpdb->query() returning false without clearing
+ * last_result - see includes/option-cache.php). A caller saving an allowlist row for client A
+ * followed by nonexistent client B could have B's lookup fail and silently inherit A's row,
+ * accepting a scope for a client that does not exist. Routed through aafm_wpdb_row() so a failed
+ * lookup reports null, the same fail-closed answer a genuinely missing row already gives -
+ * "client not found" and "could not check" must be indistinguishable to every caller here, both
+ * of which treat null as "cannot accept this client_id".
+ *
  * @param string $client_id The public client identifier.
  * @return array{client_id:string,client_name:string,is_active:bool,is_agent_identity:bool}|null
- *               Null when no row exists.
+ *               Null when no row exists, or the lookup itself failed.
  */
 function aafm_oauth_get_client( string $client_id ): ?array {
 	if ( '' === $client_id ) {
@@ -127,19 +136,18 @@ function aafm_oauth_get_client( string $client_id ): ?array {
 	}
 
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$row = $wpdb->get_row(
+	$view = aafm_wpdb_row(
 		$wpdb->prepare(
 			'SELECT client_id, client_name, is_active, is_agent_identity FROM %i WHERE client_id = %s',
 			$wpdb->prefix . 'aafm_oauth_clients',
 			$client_id
-		),
-		ARRAY_A
+		)
 	);
 
-	if ( ! is_array( $row ) ) {
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
 		return null;
 	}
+	$row = $view['value'];
 
 	return array(
 		'client_id'         => (string) $row['client_id'],
@@ -228,7 +236,17 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
 }
 
 /**
- * Whether a client is anything other than a confirmed, currently-active registration.
+ * Whether a client is anything other than a confirmed, currently-active registration, and
+ * whether that read could even be completed - one query answering both.
+ *
+ * Codex round 7, R7-3: aafm_oauth_client_is_deactivated() plus the former
+ * aafm_oauth_client_lookup_failed() used to require two separate queries at the two call sites
+ * that need to tell a genuine deactivation apart from a read failure - the same query, run
+ * twice, with two chances to disagree. If the first read failed and the second succeeded, both
+ * callers still reported invalid_grant instead of the server_error the fault deserved. If the
+ * first read genuinely found the client missing or deactivated and the second read then failed,
+ * a real invalid_grant was reported as server_error instead. One read now answers both
+ * questions, the same shape aafm_oauth_consent_view() already uses for the consent check.
  *
  * Used to re-enforce a client's standing AFTER authorize-time, at three live authorization
  * gates - code redemption (rest.php), refresh rotation (tokens.php), and bearer validation
@@ -239,47 +257,88 @@ function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_i
  * as a standalone authorization decision (Codex round 12, R12-3 - an earlier docblock here
  * claimed every caller was a live gate, which was true of three but not that fourth).
  *
- * Fails closed in every direction regardless of which of those four callers is asking, because
- * certification reads go through a direct aafm_wpdb_scalar() read instead - see
- * aafm_oauth_deactivate_client() and aafm_oauth_delete_consent() - never through this function:
- * an unreadable clients table denies (Codex round 10, R10-10), and so does a row that is
- * missing entirely rather than confirmed inactive (Codex round 11, R11-2) - a client whose
- * row was removed by a partial table clear, a manual repair, or the abandoned-client reaper
- * must not keep authenticating just because there is nothing left to read as "deactivated".
- * Only a row read back with is_active = 1 counts as active; anything else - no row, a
- * non-1 value, or a failed read - denies. The events this denial feeds (aafm_oauth_log_event's
- * 'bearer'/'refresh' 'denied' rows, and the generic invalid_grant responses at code redemption
- * and refresh) are already worded as a plain denial rather than a claim that the client was
- * deactivated, so failing closed here does not misreport a missing row or a database error as
- * a revocation.
+ * Fails closed in every direction regardless of which caller is asking, because certification
+ * reads go through a direct aafm_wpdb_scalar() read instead - see aafm_oauth_deactivate_client()
+ * and aafm_oauth_delete_consent() - never through this function: an unreadable clients table
+ * denies (Codex round 10, R10-10), and so does a row that is missing entirely rather than
+ * confirmed inactive (Codex round 11, R11-2) - a client whose row was removed by a partial table
+ * clear, a manual repair, or the abandoned-client reaper must not keep authenticating just
+ * because there is nothing left to read as "deactivated". Only a row read back with
+ * is_active = 1 counts as active; anything else - no row, a non-1 value, or a failed read -
+ * denies. The events this denial feeds (aafm_oauth_log_event's 'bearer'/'refresh' 'denied' rows,
+ * and the generic invalid_grant responses at code redemption and refresh) are already worded as
+ * a plain denial rather than a claim that the client was deactivated, so failing closed here
+ * does not misreport a missing row or a database error as a revocation.
+ *
+ * @param string $client_id The client identifier carried by a code/token row.
+ * @return array{ok:bool,deactivated:bool} ok is false when the read itself failed - deactivated
+ *              is still the correct fail-closed answer (true) in that case, since every caller
+ *              must deny either way; ok exists only so a caller that needs to report the fault
+ *              honestly (server_error, not invalid_grant) can tell the two apart. An empty
+ *              client id is NOT a read failure - it reports ok=true, deactivated=true, the same
+ *              genuine no-client answer this has always given it.
+ */
+function aafm_oauth_client_deactivation_view( string $client_id ): array {
+	if ( '' === $client_id ) {
+		return array(
+			'ok'          => true,
+			'deactivated' => true, // No client id to authorize against: deny, this is a live auth gate.
+		);
+	}
+
+	$view = aafm_oauth_client_active_row_view( $client_id );
+
+	if ( ! $view['ok'] ) {
+		return array(
+			'ok'          => false,
+			'deactivated' => true, // Unreadable table: fail closed, this is a live auth gate.
+		);
+	}
+
+	if ( null === $view['value'] ) {
+		return array(
+			'ok'          => true,
+			'deactivated' => true, // No row: nothing to positively authorize against, fail closed.
+		);
+	}
+
+	return array(
+		'ok'          => true,
+		'deactivated' => 1 !== (int) $view['value'],
+	);
+}
+
+/**
+ * Whether a client is anything other than a confirmed, currently-active registration.
+ *
+ * Fails closed (denies) on a read failure - callers that need to tell a genuine deactivation
+ * apart from "could not be checked" use aafm_oauth_client_deactivation_view() directly instead,
+ * the way refresh rotation (tokens.php) and code redemption (rest.php) do.
  *
  * @param string $client_id The client identifier carried by a code/token row.
  * @return bool True unless a client row is read back and confirmed active (is_active = 1).
  */
 function aafm_oauth_client_is_deactivated( string $client_id ): bool {
-	if ( '' === $client_id ) {
-		return true; // No client id to authorize against: deny, this is a live auth gate.
-	}
+	return aafm_oauth_client_deactivation_view( $client_id )['deactivated'];
+}
 
+/**
+ * The raw is_active read aafm_oauth_client_deactivation_view() runs, factored out so it stays a
+ * single query per decision without reaching into that function's internals.
+ *
+ * @param string $client_id The client identifier to look up. Caller-validated non-empty.
+ * @return array{ok:bool,value:mixed} Same shape as aafm_wpdb_scalar().
+ */
+function aafm_oauth_client_active_row_view( string $client_id ): array {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$view = aafm_wpdb_scalar(
+	return aafm_wpdb_scalar(
 		$wpdb->prepare(
 			'SELECT is_active FROM %i WHERE client_id = %s',
 			$wpdb->prefix . 'aafm_oauth_clients',
 			$client_id
 		)
 	);
-
-	if ( ! $view['ok'] ) {
-		return true; // Unreadable table: fail closed, this is a live auth gate.
-	}
-
-	if ( null === $view['value'] ) {
-		return true; // No row: nothing to positively authorize against, fail closed.
-	}
-
-	return 1 !== (int) $view['value'];
 }
 
 /**
@@ -404,6 +463,14 @@ function aafm_oauth_validate_redirect_uri( string $uri ): bool {
  * non-array value decodes to an empty array so the caller never has to guard it.
  * Ordered newest first. Read-only, prepared queries against the plugin's own tables.
  *
+ * Codex round 7, R7-2: both reads below used to go through a bare $wpdb->get_results(), which
+ * always returns $wpdb->last_result after calling query() regardless of whether that call
+ * succeeded (wp-includes/class-wpdb.php) - so a failed query here could hand back an EARLIER,
+ * unrelated query's rows rather than the empty result the `! is_array()` guard expected. Routed
+ * through aafm_wpdb_results(), which checks $wpdb->query()'s own return value, so a genuine
+ * failure now falls into the same "tolerate a not-yet-installed table" empty-list path a failure
+ * was always meant to take, instead of silently displaying stale rows or stale counts.
+ *
  * @return array<int,array{client_id:string,client_name:string,redirect_uris:string[],created_at:string,is_active:bool,active_tokens:int,is_agent_identity:bool}>
  */
 function aafm_oauth_list_clients(): array {
@@ -416,31 +483,29 @@ function aafm_oauth_list_clients(): array {
 	// (a brand-new install before activation finishes) by returning an empty list
 	// instead of surfacing a DB error.
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT client_id, client_name, redirect_uris, created_at, is_active, is_agent_identity FROM %i ORDER BY created_at DESC, id DESC', $clients_table ), ARRAY_A );
+	$view       = aafm_wpdb_results( $wpdb->prepare( 'SELECT client_id, client_name, redirect_uris, created_at, is_active, is_agent_identity FROM %i ORDER BY created_at DESC, id DESC', $clients_table ) );
 	$wpdb->suppress_errors( $suppressed );
 
-	if ( ! is_array( $rows ) ) {
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
 		return array();
 	}
+	$rows = $view['value'];
 
 	// One grouped pass over the tokens table builds a client_id => active-token-count map, so
 	// the listing never runs a COUNT per client (an N+1 that scanned the token table once per row).
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count_rows = $wpdb->get_results(
+	$count_view = aafm_wpdb_results(
 		$wpdb->prepare(
 			'SELECT client_id, COUNT(*) AS active_tokens FROM %i WHERE is_active = 1 AND ( expires_at IS NULL OR expires_at > %s ) GROUP BY client_id',
 			$tokens_table,
 			$now
-		),
-		ARRAY_A
+		)
 	);
 	$wpdb->suppress_errors( $suppressed );
 
 	$counts = array();
-	if ( is_array( $count_rows ) ) {
-		foreach ( $count_rows as $count_row ) {
+	if ( $count_view['ok'] && is_array( $count_view['value'] ) ) {
+		foreach ( $count_view['value'] as $count_row ) {
 			$counts[ (string) $count_row['client_id'] ] = (int) $count_row['active_tokens'];
 		}
 	}
@@ -492,9 +557,11 @@ function aafm_oauth_list_grants(): array {
 	// Read-only listing for the admin table: tolerate a not-yet-installed table
 	// by returning an empty list instead of surfacing a DB error. Both table names are
 	// bound as %i identifiers; the LEFT JOIN keeps a consent whose client row was removed.
+	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
+	// see aafm_oauth_list_clients()'s docblock for why a failed query must not be allowed to
+	// return an earlier, unrelated query's rows here.
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$rows = $wpdb->get_results(
+	$view       = aafm_wpdb_results(
 		$wpdb->prepare(
 			'SELECT c.wp_user_id, c.client_id, c.granted_at, cl.client_name
 			 FROM %i c
@@ -502,17 +569,16 @@ function aafm_oauth_list_grants(): array {
 			 ORDER BY c.granted_at DESC, c.id DESC',
 			$consents_table,
 			$clients_table
-		),
-		ARRAY_A
+		)
 	);
 	$wpdb->suppress_errors( $suppressed );
 
-	if ( ! is_array( $rows ) ) {
+	if ( ! $view['ok'] || ! is_array( $view['value'] ) ) {
 		return array();
 	}
 
 	$out = array();
-	foreach ( $rows as $row ) {
+	foreach ( $view['value'] as $row ) {
 		$user_id = (int) $row['wp_user_id'];
 		$user    = get_userdata( $user_id );
 		if ( ! $user ) {

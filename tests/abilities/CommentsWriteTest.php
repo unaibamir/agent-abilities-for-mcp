@@ -367,4 +367,52 @@ final class CommentsWriteTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
+
+	/**
+	 * Codex round 8, R8-4: wp_set_comment_status() fires its 'wp_set_comment_status' action
+	 * AFTER its own DB update has already succeeded, and returns `true` unconditionally once that
+	 * update ran - the old code branched on that return value, so a hook on the action that moves
+	 * the comment again (here, straight back to its pre-moderation status - the same shape as a
+	 * second plugin's moderation rule overriding this one, or a spam filter reverting an
+	 * unwarranted approval) went unreported: the discarded/truthy return value said success while
+	 * the comment sat at a status the caller never asked for. Same route as the sibling
+	 * vanish-mid-write test above, but the row survives with the WRONG status instead of
+	 * disappearing - the shape the old `! $ok && mismatch` gate could never catch, because $ok was
+	 * true.
+	 */
+	public function test_moderate_comment_errors_when_a_hook_reverts_the_status_after_a_successful_update(): void {
+		global $wpdb;
+
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '0',
+			)
+		);
+
+		$revert = static function ( $comment_id ) use ( $wpdb ) {
+			// A raw update, not wp_set_comment_status(), so the hook itself does not
+			// recurse back into the action it is attached to.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update( $wpdb->comments, array( 'comment_approved' => '0' ), array( 'comment_ID' => $comment_id ) );
+			clean_comment_cache( $comment_id );
+		};
+		add_action( 'wp_set_comment_status', $revert );
+
+		try {
+			$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
+				array(
+					'comment_id' => $comment,
+					'action'     => 'approve',
+				)
+			);
+		} finally {
+			remove_action( 'wp_set_comment_status', $revert );
+		}
+
+		$this->assertSame( 'unapproved', wp_get_comment_status( $comment ), 'The hook must have actually reverted the status for this test to prove anything.' );
+		$this->assertInstanceOf( WP_Error::class, $out, 'A status the hook reverted away from what was requested must not be reported as a successful approval.' );
+	}
 }

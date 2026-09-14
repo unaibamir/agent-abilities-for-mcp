@@ -220,4 +220,44 @@ final class UserDeletionCleanupTest extends TestCase {
 			"The bystander's own grant for the same client must be untouched."
 		);
 	}
+
+	/**
+	 * Pins the -1 vs 0 return contract commit a67208a introduced: a genuine query failure
+	 * (here, the table itself is gone) must read as -1, never as the same 0 a real no-op
+	 * returns. Without the fix these all read 0, indistinguishable from "nothing to revoke".
+	 *
+	 * Extended to the four N1 siblings (aafm_oauth_revoke_client_tokens(),
+	 * aafm_oauth_revoke_user_client_tokens(), aafm_oauth_revoke_client_codes(),
+	 * aafm_oauth_revoke_user_client_codes()), brought onto the same shape.
+	 */
+	public function test_revoke_helpers_report_negative_one_when_the_table_is_missing(): void {
+		aafm_drop_oauth_tables();
+
+		$this->assertSame( -1, aafm_oauth_revoke_user_tokens( 1 ), 'aafm_oauth_revoke_user_tokens() must report -1, not 0, on a missing table.' );
+		$this->assertSame( -1, aafm_oauth_revoke_user_codes( 1 ), 'aafm_oauth_revoke_user_codes() must report -1, not 0, on a missing table.' );
+		$this->assertSame( -1, aafm_oauth_revoke_client_tokens( 'client_one' ), 'aafm_oauth_revoke_client_tokens() must report -1, not 0, on a missing table.' );
+		$this->assertSame( -1, aafm_oauth_revoke_user_client_tokens( 1, 'client_one' ), 'aafm_oauth_revoke_user_client_tokens() must report -1, not 0, on a missing table.' );
+		$this->assertSame( -1, aafm_oauth_revoke_client_codes( 'client_one' ), 'aafm_oauth_revoke_client_codes() must report -1, not 0, on a missing table.' );
+		$this->assertSame( -1, aafm_oauth_revoke_user_client_codes( 1, 'client_one' ), 'aafm_oauth_revoke_user_client_codes() must report -1, not 0, on a missing table.' );
+
+		// Recreate the tables so later tests in the same run (which do not call set_up()
+		// again mid-test) are not left against a dropped schema.
+		aafm_install_oauth_tables();
+	}
+
+	/**
+	 * The other half of the same contract: with the tables present and nothing to revoke,
+	 * every helper must report a real 0, not the -1 failure sentinel. A fix that returned
+	 * -1 unconditionally would pass the test above and fail this one.
+	 */
+	public function test_revoke_helpers_report_zero_for_a_genuine_no_op(): void {
+		$user = self::factory()->user->create( array( 'role' => 'editor' ) );
+
+		$this->assertSame( 0, aafm_oauth_revoke_user_tokens( $user ) );
+		$this->assertSame( 0, aafm_oauth_revoke_user_codes( $user ) );
+		$this->assertSame( 0, aafm_oauth_revoke_client_tokens( 'no_such_client' ) );
+		$this->assertSame( 0, aafm_oauth_revoke_user_client_tokens( $user, 'no_such_client' ) );
+		$this->assertSame( 0, aafm_oauth_revoke_client_codes( 'no_such_client' ) );
+		$this->assertSame( 0, aafm_oauth_revoke_user_client_codes( $user, 'no_such_client' ) );
+	}
 }

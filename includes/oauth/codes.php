@@ -98,7 +98,7 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 	$table = $wpdb->prefix . 'aafm_oauth_codes';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query(
+	$updated = $wpdb->query(
 		$wpdb->prepare(
 			'UPDATE %i
 			 SET used_at = %s
@@ -116,6 +116,17 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 		)
 	);
 
+	// R6-2: $wpdb->query()'s own return value used to be discarded outright, so a genuine query
+	// failure (false) and a code that is simply invalid/expired/already-used (0 rows affected)
+	// were indistinguishable through $wpdb->rows_affected alone - both reported as invalid_grant.
+	// Only the latter is a real grant-validity answer.
+	if ( false === $updated ) {
+		return new WP_Error(
+			'server_error',
+			__( 'The authorization code could not be redeemed.', 'agent-abilities-for-mcp' )
+		);
+	}
+
 	if ( 0 === (int) $wpdb->rows_affected ) {
 		return new WP_Error(
 			'invalid_grant',
@@ -123,24 +134,25 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 		);
 	}
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$row = $wpdb->get_row(
+	$lookup = aafm_wpdb_row(
 		$wpdb->prepare(
 			'SELECT * FROM %i WHERE code_hash = %s',
 			$table,
 			$hash
-		),
-		ARRAY_A
+		)
 	);
 
-	if ( ! is_array( $row ) ) {
+	// R6-2: the UPDATE above just stamped exactly one row by this exact hash, so a failed or
+	// empty readback here is never a genuine grant-validity answer - it is this function's own
+	// read that could not be trusted, not evidence the code itself is bad.
+	if ( ! $lookup['ok'] || ! is_array( $lookup['value'] ) ) {
 		return new WP_Error(
-			'invalid_grant',
+			'server_error',
 			__( 'The authorization code could not be read back after redemption.', 'agent-abilities-for-mcp' )
 		);
 	}
 
-	return $row;
+	return $lookup['value'];
 }
 
 /**
@@ -153,20 +165,25 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
  * presented.
  *
  * @param string $client_id The public client identifier.
- * @return int Rows deleted.
+ * @return int Rows deleted, or -1 when the query itself failed and the count cannot be
+ *              trusted - a caller must not read -1 as "nothing to delete".
  */
 function aafm_oauth_revoke_client_codes( string $client_id ): int {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_codes';
 
+	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	return (int) $wpdb->query(
+	$result = $wpdb->query(
 		$wpdb->prepare(
 			'DELETE FROM %i WHERE client_id = %s',
 			$table,
 			$client_id
 		)
 	);
+	$wpdb->suppress_errors( $suppressed );
+
+	return false === $result ? -1 : (int) $result;
 }
 
 /**
@@ -177,14 +194,16 @@ function aafm_oauth_revoke_client_codes( string $client_id ): int {
  *
  * @param int    $user_id   The WordPress user.
  * @param string $client_id The public client identifier.
- * @return int Rows deleted.
+ * @return int Rows deleted, or -1 when the query itself failed and the count cannot be
+ *              trusted - a caller must not read -1 as "nothing to delete".
  */
 function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ): int {
 	global $wpdb;
 	$table = $wpdb->prefix . 'aafm_oauth_codes';
 
+	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	return (int) $wpdb->query(
+	$result = $wpdb->query(
 		$wpdb->prepare(
 			'DELETE FROM %i WHERE wp_user_id = %d AND client_id = %s',
 			$table,
@@ -192,6 +211,9 @@ function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ):
 			$client_id
 		)
 	);
+	$wpdb->suppress_errors( $suppressed );
+
+	return false === $result ? -1 : (int) $result;
 }
 
 /**

@@ -9,7 +9,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.7.4 |
+| **Stable tag** | 1.7.5 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -295,6 +295,14 @@ It makes two kinds of outbound HTTP request on its own: the Connection tab's rea
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), run on your own machine and not bundled with this plugin.
 
 ## Changelog
+### 1.7.5
+
+* **Feature:** The Connection tab swaps the allowlist textarea for a searchable checkbox picker and adds role and client selects, a Client ID copy control, paginated tables, and cross-tab abilities search.
+* **Fix:** A zero-match abilities search left the Save button stranded on an empty card; the savebar now hides and returns with the results.
+* **Fix:** The client picker's hover and selected states looked identical; hover is now a border outline only.
+* **Fix:** Ability order now survives a re-save, a stale search clears on keyboard navigation, a large allowlist no longer renders every checkbox at load, and new controls have accessible names and translations.
+* **Fix:** Post, block and template writes now confirm what landed, a stuck OAuth migration can no longer re-enable a switch you disabled, comment counts no longer hint at hidden comments, and a failed token revoke no longer reports success.
+
 ### 1.7.4
 
 * **Feature:** 26 new abilities cover The Events Calendar, Event Tickets, Slim SEO, Avada, and GeoDirectory, plus uploading media straight from a URL. All of them stay off until you turn them on.

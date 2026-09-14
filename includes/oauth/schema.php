@@ -187,13 +187,22 @@ function aafm_oauth_enforce_lifecycle_engine(): bool {
 	$non_transactional = array();
 
 	foreach ( aafm_oauth_lifecycle_table_suffixes() as $suffix ) {
-		$table  = $wpdb->prefix . $suffix;
-		$engine = aafm_oauth_table_engine( $table );
+		$table = $wpdb->prefix . $suffix;
+		$view  = aafm_oauth_table_engine_view( $table );
 
-		// '' means the engine could not be read: the table is absent, or it is a TEMPORARY table
-		// (the PHPUnit harness form), which information_schema does not list. Either way there is
-		// nothing to convert, nothing to warn about, and nothing to block the version stamp on.
-		if ( '' === $engine || 0 === strcasecmp( $engine, 'InnoDB' ) ) {
+		// A SUCCESSFUL read of '' means the engine could not be determined: the table is absent, or
+		// it is a TEMPORARY table (the PHPUnit harness form), which information_schema does not
+		// list. Either way there is nothing to convert, nothing to warn about, and nothing to block
+		// the version stamp on. Codex round 7, R7-2: this must be gated on $view['ok'] as well as
+		// the value - a query that FAILED (not merely found nothing) used to read identically to
+		// '' here, so a stale non-null 'InnoDB' string left over from an earlier iteration's
+		// successful read of a DIFFERENT, already-converted table could make this branch wrongly
+		// believe a genuinely MyISAM table was already InnoDB and skip it entirely, with no warning
+		// ever recorded. A failed read now falls through to the same conversion-attempt branch a
+		// confirmed non-InnoDB table takes; if the follow-up read inside
+		// aafm_oauth_convert_table_to_innodb() also fails, the table lands in $non_transactional
+		// and the run is correctly reported incomplete instead of silently believed fine.
+		if ( $view['ok'] && ( '' === $view['value'] || 0 === strcasecmp( $view['value'], 'InnoDB' ) ) ) {
 			continue;
 		}
 
@@ -213,26 +222,48 @@ function aafm_oauth_enforce_lifecycle_engine(): bool {
 }
 
 /**
- * The storage engine of a table for the current blog, or '' when it cannot be read.
+ * The storage engine of a table for the current blog, and whether the read itself succeeded.
  *
  * The information_schema view may omit a TEMPORARY table (the PHPUnit harness rewrites plugin
- * CREATE TABLE to that form) or a table that does not exist, so both return '' and callers treat
- * that as "cannot verify, do not act". The table name is bound as a value here (information_schema stores
- * it as data), never interpolated.
+ * CREATE TABLE to that form) or a table that does not exist, so both read as a SUCCESSFUL query
+ * whose value is '' - callers treat that as "cannot verify, do not act". A query that fails
+ * outright is a different thing entirely (Codex round 7, R7-2) and must not be folded into the
+ * same '' signal - see aafm_wpdb_scalar()'s docblock for why $wpdb->query()'s own return value,
+ * not a bare get_var(), is what tells the two apart. The table name is bound as a value here
+ * (information_schema stores it as data), never interpolated.
  *
  * @param string $table Fully-prefixed table name (an internal constant).
- * @return string Engine name (e.g. 'InnoDB', 'MyISAM'), or '' when unknown.
+ * @return array{ok:bool,value:string} ok is false when the query itself failed - value is not
+ *              trustworthy in that case. value is the engine name (e.g. 'InnoDB', 'MyISAM'), or ''
+ *              when the query succeeded but the table is absent/unlisted.
  */
-function aafm_oauth_table_engine( string $table ): string {
+function aafm_oauth_table_engine_view( string $table ): array {
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$engine = $wpdb->get_var(
+	$view = aafm_wpdb_scalar(
 		$wpdb->prepare(
 			'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s',
 			$table
 		)
 	);
-	return is_string( $engine ) ? $engine : '';
+
+	return array(
+		'ok'    => $view['ok'],
+		'value' => is_string( $view['value'] ) ? $view['value'] : '',
+	);
+}
+
+/**
+ * The storage engine of a table for the current blog, or '' when it cannot be determined - either
+ * a genuinely absent/TEMPORARY table, or the read itself failing. Callers that must tell those two
+ * apart (a query failure is not the same thing as a confirmed-absent table) use
+ * aafm_oauth_table_engine_view() directly instead, the way aafm_oauth_enforce_lifecycle_engine()
+ * does.
+ *
+ * @param string $table Fully-prefixed table name (an internal constant).
+ * @return string Engine name (e.g. 'InnoDB', 'MyISAM'), or '' when unknown.
+ */
+function aafm_oauth_table_engine( string $table ): string {
+	return aafm_oauth_table_engine_view( $table )['value'];
 }
 
 /**
@@ -355,21 +386,35 @@ function aafm_oauth_schema_verify(): bool {
  * not list, so existence is probed with a trivial select that sees a temporary table the same way
  * the plugin's own queries do. The %i placeholder quotes the identifier (an internal constant).
  *
+ * 1.7.5 round 4, R4-4: this used to read '' === $wpdb->last_error as its success signal, which
+ * confuses a query that never ran (three of $wpdb->query()'s own false-returning paths never
+ * touch last_error - see aafm_wpdb_scalar()'s docblock, R10-1) with one that ran and found the
+ * table. Under that failure shape an absent table (the consents table, say, after an
+ * unsuccessful CREATE) reported present, and schema finalization could stamp the current version
+ * without the normal missing-table retry ever firing. Delegating to aafm_wpdb_scalar(), which
+ * checks $wpdb->query()'s own return value, closes the same gap the activity-log table's sibling
+ * probe closes.
+ *
  * @param string $table Fully-prefixed table name.
  * @return bool
  */
 function aafm_oauth_table_present( string $table ): bool {
 	global $wpdb;
 	$suppressed = $wpdb->suppress_errors( true );
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
-	$error = $wpdb->last_error;
+	$result     = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
 	$wpdb->suppress_errors( $suppressed );
-	return '' === $error;
+	return $result['ok'];
 }
 
 /**
  * Whether a named column exists on a table. Works on the harness's TEMPORARY tables.
+ *
+ * Codex round 7, R7-2: a bare $wpdb->get_var() returns the PREVIOUS query's row when the current
+ * query itself fails, so a failed SHOW COLUMNS could inherit an unrelated non-empty value left
+ * over from an earlier, successful check and report a missing column as present - letting schema
+ * finalization stamp the current version over an incomplete upgrade. Routed through
+ * aafm_wpdb_scalar() so a failed read reports absent, the same fail-closed direction this
+ * function already took for a genuinely missing column.
  *
  * @param string $table  Fully-prefixed table name (an internal constant).
  * @param string $column Column name to look for (no wildcards; matched exactly by SHOW COLUMNS).
@@ -378,8 +423,8 @@ function aafm_oauth_table_present( string $table ): bool {
 function aafm_oauth_table_has_column( string $table, string $column ): bool {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $column ) );
-	return null !== $found && '' !== $found;
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $column ) );
+	return $view['ok'] && null !== $view['value'] && '' !== $view['value'];
 }
 
 /**
@@ -534,7 +579,8 @@ function aafm_oauth_cleanup(): void {
  * no token rows of any state - is dead weight. This removes such rows once they are older than
  * the TTL (default 7 days), keeping a generous window for a legitimate register-then-approve
  * flow that spans a session. A client with at least one consent OR any token row is kept, so a
- * live or revoked-but-historical client is never reaped. Deletes the matching codes too.
+ * live or revoked-but-historical client is never reaped - the deletion re-checks that condition
+ * itself rather than trusting the scan that found the candidates. Deletes the matching codes too.
  *
  * The TTL is filterable via `aafm_oauth_client_reap_ttl` (seconds). All three tables are
  * internal constants; the cutoff is bound.
@@ -558,9 +604,12 @@ function aafm_oauth_reap_abandoned_clients(): int {
 	$codes_table    = esc_sql( $wpdb->prefix . 'aafm_oauth_codes' );
 
 	// Find abandoned client_ids: older than the cutoff, with no consent row and no token row.
-	// All table names are internal constants; the cutoff is bound.
+	// All table names are internal constants; the cutoff is bound. Codex round 7, R7-2: routed
+	// through aafm_wpdb_col() rather than a bare get_col() - a failed query here must not be
+	// allowed to return an earlier, unrelated query's column values, since this list feeds a
+	// DELETE below and a stale, wrong client_id list would delete the wrong rows.
 	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$abandoned = $wpdb->get_col(
+	$view = aafm_wpdb_col(
 		$wpdb->prepare(
 			"SELECT cl.client_id FROM {$clients_table} cl
 			 WHERE cl.created_at < %s
@@ -571,23 +620,39 @@ function aafm_oauth_reap_abandoned_clients(): int {
 	);
 	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-	if ( empty( $abandoned ) || ! is_array( $abandoned ) ) {
+	if ( ! $view['ok'] || empty( $view['value'] ) || ! is_array( $view['value'] ) ) {
 		return 0;
 	}
+	$abandoned = $view['value'];
 
 	$placeholders = implode( ', ', array_fill( 0, count( $abandoned ), '%s' ) );
 
-	// Remove the abandoned clients and any stray (unredeemed, now-expired) codes they minted.
+	// Delete the clients, but re-certify abandonment in the DELETE's own WHERE clause rather
+	// than trusting the candidate list above (Codex round 8, R8-3): that list can go stale
+	// between the scan and this delete if a candidate is approved in the meantime - consent
+	// recorded, a code minted, a token issued - and a blind IN-list delete would then remove a
+	// registration that just went live, orphaning the token issued seconds earlier. Carrying the
+	// scan's exact predicate here means the database decides from current data at delete time,
+	// not PHP from a stale snapshot, the same fix shape as R7-1's row-locked UPDATE.
 	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-	$wpdb->query(
-		$wpdb->prepare(
-			"DELETE FROM {$codes_table} WHERE client_id IN ( {$placeholders} )",
-			$abandoned
-		)
-	);
 	$deleted = (int) $wpdb->query(
 		$wpdb->prepare(
-			"DELETE FROM {$clients_table} WHERE client_id IN ( {$placeholders} )",
+			"DELETE FROM {$clients_table} WHERE client_id IN ( {$placeholders} )
+			   AND created_at < %s
+			   AND NOT EXISTS ( SELECT 1 FROM {$consents_table} co WHERE co.client_id = {$clients_table}.client_id )
+			   AND NOT EXISTS ( SELECT 1 FROM {$tokens_table} t WHERE t.client_id = {$clients_table}.client_id )",
+			array_merge( $abandoned, array( $cutoff ) )
+		)
+	);
+
+	// Only now delete the stray codes - scoped to client_ids that no longer have a client row
+	// at all, derived from the delete that just happened rather than from the stale candidate
+	// list. A candidate that survived the recheck above (freshly approved, consent and a code
+	// both just minted) keeps its client row and, by the same token, its live code.
+	$wpdb->query(
+		$wpdb->prepare(
+			"DELETE FROM {$codes_table} WHERE client_id IN ( {$placeholders} )
+			   AND NOT EXISTS ( SELECT 1 FROM {$clients_table} cl WHERE cl.client_id = {$codes_table}.client_id )",
 			$abandoned
 		)
 	);

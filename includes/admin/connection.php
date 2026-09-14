@@ -602,7 +602,15 @@ function aafm_ajax_oauth_revoke_client(): void {
 	// any single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to
 	// still send success; Codex round 10, R10-2 - the code-table delete above was never
 	// certified at all).
-	if ( ! $deactivated || aafm_oauth_client_has_active_tokens( $client_id ) || aafm_oauth_client_has_pending_codes( $client_id ) ) {
+	//
+	// F6 (1.7.5 deferred): aafm_oauth_revoke_client_tokens() reports a genuine query failure as
+	// -1 (N1), and the final-state read above can still find zero active tokens even when that
+	// UPDATE itself failed (there was nothing to update either way) - so this response used to
+	// send the -1 sentinel straight through as revoked_tokens. The admin JS reads it as
+	// Number(revoked_tokens) and subtracts it from the displayed count, so a -1 INCREASED the
+	// shown token count instead of decreasing it. A genuine query failure is refused the same as
+	// any other unconfirmed revoke.
+	if ( ! $deactivated || -1 === $revoked || aafm_oauth_client_has_active_tokens( $client_id ) || aafm_oauth_client_has_pending_codes( $client_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the client. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 
@@ -682,7 +690,13 @@ function aafm_ajax_oauth_revoke_grant(): void {
 	// single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to still
 	// send success while the bearer token kept validating; Codex round 10, R10-2 - the code-table
 	// delete above was never certified at all).
-	if ( ! $consent_deleted || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_pending_codes( $user_id, $client_id ) ) {
+	//
+	// F6 (1.7.5 deferred): same sentinel leak as aafm_ajax_oauth_revoke_client() above -
+	// aafm_oauth_revoke_user_client_tokens() reports a genuine query failure as -1 (N1), and the
+	// final-state read can still find zero active tokens even when that UPDATE itself failed, so
+	// this response used to send the -1 sentinel straight through as revoked_tokens, which the
+	// admin JS then subtracted, INCREASING the displayed count instead of decreasing it.
+	if ( ! $consent_deleted || -1 === $revoked || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_pending_codes( $user_id, $client_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the grant. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
 
@@ -856,7 +870,23 @@ function aafm_render_oauth_management(): void {
 
 			printf( '<tr data-client-row="%s">', esc_attr( $full_id ) );
 			printf( '<td>%s</td>', esc_html( $name ) );
-			printf( '<td><code title="%1$s">%2$s</code></td>', esc_attr( $full_id ), esc_html( $short_id ) );
+			// The cell cannot hold a full client id without breaking the table layout, so the
+			// column stays truncated; a copy control (the same .aafm-copy component used
+			// elsewhere on this tab, already bound in admin.js and already in the kses allowlist)
+			// carries the full id, since the title tooltip lets an operator see it but not copy it.
+			echo '<td>';
+			echo wp_kses(
+				sprintf(
+					'<span class="aafm-field-mono aafm-client-id-cell"><code title="%1$s">%2$s</code><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-copy" data-copy="%1$s" aria-label="%5$s">%3$s<span class="aafm-copy-label">%4$s</span></button></span>',
+					esc_attr( $full_id ),
+					esc_html( $short_id ),
+					aafm_icon( 'copy' ),
+					esc_html__( 'Copy', 'agent-abilities-for-mcp' ),
+					esc_attr__( 'Copy the full client ID', 'agent-abilities-for-mcp' )
+				),
+				aafm_admin_allowed_html()
+			);
+			echo '</td>';
 
 			echo '<td>';
 			if ( empty( $client['redirect_uris'] ) ) {
@@ -1255,6 +1285,11 @@ function aafm_render_connection_tab(): void {
 
 	echo '</section>';
 
+	// Moved above the app-password fallback per operator request: the allowlist governs both
+	// roles and OAuth clients regardless of which connection method is in use, so it belongs with
+	// the OAuth management tables rather than buried below the accordion.
+	aafm_render_allowlist_section();
+
 	// ---- 3. App-Password fallback: existing three-step wizard inside <details> ----
 	// Open by default when OAuth is off so the wizard is immediately visible; collapsed when
 	// OAuth is on because most operators will use the OAuth path above.
@@ -1521,8 +1556,6 @@ function aafm_render_connection_tab(): void {
 	echo '</div>'; // .aafm-step 3
 
 	echo '</details>'; // .aafm-app-password-fallback
-
-	aafm_render_allowlist_section();
 
 	echo '</div>'; // .aafm-connection
 }

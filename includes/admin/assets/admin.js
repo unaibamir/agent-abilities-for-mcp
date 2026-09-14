@@ -51,6 +51,7 @@
 			this.#bindClientPicker();
 			this.#bindOauthClientPicker();
 			this.#bindSubjectTabs();
+			this.#bindAbilitiesSearch();
 			this.#bindSectionToggles();
 			this.#bindEnableReads();
 			this.#bindEnableWrites();
@@ -74,6 +75,7 @@
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
 			this.#bindOauthRevoke();
+			this.#bindOauthPagination();
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
@@ -347,11 +349,188 @@
 					.forEach( ( panel ) => {
 						panel.hidden = panel.dataset.subject !== subject;
 					} );
+				// Codex admin-ui-r1 M2: a click and an Arrow/Home/End key both land here (the
+				// keydown handler wired by #wireTablistKeys() calls this same function), so
+				// dispatching from one place lets #bindAbilitiesSearch() clear a stale query on
+				// either input method instead of only on click.
+				document.dispatchEvent( new CustomEvent( 'aafm-subject-tab-change' ) );
 			};
 			list.forEach( ( tab ) => {
 				tab.addEventListener( 'click', () => activate( tab ) );
 			} );
 			this.#wireTablistKeys( list, activate );
+		}
+
+		/**
+		 * Get-or-create the small subject label admin.js shows above a panel's own heading
+		 * while a cross-tab search has more than one panel visible at once. The panel's own
+		 * <h2> is only ever a count ("27 / 27 enabled"), never the subject name, so there is
+		 * nothing on the panel itself to point at - built from data-subject-label
+		 * (page.php), which page.php escapes and the browser decodes like any other
+		 * attribute, so this is textContent on trusted data, not a new HTML sink.
+		 *
+		 * @param {HTMLElement} panel A .aafm-subject-panel.
+		 * @return {HTMLElement|null} The label element, or null if the panel has no label to show.
+		 */
+		#abilitiesPanelLabel( panel ) {
+			const text = panel.dataset.subjectLabel;
+			if ( ! text ) {
+				return null;
+			}
+			let label = panel.querySelector( ':scope > .aafm-subject-search-label' );
+			if ( ! label ) {
+				label = document.createElement( 'p' );
+				label.className = 'aafm-subject-search-label';
+				label.textContent = text;
+				panel.prepend( label );
+			}
+			return label;
+		}
+
+		/**
+		 * Search field on the Abilities tab: filters every .aafm-ability-row across every
+		 * sub-tab by its own text, the same row.textContent match #bindBridgeFilter() already
+		 * uses for the bridge directory. Unlike that filter, a match here can live on a panel
+		 * other than the one currently open, so a query reveals every panel with at least one
+		 * match instead of only filtering within the active panel.
+		 *
+		 * Hiding is via the `hidden` attribute only, on rows and panels that already exist in
+		 * the DOM - never moved, cloned, or disabled - so a hidden-by-search checkbox keeps its
+		 * name and checked state and still submits with the rest of the form
+		 * (aafm_render_abilities_tab()'s own docblock states every panel submits regardless of
+		 * visibility).
+		 */
+		#bindAbilitiesSearch() {
+			const search = document.getElementById( 'aafm-abilities-search' );
+			const form = document.getElementById( 'aafm-abilities-form' );
+			if ( ! search || ! form ) {
+				return;
+			}
+			const status = document.getElementById( 'aafm-abilities-search-status' );
+			const savebar = form.querySelector( '.aafm-savebar' );
+			const panels = Array.from( form.querySelectorAll( '.aafm-subject-panel' ) );
+
+			// Everything in a panel that is not a row container (.aafm-ability-list, one per
+			// Reads/Writes group) or the subject label: the heading, the bulk-toggle buttons,
+			// the Reads/Writes group headings, and (on some panels) the post-types or meta-key
+			// cards. A query hides all of it, `hidden` only, on elements already in the DOM -
+			// never moved, cloned, or disabled - so what remains visible is a flat run of
+			// ability rows with nothing to separate one subject's matches from the next. Written
+			// as a query rather than a fixed class list so a future flat "All abilities" tab can
+			// reuse it without maintaining a second copy. .aafm-ability-list is excluded here on
+			// purpose - it holds rows, not chrome - and gets its own visibility pass in apply()/
+			// clear() below, hidden only once every row inside it is hidden (Codex admin-ui-r1 L2).
+			const panelChrome = ( panel ) =>
+				panel.querySelectorAll( ':scope > :not(.aafm-ability-list):not(.aafm-subject-search-label)' );
+
+			// The sub-tab a plain click would show right now, so clearing the query restores
+			// exactly that panel rather than whichever one a match happened to leave open.
+			const activeSubject = () =>
+				document.querySelector( '.aafm-subject-tab.is-active' )?.dataset.subject ?? null;
+
+			const setBulkButtonsDisabled = ( panel, disabled ) => {
+				panel.querySelectorAll( '.aafm-section-toggle button' ).forEach( ( btn ) => {
+					btn.disabled = disabled;
+				} );
+			};
+
+			const clear = () => {
+				const subject = activeSubject();
+				panels.forEach( ( panel ) => {
+					panel.hidden = panel.dataset.subject !== subject;
+					panel.querySelectorAll( '.aafm-ability-row' ).forEach( ( row ) => {
+						row.hidden = false;
+					} );
+					panel.querySelectorAll( '.aafm-ability-list' ).forEach( ( list ) => {
+						list.hidden = false;
+					} );
+					panelChrome( panel ).forEach( ( el ) => {
+						el.hidden = false;
+					} );
+					setBulkButtonsDisabled( panel, false );
+					const label = panel.querySelector( ':scope > .aafm-subject-search-label' );
+					if ( label ) {
+						label.hidden = true;
+					}
+				} );
+				if ( savebar ) {
+					savebar.hidden = false;
+				}
+				if ( status ) {
+					status.textContent = '';
+				}
+			};
+
+			const apply = () => {
+				const query = search.value.trim().toLowerCase();
+				if ( '' === query ) {
+					clear();
+					return;
+				}
+
+				let matchCount = 0;
+				panels.forEach( ( panel ) => {
+					let panelMatches = 0;
+					panel.querySelectorAll( '.aafm-ability-row' ).forEach( ( row ) => {
+						const isMatch = row.textContent.toLowerCase().includes( query );
+						row.hidden = ! isMatch;
+						if ( isMatch ) {
+							panelMatches += 1;
+						}
+					} );
+					// Codex admin-ui-r1 L2: a panel with both a Reads and a Writes list, where
+					// the query matches only one of them, used to leave the other as an empty
+					// bordered .aafm-card - panelChrome() deliberately skips .aafm-ability-list
+					// (it holds rows, not chrome), so nothing else here was hiding it. Hide a
+					// list once every row inside it is hidden; #clear() above already restores all
+					// of them.
+					panel.querySelectorAll( '.aafm-ability-list' ).forEach( ( list ) => {
+						list.hidden = 0 === list.querySelectorAll( '.aafm-ability-row:not([hidden])' ).length;
+					} );
+					panel.hidden = 0 === panelMatches;
+					panelChrome( panel ).forEach( ( el ) => {
+						el.hidden = true;
+					} );
+					setBulkButtonsDisabled( panel, true );
+					const label = this.#abilitiesPanelLabel( panel );
+					if ( label ) {
+						label.hidden = 0 === panelMatches;
+					}
+					matchCount += panelMatches;
+				} );
+
+				// A zero-match query leaves the savebar as the only thing still rendered above
+				// "No abilities match." - a bare Save button with no rows, heading, or context
+				// above it. Hide it with the rest of the empty view and restore it in clear()
+				// or the moment a later keystroke matches again.
+				if ( savebar ) {
+					savebar.hidden = 0 === matchCount;
+				}
+				if ( status ) {
+					status.textContent =
+						0 === matchCount
+							? this.#t( 'abilitiesSearchNone', 'No abilities match.' )
+							: this.#format(
+									this.#t( 'abilitiesSearchCount', '%s abilities match.' ),
+									new Intl.NumberFormat().format( matchCount )
+							  );
+				}
+			};
+
+			search.addEventListener( 'input', apply );
+
+			// A sub-tab change - by click or by Arrow/Home/End (both dispatch this event from
+			// #bindSubjectTabs()'s shared activate(), Codex admin-ui-r1 M2) - is a request to see
+			// only that one tab, the way it always has been. Reconcile the search box with it
+			// rather than leaving a stale query active over a view that no longer matches what it
+			// filtered: before this fix, a keyboard move could reveal a panel with no matches
+			// while the search box and match count still claimed some existed.
+			document.addEventListener( 'aafm-subject-tab-change', () => {
+				if ( '' !== search.value ) {
+					search.value = '';
+					clear();
+				}
+			} );
 		}
 
 		#bindOsTabs() {
@@ -1786,6 +1965,124 @@
 		}
 
 		/**
+		 * Client-side pager for one OAuth management table (Registered clients or Active
+		 * grants). Both queries already run with no LIMIT and every row is already in the
+		 * DOM (aafm_oauth_list_clients()/aafm_oauth_list_grants()), so this only toggles
+		 * `hidden` on a rows-per-page slice - no second query, no AJAX round trip.
+		 *
+		 * A MutationObserver on the <tbody> re-derives the page count whenever a row is
+		 * removed, rather than the click handlers being the only thing that can trigger a
+		 * recompute: #bindOauthRevoke() calls row.remove() for a revoked grant with no
+		 * knowledge of pagination at all, and the observer means it does not need any. If
+		 * removing a row empties the current page (the last row on the last page), the
+		 * observer steps the page back and re-renders, so the pager never goes on showing a
+		 * page number or a Prev/Next state the live row set no longer has.
+		 *
+		 * @param {HTMLTableElement} table   The table to paginate.
+		 * @param {number}           perPage Rows per page.
+		 */
+		#paginateTable( table, perPage ) {
+			const tbody = table.querySelector( 'tbody' );
+			if ( ! tbody ) {
+				return;
+			}
+			const anchor = table.closest( '.aafm-table-wrap' ) ?? table;
+
+			const pager = document.createElement( 'div' );
+			pager.className = 'aafm-pager';
+
+			const count = document.createElement( 'span' );
+			count.className = 'aafm-pager-status aafm-oauth-pager-count';
+
+			const prev = document.createElement( 'button' );
+			prev.type = 'button';
+			prev.className = 'aafm-btn aafm-btn-secondary aafm-btn-sm';
+			prev.textContent = this.#t( 'pagerPrevious', 'Previous' );
+
+			const status = document.createElement( 'span' );
+			status.className = 'aafm-pager-status';
+			status.setAttribute( 'aria-live', 'polite' );
+
+			const next = document.createElement( 'button' );
+			next.type = 'button';
+			next.className = 'aafm-btn aafm-btn-secondary aafm-btn-sm';
+			next.textContent = this.#t( 'pagerNext', 'Next' );
+
+			pager.append( count, prev, status, next );
+			anchor.after( pager );
+
+			const fmt = new Intl.NumberFormat();
+			let page = 1;
+			let totalPages = 1;
+
+			const render = () => {
+				const rows = Array.from( tbody.rows );
+				const total = rows.length;
+				totalPages = Math.max( 1, Math.ceil( total / perPage ) );
+				if ( page > totalPages ) {
+					page = totalPages;
+				}
+
+				// A table that already fits on one page gets no pager at all.
+				pager.hidden = total <= perPage;
+
+				rows.forEach( ( row, i ) => {
+					row.hidden = Math.floor( i / perPage ) !== page - 1;
+				} );
+
+				const start = 0 === total ? 0 : ( page - 1 ) * perPage + 1;
+				const end = Math.min( page * perPage, total );
+				count.textContent = this.#format(
+					this.#t( 'oauthPagerCount', 'Showing %1$s-%2$s of %3$s' ),
+					fmt.format( start ),
+					fmt.format( end ),
+					fmt.format( total )
+				);
+				status.textContent = this.#format(
+					this.#t( 'pagerStatus', 'Page %1$s of %2$s' ),
+					fmt.format( page ),
+					fmt.format( totalPages )
+				);
+				prev.disabled = page <= 1;
+				next.disabled = page >= totalPages;
+			};
+
+			prev.addEventListener( 'click', () => {
+				if ( page > 1 ) {
+					page -= 1;
+					render();
+				}
+			} );
+			next.addEventListener( 'click', () => {
+				if ( page < totalPages ) {
+					page += 1;
+					render();
+				}
+			} );
+
+			new MutationObserver( render ).observe( tbody, { childList: true } );
+
+			render();
+		}
+
+		/**
+		 * Paginate the Connection tab's two OAuth tables, ten rows per page. Two
+		 * independent pagers over two unrelated datasets - Registered clients never
+		 * shares a page count with Active grants.
+		 */
+		#bindOauthPagination() {
+			const PER_PAGE = 10;
+			const clientsTable = document.querySelector( '.aafm-clients-table' );
+			const grantsTable = document.querySelector( '.aafm-grants-table' );
+			if ( clientsTable ) {
+				this.#paginateTable( clientsTable, PER_PAGE );
+			}
+			if ( grantsTable ) {
+				this.#paginateTable( grantsTable, PER_PAGE );
+			}
+		}
+
+		/**
 		 * Wire the Registered-clients table's per-row "Agent" toggle: on change, POST the
 		 * nonce-checked AJAX action that flags/unflags that client as an agent identity. On
 		 * failure the checkbox reverts to its prior state so the UI never shows a state the
@@ -1824,45 +2121,405 @@
 		}
 
 		/**
+		 * The abilities catalog the allowlist picker renders from, grouped by subject exactly the
+		 * way aafm_allowlist_ability_catalog() (PHP) built it - the same source
+		 * aafm_allowlist_sanitize_row() validates a save against, so a picker built from this can
+		 * never offer a name the server would refuse.
+		 *
+		 * @return {Array<{subject: string, label: string, abilities: Array<{name: string, label: string}>}>}
+		 */
+		#allowlistCatalog() {
+			return Array.isArray( aafmAdmin?.allowlistCatalog ) ? aafmAdmin.allowlistCatalog : [];
+		}
+
+		/**
+		 * Build one allowlist row's ability picker: an "All abilities" checkbox, and - visible only
+		 * while that checkbox is unchecked - a plain selected-count label, a warning for the
+		 * zero-selected state, a search field, and the searchable/subject-grouped checkbox list
+		 * itself. Built entirely with DOM APIs (createElement/textContent/value/checked), never
+		 * innerHTML, matching this file's existing convention for every dynamically-created
+		 * allowlist cell.
+		 *
+		 * The list used to sit behind a collapsed `<details>` an operator had to notice and click.
+		 * Verified working (three ticks correctly produced "3 selected"), but the operator could not
+		 * find it - a grey "Choose abilities 0 selected" under a bold "All abilities" label read as
+		 * disabled helper text. A chevron would only have signposted the hidden thing; the fix is to
+		 * not hide it: unchecking "All abilities" IS the request to narrow, so the list it would
+		 * narrow just appears there, no click, no disclosure to discover.
+		 *
+		 * "All" and an individual selection are mutually exclusive in the STORED shape (the server
+		 * accepts only the literal string "all" or an array), so checking "All" here only hides the
+		 * rest of the picker - it does not clear any ticked box - and #serializeAllowlistRow() below
+		 * reports "all" whenever the toggle is checked, ignoring whatever the individual boxes show
+		 * underneath. Unchecking "All" again shows exactly the selection that was there before, with
+		 * nothing to re-open.
+		 *
+		 * @param {'all'|Array<string>} allowed Initial state: "all", or the array of allowed names.
+		 * @return {HTMLElement} The `.aafm-allowlist-picker` root, ready to append to a cell.
+		 */
+		#buildAllowlistPicker( allowed ) {
+			const isAll = 'all' === allowed;
+			const names = new Set( isAll ? [] : allowed );
+
+			const picker = document.createElement( 'div' );
+			picker.className = 'aafm-allowlist-picker';
+			// Codex admin-ui-r1 M1: the order this row was stored in, kept so
+			// #serializeAllowlistRow() can write it back unchanged instead of catalog order.
+			picker.originalOrder = isAll ? [] : Array.from( names );
+			// F4 (1.7.5 deferred): read by #serializeAllowlistRow() so an unmaterialized row (see
+			// buildGroups()/the IntersectionObserver below) serializes its untouched original
+			// selection instead of an empty DOM query.
+			picker.groupsBuilt = false;
+
+			const allLabel = document.createElement( 'label' );
+			allLabel.className = 'aafm-allowlist-all';
+			const allToggle = document.createElement( 'input' );
+			allToggle.type = 'checkbox';
+			allToggle.className = 'aafm-allowlist-all-toggle';
+			allToggle.checked = isAll;
+			allLabel.append( allToggle, document.createTextNode( ' ' + this.#t( 'allowlistAll', 'All abilities (no narrowing)' ) ) );
+
+			// Everything below is what "All abilities" narrows - hidden while there is genuinely
+			// nothing to choose (All is checked), visible with no further click the moment it isn't.
+			const bodyEl = document.createElement( 'div' );
+			bodyEl.className = 'aafm-allowlist-picker-body';
+			bodyEl.hidden = isAll;
+
+			const count = document.createElement( 'p' );
+			count.className = 'aafm-allowlist-picker-count aafm-muted';
+
+			// aafm_ability_allowed_for_principal() (includes/allowlist.php) fails a role or client
+			// closed against EVERY ability when its allowed set is a non-"all" empty array - correct,
+			// fail-closed behaviour that must not change, but nothing in the UI used to say so before
+			// a save. Warn plainly instead; this is advisory, never a block, since locking a scope out
+			// entirely can be exactly what the operator wants.
+			const warning = document.createElement( 'p' );
+			warning.className = 'aafm-notice aafm-notice-warning aafm-notice-inline aafm-allowlist-warning';
+			warning.textContent = this.#t(
+				'allowlistZeroSelected',
+				'No abilities selected. Saving now will block this scope from every ability.'
+			);
+			warning.hidden = true;
+
+			const searchInput = document.createElement( 'input' );
+			searchInput.type = 'search';
+			searchInput.className = 'aafm-allowlist-picker-search aafm-integration-search';
+			searchInput.placeholder = this.#t( 'allowlistSearch', 'Search abilities…' );
+			// Codex admin-ui-r1 M3: this field is built entirely with createElement, so it has no
+			// <label> the way a server-rendered one gets - an aria-label is the only way to give it
+			// a persistent accessible name.
+			searchInput.setAttribute( 'aria-label', this.#t( 'allowlistSearch', 'Search abilities…' ) );
+			searchInput.autocomplete = 'off';
+
+			const groupsEl = document.createElement( 'div' );
+			groupsEl.className = 'aafm-allowlist-picker-groups';
+
+			const updateCount = () => {
+				// F4 (1.7.5 deferred): before the grid is built there is nothing to query in the
+				// DOM - names.size (the row's untouched stored selection) is the correct count,
+				// not zero.
+				const checked = picker.groupsBuilt
+					? groupsEl.querySelectorAll( '.aafm-allowlist-ability:checked' ).length
+					: names.size;
+				count.textContent = this.#format( this.#t( 'allowlistSelectedCount', '%s selected' ), checked );
+				warning.hidden = 0 !== checked;
+			};
+
+			// Codex admin-ui-r1 M4 / F4 (1.7.5 deferred): at the supported cap (AAFM_ALLOWLIST_MAX_ROWS
+			// rows x the full catalog) building every row's grid eagerly means tens of thousands of
+			// checkboxes, labels and change listeners at page load. An "all" row defers the cost
+			// until "All abilities" is unchecked or its search is used (below); a row that starts
+			// narrowed used to build right away instead, since its body starts visible - M4 only
+			// closed the "all" half, so a set of narrowed rows was still the worst case. Both now
+			// defer to first real need: an explicit interaction, or (for a narrowed row) the row
+			// actually scrolling into view (the IntersectionObserver below). One delegated change
+			// listener on the container replaces one per checkbox either way.
+			let groupsBuilt = false;
+			const buildGroups = () => {
+				if ( groupsBuilt ) {
+					return;
+				}
+				groupsBuilt = true;
+				picker.groupsBuilt = true;
+				this.#allowlistCatalog().forEach( ( group ) => {
+					const fieldset = document.createElement( 'fieldset' );
+					fieldset.className = 'aafm-allowlist-group';
+					fieldset.dataset.subject = group.subject;
+					const legend = document.createElement( 'legend' );
+					legend.textContent = group.label;
+					fieldset.append( legend );
+
+					( group.abilities ?? [] ).forEach( ( ability ) => {
+						const item = document.createElement( 'label' );
+						item.className = 'aafm-allowlist-item';
+						const box = document.createElement( 'input' );
+						box.type = 'checkbox';
+						box.className = 'aafm-allowlist-ability';
+						box.value = ability.name;
+						box.checked = names.has( ability.name );
+						item.append( box, document.createTextNode( ' ' + ability.label ) );
+						fieldset.append( item );
+					} );
+
+					groupsEl.append( fieldset );
+				} );
+			};
+			groupsEl.addEventListener( 'change', ( e ) => {
+				if ( e.target.classList.contains( 'aafm-allowlist-ability' ) ) {
+					updateCount();
+				}
+			} );
+
+			if ( ! isAll ) {
+				// F4 (1.7.5 deferred): build a narrowed row's grid the first time it actually
+				// scrolls into view rather than unconditionally at page load - 200 narrowed rows
+				// against the full catalog otherwise still build roughly 35,800 checkboxes up
+				// front, the same cost M4 removed from the "all" case. observe() on a
+				// not-yet-attached element is safe: it simply reports nothing until the row is
+				// appended and laid out.
+				//
+				// R2-5 (1.7.5 deferred, round 2): the only prior disconnect() was inside the
+				// callback itself, so a row removed from the DOM before it ever scrolled into
+				// view (reconciled away as a duplicate, or removed by the operator) left this
+				// observer watching a detached element, and its callback closure (over picker,
+				// buildGroups, updateCount) alive, indefinitely. Recorded on the picker itself so
+				// #disconnectAllowlistObserver() can dispose of it from either removal site below.
+				const observer = new IntersectionObserver( ( entries ) => {
+					if ( entries.some( ( entry ) => entry.isIntersecting ) ) {
+						observer.disconnect();
+						buildGroups();
+						updateCount();
+					}
+				} );
+				picker.lazyObserver = observer;
+				observer.observe( picker );
+			}
+
+			// Per-picker search: filters this row's own list only, the same substring-of-textContent
+			// match the Abilities tab search uses, hiding an emptied group's legend along with it.
+			searchInput.addEventListener( 'input', () => {
+				buildGroups();
+				const query = searchInput.value.trim().toLowerCase();
+				groupsEl.querySelectorAll( '.aafm-allowlist-group' ).forEach( ( fieldset ) => {
+					let visible = 0;
+					fieldset.querySelectorAll( '.aafm-allowlist-item' ).forEach( ( item ) => {
+						const isMatch = '' === query || item.textContent.toLowerCase().includes( query );
+						item.hidden = ! isMatch;
+						if ( isMatch ) {
+							visible += 1;
+						}
+					} );
+					fieldset.hidden = 0 === visible;
+				} );
+			} );
+
+			// Hiding the body is the whole mechanism now - a hidden checkbox is neither focusable
+			// nor clickable, so there is no need to also disable it, and leaving it enabled keeps its
+			// checked state intact for when "All" is unchecked again.
+			allToggle.addEventListener( 'change', () => {
+				bodyEl.hidden = allToggle.checked;
+				if ( ! allToggle.checked ) {
+					buildGroups();
+				}
+			} );
+
+			bodyEl.append( count, warning, searchInput, groupsEl );
+			picker.append( allLabel, bodyEl );
+			updateCount();
+
+			return picker;
+		}
+
+		/**
+		 * R2-5 (1.7.5 deferred, round 2): disconnect a removed allowlist row's lazy-build
+		 * IntersectionObserver, if it has one and never fired - see #buildAllowlistPicker()'s
+		 * IntersectionObserver above. Call before removing $row from the DOM.
+		 *
+		 * @param {HTMLElement} row A `[data-allowlist-row]` element about to be removed.
+		 * @return {void}
+		 */
+		#disconnectAllowlistObserver( row ) {
+			row.querySelector( '.aafm-allowlist-picker' )?.lazyObserver?.disconnect();
+		}
+
+		/**
+		 * Read one allowlist row's picker back into the shape the server expects: the literal
+		 * string "all", or the array of checked ability names.
+		 *
+		 * Codex admin-ui-r1 M1: checkboxes render in catalog order, so reading DOM order back
+		 * (Array.from(...checked)) would silently reorder a row's stored array on every save even
+		 * when nothing about its selection changed. Keep each retained name in the order
+		 * #buildAllowlistPicker() recorded as picker.originalOrder, then append any newly-checked
+		 * name (not part of that order) in the deterministic catalog/DOM order it was found in.
+		 *
+		 * @param {HTMLElement} row A `[data-allowlist-row]` element.
+		 * @return {'all'|Array<string>}
+		 */
+		#serializeAllowlistRow( row ) {
+			const allToggle = row.querySelector( '.aafm-allowlist-all-toggle' );
+			if ( allToggle?.checked ) {
+				return 'all';
+			}
+			const picker = row.querySelector( '.aafm-allowlist-picker' );
+			// F4 (1.7.5 deferred): a narrowed row whose grid was never materialized (it never
+			// scrolled into view - see #buildAllowlistPicker()'s IntersectionObserver) has no
+			// checkboxes in the DOM at all. Querying them here would read back an empty
+			// selection and silently save "deny everything" for a row nobody touched; the row's
+			// own untouched originalOrder is the correct, unchanged answer.
+			if ( picker && ! picker.groupsBuilt ) {
+				return picker.originalOrder ?? [];
+			}
+			const checked = new Set(
+				Array.from( row.querySelectorAll( '.aafm-allowlist-ability:checked' ) ).map(
+					( box ) => box.value
+				)
+			);
+			const retained = ( picker?.originalOrder ?? [] ).filter( ( name ) => checked.has( name ) );
+			const kept = new Set( retained );
+			const added = Array.from( checked ).filter( ( name ) => ! kept.has( name ) );
+			return [ ...retained, ...added ];
+		}
+
+		/**
+		 * Hydrate one server-rendered "Allowed abilities" cell: read its `data-allowed` (the literal
+		 * "all", or a JSON array of names - aafm_render_allowlist_section()'s data shell) and swap
+		 * the no-JS text summary for the interactive picker built from the same state.
+		 *
+		 * @param {HTMLElement} cell A `.aafm-allowlist-allowed-cell`.
+		 */
+		#hydrateAllowlistCell( cell ) {
+			let allowed = 'all';
+			try {
+				const parsed = JSON.parse( cell.dataset.allowed ?? '"all"' );
+				allowed = 'all' === parsed || Array.isArray( parsed ) ? parsed : 'all';
+			} catch {
+				allowed = 'all';
+			}
+			cell.replaceChildren( this.#buildAllowlistPicker( allowed ) );
+		}
+
+		/**
 		 * Wire the Connections tab's "Ability allowlist" card: add a scope row, remove a row,
 		 * and save the whole set as one AJAX call. Every dynamically-created cell is built with
 		 * DOM APIs (createElement/textContent/value), never innerHTML with interpolated input,
 		 * so no separate escaping helper is needed for the values this card handles.
+		 *
+		 * The zero-row state renders a plain .aafm-empty-state paragraph instead of a table with
+		 * an empty <tbody>, so #aafm-allowlist-table does not exist until the first row lands.
+		 * Bind against the card itself (always rendered) rather than the table, delegate the
+		 * remove click to the card so it still works on a table built after bind time, and build
+		 * the table the first time "Add scope" needs somewhere to put a row.
 		 */
 		#bindAllowlist() {
-			const table = document.getElementById( 'aafm-allowlist-table' );
+			const card = document.querySelector( '.aafm-allowlist-card' );
 			const saveBtn = document.getElementById( 'aafm-allowlist-save' );
 			const addBtn = document.getElementById( 'aafm-allowlist-add-row' );
-			if ( ! table || ! saveBtn || ! addBtn ) {
+			if ( ! card || ! saveBtn || ! addBtn ) {
 				return;
 			}
 			const status = document.getElementById( 'aafm-allowlist-status' );
-			const body = table.querySelector( 'tbody' );
+
+			// The scope-id control is two <select>s (real roles, real OAuth clients - both
+			// server-rendered from the same lists the rest of this tab already uses), toggled by
+			// which one the scope-type select currently means. Bound once, not just inside the
+			// "Add scope" handler, so a page that loads with a scope type already selected shows
+			// the matching list from the start.
+			const typeSelect = document.getElementById( 'aafm-allowlist-new-scope-type' );
+			const roleSelect = document.getElementById( 'aafm-allowlist-new-role' );
+			const clientSelect = document.getElementById( 'aafm-allowlist-new-client' );
+			const syncScopeIdControl = () => {
+				const isRole = 'role' === ( typeSelect?.value ?? 'role' );
+				if ( roleSelect ) {
+					roleSelect.hidden = ! isRole;
+				}
+				if ( clientSelect ) {
+					clientSelect.hidden = isRole;
+				}
+			};
+			typeSelect?.addEventListener( 'change', syncScopeIdControl );
+			syncScopeIdControl();
+
+			// Every row the server rendered starts as a data shell (a `data-allowed` JSON
+			// attribute plus a plain-text summary) - swap each one for the interactive picker now.
+			card.querySelectorAll( '.aafm-allowlist-allowed-cell' ).forEach( ( cell ) => {
+				this.#hydrateAllowlistCell( cell );
+			} );
+
+			const allowlistBody = () => document.getElementById( 'aafm-allowlist-table' )?.querySelector( 'tbody' ) ?? null;
+
+			// Get the <tbody> to append a new row to, building the table wrap first if this is
+			// the first row added since page load.
+			const ensureAllowlistBody = () => {
+				const existing = allowlistBody();
+				if ( existing ) {
+					return existing;
+				}
+
+				document.getElementById( 'aafm-allowlist-empty' )?.remove();
+
+				const wrap = document.createElement( 'div' );
+				wrap.className = 'aafm-table-wrap';
+				wrap.id = 'aafm-allowlist-table-wrap';
+
+				const table = document.createElement( 'table' );
+				table.className = 'widefat striped aafm-oauth-table aafm-allowlist-table';
+				table.id = 'aafm-allowlist-table';
+
+				const thead = document.createElement( 'thead' );
+				const headRow = document.createElement( 'tr' );
+				[
+					this.#t( 'allowlistScope', 'Scope' ),
+					this.#t( 'allowlistAllowedHeading', 'Allowed abilities' ),
+					'',
+				].forEach( ( text ) => {
+					const th = document.createElement( 'th' );
+					th.textContent = text;
+					headRow.append( th );
+				} );
+				thead.append( headRow );
+
+				const tbody = document.createElement( 'tbody' );
+				table.append( thead, tbody );
+				wrap.append( table );
+
+				document.getElementById( 'aafm-allowlist-add' )?.before( wrap );
+
+				return tbody;
+			};
 
 			addBtn.addEventListener( 'click', () => {
-				const typeSelect = document.getElementById( 'aafm-allowlist-new-scope-type' );
-				const idInput = document.getElementById( 'aafm-allowlist-new-scope-id' );
-				const scopeId = idInput?.value.trim() ?? '';
+				const isRole = 'role' === ( typeSelect?.value ?? 'role' );
+				const activeSelect = isRole ? roleSelect : clientSelect;
+				const scopeId = activeSelect?.value ?? '';
 				if ( ! scopeId ) {
-					idInput?.focus();
+					activeSelect?.focus();
 					return;
 				}
+				// Roles show their display name once saved (aafm_render_allowlist_section() looks
+				// it up by slug), so use the same text here rather than the slug. A connection row
+				// shows the raw client id even after a reload - there is no separate name column to
+				// read back from a stored row - so match that rather than inventing a new label.
+				const scopeLabel = isRole ? ( activeSelect.selectedOptions[ 0 ]?.textContent ?? scopeId ) : scopeId;
 
 				const row = document.createElement( 'tr' );
 				row.dataset.allowlistRow = '';
-				row.dataset.scopeType = typeSelect?.value ?? 'role';
+				row.dataset.scopeType = isRole ? 'role' : 'oauth_client';
 				row.dataset.scopeId = scopeId;
 
+				// Codex admin-ui-r1 L3: these were hardcoded English template literals, so a newly
+				// added row showed English on a localized site until reload, when PHP rendered the
+				// same label through aafm_render_allowlist_section()'s translated strings. Route
+				// through the same aafmAdmin.i18n bag those PHP strings are localized from.
 				const labelCell = document.createElement( 'td' );
-				labelCell.textContent =
-					( typeSelect?.value ?? 'role' ) === 'role' ? `Role: ${ scopeId }` : `Connection: ${ scopeId }`;
+				labelCell.textContent = this.#format(
+					this.#t( isRole ? 'allowlistRoleLabel' : 'allowlistConnectionLabel', isRole ? 'Role: %s' : 'Connection: %s' ),
+					scopeLabel
+				);
 
 				const allowedCell = document.createElement( 'td' );
-				const textarea = document.createElement( 'textarea' );
-				textarea.className = 'aafm-allowlist-allowed';
-				textarea.rows = 2;
-				textarea.value = 'all'; // Unrestricted until the operator narrows it - never starts as "deny everything".
-				allowedCell.append( textarea );
+				allowedCell.className = 'aafm-allowlist-allowed-cell';
+				// Unrestricted until the operator narrows it - never starts as "deny everything".
+				allowedCell.append( this.#buildAllowlistPicker( 'all' ) );
 
 				const removeCell = document.createElement( 'td' );
 				const removeBtn = document.createElement( 'button' );
@@ -1872,37 +2529,41 @@
 				removeCell.append( removeBtn );
 
 				row.append( labelCell, allowedCell, removeCell );
-				body?.append( row );
-				if ( idInput ) {
-					idInput.value = '';
-				}
+				ensureAllowlistBody().append( row );
+				activeSelect.value = '';
 			} );
 
-			table.addEventListener( 'click', ( e ) => {
+			// Delegated on the card (always present) rather than the table (not present until
+			// the first row exists), so a remove button works whether its row came from the
+			// server or from a later "Add scope" click.
+			card.addEventListener( 'click', ( e ) => {
 				const btn = e.target.closest( '.aafm-allowlist-remove' );
 				if ( btn ) {
-					btn.closest( 'tr' )?.remove();
+					const row = btn.closest( 'tr' );
+					if ( row ) {
+						this.#disconnectAllowlistObserver( row );
+						row.remove();
+					}
 				}
 			} );
 
 			saveBtn.addEventListener( 'click', async () => {
-				const rows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).map( ( row ) => {
-					const raw = row.querySelector( '.aafm-allowlist-allowed' )?.value ?? '';
-					const trimmed = raw.trim();
-					const allowedAbilities =
-						trimmed.toLowerCase() === 'all'
-							? 'all'
-							: trimmed
-									.split( /[\n,]/ )
-									.map( ( name ) => name.trim() )
-									.filter( Boolean );
-					return {
-						scope_type: row.dataset.scopeType,
-						scope_id: row.dataset.scopeId,
-						allowed_abilities: allowedAbilities,
-					};
-				} );
+				const body = allowlistBody();
+				const rows = Array.from( body?.querySelectorAll( '[data-allowlist-row]' ) ?? [] ).map( ( row ) => ( {
+					scope_type: row.dataset.scopeType,
+					scope_id: row.dataset.scopeId,
+					allowed_abilities: this.#serializeAllowlistRow( row ),
+				} ) );
 
+				// R3-4 (1.7.5 deferred, round 3): reconciliation below reads the DOM as it stands
+				// AFTER the request resolves, so any add/remove/checkbox edit made while the
+				// request was in flight was never part of `rows` above but still looked "Saved."
+				// Disabling only the Save button left every other control (Add scope, Remove,
+				// the ability picker's own checkboxes) live for the whole round trip. `inert`
+				// makes the entire card - every control in it, not just Save - unclickable and
+				// unfocusable for exactly that window, then hands interaction back once
+				// reconciliation itself is done, not merely once the request resolves.
+				card.inert = true;
 				saveBtn.disabled = true;
 				const json = await this.#post( 'aafm_save_allowlist', {
 					allowlist_json: JSON.stringify( rows ),
@@ -1930,6 +2591,7 @@
 					domRows.forEach( ( row ) => {
 						const key = `${ row.dataset.scopeType }:${ row.dataset.scopeId }`;
 						if ( ! keptKeys.has( key ) || lastRowForKey.get( key ) !== row ) {
+							this.#disconnectAllowlistObserver( row );
 							row.remove();
 						}
 					} );
@@ -1944,6 +2606,7 @@
 					status.textContent =
 						json?.data?.message ?? this.#t( 'allowlistSaveFailed', 'Could not save. Please try again.' );
 				}
+				card.inert = false;
 			} );
 		}
 

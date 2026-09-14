@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Audit;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class UninstallTest extends TestCase {
@@ -35,6 +36,31 @@ final class UninstallTest extends TestCase {
 		$this->assertTrue( $this->activity_log_table_exists(), 'Activity log table must survive when flag is off.' );
 		// OAuth schema version survives (proxy for OAuth tables still present).
 		$this->assertNotFalse( get_option( 'aafm_oauth_schema_version' ), 'aafm_oauth_schema_version must survive when flag is off.' );
+	}
+
+	/**
+	 * Codex round 7, R7-2: aafm_uninstall_should_delete_data() used to read the flag with a bare
+	 * $wpdb->get_var(), which returns the PREVIOUS query's row when the current query itself
+	 * fails. Plant a positive scalar from an unrelated query, then force the flag's own SELECT to
+	 * fail via one of $wpdb->query()'s no-flush paths (the `query` filter returning empty), and
+	 * confirm the failure is refused rather than certified as permission to delete every option,
+	 * the activity log, and the OAuth tables.
+	 */
+	public function test_uninstall_should_delete_data_fails_closed_when_the_read_fails_after_a_positive_prior_query(): void {
+		delete_option( 'aafm_delete_data_on_uninstall' );
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( 'SELECT 1' );
+
+		$result = QueryFaultInjector::fail_query(
+			'aafm_delete_data_on_uninstall',
+			static function () {
+				return aafm_uninstall_should_delete_data();
+			}
+		);
+
+		$this->assertFalse( $result, 'a failed read must never be certified as permission to delete site data' );
 	}
 
 	/**

@@ -798,7 +798,13 @@ function aafm_handle_review_request_post(): void {
 		wp_die( esc_html__( 'Unknown action.', 'agent-abilities-for-mcp' ), '', array( 'response' => 400 ) );
 	}
 
-	aafm_review_request_record_verdict( $verdict );
+	$result = aafm_review_request_record_verdict( $verdict );
+	// Honour the same persistence result the AJAX twin above already checks (Codex round 10,
+	// R10-9): this path used to discard it and redirect back as though the answer had saved,
+	// even when it had not.
+	if ( ! $result['persisted'] ) {
+		wp_die( esc_html( aafm_switch_not_persisted_message( __( 'Your answer', 'agent-abilities-for-mcp' ) ) ), '', array( 'response' => 500 ) );
+	}
 
 	$back = wp_get_referer();
 	wp_safe_redirect( $back ? $back : admin_url() );

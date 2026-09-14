@@ -56,8 +56,15 @@ function aafm_oauth_local_error( string $code, string $message ): WP_Error {
 /**
  * Look up an active OAuth client row by client_id.
  *
+ * Same stale-read class as R8-1 (aafm_oauth_get_client() in oauth/clients.php): a bare
+ * $wpdb->get_row() hands back the PREVIOUS query's row when this one fails, which here would let
+ * a failed lookup for one client authorize the request as whichever OTHER client the connection
+ * happened to look up last. This gates the whole authorize flow, so a failed lookup must DENY,
+ * the same way a genuinely missing/inactive client already does - never fall back to some other
+ * client's row.
+ *
  * @param string $client_id The public client identifier.
- * @return array<string,mixed>|null The client row, or null when missing/inactive.
+ * @return array<string,mixed>|null The client row, or null when missing/inactive/unreadable.
  */
 function aafm_oauth_get_active_client( string $client_id ): ?array {
 	if ( '' === $client_id ) {
@@ -65,17 +72,15 @@ function aafm_oauth_get_active_client( string $client_id ): ?array {
 	}
 
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$row = $wpdb->get_row(
+	$view = aafm_wpdb_row(
 		$wpdb->prepare(
 			'SELECT * FROM %i WHERE client_id = %s AND is_active = 1',
 			$wpdb->prefix . 'aafm_oauth_clients',
 			$client_id
-		),
-		ARRAY_A
+		)
 	);
 
-	return is_array( $row ) ? $row : null;
+	return ( $view['ok'] && is_array( $view['value'] ) ) ? $view['value'] : null;
 }
 
 /**
@@ -169,20 +174,41 @@ function aafm_oauth_validate_authorize_params( array $params ) {
 }
 
 /**
- * Whether the user has already consented to this client.
+ * Whether the user has already consented to this client, and whether that read could even be
+ * completed - one query answering both.
+ *
+ * Codex round 7, R7-2: the plain `$wpdb->get_var()` this used to be built on returns the
+ * PREVIOUS query's row when the current query itself fails ($wpdb->query() returns false before
+ * ever touching last_result on some paths - see aafm_wpdb_scalar()'s docblock), so a failed
+ * consent check could read as a positive consent left over from whatever query ran just before
+ * it - at the authorization-code redemption call site (rest.php), that query is the code lookup
+ * that just found a real row, so a failed consent read there would inherit a real, non-null id
+ * and report consent as granted. Routing through aafm_wpdb_scalar() closes that: a failed query
+ * is reported as failed, never silently reused as a stale answer.
+ *
+ * This also replaces the query-per-decision pair aafm_oauth_has_consent() plus the former
+ * aafm_oauth_consent_lookup_failed() used to require at the redemption call site (Codex round 6,
+ * R6-2) - one read now answers both "does consent exist" and "could this even be checked",
+ * so a caller that needs to distinguish a database fault from a genuine no-consent answer no
+ * longer needs a second, separate query to do it.
  *
  * @param int    $user_id   WordPress user ID.
  * @param string $client_id The public client identifier.
- * @return bool
+ * @return array{ok:bool,value:bool} ok is false when the read itself failed - value is not
+ *              trustworthy in that case. value is true when a consent row exists. An invalid
+ *              user id or empty client id is not a read failure - it reports ok=true, value=false,
+ *              the same genuine no-consent answer aafm_oauth_has_consent() has always given it.
  */
-function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
+function aafm_oauth_consent_view( int $user_id, string $client_id ): array {
 	if ( $user_id <= 0 || '' === $client_id ) {
-		return false;
+		return array(
+			'ok'    => true,
+			'value' => false,
+		);
 	}
 
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$found = $wpdb->get_var(
+	$view = aafm_wpdb_scalar(
 		$wpdb->prepare(
 			'SELECT id FROM %i WHERE wp_user_id = %d AND client_id = %s',
 			$wpdb->prefix . 'aafm_oauth_consents',
@@ -191,7 +217,27 @@ function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
 		)
 	);
 
-	return null !== $found;
+	return array(
+		'ok'    => $view['ok'],
+		'value' => $view['ok'] && null !== $view['value'],
+	);
+}
+
+/**
+ * Whether the user has already consented to this client.
+ *
+ * Fails closed (reports no consent) on a read failure - callers that need to tell a genuine
+ * "not consented" apart from "could not be checked" use aafm_oauth_consent_view() directly
+ * instead, the way the authorization-code redemption call site (rest.php) does.
+ *
+ * @param int    $user_id   WordPress user ID.
+ * @param string $client_id The public client identifier.
+ * @return bool
+ */
+function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
+	$view = aafm_oauth_consent_view( $user_id, $client_id );
+
+	return $view['ok'] && $view['value'];
 }
 
 /**

@@ -249,22 +249,71 @@ function aafm_exec_get_comments( array $input ): array {
 		);
 	}
 
-	$scan_cap  = aafm_comments_sitewide_scan_cap();
-	$truncated = $raw_total > $scan_cap;
-	$scanned   = get_comments(
+	$scan_cap    = aafm_comments_sitewide_scan_cap();
+	$is_readable = static fn( $comment ): bool => $comment instanceof WP_Comment
+		&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID );
+	$scanned     = get_comments(
 		array(
 			'status' => 'approve',
 			'number' => min( $raw_total, $scan_cap ),
 		)
 	);
 
-	$visible = array_values(
-		array_filter(
-			(array) $scanned,
-			static fn( $comment ): bool => $comment instanceof WP_Comment
-				&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID )
-		)
-	);
+	$visible = array_values( array_filter( (array) $scanned, $is_readable ) );
+
+	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan
+	// (Codex round 10, R10-8, generalized at F7, then R2-6, then R3-6 across three rounds of
+	// this batch). Every earlier predicate - comparing raw_total against scan_cap, requiring the
+	// whole window to be visible, a bounded second-window lookahead sized or OFFSET from a count
+	// that includes hidden rows - shared the same flaw: inserting or removing ONE hidden comment
+	// anywhere before a count-based boundary shifts every comment after it by one position, which
+	// can push a genuinely visible comment across whichever boundary the predicate was watching,
+	// flipping `truncated` on content the caller never saw and never asked about.
+	//
+	// R3-6's fix: probe by IDENTITY, not by count/offset. `comment__not_in` excludes exactly the
+	// comment ids already examined, so the next probe batch is always "whatever wasn't already
+	// looked at", regardless of how many hidden comments were inserted or removed anywhere in the
+	// approved set - unlike an offset, an id exclusion list cannot be shifted by unrelated rows.
+	// Walk forward in bounded batches (mirrors aafm_exec_geodirectory_get_listings()'s own
+	// keyset-based disambiguation probe) until a readable comment resolves this true, a batch
+	// comes back short of what was asked for (proving no more approved comments exist at all,
+	// resolving this false), or a small reserve of probe batches is exhausted without resolving
+	// either way - at which point, as with that same GeoDirectory probe, an unresolved state
+	// reports true rather than assert a "nothing more" the scan never actually confirmed.
+	$truncated = false;
+	if ( count( (array) $scanned ) < $raw_total ) {
+		$excluded  = array_map(
+			static fn( $comment ): int => $comment instanceof WP_Comment ? (int) $comment->comment_ID : 0,
+			(array) $scanned
+		);
+		$probe_cap = 2; // Small, fixed reserve - see the docblock above for why an unresolved probe defaults to true rather than growing without bound.
+		for ( $i = 0; $i < $probe_cap; $i++ ) {
+			$probe = get_comments(
+				array(
+					'status'          => 'approve',
+					'number'          => $scan_cap,
+					'comment__not_in' => $excluded,
+				)
+			);
+			if ( array() !== array_filter( (array) $probe, $is_readable ) ) {
+				$truncated = true;
+				break;
+			}
+			if ( count( (array) $probe ) < $scan_cap ) {
+				break; // A short batch proves no more approved comments exist at all: stays false.
+			}
+			$excluded = array_merge(
+				$excluded,
+				array_map(
+					static fn( $comment ): int => $comment instanceof WP_Comment ? (int) $comment->comment_ID : 0,
+					(array) $probe
+				)
+			);
+			if ( $i === $probe_cap - 1 ) {
+				$truncated = true; // Reserve exhausted without resolving either way: unknown, so assume yes.
+			}
+		}
+	}
 
 	$page_comments = array_slice( $visible, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );
 
@@ -298,10 +347,23 @@ function aafm_comment_post_is_readable( int $post_id ): bool {
 		return false;
 	}
 
+	// R3-5 (1.7.5 deferred, round 3): a password-protected public post fell straight through to
+	// the read_post branch below, which maps to the ordinary 'read' capability - the password
+	// itself was never checked, so a Subscriber could read approved comments on a password-
+	// protected published post. Matches core's own REST comments controller
+	// (WP_REST_Comments_Controller::get_items_permissions_check()): a still-password-required
+	// post is gated on edit_post, not on merely being able to read the post record.
+	// post_password_required() itself already accounts for the caller having supplied the
+	// password (the post-password cookie), so this only tightens the case that cookie does not
+	// cover.
+	if ( post_password_required( $post ) ) {
+		return current_user_can( 'edit_post', $post_id );
+	}
+
 	$status_object = get_post_status_object( (string) get_post_status( $post ) );
 	$is_public     = null !== $status_object && ! empty( $status_object->public );
 
-	if ( $is_public && '' === (string) $post->post_password ) {
+	if ( $is_public ) {
 		return current_user_can( 'read' );
 	}
 
@@ -583,8 +645,15 @@ function aafm_exec_create_comment( array $input ) {
 	// Pin status to pending in case a filter flipped it on insert.
 	wp_set_comment_status( $comment_id, 'hold' );
 
+	// Codex round 8, R8-4: wp_set_comment_status()'s return value was discarded here, and only
+	// existence was checked afterward - so if its own DB update failed, or a 'wp_set_comment_status'
+	// hook it fires (synchronously, before it returns) moved the comment somewhere other than
+	// pending, this reported success with an approved (or otherwise non-pending) comment,
+	// contradicting the pending-queue guarantee this function exists to enforce. Read the actual
+	// stored status back and require it to be pending ('0', the literal value wp_set_comment_status()
+	// itself writes for 'hold' - wp-includes/comment.php) rather than trusting the call succeeded.
 	$created = get_comment( $comment_id );
-	if ( ! $created instanceof WP_Comment ) {
+	if ( ! $created instanceof WP_Comment || '0' !== $created->comment_approved ) {
 		return aafm_generic_error();
 	}
 
@@ -764,15 +833,15 @@ function aafm_exec_moderate_comment( array $input ) {
 
 	switch ( $action ) {
 		case 'approve':
-			$ok              = wp_set_comment_status( $id, 'approve' );
+			wp_set_comment_status( $id, 'approve' );
 			$target_approved = '1';
 			break;
 		case 'unapprove':
-			$ok              = wp_set_comment_status( $id, 'hold' );
+			wp_set_comment_status( $id, 'hold' );
 			$target_approved = '0';
 			break;
 		case 'spam':
-			$ok              = (bool) wp_spam_comment( $id );
+			wp_spam_comment( $id );
 			$target_approved = 'spam';
 			break;
 		case 'trash':
@@ -781,7 +850,7 @@ function aafm_exec_moderate_comment( array $input ) {
 				// refuse rather than permanently destroy the comment.
 				return aafm_trash_disabled_error();
 			}
-			$ok              = (bool) wp_trash_comment( $id );
+			wp_trash_comment( $id );
 			$target_approved = 'trash';
 			break;
 		default:
@@ -791,28 +860,26 @@ function aafm_exec_moderate_comment( array $input ) {
 			);
 	}
 
-	// $ok can be true here even when the comment no longer exists at all:
-	// wp_set_comment_status() (used by approve/unapprove) fires its 'wp_set_comment_status'
-	// action AFTER its DB update succeeds and returns true unconditionally once that update ran,
-	// so a hook on that action (an anti-spam or moderation plugin reacting to the status change,
-	// say) that hard-deletes the row leaves $ok === true while get_comment($id) is already null
-	// by the time we read the status back. A 1.6.1-era fix kept that case a "success" reporting
-	// aafm_comment_status_string()'s 'unknown' fallback, which satisfied the schema's
-	// type:string but told the caller nothing usable about whether its moderation took effect.
-	// 1.6.2 reverses that decision: a comment that vanished mid-write is an error, the same
-	// aafm_generic_error() every other miss path in this file returns.
+	// Codex round 8, R8-4: this used to branch on each call's own return value ($ok) - true only
+	// proves wp_set_comment_status()'s (or wp_spam_comment()'s/wp_trash_comment()'s, both thin
+	// wrappers around it) OWN $wpdb->update() call landed. It fires the 'wp_set_comment_status'
+	// action synchronously, AFTER that update succeeds but BEFORE returning, so a hook on that
+	// action (an anti-spam plugin, a second moderation rule, a plugin that hard-deletes the row)
+	// can move or remove the comment again before control returns here - leaving the discarded
+	// return value true while the actual stored status is something else entirely. The only signal
+	// this function can trust is a fresh read taken after every hook has already run, compared
+	// against what was actually requested - never a return value from mid-pipeline.
 	$comment = get_comment( $id );
 	if ( ! $comment instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue (a wp_set_comment_status hook can delete the row after the guard above)
 		return aafm_generic_error();
 	}
 
-	// $ok can also come back false when the underlying $wpdb->update() matched the comment's row
-	// but changed nothing: MySQL reports 0 affected rows for a same-value UPDATE, WordPress does
-	// not set CLIENT_FOUND_ROWS, and wp_set_comment_status() (unlike wp_insert_post()'s update
-	// branch, which checks `false === $wpdb->update(...)`) treats that 0 as a plain failure. So a
-	// falsy $ok on a comment already sitting in the requested state is a no-op, not an error -
-	// report it the same as a successful transition rather than failing an idempotent request.
-	if ( ! $ok && $comment->comment_approved !== $target_approved ) {
+	// A same-value request (moderating a comment already in the requested state) is a legitimate
+	// no-op, not an error: the final read already matches $target_approved either way, so it is
+	// reported as success without needing to know whether the underlying UPDATE actually changed a
+	// row (MySQL reports 0 affected rows for a same-value UPDATE, WordPress does not set
+	// CLIENT_FOUND_ROWS, and that path is indistinguishable from a real failure by row count alone).
+	if ( $comment->comment_approved !== $target_approved ) {
 		return aafm_generic_error();
 	}
 

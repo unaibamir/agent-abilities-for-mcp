@@ -304,6 +304,41 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
+	 * F8 (1.7.5 deferred): the missing-option guard's required list omitted CURLOPT_TIMEOUT and
+	 * CURLOPT_CONNECTTIMEOUT, so a hooked callback removing either one passed straight through and
+	 * a public HTTPS server could then stall the transfer past the intended ten-second bound. Same
+	 * shape and seam as test_a_curl_option_the_handle_cannot_apply_aborts_before_any_connection()
+	 * above, but removes a required key outright instead of setting an option the handle rejects.
+	 */
+	public function test_removing_a_transfer_timeout_option_aborts_before_any_connection(): void {
+		$reached_exec = false;
+		add_filter(
+			'aafm_media_fetch_curl_options',
+			static function ( array $options ): array {
+				unset( $options[ CURLOPT_TIMEOUT ] );
+				return $options;
+			}
+		);
+		add_action(
+			'aafm_media_fetch_before_exec',
+			static function () use ( &$reached_exec ): void {
+				$reached_exec = true;
+			}
+		);
+
+		try {
+			$out = aafm_ssrf_safe_fetch_url( 'https://example.test/pixel.png' );
+		} finally {
+			remove_all_filters( 'aafm_media_fetch_curl_options' );
+			remove_all_actions( 'aafm_media_fetch_before_exec' );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_fetch_failed', $out->get_error_code() );
+		$this->assertFalse( $reached_exec, 'curl_exec() must never run once a required transfer-timeout option is missing.' );
+	}
+
+	/**
 	 * Proves the aafm_media_fetch_before_exec seam used above is actually live: with a benign
 	 * option set (no bad CURLOPT_PROXYTYPE), the fetch must reach the point right before
 	 * curl_exec() and fire the action, aborting there via a thrown exception so no real network

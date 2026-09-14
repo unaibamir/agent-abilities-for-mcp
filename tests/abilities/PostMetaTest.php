@@ -413,6 +413,52 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
+	 * Codex round 6, R6-4: "nothing was asked to change" used to be judged from the raw values
+	 * alone ($intended === $old), blind to whether $old was already in the site's own canonical
+	 * form. Resubmitting the literal value already stored, when that value is NOT canonical, is a
+	 * real ask (the sanitizer should still normalize it) - a persistence veto that blocks even
+	 * that canonicalization must not be waved through as a confirmed no-op just because the raw
+	 * input happened to match what was already there.
+	 */
+	public function test_update_meta_rejects_a_veto_that_blocks_canonicalization_of_a_same_value_resubmission(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		// Stored value is deliberately NOT canonical yet - set before the sanitizer below is
+		// registered, so this write is not itself normalized.
+		update_post_meta( $id, 'aafm_note', 'old' );
+
+		$normalize = static fn( $value ) => strtoupper( (string) $value );
+		add_filter( 'sanitize_post_meta_aafm_note', $normalize );
+
+		// A persistence veto blocks the write outright, so storage never moves off the
+		// non-canonical 'old' - simulating a filter (or a write conflict) that keeps the old row
+		// exactly as it was, canonicalization included.
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+
+		$out = aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'old',
+			)
+		);
+
+		remove_filter( 'update_post_metadata', $veto, 10 );
+		remove_filter( 'sanitize_post_meta_aafm_note', $normalize );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A veto that blocks the canonicalization of a same-value resubmission must not be reported as a confirmed no-op.'
+		);
+		$this->assertSame( 'old', get_post_meta( $id, 'aafm_note', true ), 'precondition: the veto must have genuinely kept the non-canonical value in place.' );
+	}
+
+	/**
 	 * Codex round 8 R8-1: the confirmation guard used to run sanitize_meta() against
 	 * wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, but core's own
 	 * update_metadata() unslashes the incoming value and THEN sanitizes it - the guard was

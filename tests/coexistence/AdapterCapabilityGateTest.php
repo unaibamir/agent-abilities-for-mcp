@@ -1,6 +1,6 @@
 <?php
 /**
- * Coexistence: the request-time capability-gate assertion (L5 / pentest F3).
+ * Coexistence: the request-time capability-gate assertion.
  *
  * The version floor only proves the loaded adapter copy REPORTS an in-range version. A sibling that
  * pre-declares an in-range copy with the mcp_adapter_tools_list filter stripped would clear the floor

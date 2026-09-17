@@ -125,7 +125,7 @@ final class ResetPluginTest extends TestCase {
 			$this->assertFalse( get_option( $option, false ), "Option {$option} should be deleted by reset." );
 		}
 
-		// Activity log emptied except for the L4 tamper marker recording the reset itself.
+		// Activity log emptied except for the tamper marker recording the reset itself.
 		$this->assertSame( 1, aafm_activity_count(), 'Activity log should hold only the reset tamper marker.' );
 		$rows = aafm_query_activity( array() );
 		$this->assertNotSame( 'aafm/get-posts', $rows[0]['ability'], 'The seeded call must not survive the reset.' );
@@ -182,7 +182,7 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
-	 * L4: aafm_reset_plugin() also empties the activity log, so it must leave the same
+	 * aafm_reset_plugin() also empties the activity log, so it must leave the same
 	 * tamper-evident marker aafm_ajax_clear_log() does - proving who reset the plugin and when,
 	 * rather than leaving a completely silent, empty log.
 	 */
@@ -201,7 +201,7 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
-	 * L15: aafm_reset_plugin() truncates all four OAuth data tables (clients, codes, access
+	 * aafm_reset_plugin() truncates all four OAuth data tables (clients, codes, access
 	 * tokens, consents) - see its own docblock - but the confirm dialog the operator actually
 	 * reads before clicking never said so. State it, alongside the other real consequences.
 	 */

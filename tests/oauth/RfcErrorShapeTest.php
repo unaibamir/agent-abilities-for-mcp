@@ -20,7 +20,8 @@ use WP_REST_Response;
  * unreadable to any real OAuth client. These tests dispatch through rest_do_request() and
  * assert the actual response body: the RFC 6749 section 5.2 {error, error_description} shape
  * on protocol errors, the section 5.1 no-cache headers, and the deliberate WordPress-shaped
- * 404 exception carved out for a switched-off endpoint (see D1 in RestEndpointsTest.php).
+ * 404 exception carved out for a switched-off endpoint (see RestEndpointsTest.php's
+ * disabled-endpoint tests).
  */
 class RfcErrorShapeTest extends TestCase {
 

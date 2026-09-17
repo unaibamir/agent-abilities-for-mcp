@@ -34,7 +34,7 @@ final class AcfContractTest extends TestCase {
 	}
 
 	/**
-	 * M6: detection must key on the `ACF` class, which the SCF fork keeps, not on `get_field()` —
+	 * Detection must key on the `ACF` class, which the SCF fork keeps, not on `get_field()` —
 	 * a bare theme helper named get_field() collides with the loose fallback.
 	 */
 	public function test_acf_marker_class_and_api_exist(): void {

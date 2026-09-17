@@ -142,7 +142,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * T1-7: when the row insert fails, mint returns a WP_Error rather than phantom tokens -
+	 * When the row insert fails, mint returns a WP_Error rather than phantom tokens -
 	 * a client must never get a successful token response for a grant that was never stored.
 	 */
 	public function test_mint_returns_error_when_insert_fails(): void {
@@ -474,7 +474,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * T1-8: deactivating a client blocks its refresh rotation, even for a token issued while the
+	 * Deactivating a client blocks its refresh rotation, even for a token issued while the
 	 * client was still active.
 	 */
 	public function test_rotate_refresh_rejected_for_deactivated_client(): void {

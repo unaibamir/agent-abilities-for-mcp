@@ -250,7 +250,7 @@ class AuthorizeTest extends TestCase {
 	 * A code minted with the forced endpoint resource persists that exact string.
 	 *
 	 * The authorize flow forces resource => aafm_endpoint_url() at the mint call, and
-	 * the D1 token validator later audience-checks that exact string. This locks the
+	 * the token validator later audience-checks that exact string. This locks the
 	 * audience carry-forward contract at the storage boundary: read the stored row
 	 * back by the code's SHA-256 hash and assert the persisted resource is the
 	 * endpoint URL byte-for-byte.
@@ -1116,7 +1116,7 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
-	 * L2: the fixed security headers sent on every consent-flow render (the consent screen
+	 * The fixed security headers sent on every consent-flow render (the consent screen
 	 * itself and its local error pages) include Cache-Control: no-store and Pragma: no-cache
 	 * (RFC 6749 section 5.1), so a shared cache or a browser's back/forward cache never
 	 * stores a page carrying OAuth flow state (client name, redirect host, PKCE-bound nonce).

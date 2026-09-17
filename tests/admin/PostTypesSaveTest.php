@@ -149,7 +149,7 @@ final class PostTypesSaveTest extends TestCase {
 	}
 
 	/**
-	 * L19: the privacy-policy text only described the content-type/meta-key surface, but an
+	 * The privacy-policy text must describe more than the content-type/meta-key surface: an
 	 * agent can also read user PII (aafm/get-users, aafm/get-user), WooCommerce customer/order
 	 * PII (billing/shipping address, phone, order history - see includes/abilities/woocommerce/
 	 * customers.php), and ACF field values (which bypass the post-meta allowlist entirely - see

@@ -177,7 +177,7 @@ final class ConnectionTest extends TestCase {
 	}
 
 	/**
-	 * T3-1: the agent-user AJAX handler must gate on manage_options, not create_users. A
+	 * The agent-user AJAX handler must gate on manage_options, not create_users. A
 	 * non-admin custom role holding only create_users (plus the nonce) must be denied.
 	 */
 	public function test_create_agent_user_ajax_requires_manage_options(): void {

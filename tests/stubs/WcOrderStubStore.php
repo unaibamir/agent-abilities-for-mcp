@@ -491,7 +491,7 @@ class WcOrderStubStore {
 			array_map(
 				static function ( array $row ) use ( $order_id ): object {
 					// Mirror the normalized objects real wc_get_order_notes() returns: ->id and ->content.
-					// Real WooCommerce never emits the literal 'user' (M12) - a programmatic note is
+					// Real WooCommerce never emits the literal 'user' - a programmatic note is
 					// attributed 'system' (comment_author 'WooCommerce'), a user-added note is attributed
 					// the acting user's display name, which the fixture stands in for here.
 					$note = array(

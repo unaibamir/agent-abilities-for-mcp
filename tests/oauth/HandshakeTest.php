@@ -415,7 +415,7 @@ class HandshakeTest extends TestCase {
 	}
 
 	/**
-	 * T1-8: deactivating a client blocks redemption of a code minted before deactivation -
+	 * Deactivating a client blocks redemption of a code minted before deactivation -
 	 * is_active is otherwise only checked at authorize-time.
 	 */
 	public function test_deactivated_client_cannot_redeem_code(): void {

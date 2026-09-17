@@ -636,8 +636,8 @@ if ( ! class_exists( 'WC_Order_Item' ) ) {
 	 * Stub WC_Order_Item for PHPStan - mirrors the getters the order abilities call.
 	 *
 	 * The base class declares no get_taxes() - real WooCommerce only defines it on
-	 * WC_Order_Item_Product (and the other taxed subtypes), never the base class (M13/refund
-	 * crash-risk fix; pinned by WooCommerceContractTest::test_get_taxes_is_not_on_base_order_item()).
+	 * WC_Order_Item_Product (and the other taxed subtypes), never the base class;
+	 * pinned by WooCommerceContractTest::test_get_taxes_is_not_on_base_order_item().
 	 */
 	class WC_Order_Item {
 		/** @return int */

@@ -28,9 +28,9 @@ final class DashboardTest extends TestCase {
 	}
 
 	/**
-	 * M11: the candidate scan used to fetch only the first 50 users ordered by ID, so an
-	 * app-password holder created after the 50th user was invisible to the dashboard. Querying
-	 * by the application-passwords meta key directly removes the arbitrary page bound.
+	 * The candidate scan queries by the application-passwords meta key directly rather than
+	 * fetching only the first 50 users ordered by ID, so an app-password holder created after
+	 * the 50th user is not invisible to the dashboard.
 	 */
 	public function test_agent_user_candidates_finds_a_holder_past_the_old_fifty_user_cap(): void {
 		for ( $i = 0; $i < 55; $i++ ) {

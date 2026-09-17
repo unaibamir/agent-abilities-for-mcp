@@ -48,7 +48,7 @@ final class SafetyTest extends TestCase {
 	}
 
 	/**
-	 * T3-3: a filter returning a non-positive rate limit must not disable the limiter. The
+	 * A filter returning a non-positive rate limit must not disable the limiter. The
 	 * post-filter value is re-clamped to the stored limit, so a buggy filter can't turn off a
 	 * fail-closed control.
 	 */
@@ -88,7 +88,7 @@ final class SafetyTest extends TestCase {
 	}
 
 	/**
-	 * T3-3: a filter returning an empty allowlist must not widen an operator-configured
+	 * A filter returning an empty allowlist must not widen an operator-configured
 	 * non-empty allowlist to allow-all. The stored list wins when the filter empties it.
 	 */
 	public function test_ip_allowlist_filter_cannot_empty_a_configured_allowlist(): void {

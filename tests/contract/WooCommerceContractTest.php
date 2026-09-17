@@ -55,7 +55,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * M13: a payment gateway's sort position is NOT a `$gateway->order` property. Production reads
+	 * A payment gateway's sort position is NOT a `$gateway->order` property. Production reads
 	 * `->order` and gets nothing (every gateway reports order:0). The abstract gateway declares no
 	 * such property, and gateways expose no `save()` (the phpstan stub invented one).
 	 */
@@ -65,7 +65,7 @@ final class WooCommerceContractTest extends TestCase {
 
 		$this->assertFalse(
 			$ref->hasProperty( 'order' ),
-			'WC_Payment_Gateway declares no `order` property — reading $gateway->order (gateways.php:142) is the M13 fabrication.'
+			'WC_Payment_Gateway declares no `order` property — reading $gateway->order (gateways.php:142) is a fabrication.'
 		);
 		$this->assertFalse(
 			method_exists( '\WC_Payment_Gateway', 'save' ),
@@ -124,7 +124,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * Refund crash risk (audit F3): `get_taxes()` lives on the product/fee/shipping order-item
+	 * Refund crash risk: `get_taxes()` lives on the product/fee/shipping order-item
 	 * subclasses, NOT on the base WC_Order_Item. The stub fabricated it on the base class, hiding a
 	 * fatal when a coupon/tax line id is passed to the refund ability.
 	 */
@@ -132,7 +132,7 @@ final class WooCommerceContractTest extends TestCase {
 		$this->assertTrue( class_exists( '\WC_Order_Item' ), 'WC_Order_Item must exist.' );
 		$this->assertFalse(
 			method_exists( '\WC_Order_Item', 'get_taxes' ),
-			'Base WC_Order_Item has no get_taxes() — refund executor must guard with method_exists (F3).'
+			'Base WC_Order_Item has no get_taxes() — refund executor must guard with method_exists.'
 		);
 		$this->assertTrue(
 			method_exists( '\WC_Order_Item_Product', 'get_taxes' ),
@@ -145,7 +145,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * C1: `WC_Shipping_Zones::get_zones()` rows carry NO `zone_object` key. 1.2.1 read
+	 * `WC_Shipping_Zones::get_zones()` rows carry NO `zone_object` key. A prior version read
 	 * `$row['zone_object']` (never set) and returned an empty zone list on every store.
 	 */
 	public function test_shipping_zone_rows_have_no_zone_object_key(): void {
@@ -167,7 +167,7 @@ final class WooCommerceContractTest extends TestCase {
 		$this->assertArrayNotHasKey(
 			'zone_object',
 			$row,
-			'get_zones() rows have NO zone_object key — reading it (shipping.php:300) was the C1 silent-empty bug.'
+			'get_zones() rows have NO zone_object key — reading it (shipping.php:300) was a silent-empty bug.'
 		);
 		$this->assertArrayHasKey( 'zone_id', $row, 'Rows expose the zone id under zone_id.' );
 
@@ -176,7 +176,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * M4: WooCommerce registers a dedicated `customer` role on install. A buyer who holds a
+	 * WooCommerce registers a dedicated `customer` role on install. A buyer who holds a
 	 * different role (subscriber on a membership/LMS store) is invisible to a role=customer query,
 	 * which is why hardcoding role=customer reports zero customers on those stores.
 	 */
@@ -194,7 +194,7 @@ final class WooCommerceContractTest extends TestCase {
 		$this->assertNotContains(
 			(string) $buyer,
 			array_map( 'strval', $as_customer ),
-			'A subscriber-role buyer is NOT returned by role=customer — the M4 blind spot.'
+			'A subscriber-role buyer is NOT returned by role=customer.'
 		);
 
 		$all = get_users(
@@ -211,7 +211,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * M12: a programmatic order note is attributed by WooCommerce as `added_by = 'system'`, never
+	 * A programmatic order note is attributed by WooCommerce as `added_by = 'system'`, never
 	 * the literal `'user'` the stub emitted and the production `added_by_user` check tested for.
 	 */
 	public function test_order_note_added_by_is_system_not_user(): void {
@@ -231,14 +231,14 @@ final class WooCommerceContractTest extends TestCase {
 		$this->assertSame(
 			'system',
 			$note->added_by,
-			"A programmatic note is added_by 'system', not 'user' — the M12 fabrication tested for 'user'."
+			"A programmatic note is added_by 'system', not 'user'."
 		);
 
 		$order->delete( true );
 	}
 
 	/**
-	 * M12 companion: a note a logged-in user with edit_shop_orders adds ($added_by_user = true) is
+	 * Companion case: a note a logged-in user with edit_shop_orders adds ($added_by_user = true) is
 	 * attributed to that user's DISPLAY NAME, not 'system'. This is the case the production
 	 * added_by_user check ('system' !== added_by) must read as true - the inverse of the programmatic
 	 * case above, and the half the original stub's hardcoded 'user' never modelled either.
@@ -285,7 +285,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * M3 / WC 9.1 floor: at 9.1.0 `wc_update_attribute()` backfills the fields a partial update
+	 * At 9.1.0 `wc_update_attribute()` backfills the fields a partial update
 	 * omits, so a name-only update no longer wipes has_archives/order_by/type. This is the
 	 * behavioural cliff the version floor is pinned to; below 9.1 the same call is destructive.
 	 */
@@ -322,7 +322,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * M3 version-safety: the ability's update executor no longer trusts wc_update_attribute()'s
+	 * Version-safety: the ability's update executor does not trust wc_update_attribute()'s
 	 * own backfill (that only exists from 9.1.0); instead it resolves the CURRENT row from
 	 * wc_get_attribute_taxonomies() and backfills every field itself before writing. This pins the
 	 * exact stdClass property names that resolve step reads (attributes.php:aafm_wc_get_attribute /

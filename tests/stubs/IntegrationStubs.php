@@ -235,7 +235,7 @@ class Post {
 		$model->save();
 	}
 	public function save() {
-		// Real AIOSEO's Model::save() returns void, never a bool (L11) - a "failure" here means the
+		// Real AIOSEO's Model::save() returns void, never a bool - a "failure" here means the
 		// write silently does not persist, exercisable only through the read-back verification the
 		// executor now does, not through a fabricated return value.
 		if ( \AAFM\Tests\AioseoStubStore::$save_should_fail ) {
@@ -256,7 +256,7 @@ PHP;
 	 * call. The guarded function definitions below read+write that store, so within a test a
 	 * value written through update_field() is visible to a following get_field()/get_fields().
 	 *
-	 * Config shape (per the A1 plan):
+	 * Config shape:
 	 *   array(
 	 *     'groups' => array( array( 'key' => 'group_1', 'title' => 'Hero',
 	 *                  'fields' => array( array( 'key' => 'field_1', 'label' => 'Headline', 'type' => 'text' ) ) ) ),
@@ -1090,7 +1090,7 @@ PHP;
 	 *
 	 * @param array<string,mixed> $data Customer data for the WC_Customer stub getters. An optional
 	 *                                   'role' key seeds a different WP role (e.g. 'subscriber' for
-	 *                                   an M4 fixture) instead of 'customer'.
+	 *                                   a non-customer fixture) instead of 'customer'.
 	 * @return int The created user id.
 	 * @throws \RuntimeException When the fixture user cannot be created.
 	 */
@@ -2069,7 +2069,7 @@ PHP;
 		return <<<'PHP'
 class WC_Payment_Gateway {
 	// Deliberately no $order property or save() method - real WooCommerce declares neither
-	// (M13; pinned by WooCommerceContractTest::test_payment_gateway_has_no_order_property_or_save_method()).
+	// pinned by WooCommerceContractTest::test_payment_gateway_has_no_order_property_or_save_method().
 	/** @var string */
 	public $id = '';
 	/** @var string */

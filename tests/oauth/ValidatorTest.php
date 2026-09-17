@@ -349,7 +349,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * T1-8: deactivating a client invalidates its live access tokens - a bearer whose owning
+	 * Deactivating a client invalidates its live access tokens - a bearer whose owning
 	 * client is disabled no longer resolves a user, even on the MCP route.
 	 */
 	public function test_bearer_does_not_resolve_for_deactivated_client(): void {
@@ -495,7 +495,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * L3: an inactive or expired bearer - a real token row that was once issued but no longer
+	 * An inactive or expired bearer - a real token row that was once issued but no longer
 	 * validates - writes a denied `oauth:bearer` audit row, so a stolen or replayed credential leaves
 	 * a trace even though it never resolves an owning client. A bearer that matches no stored token at
 	 * all is NOT logged (see test_unknown_bearer_writes_no_audit_row); only a real credential does.
@@ -530,7 +530,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * L3: a wrong-audience bearer writes a denied `oauth:bearer` row carrying the client_id
+	 * A wrong-audience bearer writes a denied `oauth:bearer` row carrying the client_id
 	 * the token actually belongs to, so an operator can trace which client presented it.
 	 */
 	public function test_wrong_audience_token_writes_a_denied_bearer_audit_row(): void {
@@ -935,7 +935,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * M16: a successful bearer resolve records the client_id via aafm_oauth_current_client_id(),
+	 * A successful bearer resolve records the client_id via aafm_oauth_current_client_id(),
 	 * purely for activity-log attribution - register.php reads it back when logging the ability
 	 * call that follows on this same request.
 	 */
@@ -955,7 +955,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * M16: a bearer that never resolves a user (no header, wrong audience, expired, deactivated
+	 * A bearer that never resolves a user (no header, wrong audience, expired, deactivated
 	 * client) must never populate the client_id store - a failed or absent OAuth attempt is not
 	 * an attributed call.
 	 */

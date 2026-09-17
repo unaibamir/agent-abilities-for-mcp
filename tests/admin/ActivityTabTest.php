@@ -65,7 +65,7 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
-	 * L4: clearing the log used to leave no trace of its own clearing - an operator (or an
+	 * Clearing the log must not leave no trace of its own clearing - otherwise an operator (or an
 	 * attacker with manage_options) could wipe the audit trail without the log itself ever
 	 * showing it happened. aafm_ajax_clear_log() must write one final row recording the clear,
 	 * who did it, and when, so the emptied log is never completely silent about its own history.

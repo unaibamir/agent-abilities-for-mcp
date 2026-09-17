@@ -53,8 +53,8 @@ final class HelpTabTest extends TestCase {
 	}
 
 	/**
-	 * L13: the term-meta help entry used to claim "Term meta has no field on the Abilities
-	 * tab" and code-filter only, but aafm_render_term_meta_keys_selector() renders an
+	 * The term-meta help entry must not claim "Term meta has no field on the Abilities
+	 * tab" and code-filter only: aafm_render_term_meta_keys_selector() renders an
 	 * "Exposed term meta keys" / "Denied term meta keys" field under the Taxonomies & Terms
 	 * panel. The entry must point at that field, not deny it exists.
 	 */
@@ -70,9 +70,9 @@ final class HelpTabTest extends TestCase {
 	}
 
 	/**
-	 * L14: aafm_rate_limit_consume() (includes/safety.php) keys its transient bucket by
+	 * aafm_rate_limit_consume() (includes/safety.php) keys its transient bucket by
 	 * user_id alone, so two connections authenticated as the same agent user share one
-	 * budget. The old copy claimed the opposite ("do not eat into each other's budget").
+	 * budget - the help text must not claim the opposite ("do not eat into each other's budget").
 	 */
 	public function test_help_tab_rate_limit_entry_says_connections_share_one_budget(): void {
 		$this->acting_as( 'administrator' );

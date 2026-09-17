@@ -32,7 +32,7 @@ final class AbilitiesSaveTest extends TestCase {
 	}
 
 	/**
-	 * T3-2: a scoped save (the Integrations tab) must NOT trust client-supplied off-tab state.
+	 * A scoped save (the Integrations tab) must NOT trust client-supplied off-tab state.
 	 * Posting with aafm_scope set to the integration subjects, but with an off-tab core ability
 	 * absent from aafm_abilities, must preserve that core ability from the persisted option.
 	 */
@@ -53,7 +53,7 @@ final class AbilitiesSaveTest extends TestCase {
 	}
 
 	/**
-	 * T3-2: a scoped save still toggles abilities WITHIN its scope. Posting scope=[woocommerce]
+	 * A scoped save still toggles abilities WITHIN its scope. Posting scope=[woocommerce]
 	 * with no in-scope abilities disables a previously enabled woocommerce ability, while leaving
 	 * an off-tab ability untouched.
 	 */
@@ -375,7 +375,7 @@ final class AbilitiesSaveTest extends TestCase {
 	}
 
 	/**
-	 * M9: an ability whose host integration is currently inactive never renders a checkbox, so
+	 * An ability whose host integration is currently inactive never renders a checkbox, so
 	 * it can never appear in $posted. Saving the Abilities tab (the full-replace, no-scope path)
 	 * must not silently wipe it - it survives until the operator explicitly turns it off (which
 	 * requires the host to be active again, exactly as aafm_ajax_save_bridged_abilities() already
@@ -408,9 +408,9 @@ final class AbilitiesSaveTest extends TestCase {
 	}
 
 	/**
-	 * M9, scoped variant: the Integrations tab save must also preserve an inactive-host
-	 * ability, not just the Abilities tab. page.php:258's preserved-abilities loop used to drop
-	 * anything absent from the host-gated registry, which included the very abilities the
+	 * Scoped variant: the Integrations tab save must also preserve an inactive-host ability,
+	 * not just the Abilities tab. page.php:258's preserved-abilities loop must not drop anything
+	 * absent from the host-gated registry, since that includes the very abilities the
 	 * Integrations tab exists to manage once their host comes back online.
 	 */
 	public function test_scoped_save_preserves_an_inactive_host_ability(): void {

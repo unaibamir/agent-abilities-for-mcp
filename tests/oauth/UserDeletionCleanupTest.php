@@ -1,8 +1,8 @@
 <?php
 /**
- * Regression test for S2 of the 1.7.4 security assessment: OAuth grants used to
- * survive deletion of the WordPress user who approved them, leaving orphaned rows
- * with a wp_user_id that no longer resolves to anyone.
+ * Regression test: OAuth grants must not survive deletion of the WordPress user who
+ * approved them, leaving orphaned rows with a wp_user_id that no longer resolves to
+ * anyone.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -134,7 +134,7 @@ final class UserDeletionCleanupTest extends TestCase {
 	}
 
 	/**
-	 * S2: deleting the user must clear their consent, active-token and pending-code rows
+	 * Deleting the user must clear their consent, active-token and pending-code rows
 	 * across every client they ever approved, not just one.
 	 */
 	public function test_deleting_a_user_clears_their_oauth_grants_across_every_client(): void {
@@ -226,7 +226,7 @@ final class UserDeletionCleanupTest extends TestCase {
 	 * (here, the table itself is gone) must read as -1, never as the same 0 a real no-op
 	 * returns. Without the fix these all read 0, indistinguishable from "nothing to revoke".
 	 *
-	 * Extended to the four N1 siblings (aafm_oauth_revoke_client_tokens(),
+	 * Extended to the four sibling revoke functions (aafm_oauth_revoke_client_tokens(),
 	 * aafm_oauth_revoke_user_client_tokens(), aafm_oauth_revoke_client_codes(),
 	 * aafm_oauth_revoke_user_client_codes()), brought onto the same shape.
 	 */

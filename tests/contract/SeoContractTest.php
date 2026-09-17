@@ -47,7 +47,7 @@ final class SeoContractTest extends TestCase {
 	}
 
 	/**
-	 * L11: AIOSEO `Model::save()` returns void (its body ends on `$this->reset()` with no return).
+	 * AIOSEO `Model::save()` returns void (its body ends on `$this->reset()` with no return).
 	 * Production guards `false === $model->save()`, which can never be true — dead code that lets a
 	 * genuinely failed write report success. The contract: save() declares no bool return.
 	 */
@@ -61,7 +61,7 @@ final class SeoContractTest extends TestCase {
 		$method = new \ReflectionMethod( $model, 'save' );
 		$this->assertFalse(
 			$method->hasReturnType(),
-			'Model::save() declares no return type and returns null (void) — `false === save()` is dead code (L11).'
+			'Model::save() declares no return type and returns null (void) — `false === save()` is dead code.'
 		);
 	}
 
@@ -112,7 +112,7 @@ final class SeoContractTest extends TestCase {
 
 	/**
 	 * Rank Math's post/schema abilities are a meta-key integration (no Rank Math code symbols
-	 * called); the head-rendering ability is not (M1). Pin the detection contract M6-style: the
+	 * called); the head-rendering ability is not. Pin the detection contract the same way: the
 	 * `RankMath` marker class and version constant exist.
 	 */
 	public function test_rankmath_detection_contract(): void {
@@ -127,7 +127,7 @@ final class SeoContractTest extends TestCase {
 	}
 
 	/**
-	 * M1 (part 1 of 2 - must run before the companion test below mutates registration state): on a
+	 * Part 1 of 2 - must run before the companion test below mutates registration state: on a
 	 * fresh/unregistered install, rank_math()->head is genuinely absent. Pin that our renderer's
 	 * isset() guard condition is reachable against the real vendor, not just a stub assumption.
 	 * Declared before _once_registration_is_resolved so PHPUnit's declaration-order default (this
@@ -148,10 +148,10 @@ final class SeoContractTest extends TestCase {
 	}
 
 	/**
-	 * M1 (part 2 of 2): rankmath-get-head used to register no production callback on the
-	 * aafm_seo_rendered_head seam at all, so it always returned head:'' with success.
-	 * aafm_rankmath_rendered_head() now calls rank_math()->head->head() - pin the two-stage real
-	 * shape that call depends on.
+	 * Part 2 of 2: aafm_rankmath_rendered_head() calls rank_math()->head->head() - pin the
+	 * two-stage real shape that call depends on, so rankmath-get-head can't silently regress to
+	 * registering no production callback on the aafm_seo_rendered_head seam and returning head:''
+	 * with success.
 	 *
 	 * Stage 1: rank_math()->frontend only exists once RankMath::init_frontend() sees a valid/skipped
 	 * registration (`if ( $this->container['registration']->invalid ) return;`). A fresh install

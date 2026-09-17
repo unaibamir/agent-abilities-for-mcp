@@ -981,7 +981,7 @@ class RestEndpointsTest extends TestCase {
 	 * With OAuth disabled, /register still returns WordPress's own error shape rather than
 	 * the RFC 6749 shape used for real protocol errors.
 	 *
-	 * D1: a disabled endpoint answers as "this route does not exist" (WordPress's own
+	 * A disabled endpoint answers as "this route does not exist" (WordPress's own
 	 * rest_no_route body), not as an OAuth error, because there is no grant to describe -
 	 * the RFC 6749 §5.2 shape would not apply to a switched-off surface. This is a
 	 * deliberate exception carved out during the issue #68 fix, not a gap in it, and this
@@ -1006,8 +1006,8 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * With OAuth disabled, /token still returns WordPress's own error shape. See D1 on the
-	 * register test above for why this is deliberate.
+	 * With OAuth disabled, /token still returns WordPress's own error shape. See
+	 * test_register_disabled_returns_wordpress_error_shape() above for why this is deliberate.
 	 */
 	public function test_token_disabled_returns_wordpress_error_shape(): void {
 		update_option( 'aafm_oauth_enabled', '0' );
@@ -1028,8 +1028,8 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * With OAuth disabled, /revoke still returns WordPress's own error shape. See D1 on the
-	 * register test above for why this is deliberate.
+	 * With OAuth disabled, /revoke still returns WordPress's own error shape. See
+	 * test_register_disabled_returns_wordpress_error_shape() above for why this is deliberate.
 	 */
 	public function test_revoke_disabled_returns_wordpress_error_shape(): void {
 		update_option( 'aafm_oauth_enabled', '0' );

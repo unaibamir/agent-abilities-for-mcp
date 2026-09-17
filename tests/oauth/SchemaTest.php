@@ -91,7 +91,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * T3-6: the resource (audience) column must be wide enough for long endpoint URLs so an
+	 * The resource (audience) column must be wide enough for long endpoint URLs so an
 	 * audience match never fails on a truncated value.
 	 */
 	public function test_resource_column_holds_long_urls(): void {
@@ -429,7 +429,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * The core of F1: a failed migration must NOT advance the version, and must flag a bounded error,
+	 * A failed migration must NOT advance the version, and must flag a bounded error,
 	 * so the admin_init / rest_api_init self-heal keeps retrying instead of early-returning forever.
 	 */
 	public function test_finalize_does_not_advance_version_on_broken_schema(): void {
@@ -458,7 +458,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * The CREATE statement (F3) of the two lifecycle tables declares InnoDB, so a fresh install is
+	 * The CREATE statement of the two lifecycle tables declares InnoDB, so a fresh install is
 	 * transactional. SHOW CREATE TABLE reveals the engine even for the harness's TEMPORARY tables.
 	 *
 	 * @param string $suffix Lifecycle table suffix.
@@ -473,7 +473,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * F3: new installs put the lifecycle tables on InnoDB so consume+mint can actually roll back.
+	 * New installs put the lifecycle tables on InnoDB so consume+mint can actually roll back.
 	 */
 	public function test_lifecycle_tables_are_created_on_innodb(): void {
 		aafm_install_oauth_tables();
@@ -562,7 +562,7 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * F3: a pre-existing non-InnoDB lifecycle table is converted by the guarded one-time ALTER that
+	 * A pre-existing non-InnoDB lifecycle table is converted by the guarded one-time ALTER that
 	 * dbDelta cannot do. Uses a real (non-TEMPORARY) throwaway table, since information_schema does
 	 * not list temporary tables; the harness's temporary-table rewrite is lifted only for this
 	 * probe and always restored, and the throwaway table is always dropped.

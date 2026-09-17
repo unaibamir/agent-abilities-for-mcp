@@ -160,7 +160,7 @@ final class ClientListTest extends TestCase {
 	}
 
 	/**
-	 * S4 of the 1.7.4 security assessment: nothing snapshots the approver's role at
+	 * Nothing snapshots the approver's role at
 	 * consent time, so the grants list must read it LIVE - the same grant row must
 	 * reflect a role change made after the grant was approved, with no re-approval
 	 * and no change to the consent row itself.

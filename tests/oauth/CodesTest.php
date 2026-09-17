@@ -72,7 +72,7 @@ class CodesTest extends TestCase {
 	}
 
 	/**
-	 * T1-7: when the row insert fails, mint returns a WP_Error rather than a phantom code -
+	 * When the row insert fails, mint returns a WP_Error rather than a phantom code -
 	 * a client must never get a successful redirect for a grant that was never persisted.
 	 */
 	public function test_mint_returns_error_when_insert_fails(): void {

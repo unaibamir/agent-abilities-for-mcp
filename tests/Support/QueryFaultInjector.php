@@ -2,22 +2,22 @@
 /**
  * Reusable $wpdb query fault injector for the failure-path test suite.
  *
- * Eight Codex rounds on `fix/1.7.5-deferred` found real defects almost exclusively in query
- * FAILURE paths (a stale $wpdb->last_result, a token that rotates mid-walk, a row that changes
- * between two statements) while 3,800+ PHPUnit tests, the traffic sim, and every CI leg stayed
- * green throughout - the gate only ever exercised success paths. Several fix lanes each hand-rolled
- * their own version of "make one query fail" to cover their finding (HelpersTest, UninstallTest,
- * AuthorizeTest, AllowlistAdminTest, PairedSecurityWriteOrderTest, OauthRevokeAjaxTest, TokensTest).
- * This factors that shape out into one place so there is one way to do this, and so it can be
- * reused for the decisive-path coverage this bug class actually needs.
+ * Real defects in this plugin concentrate almost exclusively in query FAILURE paths (a stale
+ * $wpdb->last_result, a token that rotates mid-walk, a row that changes between two statements),
+ * shapes that thousands of passing PHPUnit tests, the traffic sim, and every CI leg can stay
+ * green through if the gate only ever exercises success paths. Several test files had each
+ * hand-rolled their own version of "make one query fail" to cover a specific finding (HelpersTest,
+ * UninstallTest, AuthorizeTest, AllowlistAdminTest, PairedSecurityWriteOrderTest,
+ * OauthRevokeAjaxTest, TokensTest). This factors that shape out into one place so there is one way
+ * to do this, and so it can be reused for the decisive-path coverage this bug class actually needs.
  *
  * TWO DISTINCT FAILURE SHAPES, both real bugs have depended on either one:
  *
  * - fail_nth_query() / fail_query(): the 'query' filter returns '' for the targeted query.
  *   wp-includes/class-wpdb.php's query() checks `if ( ! $query )` and returns false
  *   IMMEDIATELY, before its own flush() call - so $wpdb->last_result/last_error are left holding
- *   whatever the PREVIOUS query left there. This is the "no-flush" / stale-result path the
- *   R7-2/R8-1/R8-2/R8-3 defect class exploits, and it raises no real SQL error.
+ *   whatever the PREVIOUS query left there. This is the "no-flush" / stale-result path that the
+ *   defect class this file exists to catch exploits, and it raises no real SQL error.
  *
  * - break_query_with_real_error(): the targeted query is redirected at a table that does not
  *   exist, producing a genuine SQL error - last_result IS flushed, last_error IS populated. Use

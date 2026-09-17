@@ -109,11 +109,11 @@ function aafm_integration_cards(): array {
  *                'not_installed'.
  */
 function aafm_integration_status( string $slug ): string {
-	// Codex final round 4 MEDIUM: registering Event Tickets' abilities already requires TEC too
-	// (includes/abilities/tec/tickets.php), but this card reported a bare 'active' from Event
-	// Tickets alone, so the card said "Active" and let the operator enable abilities that would
-	// never actually register or appear in tools/list. Checked before the general 'active' report
-	// below, the same way 'below_floor' is checked before it for a version mismatch.
+	// Registering Event Tickets' abilities already requires TEC too
+	// (includes/abilities/tec/tickets.php), so a bare 'active' report from Event Tickets alone
+	// would tell the operator to enable abilities that could never actually register or appear in
+	// tools/list. Checked before the general 'active' report below, the same way 'below_floor' is
+	// checked before it for a version mismatch.
 	if ( 'event_tickets' === $slug && aafm_integration_active( 'event_tickets' ) && ! aafm_integration_active( 'tec' ) ) {
 		return 'missing_dependency';
 	}
@@ -423,12 +423,12 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 		case 'active':
 			return __( 'Active. Turn on the abilities you want this agent to use.', 'agent-abilities-for-mcp' );
 		case 'below_floor':
-			// Codex final round 4 MEDIUM: this used to hardcode WooCommerce's own constant and
-			// version function for EVERY integration's below-floor notice, so a TEC or Event
-			// Tickets site below its real floor was told to install a WooCommerce version it
-			// likely already had. Each versioned integration's own minimum-version constant and
-			// version-reader function, matching the exact pair aafm_{slug}_below_version_floor()
-			// already checks against for that slug.
+			// Each integration's below-floor notice uses that integration's own minimum-version
+			// constant and version-reader function, matching the exact pair
+			// aafm_{slug}_below_version_floor() already checks against for that slug - not a single
+			// hardcoded WooCommerce constant and version function for every integration, which would
+			// tell a TEC or Event Tickets site below its real floor to install a WooCommerce version
+			// it likely already had.
 			$version_floor                    = array(
 				'woocommerce'   => array( AAFM_WOOCOMMERCE_MIN_VERSION, 'aafm_woocommerce_version' ),
 				'tec'           => array( AAFM_TEC_MIN_VERSION, 'aafm_tec_version' ),

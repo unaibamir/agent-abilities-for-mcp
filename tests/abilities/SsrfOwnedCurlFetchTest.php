@@ -4,10 +4,10 @@
  * aborts a transfer, on a handle this plugin owns outright, rather than merely rejecting a
  * fully-downloaded oversized result after the fact.
  *
- * Codex final round 7/8 MEDIUM: the interim fix bounded the download via WP's own
- * 'limit_response_size' request arg, which correctly rejected an oversized result but only after
- * the (bounded) transfer completed - a hostile or slow server could still occupy a PHP worker and
- * consume bandwidth for up to the 10-second timeout. These tests run a REAL local `php -S`
+ * WP's own 'limit_response_size' request arg bounds the download and correctly rejects an
+ * oversized result, but only after the (bounded) transfer completes - a hostile or slow server
+ * could still occupy a PHP worker and consume bandwidth for up to the 10-second timeout. These
+ * tests run a REAL local `php -S`
  * server (no pre_http_request mock - that would prove nothing about the actual curl callbacks)
  * and assert the fetch returns almost immediately, not after a multi-second sleep or the full
  * timeout, which only a genuine mid-transfer abort can produce.
@@ -144,7 +144,7 @@ final class SsrfOwnedCurlFetchTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt H2: aafm_ssrf_safe_fetch_url() now composes aafm_ssrf_owned_curl_fetch() and
+	 * aafm_ssrf_safe_fetch_url() composes aafm_ssrf_owned_curl_fetch() and
 	 * aafm_ssrf_process_fetch_response() directly, with no pre_http_request mock possible or
 	 * needed in between. This proves the SECOND half of that pipe - a REAL fetch result feeding
 	 * cleanly into aafm_ssrf_process_fetch_response() - against a real fetch result rather than a
@@ -161,7 +161,7 @@ final class SsrfOwnedCurlFetchTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5, R5-6: the test above calls aafm_ssrf_owned_curl_fetch() and
+	 * The test above calls aafm_ssrf_owned_curl_fetch() and
 	 * aafm_ssrf_process_fetch_response() by hand - it never calls aafm_ssrf_safe_fetch_url()
 	 * itself, so a wrapper regression that reaches the owned fetch but skips response processing
 	 * (or the reverse) would leave this file green despite the misleading claim above.

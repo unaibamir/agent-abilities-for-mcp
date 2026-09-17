@@ -499,6 +499,10 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 == Upgrade Notice ==
 
+= 1.7.5 =
+
+A handful of write-confirming checks used to report success even when the confirming read had failed, for example after moderating a comment or updating custom fields. Those checks now report an error instead. No default, permission, or scoping rule has changed.
+
 = 1.7.4 =
 
 Every new ability in this release, including The Events Calendar, Slim SEO, Avada, GeoDirectory, and URL-based media upload, stays off until you turn it on, so nothing changes automatically. If you use Elementor, Divi, Beaver Builder, or Avada, a write that would land on a page one of them owns is now refused instead of silently doing nothing.

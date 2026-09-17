@@ -157,9 +157,9 @@ final class WpmlLangAllTest extends TestCase {
 
 	/**
 	 * The headline reproduction: 3 'is' posts + 2 'en' posts = 5 total. A request for
-	 * lang:"all" must see all 5 and report language:"all". Pre-fix this returns 3 (only the
-	 * ambient 'is' language, since the switch to 'all' is silently ignored) while still
-	 * reporting language:"all" - the exact "reports success while missing data" shape doc 206
+	 * lang:"all" must see all 5 and report language:"all". Without proper handling, this would
+	 * return 3 (only the ambient 'is' language, since the switch to 'all' is silently ignored)
+	 * while still reporting language:"all" - the exact "reports success while missing data" shape
 	 * measured on the sim clone.
 	 */
 	public function test_get_posts_lang_all_spans_every_active_language(): void {

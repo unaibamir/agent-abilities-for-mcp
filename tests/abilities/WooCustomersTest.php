@@ -317,9 +317,9 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
-	 * Doc 214, finding 6: the WC_Customer stub's getters used to apply no WooCommerce filter at
-	 * all, unlike real WC_Customer (get_prop()/get_address_prop()-backed, filtered
-	 * 'woocommerce_customer_get_{prop}'). Hook two of the getters this ability's own shaping
+	 * The WC_Customer stub's getters must apply the same WooCommerce filters as real WC_Customer
+	 * (get_prop()/get_address_prop()-backed, filtered 'woocommerce_customer_get_{prop}').
+	 * Hook two of the getters this ability's own shaping
 	 * reads - a plain prop and a billing address prop - and confirm the filtered value reaches
 	 * the wire.
 	 */

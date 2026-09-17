@@ -1,7 +1,7 @@
 <?php
 /**
  * Real tools/call coverage for aafm_filter_bridged_tool_call_result(), supplementing the direct-
- * call tests in tests/abilities/BridgeToolCallResultFilterTest.php (doc 216 item 1: those tests
+ * call tests in tests/abilities/BridgeToolCallResultFilterTest.php (those tests
  * prove the filter's logic but never that it runs on a real wire call). Follows the exact pattern
  * BridgeObjectRefusalWireTest.php established: a throwaway, independently-constructed
  * WP\MCP\Core\McpServer + ToolsHandler pair carrying one fixture ability per case, never the

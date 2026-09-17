@@ -16,7 +16,7 @@ namespace AAFM\Tests;
 /**
  * Process-wide backing store for the WooCommerce payment gateway stubs.
  *
- * Doc 214, finding 6: this store deliberately applies no WooCommerce filters, checked and
+ * This store deliberately applies no WooCommerce filters, checked and
  * confirmed rather than assumed. aafm_wc_gateway_shape() (gateways.php) reads $gateway->id,
  * ->title, ->description, ->enabled, and ->settings as PLAIN PUBLIC PROPERTIES, never through a
  * getter method. Real WC_Payment_Gateway (abstract-wc-payment-gateway.php) extends

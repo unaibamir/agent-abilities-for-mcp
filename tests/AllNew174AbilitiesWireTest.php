@@ -1,6 +1,6 @@
 <?php
 /**
- * Consolidated wire-coverage sweep for every one of the 26 canonical abilities plan 228
+ * Consolidated wire-coverage sweep for every one of the 26 canonical abilities this plugin
  * registers (224-1-7-4-release-spec.md's canonical table), named individually. Each task's own
  * wire test proves its own narrow round trip; this file's job is
  * the sweep-completeness proof that NONE of the 26 is missing a real tools/call exercise, the

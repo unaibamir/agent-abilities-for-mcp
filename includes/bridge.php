@@ -192,10 +192,10 @@ function aafm_bridge_risk( $ability ): array {
  * Strip JSON-Schema keywords an MCP client is not guaranteed to understand from a FOREIGN
  * ability's schema, before it is copied onto our wrapper's registration.
  *
- * Delegates to WP 7.1's wp_prepare_json_schema_for_client() (Rule 1 of the delegation audit: this
- * plugin has no way to know every keyword a third-party ability's author might have used, and core
- * already maintains the allow-listed keyword set its own REST API and Abilities API clients
- * expect). A no-op on the WP 6.9/7.0 floor, where the function does not exist yet. Only ever called
+ * Delegates to WP 7.1's wp_prepare_json_schema_for_client(): this plugin has no way to know every
+ * keyword a third-party ability's author might have used, and core already maintains the
+ * allow-listed keyword set its own REST API and Abilities API clients expect. A no-op on the
+ * WP 6.9/7.0 floor, where the function does not exist yet. Only ever called
  * on a BRIDGED (third-party-authored) schema - a native aafm/* ability's own schema is authored by
  * this plugin and already kept to a known-safe keyword set, so running it through this too would
  * add a dependency for no benefit.
@@ -304,15 +304,14 @@ function aafm_discover_foreign_abilities(): array {
 	// third-party filter could hide an ability from this admin governance screen. Read the
 	// registry directly instead: WP_Abilities_Registry::get_all_registered() is public since this
 	// plugin's WP 6.9.0 floor and bypasses both filters, giving the site owner ground truth about
-	// what is actually registered rather than whatever a rogue plugin lets through. Investigated
-	// (delegation audit, WP 7.1 findings): the new $args filter on wp_get_abilities() cannot
-	// express "every namespace except aafm and aafm-bridge", so it is not a substitute for this
-	// function's own exclusion loop below - this is a bypass of the filtering layer, not a
-	// delegation to it.
+	// what is actually registered rather than whatever a rogue plugin lets through. The new $args
+	// filter on wp_get_abilities() cannot express "every namespace except aafm and aafm-bridge",
+	// so it is not a substitute for this function's own exclusion loop below - this is a bypass
+	// of the filtering layer, not a delegation to it.
 	//
-	// Deliberate departure from core's documented contract (delegation audit, review round 1,
-	// 2026-08-26): core documents wp_get_abilities_item_include as enforcing "universal inclusion
-	// rules" that every caller is expected to respect, and get_all_registered() skips it entirely.
+	// Deliberate departure from core's documented contract: core documents
+	// wp_get_abilities_item_include as enforcing "universal inclusion rules" that every caller is
+	// expected to respect, and get_all_registered() skips it entirely.
 	// The cost: a vendor that hides an internal, deprecated, license-gated or feature-flagged
 	// ability from wp_get_abilities() on purpose will see it listed here anyway, and an operator
 	// could select it in the bridge directory even though the vendor never intended it to be
@@ -608,21 +607,19 @@ function aafm_register_enabled_bridged_abilities(): void {
  * Whether $value contains, at $value itself or nested at any depth inside it, an object that is
  * not an exact empty stdClass.
  *
- * Final gate round 2: the ORIGINAL top-level-only check inspected the wrong layer. On the real
- * MCP wire, McpTool::execute() already wraps any non-array bridged result as
- * array('result' => $value) BEFORE mcp_adapter_tool_call_result (this file's filter) ever runs
+ * Walks the whole structure rather than only its top level, because on the real MCP wire,
+ * McpTool::execute() already wraps any non-array bridged result as array('result' => $value)
+ * BEFORE mcp_adapter_tool_call_result (this file's filter) ever runs
  * (vendor/wordpress/mcp-adapter/includes/Domain/Tools/McpTool.php:295-299,
  * ToolsHandler.php:189/205) - so a bare object at the FUNCTION's top level is a shape the real
  * adapter never delivers; a hidden object one or more levels inside an array is exactly what it
- * delivers instead. This walks the whole structure so the guard fires where the danger actually
- * is, not only where the old (unreachable in production) shape assumed it would be.
+ * delivers instead. The guard has to fire where the danger actually is, not only at the root.
  *
  * The house idiom (object) array() can legitimately appear at ANY depth, not only the root - a
  * bridged ability might return {"items": [...], "meta": {}} where the empty map sits one level
  * down. So the exemption for an exact, empty stdClass (get_class() === 'stdClass', not
- * `instanceof`, which a subclass also satisfies - see the fix round 1 note this replaces) applies
- * at whatever depth it is found, and nothing else does: any other object, at any depth, is
- * refused.
+ * `instanceof`, which a subclass also satisfies) applies at whatever depth it is found, and
+ * nothing else does: any other object, at any depth, is refused.
  *
  * Recursion is depth-bounded, deliberately, using the same AAFM_SCHEMA_MAX_DEPTH bound
  * aafm_sanitize_schema_array() uses for the identical reason: a bridged result is foreign data of
@@ -660,7 +657,7 @@ function aafm_bridge_result_hides_an_object( $value, int $depth = 0 ): bool {
  * Whether a tool_call_result belongs to a BRIDGED (aafm-bridge/*) ability, classified by the
  * backing ability's own identity rather than by the wire tool name.
  *
- * Final gate round 3: the wire-name prefix test alone is bypassable both directions. The adapter
+ * The wire-name prefix test alone is bypassable both directions. The adapter
  * applies the PUBLIC mcp_adapter_tool_name filter to rename a tool's wire name AFTER sanitizing
  * the ability name (RegisterAbilityAsMcpTool::resolve_tool_name), so a site hooking that filter
  * could rename a bridged wrapper OUT of the aafm-bridge- prefix (skipping this guard entirely) or

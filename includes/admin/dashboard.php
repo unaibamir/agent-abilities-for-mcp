@@ -16,8 +16,8 @@ defined( 'ABSPATH' ) || exit;
  * email, display name, or any password material.
  *
  * Queries by the application-passwords meta key directly rather than paging through every
- * user on the site: a fixed page (M11) meant an agent user created after the cap was
- * invisible to the dashboard on any site with more users than the page held. A user still
+ * user on the site: a fixed page would leave an agent user created after the cap invisible
+ * to the dashboard on any site with more users than the page held. A user still
  * carries the meta key after deleting all their passwords (WP_Application_Passwords stores
  * an empty array rather than removing the key), so the per-user emptiness check below still
  * does the real filtering; this query only narrows the candidate set.

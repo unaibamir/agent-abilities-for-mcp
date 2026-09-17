@@ -204,8 +204,8 @@ function aafm_ajax_save_settings(): void {
 	// one (as it is below, once OAuth/DCR are deferred to the ON branch). Here both writes are the
 	// OFF/restrictive direction, so whichever one failed simply keeps its OLD value, which may
 	// still be ON - a mixed-direction save could leave the site transiently wider than either the
-	// old or the new requested state, exactly the residual the gate review flagged. Say plainly
-	// that some changes did not take rather than implying either a full success or a full rollback.
+	// old or the new requested state. Say plainly that some changes did not take rather than
+	// implying either a full success or a full rollback.
 	if ( ! $oauth_persisted || ! $dcr_persisted ) {
 		// The high-risk / read-only switches above already certified by this point (their own
 		// failure branch already returned above if either had failed), so an attempted one has no

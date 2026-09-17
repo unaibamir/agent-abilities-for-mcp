@@ -241,7 +241,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
  * The aafm_get_enabled_abilities() accessor intersects the stored option against the live,
  * host-gated registry, so an ability whose host integration is currently inactive is invisible
  * there even though it is still sitting in the option untouched. The save-preservation logic
- * below needs to see those inactive-host entries in order to carry them forward (M9), so it
+ * below needs to see those inactive-host entries in order to carry them forward, so it
  * reads the option directly here instead of going through that filtered accessor.
  *
  * @return array<int,string>
@@ -340,7 +340,7 @@ function aafm_set_enabled_abilities( array $enabled, ?bool &$persisted = null ):
  *
  * An ability whose host integration is currently inactive is host-gated out of the live
  * registry, so its checkbox never rendered and it can never appear in $posted - a plain
- * intersect would silently wipe it on ANY save, not just an Integrations-tab one (M9). It is
+ * intersect would silently wipe it on ANY save, not just an Integrations-tab one. It is
  * unioned back in when it is still a real ability (present in the full, host-independent
  * registry) that was previously enabled, mirroring the orphan handling in
  * aafm_ajax_save_bridged_abilities().
@@ -423,8 +423,8 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 	// Persisted abilities OUTSIDE the posted scope are kept from the server, not the POST. Look
 	// up "is this real" and "which subject" against the FULL, host-independent registry rather
 	// than the live one: an ability whose host integration is currently inactive is host-gated
-	// out of the live registry too, so a plain live-registry check would drop it exactly like
-	// M9's Abilities-tab bug - it can never have been intentionally toggled off since its
+	// out of the live registry too, so a plain live-registry check would drop it the same way the
+	// Abilities tab's own save could - it can never have been intentionally toggled off since its
 	// checkbox never rendered, so it is always preserved rather than scope-checked.
 	//
 	// A locked ability is the same story from the other direction: a floor takes its checkbox away

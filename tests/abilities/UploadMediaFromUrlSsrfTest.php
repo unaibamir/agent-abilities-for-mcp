@@ -2,22 +2,20 @@
 /**
  * Dedicated SSRF-regression tests for aafm/upload-media-from-url, one per control decided in
  * 228-url-upload-ssrf-design.md: https-only, no bare IP literal, resolve-once-then-pin (proven
- * by a call-count assertion, not just a refusal - Codex-review amendment 20), no redirects, a
+ * by a call-count assertion, not just a refusal), no redirects, a
  * size cap enforced even against a synthetic fetch result, and the existing byte-sniff allow-list.
  *
- * Codex hunt H2 (2026-09-06): aafm_ssrf_safe_fetch_url() no longer routes through
+ * aafm_ssrf_safe_fetch_url() does not route through
  * `wp_safe_remote_get()`/`pre_http_request` at all - it calls aafm_ssrf_owned_curl_fetch()
- * directly (includes/abilities/media.php). Mocking a fetch result via `pre_http_request` would
- * therefore no longer intercept anything, so every test below that used to fake a response that
- * way now either calls aafm_ssrf_validate_fetch_target() directly (the validation half, before
+ * directly (includes/abilities/media.php). Mocking a fetch result via `pre_http_request`
+ * therefore cannot intercept anything, so every test below that needs a fake response instead
+ * calls either aafm_ssrf_validate_fetch_target() directly (the validation half, before
  * any fetch is attempted) or aafm_ssrf_process_fetch_response() directly (the response-handling
  * half, with a synthetic array in the same shape aafm_ssrf_owned_curl_fetch() returns) - both
  * split out of aafm_ssrf_safe_fetch_url() specifically so they stay unit-testable without a
- * network mock. Two tests whose entire subject was the removed `pre_http_request` short-circuit
- * itself (that it registered at PHP_INT_MAX, and that it passed an earlier filter's result
- * through untouched) are deleted outright: there is nothing left to prove once no such
- * registration happens at all. Real-bytes-over-a-real-socket coverage of
- * aafm_ssrf_owned_curl_fetch() itself lives in tests/abilities/SsrfOwnedCurlFetchTest.php.
+ * network mock. No `pre_http_request` short-circuit is registered at all, so there is nothing
+ * to prove about its registration priority or pass-through behavior. Real-bytes-over-a-real-socket
+ * coverage of aafm_ssrf_owned_curl_fetch() itself lives in tests/abilities/SsrfOwnedCurlFetchTest.php.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -63,7 +61,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex round C finding 1: without cURL, WordPress's HTTP API falls back to the Fsockopen
+	 * Without cURL, WordPress's HTTP API falls back to the Fsockopen
 	 * transport, which performs its OWN unpinned DNS resolution - CURLOPT_RESOLVE pinning inside
 	 * http_api_curl never fires for that path at all, silently reopening the TOCTOU gap this
 	 * whole design exists to close. Refusing outright when cURL is unavailable removes the
@@ -81,7 +79,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round HIGH: function_exists('curl_init') is not the test Requests itself runs
+	 * function_exists('curl_init') is not the test Requests itself runs
 	 * before selecting the Curl transport over Fsockopen for an https:// request - Requests also
 	 * requires curl_exec() to exist and the installed libcurl to have SSL support. This CI/dev
 	 * container has a real, SSL-capable cURL build, so the true default (with no filter override)
@@ -92,7 +90,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 2 HIGH: CURLOPT_RESOLVE pinning never applies once WordPress routes the
+	 * CURLOPT_RESOLVE pinning never applies once WordPress routes the
 	 * request through an outbound HTTP proxy - the proxy, not this server, resolves the hostname.
 	 * No real WP_PROXY_HOST/WP_PROXY_PORT constants are defined here (defining them would leak
 	 * into every later test in this process); the filter mirrors what WP_HTTP_Proxy would decide.
@@ -115,11 +113,11 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8 LOW: aafm_url_would_use_proxy() used to pass the full URL as a second filter
-	 * argument, so any 'all' hook observer could read a signed query string before any control had
+	 * aafm_url_would_use_proxy() must not pass the full URL as a second filter
+	 * argument, or any 'all' hook observer could read a signed query string before any control had
 	 * run. This is a plugin-defined filter (unlike the core-mirrored http_allowed_safe_ports below,
 	 * which legitimately still carries the URL), so a call-count assertion is what proves the URL
-	 * was dropped rather than merely unread by this particular observer.
+	 * is dropped rather than merely unread by this particular observer.
 	 */
 	public function test_proxy_filter_does_not_receive_the_url(): void {
 		$received_args = null;
@@ -164,14 +162,14 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 9 MEDIUM: this function used to short-circuit WP's HTTP transport via
-	 * 'pre_http_request', which ran BEFORE 'reject_unsafe_urls' was ever acted on inside
-	 * WP_Http::request() - so passing that request arg gave no actual port protection, and an
+	 * Short-circuiting WP's HTTP transport via
+	 * 'pre_http_request' would run BEFORE 'reject_unsafe_urls' is ever acted on inside
+	 * WP_Http::request() - so passing that request arg gives no actual port protection, and an
 	 * otherwise-valid public host on an arbitrary port (a probe of any open TLS service on the
-	 * public internet, not just image hosts) sailed through. Fixed by re-deriving the same
-	 * 80/443/8080 default allowlist wp_http_validate_url() itself uses, now inside
-	 * aafm_ssrf_validate_fetch_target() (Codex hunt H2 dropped the pre_http_request/
-	 * reject_unsafe_urls plumbing this check originally had to work around entirely).
+	 * public internet, not just image hosts) would sail through. aafm_ssrf_validate_fetch_target()
+	 * instead re-derives the same 80/443/8080 default allowlist wp_http_validate_url() itself
+	 * uses, checked directly during validation rather than relying on any
+	 * pre_http_request/reject_unsafe_urls plumbing.
 	 */
 	public function test_refuses_a_port_outside_the_safe_allowlist(): void {
 		$out = aafm_ssrf_safe_fetch_url( 'https://example.test:8443/pixel.png' );
@@ -183,7 +181,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	 * The 'http_allowed_safe_ports' filter is WP core's own mechanism for a site to widen that
 	 * default allowlist; a site that already uses it for its other HTTP calls should not need a
 	 * second, plugin-specific setting for this ability to respect the same policy. Asserted at
-	 * the validation step directly (Codex hunt H2) rather than through a full fetch: whether the
+	 * the validation step directly rather than through a full fetch: whether the
 	 * widened port is accepted is entirely decided there, before any network attempt.
 	 */
 	public function test_a_port_added_via_the_core_safe_ports_filter_is_allowed(): void {
@@ -201,17 +199,17 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * The call-count proof Codex-review amendment 20 requires: a resolver double that fails the
+	 * The call-count proof: a resolver double that fails the
 	 * test if invoked more than once for a single fetch. A naive re-resolution bug passes a plain
 	 * "is refused" test (the first, validated resolution is what a refusal test checks) - only a
 	 * call-count assertion catches a second, un-pinned lookup between validation and connection.
 	 *
-	 * Codex hunt H2: asserted against aafm_ssrf_validate_fetch_target() alone now, since
+	 * Asserted against aafm_ssrf_validate_fetch_target() alone, since
 	 * resolution only ever happens there - aafm_ssrf_owned_curl_fetch() takes the already-resolved
 	 * IP as a plain string argument and has no way to call the resolver again, so "never
-	 * re-resolved between validation and connection" is now a structural property of the function
-	 * signatures, not just an observed one. This also drops the prior need to mock a fetch result
-	 * just to get past validation to the point being measured.
+	 * re-resolved between validation and connection" is a structural property of the function
+	 * signatures, not just an observed one. This also means there is no need to mock a fetch
+	 * result just to get past validation to the point being measured.
 	 */
 	public function test_resolves_the_hostname_exactly_once_per_fetch(): void {
 		$calls = 0;
@@ -231,7 +229,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F12: the validation test above proves the hostname is resolved once, but
+	 * The validation test above proves the hostname is resolved once, but
 	 * nothing there shows the pin it produced is ever applied to a cURL handle. This test runs the
 	 * real owned-fetch path and uses the aafm_media_fetch_curl_options seam to capture the final
 	 * option array right before curl_setopt_array(), aborting there so no network call happens.
@@ -262,10 +260,10 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 HIGH: curl_setopt_array()'s return value was ignored, so a single option
-	 * it could not apply (CURLOPT_PROXYTYPE with an out-of-range value, verified separately to make
+	 * curl_setopt_array()'s return value must be checked: a single option
+	 * it cannot apply (CURLOPT_PROXYTYPE with an out-of-range value, verified separately to make
 	 * curl_setopt_array() return false without throwing, per the cURL manual's documented behavior)
-	 * still let curl_exec() run. This injects exactly that failure via the aafm_media_fetch_curl_options
+	 * must not let curl_exec() run anyway. This injects exactly that failure via the aafm_media_fetch_curl_options
 	 * seam and proves two things: a WP_Error comes back, and curl_exec() itself was never reached.
 	 * The second point is observed directly via the aafm_media_fetch_before_exec seam
 	 * (fires right before curl_exec(), a test-only observation point) rather than inferred from
@@ -304,9 +302,9 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * F8 (1.7.5 deferred): the missing-option guard's required list omitted CURLOPT_TIMEOUT and
-	 * CURLOPT_CONNECTTIMEOUT, so a hooked callback removing either one passed straight through and
-	 * a public HTTPS server could then stall the transfer past the intended ten-second bound. Same
+	 * The missing-option guard's required list must include CURLOPT_TIMEOUT and
+	 * CURLOPT_CONNECTTIMEOUT: a hooked callback removing either one must not pass straight through
+	 * and let a public HTTPS server stall the transfer past the intended ten-second bound. Same
 	 * shape and seam as test_a_curl_option_the_handle_cannot_apply_aborts_before_any_connection()
 	 * above, but removes a required key outright instead of setting an option the handle rejects.
 	 */
@@ -364,7 +362,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt H2: asserted against aafm_ssrf_process_fetch_response() directly with a synthetic
+	 * Asserted against aafm_ssrf_process_fetch_response() directly with a synthetic
 	 * response in the same shape aafm_ssrf_owned_curl_fetch() returns for a redirect (a 302 status,
 	 * no captured headers - that function never records a Location header, since
 	 * CURLOPT_FOLLOWLOCATION is off and nothing downstream needs one).
@@ -387,7 +385,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt H2: asserted against aafm_ssrf_process_fetch_response() directly. The mid-transfer
+	 * Asserted against aafm_ssrf_process_fetch_response() directly. The mid-transfer
 	 * abort itself (the mechanism that actually stops an oversized body being downloaded) is
 	 * proven against a real local server in SsrfOwnedCurlFetchTest.php; this is the
 	 * defense-in-depth re-check one layer up, for a body that reaches this function already over
@@ -412,7 +410,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt H2: asserted against aafm_ssrf_process_fetch_response() with a synthetic
+	 * Asserted against aafm_ssrf_process_fetch_response() with a synthetic
 	 * response, then fed through the real byte-sniff/upload path. Real bytes fetched over a real
 	 * socket are covered separately in SsrfOwnedCurlFetchTest.php; this test's job is only the
 	 * response-shape-to-upload composition, which never needed a network call to exercise.

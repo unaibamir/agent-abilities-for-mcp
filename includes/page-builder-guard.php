@@ -10,12 +10,6 @@
  * builder integration: it never edits builder-owned data, it only stops a write from landing
  * somewhere it will be silently ignored.
  *
- * OptimizePress is one of the four builders locked by the release spec, but it is a paid,
- * non-wordpress.org plugin whose post-meta ownership marker could not be verified against any
- * public source (no wordpress.org SVN checkout, no public developer docs found, no plugin copy
- * available in this repo) - see 228-plan-1-7-4-features.md Amendment 22. This is recorded as an
- * open scope gap below, not shipped as a guessed marker.
- *
  * Avada/Fusion Builder's marker WAS confirmed (2026-09-05) against a real installed copy (Avada
  * 7.16.1 theme, Fusion Builder 3.16.1 plugin): `fusion_builder_status` post meta set to 'active'
  * (inc/class-fusion-builder.php:1736, read back at :1751/:2723/:2732 to decide whether a page is
@@ -38,12 +32,11 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Whether a post's content is owned by a detected foreign page builder.
  *
- * OptimizePress is NOT included: no public source (wordpress.org SVN, developer docs, or a
- * plugin copy) was available to verify its actual ownership marker, and shipping a guessed meta
- * key would be worse than shipping nothing - a wrong key would refuse ordinary writes on
- * uninvolved posts, or (if it happens to never match) give operators false confidence the guard
- * covers a builder it does not. Filterable via aafm_page_builder_markers so the operator, or a
- * future patch once a real marker is confirmed, can add it without a code change.
+ * A builder is only listed once its ownership marker has been confirmed against real source or a
+ * real installed copy. Shipping a guessed meta key would be worse than shipping nothing: a wrong
+ * key refuses ordinary writes on uninvolved posts, or, if it never matches, gives operators false
+ * confidence that the guard covers a builder it does not. The map is filterable via
+ * aafm_page_builder_markers, so an operator can add a marker without a code change.
  *
  * @param int $post_id Post id.
  * @return string|false The detected builder's short name, or false when none is detected.
@@ -72,8 +65,7 @@ function aafm_post_has_foreign_builder_ownership( int $post_id ) {
  * ownership check pass on the very next call, writing through the guard entirely.
  * `_elementor_data`/`_fl_builder_data` were already covered by is_protected_meta()'s leading-
  * underscore rule; blocking the whole map here rather than only the two gap keys keeps this
- * automatically correct for any marker added later through the aafm_page_builder_markers filter,
- * including a future OptimizePress marker once one is confirmed.
+ * automatically correct for any marker added later through the aafm_page_builder_markers filter.
  *
  * @return array<string,string> Meta key => builder short name.
  */

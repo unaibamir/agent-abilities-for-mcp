@@ -2,10 +2,10 @@
 /**
  * Raw plain-text sanitizer scanner.
  *
- * B-18 fixed a real defect: invisible and control characters (a raw NUL, a C0 control, a bidi
- * override) reached stored text, and a NUL in post_excerpt breaks the site's whole RSS feed
- * document. The fix is the aafm_sanitize_plain_text() / aafm_sanitize_multiline_text() pair, which
- * run WordPress's own sanitizer and then strip what it leaves behind.
+ * Invisible and control characters (a raw NUL, a C0 control, a bidi override) could reach stored
+ * text, and a NUL in post_excerpt breaks the site's whole RSS feed document. The fix is the
+ * aafm_sanitize_plain_text() / aafm_sanitize_multiline_text() pair, which run WordPress's own
+ * sanitizer and then strip what it leaves behind.
  *
  * That sweep was declared complete three separate times and was wrong each time: it missed
  * update-user, then the order billing/shipping addresses, then the whole sanitize_textarea_field
@@ -37,17 +37,16 @@
  *    or a receiver chain the walk cannot follow all the way back - identified by its enclosing
  *    statement instead.
  *
- * Point 5 is what makes this list stable rather than a running tally of shapes. Five review rounds
- * each found one more receiver form, so the walk no longer tries to enumerate them: it either
- * resolves a chain completely or hands the whole statement back. A HALF-resolved chain is never
- * returned, because that is precisely how two different receivers came to share one string.
+ * Point 5 is what makes this list stable rather than a running tally of shapes. New receiver forms
+ * keep turning up, so the walk does not try to enumerate them: it either resolves a chain
+ * completely or hands the whole statement back. A HALF-resolved chain is never returned, because
+ * that is precisely how two different receivers came to share one string.
  *
  * WHAT IT CANNOT SEE AT ALL
  *
  * 6. A sanitizer reached indirectly through a variable:
  *    `$fn = 'sanitize_text_field'; $fn( $value );`. Resolving that needs variable tracking, which
- *    is a different kind of tool. Named here as a boundary rather than left for a later review
- *    round to find.
+ *    is a different kind of tool. Named here as a boundary rather than left to be found later.
  * 7. Any dynamically constructed name, `$prefix . '_text_field'`, for the same reason.
  *
  * OUT OF SCOPE BY DESIGN
@@ -150,11 +149,11 @@ final class StoredTextSanitizerScanner {
 	 * sanitizer only moves when someone renames the function or moves the code, which is exactly
 	 * when the justification deserves re-reading.
 	 *
-	 * The value is the call TEXT rather than a count, and that is the fix for a real hole Codex
-	 * found (R3-3). A bare count is transferable: convert a justified query call to the helper and
-	 * add an unsafe stored write to the same function in one edit, and the count is unchanged, so
-	 * the old reason silently covers the new call. Recording what each call actually sanitizes means
-	 * the new call does not match the justified one and the build fails.
+	 * The value is the call TEXT rather than a count, because a bare count is transferable: convert
+	 * a justified query call to the helper and add an unsafe stored write to the same function in
+	 * one edit, and the count is unchanged, so the old reason silently covers the new call.
+	 * Recording what each call actually sanitizes means the new call does not match the justified
+	 * one and the build fails.
 	 *
 	 * The cost is honest and bounded: editing a justified call - renaming its variable, changing the
 	 * input key - changes its text and forces the allowlist entry to be updated. That is a real
@@ -165,7 +164,7 @@ final class StoredTextSanitizerScanner {
 	 * A callable-string entry looks different from a direct-call one, and that is intentional: its
 	 * identity is the CONSUMING call, `array_map( 'sanitize_text_field', $req['grant_types'] )`,
 	 * rather than the bare literal. The literal alone is the same in every use, so it could not
-	 * distinguish two of them in one function (R4-3).
+	 * distinguish two of them in one function.
 	 *
 	 * @param array<int,array{file:string,function:string,sanitizer:string,line:int,form:string,call:string}> $records Scan output.
 	 * @return array<string,array{calls:array<int,string>,lines:array<int,int>}> Keyed by the stable key.
@@ -296,11 +295,10 @@ final class StoredTextSanitizerScanner {
 	 * Covers the spellings that all resolve to the same global function:
 	 *
 	 * - `sanitize_text_field(...)`            - T_STRING, the ordinary case.
-	 * - `\sanitize_text_field(...)`           - T_NAME_FULLY_QUALIFIED on PHP 8, which the old
-	 *                                           T_STRING-only match missed entirely. This is the
-	 *                                           bypass Codex found: a fully-qualified call is the
-	 *                                           natural spelling inside a namespaced file and was
-	 *                                           invisible to the scan.
+	 * - `\sanitize_text_field(...)`           - T_NAME_FULLY_QUALIFIED on PHP 8, which a
+	 *                                           T_STRING-only match would miss entirely. A
+	 *                                           fully-qualified call is the natural spelling inside
+	 *                                           a namespaced file, so it has to be matched too.
 	 * - `\sanitize_text_field(...)` on 7.4    - T_NS_SEPARATOR followed by T_STRING, which the
 	 *                                           lookbehind already tolerated, so both tokenizations
 	 *                                           are handled.
@@ -367,11 +365,10 @@ final class StoredTextSanitizerScanner {
 	 * `use function sanitize_text_field as clean;` makes every later `clean( $v )` a raw sanitizer
 	 * call under a name no grep would ever look for.
 	 *
-	 * R4-6 (1.7.5 deferred, round 4): this used to be its own hand-rolled parser - one of three
-	 * near-identical copies across the test suite, each fixed for whichever single syntax case a
-	 * reviewer happened to quote and broken for the rest (comments inside the import, case
-	 * sensitivity, aliases leaking across namespace blocks). It now shares
-	 * UseImportScanner::parse_aliases() with the other two.
+	 * This shares UseImportScanner::parse_aliases() with the other scanners in the test suite
+	 * rather than hand-rolling its own parser, so syntax cases that are easy to miss (comments
+	 * inside the import, case sensitivity, aliases leaking across namespace blocks) are handled
+	 * once, consistently, instead of drifting across near-identical copies.
 	 *
 	 * The exact-match filter below is deliberately NOT the same "any qualifier, same trailing
 	 * name" matching the other two scanners use: `use function Vendor\sanitize_text_field as
@@ -421,8 +418,8 @@ final class StoredTextSanitizerScanner {
 	 * The normalised text of the call that CONSUMES a callable string, e.g.
 	 * `array_map( 'sanitize_text_field', $req['grant_types'] )`.
 	 *
-	 * R4-3. Recording only the literal made every callable-string use in a function identical, so
-	 * the multiset could not tell two of them apart. aafm_oauth_register_client() already has two,
+	 * Recording only the literal would make every callable-string use in a function identical, so
+	 * a multiset could not tell two of them apart. aafm_oauth_register_client() already has two,
 	 * over grant_types and response_types; converting one to the helper and adding an unsafe map
 	 * over stored text left the allowlist byte-for-byte unchanged and every test green. Naming the
 	 * consuming call and its arguments is what distinguishes them.
@@ -457,8 +454,8 @@ final class StoredTextSanitizerScanner {
 		}
 
 		// The callee sits immediately before its opening parenthesis, but it may be the tail of a
-		// member-access chain rather than a bare name. Taking only the last name token made
-		// `$a->map( … )` and `$b->map( … )` identical (R5-3), so the whole chain is captured.
+		// member-access chain rather than a bare name. Taking only the last name token would make
+		// `$a->map( … )` and `$b->map( … )` identical, so the whole chain is captured.
 		$callee = null;
 		if ( null !== $open ) {
 			$last = self::prev_significant( $tokens, $open - 1 );
@@ -481,8 +478,8 @@ final class StoredTextSanitizerScanner {
 			// fine. But when the owner is anonymous - `[new A()][0]`, `alpha()[0][1]`, a
 			// parenthesized ternary - there is no name to land on and the walk stops holding only
 			// the trailing subscript, so `[new A()][0]` and `[new B()][0]` both reduce to
-			// `[0]->map( … )`. That is a HALF chain, and the same ambiguity R5-3 and R6-5 each fixed
-			// for one receiver form and left at this one. Hand back the statement instead.
+			// `[0]->map( … )`. That is a HALF chain, the same kind of ambiguity guarded against for
+			// every other receiver form. Hand back the statement instead.
 			if ( '[' === $tokens[ $callee ] ) {
 				$whole = false;
 			}
@@ -494,10 +491,10 @@ final class StoredTextSanitizerScanner {
 		}
 
 		// No named callee: a variable function, an invoked callable array, or something else this
-		// scan cannot name. The old fallback was the literal alone, which is the SAME string at
-		// every such site, so two of them silently matched - R4-3's collision through another door.
-		// The enclosing statement is imprecise but never ambiguous, and imprecision is visible to a
-		// reader where ambiguity is not.
+		// scan cannot name. The literal alone would be the SAME string at every such site, so two
+		// of them could silently match each other's justification. The enclosing statement is
+		// imprecise but never ambiguous, and imprecision is visible to a reader where ambiguity is
+		// not.
 		return "'" . $literal . "' in " . self::enclosing_statement_text( $tokens, $index );
 	}
 
@@ -569,8 +566,8 @@ final class StoredTextSanitizerScanner {
 						return $owner;
 					}
 					// Nothing owns the group, so the group itself is the chain element:
-					// `(new A())->map( … )`. Returning null here dropped the receiver entirely
-					// and let two different receivers share one fingerprint (R6-5).
+					// `(new A())->map( … )`. Returning null here would drop the receiver entirely
+					// and let two different receivers share one fingerprint.
 					return $i;
 				}
 			}
@@ -906,8 +903,8 @@ final class StoredTextSanitizerScanner {
 	 * than from a list somebody maintains by hand. That is the whole point: a hand-picked list has
 	 * its hole exactly where the next file lands, and "it has no sanitizer calls today" is the
 	 * argument that was made about update-user and about the order addresses, both of which later
-	 * needed fixing. uninstall.php was the file that proved it - it ships, it was outside the scan,
-	 * and nobody noticed until Codex read the source list (R3-3).
+	 * needed fixing. uninstall.php proved it too - it ships, and it was outside the scan until this
+	 * derivation caught it.
 	 *
 	 * Two boundaries, both deliberate and both stated so they are not mistaken for oversights:
 	 *

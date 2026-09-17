@@ -3,11 +3,11 @@
  * Append-only regression corpus for the aafm/upload-media filename and title strip (S-3).
  *
  * WHY THIS IS A CORPUS AND NOT A SINGLE TEST. The bug it pins is this project's documented
- * archetype twice over. It was found once in round 1, reached no compiler for two rounds, and
- * was then half-fixed in a discarded attempt that covered the file name and not the title. The
- * structural answer that finally closed the comparable B2-02 loop was a single corpus pinning the
- * WHOLE union of cases rather than whichever one the current round happened to name, so that a
- * later rewrite fails loudly instead of silently deleting protection with every gate green.
+ * archetype twice over: a fix that covers the file name and not the title is easy to write and
+ * easy to declare complete while it is still half-fixed. A single corpus pinning the WHOLE union
+ * of cases, rather than whichever one is top of mind at the time, is what closes that loop for
+ * good, so that a later rewrite fails loudly instead of silently deleting protection with every
+ * gate green.
  *
  * ADD ROWS, NEVER DELETE THEM. A deleted row is how coverage gets lost.
  *

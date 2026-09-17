@@ -3,41 +3,38 @@
  * Sweep: no bare $wpdb->get_var()/get_row()/get_col()/get_results() call survives anywhere under
  * includes/, with no exemption list.
  *
- * Codex round 7, R7-2 first named this defect class: WordPress's convenience readers call
- * $wpdb->query() and then read $wpdb->last_result, but on two failure paths - wpdb::ready being
- * false, and the 'query' filter returning an empty string - query() returns false WITHOUT
- * clearing last_result, so the reader hands back the PREVIOUS query's rows. Code that checks the
- * return value and then trusts the data gets a stale answer from an unrelated query. Round 7
- * judged each of 25-26 call sites on whether a plausible exploit path existed and cleared several
- * on that basis; round 8 (R8-1) then found a live defect at one of the sites round 7 explicitly
- * cleared. Judging call sites one at a time lets the next round re-discover the ones this round
- * missed - this sweep bans the shape mechanically instead: EVERY bare call under includes/ fails
- * this test, with no per-site allowlist, so a future one is caught the moment it is written
- * rather than the next time a reviewer happens to sample it.
+ * WordPress's convenience readers call $wpdb->query() and then read $wpdb->last_result, but on
+ * two failure paths - wpdb::ready being false, and the 'query' filter returning an empty string -
+ * query() returns false WITHOUT clearing last_result, so the reader hands back the PREVIOUS
+ * query's rows. Code that checks the return value and then trusts the data gets a stale answer
+ * from an unrelated query. Judging call sites one at a time on whether a plausible exploit path
+ * exists lets a bad one slip through unnoticed, so this sweep bans the shape mechanically
+ * instead: EVERY bare call under includes/ fails this test, with no per-site allowlist, so a
+ * future one is caught the moment it is written rather than the next time a reviewer happens to
+ * sample it.
  *
  * Routing a call through one of the four aafm_wpdb_*() helpers (includes/option-cache.php) is the
  * fix: they call $wpdb->query() themselves and only trust $wpdb->last_result after confirming
  * query() did not return false, giving every caller an explicit {ok, value} pair instead of a
  * single value that means three different things.
  *
- * Codex round 9, R9-5: the matcher above only recognized the literal shape
- * `$wpdb->methodName(...)`. Three PHP 7.4-compatible forms reach the identical stale-read bug
- * while emitting none of those tokens in that order: a braced method name
- * (`$wpdb->{'get_row'}(...)`), a variable method name (`$method = 'get_row';
- * $wpdb->$method(...)`), and copying the object into another variable first (`$db = $wpdb;
- * $db->get_row(...)`), which never re-mentions the literal `$wpdb` token at the call site. The
- * matcher now also bans any braced or variable method dispatch on `$wpdb` unconditionally - no
- * legitimate reader call ever needs one - and bans copying the bare `$wpdb` reference into
- * anything else (`$anything = $wpdb;`) outright, since that copy is the one step every alias hop
- * needs first; closing the copy closes every hop that could follow it.
+ * The matcher recognizes more than the literal shape `$wpdb->methodName(...)`. Three
+ * PHP 7.4-compatible forms reach the identical stale-read bug while emitting none of those tokens
+ * in that order: a braced method name (`$wpdb->{'get_row'}(...)`), a variable method name
+ * (`$method = 'get_row'; $wpdb->$method(...)`), and copying the object into another variable
+ * first (`$db = $wpdb; $db->get_row(...)`), which never re-mentions the literal `$wpdb` token at
+ * the call site. The matcher bans any braced or variable method dispatch on `$wpdb`
+ * unconditionally - no legitimate reader call ever needs one - and bans copying the bare `$wpdb`
+ * reference into anything else (`$anything = $wpdb;`) outright, since that copy is the one step
+ * every alias hop needs first; closing the copy closes every hop that could follow it.
  *
  * This still cannot be a complete defense against a dynamic language, and does not try to be. It
  * does not follow $wpdb through a function parameter (`function f( $db ) { $db->get_row(...); }`
  * called as `f( $wpdb )`), a `call_user_func( array( $wpdb, 'get_row' ) )` / `array( $wpdb,
  * 'get_row' )` callable, a variable-variable (`$$name`), or `compact()`/`extract()`. Those need
  * real data-flow analysis, not a token walk, and none of them exist under includes/ today. This
- * test is a regression gate against the concrete evasions Codex has actually demonstrated, not a
- * proof that no bare $wpdb read can ever exist.
+ * test is a regression gate against known concrete evasions of the matcher, not a proof that no
+ * bare $wpdb read can ever exist.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -120,9 +117,9 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 
 	/**
 	 * Every bare `$wpdb->get_var()/get_row()/get_col()/get_results()` call in $source, plus every
-	 * shape that reaches the identical bug while dodging that literal token pattern - see the
-	 * R9-5 paragraph in this file's own header docblock for what each variant is and why it's
-	 * banned unconditionally, and for the honest limits of a token walk. A real token walk, not a
+	 * shape that reaches the identical bug while dodging that literal token pattern - see this
+	 * file's own header docblock for what each variant is and why it's banned unconditionally,
+	 * and for the honest limits of a token walk. A real token walk, not a
 	 * regex: it tolerates a comment sitting between `$wpdb`, `->`, and the method name, and
 	 * matches the method name case-insensitively, since PHP resolves both that way. Text inside a
 	 * comment or docblock is never mistaken for a call, because token_get_all() classifies it as
@@ -222,8 +219,8 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 	}
 
 	/**
-	 * R9-5, evasion 1: a braced method name never emits the literal T_STRING token the original
-	 * matcher looked for, but reaches the identical stale-read bug and must still be flagged.
+	 * A braced method name never emits the literal T_STRING token a naive matcher would look
+	 * for, but reaches the identical stale-read bug and must still be flagged.
 	 */
 	public function test_find_bare_wpdb_reads_flags_a_braced_method_name(): void {
 		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n\t\$row = \$wpdb->{'get_row'}( 'SELECT 1' );\n}\n";
@@ -235,8 +232,8 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 	}
 
 	/**
-	 * R9-5, evasion 2: dispatching through a variable method name never emits a T_STRING method
-	 * token either, and must still be flagged.
+	 * Dispatching through a variable method name never emits a T_STRING method token either,
+	 * and must still be flagged.
 	 */
 	public function test_find_bare_wpdb_reads_flags_a_dynamic_method_dispatch(): void {
 		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n\t\$method = 'get_row';\n\t\$row = \$wpdb->\$method( 'SELECT 1' );\n}\n";
@@ -248,9 +245,9 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 	}
 
 	/**
-	 * R9-5, evasion 3: aliasing $wpdb into another variable, then calling the banned method
-	 * through the alias, never re-mentions the literal `$wpdb` token at the call site - so the
-	 * matcher instead has to catch the alias being created, on the line it's created.
+	 * Aliasing $wpdb into another variable, then calling the banned method through the alias,
+	 * never re-mentions the literal `$wpdb` token at the call site - so the matcher instead has
+	 * to catch the alias being created, on the line it's created.
 	 */
 	public function test_find_bare_wpdb_reads_flags_an_alias_assignment(): void {
 		$source = "<?php\nfunction f() {\n\tglobal \$wpdb;\n\t\$db = \$wpdb;\n\t\$row = \$db->get_row( 'SELECT 1' );\n}\n";
@@ -332,8 +329,7 @@ final class StaleWpdbReaderSweepTest extends TestCase {
 	 * mechanical approach: reading source text rather than running it catches a future call the
 	 * moment it is written, wherever in includes/ it lands. No exemption list - a site that
 	 * genuinely cannot be converted must be fixed or reported, never allowlisted, per the whole
-	 * point of banning the shape mechanically instead of re-judging call sites one round at a
-	 * time.
+	 * point of banning the shape mechanically instead of re-judging call sites one at a time.
 	 */
 	public function test_no_bare_wpdb_reader_call_survives_under_includes(): void {
 		$includes_dir = AAFM_PLUGIN_DIR . 'includes';

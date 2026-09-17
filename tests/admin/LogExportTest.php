@@ -38,9 +38,9 @@ final class LogExportTest extends TestCase {
 	}
 
 	/**
-	 * R9-3: a failed page read used to be indistinguishable from "reached the end of the
-	 * table" - both came back as an empty/short page, so the export loop stopped and the
-	 * download completed looking whole while everything after the failure was silently
+	 * A failed page read must not be indistinguishable from "reached the end of the table":
+	 * both would otherwise come back as an empty/short page, letting the export loop stop and
+	 * the download complete looking whole while everything after the failure is silently
 	 * missing. Fails the SECOND page's read (of a 205-row export, so a genuine third page
 	 * would otherwise follow) and proves the export ends with an unmistakable failure marker
 	 * instead of quietly closing the file after only the first 200 rows.
@@ -70,10 +70,10 @@ final class LogExportTest extends TestCase {
 	}
 
 	/**
-	 * R9-3, the sibling failure: the export's pagination snapshot (aafm_activity_max_id_result())
-	 * used to collapse a failed read to 0, the same value an empty table produces, so every page's
-	 * `id <= 0` filter came back empty and the export finished looking like a genuinely empty log
-	 * instead of a failed one.
+	 * The sibling failure: the export's pagination snapshot (aafm_activity_max_id_result()) must
+	 * not collapse a failed read to 0, the same value an empty table produces, or every page's
+	 * `id <= 0` filter would come back empty and the export would finish looking like a genuinely
+	 * empty log instead of a failed one.
 	 */
 	public function test_a_failed_max_id_snapshot_marks_the_export_incomplete_instead_of_looking_empty(): void {
 		aafm_log_activity(

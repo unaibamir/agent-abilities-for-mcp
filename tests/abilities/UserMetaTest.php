@@ -283,10 +283,10 @@ final class UserMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
-	 * update_user_meta(...)`, so a metadata filter that short-circuits update_user_metadata to a
-	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
-	 * success and returned the old stored value.
+	 * The write-confirmation guard must not check only `false === update_user_meta(...)`, or a
+	 * metadata filter that short-circuits update_user_metadata to a truthy value would bypass the
+	 * write entirely while the guard never noticed - reporting success and returning the old
+	 * stored value.
 	 */
 	public function test_update_user_meta_returns_an_error_when_the_write_is_vetoed(): void {
 		add_filter( 'aafm_allowed_user_meta_keys', static fn() => array( 'twitter' ) );
@@ -314,8 +314,8 @@ final class UserMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7 R7-3: the confirmation guard used to omit the object subtype (defaulting to
-	 * ''), but core's own get_object_subtype( 'user', $id ) (wp-includes/meta.php) resolves to
+	 * The confirmation guard must not omit the object subtype (defaulting to ''): core's own
+	 * get_object_subtype( 'user', $id ) (wp-includes/meta.php) resolves to
 	 * the literal string 'user' for any user that exists - the exact subtype update_metadata()
 	 * itself passes to sanitize_meta() at write time. A sanitizer registered on the
 	 * subtype-specific hook (register_meta()'s object_subtype => 'user', not the generic one)

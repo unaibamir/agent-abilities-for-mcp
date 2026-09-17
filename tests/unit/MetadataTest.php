@@ -71,7 +71,7 @@ final class MetadataTest extends TestCase {
 	}
 
 	/**
-	 * B6: the blanket "argument values are never stored" claim is false and has been since
+	 * The blanket "argument values are never stored" claim is false and has been since
 	 * activity-log v5 (1.5.0): aafm_activity_detail_field() stores ids, meta key names, slugs,
 	 * and enum members in the detail column by design, and several of those arrive as argument
 	 * values. The honest claim is that free-text argument content (bodies, emails, anything

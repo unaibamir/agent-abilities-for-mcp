@@ -1101,7 +1101,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * B4 regression: a repeater write that ACF stores by sub-field KEY must report SUCCESS.
+	 * A repeater write that ACF stores by sub-field KEY must report SUCCESS.
 	 *
 	 * The caller writes repeater rows keyed by sub-field NAME (the documented shape). Real ACF Pro
 	 * reads the raw value back keyed by sub-field KEY, so the write-verify's byte comparison of the
@@ -1188,7 +1188,7 @@ final class AcfTest extends TestCase {
 	/**
 	 * Register a flexible-content field whose 'hero' layout carries a url + a wysiwyg sub-field.
 	 * Flex defs nest sub_fields per layout (layouts[*]['sub_fields']), never at the top level -
-	 * exactly the shape the B26 resolver must descend into.
+	 * exactly the shape the layout-aware resolver must descend into.
 	 */
 	private function stub_acf_flex_field(): void {
 		$this->reset_integration_stubs();
@@ -1234,7 +1234,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * B26: leaves inside a flexible-content layout must be sanitized by their OWN sub-field type.
+	 * Leaves inside a flexible-content layout must be sanitized by their OWN sub-field type.
 	 *
 	 * Flex sub-fields live under layouts[*]['sub_fields'] keyed by the row's acf_fc_layout; the old
 	 * resolver read only the top-level sub_fields (absent on a flex def), so every flex leaf fell
@@ -1281,7 +1281,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * B26 (clone): a clone field is a container too - acf_get_field() populates its sub_fields from
+	 * A clone field is a container too - acf_get_field() populates its sub_fields from
 	 * the cloned fields and its value is a flat sub-field map like a group's. The old container list
 	 * omitted clone, so a url leaf inside one was sanitized as plain text and kept a javascript:
 	 * scheme, and a wysiwyg leaf was flattened.
@@ -1335,11 +1335,11 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * B4 residual: a container nested INSIDE a flexible-content layout must verify as the success
-	 * it is. The pass-1 re-keying fix resolved child defs only from top-level sub_fields, so a
-	 * repeater in a flex layout stayed keyed by sub-field KEY after the re-key, the verify's
-	 * comparison against the name-keyed sent value mismatched, and a write that was live on the
-	 * post reported a generic error. The stub models real ACF's re-keying at every depth here.
+	 * A container nested INSIDE a flexible-content layout must verify as the success it is. If the
+	 * re-keying resolves child defs only from top-level sub_fields, a repeater in a flex layout
+	 * stays keyed by sub-field KEY after the re-key, the verify's comparison against the
+	 * name-keyed sent value mismatches, and a write that was live on the post reports a generic
+	 * error instead. The stub models real ACF's re-keying at every depth here.
 	 */
 	public function test_update_post_fields_repeater_inside_flex_persist_is_reported_as_success(): void {
 		$this->reset_integration_stubs();
@@ -1432,7 +1432,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * B4 sweep: the flat-container sibling of the repeater-inside-flex case. A GROUP nested inside
+	 * The flat-container sibling of the repeater-inside-flex case. A GROUP nested inside
 	 * a flexible-content layout stores the flex row AND the nested group map by sub-field KEY, so
 	 * the verify must re-key both depths back to names - including resolving the group's own def
 	 * through layouts[*]['sub_fields'] - before comparing against the name-keyed sent value.
@@ -1576,7 +1576,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * B26 sweep: all three update abilities share aafm_acf_write_fields/aafm_acf_sanitize_value, so
+	 * All three update abilities share aafm_acf_write_fields/aafm_acf_sanitize_value, so
 	 * the layout-aware resolver must hold on the term and user paths too - a javascript: URL inside
 	 * a flex layout is stripped before it reaches either selector's storage.
 	 */
@@ -1616,7 +1616,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * B60: the three acf-get-* descriptions must say what the code does. get_fields() returns the
+	 * The three acf-get-* descriptions must say what the code does. get_fields() returns the
 	 * value map keyed by field NAME (ACF api-template.php get_field_objects: "Associative array
 	 * where field name => field"), so a description claiming the map is hydrated "by field key"
 	 * misleads the agent reading the tool listing.
@@ -1639,7 +1639,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * B41: update_field() persists through update_metadata(), which wp_unslash()es the value, so a
+	 * update_field() persists through update_metadata(), which wp_unslash()es the value, so a
 	 * backslash written unslashed loses one level on store. The write path must wp_slash() before
 	 * update_field() (matching the meta.php/terms.php/user-meta.php writers) - without it a value
 	 * like C:\Users corrupts in storage AND the read-back verify reports the mangled persist as a
@@ -1830,7 +1830,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * R6-1: the address floor's predicate, pinned directly.
+	 * The address floor's predicate, pinned directly.
 	 *
 	 * The OUTCOME of this floor cannot be reached from the unit suite, and that is deliberate rather
 	 * than an omission. The stub resolves a definition by exact array key (AcfStubStore::field_def),

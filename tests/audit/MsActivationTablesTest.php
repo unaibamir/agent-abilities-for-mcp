@@ -1,6 +1,6 @@
 <?php
 /**
- * Network activation must install the plugin tables on every site (finding B36).
+ * Network activation must install the plugin tables on every site.
  *
  * Activation hooks run once, on the main site, and register_activation_hook passes the
  * $network_wide flag for exactly this reason: without honoring it, only the main site
@@ -55,8 +55,8 @@ final class MsActivationTablesTest extends TestCase {
 	}
 
 	/**
-	 * B36 part one: network-wide activation loops every site and installs both schemas
-	 * per site, matching the get_sites() loop uninstall.php already runs.
+	 * Network-wide activation loops every site and installs both schemas per site, matching the
+	 * get_sites() loop uninstall.php already runs.
 	 */
 	public function test_network_activation_installs_tables_on_every_site(): void {
 		$blog_id = (int) self::factory()->blog->create();
@@ -100,8 +100,8 @@ final class MsActivationTablesTest extends TestCase {
 	}
 
 	/**
-	 * B36 part two: a site created AFTER network activation gets its tables from the
-	 * wp_initialize_site hook, gated on the plugin being network-active.
+	 * A site created AFTER network activation gets its tables from the wp_initialize_site hook,
+	 * gated on the plugin being network-active.
 	 */
 	public function test_new_site_gets_tables_when_plugin_is_network_active(): void {
 		update_site_option( 'active_sitewide_plugins', array( AAFM_PLUGIN_BASENAME => time() ) );

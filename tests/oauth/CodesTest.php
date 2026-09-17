@@ -209,8 +209,8 @@ class CodesTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 5): the consuming UPDATE's own query result used to be discarded,
-	 * so a genuine query failure and a code that is simply invalid/expired/used both fell through
+	 * The consuming UPDATE's own query result must not be discarded, or a genuine query failure
+	 * and a code that is simply invalid/expired/used would both fall through
 	 * $wpdb->rows_affected to the same invalid_grant answer. Only the latter is a real
 	 * grant-validity finding.
 	 */
@@ -243,9 +243,9 @@ class CodesTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-2 (site 6): the consuming UPDATE just stamped exactly one row by this
-	 * exact hash, so a failed readback immediately after can never be a genuine grant-validity
-	 * finding - it used to report invalid_grant anyway.
+	 * The consuming UPDATE just stamped exactly one row by this exact hash, so a failed readback
+	 * immediately after can never be a genuine grant-validity finding, and must not be reported
+	 * as invalid_grant.
 	 */
 	public function test_redeem_reports_server_error_when_the_readback_fails(): void {
 		aafm_install_oauth_tables();

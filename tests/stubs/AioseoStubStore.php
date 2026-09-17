@@ -49,9 +49,8 @@ class AioseoStubStore {
 
 	/**
 	 * Every call made to the stub Post::savePost($postId, $data), in order: array{post_id:int,
-	 * data:array<string,mixed>}. Fix round 1, delegation audit sweep - lets a test assert the
-	 * vendor's own savePost() path was actually taken, and with which patch-data keys, rather than
-	 * a bare property-set-then-save().
+	 * data:array<string,mixed>}. Lets a test assert the vendor's own savePost() path was actually
+	 * taken, and with which patch-data keys, rather than a bare property-set-then-save().
 	 *
 	 * @var array<int,array{post_id:int,data:array<string,mixed>}>
 	 */

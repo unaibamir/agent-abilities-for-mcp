@@ -86,7 +86,7 @@ trait IntegrationStubs {
 	 * string. The rank_math_* post meta (incl. the serialized robots array and the dynamic schema
 	 * keys) is read/written with core get_post_meta/update_post_meta, so no extra store is needed.
 	 *
-	 * Also defines a stub \RankMath\Sitemap\Cache_Watcher (fix round 1, delegation audit sweep):
+	 * Also defines a stub \RankMath\Sitemap\Cache_Watcher:
 	 * the real class's invalidate_post() is a public static that records nothing, so a stub that
 	 * only records its calls is enough to prove which write paths call it and which do not, without
 	 * modelling the real sitemap cache itself.
@@ -132,11 +132,11 @@ trait IntegrationStubs {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 			eval( $this->aafm_aioseo_post_model_source() );
 		}
-		// Fix round 2 (assertion-count reconciliation): the stubbed AIOSEO must look like a
+		// The stubbed AIOSEO must look like a
 		// SUPPORTED one, since that is what it is standing in for. aafm_aioseo_version() has no
 		// real AIOSEO_VERSION constant to read in this environment (only the marker function
-		// above is defined), so without this the version floor added in fix round 2 fails closed
-		// for every test that relies on real (unforced) detection rather than the outer
+		// above is defined), so without a real, defined constant here the version floor fails
+		// closed for every test that relies on real (unforced) detection rather than the outer
 		// aafm_integration_active_aioseo filter.
 		//
 		// A real, defined constant here, NOT a filter - measured, not assumed. A filter added
@@ -208,7 +208,7 @@ class Post {
 		return $model;
 	}
 	public static function savePost( $postId, $data ) {
-		// Fix round 1, delegation audit sweep: mirrors the SHAPE of the real AIOSEO
+		// Mirrors the SHAPE of the real AIOSEO
 		// Post::savePost($postId, $data) - a patch-keyed $data array applied onto the CURRENT
 		// model, then saved - without replicating the real vendor's own internal filters/hooks/
 		// default-format-tracking, which are the real vendor's job, not this plugin's. What this
@@ -357,7 +357,7 @@ PHP;
 	protected function stub_wc_order_statuses(): void {
 		if ( ! function_exists( 'wc_get_order_statuses' ) ) {
 			// Serves WcOrderStubStore::$order_statuses (the default seven; a test can add custom
-			// statuses the way real WC's wc_order_statuses filter lets plugins do - B52).
+			// statuses the way real WC's wc_order_statuses filter lets plugins do).
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_order_statuses() { return \AAFM\Tests\WcOrderStubStore::$order_statuses; }' );
 		}
@@ -707,7 +707,7 @@ class WC_Order {
 		$stored = \AAFM\Tests\WcOrderStubStore::get( $id );
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
 	}
-	// Doc 214, finding 6. get_order_number() mirrors real WC_Order::get_order_number()
+	// get_order_number() mirrors real WC_Order::get_order_number()
 	// (class-wc-order.php), which applies the literal 'woocommerce_order_number' filter - NOT the
 	// get_prop() 'woocommerce_order_get_*' pattern every other simple prop below uses (object_type
 	// = 'order'). get_items() mirrors WC_Abstract_Order::get_items(), filtered
@@ -1048,7 +1048,7 @@ class WC_Order_Refund {
 		$stored = \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id );
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0, 'amount' => '0.00', 'reason' => '', 'date_created' => '' );
 	}
-	// Doc 214, finding 6: mirrors real WC_Order_Refund (class-wc-order-refund.php, object_type =
+	// Mirrors real WC_Order_Refund (class-wc-order-refund.php, object_type =
 	// 'order_refund'), whose get_prop()-backed getters filter 'woocommerce_order_refund_get_{prop}'.
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
 	public function get_amount() { return (string) apply_filters( 'woocommerce_order_refund_get_amount', $this->data['amount'] ?? '0.00', $this ); }
@@ -1187,7 +1187,7 @@ class WC_Customer {
 			$this->data = array( 'id' => 0 );
 		}
 	}
-	// Doc 214, finding 6. get_email/get_first_name/get_last_name/get_username/get_date_created
+	// get_email/get_first_name/get_last_name/get_username/get_date_created
 	// mirror real WC_Customer's plain WC_Data props, filtered 'woocommerce_customer_get_{prop}'
 	// via get_prop() (class-wc-customer.php, object_type = 'customer'). get_order_count and
 	// get_total_spent are NOT WC_Data props in real WC - they read a cached user-meta value
@@ -1382,7 +1382,7 @@ class WC_Coupon {
 	}
 	// Every getter below mirrors real WC_Coupon: each is a WC_Data prop read through get_prop(),
 	// which applies a 'woocommerce_coupon_get_{prop}' filter in view context
-	// (class-wc-coupon.php, get_hook_prefix() = 'woocommerce_coupon_get_'). Doc 214, finding 6.
+	// (class-wc-coupon.php, get_hook_prefix() = 'woocommerce_coupon_get_').
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
 	public function get_code() { return (string) apply_filters( 'woocommerce_coupon_get_code', $this->data['code'] ?? '', $this ); }
 	public function get_amount() { return (string) apply_filters( 'woocommerce_coupon_get_amount', $this->data['amount'] ?? '0.00', $this ); }
@@ -1560,7 +1560,7 @@ class WC_Shipping_Zone {
 		// missing non-zero id, inside the constructor (class-wc-shipping-zone-data-store.php:96),
 		// while zone 0 (Rest of World) always exists. The earlier stub fabricated a phantom zone
 		// carrying the requested id, which is exactly what hid the dead null branch in
-		// aafm_wc_get_shipping_zone_object() (B33).
+		// aafm_wc_get_shipping_zone_object().
 		if ( ! is_array( $stored ) && $zone_id > 0 ) {
 			throw new \Exception( 'Invalid data store.' );
 		}
@@ -1978,7 +1978,7 @@ class WC_Tax {
 	 * Mirror WC_Tax::format_tax_rate_class() (class-wc-tax.php:1059-1066), which both real write
 	 * paths run: an unknown class slug is refiled to '' (Standard), and 'standard' maps to ''.
 	 * Without this the stub stored unknown slugs verbatim and could never exercise the
-	 * silently-refiled-into-Standard defect (B30).
+	 * silently-refiled-into-Standard defect.
 	 *
 	 * @param array<string,mixed> $tax_rate Tax rate row fields.
 	 * @return array<string,mixed>

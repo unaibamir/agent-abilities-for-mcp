@@ -2,10 +2,10 @@
 /**
  * Shared `use`-import parser for the plugin's source-scanning tests.
  *
- * 1.7.5 deferred, test-infrastructure closure round: three tests each grew their own copy of this
+ * Three tests each grew their own copy of this
  * parser (SecurityRegressionTest, SecurityOptionWritesSweepTest, StoredTextSanitizerScanner), and
- * each copy was "fixed" for the one syntax case a reviewer happened to quote, then reopened when
- * the next round tried a different one - group prefixes, then whitespace, then comments, three
+ * each copy was "fixed" for the one syntax case someone happened to quote, then reopened when
+ * a different one turned up - group prefixes, then whitespace, then comments, three
  * times over. All three actually need the same thing: given a token stream, tell them which
  * imported alias resolves to which real class/function/const name.
  *
@@ -165,7 +165,7 @@ final class UseImportScanner {
 	}
 
 	/**
-	 * Codex round 7, R7-6: on PHP 8, `\wp_safe_remote_get` tokenizes as ONE T_NAME_FULLY_QUALIFIED
+	 * On PHP 8, `\wp_safe_remote_get` tokenizes as ONE T_NAME_FULLY_QUALIFIED
 	 * token (never a bare T_STRING), and `Foo\Bar` as ONE T_NAME_QUALIFIED token; on PHP 7.4 the
 	 * same source is a T_NS_SEPARATOR/T_STRING run instead. Collapse every such run - on either PHP
 	 * version - into a single T_STRING-shaped token carrying the full qualified text (leading `\`
@@ -269,7 +269,7 @@ final class UseImportScanner {
 	 * @param int                                                                                        $pos Index of the opening `{`.
 	 * @param int                                                                                        $total Token count.
 	 * @param string                                                                                     $kind Statement-level import kind, the default for a member with no override.
-	 * @param string                                                                                     $prefix The qualified name preceding the group - B6 (1.7.5 deferred round 1): every
+	 * @param string                                                                                     $prefix The qualified name preceding the group - every
 	 *                                                                                                            member, not only the first, is resolved against this same prefix.
 	 * @param array{class:array<string,string>,function:array<string,string>,const:array<string,string>} $aliases Mutated in place.
 	 * @return int Index just past the closing `}`.
@@ -337,7 +337,7 @@ final class UseImportScanner {
 	 * Record one parsed import. The local name is the explicit alias when there is one, otherwise
 	 * the imported name's own trailing segment - `use Foo\Bar;` makes `Bar` usable unqualified.
 	 *
-	 * Codex round 8, R8-5: keyed lower-case, since PHP resolves class/function/const names and
+	 * Keyed lower-case, since PHP resolves class/function/const names and
 	 * `use` aliases case-insensitively (class constants and property/method names are the only
 	 * case-sensitive part of a call).
 	 *

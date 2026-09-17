@@ -33,9 +33,9 @@ final class SectionToggleTest extends TestCase {
 	}
 
 	/**
-	 * Codex admin-ui-r1 M3: the Abilities search field's only text was placeholder + status live
-	 * region text, neither of which is a persistent accessible name for a screen reader or voice
-	 * control user. A visually-hidden <label for> pointing at the field is the fix.
+	 * The Abilities search field needs more than placeholder + status live region text for its
+	 * accessible name, since neither is a persistent accessible name for a screen reader or voice
+	 * control user. A visually-hidden <label for> pointing at the field provides one.
 	 */
 	public function test_the_abilities_search_field_has_a_persistent_label(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -50,10 +50,10 @@ final class SectionToggleTest extends TestCase {
 	}
 
 	/**
-	 * Codex admin-ui-r1 L3: a client-side "Add scope" row built its "Role:"/"Connection:" label
-	 * from a hardcoded English template literal in admin.js instead of a localized string, so it
-	 * showed English on a localized site until reload. This pins the two i18n keys admin.js now
-	 * localizes through - it does not exercise the JS itself (see AllowlistAdminTest for the
+	 * A client-side "Add scope" row must not build its "Role:"/"Connection:" label
+	 * from a hardcoded English template literal in admin.js: doing so would show English on a
+	 * localized site until reload. This pins the two i18n keys admin.js localizes through - it
+	 * does not exercise the JS itself (see AllowlistAdminTest for the
 	 * server-rendered side of the same row shape).
 	 */
 	public function test_the_allowlist_scope_row_labels_are_localized(): void {

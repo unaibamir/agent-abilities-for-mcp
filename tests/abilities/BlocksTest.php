@@ -103,14 +103,14 @@ final class BlocksTest extends TestCase {
 		$ids = wp_list_pluck( $res['blocks'], 'id' );
 		$this->assertContains( $mine, $ids, 'the contributor must see a block they own and can edit.' );
 		$this->assertNotContains( $theirs, $ids, "the contributor must NOT enumerate another author's draft block they cannot edit." );
-		// B34 contract change: total is the query-wide count (found_posts), so here it counts
+		// total is the query-wide count (found_posts), so here it counts
 		// both drafts even though only one row is visible to the contributor. The row filter
 		// still hides the other author's block; only the count is query-wide.
 		$this->assertSame( 2, $res['total'], 'total must be the query-wide count, not the visible-row count.' );
 	}
 
 	/**
-	 * B34: `total` must be the query-wide count of matching blocks (what the description
+	 * `total` must be the query-wide count of matching blocks (what the description
 	 * promises), not the size of the current page slice. With the slice count, total is never
 	 * greater than per_page, so an agent paginating by ceil(total/per_page) never fetches
 	 * page 2 and silently misses blocks.
@@ -128,7 +128,7 @@ final class BlocksTest extends TestCase {
 	}
 
 	/**
-	 * B7: the force-draft setting promises to cover "everything an agent creates", but
+	 * The force-draft setting promises to cover "everything an agent creates", but
 	 * create-block hardcoded post_status=publish. With the setting on, a new block must be
 	 * saved as a draft for a human to publish.
 	 */

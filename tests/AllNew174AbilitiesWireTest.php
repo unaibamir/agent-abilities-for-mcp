@@ -1,8 +1,8 @@
 <?php
 /**
- * Consolidated wire-coverage sweep for every one of the 26 canonical abilities plan 228
- * registers (224-1-7-4-release-spec.md's canonical table), named individually - Codex-review
- * amendment 17. Each task's own wire test proves its own narrow round trip; this file's job is
+ * Consolidated wire-coverage sweep for every one of the 26 canonical abilities this plugin
+ * registers (224-1-7-4-release-spec.md's canonical table), named individually. Each task's own
+ * wire test proves its own narrow round trip; this file's job is
  * the sweep-completeness proof that NONE of the 26 is missing a real tools/call exercise, the
  * same way PageBuilderGuardSweepTest.php proves the guard is wired everywhere rather than
  * trusting a per-call-site claim.
@@ -375,7 +375,7 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 		remove_all_filters( 'aafm_media_fetch_pre_fetch_result' );
 		remove_all_filters( 'aafm_resolve_hostname_to_ip' );
 
-		// Codex round C finding 6: every fixture in this sweep is deliberately success-shaped
+		// Every fixture in this sweep is deliberately success-shaped
 		// (a valid role, valid input, a real target object) - accepting ANY non-(-32601) error as
 		// "a legitimate domain refusal" let a genuinely broken ability (an internal error, a bad
 		// permission bypass symptom, an unexpected validation failure) pass silently, since
@@ -479,7 +479,7 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 				$this->assertStringContainsString( 'sweep replaced', (string) get_post_field( 'post_content', $this->ordinary_post_id, 'raw' ) );
 				break;
 			case 'upload-media-from-url':
-				// Codex round C finding 6: this case had no real persistence check at all - the
+				// This case has no real persistence check at all above - the
 				// fetch/upload MECHANICS have their own dedicated coverage elsewhere
 				// (tests/abilities/UploadMediaFromUrlTest.php, the SSRF test file), but THIS
 				// sweep's own job is proving the wire call actually created a real attachment.

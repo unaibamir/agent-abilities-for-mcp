@@ -128,11 +128,11 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * B25: an unparseable date must return an error, not a confidently wrong money figure.
+	 * An unparseable date must return an error, not a confidently wrong money figure.
 	 *
-	 * The strtotime('garbage') call returns false, which cast to 0 silently widened the window to all-time on a bad
-	 * start date and emptied it on a bad end date, returning success either way. The report now
-	 * refuses an unparseable date.
+	 * The strtotime('garbage') call returns false, which cast to 0 would silently widen the window
+	 * to all-time on a bad start date and empty it on a bad end date, returning success either
+	 * way. The report must refuse an unparseable date instead.
 	 */
 	public function test_get_sales_report_rejects_an_unparseable_date(): void {
 		$this->acting_as( 'administrator' );
@@ -517,9 +517,10 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * B52: `total` used to be a hardcoded seven-status sum, so orders in a custom status (which
-	 * plugins register through the wc_order_statuses filter) were silently excluded while the
-	 * shape claimed a complete total. The total now derives from wc_get_order_statuses().
+	 * `total` must not be a hardcoded seven-status sum: orders in a custom status (which
+	 * plugins register through the wc_order_statuses filter) would otherwise be silently excluded
+	 * while the shape claims a complete total. The total derives from wc_get_order_statuses()
+	 * instead.
 	 */
 	public function test_count_orders_total_includes_custom_statuses(): void {
 		$this->acting_as( 'administrator' );
@@ -1150,10 +1151,10 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * B32: with the old sequence, a mid-batch persistence failure returned a bare generic error
-	 * after earlier fields had already landed - "error" with changed state. The executor now
-	 * verifies the whole batch at the end and, when anything failed, names exactly which fields
-	 * persisted and which did not, in both the message and the error data.
+	 * A mid-batch persistence failure must not return a bare generic error
+	 * after earlier fields have already landed - "error" with changed state helps nobody. The
+	 * executor verifies the whole batch at the end and, when anything failed, names exactly which
+	 * fields persisted and which did not, in both the message and the error data.
 	 */
 	public function test_update_payment_gateway_partial_persist_failure_names_what_landed(): void {
 		$this->acting_as( 'administrator' );
@@ -1237,12 +1238,11 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * FIX-3 item 3 (sweep finding, A2 batch): the per-status order count now delegates to
+	 * The per-status order count delegates to
 	 * wc_orders_count(), WooCommerce's own public, HPOS/legacy-abstracted, cache-backed count
 	 * helper, instead of a hand-rolled wc_get_orders() pagination probe. Both mechanisms read the
 	 * same underlying count, so there is no behavioural difference to drive a test red - this pins
-	 * the source-level fact instead, as the finding predicted, and states plainly it could not go
-	 * red any other way.
+	 * the source-level fact instead, and states plainly it could not go red any other way.
 	 */
 	public function test_count_orders_by_status_delegates_to_wc_orders_count(): void {
 		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/reports.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
@@ -1254,13 +1254,12 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * FIX-3 item 4 (sweep finding, B4 batch): the only live gap in this dispatch.
 	 * WC_Settings_API::process_admin_options() - the real admin-form gateway save path - fires
 	 * woocommerce_update_option with array('id' => $option_key) before its own update_option()
-	 * call. This ability never fired it, so WooCommerce's own opt-in usage-tracking snapshot
-	 * (WC_Settings_Tracking::add_option_to_list(), wired to this exact hook) never saw a gateway
-	 * change made through this ability. Asserts the real hook fires with the exact vendor payload
-	 * shape, not an invented one.
+	 * call. This ability must fire it too, or WooCommerce's own opt-in usage-tracking snapshot
+	 * (WC_Settings_Tracking::add_option_to_list(), wired to this exact hook) would never see a
+	 * gateway change made through this ability. Asserts the real hook fires with the exact vendor
+	 * payload shape, not an invented one.
 	 */
 	public function test_update_payment_gateway_fires_the_vendor_update_option_hook(): void {
 		$this->acting_as( 'administrator' );

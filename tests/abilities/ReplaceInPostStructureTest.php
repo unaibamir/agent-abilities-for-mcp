@@ -1,14 +1,15 @@
 <?php
 /**
- * The B2-02 regression corpus: every case the replace-in-post structure guard has ever protected.
+ * The regression corpus: every case the replace-in-post structure guard has ever protected.
  *
  * ROWS IN THIS FILE ARE APPEND-ONLY. NEVER DELETE ONE.
  *
  * Read that literally, and here is why it is worth the inconvenience. This guard has now been
- * written three times. Each rewrite fixed the case the current review round had found and silently
+ * written three times. Each rewrite fixed the case that prompted it and silently
  * dropped a case an earlier version was already protecting, because the suite only ever pinned the
- * most recent round's findings. The second attempt deleted the first attempt's raw-text body
- * protection with all four gates green, and the next round rediscovered it as a fresh HIGH.
+ * most recent findings. The second attempt deleted the first attempt's raw-text body
+ * protection with all four gates green, and it was later rediscovered as a fresh HIGH-severity
+ * regression.
  *
  * So this file is not a list of tests. It is the union of every case any version of this guard has
  * protected or got wrong, each labelled with where it came from, pinned simultaneously, so that a
@@ -23,8 +24,8 @@
  *
  * The GUARD rows call aafm_replacement_preserves_structure() with the document pair directly. They
  * exist because wp_kses_post() runs before the guard does, and it neutralises some payloads on the
- * way in - the round-7 SVG CDATA payload arrives as escaped text, for instance. Pinning those only
- * end-to-end would quietly turn them into assertions about kses instead of about the guard, which
+ * way in - the SVG CDATA payload in the cases below arrives as escaped text, for instance. Pinning
+ * those only end-to-end would quietly turn them into assertions about kses instead of about the guard, which
  * is the vacuous-coverage trap this whole file exists to prevent. The guard has its own contract
  * and these rows hold it to it, whatever happens to sit in front of it later.
  *
@@ -50,22 +51,22 @@ final class ReplaceInPostStructureTest extends TestCase {
 	 */
 	public function provide_guard_cases(): array {
 		return array(
-			// R6-2: the tag does not end at the first `>` when that `>` is inside a quoted value.
-			'R6-2 quoted attribute contains a bracket' => array(
+			// The tag does not end at the first `>` when that `>` is inside a quoted value.
+			'quoted attribute contains a bracket'      => array(
 				'<p>hi</p><a title="a > b" href="MARK">x</a>',
 				'MARK',
 				'x" onmouseover="alert(1)" data-z="',
 				false,
 			),
-			// R6-4: a literal `<` in prose is not a tag opener, and must not cost a caller their edit.
-			'R6-4 literal bracket in prose'            => array(
+			// A literal `<` in prose is not a tag opener, and must not cost a caller their edit.
+			'literal bracket in prose'                 => array(
 				'<p>if x < y then MARK holds</p>',
 				'MARK',
 				'the bound',
 				true,
 			),
-			// Round 6: every original token survives, yet the rest of the comment became live markup.
-			'round6 comment ended early'               => array(
+			// Every original token survives, yet the rest of the comment became live markup.
+			'comment ended early'                      => array(
 				'<p>a</p><!-- note MARK end --><p>b</p>',
 				'MARK',
 				'--><img src=x onerror=alert(1)><!--',
@@ -123,20 +124,20 @@ final class ReplaceInPostStructureTest extends TestCase {
 			),
 
 			/*
-			 * Round 7, and never protected by either previous attempt. What actually let these
+			 * Never protected by either previous attempt. What actually let these
 			 * through was not the missing namespace but the old count-and-subsequence arithmetic:
 			 * a break-out that re-opens the subtree leaves every original token present and in
 			 * order, and the totals balance. Demanding exact equality is what closes them, and
 			 * removing the tree signature entirely still leaves both refused. Worth knowing before
 			 * anybody trims the guard on the theory that the tree half is carrying these.
 			 */
-			'round7 svg cdata splice'                  => array(
+			'svg cdata splice'                         => array(
 				'<p>hi</p><svg><desc>MARK</desc></svg>',
 				'MARK',
 				'<![CDATA[</desc><script>alert(1)</script>]]>',
 				false,
 			),
-			'round7 foreign self-closing state'        => array(
+			'foreign self-closing state'               => array(
 				'<p>hi</p><svg><circle r="1"/>MARK</svg>',
 				'MARK',
 				'</svg><p>injected</p><svg>',
@@ -243,7 +244,7 @@ final class ReplaceInPostStructureTest extends TestCase {
 				'<strong>brown</strong>',
 				false,
 			),
-			// The R6-4 family again: a bracket that cannot open a tag must stay affordable.
+			// Same family as the literal-bracket-in-prose case: a bracket that cannot open a tag must stay affordable.
 			'replacement contains an inert bracket'    => array(
 				'<p>bound MARK stated</p>',
 				'MARK',
@@ -293,13 +294,13 @@ final class ReplaceInPostStructureTest extends TestCase {
 	 */
 	public function provide_ability_cases(): array {
 		return array(
-			'R6-2 attribute break-out'              => array(
+			'attribute break-out'                   => array(
 				'<a href="https://example.com" title="MARK">link</a>',
 				'MARK',
 				'x" onmouseover="alert(1)" data-z="',
 				false,
 			),
-			'R6-4 literal bracket in prose'         => array(
+			'literal bracket in prose'               => array(
 				'<p>if x < y then MARK holds</p>',
 				'MARK',
 				'the bound',

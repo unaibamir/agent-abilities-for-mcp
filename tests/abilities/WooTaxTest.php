@@ -186,10 +186,11 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * B51: a negative priority must be rejected, not sign-flipped by absint.
+	 * A negative priority must be rejected, not sign-flipped by absint.
 	 *
-	 * The absint(-1) call returns 1, so a negative priority (or order) was silently persisted as its positive twin.
-	 * The integer schema now carries minimum:0, so a negative is refused at input validation.
+	 * The absint(-1) call returns 1, so without a floor, a negative priority (or order) would be
+	 * silently persisted as its positive twin. The integer schema carries minimum:0, so a
+	 * negative is refused at input validation.
 	 */
 	public function test_create_tax_rate_rejects_a_negative_priority(): void {
 		$this->acting_as( 'administrator' );
@@ -280,8 +281,9 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * B54: wc-list-tax-rates was the only unbounded list - every sibling pages. It now accepts
-	 * the standard page/per_page pair, slices the rows, and keeps total as the grand total.
+	 * wc-list-tax-rates must not be the only unbounded list while every sibling pages. It
+	 * accepts the standard page/per_page pair, slices the rows, and keeps total as the grand
+	 * total.
 	 */
 	public function test_list_tax_rates_pages_like_every_other_list(): void {
 		$this->acting_as( 'administrator' );
@@ -309,13 +311,14 @@ final class WooTaxTest extends TestCase {
 	}
 
 	// =========================================================================
-	// B30: unknown tax-class slugs on rate writes
+	// Unknown tax-class slugs on rate writes
 	// =========================================================================
 
 	/**
-	 * B30: WooCommerce's format_tax_rate_class() maps any unknown class slug to '' (Standard), so
-	 * a rate meant for "reduced-rate" with a typo silently landed in Standard, changed checkout
-	 * tax, and reported success. The slug must be validated against the existing classes first.
+	 * WooCommerce's format_tax_rate_class() maps any unknown class slug to '' (Standard), so
+	 * a rate meant for "reduced-rate" with a typo would silently land in Standard, change
+	 * checkout tax, and report success. The slug must be validated against the existing classes
+	 * first.
 	 */
 	public function test_create_tax_rate_unknown_class_is_refused(): void {
 		$this->acting_as( 'administrator' );
@@ -333,7 +336,7 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * B30: the same guard applies on update - the stored class must survive a bad request.
+	 * The same guard applies on update - the stored class must survive a bad request.
 	 */
 	public function test_update_tax_rate_unknown_class_is_refused_and_nothing_changes(): void {
 		$this->acting_as( 'administrator' );
@@ -357,7 +360,7 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * B30 control: a class slug that really exists is accepted and stored as sent.
+	 * Control: a class slug that really exists is accepted and stored as sent.
 	 */
 	public function test_create_tax_rate_known_class_is_stored(): void {
 		$this->acting_as( 'administrator' );
@@ -396,9 +399,9 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * B29: the old description promised a colliding slug "de-duplicates", but
-	 * WC_Tax::create_tax_class() actually returns a WP_Error on collision. The true contract is
-	 * a refusal, so a collision must surface as a clean, actionable error naming the slug.
+	 * A colliding slug must be refused, not "de-duplicated": WC_Tax::create_tax_class() returns
+	 * a WP_Error on collision, so a collision must surface as a clean, actionable error naming
+	 * the slug.
 	 */
 	public function test_create_tax_class_colliding_slug_is_refused_with_actionable_error(): void {
 		$this->acting_as( 'administrator' );
@@ -414,7 +417,7 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * B29: an explicitly requested colliding slug is refused the same way.
+	 * An explicitly requested colliding slug is refused the same way.
 	 */
 	public function test_create_tax_class_explicit_colliding_slug_is_refused(): void {
 		$this->acting_as( 'administrator' );
@@ -431,7 +434,7 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * B29: the slug description must no longer promise the de-duplication WooCommerce never does.
+	 * The slug description must not promise the de-duplication WooCommerce never does.
 	 */
 	public function test_create_tax_class_description_matches_the_real_collision_contract(): void {
 		$args        = aafm_args_wc_create_tax_class();
@@ -495,7 +498,7 @@ final class WooTaxTest extends TestCase {
 	 * proves the wp_cache_delete() call aafm_exec_wc_create_tax_class() makes immediately before
 	 * its final guard actually does something, isolated from WC_Tax::create_tax_class()'s own
 	 * (uncached, in this stub) duplicate check so this test can't pass by coincidence off a
-	 * different layer catching the race instead (Codex review, 2026-09-05).
+	 * different layer catching the race instead.
 	 */
 	public function test_tax_class_collision_check_forces_a_fresh_read_before_the_final_guard(): void {
 		// First read (models the early check): the slug is free, populates the request cache.
@@ -531,10 +534,9 @@ final class WooTaxTest extends TestCase {
 		// A genuinely free name/slug, not one of seed_wc_tax()'s pre-seeded classes - the point
 		// of this test is the DEEPER post-write confirmation, which only ever runs once both the
 		// early AND final collision checks (correctly) find nothing wrong. A colliding name here
-		// (Codex review, 2026-09-05: the original draft used the pre-seeded "Reduced rate", which
-		// let the early check refuse it before create_tax_class() was ever reached, leaving the
-		// post-write confirmation this test claims to prove completely unexercised) would prove
-		// nothing about that deeper path.
+		// would let the early check refuse it before create_tax_class() is ever reached, leaving
+		// the post-write confirmation this test claims to prove completely unexercised, and would
+		// prove nothing about that deeper path.
 		WcTaxStubStore::$simulate_masked_insert_failure = true;
 
 		$result = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Fresh class' ) );
@@ -643,11 +645,11 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * FIX-3 item 1 (pilot finding, delegation sweep): the by-id single-rate read now delegates to
+	 * The by-id single-rate read delegates to
 	 * WC_Tax::_get_tax_rate() instead of a hand-rolled $wpdb->get_row(). Both queries read the
 	 * identical table with no caching or hook on either side, so there is no behavioural
-	 * difference to drive a test red - this pins the source-level fact instead, as the pilot's own
-	 * finding predicted, and states plainly it could not go red any other way.
+	 * difference to drive a test red - this pins the source-level fact instead, and states
+	 * plainly it could not go red any other way.
 	 */
 	public function test_get_tax_rate_by_id_delegates_to_wc_tax(): void {
 		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/tax.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.

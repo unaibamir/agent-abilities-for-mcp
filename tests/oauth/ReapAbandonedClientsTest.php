@@ -12,10 +12,10 @@ namespace AAFM\Tests\OAuth;
 use AAFM\Tests\TestCase;
 
 /**
- * Codex round 8, R8-3: the reaper's DELETEs used to trust the candidate list its own
- * SELECT scan produced, with no re-check at the deletion boundary - a client approved
- * in the window between the scan and the delete was removed anyway. The fix folds the
- * scan's exact predicate into the DELETE's own WHERE clause, so the database decides
+ * The reaper's DELETEs must not trust the candidate list its own
+ * SELECT scan produced, with no re-check at the deletion boundary - otherwise a client approved
+ * in the window between the scan and the delete would be removed anyway. Folding the
+ * scan's exact predicate into the DELETE's own WHERE clause means the database decides
  * from current data at delete time rather than from a stale PHP-side snapshot.
  *
  * A single, synchronous PHPUnit process cannot open a real window between this

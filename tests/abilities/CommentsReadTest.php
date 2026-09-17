@@ -190,10 +190,11 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * R3-5 (1.7.5 deferred, round 3): a password-protected post is PUBLIC (its post_status object
-	 * has public=>true), so it used to fall through to the "any logged-in caller may read" branch
-	 * - the password itself was never checked. A Subscriber must not read approved comments on a
-	 * password-protected published post through either the post-scoped or sitewide entry point.
+	 * A password-protected post is PUBLIC (its post_status object
+	 * has public=>true), so a check based on post_status public-ness alone would fall through to
+	 * the "any logged-in caller may read" branch without ever checking the password. A Subscriber
+	 * must not read approved comments on a password-protected published post through either the
+	 * post-scoped or sitewide entry point.
 	 *
 	 * What would break this: reverting aafm_comment_post_is_readable() to skip the
 	 * post_password_required() check (comparing only against post_status public-ness) makes both
@@ -267,12 +268,11 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-4: the whole-site listing used to ask the database for one page,
-	 * THEN drop comments on posts the caller can't read - so a readable comment could be
-	 * pushed off page 1 entirely by unreadable ones consuming its slot. An older readable
+	 * The whole-site listing must not ask the database for one page and
+	 * THEN drop comments on posts the caller can't read - doing so would let a readable comment
+	 * get pushed off page 1 entirely by unreadable ones consuming its slot. An older readable
 	 * comment plus ten newer unreadable ones on a private post must still surface the
-	 * readable one on page 1, and `total` must now be reported (it used to be omitted for
-	 * this branch entirely).
+	 * readable one on page 1, and `total` must be reported for this branch too.
 	 */
 	public function test_get_comments_sitewide_does_not_hide_a_readable_comment_behind_unreadable_ones(): void {
 		$public_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
@@ -375,7 +375,7 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * F7 (1.7.5 deferred): `truncated` must never disclose hidden comment volume to a caller
+	 * `truncated` must never disclose hidden comment volume to a caller
 	 * whose own visible results are unaffected by it. Adding one more comment on a post this
 	 * subscriber can never read must not flip `truncated`, even though it pushes the raw
 	 * approved count past the scan cap, as long as the scanned window still contains at least
@@ -445,16 +445,16 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * R2-6 (1.7.5 deferred, round 2): the round-1 fix above stopped a HIDDEN comment inside the
-	 * scan window from leaking, but a window that is ENTIRELY visible still leaked: a raw count
-	 * crossing the cap flipped `truncated` true even when the one additional comment beyond the
-	 * window sat on a post this subscriber cannot read. `comments` and `total` are unaffected
+	 * The test above stops a HIDDEN comment inside the
+	 * scan window from leaking, but a window that is ENTIRELY visible can still leak: a raw count
+	 * crossing the cap must not flip `truncated` true when the one additional comment beyond the
+	 * window sits on a post this subscriber cannot read. `comments` and `total` are unaffected
 	 * either way - only the flag, and only because of a comment that does not exist to this
 	 * caller.
 	 *
 	 * Fails if the truncation lookahead below is removed or reverts to inferring truncation from
-	 * raw_total/scan_cap without checking readability - the same class of leak that already broke
-	 * this flag twice.
+	 * raw_total/scan_cap without checking readability - the same class of leak that broke this
+	 * flag before.
 	 */
 	public function test_get_comments_sitewide_truncated_does_not_leak_a_hidden_comment_beyond_a_fully_visible_window(): void {
 		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 3 );
@@ -496,11 +496,11 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * R3-6 (1.7.5 deferred, round 3): the round-2 lookahead sized/offset its second window from a
-	 * count that included hidden comments, so inserting ONE hidden comment between the scanned
-	 * window and a genuinely visible comment shifted that visible comment out of the lookahead
-	 * window entirely - flipping truncated from true to false with the caller's own visible
-	 * results completely unchanged. This reproduces that exact insertion.
+	 * A lookahead that sizes/offsets its second window from a
+	 * count that includes hidden comments is unsafe: inserting ONE hidden comment between the
+	 * scanned window and a genuinely visible comment would shift that visible comment out of the
+	 * lookahead window entirely - flipping truncated from true to false with the caller's own
+	 * visible results completely unchanged. This reproduces that exact insertion.
 	 *
 	 * What would break this: reverting the identity-based (comment__not_in) probe to a count/
 	 * offset-sized lookahead makes the second assertion fail - truncated would go back to false

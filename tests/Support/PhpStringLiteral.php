@@ -3,7 +3,7 @@
  * Decodes a PHP string-literal token's real runtime value, for the source-scanning tests that
  * compare a call's literal argument against a known option/sanitizer name.
  *
- * R4-6 (1.7.5 deferred, round 4): SecurityOptionWritesSweepTest's option-name check and
+ * SecurityOptionWritesSweepTest's option-name check and
  * StoredTextSanitizerScanner's callable-string check both compared a T_CONSTANT_ENCAPSED_STRING
  * token's raw text with a bare `substr( $text, 1, -1 )`/`trim( $text, "'\"" )` - correct for the
  * common case, wrong for a `b`/`B`-prefixed binary string, an escaped character

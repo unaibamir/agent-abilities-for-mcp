@@ -3,7 +3,7 @@
  * Wire-level proof that the page-builder ownership guard refuses a real tools/call, not only the
  * direct-PHP proof in tests/PageBuilderGuardTest.php and tests/PageBuilderGuardSweepTest.php.
  *
- * Codex round-b finding 9: the sweep only ever calls the execute callbacks directly, so a guard
+ * The sweep in those files only ever calls the execute callbacks directly, so a guard
  * wired into the wrong seam (e.g. only the permission_callback, which the adapter's own decorated
  * closure could short-circuit before reaching aafm_exec_update_post() at all) would still pass
  * every existing test.
@@ -117,7 +117,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 7 HIGH: a real two-tool sequence proving the marker can no longer be
+	 * A real two-tool sequence proving the marker can no longer be
 	 * cleared through update-post-meta, so the ownership guard on the SEPARATE update-post call
 	 * afterward still refuses - not two isolated checks, the actual attack sequence end to end.
 	 */
@@ -163,8 +163,8 @@ final class PageBuilderGuardWireTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 8 HIGH: tec-update-event wrote post_content through the ORM with no
-	 * ownership check at all - a real tools/call, not just the direct-PHP proof in
+	 * tec-update-event writes post_content through the ORM, so this proves a real
+	 * ownership check on a real tools/call, not just the direct-PHP proof in
 	 * PageBuilderGuardSweepTest.php, since a guard wired into the wrong seam could still pass
 	 * a direct call.
 	 */
@@ -201,8 +201,8 @@ final class PageBuilderGuardWireTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 8 HIGH: geodirectory-update-listing called wp_update_post() directly
-	 * with no ownership check at all - same real-tools/call proof as the TEC test above.
+	 * geodirectory-update-listing calls wp_update_post() directly, so this is the
+	 * same real-tools/call proof as the TEC test above.
 	 */
 	public function test_geodirectory_update_listing_refuses_an_avada_owned_listing_over_a_real_tools_call(): void {
 		$this->register_enabled( array( 'aafm/geodirectory-update-listing' ) );

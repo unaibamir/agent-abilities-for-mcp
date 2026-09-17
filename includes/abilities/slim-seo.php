@@ -93,12 +93,23 @@ function aafm_slim_seo_url_fields(): array {
 /**
  * Read a post's slim_seo meta array into the ability's flat output shape.
  *
+ * Failure-aware: the read goes through aafm_meta_read()'s {ok,value} shape rather than a raw
+ * get_post_meta() call, so a query that fails after a just-confirmed write is reported as unknown
+ * instead of silently reading back as an empty (and therefore falsely "cleared") field.
+ *
  * @param int $id Post id, already confirmed to exist by the caller.
- * @return array<string,mixed>
+ * @return array{ok:bool,data:array<string,mixed>} ok is false when the read itself failed - data
+ *              is empty in that case.
  */
 function aafm_slim_seo_read_fields( int $id ): array {
-	$stored = get_post_meta( $id, 'slim_seo', true );
-	$stored = is_array( $stored ) ? $stored : array();
+	$read = aafm_meta_read( $id, 'slim_seo', 'post' );
+	if ( ! $read['ok'] ) {
+		return array(
+			'ok'   => false,
+			'data' => array(),
+		);
+	}
+	$stored = is_array( $read['value'] ) ? $read['value'] : array();
 	$out    = array(
 		'plugin'  => 'slim_seo',
 		'post_id' => $id,
@@ -107,7 +118,10 @@ function aafm_slim_seo_read_fields( int $id ): array {
 		$out[ $field ] = isset( $stored[ $field ] ) && is_scalar( $stored[ $field ] ) ? (string) $stored[ $field ] : '';
 	}
 	$out['noindex'] = ! empty( $stored['noindex'] );
-	return $out;
+	return array(
+		'ok'   => true,
+		'data' => $out,
+	);
 }
 
 /**
@@ -176,7 +190,8 @@ function aafm_exec_slim_seo_get_post( array $input ) {
 	if ( ! get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return aafm_slim_seo_read_fields( $id );
+	$read = aafm_slim_seo_read_fields( $id );
+	return $read['ok'] ? $read['data'] : aafm_generic_error();
 }
 
 /**
@@ -245,8 +260,15 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$stored = get_post_meta( $id, 'slim_seo', true );
-	$stored = is_array( $stored ) ? $stored : array();
+	// A raw get_post_meta() read cannot tell "genuinely absent" from "the confirming SELECT itself
+	// failed" - both return ''. Failing that closed here matters more than at a scalar meta key:
+	// the write below replaces the WHOLE stored array, so a failed read masquerading as "nothing
+	// stored" would erase every field the caller did not touch, not just report a stale value.
+	$stored_read = aafm_meta_read( $id, 'slim_seo', 'post' );
+	if ( ! $stored_read['ok'] ) {
+		return aafm_generic_error();
+	}
+	$stored = is_array( $stored_read['value'] ) ? $stored_read['value'] : array();
 	// Snapshot the pre-write array before the mutation loop below rewrites $stored in place -
 	// the confirmation pass needs each field's genuine OLD value, not what $stored becomes.
 	$old = $stored;
@@ -315,7 +337,15 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 	$canonical     = is_array( $canonical ) ? $canonical : array();
 	$canonical_old = sanitize_meta( 'slim_seo', $old, 'post', $subtype );
 	$canonical_old = is_array( $canonical_old ) ? $canonical_old : array();
-	$confirmed     = aafm_slim_seo_read_fields( $id );
+	// The confirming read must be as failure-aware as the baseline above: a raw getter that fails
+	// here reads back as '' for every field, which can equal a requested clear-to-empty just as
+	// easily as it can equal a vetoed write's unchanged-but-empty state - the two are then
+	// indistinguishable and a genuine veto would certify as a confirmed clear.
+	$confirmed_read = aafm_slim_seo_read_fields( $id );
+	if ( ! $confirmed_read['ok'] ) {
+		return aafm_generic_error();
+	}
+	$confirmed = $confirmed_read['data'];
 	foreach ( aafm_slim_seo_fields() as $field ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;

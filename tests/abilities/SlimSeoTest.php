@@ -9,7 +9,9 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
+use WP_Error;
 
 final class SlimSeoTest extends TestCase {
 
@@ -99,6 +101,86 @@ final class SlimSeoTest extends TestCase {
 		$this->assertTrue( $stored['noindex'] );
 		$this->assertSame( 'https://example.com/new-fb.jpg', $stored['facebook_image'] );
 		$this->assertTrue( $out['noindex'] );
+	}
+
+	/**
+	 * The whole slim_seo array is replaced in one write, so a raw baseline read that cannot tell
+	 * "genuinely absent" from "the SELECT itself failed" is worse here than at a scalar meta key:
+	 * treating a failed read as an empty array would make the write persist ONLY the field the
+	 * caller supplied, erasing every other setting that was never touched.
+	 */
+	public function test_update_post_fails_closed_rather_than_erasing_omitted_fields_when_the_baseline_read_fails(): void {
+		$post     = self::factory()->post->create_and_get();
+		$original = array(
+			'title'       => 'Existing title',
+			'description' => 'Existing description',
+			'noindex'     => true,
+		);
+		update_post_meta( $post->ID, 'slim_seo', $original );
+		wp_cache_delete( $post->ID, 'post_meta' );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		global $wpdb;
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, 'SELECT' ),
+			static function () use ( $post ) {
+				return aafm_exec_slim_seo_update_post(
+					array(
+						'post_id' => $post->ID,
+						'title'   => 'New title',
+					)
+				);
+			},
+			1
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A failed baseline read must refuse the write, not silently replace the whole stored array with only the supplied field.'
+		);
+		wp_cache_delete( $post->ID, 'post_meta' );
+		$this->assertSame( $original, get_post_meta( $post->ID, 'slim_seo', true ), 'sanity: the stored array must be untouched.' );
+	}
+
+	/**
+	 * The confirming read must be as failure-aware as the baseline: a raw getter that fails here
+	 * reads back as '' for every field, which can equal a requested clear-to-empty just as easily
+	 * as it can equal a vetoed write's unchanged-but-empty state - so a genuine veto of a clear
+	 * request would certify as a confirmed clear.
+	 */
+	public function test_update_post_rejects_a_veto_when_the_confirming_read_also_fails(): void {
+		$post = self::factory()->post->create_and_get();
+		update_post_meta( $post->ID, 'slim_seo', array( 'title' => 'Old title' ) );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		global $wpdb;
+		$veto = static function () use ( $post ) {
+			wp_cache_delete( $post->ID, 'post_meta' );
+			return true; // Short-circuits the write: storage keeps the old array.
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, 'SELECT' ),
+			static function () use ( $post ) {
+				return aafm_exec_slim_seo_update_post(
+					array(
+						'post_id' => $post->ID,
+						'title'   => '',
+					)
+				);
+			},
+			0
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A failed confirming read must never certify a vetoed clear as a landed change.'
+		);
+		wp_cache_delete( $post->ID, 'post_meta' );
+		$this->assertSame( 'Old title', get_post_meta( $post->ID, 'slim_seo', true )['title'], 'sanity: the title was never actually cleared.' );
 	}
 
 	/**

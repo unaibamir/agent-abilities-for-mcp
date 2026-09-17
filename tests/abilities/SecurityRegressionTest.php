@@ -410,15 +410,15 @@ final class SecurityRegressionTest extends TestCase {
 	/**
 	 * Arbitrary code-exec primitives must never appear in our source.
 	 *
-	 * Codex round 5, R5-5: this test used to also police curl_exec() and the three
-	 * wp_remote_*() functions with a whole-file exemption. That check is now
-	 * test_outbound_network_primitives_match_an_exact_per_file_allowlist() below, which covers
+	 * Outbound network calls (curl_exec() and the wp_remote_*() family) are covered separately by
+	 * test_outbound_network_primitives_match_an_exact_per_file_allowlist() below, which enforces
 	 * the whole WP safe-remote/cURL/socket family with an exact per-file call count instead of a
 	 * blanket per-file pass.
 	 *
-	 * Codex round 9, R9-13: the old `/\b(eval|create_function|assert|download_url)\s*\(/` regex
-	 * was case-sensitive text matching, while PHP identifiers and keywords are not, so
-	 * `EVAL( $payload )` still executes with the regex green. Tokens fix this two ways: `eval` is
+	 * A token walk, not a regex, does the matching here: a regex like
+	 * `/\b(eval|create_function|assert|download_url)\s*\(/` is case-sensitive text matching, while
+	 * PHP identifiers and keywords are not, so `EVAL( $payload )` would still execute with such a
+	 * regex reporting clean. Tokens fix this two ways: `eval` is
 	 * a language construct, not a callable, so PHP itself never tokenizes it as T_STRING - it is
 	 * always T_EVAL regardless of case - so it gets its own count. The other three are ordinary
 	 * function calls, so they reuse count_function_call_tokens(), the same real-call tokenizer this
@@ -489,7 +489,7 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-6: on PHP 8, `\wp_safe_remote_get` tokenizes as ONE T_NAME_FULLY_QUALIFIED
+	 * On PHP 8, `\wp_safe_remote_get` tokenizes as ONE T_NAME_FULLY_QUALIFIED
 	 * token (never a bare T_STRING), and `Foo\Bar` as ONE T_NAME_QUALIFIED token; on PHP 7.4 the
 	 * same source is a T_NS_SEPARATOR/T_STRING run instead. Either way it is still a call to the
 	 * same primitive under a qualifier, not a different function. Collapse every such run - on
@@ -517,23 +517,21 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-6: `use function wp_safe_remote_get as fetch;` or
-	 * `use WpOrg\Requests\Requests as Net;` lets code call the exact same primitive under a name
-	 * that no longer matches any literal target this scan looks for. Map every imported alias
-	 * back to the real bare name it imports (function and class imports tracked separately, since
-	 * PHP resolves them in separate namespaces), so a call to the alias still counts as a call to
-	 * the primitive it actually resolves to.
+	 * `use function wp_safe_remote_get as fetch;` or `use WpOrg\Requests\Requests as Net;` lets
+	 * code call the exact same primitive under a name that no longer matches any literal target
+	 * this scan looks for. Map every imported alias back to the real bare name it imports
+	 * (function and class imports tracked separately, since PHP resolves them in separate
+	 * namespaces), so a call to the alias still counts as a call to the primitive it actually
+	 * resolves to.
 	 *
-	 * R4-6 (1.7.5 deferred, round 4): this used to be its own hand-rolled parser, one of three
-	 * near-duplicates across the test suite that each accreted a fix for whichever single syntax
-	 * case the last review round happened to quote - group prefixes, then whitespace, then
-	 * comments - and stayed broken for every case nobody had quoted yet (non-ASCII aliases,
-	 * `use const`, mixed grouped `function`/`const` members, trait-use-in-a-class-body mistaken
-	 * for an import, aliases leaking across namespace blocks, a fully-qualified call wrongly
-	 * resolved through an unrelated alias). All three now share one parser,
-	 * UseImportScanner::parse_aliases() - see that class for the grammar and the fixtures proving
-	 * each case. reduce_to_trailing() keeps this file's existing "same bare trailing name,
-	 * regardless of which namespace it came from" matching behaviour.
+	 * This shares one parser, UseImportScanner::parse_aliases(), with the other use-import
+	 * scanners in this test suite rather than hand-rolling its own, since a hand-rolled copy tends
+	 * to handle only the syntax case someone happened to hit and stay broken for the rest
+	 * (non-ASCII aliases, `use const`, mixed grouped `function`/`const` members, a
+	 * trait-use-in-a-class-body mistaken for an import, aliases leaking across namespace blocks, a
+	 * fully-qualified call wrongly resolved through an unrelated alias) - see that class for the
+	 * grammar and the fixtures proving each case. reduce_to_trailing() keeps this file's existing
+	 * "same bare trailing name, regardless of which namespace it came from" matching behaviour.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens (see
 	 *                                                               collapse_qualified_names()).
@@ -551,16 +549,16 @@ final class SecurityRegressionTest extends TestCase {
 	 * Whether a collapsed name token's bare segment resolves - directly, or through an imported
 	 * alias - to the given target name.
 	 *
-	 * Codex round 8, R8-5: PHP resolves function names, class names, and `use` aliases
-	 * case-insensitively (class constants and property/method names on an object are the only
-	 * case-sensitive parts of a call). A prior case-sensitive variant here missed a call written in
-	 * a different case, or through an alias whose declared case did not match the call site's - the
-	 * alias lookup is now keyed by lower case and the final comparison always uses strcasecmp().
+	 * PHP resolves function names, class names, and `use` aliases case-insensitively (class
+	 * constants and property/method names on an object are the only case-sensitive parts of a
+	 * call), so a case-sensitive matcher here would miss a call written in a different case, or
+	 * through an alias whose declared case does not match the call site's - the alias lookup is
+	 * keyed by lower case and the final comparison always uses strcasecmp().
 	 *
-	 * R4-6 (1.7.5 deferred, round 4): a call written fully qualified (`\wp_remote_get()`) resolves
-	 * to the literal global name in real PHP, regardless of any local `use ... as wp_remote_get;`
-	 * pointing that bare name somewhere else - an alias never applies to a fully qualified
-	 * reference. The alias lookup below is skipped entirely for one, closing that bypass.
+	 * A call written fully qualified (`\wp_remote_get()`) resolves to the literal global name in
+	 * real PHP, regardless of any local `use ... as wp_remote_get;` pointing that bare name
+	 * somewhere else - an alias never applies to a fully qualified reference. The alias lookup
+	 * below is skipped entirely for one, closing that bypass.
 	 *
 	 * @param string               $token_text Collapsed token text.
 	 * @param string               $target Bare target name to match.
@@ -574,15 +572,13 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-6: the retired scan stripped comments and then ran regexes against the
-	 * reconstructed source text - so a string literal such as "wp_safe_remote_get(" or a method
-	 * named the same as a primitive, like $client->curl_exec(), still counted as a hit. Tokens
-	 * distinguish these cases directly: a string literal is never a T_STRING identifier token,
-	 * and a real function call has '(' as its very next significant token with neither '->'
-	 * (a method call), '::' (a static call), nor the `function` keyword (a declaration) as the
-	 * token right before it.
+	 * A string literal such as "wp_safe_remote_get(" or a method named the same as a primitive,
+	 * like $client->curl_exec(), must never count as a hit. Tokens distinguish these cases
+	 * directly: a string literal is never a T_STRING identifier token, and a real function call
+	 * has '(' as its very next significant token with neither '->' (a method call), '::' (a
+	 * static call), nor the `function` keyword (a declaration) as the token right before it.
 	 *
-	 * Codex round 7, R7-6: matches through resolves_to() now, so a fully-qualified call
+	 * Matching goes through resolves_to(), so a fully-qualified call
 	 * (`\wp_safe_remote_get(...)`) or an imported alias (`use function ... as fetch; fetch(...)`)
 	 * counts exactly the same as the bare, unaliased call.
 	 *
@@ -611,15 +607,15 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-6: counts a static call prefix like `Requests::` - the class name token
-	 * immediately followed by `::` - the one primitive in this suite where a preceding `::` is
-	 * exactly the pattern being looked for, not something to exclude.
+	 * Counts a static call prefix like `Requests::` - the class name token immediately followed
+	 * by `::` - the one primitive in this suite where a preceding `::` is exactly the pattern
+	 * being looked for, not something to exclude.
 	 *
-	 * Codex round 7, R7-6: matches through resolves_to() now, so `\WpOrg\Requests\Requests::` and
-	 * an imported `use WpOrg\Requests\Requests as Net; Net::` both count.
+	 * Matching goes through resolves_to(), so `\WpOrg\Requests\Requests::` and an imported
+	 * `use WpOrg\Requests\Requests as Net; Net::` both count.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
-	 * @param string                                        $class_name Class name, matched case-insensitively (Codex round 8, R8-5).
+	 * @param string                                        $class_name Class name, matched case-insensitively.
 	 * @param array<string,string>                          $aliases Class alias => real bare name.
 	 * @return int
 	 */
@@ -638,16 +634,16 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-6: counts a bare class-name reference such as `WP_Http`, used for
-	 * `new WP_Http()`, a type hint, or an `instanceof` check - none of which put '(' right after
-	 * the name. Only a real identifier token counts; the class name sitting inside a string
-	 * literal (e.g. `class_exists( 'WP_Http' )`) never tokenizes as T_STRING at all.
+	 * Counts a bare class-name reference such as `WP_Http`, used for `new WP_Http()`, a type
+	 * hint, or an `instanceof` check - none of which put '(' right after the name. Only a real
+	 * identifier token counts; the class name sitting inside a string literal (e.g.
+	 * `class_exists( 'WP_Http' )`) never tokenizes as T_STRING at all.
 	 *
-	 * Codex round 7, R7-6: matches through resolves_to() now, so `\WP_Http` and an imported
-	 * `use WP_Http as Http;` alias both count as a reference to WP_Http.
+	 * Matching goes through resolves_to(), so `\WP_Http` and an imported `use WP_Http as Http;`
+	 * alias both count as a reference to WP_Http.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
-	 * @param string                                        $name Identifier name, matched case-insensitively (Codex round 8, R8-5).
+	 * @param string                                        $name Identifier name, matched case-insensitively.
 	 * @param array<string,string>                          $aliases Class alias => real bare name.
 	 * @return int
 	 */
@@ -662,17 +658,17 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-6: file_get_contents() is only an outbound-fetch primitive when its
-	 * argument is an http(s) URL - the local, non-network calls this codebase actually makes are
-	 * legitimate. Confirm the call is real (same rule as count_function_call_tokens()), then walk
-	 * the balanced parens collecting the raw argument text and look for 'http' in THAT text only,
-	 * rather than in the whole comment-stripped file the retired regex scanned.
+	 * file_get_contents() is only an outbound-fetch primitive when its argument is an http(s)
+	 * URL - the local, non-network calls this codebase actually makes are legitimate. Confirm the
+	 * call is real (same rule as count_function_call_tokens()), then walk the balanced parens
+	 * collecting the raw argument text and look for 'http' in THAT text only, matching against the
+	 * actual argument rather than the whole file's text.
 	 *
-	 * Codex round 7, R7-6: a runtime URL held in a variable never contains the literal text
-	 * 'http' in the SOURCE, so `file_get_contents( $url )` passed the old text search regardless
-	 * of what $url holds at runtime. The first argument is only "safe to text-match" when it is a
-	 * single plain string literal - anything else (a variable, concatenation, constant, or nested
-	 * call) is not statically known, so it counts as outbound unconditionally.
+	 * A runtime URL held in a variable never contains the literal text 'http' in the SOURCE, so a
+	 * plain text search over the file would pass `file_get_contents( $url )` regardless of what
+	 * $url holds at runtime. The first argument is only "safe to text-match" when it is a single
+	 * plain string literal - anything else (a variable, concatenation, constant, or nested call)
+	 * is not statically known, so it counts as outbound unconditionally.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
 	 * @param array<string,string>                          $aliases Function alias => real bare name.
@@ -735,15 +731,14 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5, R5-5: the retired scan recognized only wp_remote_get/post/request, missing
-	 * direct siblings such as wp_safe_remote_get() and wp_remote_head(), and exempted entire
-	 * files by name - a SECOND unguarded call anywhere in an already-exempt file passed silently.
-	 *
-	 * Codex round 6, B6-6: that scan then stripped comments and regexed the leftover source text,
-	 * which still let a string literal or a same-named method call through. This version tokenizes
-	 * each file once and asks the token-based helpers above whether each hit is a real call, static
-	 * prefix, or bare identifier, so only the specific calls this codebase's own SSRF design already
-	 * accounts for are allowed, and one more of any of them anywhere fails the suite.
+	 * Recognizing only wp_remote_get/post/request would miss direct siblings such as
+	 * wp_safe_remote_get() and wp_remote_head(), and exempting entire files by name would let a
+	 * SECOND unguarded call anywhere in an already-exempt file pass silently. A comment-stripped
+	 * regex scan of the leftover source text would also let a string literal or a same-named
+	 * method call through. This version tokenizes each file once and asks the token-based helpers
+	 * above whether each hit is a real call, static prefix, or bare identifier, so only the
+	 * specific calls this codebase's own SSRF design already accounts for are allowed, and one
+	 * more of any of them anywhere fails the suite.
 	 *
 	 * Only two call sites may reach the network at all: aafm_ssrf_owned_curl_fetch()'s
 	 * cURL handle in media.php (owned outright, pinned via CURLOPT_RESOLVE, proxy disabled, no
@@ -751,13 +746,13 @@ final class SecurityRegressionTest extends TestCase {
 	 * SSRF gate - covered by SsrfOwnedCurlFetchTest and UploadMediaFromUrlSsrfTest), and
 	 * aafm_ajax_test_connection()'s single wp_remote_post() call in connection.php: an
 	 * admin-only, manage_options + nonce gated reachability probe never reachable by an MCP
-	 * agent (Codex hunt F3 already covers why its target URL is trusted; see
-	 * aafm_ability_disclosures()'s file docblock in disclosures.php).
+	 * agent (see aafm_ability_disclosures()'s file docblock in disclosures.php for why its target
+	 * URL is trusted).
 	 *
-	 * Codex round 7, R7-6: tokens are collapsed (collapse_qualified_names()) and each file's own
-	 * `use` imports resolved (parse_use_aliases()) before matching, so a fully-qualified call or
-	 * an imported alias for any of these primitives is caught exactly like the bare, unaliased
-	 * spelling - it does not get a second, unaccounted-for way to reach the network.
+	 * Tokens are collapsed (collapse_qualified_names()) and each file's own `use` imports
+	 * resolved (parse_use_aliases()) before matching, so a fully-qualified call or an imported
+	 * alias for any of these primitives is caught exactly like the bare, unaliased spelling - it
+	 * does not get a second, unaccounted-for way to reach the network.
 	 */
 	public function test_outbound_network_primitives_match_an_exact_per_file_allowlist(): void {
 		$dir   = dirname( __DIR__, 2 ) . '/includes';
@@ -786,11 +781,11 @@ final class SecurityRegressionTest extends TestCase {
 			'includes/admin/connection.php' => array(
 				'wp_remote_post' => 1,
 			),
-			// Codex round 7, R7-6: aafm_adapter_file_applies_tools_list_filter() reads an
-			// already-loaded, is_readable()-checked local adapter file path, never a URL - but the
-			// path arrives in a variable, so the stricter file_get_contents() check below (a
-			// non-literal first argument is never "statically known" to be safe) now needs this
-			// entry the same way media.php's cURL handle and connection.php's probe are allowed.
+			// aafm_adapter_file_applies_tools_list_filter() reads an already-loaded,
+			// is_readable()-checked local adapter file path, never a URL - but the path arrives in
+			// a variable, so the stricter file_get_contents() check below (a non-literal first
+			// argument is never "statically known" to be safe) needs this entry the same way
+			// media.php's cURL handle and connection.php's probe are allowed.
 			'includes/adapter-loader.php'   => array(
 				'file_get_contents(http)' => 1,
 			),
@@ -840,9 +835,8 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-6: fixture-based self-tests for the scanner itself. Each one proves a
-	 * specific bypass the finding named is now caught, and that the existing string/method false
-	 * positives round 6 already fixed stay fixed.
+	 * Fixture-based self-tests for the scanner itself. Each one proves a specific bypass is
+	 * caught, and that the existing string/method false positives stay fixed.
 	 *
 	 * @param string $source Bare PHP body (no opening <?php tag - added here).
 	 * @return array<int,array{0:int,1:string,2:int}|string>
@@ -882,13 +876,13 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * F10 (1.7.5 deferred): the ordinary whitespace after the comma in a grouped import
-	 * (`{Exception, Requests as Net}` - a space is standard formatting, not an edge case) used to
-	 * land between the group's shared namespace prefix and the second member's own name, so
-	 * trailing_name_segment() returned " Requests" (a leading space) instead of "Requests" and the
-	 * alias never resolved. Both members of this group must resolve: the first is a bare import,
-	 * the second is aliased, exercising both the B6 prefix-carry-forward fix and this whitespace
-	 * fix together the way a real grouped Requests import actually reads.
+	 * The ordinary whitespace after the comma in a grouped import (`{Exception, Requests as Net}`
+	 * - a space is standard formatting, not an edge case) must not land between the group's
+	 * shared namespace prefix and the second member's own name: trailing_name_segment() has to
+	 * return "Requests", not " Requests" with a leading space, or the alias never resolves. Both
+	 * members of this group must resolve: the first is a bare import, the second is aliased,
+	 * exercising the prefix-carry-forward behavior and this whitespace handling together the way
+	 * a real grouped Requests import actually reads.
 	 */
 	public function test_scanner_counts_both_members_of_a_grouped_import_with_ordinary_spacing(): void {
 		$tokens  = $this->collapsed_fixture_tokens(
@@ -899,26 +893,25 @@ final class SecurityRegressionTest extends TestCase {
 		$this->assertSame( 'Exception', $aliases['class']['exception'] ?? null );
 		$this->assertSame( 1, $this->count_static_class_prefix_tokens( $tokens, 'Requests', $aliases['class'] ) );
 
-		// R4-7 (1.7.5 deferred, round 4): the two assertions above only ever compare bare trailing
-		// names, so they cannot tell "the group's namespace prefix was actually carried forward
-		// onto the second member" apart from "the prefix was dropped and the bare name matched by
-		// coincidence" - removing the prefix-reseeding fix (B6) does not change either assertion's
-		// result. Asserting the fully qualified identity here - straight from
-		// UseImportScanner::parse_aliases(), before reduce_to_trailing() throws the namespace
-		// away - is what actually distinguishes the two: only the version with the prefix carried
-		// forward resolves to the real qualified name.
+		// The two assertions above only ever compare bare trailing names, so they cannot tell
+		// "the group's namespace prefix was actually carried forward onto the second member"
+		// apart from "the prefix was dropped and the bare name matched by coincidence". Asserting
+		// the fully qualified identity here - straight from UseImportScanner::parse_aliases(),
+		// before reduce_to_trailing() throws the namespace away - is what actually distinguishes
+		// the two: only the version with the prefix carried forward resolves to the real
+		// qualified name.
 		$qualified = UseImportScanner::parse_aliases( $tokens );
 		$this->assertSame( 'WpOrg\\Requests\\Exception', $qualified['class']['exception'] ?? null );
 		$this->assertSame( 'WpOrg\\Requests\\Requests', $qualified['class']['net'] ?? null );
 	}
 
 	/**
-	 * R2-8 (1.7.5 deferred, round 2): a comment between a grouped member's name and its "as"
-	 * alias - legal PHP, `use WpOrg\Requests\{Exception, Requests /* transport *\/ as Net};` -
-	 * used to be appended into the parsed entry verbatim, so trailing_name_segment() returned
-	 * "Requests /* transport *\/" instead of "Requests" and the alias never resolved, concealing
-	 * every call through it. Also covers a comment right after "as", the other side of the same
-	 * gap. Fails if parse_use_aliases() stops discarding comment tokens mid-entry.
+	 * A comment between a grouped member's name and its "as" alias is legal PHP -
+	 * `use WpOrg\Requests\{Exception, Requests /* transport *\/ as Net};` - and must not be
+	 * appended into the parsed entry verbatim: that would make trailing_name_segment() return
+	 * "Requests /* transport *\/" instead of "Requests" and the alias would never resolve,
+	 * concealing every call through it. Also covers a comment right after "as", the other side of
+	 * the same gap. Fails if parse_use_aliases() stops discarding comment tokens mid-entry.
 	 */
 	public function test_scanner_counts_a_grouped_import_with_a_comment_around_its_alias(): void {
 		$tokens  = $this->collapsed_fixture_tokens(
@@ -940,10 +933,10 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * R3-7 (1.7.5 deferred, round 3): the test above already covers a comment with real whitespace
-	 * on at least one side of "as". This covers the narrower case that broke: a comment with NO
-	 * whitespace on either side, which - before this fix - collapsed straight into "Requestsas" or
-	 * "asNet" with nothing standing in for the discarded comment token at all.
+	 * The test above already covers a comment with real whitespace on at least one side of "as".
+	 * This covers the narrower case: a comment with NO whitespace on either side, which without a
+	 * replacement space would collapse straight into "Requestsas" or "asNet" with nothing
+	 * standing in for the discarded comment token at all.
 	 *
 	 * What would break this: reverting the comment-skip in parse_use_aliases() to omit the
 	 * replacement space makes every alias below resolve to null, and the corresponding call count
@@ -966,9 +959,9 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): a non-ASCII alias identifier, e.g. imported as `Réseau`. The
-	 * retired parser matched aliases with `\w+`, an ASCII-only character class, so this alias was
-	 * never recognised and the call through it went uncounted. What would break this: reverting
+	 * A non-ASCII alias identifier, e.g. imported as `Réseau`, must resolve too. Matching aliases
+	 * with `\w+`, an ASCII-only character class, would leave this alias unrecognised and the call
+	 * through it uncounted. What would break this: reverting
 	 * UseImportScanner::parse_optional_alias() to a `\w+`-style regex over reassembled text.
 	 */
 	public function test_scanner_counts_a_call_through_a_non_ascii_alias(): void {
@@ -982,11 +975,10 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): `use const` must never populate the class or function alias
-	 * maps - the retired parser's default 'class' kind stuck whenever a `const` clause was not
-	 * separately recognised, so a constant named after a tracked primitive could poison the class
-	 * alias map. What would break this: UseImportScanner treating `T_CONST` the same as no keyword
-	 * at all.
+	 * `use const` must never populate the class or function alias maps. A parser whose default
+	 * 'class' kind sticks whenever a `const` clause is not separately recognised would let a
+	 * constant named after a tracked primitive poison the class alias map. What would break this:
+	 * UseImportScanner treating `T_CONST` the same as no keyword at all.
 	 */
 	public function test_scanner_does_not_treat_a_use_const_import_as_a_class_or_function_alias(): void {
 		$tokens  = $this->collapsed_fixture_tokens( "use const Foo\\Bar\\Requests;\n" );
@@ -997,8 +989,8 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): a group whose members individually override the statement's
-	 * default kind with a leading `function`/`const` keyword. What would break this: a parser that
+	 * A group whose members individually override the statement's default kind with a leading
+	 * `function`/`const` keyword must resolve per member. What would break this: a parser that
 	 * applies one kind to every member of a group regardless of these per-member keywords.
 	 */
 	public function test_scanner_resolves_a_mixed_grouped_import_by_each_members_own_kind(): void {
@@ -1019,13 +1011,12 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): a trait-use statement inside a class body is not a namespace
-	 * import and must not be parsed as one - `use SomeTrait;` here names a trait, not an alias for
-	 * anything callable, and a parser that mistook it for an import could have a trait sharing a
-	 * tracked primitive's bare name silently "import" that name into the class alias map. A real
-	 * `use` import declared after the class must still resolve normally. What would break this:
-	 * UseImportScanner treating every T_USE token the same regardless of whether it sits inside a
-	 * class-like body.
+	 * A trait-use statement inside a class body is not a namespace import and must not be parsed
+	 * as one - `use SomeTrait;` here names a trait, not an alias for anything callable, and a
+	 * parser that mistook it for an import could have a trait sharing a tracked primitive's bare
+	 * name silently "import" that name into the class alias map. A real `use` import declared
+	 * after the class must still resolve normally. What would break this: UseImportScanner
+	 * treating every T_USE token the same regardless of whether it sits inside a class-like body.
 	 */
 	public function test_scanner_does_not_treat_trait_use_inside_a_class_body_as_an_import(): void {
 		$tokens  = $this->collapsed_fixture_tokens(
@@ -1041,10 +1032,10 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): `use` imports are scoped to the namespace block they appear
-	 * in - an alias declared in one namespace block must not leak into the next one, which the
-	 * retired parser's single running map could not tell apart. What would break this:
-	 * UseImportScanner::parse_aliases() no longer resetting on T_NAMESPACE.
+	 * `use` imports are scoped to the namespace block they appear in - an alias declared in one
+	 * namespace block must not leak into the next one, which a single running map with no reset
+	 * could not tell apart. What would break this: UseImportScanner::parse_aliases() no longer
+	 * resetting on T_NAMESPACE.
 	 */
 	public function test_scanner_does_not_carry_an_alias_across_a_namespace_boundary(): void {
 		$tokens  = $this->collapsed_fixture_tokens(
@@ -1061,13 +1052,12 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): a fully qualified call bypasses every `use` import - PHP
-	 * resolves `\wp_remote_get()` to the literal global function regardless of any local
-	 * `use function harmless as wp_remote_get;` re-pointing that bare name elsewhere. The retired
-	 * resolver looked the bare trailing name up in the alias map unconditionally, so an alias could
-	 * override an explicitly fully qualified reference and hide the real call from the scan. What
-	 * would break this: resolves_to() no longer checking UseImportScanner::is_fully_qualified()
-	 * before consulting the alias map.
+	 * A fully qualified call bypasses every `use` import - PHP resolves `\wp_remote_get()` to the
+	 * literal global function regardless of any local `use function harmless as wp_remote_get;`
+	 * re-pointing that bare name elsewhere. A resolver that looks the bare trailing name up in the
+	 * alias map unconditionally would let an alias override an explicitly fully qualified
+	 * reference and hide the real call from the scan. What would break this: resolves_to() no
+	 * longer checking UseImportScanner::is_fully_qualified() before consulting the alias map.
 	 */
 	public function test_scanner_does_not_let_an_alias_override_an_explicitly_fully_qualified_call(): void {
 		$tokens  = $this->collapsed_fixture_tokens(
@@ -1086,7 +1076,7 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-5: PHP function calls and imported aliases both resolve
+	 * PHP function calls and imported aliases both resolve
 	 * case-insensitively, so `use function wp_safe_remote_get as fetch;` followed by a call
 	 * written `FETCH(...)` is still the same primitive - a bare uppercase call proves the
 	 * final-name comparison is case-insensitive, and an uppercase call through a differently
@@ -1187,9 +1177,7 @@ final class SecurityRegressionTest extends TestCase {
 	 * file-level one. aafm_geodirectory_rollback_unconfirmed_create() force-deletes a
 	 * listing the SAME request just half-created and that failed its own write
 	 * verification - the caller never received an ID for it, and leaving it in Trash
-	 * would surface a half-written record to admins browsing the listing type. Round 5
-	 * un-masked this call by accident (an unrelated `(int)` cast removal broke the old
-	 * `[^)]*` regex's evasion, see git history on this test), which is why it is
+	 * would surface a half-written record to admins browsing the listing type. It is
 	 * disclosed here explicitly instead of silently exempted. Only THAT function's body
 	 * is stripped before the sweep runs against geodirectory.php, so a second, different
 	 * force-delete added anywhere else in the same file still fails this test.
@@ -1197,13 +1185,12 @@ final class SecurityRegressionTest extends TestCase {
 	 * A force-delete of any of these primitives in any other file, or any other function, is
 	 * still a CVE.
 	 *
-	 * Codex round 8, R8-6: the scan used to run three raw-source regexes, case-sensitive, with no
-	 * tolerance for a comment sitting between the function name and its opening paren, so an
-	 * uppercase call name or a call with an inline comment before the paren evaded every one of
-	 * them. It now tokenizes each file once and reuses resolves_to()'s case-insensitive,
-	 * alias-aware, comment-tolerant call detection - the same rule count_function_call_tokens()
-	 * already proved for R8-5 - then walks each real call's own balanced parens to read its true
-	 * last argument via has_force_delete_call().
+	 * Three raw-source, case-sensitive regexes with no tolerance for a comment sitting between the
+	 * function name and its opening paren would let an uppercase call name or a call with an
+	 * inline comment before the paren evade detection. Tokenizing each file once and reusing
+	 * resolves_to()'s case-insensitive, alias-aware, comment-tolerant call detection - the same
+	 * rule count_function_call_tokens() already relies on - avoids that, then walks each real
+	 * call's own balanced parens to read its true last argument via has_force_delete_call().
 	 */
 	public function test_no_force_delete_in_source(): void {
 		$dir   = dirname( __DIR__, 2 ) . '/includes';
@@ -1268,13 +1255,13 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-6: whether any real call to $name in $tokens has `true` as its own last
-	 * argument. Reuses the exact "is this a real call" rule count_function_call_tokens() already
-	 * applies (case-insensitive name/alias match via resolves_to(), comment-tolerant because
+	 * Whether any real call to $name in $tokens has `true` as its own last argument. Reuses the
+	 * exact "is this a real call" rule count_function_call_tokens() already applies
+	 * (case-insensitive name/alias match via resolves_to(), comment-tolerant because
 	 * significant_token() already skips comments, never a method/static/declaration false hit),
 	 * then walks that call's own balanced parens to its matching close, so a cast like
-	 * `(int) $post_id` sitting ahead of `, true )` cannot end the match early - the same class of
-	 * gap a `[^)]*` regex once had (see the docblock above).
+	 * `(int) $post_id` sitting ahead of `, true )` cannot end the match early - the class of gap a
+	 * `[^)]*` regex would have (see the docblock above).
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens Collapsed tokens.
 	 * @param string                                        $name Bare function name to match.
@@ -1328,17 +1315,17 @@ final class SecurityRegressionTest extends TestCase {
 	 * Strip one named top-level function's body out of source, so a sanctioned call site inside
 	 * it does not mask a real violation added anywhere else in the same file.
 	 *
-	 * A real token walk, not a line-based brace-depth counter (Codex round 7, R7-7): the prior
-	 * regex-and-line-count version matched the exempt function's declaration line (which also
-	 * carries the opening `{`) without ever counting that brace, so a bare `}` closing line made
-	 * the depth counter go negative without ever satisfying its own "line contains `{`" exit
-	 * condition. Stripping then continued past the function's real end through every following
-	 * top-level line - silently deleting a force-delete call placed anywhere after the exempt
-	 * function, all the way to the next function declaration that happened to contain a `{`.
-	 * Walking `token_get_all()`'s tokens instead finds the true opening brace after the matched
-	 * T_FUNCTION + T_STRING pair and counts every brace token (including the T_CURLY_OPEN/
-	 * T_DOLLAR_OPEN_CURLY_BRACES tokens PHP emits for `"{$var}"`/`"${var}"` interpolation) to its
-	 * exact matching close, so only that one function's real body is ever removed.
+	 * A real token walk, not a line-based brace-depth counter: a regex-and-line-count approach
+	 * would match the exempt function's declaration line (which also carries the opening `{`)
+	 * without ever counting that brace, so a bare `}` closing line could make the depth counter go
+	 * negative without ever satisfying its own "line contains `{`" exit condition. Stripping would
+	 * then continue past the function's real end through every following top-level line - silently
+	 * deleting a force-delete call placed anywhere after the exempt function, all the way to the
+	 * next function declaration that happened to contain a `{`. Walking `token_get_all()`'s tokens
+	 * instead finds the true opening brace after the matched T_FUNCTION + T_STRING pair and counts
+	 * every brace token (including the T_CURLY_OPEN/T_DOLLAR_OPEN_CURLY_BRACES tokens PHP emits
+	 * for `"{$var}"`/`"${var}"` interpolation) to its exact matching close, so only that one
+	 * function's real body is ever removed.
 	 *
 	 * @param string $source        Full file contents.
 	 * @param string $function_name Function name to strip, without parentheses.
@@ -1387,11 +1374,11 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-7: a force-delete call placed immediately after the exempt GeoDirectory
-	 * rollback function's real closing brace must survive the strip. Before the token-based
-	 * rewrite, the line-based counter's depth went negative on the exempt function's own closing
-	 * `}` without ever satisfying its "line contains `{`" exit condition, so stripping ran on past
-	 * the function's true end and silently deleted a force-delete call sitting right after it.
+	 * A force-delete call placed immediately after the exempt GeoDirectory rollback function's
+	 * real closing brace must survive the strip. A line-based depth counter would go negative on
+	 * the exempt function's own closing `}` without ever satisfying its "line contains `{`" exit
+	 * condition, so stripping would run on past the function's true end and silently delete a
+	 * force-delete call sitting right after it.
 	 */
 	public function test_strip_function_body_does_not_leak_into_following_source(): void {
 		$source = "<?php\nfunction aafm_geodirectory_rollback_unconfirmed_create( int \$post_id ): void {\n\twp_delete_post( \$post_id, true );\n}\n\nwp_delete_post( \$other_id, true );\n\nfunction aafm_other(): void {\n\techo 'hi';\n}\n";
@@ -1408,9 +1395,9 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-7: a force-delete made through a `use function ... as` alias must still
-	 * be caught. Before this fix, `use function wp_delete_post as remove; remove($id, true)`
-	 * never matched the sweep's regex, which is anchored on the literal name `wp_delete_post`.
+	 * A force-delete made through a `use function ... as` alias must still be caught: a sweep
+	 * anchored on the literal name `wp_delete_post` would never match
+	 * `use function wp_delete_post as remove; remove($id, true)`.
 	 */
 	public function test_has_force_delete_call_matches_an_aliased_call(): void {
 		$tokens  = $this->collapsed_fixture_tokens( "use function wp_delete_post as remove;\nremove( \$post_id, true );" );
@@ -1420,9 +1407,9 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-6: the retired regex was case-sensitive and required a literal `\s*`
-	 * (not a comment) between the function name and its opening paren, so an uppercase call, or
-	 * one with a comment before the paren, evaded it entirely.
+	 * A case-sensitive regex requiring a literal `\s*` (not a comment) between the function name
+	 * and its opening paren would let an uppercase call, or one with a comment before the paren,
+	 * evade it entirely.
 	 */
 	public function test_has_force_delete_call_matches_an_uppercase_call_with_a_comment_before_the_paren(): void {
 		$tokens = $this->collapsed_fixture_tokens( 'WP_DELETE_POST /* cleanup */ ( $post_id, true );' );
@@ -1459,7 +1446,7 @@ final class SecurityRegressionTest extends TestCase {
 			$includes . '/abilities/pages.php',
 			$includes . '/abilities/comments.php',
 			$includes . '/abilities/blocks.php',
-			// Gate round 1 finding 6: tec-delete-event now carries the same guard as its siblings.
+			// tec-delete-event carries the same guard as its siblings.
 			$includes . '/abilities/tec/events.php',
 		);
 

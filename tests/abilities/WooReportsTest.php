@@ -830,6 +830,29 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * The list endpoint reads its own title separately from the single-gateway shape, so it needs
+	 * its own pin. A fix applied only to aafm_wc_gateway_shape() leaves this sibling reporting the
+	 * raw, unfiltered name.
+	 */
+	public function test_list_payment_gateways_titles_are_filtered(): void {
+		add_filter(
+			'woocommerce_gateway_title',
+			static function ( $title, $gateway_id ) {
+				return 'paypal' === $gateway_id ? 'PayPal (translated)' : $title;
+			},
+			10,
+			2
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_list_payment_gateways( array() );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$titles = wp_list_pluck( $res['gateways'], 'title', 'id' );
+		$this->assertSame( 'PayPal (translated)', $titles['paypal'], 'The list endpoint must report the filtered title, not the raw property.' );
+	}
+
+	/**
 	 * Get gateway strips stripe_secret from stripe gateway.
 	 */
 	public function test_get_payment_gateway_redacts_stripe_secret(): void {

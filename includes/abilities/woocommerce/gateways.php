@@ -523,10 +523,12 @@ function aafm_exec_wc_list_payment_gateways( array $input ) { // phpcs:ignore Ge
 	foreach ( $gateways as $gateway ) {
 		$items[] = array(
 			'id'      => $gateway->id,
-			// Same missing-default risk as aafm_wc_gateway_shape(): WC_Payment_Gateway declares
-			// no default for $title, so an unassigned one would read back as null against the
+			// get_title() applies the woocommerce_gateway_title filter, so this reports the name
+			// checkout actually shows rather than the raw stored value. The cast covers the same
+			// missing-default risk as aafm_wc_gateway_shape(): WC_Payment_Gateway declares no
+			// default for $title, so an unassigned one would read back as null against the
 			// declared string schema.
-			'title'   => (string) $gateway->title,
+			'title'   => (string) $gateway->get_title(),
 			'enabled' => 'yes' === $gateway->enabled,
 		);
 	}

@@ -219,13 +219,12 @@ final class BridgeDirectoryMergeTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.2 finding 2, the second collision this fix closes: the old key derivation
-	 * ('aafm-known-' . sanitize_title($label)) de-duped known plugins on a LOSSY transform of
-	 * their label, so two genuinely different plugin labels that happen to sanitize to the same
-	 * slug (sanitize_title() collapses whitespace/hyphen differences and case) would wrongly land
-	 * in the same merged group. The fix keys on the exact label string instead of a sanitized
-	 * form of it, so only two namespaces whose labels are the literal same string ever share a
-	 * key.
+	 * The key derivation must not de-dupe known plugins on a LOSSY transform of their label:
+	 * ('aafm-known-' . sanitize_title($label)) would let two genuinely different plugin labels
+	 * that happen to sanitize to the same slug (sanitize_title() collapses whitespace/hyphen
+	 * differences and case) wrongly land in the same merged group. Keying on the exact label
+	 * string instead of a sanitized form of it means only two namespaces whose labels are the
+	 * literal same string ever share a key.
 	 *
 	 * Direct unit check on the key-derivation helper itself (aafm_bridge_merge_group_key()),
 	 * independent of the real known-plugin map: 'foo bar' and 'foo-bar' are DIFFERENT labels that

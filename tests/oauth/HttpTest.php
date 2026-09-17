@@ -38,9 +38,9 @@ class HttpTest extends TestCase {
 	/**
 	 * The limiter still trips when each call is a separate request on the default object cache.
 	 *
-	 * This is the B3 regression. The previous limiter seeded its counter with wp_cache_add() and
-	 * only consulted the transient on a wp_cache_incr() miss, which never fires within a single
-	 * process. Every existing test called the limiter repeatedly inside ONE test method, so the
+	 * A limiter that seeds its counter with wp_cache_add() and only consults the transient on a
+	 * wp_cache_incr() miss never fires that fallback within a single process. Every existing test
+	 * calls the limiter repeatedly inside ONE test method, so the
 	 * in-memory object cache persisted and the counter climbed, hiding a limiter that was dead on
 	 * the default per-request cache. wp_cache_flush() between calls models a fresh process each
 	 * time (what a real request is), where only the transient survives. Expected sequence for a

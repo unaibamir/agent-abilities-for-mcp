@@ -47,7 +47,7 @@ class WcGatewayStubStore {
 	/**
 	 * Setting keys whose writes are rejected (value NOT persisted) while other keys keep working.
 	 * Models a PARTIAL persistence failure - e.g. the title landing while the enabled write dies -
-	 * so the executor's what-actually-persisted reporting is exercisable (B32).
+	 * so the executor's what-actually-persisted reporting is exercisable.
 	 *
 	 * @var array<int,string>
 	 */

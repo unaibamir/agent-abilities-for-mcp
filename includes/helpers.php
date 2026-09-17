@@ -2333,6 +2333,36 @@ function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $met
 }
 
 /**
+ * Whether a meta key is confirmed absent after a delete, failure-aware.
+ *
+ * Core's metadata_exists() cannot tell a genuinely empty result from one produced by a failed
+ * confirming read - both come back as "not found" - so a delete endpoint that trusts it directly
+ * can certify a vetoed or failed delete as a successful one: evict the object's metadata cache,
+ * fail the follow-up SELECT metadata_exists() itself issues, and it reports false while the row is
+ * still there. This routes the same existence check through aafm_meta_read()'s {ok,value} shape
+ * instead, so a read failure comes back as unknown rather than silently read as "gone".
+ *
+ * @param int    $object_id   The post/term/user id the meta is stored against.
+ * @param string $meta_key    Meta key.
+ * @param string $object_type 'post', 'term', or 'user'.
+ * @return array{ok:bool,deleted:bool} ok is false when the confirming read itself failed -
+ *              deleted is not trustworthy either way in that case.
+ */
+function aafm_meta_confirmed_deleted( int $object_id, string $meta_key, string $object_type ): array {
+	$view = aafm_meta_read( $object_id, $meta_key, $object_type );
+	if ( ! $view['ok'] ) {
+		return array(
+			'ok'      => false,
+			'deleted' => false,
+		);
+	}
+	return array(
+		'ok'      => true,
+		'deleted' => '' === $view['value'],
+	);
+}
+
+/**
  * The post-field sibling of aafm_meta_write_confirmed(): whether a post-field write (post_title,
  * post_content, post_excerpt, post_status, and so on) landed as intended, judged against the
  * field's CANONICAL stored form rather than the plugin's own pre-write intent.

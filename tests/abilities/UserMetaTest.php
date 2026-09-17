@@ -13,7 +13,9 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
+use WP_Error;
 
 final class UserMetaTest extends TestCase {
 
@@ -123,6 +125,46 @@ final class UserMetaTest extends TestCase {
 		);
 		$this->assertIsArray( $del );
 		$this->assertSame( '', (string) get_user_meta( $uid, 'twitter', true ) );
+	}
+
+	/**
+	 * A raw metadata_exists() check cannot tell a genuine miss from a failed confirming read - both come back
+	 * as "not found" - so a delete endpoint that trusted it directly could certify a vetoed delete
+	 * as successful once a filter evicted the cache ahead of a failed follow-up SELECT.
+	 */
+	public function test_delete_user_meta_fails_closed_when_a_veto_evicts_cache_and_the_confirming_read_fails(): void {
+		add_filter( 'aafm_allowed_user_meta_keys', static fn(): array => array( 'twitter' ) );
+		$this->acting_as( 'administrator' );
+		$uid = self::factory()->user->create( array( 'role' => 'author' ) );
+		update_user_meta( $uid, 'twitter', '@handle' );
+
+		global $wpdb;
+		$veto = static function () use ( $uid ) {
+			wp_cache_delete( $uid, 'user_meta' );
+			return true; // Short-circuits delete_metadata(): the row survives.
+		};
+		add_filter( 'delete_user_metadata', $veto, 10, 0 );
+		$out = QueryFaultInjector::break_query_with_real_error(
+			$wpdb->usermeta,
+			static function () use ( $uid ) {
+				return aafm_exec_delete_user_meta(
+					array(
+						'user_id' => $uid,
+						'key'     => 'twitter',
+					)
+				);
+			},
+			0
+		);
+		remove_filter( 'delete_user_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A failed confirming read must never certify a vetoed delete as successful.'
+		);
+		wp_cache_delete( $uid, 'user_meta' );
+		$this->assertSame( '@handle', get_user_meta( $uid, 'twitter', true ), 'sanity: the delete was never actually applied.' );
 	}
 
 	public function test_user_meta_refuses_blocked_key_even_if_targeted(): void {

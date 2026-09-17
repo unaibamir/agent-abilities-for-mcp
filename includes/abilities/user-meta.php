@@ -335,8 +335,12 @@ function aafm_exec_delete_user_meta( array $input ) {
 	}
 	delete_user_meta( $id, $key );
 	// Report the real end state, not a hardcoded true: if the key is still present the delete did
-	// not take. Deleting an already-absent key is an idempotent success.
-	if ( metadata_exists( 'user', $id, $key ) ) {
+	// not take. Deleting an already-absent key is an idempotent success. metadata_exists() cannot
+	// tell a genuine miss from a failed confirming read - both come back as "not found" - so this
+	// goes through the failure-aware check instead and refuses to certify a deletion it could not
+	// actually confirm.
+	$confirm = aafm_meta_confirmed_deleted( $id, $key, 'user' );
+	if ( ! $confirm['ok'] || ! $confirm['deleted'] ) {
 		return aafm_generic_error();
 	}
 	return array( 'deleted' => true );

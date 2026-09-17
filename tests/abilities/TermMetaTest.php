@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -203,6 +204,48 @@ final class TermMetaTest extends TestCase {
 			)
 		);
 		$this->assertSame( '', get_term_meta( $term_id, 'seo_title', true ) );
+		remove_all_filters( 'aafm_allowed_term_meta_keys' );
+	}
+
+	/**
+	 * A raw metadata_exists() check cannot tell a genuine miss from a failed confirming read - both come back
+	 * as "not found" - so a delete endpoint that trusted it directly could certify a vetoed delete
+	 * as successful once a filter evicted the cache ahead of a failed follow-up SELECT.
+	 */
+	public function test_delete_term_meta_fails_closed_when_a_veto_evicts_cache_and_the_confirming_read_fails(): void {
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'seo_title' ) );
+		$this->acting_as( 'editor' );
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		update_term_meta( $term_id, 'seo_title', 'Bye' );
+
+		global $wpdb;
+		$veto = static function () use ( $term_id ) {
+			wp_cache_delete( $term_id, 'term_meta' );
+			return true; // Short-circuits delete_metadata(): the row survives.
+		};
+		add_filter( 'delete_term_metadata', $veto, 10, 0 );
+		$out = QueryFaultInjector::break_query_with_real_error(
+			$wpdb->termmeta,
+			static function () use ( $term_id ) {
+				return aafm_exec_delete_term_meta(
+					array(
+						'taxonomy' => 'category',
+						'term_id'  => $term_id,
+						'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					)
+				);
+			},
+			0
+		);
+		remove_filter( 'delete_term_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A failed confirming read must never certify a vetoed delete as successful.'
+		);
+		wp_cache_delete( $term_id, 'term_meta' );
+		$this->assertSame( 'Bye', get_term_meta( $term_id, 'seo_title', true ), 'sanity: the delete was never actually applied.' );
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
 	}
 

@@ -255,6 +255,47 @@ final class PostMetaTest extends TestCase {
 		$this->assertSame( '', get_post_meta( $id, 'subtitle', true ) );
 	}
 
+	/**
+	 * A raw metadata_exists() check cannot tell a genuine miss from a failed confirming read - both come back
+	 * as "not found" - so a delete endpoint that trusted it directly could certify a vetoed delete
+	 * as successful once a filter evicted the cache ahead of a failed follow-up SELECT.
+	 */
+	public function test_delete_meta_fails_closed_when_a_veto_evicts_cache_and_the_confirming_read_fails(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'subtitle', 'x' );
+
+		global $wpdb;
+		$veto = static function () use ( $id ) {
+			wp_cache_delete( $id, 'post_meta' );
+			return true; // Short-circuits delete_metadata(): the row survives.
+		};
+		add_filter( 'delete_post_metadata', $veto, 10, 0 );
+		$out = QueryFaultInjector::break_query_with_real_error(
+			$wpdb->postmeta,
+			static function () use ( $id ) {
+				return aafm_exec_delete_post_meta(
+					array(
+						'post_id'  => $id,
+						'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					)
+				);
+			},
+			0
+		);
+		remove_filter( 'delete_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A failed confirming read must never certify a vetoed delete as successful.'
+		);
+		wp_cache_delete( $id, 'post_meta' );
+		$this->assertSame( 'x', get_post_meta( $id, 'subtitle', true ), 'sanity: the delete was never actually applied.' );
+	}
+
 	public function test_delete_meta_gates_block_and_other_author(): void {
 		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 		$owner = self::factory()->user->create( array( 'role' => 'author' ) );

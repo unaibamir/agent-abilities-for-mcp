@@ -148,7 +148,7 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	// Anything else at this id (a non-variation product, or false) is not a valid variation
 	// target. A variation-type product is always returned as a WC_Product_Variation by
 	// wc_get_product(), so the instanceof check above already covers it - there is no separate
-	// "WC_Product whose type is variation" case to handle (B11).
+	// "WC_Product whose type is variation" case to handle.
 	return null;
 }
 
@@ -322,10 +322,10 @@ function aafm_exec_wc_list_product_variations( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// B28: only variable products have variations. get_children() is NOT variation-specific - on a
+	// Only variable products have variations. get_children() is NOT variation-specific - on a
 	// grouped product it returns the grouped child PRODUCTS, so counting it as `total` while every
-	// row fails the variation check produced {variations:[], total:N}, a total contradicting its own
-	// rows. Refuse a non-variable parent with an actionable error instead.
+	// row fails the variation check would produce {variations:[], total:N}, a total contradicting
+	// its own rows. Refuse a non-variable parent with an actionable error instead.
 	if ( 'variable' !== $parent->get_type() ) {
 		return new \WP_Error(
 			'aafm_wc_not_variable_product',
@@ -597,9 +597,7 @@ function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product
 	// a `woocommerce_product_get_attributes` filter can present an attribute the parent does not
 	// actually store, and both the key check and the value check below would then accept a
 	// variation attribute that WooCommerce's stored parent configuration can never match. The
-	// product write sibling already reads the parent in edit context for exactly this reason
-	// (products.php:722); this validator is newer and did not carry the guard across. Same lesson
-	// as R6-1, one file over.
+	// product write sibling reads the parent in edit context for the same reason (products.php:722).
 	$parent_attributes = $parent_product->get_attributes( 'edit' );
 	$declared          = array_map( 'strval', array_keys( $parent_attributes ) );
 	$for_variations    = array();

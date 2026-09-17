@@ -18,7 +18,7 @@ final class QueryFaultInjectorTest extends TestCase {
 
 	/**
 	 * Fail_query() must make the matching query return false without flushing last_result - the
-	 * exact precondition the R7-2/R8-1/R8-3 defect class depends on.
+	 * exact precondition the stale-last_result defect class depends on.
 	 */
 	public function test_fail_query_returns_false_without_flushing_last_result(): void {
 		global $wpdb;

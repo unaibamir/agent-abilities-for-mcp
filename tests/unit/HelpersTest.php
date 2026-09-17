@@ -548,12 +548,12 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
-	 * no matter what post type the meta actually belonged to. register_post_meta() for a
-	 * non-'post' type registers its sanitize_callback on the subtype-specific
-	 * sanitize_post_meta_{key}_for_{subtype} hook (wp-includes/meta.php), which sanitize_meta()
-	 * only consults when given that same subtype - so a coercion callback registered for 'page'
-	 * was invisible to the old hardcoded probe. Passing the real post type must surface it.
+	 * register_post_meta() for a non-'post' type registers its sanitize_callback on the
+	 * subtype-specific sanitize_post_meta_{key}_for_{subtype} hook (wp-includes/meta.php), which
+	 * sanitize_meta() only consults when given that same subtype - so a probe that hardcodes the
+	 * literal string 'post' as the object subtype, no matter what post type the meta actually
+	 * belongs to, would make a coercion callback registered for 'page' invisible to it. Passing
+	 * the real post type must surface it.
 	 */
 	public function test_meta_value_sanitizer_catches_a_page_specific_coercion_callback(): void {
 		register_post_meta(
@@ -571,9 +571,9 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7 R7-3, term-meta sibling: the probe used to pass the literal string 'term',
-	 * which is never a real taxonomy name, so a callback registered via
-	 * register_term_meta( $taxonomy, ... ) for ANY taxonomy was always invisible to it.
+	 * Term-meta sibling: a probe that hardcodes the literal string 'term', which is never a real
+	 * taxonomy name, would make a callback registered via register_term_meta( $taxonomy, ... )
+	 * for ANY taxonomy always invisible to it.
 	 */
 	public function test_term_meta_value_sanitizer_catches_a_taxonomy_specific_coercion_callback(): void {
 		register_term_meta(
@@ -679,10 +679,10 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-4: aafm_post_field_write_confirmed()'s "nothing asked" branch used to be
-	 * judged from the raw values alone ($intended === $old), blind to whether $old was already in
-	 * the field's own canonical (sanitized) form - the same defect aafm_meta_write_confirmed()'s
-	 * round 6, R6-4 fix (2781422) closed for meta. Resubmitting a non-canonical $old is a real
+	 * aafm_post_field_write_confirmed()'s "nothing asked" branch must not be judged from the raw
+	 * values alone ($intended === $old): that would be blind to whether $old was already in the
+	 * field's own canonical (sanitized) form, the same defect aafm_meta_write_confirmed() (commit
+	 * 2781422) closes for meta. Resubmitting a non-canonical $old is a real
 	 * ask, since the write is still expected to land on the canonical form a genuinely different
 	 * value would have to reach; a persistence veto that instead leaves storage at the old,
 	 * non-canonical value must not be waved through as a confirmed no-op just because the caller's
@@ -715,13 +715,13 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-2: get_post_field() returns '' both when a field is genuinely empty and
-	 * when the read that was meant to confirm it failed - get_post() (wp-includes/post.php)
-	 * returns null on a failed query the same way it does on a real "no such row", and
-	 * get_post_field() maps that null to '' exactly like it maps a real empty field to ''. A
-	 * clearing write (post_title/content/excerpt -> "") was therefore indistinguishable from an
-	 * unconfirmable read: a persistence veto that left the old value in place, combined with a
-	 * failed confirming read, used to be reported as a confirmed clear.
+	 * get_post_field() returns '' both when a field is genuinely empty and when the read that was
+	 * meant to confirm it failed - get_post() (wp-includes/post.php) returns null on a failed
+	 * query the same way it does on a real "no such row", and get_post_field() maps that null to
+	 * '' exactly like it maps a real empty field to ''. A clearing write
+	 * (post_title/content/excerpt -> "") is therefore indistinguishable from an unconfirmable read
+	 * on '' alone: a persistence veto that left the old value in place, combined with a failed
+	 * confirming read, must not be reported as a confirmed clear.
 	 */
 	public function test_post_field_write_confirmed_fails_closed_when_the_confirming_read_itself_fails(): void {
 		$id = self::factory()->post->create( array( 'post_title' => 'old' ) );

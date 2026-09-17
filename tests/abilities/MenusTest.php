@@ -86,6 +86,49 @@ final class MenusTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, wp_get_ability( 'aafm/get-menu' )->execute( array( 'menu_id' => 999999 ) ) );
 	}
 
+	/**
+	 * Codex round 1 (1.7.6), R1-7: get-menu advertised only id/name/slug/count while its executor
+	 * (aafm_redact_menu(), the same one list-menus/create-menu/update-menu already used) had long
+	 * since started returning attached_theme_locations and registered_theme_locations too. Assert
+	 * schema keys match the actual result keys for every one of the four menu endpoints that share
+	 * this shape, so a sibling drifting out of sync fails this test instead of silently
+	 * under-describing its result.
+	 */
+	public function test_menu_output_schema_matches_the_actual_result_shape_across_all_four_endpoints(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Schema Fidelity' );
+
+		$cases = array(
+			'aafm/get-menu'    => wp_get_ability( 'aafm/get-menu' )->execute( array( 'menu_id' => $menu_id ) ),
+			'aafm/create-menu' => wp_get_ability( 'aafm/create-menu' )->execute( array( 'name' => 'Schema Fidelity Created' ) ),
+			'aafm/update-menu' => wp_get_ability( 'aafm/update-menu' )->execute(
+				array(
+					'menu_id' => $menu_id,
+					'name'    => 'Schema Fidelity Renamed',
+				)
+			),
+		);
+
+		foreach ( $cases as $name => $result ) {
+			$this->assertIsArray( $result, $name . ' did not return an array.' );
+			$schema_keys = array_keys( wp_get_ability( $name )->get_output_schema()['properties'] );
+			$result_keys = array_keys( $result );
+			sort( $schema_keys );
+			sort( $result_keys );
+			$this->assertSame( $schema_keys, $result_keys, $name . ' output_schema properties must match its actual result keys exactly.' );
+		}
+
+		// list-menus wraps the same per-menu shape one level down, under 'menus'.
+		$list = wp_get_ability( 'aafm/list-menus' )->execute( array() );
+		$this->assertNotEmpty( $list['menus'], 'sanity: at least one menu must exist to compare shapes.' );
+		$list_schema_keys = array_keys( wp_get_ability( 'aafm/list-menus' )->get_output_schema()['properties']['menus']['items']['properties'] );
+		$list_result_keys = array_keys( $list['menus'][0] );
+		sort( $list_schema_keys );
+		sort( $list_result_keys );
+		$this->assertSame( $list_schema_keys, $list_result_keys, 'aafm/list-menus menu item schema must match its actual result keys exactly.' );
+	}
+
 	public function test_create_then_update_then_delete_menu(): void {
 		$this->register_menus();
 		$this->acting_as( 'administrator' );

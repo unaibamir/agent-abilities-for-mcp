@@ -201,12 +201,12 @@ function aafm_args_get_menu(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'    => array( 'type' => 'integer' ),
-				'name'  => array( 'type' => 'string' ),
-				'slug'  => array( 'type' => 'string' ),
-				'count' => array( 'type' => 'integer' ),
-			),
+			// Codex round 1 (1.7.6), R1-7: this used to list only id/name/slug/count by hand,
+			// while the executor below (aafm_redact_menu()) already returns the same
+			// attached/registered theme-location fields list-menus/create-menu/update-menu
+			// advertise through this shared helper. Use it here too, so all four menu endpoints
+			// describe the identical result shape they actually return.
+			'properties' => aafm_menu_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_get_menu',
 		'permission_callback' => 'aafm_perm_edit_theme_options',

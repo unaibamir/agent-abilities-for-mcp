@@ -178,7 +178,7 @@ final class BridgeToolCallResultWireTest extends TestCase {
 
 		// "Passes through untouched" means the ORIGINAL vendor message survives, not merely that
 		// some error surfaces - a bridge filter that swapped it for a generic message would still
-		// pass the two assertions above (Codex review, plan 226 round 1).
+		// pass the two assertions above.
 		$content = $response->getContent();
 		$this->assertNotEmpty( $content, 'An error result must still carry explanatory content.' );
 		$this->assertStringContainsString(

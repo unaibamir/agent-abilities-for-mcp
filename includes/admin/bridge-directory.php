@@ -194,9 +194,7 @@ function aafm_render_bridge_filter(): void {
  * exists precisely so nothing that identifies WHICH plugin this is ever depends on that: it is a
  * plain lowercase-hyphen literal that never passes through __() or the 'gettext' filter, so two
  * unrelated products can never end up sharing an id just because their labels happen to
- * translate to the same localized string on some site (1.7.2 residual finding, third Codex
- * re-review - the prior fix keyed the merge on the translated label itself, which closed the
- * raw-namespace and sanitize_title aliasing cases but not this one).
+ * translate to the same localized string on some site.
  *
  * This list is necessarily incomplete - the Abilities API has no way to ask "what is your
  * plugin's display name" for an arbitrary namespace - so an unlisted plugin still falls back to
@@ -315,9 +313,9 @@ function aafm_bridge_merge_group_key_prefix(): string {
  * sanitize_title($label) collapsed whitespace/hyphen/case differences between two DIFFERENT
  * labels onto the same slug, and keying on the label string itself (still __()'d) let two
  * DIFFERENT known plugins collapse onto the same key whenever their English labels happened to
- * translate - or get 'gettext'-filtered - to the same localized string (1.7.2 residual finding,
- * third Codex re-review). An id is a plain literal that is never translated or filtered, so only
- * two namespaces this map itself declares to be the same product ever share a key.
+ * translate - or get 'gettext'-filtered - to the same localized string. An id is a plain literal
+ * that is never translated or filtered, so only two namespaces this map itself declares to be the
+ * same product ever share a key.
  *
  * @param string $id Canonical known-plugin id (a value of aafm_bridge_known_plugin_ids()).
  * @return string
@@ -813,7 +811,7 @@ function aafm_ajax_save_bridged_abilities(): void {
 	// from the screen. Refuse a slug that is not already stored, the same rule
 	// aafm_set_enabled_abilities() applies to native names: an existing choice is carried forward,
 	// a fresh one is not accepted from a form that never offered it. The refused slugs are kept
-	// so the refusal can be audited below (B18), exactly as the native path audits its own.
+	// so the refusal can be audited below, exactly as the native path audits its own.
 	$refused = array();
 	if ( aafm_read_only_mode() ) {
 		$kept = array_values(
@@ -852,7 +850,7 @@ function aafm_ajax_save_bridged_abilities(): void {
 	// persistent object cache can otherwise make the write silently no-op.
 	$enabled_persisted = aafm_update_option_verified( 'aafm_enabled_bridged_abilities', $enabled );
 
-	// B18: the bridge tab changes ability exposure outside the main save path, so it carries the
+	// The bridge tab changes ability exposure outside the main save path, so it carries the
 	// same audit contract - one ability_enabled/ability_disabled row per changed slug, and one
 	// ability_enable_blocked row per refused fresh write. The reason is passed explicitly:
 	// aafm_ability_lock_reason() is native-only and must never see a bridged slug, and the only

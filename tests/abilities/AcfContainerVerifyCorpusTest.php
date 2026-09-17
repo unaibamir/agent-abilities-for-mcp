@@ -589,13 +589,11 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 			),
 
 			// -----------------------------------------------------------------
-			// CLONE. The container type the round-3 sim could not drive at all,
-			// because no clone field is defined on the clone site, so the claim
-			// that it shared the repeater fix was argued and never demonstrated.
-			// It did not share it: a clone with "Prefix Field Names" on renames
-			// the sub-field on the way out but not on the way in, and every one
-			// of its writes false-failed. See clone_config() for the three name
-			// shapes and where each was measured.
+			// CLONE. This container type needs its own coverage rather than assuming it shares
+			// the repeater fix: a clone with "Prefix Field Names" on renames the sub-field on the
+			// way out but not on the way in, so every one of its writes silently fails unless
+			// tested directly. See clone_config() for the three name shapes and where each
+			// applies.
 			// -----------------------------------------------------------------
 			'clone prefixed: partial map'       => array(
 				'clone',

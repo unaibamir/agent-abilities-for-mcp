@@ -504,14 +504,14 @@ final class WpmlLangAllTest extends TestCase {
 	}
 
 	/**
-	 * Branch review fix (lang scope and result shaping): plan 207's lang:"all" fix and plan
-	 * 208's delegation of the auto-excerpt to get_the_excerpt() compose into a silent
-	 * wrong-language shape. A get_the_excerpt filter that returns the CURRENT ambient WPML
-	 * language must, on every post lang:"all" returns, produce an excerpt matching THAT
+	 * Combining lang:"all" with an auto-excerpt delegated to get_the_excerpt() can compose into
+	 * a silent wrong-language shape. A get_the_excerpt filter that returns the CURRENT ambient
+	 * WPML language must, on every post lang:"all" returns, produce an excerpt matching THAT
 	 * post's OWN tagged language - not whatever language the "all" loop happened to leave
-	 * ambient by the time shaping ran (pre-fix: always the language active BEFORE the loop
-	 * started, since aafm_with_language() restores to its own caller's ambient in a finally,
-	 * and the shape step ran after every iteration had already returned).
+	 * ambient by the time shaping ran. Without this, shaping would always reflect whatever
+	 * language was active BEFORE the loop started, since aafm_with_language() restores to its
+	 * own caller's ambient in a finally, and the shape step runs after every iteration has
+	 * already returned.
 	 */
 	public function test_get_posts_lang_all_shapes_each_result_under_its_own_language(): void {
 		$this->fake_wpml_with_post_filtering();
@@ -617,11 +617,9 @@ final class WpmlLangAllTest extends TestCase {
 	}
 
 	/**
-	 * Branch review fix, round 2: the operator's own round-1 constraint (leave the
-	 * single-language branch byte-for-byte unchanged) preserved the identical defect on an
-	 * EXPLICIT lang request - aafm_with_language() restores ambient before returning either
-	 * way, "all" or one code. Withdrawn: a single non-"all" language must ALSO shape under the
-	 * requested language, not ambient.
+	 * A single non-"all" language must ALSO shape under the requested language, not ambient:
+	 * aafm_with_language() restores ambient before returning either way, "all" or one code, so an
+	 * EXPLICIT lang request needs the same treatment as the multi-language path.
 	 */
 	public function test_get_posts_explicit_lang_shapes_under_the_requested_language(): void {
 		$this->fake_wpml_with_post_filtering( 'is' );
@@ -713,10 +711,10 @@ final class WpmlLangAllTest extends TestCase {
 	}
 
 	/**
-	 * Branch review fix, round 3: aafm/get-media had the identical defect as the post/search
-	 * list paths - aafm_redact_media() (which calls the filterable get_the_title()) ran after
-	 * the language scope had already restored to ambient. Covers both explicit lang and "all",
-	 * since both now share the same $shape_language closure.
+	 * aafm/get-media has the identical shape-under-own-language requirement as the post/search
+	 * list paths: aafm_redact_media() (which calls the filterable get_the_title()) must run
+	 * before the language scope restores to ambient, not after. Covers both explicit lang and
+	 * "all", since both share the same $shape_language closure.
 	 */
 	public function test_get_media_shapes_each_result_under_its_own_language(): void {
 		$this->fake_wpml_with_post_filtering( 'is' );

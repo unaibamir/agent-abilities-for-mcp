@@ -27,6 +27,8 @@ use WP_Query;
 final class RankMathRenderedHeadBufferTest extends TestCase {
 
 	/**
+	 * Isolated so the rank_math() stub this test defines never leaks into a later test.
+	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */

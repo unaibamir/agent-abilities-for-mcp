@@ -2500,8 +2500,18 @@ function aafm_rich_block_output_properties(): array {
 /**
  * Safe shape for a nav menu (a wp_term in the nav_menu taxonomy).
  *
- * Returns only id, name, slug, and the item count - the same metadata the admin Menus
- * screen shows in its dropdown. No taxonomy internals (term_taxonomy_id, parent, …) leak.
+ * Returns id, name, slug, the item count - the same metadata the admin Menus screen shows in
+ * its dropdown - plus two disclosure fields (register 1.5): this taxonomy-backed menu API can
+ * only ever touch the CLASSIC theme-location mechanism (nav_menu_locations), never a block
+ * theme's core/navigation block, which reads from the separate wp_navigation post type instead.
+ * A menu this API creates or edits is real and correct, but on a block theme it is invisible on
+ * the front end until a human wires it into a template - and even on a classic theme, a freshly
+ * created menu is never auto-assigned anywhere. attached_theme_locations names the location
+ * slugs (if any) currently pointing at this menu id (get_nav_menu_locations(), a theme_mod read,
+ * not a query); registered_theme_locations lists every location slug the active theme has
+ * declared (get_registered_nav_menus()) - empty on a theme that registers none, itself a signal
+ * that classic locations do not apply here. Neither call writes anything; this is disclosure
+ * only, not the wiring itself. No taxonomy internals (term_taxonomy_id, parent, …) leak.
  *
  * @param mixed $menu A WP_Term in the nav_menu taxonomy (as returned by the nav-menu API).
  * @return array<string,mixed>
@@ -2510,11 +2520,20 @@ function aafm_redact_menu( $menu ): array {
 	if ( ! $menu instanceof WP_Term ) {
 		return array();
 	}
+	$locations = get_nav_menu_locations();
+	$attached  = array();
+	foreach ( $locations as $location => $menu_id ) {
+		if ( (int) $menu_id === (int) $menu->term_id ) {
+			$attached[] = (string) $location;
+		}
+	}
 	return array(
-		'id'    => (int) $menu->term_id,
-		'name'  => $menu->name,
-		'slug'  => $menu->slug,
-		'count' => (int) $menu->count,
+		'id'                         => (int) $menu->term_id,
+		'name'                       => $menu->name,
+		'slug'                       => $menu->slug,
+		'count'                      => (int) $menu->count,
+		'attached_theme_locations'   => $attached,
+		'registered_theme_locations' => array_keys( get_registered_nav_menus() ),
 	);
 }
 
@@ -2527,10 +2546,18 @@ function aafm_redact_menu( $menu ): array {
  */
 function aafm_menu_output_properties(): array {
 	return array(
-		'id'    => array( 'type' => 'integer' ),
-		'name'  => array( 'type' => 'string' ),
-		'slug'  => array( 'type' => 'string' ),
-		'count' => array( 'type' => 'integer' ),
+		'id'                         => array( 'type' => 'integer' ),
+		'name'                       => array( 'type' => 'string' ),
+		'slug'                       => array( 'type' => 'string' ),
+		'count'                      => array( 'type' => 'integer' ),
+		'attached_theme_locations'   => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'string' ),
+		),
+		'registered_theme_locations' => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'string' ),
+		),
 	);
 }
 

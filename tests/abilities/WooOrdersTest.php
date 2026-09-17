@@ -427,10 +427,11 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * B57: status "any" used to trust the storage backend's default status set, which includes
-	 * the internal checkout-draft status on HPOS and excludes it on legacy CPT storage - the same
-	 * call gave a backend-dependent answer. "any" now expands to the registered statuses from
-	 * wc_get_order_statuses() explicitly, which never include the ephemeral checkout-draft.
+	 * Status "any" must not trust the storage backend's default status set: that set includes
+	 * the internal checkout-draft status on HPOS and excludes it on legacy CPT storage, so the
+	 * same call could give a backend-dependent answer. "any" expands to the registered statuses
+	 * from wc_get_order_statuses() explicitly instead, which never include the ephemeral
+	 * checkout-draft.
 	 */
 	public function test_list_orders_any_excludes_checkout_draft_explicitly(): void {
 		$this->acting_as( 'administrator' );
@@ -451,7 +452,7 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * B57 control: an explicit checkout-draft request still returns the draft orders.
+	 * An explicit checkout-draft request still returns the draft orders.
 	 */
 	public function test_list_orders_explicit_checkout_draft_still_works(): void {
 		$this->acting_as( 'administrator' );
@@ -480,10 +481,10 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * B24: the order read must expose each line item's own order-item id, because
+	 * The order read must expose each line item's own order-item id, because
 	 * wc-create-order-refund's line_items contract documents "the order's own line item id, as
-	 * returned by reading the order" - and until this fix the read returned no id at all, making
-	 * the documented per-line refund unusable.
+	 * returned by reading the order" - without it, the documented per-line refund would be
+	 * unusable.
 	 */
 	public function test_get_order_exposes_line_item_ids(): void {
 		$this->acting_as( 'administrator' );
@@ -530,10 +531,10 @@ final class WooOrdersTest extends TestCase {
 	 * Put the seeded order into a status WooCommerce still treats as editable.
 	 *
 	 * The fixture seeds 5001 as `processing` (IntegrationStubs), which is the normal state of a
-	 * PAID order and one WooCommerce does NOT treat as editable. Since R3-1 the update ability
-	 * refuses to add line items to such an order, so every test that exercises a successful add has
-	 * to state which kind of order it is adding to. That precondition used to be incidental; it is
-	 * load-bearing now, which is why it is spelled rather than left to the fixture default.
+	 * PAID order and one WooCommerce does NOT treat as editable. The update ability refuses to
+	 * add line items to such an order, so every test that exercises a successful add has to state
+	 * which kind of order it is adding to; this precondition is load-bearing, which is why it is
+	 * spelled out rather than left to the fixture default.
 	 */
 	private function make_seeded_order_editable(): void {
 		WcOrderStubStore::$orders[5001]['status'] = 'on-hold';
@@ -776,10 +777,10 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * B27: the add-items promise is "the entire request fails with no partial write". Real
-	 * add_product() persists each item row immediately, so a throw mid-loop used to leave the
-	 * earlier items attached to the order while the caller was told the request failed. A
-	 * mid-loop throw must now roll the already-written items back and return a specific error.
+	 * The add-items promise is "the entire request fails with no partial write". Real
+	 * add_product() persists each item row immediately, so a throw mid-loop must not leave the
+	 * earlier items attached to the order while the caller is told the request failed: it has to
+	 * roll the already-written items back and return a specific error.
 	 */
 	public function test_update_order_mid_loop_add_failure_leaves_no_partial_write(): void {
 		$this->register_wc_order_writes();
@@ -815,8 +816,8 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * B27 (create side): a mid-loop throw on wc-create-order used to leave the already-added
-	 * items persisted as order_id-0 orphan rows. They must be cleaned up on failure.
+	 * A mid-loop throw on wc-create-order must not leave the already-added items persisted as
+	 * order_id-0 orphan rows. They must be cleaned up on failure.
 	 */
 	public function test_create_order_mid_loop_add_failure_leaves_no_orphan_items(): void {
 		$this->register_wc_order_writes();
@@ -1302,10 +1303,10 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * B55: WC_Order::update_status() swallows its own exceptions and returns false on a failed
-	 * transition, and the executor ignored that return - a failed transition came back as a
-	 * success payload showing the OLD status. The return is now checked and the resulting status
-	 * verified, erroring honestly.
+	 * WC_Order::update_status() swallows its own exceptions and returns false on a failed
+	 * transition, so the executor must check that return value and verify the resulting status
+	 * rather than trust it: ignoring it would let a failed transition come back as a success
+	 * payload still showing the OLD status.
 	 */
 	public function test_update_order_status_failed_transition_is_an_error_not_a_success_payload(): void {
 		$this->register_wc_order_status_write();
@@ -1446,7 +1447,7 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * R3-1: adding a line item to an order WooCommerce no longer treats as editable is REFUSED.
+	 * Adding a line item to an order WooCommerce no longer treats as editable is REFUSED.
 	 *
 	 * This replaces a test that asserted calculate_totals() was called with false for a completed
 	 * order. That assertion encoded the defect instead of detecting it: passing false does protect
@@ -1498,7 +1499,7 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * R3-1: a PROCESSING order refuses the add, and this is the case worth doubting.
+	 * A PROCESSING order refuses the add, and this is the case worth doubting.
 	 *
 	 * It has its own named test rather than only a data-provider row because it is the one a future
 	 * reader will question. processing is the normal state of a paid order, so refusing it looks at
@@ -1536,9 +1537,9 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * R3-1: the refusal covers every non-editable status, not just completed. processing is the one
+	 * The refusal covers every non-editable status, not just completed. processing is the one
 	 * that matters most in practice -- it is the normal state of a paid order, and it is NOT
-	 * editable, so this is where the old code silently recorded untaxed goods most often.
+	 * editable, so this is where silently recording untaxed goods would happen most often.
 	 *
 	 * @dataProvider provide_non_editable_statuses
 	 *
@@ -1582,7 +1583,7 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * R3-1: a request that adds items AND completes the order in one call still taxes the goods.
+	 * A request that adds items AND completes the order in one call still taxes the goods.
 	 *
 	 * Editability is judged against the status the order HAD when the request arrived, and the
 	 * recalculation then runs with taxes on unconditionally. Re-reading editability at the

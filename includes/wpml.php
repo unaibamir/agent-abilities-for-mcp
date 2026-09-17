@@ -73,9 +73,9 @@ function aafm_lang_schema_fragment(): array {
 /**
  * Resolve a requested language from validated input.
  *
- * An unknown code under active WPML is REFUSED, not coerced: the old null-coercion both
- * served the default language silently and reported `language: null`, which the output
- * schema documents as "WPML inactive" - two false statements in one response (B48). With
+ * An unknown code under active WPML is REFUSED, not coerced: silently coercing it to the
+ * default language would both serve the default silently and report `language: null`, which
+ * the output schema documents as "WPML inactive" - two false statements in one response. With
  * WPML off, `lang` stays documented as ignored, so null is returned without inspection.
  *
  * @param array<string,mixed> $input Ability input.

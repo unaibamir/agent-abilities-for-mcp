@@ -107,7 +107,7 @@ function aafm_sanitize_multiline_text( string $value ): string {
  * The feed wraps each excerpt in `<![CDATA[ … ]]>`, so a raw `]]>` inside one ends the section
  * early, turns everything after it into markup, and makes the whole document not well-formed. That
  * is the same harm the invisible-character strip above exists to prevent, arriving through a
- * character nobody enumerated (B2-09).
+ * character nobody enumerated.
  *
  * It is fixed HERE, at output, rather than in the sanitizers above, and the difference matters.
  * Every character those strip is invalid or deceptive in any context, so removing it loses nothing.

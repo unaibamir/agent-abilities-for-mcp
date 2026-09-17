@@ -56,7 +56,7 @@ function aafm_oauth_local_error( string $code, string $message ): WP_Error {
 /**
  * Look up an active OAuth client row by client_id.
  *
- * Same stale-read class as R8-1 (aafm_oauth_get_client() in oauth/clients.php): a bare
+ * The same stale-read risk applies here as in aafm_oauth_get_client() (oauth/clients.php): a bare
  * $wpdb->get_row() hands back the PREVIOUS query's row when this one fails, which here would let
  * a failed lookup for one client authorize the request as whichever OTHER client the connection
  * happened to look up last. This gates the whole authorize flow, so a failed lookup must DENY,
@@ -177,20 +177,18 @@ function aafm_oauth_validate_authorize_params( array $params ) {
  * Whether the user has already consented to this client, and whether that read could even be
  * completed - one query answering both.
  *
- * Codex round 7, R7-2: the plain `$wpdb->get_var()` this used to be built on returns the
+ * Routed through aafm_wpdb_scalar() rather than a bare `$wpdb->get_var()`: a bare call returns the
  * PREVIOUS query's row when the current query itself fails ($wpdb->query() returns false before
  * ever touching last_result on some paths - see aafm_wpdb_scalar()'s docblock), so a failed
  * consent check could read as a positive consent left over from whatever query ran just before
  * it - at the authorization-code redemption call site (rest.php), that query is the code lookup
  * that just found a real row, so a failed consent read there would inherit a real, non-null id
- * and report consent as granted. Routing through aafm_wpdb_scalar() closes that: a failed query
- * is reported as failed, never silently reused as a stale answer.
+ * and report consent as granted. aafm_wpdb_scalar() reports a failed query as failed, never
+ * silently reused as a stale answer.
  *
- * This also replaces the query-per-decision pair aafm_oauth_has_consent() plus the former
- * aafm_oauth_consent_lookup_failed() used to require at the redemption call site (Codex round 6,
- * R6-2) - one read now answers both "does consent exist" and "could this even be checked",
- * so a caller that needs to distinguish a database fault from a genuine no-consent answer no
- * longer needs a second, separate query to do it.
+ * One read here answers both "does consent exist" and "could this even be checked", so a caller
+ * that needs to distinguish a database fault from a genuine no-consent answer does not need a
+ * second, separate query to do it.
  *
  * @param int    $user_id   WordPress user ID.
  * @param string $client_id The public client identifier.
@@ -271,7 +269,7 @@ function aafm_oauth_record_consent( int $user_id, string $client_id ): bool {
 	// Certify against a fresh read rather than trusting $wpdb->replace()'s own result (same
 	// reasoning as aafm_oauth_deactivate_client()): a failed REPLACE must stop the approval
 	// handler from minting and handing back a code that redemption will find has no matching
-	// consent (Codex round 9, R9-6).
+	// consent.
 	return aafm_oauth_has_consent( $user_id, $client_id );
 }
 

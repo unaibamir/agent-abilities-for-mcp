@@ -250,7 +250,7 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
-	 * F2: a post detail's identifier links to that post's edit screen.
+	 * A post detail's identifier links to that post's edit screen.
 	 *
 	 * The detail string is built through the real result builder against the real return shape
 	 * of aafm_exec_create_page(), never hand-typed - a hand-built fixture would still pass even

@@ -38,16 +38,37 @@ defined( 'ABSPATH' ) || exit;
  * confidence that the guard covers a builder it does not. The map is filterable via
  * aafm_page_builder_markers, so an operator can add a marker without a code change.
  *
+ * This is a live-authorization-shaped check, not a certifying one: it decides whether a write is
+ * currently allowed, so a marker whose read could not be trusted must never be treated the same as
+ * a marker confirmed absent. A failed read on one marker still lets a genuine match on another
+ * marker win (that refusal is only more specific), but if nothing more definite turns up, the
+ * failure is reported rather than silently read as "no builder owns this".
+ *
  * @param int $post_id Post id.
- * @return string|false The detected builder's short name, or false when none is detected.
+ * @return string|false|WP_Error The detected builder's short name, false when none is detected, or
+ *              a WP_Error when ownership could not be determined at all (a marker's read failed and
+ *              no other marker matched).
  */
 function aafm_post_has_foreign_builder_ownership( int $post_id ) {
+	$unknown = false;
 	foreach ( aafm_page_builder_markers() as $meta_key => $builder ) {
-		$value = get_post_meta( $post_id, (string) $meta_key, true );
+		$read = aafm_meta_read( $post_id, (string) $meta_key, 'post' );
+		if ( ! $read['ok'] ) {
+			$unknown = true;
+			continue;
+		}
+		$value = $read['value'];
 		if ( '' === $value || false === $value || null === $value || '0' === $value || 'off' === $value ) {
 			continue; // Present-but-falsy (e.g. Divi toggled off) is not current ownership.
 		}
 		return (string) $builder;
+	}
+
+	if ( $unknown ) {
+		return new WP_Error(
+			'aafm_page_builder_ownership_unknown',
+			__( 'Whether this content is owned by a page builder could not be determined, so the write was refused.', 'agent-abilities-for-mcp' )
+		);
 	}
 
 	return false;
@@ -101,10 +122,21 @@ function aafm_page_builder_markers(): array {
  * shortcodes), so an unguarded generic write there would alter or corrupt the shortcode tree
  * rather than silently do nothing - Codex final round 7 LOW.
  *
- * @param string $builder The detected builder's short name (from aafm_post_has_foreign_builder_ownership()).
+ * $builder is normally the detected builder's short name, but every call site passes through
+ * whatever aafm_post_has_foreign_builder_ownership() returned once that is anything other than
+ * false - including its own WP_Error when ownership could not be determined at all. That error
+ * already states the correct refusal reason, so it is returned as-is rather than being forced
+ * through the builder-name wording below.
+ *
+ * @param string|WP_Error $builder The detected builder's short name, or the WP_Error from
+ *                                 aafm_post_has_foreign_builder_ownership() when ownership was
+ *                                 undeterminable.
  * @return WP_Error
  */
-function aafm_page_builder_owned_error( string $builder ): WP_Error {
+function aafm_page_builder_owned_error( $builder ): WP_Error {
+	if ( $builder instanceof WP_Error ) {
+		return $builder;
+	}
 	$label = ucwords( str_replace( '-', ' ', $builder ) );
 	return new WP_Error(
 		'aafm_page_builder_owned',

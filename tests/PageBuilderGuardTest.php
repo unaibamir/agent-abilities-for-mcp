@@ -9,6 +9,9 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests;
 
+use AAFM\Tests\Support\QueryFaultInjector;
+use WP_Error;
+
 final class PageBuilderGuardTest extends TestCase {
 
 	public function test_elementor_marker_is_detected(): void {
@@ -81,5 +84,56 @@ final class PageBuilderGuardTest extends TestCase {
 		$error = aafm_page_builder_owned_error( 'beaver-builder' );
 		$this->assertSame( 'aafm_page_builder_owned', $error->get_error_code() );
 		$this->assertStringContainsString( 'Beaver Builder', $error->get_error_message() );
+	}
+
+	/**
+	 * This is a live-authorization-shaped check ("is this write currently allowed"), not a
+	 * certifying one - a failed marker read must never be treated the same as a marker confirmed
+	 * absent, or a database hiccup on the last marker checked lets a builder-owned write through.
+	 */
+	public function test_ownership_check_fails_closed_when_a_markers_read_fails(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
+
+		global $wpdb;
+		$result = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, "meta_key = 'vcv-pageContent'" ),
+			static fn() => aafm_post_has_foreign_builder_ownership( $id ),
+			1
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'A failed marker read must not be read as "no builder owns this" - it must refuse, not allow.'
+		);
+	}
+
+	/**
+	 * The unknown-ownership state must actually reach a real content-write call site, not just the
+	 * detector function in isolation.
+	 */
+	public function test_update_post_refuses_a_content_write_when_ownership_cannot_be_determined(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$id       = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		update_post_meta( $id, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
+
+		global $wpdb;
+		$result = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, "meta_key = 'vcv-pageContent'" ),
+			static fn() => aafm_exec_update_post(
+				array(
+					'post_id' => $id,
+					'content' => 'New content',
+				)
+			),
+			1
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'A content write must be refused, not silently allowed, when page-builder ownership could not be determined.'
+		);
 	}
 }

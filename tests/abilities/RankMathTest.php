@@ -17,6 +17,7 @@ namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\Support\QueryFaultInjector;
 use WP_Error;
 
 final class RankMathTest extends TestCase {
@@ -691,6 +692,123 @@ final class RankMathTest extends TestCase {
 
 		$res = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( 'noindex,nofollow', $res['robots'], 'A legacy string robots value must read back as that string.' );
+	}
+
+	/**
+	 * A legacy scalar robots value must never be silently coerced to array() during confirmation:
+	 * doing so makes any real scalar compare equal to an empty array, so a vetoed clear-to-empty
+	 * write reads as a landed change purely because the intended value happens to be array-shaped.
+	 */
+	public function test_update_post_rejects_a_veto_that_clears_a_legacy_scalar_robots_value(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+		update_post_meta( $post_id, 'rank_math_robots', 'noindex' );
+
+		$veto = static function ( $check, $object_id, $meta_key ) {
+			return 'rank_math_robots' === $meta_key ? true : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'robots'  => '',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		// Precondition: the veto really did block the write - the legacy scalar value survives.
+		$this->assertSame( 'noindex', get_post_meta( $post_id, 'rank_math_robots', true ), 'precondition: the veto must have kept the legacy scalar value in storage.' );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A vetoed clear of a legacy scalar robots value must not be coerced to an empty array and reported as a landed change.'
+		);
+	}
+
+	/**
+	 * A raw get_post_meta() call cannot tell a genuinely empty field from a confirming SELECT that
+	 * failed - so a response built that way after a landed write can silently report success with
+	 * an empty field. The response reader must fail closed instead.
+	 */
+	public function test_rankmath_read_fields_fails_closed_when_the_underlying_read_fails(): void {
+		$post_id = (int) self::factory()->post->create();
+		update_post_meta( $post_id, 'rank_math_title', 'A real title' );
+		wp_cache_delete( $post_id, 'post_meta' );
+
+		global $wpdb;
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, 'SELECT' ),
+			static fn(): array => aafm_rankmath_read_fields( $post_id ),
+			1
+		);
+
+		$this->assertFalse( $out['ok'], 'A failed field read must not be reported as ok, even though the data would otherwise look like a legitimate empty field.' );
+	}
+
+	/**
+	 * The same failure must propagate all the way out of the update-post ability's response, not
+	 * just the internal reader - a caller that just confirmed a write landed must not be told it
+	 * succeeded with an empty field.
+	 */
+	public function test_update_post_fails_closed_when_the_response_read_fails_after_a_confirmed_write(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+
+		global $wpdb;
+		// Scoped to this exact meta key's own SELECT shape (not a bare table match, which would also
+		// catch WordPress core's own internal cache-priming queries during the write itself). For a
+		// single-field title write, this key is read four times in order: (1) the pre-write baseline,
+		// (2) WordPress core's own existing-row check inside update_post_meta(), (3)
+		// aafm_meta_write_confirmed()'s own confirming read, and (4) the response build in
+		// aafm_rankmath_read_fields() - the one this test targets. Verified against the actual query
+		// log, not assumed.
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, "meta_key = 'rank_math_title'" ),
+			static fn() => aafm_exec_rankmath_update_post(
+				array(
+					'post_id' => $post_id,
+					'title'   => 'New title',
+				)
+			),
+			4
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'A confirmed write must not report success with an empty field when the response-building read itself fails.'
+		);
+	}
+
+	/**
+	 * A baseline read failure on ANY field must abort before any write in the same call runs -
+	 * otherwise a field earlier in the loop is already persisted, and never reconsidered, by the
+	 * time a later field's failed baseline aborts the request.
+	 */
+	public function test_update_post_baseline_failure_on_a_later_field_leaves_earlier_fields_unwritten(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+
+		global $wpdb;
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, "meta_key = 'rank_math_description'" ),
+			static fn() => aafm_exec_rankmath_update_post(
+				array(
+					'post_id'     => $post_id,
+					'title'       => 'New title',
+					'description' => 'New description',
+				)
+			),
+			1
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out, 'A failed baseline read on any field must refuse the whole write.' );
+		$this->assertSame(
+			'',
+			get_post_meta( $post_id, 'rank_math_title', true ),
+			'A field earlier in the loop must not already be written by the time a later field\'s baseline read fails.'
+		);
 	}
 
 	public function test_rankmath_get_post_unknown_id_is_rejected(): void {

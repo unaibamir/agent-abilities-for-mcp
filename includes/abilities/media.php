@@ -987,10 +987,23 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		return aafm_generic_error();
 	}
 
-	// Return the redacted media shape - public URL only, never an absolute path.
+	// Return the redacted media shape - public URL only, never an absolute path. aafm_redact_media()
+	// reads alt text with a raw get_post_meta() call, which cannot tell "genuinely empty" from "the
+	// read itself failed" - so a query that fails right after the alt write above was just
+	// confirmed would silently report success with an empty alt. Re-read it failure-aware and patch
+	// it into the response rather than trusting that second, independent read to always succeed.
+	$media_shape = aafm_redact_media( $attachment );
+	if ( null !== $alt ) {
+		$alt_read = aafm_meta_read( $attachment_id, '_wp_attachment_image_alt', 'post' );
+		if ( ! $alt_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$media_shape['alt'] = (string) $alt_read['value'];
+	}
+
 	return array(
 		'attachment_id' => (int) $attachment_id,
-		'media'         => aafm_redact_media( $attachment ),
+		'media'         => $media_shape,
 	);
 }
 
@@ -1722,7 +1735,21 @@ function aafm_exec_update_media( array $input ) {
 		return aafm_media_write_unconfirmed_error();
 	}
 
-	return array( 'media' => aafm_media_item_payload( $fresh ) );
+	// aafm_media_item_payload() reads alt text (via aafm_redact_media()) with a raw get_post_meta()
+	// call, which cannot tell "genuinely empty" from "the read itself failed" - so a query that
+	// fails right after the alt write above was just confirmed would silently report success with
+	// an empty alt. Re-read it failure-aware and patch it into the response rather than trusting
+	// that second, independent read to always succeed.
+	$media_shape = aafm_media_item_payload( $fresh );
+	if ( $has_alt ) {
+		$alt_read = aafm_meta_read( $att_id, '_wp_attachment_image_alt', 'post' );
+		if ( ! $alt_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$media_shape['alt'] = (string) $alt_read['value'];
+	}
+
+	return array( 'media' => $media_shape );
 }
 
 /**

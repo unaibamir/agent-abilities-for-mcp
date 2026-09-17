@@ -15,6 +15,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 use WP_Post;
@@ -754,6 +755,62 @@ final class MediaWriteTest extends TestCase {
 			WP_Error::class,
 			$out,
 			'A vetoed alt-text write must return an error, not a success claiming the new alt text was saved.'
+		);
+	}
+
+	/**
+	 * A raw get_post_meta() call inside aafm_redact_media() reads alt text, which cannot tell
+	 * "genuinely empty" from "the read itself failed" - so a query that fails right after the alt
+	 * write above was just confirmed would silently report success with an empty alt.
+	 */
+	public function test_update_media_response_reports_the_confirmed_alt_even_when_the_redact_reads_fails(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'alt-response.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_post_meta( $att, '_wp_attachment_image_alt', 'Old Alt' );
+
+		global $wpdb;
+		// Evict the meta cache right before the real write runs (mirrors a cache backend that
+		// invalidates ahead of confirming a remote write), so aafm_redact_media()'s raw
+		// get_post_meta() call is forced to reload from the database - a warm cache would otherwise
+		// serve the correct value straight through and never exercise this read at all.
+		$evict = static function ( $check, $object_id, $meta_key ) use ( $att ) {
+			if ( $att === $object_id && '_wp_attachment_image_alt' === $meta_key ) {
+				wp_cache_delete( $object_id, 'post_meta' );
+			}
+			return $check; // Never short-circuits: the real write still runs.
+		};
+		add_filter( 'update_post_metadata', $evict, 10, 3 );
+		// Verified against the actual query log: with the cache evicted above, the 5th SELECT on
+		// this table is aafm_redact_media()'s own cache-priming read (1: baseline, 2 and 5: WordPress
+		// core's own cache-priming reads, 3: core's existing-row check, 4: the confirming read, 6:
+		// this fix's own re-read). Targeting it specifically - rather than every SELECT - proves the
+		// fix supplies the correct value even though the original raw getter's own read fails.
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, 'SELECT' ),
+			static fn() => aafm_exec_update_media(
+				array(
+					'attachment_id' => $att,
+					'alt'           => 'New Alt',
+				)
+			),
+			5
+		);
+		remove_filter( 'update_post_metadata', $evict, 10 );
+
+		if ( $out instanceof WP_Error ) {
+			$this->fail( 'A genuinely landed alt write must not itself be reported as a failure: ' . $out->get_error_message() );
+		}
+		$this->assertSame(
+			'New Alt',
+			$out['media']['alt'],
+			'A failed redact_media() read after a confirmed alt write must not silently report an empty alt.'
 		);
 	}
 

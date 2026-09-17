@@ -312,8 +312,13 @@ function aafm_rankmath_robots_tokens(): array {
  * Read every Rank Math field for a post into the unified output shape. Robots is read as the stored
  * array and imploded back to the unified comma string.
  *
+ * Failure-aware: every field goes through aafm_meta_read()'s {ok,value} shape rather than a raw
+ * get_post_meta() call, so a query that fails after a just-confirmed write is reported as unknown
+ * instead of silently reading back as an empty field on an otherwise-successful response.
+ *
  * @param int $id Post id.
- * @return array<string,mixed>
+ * @return array{ok:bool,data:array<string,mixed>} ok is false when any field's read itself failed -
+ *              data is empty in that case.
  */
 function aafm_rankmath_read_fields( int $id ): array {
 	$out = array(
@@ -321,10 +326,24 @@ function aafm_rankmath_read_fields( int $id ): array {
 		'post_id' => $id,
 	);
 	foreach ( aafm_rankmath_fields() as $field => $key ) {
-		$val           = get_post_meta( $id, $key, true );
+		$read = aafm_meta_read( $id, $key, 'post' );
+		if ( ! $read['ok'] ) {
+			return array(
+				'ok'   => false,
+				'data' => array(),
+			);
+		}
+		$val           = $read['value'];
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
-	$robots = get_post_meta( $id, 'rank_math_robots', true );
+	$robots_read = aafm_meta_read( $id, 'rank_math_robots', 'post' );
+	if ( ! $robots_read['ok'] ) {
+		return array(
+			'ok'   => false,
+			'data' => array(),
+		);
+	}
+	$robots = $robots_read['value'];
 	// Current Rank Math stores robots as an array of tokens; a legacy/imported row may hold a raw CSV
 	// string. Implode the array, pass a string through as-is, and floor anything else to ''.
 	if ( is_array( $robots ) ) {
@@ -334,7 +353,10 @@ function aafm_rankmath_read_fields( int $id ): array {
 	} else {
 		$out['robots'] = '';
 	}
-	return $out;
+	return array(
+		'ok'   => true,
+		'data' => $out,
+	);
 }
 
 /**
@@ -403,7 +425,8 @@ function aafm_exec_rankmath_get_post( array $input ) {
 	if ( ! get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return aafm_rankmath_read_fields( $id );
+	$read = aafm_rankmath_read_fields( $id );
+	return $read['ok'] ? $read['data'] : aafm_generic_error();
 }
 
 /**
@@ -527,7 +550,13 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// a silent veto rather than only replaying sanitize_meta() against a same-process recompute.
 	$old_meta = array();
 
-	$url_fields = aafm_rankmath_url_fields();
+	// Every baseline below is read BEFORE any write runs: this whole block only ever populates
+	// $expected_meta/$old_meta and the small per-group write queues, and returns closed the moment
+	// a baseline read itself is unknown - never after some of the group's writes have already run.
+	// A later field's failed baseline used to be reached only after earlier fields in the same call
+	// were already persisted, leaving them written but never reaching the confirmation pass below.
+	$text_writes = array();
+	$url_fields  = aafm_rankmath_url_fields();
 	foreach ( aafm_rankmath_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
@@ -542,30 +571,29 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		if ( ! $old_read['ok'] ) {
 			return aafm_generic_error();
 		}
-		$old_meta[ $key ] = $old_read['value'];
-		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
-		// is stripped unless it is slashed first. Every sibling meta writer (meta.php, terms.php,
-		// user-meta.php) slashes; these SEO writers must too.
-		update_post_meta( $id, $key, wp_slash( $clean ) );
+		$old_meta[ $key ]      = $old_read['value'];
 		$expected_meta[ $key ] = $clean;
+		$text_writes[ $key ]   = $clean;
 	}
 
-	// Persist the attachment-id companion meta the frontend actually renders from. A cleared image (0)
+	// The attachment-id companion meta the frontend actually renders from. A cleared image (0)
 	// blanks the id so the resolver falls through to the featured image, never a stale id. Codex round
 	// 6 B6-2: these companion writes were not confirmed below, so a filter could veto just one of them
 	// while the visible URL field still reported success and the frontend kept rendering a stale image.
+	$companion_writes = array();
 	foreach ( $resolved_ids as $field => $attachment_id ) {
-		$companion_value                             = $attachment_id > 0 ? $attachment_id : '';
-		$expected_meta[ $image_id_fields[ $field ] ] = $companion_value;
+		$companion_key   = $image_id_fields[ $field ];
+		$companion_value = $attachment_id > 0 ? $attachment_id : '';
 		// Codex round 1 (1.7.6), R1-2: fail closed when the baseline read itself is unknown,
 		// rather than letting a failed get_post_meta() read masquerade as a genuine '' baseline
 		// (see aafm_meta_read()'s own docblock).
-		$companion_old_read = aafm_meta_read( $id, $image_id_fields[ $field ], 'post' );
+		$companion_old_read = aafm_meta_read( $id, $companion_key, 'post' );
 		if ( ! $companion_old_read['ok'] ) {
 			return aafm_generic_error();
 		}
-		$old_meta[ $image_id_fields[ $field ] ] = $companion_old_read['value'];
-		update_post_meta( $id, $image_id_fields[ $field ], $companion_value );
+		$old_meta[ $companion_key ]         = $companion_old_read['value'];
+		$expected_meta[ $companion_key ]    = $companion_value;
+		$companion_writes[ $companion_key ] = $companion_value;
 	}
 
 	// Turn off the Twitter->Facebook fallback when Twitter-specific fields are provided; otherwise the
@@ -573,22 +601,24 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// includes/opengraph/class-twitter.php:93-106 and includes/frontend/paper/class-singular.php:160).
 	// Rank Math's normalize_data() (includes/helpers/class-options.php:51-62) reads only the exact
 	// string 'off' as false; an empty string, '0', or boolean false falls back to the truthy default.
-	if ( aafm_rankmath_twitter_fields_provided( $input ) ) {
+	$set_twitter_off = aafm_rankmath_twitter_fields_provided( $input );
+	if ( $set_twitter_off ) {
 		// Codex round 1 (1.7.6), R1-2: fail closed when the baseline read itself is unknown (see
 		// aafm_meta_read()'s own docblock).
 		$twitter_old_read = aafm_meta_read( $id, 'rank_math_twitter_use_facebook', 'post' );
 		if ( ! $twitter_old_read['ok'] ) {
 			return aafm_generic_error();
 		}
-		$old_meta['rank_math_twitter_use_facebook'] = $twitter_old_read['value'];
-		update_post_meta( $id, 'rank_math_twitter_use_facebook', 'off' );
+		$old_meta['rank_math_twitter_use_facebook']      = $twitter_old_read['value'];
 		$expected_meta['rank_math_twitter_use_facebook'] = 'off';
 	}
 
-	if ( array_key_exists( 'robots', $input ) ) {
-		$allowed = aafm_rankmath_robots_tokens();
-		$tokens  = array_filter( array_map( 'trim', explode( ',', (string) $input['robots'] ) ) );
-		$kept    = array_values(
+	$robots_provided = array_key_exists( 'robots', $input );
+	$robots_kept     = array();
+	if ( $robots_provided ) {
+		$allowed     = aafm_rankmath_robots_tokens();
+		$tokens      = array_filter( array_map( 'trim', explode( ',', (string) $input['robots'] ) ) );
+		$robots_kept = array_values(
 			array_filter(
 				$tokens,
 				static fn( string $t ): bool => in_array( $t, $allowed, true )
@@ -601,9 +631,25 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		if ( ! $robots_old_read['ok'] ) {
 			return aafm_generic_error();
 		}
-		$old_meta['rank_math_robots'] = $robots_old_read['value'];
-		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
-		$expected_meta['rank_math_robots'] = $kept;
+		$old_meta['rank_math_robots']      = $robots_old_read['value'];
+		$expected_meta['rank_math_robots'] = $robots_kept;
+	}
+
+	// Every baseline above read successfully - only now does any write actually run.
+	foreach ( $text_writes as $key => $clean ) {
+		// update_post_meta() unslashes the value, so a backslash in a title/description
+		// (C:\Users) is stripped unless it is slashed first. Every sibling meta writer
+		// (meta.php, terms.php, user-meta.php) slashes; these SEO writers must too.
+		update_post_meta( $id, $key, wp_slash( $clean ) );
+	}
+	foreach ( $companion_writes as $companion_key => $companion_value ) {
+		update_post_meta( $id, $companion_key, $companion_value );
+	}
+	if ( $set_twitter_off ) {
+		update_post_meta( $id, 'rank_math_twitter_use_facebook', 'off' );
+	}
+	if ( $robots_provided ) {
+		update_post_meta( $id, 'rank_math_robots', wp_slash( $robots_kept ) );
 
 		// Delegation audit sweep (210-sweep-B5-report.md): rank_math_robots is the exact meta key
 		// Sitemap::is_object_indexable() reads to decide sitemap inclusion, but Cache_Watcher only
@@ -638,7 +684,11 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		}
 	}
 
-	return aafm_rankmath_read_fields( $id );
+	// Return the confirmed values through the same failure-aware reader the plain get-post
+	// ability uses, rather than trusting that a second, independent read after a just-confirmed
+	// write can never itself fail.
+	$read = aafm_rankmath_read_fields( $id );
+	return $read['ok'] ? $read['data'] : aafm_generic_error();
 }
 
 /**

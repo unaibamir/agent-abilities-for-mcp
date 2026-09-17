@@ -16,6 +16,7 @@ namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\Support\QueryFaultInjector;
 use WP_Error;
 
 final class YoastTest extends TestCase {
@@ -331,6 +332,56 @@ final class YoastTest extends TestCase {
 	 * requested. A filter that vetoes the postmeta write must surface as a structured error, not
 	 * a success response echoing the caller's stale value.
 	 */
+	/**
+	 * A raw get_post_meta() call cannot tell a genuinely empty field from a confirming SELECT that
+	 * failed - so a response built that way after a landed write can silently report success with
+	 * an empty field. The response reader must fail closed instead.
+	 */
+	public function test_yoast_read_fields_fails_closed_when_the_underlying_read_fails(): void {
+		$post_id = (int) self::factory()->post->create();
+		update_post_meta( $post_id, '_yoast_wpseo_title', 'A real title' );
+		wp_cache_delete( $post_id, 'post_meta' );
+
+		global $wpdb;
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, 'SELECT' ),
+			static fn(): array => aafm_yoast_read_fields( $post_id ),
+			1
+		);
+
+		$this->assertFalse( $out['ok'], 'A failed field read must not be reported as ok, even though the data would otherwise look like a legitimate empty field.' );
+	}
+
+	/**
+	 * A baseline read failure on ANY field must abort before any write in the same call runs -
+	 * otherwise a field earlier in the loop is already persisted, and never reconsidered, by the
+	 * time a later field's failed baseline aborts the request.
+	 */
+	public function test_update_post_baseline_failure_on_a_later_field_leaves_earlier_fields_unwritten(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+
+		global $wpdb;
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, "meta_key = '_yoast_wpseo_metadesc'" ),
+			static fn() => aafm_exec_yoast_update_post(
+				array(
+					'post_id'     => $post_id,
+					'title'       => 'New title',
+					'description' => 'New description',
+				)
+			),
+			1
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out, 'A failed baseline read on any field must refuse the whole write.' );
+		$this->assertSame(
+			'',
+			get_post_meta( $post_id, '_yoast_wpseo_title', true ),
+			'A field earlier in the loop must not already be written by the time a later field\'s baseline read fails.'
+		);
+	}
+
 	public function test_yoast_update_post_returns_an_error_when_the_write_is_vetoed(): void {
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();

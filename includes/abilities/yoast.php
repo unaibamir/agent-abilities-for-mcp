@@ -208,8 +208,13 @@ function aafm_yoast_robots_noindex_meaning(): array {
 /**
  * Read every Yoast field for a post into the unified output shape.
  *
+ * Failure-aware: every field goes through aafm_meta_read()'s {ok,value} shape rather than a raw
+ * get_post_meta() call, so a query that fails after a just-confirmed write is reported as unknown
+ * instead of silently reading back as an empty field on an otherwise-successful response.
+ *
  * @param int $id Post id.
- * @return array<string,mixed>
+ * @return array{ok:bool,data:array<string,mixed>} ok is false when any field's read itself failed -
+ *              data is empty in that case.
  */
 function aafm_yoast_read_fields( int $id ): array {
 	$out = array(
@@ -217,14 +222,31 @@ function aafm_yoast_read_fields( int $id ): array {
 		'post_id' => $id,
 	);
 	foreach ( aafm_yoast_fields() as $field => $key ) {
-		$val           = get_post_meta( $id, $key, true );
+		$read = aafm_meta_read( $id, $key, 'post' );
+		if ( ! $read['ok'] ) {
+			return array(
+				'ok'   => false,
+				'data' => array(),
+			);
+		}
+		$val           = $read['value'];
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
 	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
-		$val           = get_post_meta( $id, $spec['key'], true );
+		$read = aafm_meta_read( $id, $spec['key'], 'post' );
+		if ( ! $read['ok'] ) {
+			return array(
+				'ok'   => false,
+				'data' => array(),
+			);
+		}
+		$val           = $read['value'];
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
-	return $out;
+	return array(
+		'ok'   => true,
+		'data' => $out,
+	);
 }
 
 /**
@@ -295,7 +317,8 @@ function aafm_exec_yoast_get_post( array $input ) {
 	if ( ! get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return aafm_yoast_read_fields( $id );
+	$read = aafm_yoast_read_fields( $id );
+	return $read['ok'] ? $read['data'] : aafm_generic_error();
 }
 
 /**
@@ -412,7 +435,13 @@ function aafm_exec_yoast_update_post( array $input ) {
 	// a silent veto rather than only replaying sanitize_meta() against a same-process recompute.
 	$old_meta = array();
 
-	$url_fields = aafm_yoast_url_fields();
+	// Every baseline below is read BEFORE any write runs: this whole block only ever populates
+	// $expected_meta/$old_meta and the small per-group write queues, and returns closed the moment
+	// a baseline read itself is unknown - never after some of the group's writes have already run.
+	// A later field's failed baseline used to be reached only after earlier fields in the same call
+	// were already persisted, leaving them written but never reaching the confirmation pass below.
+	$text_writes = array();
+	$url_fields  = aafm_yoast_url_fields();
 	foreach ( aafm_yoast_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
@@ -427,13 +456,13 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( ! $old_read['ok'] ) {
 			return aafm_generic_error();
 		}
-		$old_meta[ $key ] = $old_read['value'];
-		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
-		// is stripped unless it is slashed first, exactly like the sibling meta writers.
-		update_post_meta( $id, $key, wp_slash( $clean ) );
+		$old_meta[ $key ]      = $old_read['value'];
 		$expected_meta[ $key ] = $clean;
+		$text_writes[ $key ]   = $clean;
 	}
 
+	$enum_writes = array();
+	$adv_writes  = array();
 	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
@@ -448,9 +477,9 @@ function aafm_exec_yoast_update_post( array $input ) {
 				if ( ! $robots_old_read['ok'] ) {
 					return aafm_generic_error();
 				}
-				$old_meta[ $spec['key'] ] = $robots_old_read['value'];
-				update_post_meta( $id, $spec['key'], wp_slash( $raw ) );
+				$old_meta[ $spec['key'] ]      = $robots_old_read['value'];
 				$expected_meta[ $spec['key'] ] = $raw;
+				$enum_writes[ $spec['key'] ]   = $raw;
 			}
 			continue;
 		}
@@ -468,9 +497,24 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( ! $adv_old_read['ok'] ) {
 			return aafm_generic_error();
 		}
-		$old_meta[ $spec['key'] ] = $adv_old_read['value'];
-		update_post_meta( $id, $spec['key'], wp_slash( implode( ',', $kept ) ) );
+		$old_meta[ $spec['key'] ]      = $adv_old_read['value'];
 		$expected_meta[ $spec['key'] ] = implode( ',', $kept );
+		$adv_writes[ $spec['key'] ]    = implode( ',', $kept );
+	}
+
+	// Every baseline above read successfully - only now does any write actually run. Every value
+	// here (title/description text, the URL fields, the enum robots directives, and the filtered
+	// adv CSV) is slashed on the way in, since update_post_meta() unslashes its value and a
+	// literal backslash (C:\Users) would otherwise be stripped, exactly like the sibling meta
+	// writers.
+	foreach ( $text_writes as $key => $clean ) {
+		update_post_meta( $id, $key, wp_slash( $clean ) );
+	}
+	foreach ( $enum_writes as $key => $raw ) {
+		update_post_meta( $id, $key, wp_slash( $raw ) );
+	}
+	foreach ( $adv_writes as $key => $csv ) {
+		update_post_meta( $id, $key, wp_slash( $csv ) );
 	}
 
 	// Codex round 5 R5-2: every update_post_meta() call above discarded its return value, so a
@@ -488,7 +532,11 @@ function aafm_exec_yoast_update_post( array $input ) {
 		}
 	}
 
-	return aafm_yoast_read_fields( $id );
+	// Return the confirmed values through the same failure-aware reader the plain get-post
+	// ability uses, rather than trusting that a second, independent read after a just-confirmed
+	// write can never itself fail.
+	$read = aafm_yoast_read_fields( $id );
+	return $read['ok'] ? $read['data'] : aafm_generic_error();
 }
 
 /**

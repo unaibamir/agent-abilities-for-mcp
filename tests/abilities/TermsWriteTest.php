@@ -94,7 +94,7 @@ final class TermsWriteTest extends TestCase {
 	}
 
 	/**
-	 * B13: discovery must match executability. The test above proves a principal holding only a
+	 * Discovery must match executability. The test above proves a principal holding only a
 	 * custom taxonomy's own manage_terms cap CAN call create-term on that taxonomy - but the
 	 * empty-input discovery probe defaulted the taxonomy to 'category' and checked
 	 * manage_categories, hiding both term writes from the one user who could actually use them.
@@ -149,8 +149,8 @@ final class TermsWriteTest extends TestCase {
 	}
 
 	/**
-	 * B13 (docs half): the description claimed manage_categories unconditionally while the gate
-	 * is the target taxonomy's own manage-terms cap. Pin the corrected claim in both the registry
+	 * The gate is the target taxonomy's own manage-terms cap, not a fixed manage_categories
+	 * requirement, so the description must say so. Pin the correct claim in both the registry
 	 * description and the operator disclosure.
 	 */
 	public function test_create_term_copy_names_the_taxonomy_own_cap_not_manage_categories(): void {

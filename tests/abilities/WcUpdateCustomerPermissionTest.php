@@ -40,8 +40,8 @@ final class WcUpdateCustomerPermissionTest extends TestCase {
 	}
 
 	/**
-	 * The exact B2 attacker: manage_woocommerce, no user-management capability, a valid victim id
-	 * in the body. Must be denied, closing both the PII read-through and the write.
+	 * The exact attack profile: manage_woocommerce, no user-management capability, a valid victim
+	 * id in the body. Must be denied, closing both the PII read-through and the write.
 	 */
 	public function test_manage_woocommerce_without_edit_users_is_denied(): void {
 		$victim = $this->factory->user->create( array( 'role' => 'customer' ) );

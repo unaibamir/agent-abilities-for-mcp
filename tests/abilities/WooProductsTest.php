@@ -197,9 +197,9 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B56: get_children() is not variation-specific - on a grouped product it returns the grouped
-	 * child PRODUCT ids, which used to be reported as variation_ids. Only a variable product's
-	 * children are variations, so a grouped product must report an empty variation_ids.
+	 * get_children() is not variation-specific - on a grouped product it returns the grouped
+	 * child PRODUCT ids, not variations. Only a variable product's children are variations, so a
+	 * grouped product must report an empty variation_ids.
 	 */
 	public function test_get_product_grouped_children_are_not_variation_ids(): void {
 		$this->acting_as( 'administrator' );
@@ -222,7 +222,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B56 control: a variable product's children are real variations and must keep appearing.
+	 * A variable product's children are real variations and must keep appearing.
 	 */
 	public function test_get_product_variable_children_still_reported_as_variation_ids(): void {
 		$this->acting_as( 'administrator' );
@@ -351,10 +351,10 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B7: the force-draft setting promises to cover "everything an agent creates", but
-	 * wc-create-product saved with WooCommerce's default publish status (or any explicitly
-	 * requested one) untouched. With the setting on, a new product must land as a draft,
-	 * and an explicit publish request on create or update must be coerced to draft too.
+	 * The force-draft setting promises to cover "everything an agent creates", including
+	 * wc-create-product: with the setting on, a new product must land as a draft regardless of
+	 * WooCommerce's default publish status, and an explicit publish request on create or update
+	 * must be coerced to draft too.
 	 */
 	public function test_create_product_respects_the_force_draft_setting(): void {
 		update_option( 'aafm_force_draft', true );
@@ -387,7 +387,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B7 companion: with force-draft off, nothing changes - the default stays publish.
+	 * With force-draft off, nothing changes - the default stays publish.
 	 */
 	public function test_create_product_defaults_to_publish_without_force_draft(): void {
 		$this->acting_as( 'administrator' );
@@ -397,12 +397,13 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B22: stock_status alongside manage_stock:true must be refused, not silently discarded.
+	 * stock_status alongside manage_stock:true must be refused, not silently discarded.
 	 *
 	 * When stock is managed, WooCommerce derives stock_status from stock_quantity in
-	 * validate_props() on save, so a caller-supplied stock_status was silently overwritten and the
-	 * write reported success anyway. The contradictory pair is now refused. stock_status on its own
-	 * (manage_stock absent or false) still applies, so the existing create test above keeps passing.
+	 * validate_props() on save, so accepting a caller-supplied stock_status there would let it be
+	 * silently overwritten while the write still reported success. The contradictory pair is
+	 * refused instead. stock_status on its own (manage_stock absent or false) still applies, so
+	 * the existing create test above keeps passing.
 	 */
 	public function test_create_product_refuses_stock_status_when_managing_stock(): void {
 		$this->acting_as( 'administrator' );
@@ -715,15 +716,14 @@ final class WooProductsTest extends TestCase {
 
 	// =========================================================================
 	// aafm/wc-update-product -- page-builder ownership and block-content guards
-	// (Codex round 9 R9-1)
 	//
-	// aafm_wc_apply_product_input() used to send description/short_description straight to the
-	// WC_Product setters, and aafm_exec_wc_update_product() saved without ever checking
-	// page-builder ownership. WooCommerce persists both fields as the product post's
-	// post_content/post_excerpt, so a builder-owned product's classic content could be silently
-	// rewritten with no storefront effect, and strict block-validation policy was skipped
-	// entirely. The ownership check only applies to an UPDATE of an existing product; a brand-new
-	// product has no prior owner to protect.
+	// description/short_description route through the ownership and block-validation checks
+	// before reaching the WC_Product setters, rather than going straight through unchecked.
+	// WooCommerce persists both fields as the product post's post_content/post_excerpt, so an
+	// unchecked write on a builder-owned product could silently rewrite its classic content with
+	// no storefront effect, and skip strict block-validation policy entirely. The ownership check
+	// only applies to an UPDATE of an existing product; a brand-new product has no prior owner to
+	// protect.
 	// =========================================================================
 
 	/**
@@ -826,18 +826,17 @@ final class WooProductsTest extends TestCase {
 
 	// =========================================================================
 	// aafm/wc-update-product -- the ownership guard is scoped to content fields
-	// (Codex round 10 R10-6)
 	//
-	// R9-1's fix above ran the ownership check unconditionally, so a builder-owned product
-	// refused every update, including price/SKU/stock/category/status changes that never touch
-	// post_content or post_excerpt and so have nothing for a builder to silently ignore. The
-	// check now only runs when description or short_description is present.
+	// The ownership check only runs when description or short_description is present, rather
+	// than unconditionally on every update. Running it unconditionally would refuse every update
+	// on a builder-owned product, including price/SKU/stock/category/status changes that never
+	// touch post_content or post_excerpt and so have nothing for a builder to silently ignore.
 	// =========================================================================
 
 	/**
-	 * A non-content update (regular_price here) on a builder-owned product now succeeds -- the
-	 * write does not touch post_content/post_excerpt, so there is nothing for the builder to
-	 * silently ignore.
+	 * A non-content update (regular_price here) on a builder-owned product succeeds: the write
+	 * does not touch post_content/post_excerpt, so there is nothing for the builder to silently
+	 * ignore.
 	 */
 	public function test_update_product_allows_a_non_content_update_on_a_builder_owned_product(): void {
 		$this->acting_as( 'administrator' );
@@ -1042,11 +1041,11 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * B21: when the store keeps the row but WC_Data::delete() still returns true (its real contract),
+	 * When the store keeps the row but WC_Data::delete() still returns true (its real contract),
 	 * the ability must verify by re-reading and report failure, not deleted:true.
 	 *
-	 * A guard on delete()'s return is dead here because delete() returns true whenever a data store
-	 * exists, so the old code reported deleted:true over a product that was never removed.
+	 * A guard on delete()'s return alone is not enough here, because delete() returns true whenever
+	 * a data store exists, regardless of whether the row was actually removed.
 	 */
 	public function test_delete_product_reports_failure_when_row_survives_a_true_return(): void {
 		$this->acting_as( 'administrator' );

@@ -367,7 +367,7 @@ function aafm_args_add_post_terms(): array {
  * Permission for aafm/add-post-terms: per-object edit_post on the target post.
  *
  * The taxonomy's assign_terms cap + term-existence are enforced at execute time by the
- * reused aafm_validate_term_ids_for_taxonomy() (C2). This callback is the post-edit gate:
+ * reused aafm_validate_term_ids_for_taxonomy(). This callback is the post-edit gate:
  * a caller who cannot edit the post is denied before any term is touched, so an APPEND
  * can never attach terms to a post the agent is not authorized to edit.
  *

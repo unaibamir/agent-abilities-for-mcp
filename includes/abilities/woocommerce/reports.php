@@ -531,9 +531,9 @@ function aafm_exec_wc_count_orders( array $input ) { // phpcs:ignore Generic.Cod
  * @return int
  */
 function aafm_wc_count_orders_by_status( string $status ): int {
-	// FIX-3 item 3 (sweep finding, A2 batch): this used to hand-roll a per-status count via a
-	// wc_get_orders() pagination probe. WooCommerce ships the exact public helper for this job,
-	// wc_orders_count() (wc-order-functions.php:392), which is HPOS/legacy-abstracted and reads
+	// Uses WooCommerce's own public helper for this job rather than hand-rolling a per-status
+	// count via a wc_get_orders() pagination probe: wc_orders_count()
+	// (wc-order-functions.php:392) is HPOS/legacy-abstracted and reads
 	// through a cache layer (OrderCountCache -> OrderUtil::get_count_for_type(), which for HPOS
 	// routes to OrdersTableDataStore::get_order_count()) instead of a hand-rolled, uncached probe.
 	//

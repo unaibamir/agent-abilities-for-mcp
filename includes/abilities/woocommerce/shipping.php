@@ -139,9 +139,9 @@ function aafm_wc_shipping_registry_definitions(): array {
 /**
  * Resolve a zone_id to a WC_Shipping_Zone, or null when unavailable or unknown.
  *
- * FIX-3 item 2 (sweep finding, A1 batch): this used to hand-instantiate
- * `new \WC_Shipping_Zone( $zone_id )` inside a try/catch plus a redundant id-match re-check.
- * WooCommerce ships the exact resolver for this job, \WC_Shipping_Zones::get_zone( $zone_id )
+ * Uses WooCommerce's own resolver for this job rather than hand-instantiating
+ * `new \WC_Shipping_Zone( $zone_id )` inside a try/catch plus a redundant id-match re-check:
+ * \WC_Shipping_Zones::get_zone( $zone_id )
  * (class-wc-shipping-zones.php:78-80, a one-line wrapper around get_zone_by()), which does the
  * identical instantiate-inside-try/catch(Exception) itself (class-wc-shipping-zones.php:90-112) -
  * confirmed by reading the constructor and the data store's read_multiple(), which is what

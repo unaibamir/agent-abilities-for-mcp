@@ -807,8 +807,8 @@ function aafm_ajax_test_connection(): void {
  * (confirm + nonce-checked AJAX); the nonce field printed here is what those calls read.
  *
  * The Active Grants table's "Current role" column reads each identity's LIVE role from
- * aafm_oauth_list_grants(), never a value captured when the grant was approved (1.7.4
- * security assessment, S4): nothing in the schema stores a consent-time snapshot to diff
+ * aafm_oauth_list_grants(), never a value captured when the grant was approved: nothing in
+ * the schema stores a consent-time snapshot to diff
  * against, so this is the honest, no-schema-change way to give an operator visibility into
  * what a grant currently authorizes, even though it cannot by itself flag that a role
  * changed since approval. A high-privilege identity is called out with the same

@@ -536,8 +536,8 @@ function aafm_oauth_list_clients(): array {
  * Also reads each user's CURRENT role and privilege level, not a value stored at
  * consent time - the token table keeps no such snapshot, and none is added here. A
  * token always acts with whatever capabilities the identity holds right now, so a
- * live read is the only honest thing to show: the 1.7.4 security assessment (S4)
- * noted that an operator has no visibility into what a grant currently means if the
+ * live read is the only honest thing to show: an operator otherwise has no visibility
+ * into what a grant currently means if the
  * connected identity's role changed after they approved it. is_high_privilege reuses
  * aafm_oauth_user_is_high_privilege() (authorize.php), the same check that drives the
  * consent screen's own administrator warning, so "high privilege" means the same

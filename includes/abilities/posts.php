@@ -661,7 +661,7 @@ function aafm_write_content_schema( bool $require_title ): array {
 /**
  * Closed content input schema for the generic CPT writes.
  *
- * Starts from the shared post/page schema (so CPT items inherit the exact C2 enrichment
+ * Starts from the shared post/page schema (so CPT items inherit the exact enrichment
  * surface: title/content/excerpt/status/slug/featured_media/terms/meta) and adds a
  * REQUIRED post_type string. The schema stays closed (additionalProperties:false) so the
  * agent still cannot smuggle post_author, meta_input, or any other privileged field - the
@@ -1091,7 +1091,7 @@ function aafm_perm_create_cpt_item( array $input ): bool {
  * the requested status through the shared aafm_resolve_create_status() chokepoint - gated on
  * THIS type's own publish cap (e.g. publish_products), never a hardcoded 'publish' string
  * compare - and delegates to aafm_insert_post(), so the CPT item inherits force-draft,
- * author-forcing, content sanitization, the status floor, and the C2 enrichment exactly as
+ * author-forcing, content sanitization, the status floor, and the enrichment exactly as
  * post/page creates do.
  *
  * Previously this compared the raw input directly against the literal string 'publish' and
@@ -2078,7 +2078,7 @@ function aafm_perm_update_cpt_item( array $input ): bool {
  * Loads the target, re-validates its post_type against the allowlist+floor at execute time
  * (defense in depth against a de-allowlist race), then delegates to the existing, type-generic
  * aafm_exec_update_post() so the CPT update inherits status validation, content sanitization,
- * the force-draft public-status coercion, and the C2 enrichment with no duplicated logic.
+ * the force-draft public-status coercion, and the enrichment with no duplicated logic.
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error

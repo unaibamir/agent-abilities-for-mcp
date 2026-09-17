@@ -834,7 +834,7 @@ function aafm_oauth_user_has_active_tokens( int $user_id ): bool {
  * without going through wp_delete_user(), so 'deleted_user' never fires for it and this
  * cleanup never runs for it either. Left alone on purpose: the account stays fully live,
  * capability checks already read live state per request and deny the moment the role on
- * this site is gone (verified in the 1.7.4 security assessment, S4), and clearing the
+ * this site is gone (verified separately), and clearing the
  * grant here would mean a later re-add to the site loses a connection that a plain
  * membership toggle should arguably preserve.
  *

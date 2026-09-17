@@ -292,7 +292,7 @@ function aafm_wc_product_output_properties(): array {
 		'attributes'        => array(
 			'type'                 => 'object',
 			// Keys are attribute slugs; each value is a {name, taxonomy, options[]} triple. The key
-			// set is product-defined, so the map is open and the value shape is declared here (A3).
+			// set is product-defined, so the map is open and the value shape is declared here.
 			'additionalProperties' => array(
 				'type'       => 'object',
 				'properties' => array(

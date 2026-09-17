@@ -1103,7 +1103,7 @@ function aafm_can_read_post_object( WP_Post $post ): bool {
 /**
  * Whether the current user may EDIT a single object through the content abilities.
  *
- * Type must clear the floor AND the allowlist AND be map_meta_cap===true (Q5 write-safety).
+ * Type must clear the floor AND the allowlist AND be map_meta_cap===true for write safety.
  * For a non-mapped type the write is refused outright rather than trusting a degraded
  * per-object cap that can fail OPEN. For post/page (mapped) this resolves to today's
  * current_user_can( 'edit_post'/'edit_page', $id ) - zero behaviour change.

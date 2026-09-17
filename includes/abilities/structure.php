@@ -97,7 +97,7 @@ function aafm_args_get_taxonomies(): array {
 		'aafm_exec_get_taxonomies',
 		'taxonomies'
 	);
-	// Declare the per-taxonomy item shape so the published schema documents each field (A3).
+	// Declare the per-taxonomy item shape so the published schema documents each field.
 	$args['output_schema']['properties']['taxonomies']['items'] = array(
 		'type'       => 'object',
 		'properties' => array(

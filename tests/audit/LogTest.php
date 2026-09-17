@@ -137,12 +137,12 @@ final class LogTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-2: the version guard used to read get_option()'s cache-trusting view, so
-	 * a stale persistent cache claiming the current version was already stored, over a real
-	 * database row that is genuinely behind, would skip the self-heal for good - permanently,
-	 * since nothing else ever re-checks the row. Checks the real database row directly
-	 * (bypassing the object cache entirely) rather than get_option(), which the stale cache
-	 * would make report the current version either way.
+	 * The version guard must not read get_option()'s cache-trusting view: a stale persistent
+	 * cache claiming the current version was already stored, over a real database row that is
+	 * genuinely behind, would skip the self-heal for good - permanently, since nothing else ever
+	 * re-checks the row. Checks the real database row directly (bypassing the object cache
+	 * entirely) rather than get_option(), which a stale cache would make report the current
+	 * version either way.
 	 */
 	public function test_upgrade_runs_when_a_stale_cache_hides_an_old_version(): void {
 		global $wpdb;

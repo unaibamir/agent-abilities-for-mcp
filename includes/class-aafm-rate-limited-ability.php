@@ -19,13 +19,13 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  *
  * The decorated permission callback (aafm_register_ability_with_log()) consumes a rate token on its
  * first fire and memoizes the allow so core's re-check inside execute() does not consume a second
- * token. The memo used to be released only inside the decorated EXECUTE callback - but core's
- * execute() refuses a schema-invalid input (and, on 7.0+, an output-schema violation or a callback
- * throw) BEFORE or INSTEAD OF that callback, leaving the allow memoized. The next tools/call for the
- * same ability in the same request then reused the stale allow and skipped its consume - a real
- * rate-limit bypass inside one JSON-RPC batch (finding B12, doc 167).
+ * token. That memo has to be released even when core's execute() refuses a schema-invalid input
+ * (and, on 7.0+, an output-schema violation or a callback throw) BEFORE or INSTEAD OF the decorated
+ * execute callback - otherwise the allow stays memoized, the next tools/call for the same ability
+ * in the same request reuses the stale allow and skips its own consume, and a single JSON-RPC
+ * batch can bypass the rate limit entirely.
  *
- * Fix round 1 (Codex finding 1) added the second responsibility: on WP 7.1+, wp_ability_invoked
+ * A second responsibility lives here too: on WP 7.1+, wp_ability_invoked
  * (includes/register.php, aafm_log_ability_invocation()) pushes a pending audit row onto a per-name
  * correlation stack the instant execute() begins, before core does any work. An intentional
  * wp_pre_execute_ability short-circuit, a normalize_input() failure, or a validate_input() failure
@@ -35,13 +35,13 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * and resolved it instead of writing its own row, misattributing the second call's outcome onto the
  * first and leaving the second with no row of its own.
  *
- * Final-gate fix (Codex finding 1, round 2): the fix round 1 version discarded whatever frame was
- * on top of the per-name stack, with no way to tell whose frame that was. That is exactly wrong
- * when the SAME ability is invoked recursively - a wp_pre_execute_ability filter that itself calls
- * the same ability, which the Abilities API does not forbid. The nested call's own cleanup would
- * discard the OUTER call's still-open frame: the outer row was left stuck at 'started' forever
+ * The cleanup has to identify whose frame it is closing, because the SAME ability can be invoked
+ * recursively - a wp_pre_execute_ability filter that itself calls the same ability, which the
+ * Abilities API does not forbid. Discarding whatever frame sits on top of the per-name stack, with
+ * no way to tell whose frame that was, would be exactly wrong there: the nested call's own cleanup
+ * would discard the OUTER call's still-open frame, leaving the outer row stuck at 'started' forever
  * while the outer callback, finding nothing pending, opened and resolved a duplicate row.
- * aafm_begin_invocation() now hands this specific execute() call a unique token before
+ * aafm_begin_invocation() hands this specific execute() call a unique token before
  * parent::execute() runs, and the finally passes that SAME token, plus whatever parent::execute()
  * returned, to aafm_resolve_dangling_invocation_if_mine(), which touches the top frame only when
  * it is still the one this token opened - never a nested or outer invocation's frame. See that
@@ -55,7 +55,7 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * mcp_adapter_pre_tool_call - is covered by aafm_release_rate_memo_on_aborted_tool_call() instead;
  * that path never reaches wp_ability_invoked either, so it never has a pending row to discard.
  *
- * WP 6.9 floor gap (found in the 1.7.1 CI review, 2026-08-27): wp_ability_invoked and
+ * WP 6.9 floor gap: wp_ability_invoked and
  * wp_pre_execute_ability are both `@since 7.1.0` in core - absent entirely below that floor, not
  * merely quieter. Without a fallback, a call core itself rejects before EITHER decorated callback
  * ever runs - malformed input failing core's own validate_input() - left ZERO audit trace at all on
@@ -71,12 +71,12 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * that has it (this plugin's 7.1 ceiling and beyond), the branch below is a no-op and
  * wp_ability_invoked keeps doing this exact job exactly as before - zero behavior change there.
  *
- * Stuck-row gap closed (found in the 1.7.1 CI review, 2026-08-28): a call core itself refuses at
- * WP_Ability::validate_input() - malformed input failing the ability's own JSON Schema - never
- * reaches either decorated callback, on EITHER version this plugin supports, and used to leave its
- * 'started' row stuck there forever: a real, deterministic, core-owned outcome recorded as though
- * the call were still in flight. This class already runs unconditionally, on every WP version this
- * plugin supports, immediately around parent::execute() - exactly the choke point needed to see
+ * A call core itself refuses at WP_Ability::validate_input() - malformed input failing the
+ * ability's own JSON Schema - never reaches either decorated callback, on EITHER version this
+ * plugin supports. Left unresolved, that row would stay stuck at 'started' forever: a real,
+ * deterministic, core-owned outcome recorded as though the call were still in flight. This class
+ * already runs unconditionally, on every WP version this plugin supports, immediately around
+ * parent::execute() - exactly the choke point needed to see
  * what parent::execute() returned and resolve that one class of dangling row. See
  * aafm_resolve_dangling_invocation_if_mine() and aafm_core_input_rejection_code() in
  * includes/register.php for the mechanism and for the other dangling-row cases (a

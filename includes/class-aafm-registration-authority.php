@@ -15,17 +15,18 @@ if ( ! class_exists( 'WP_Ability' ) ) {
 }
 
 /**
- * Codex round 11 R11-3: the R10-4 identity check (object identity, not class) closed the public-
- * subclass forgery, but the record it compares against used to be writable through a public,
- * two-argument global function - aafm_remember_registered_ability( $name, $ability ) - that
- * trusted whatever WP_Ability object it was handed. That is forgeable no matter what the function
- * is named or which file declares it: PHP gives standalone functions no real access control, and
- * this plugin is open source on wordpress.org, so an unfamiliar name is no obstacle to a
- * determined reader. A plugin loaded before AAFM's own wp_abilities_api_init callback could
- * register a reserved, enabled name directly with core's wp_register_ability() (bypassing every
- * one of this plugin's decorators entirely), then call that setter itself so the record - and
- * therefore aafm_build_server_tools()'s identity check in server.php - believed the resulting
- * undecorated object was this plugin's own. R9-7's original consequence, reached a third way.
+ * The identity check in server.php compares object identity, not class, which closes the
+ * public-subclass forgery - but only because the record it compares against can never be set
+ * through anything but this class's own registration call. If the record could instead be
+ * written through a public, two-argument global function that trusted whatever WP_Ability object
+ * it was handed, that would be forgeable no matter what the function is named or which file
+ * declares it: PHP gives standalone functions no real access control, and this plugin is open
+ * source on wordpress.org, so an unfamiliar name is no obstacle to a determined reader. A plugin
+ * loaded before AAFM's own wp_abilities_api_init callback could register a reserved, enabled name
+ * directly with core's wp_register_ability() (bypassing every one of this plugin's decorators
+ * entirely), then call such a setter itself so the record - and therefore
+ * aafm_build_server_tools()'s identity check in server.php - would believe the resulting
+ * undecorated object was this plugin's own.
  *
  * What actually closes it: self::register() is the ONLY thing that ever writes $store, and it
  * does not accept a ready-made ability - it performs the wp_register_ability() call itself and
@@ -48,15 +49,15 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * caller, which was not done here - see the note on aafm_register_ability_with_log() in
  * register.php.
  *
- * Codex round 12 R12-1: register() used to pass $args straight through to
- * wp_register_ability(), which honors a caller-supplied `ability_class`. A caller invoking
- * aafm_register_ability_with_log() directly - decorators and all - could still hand it a
+ * register() below forces AAFM_Rate_Limited_Ability as the ability_class on every call it makes,
+ * overwriting whatever $args carried, rather than passing $args straight through to
+ * wp_register_ability(), which honors a caller-supplied `ability_class`. Without that, a caller
+ * invoking aafm_register_ability_with_log() directly - decorators and all - could still hand it a
  * purpose-built WP_Ability subclass of its own that overrides prepare_properties() or execute()
  * to discard what the decorators just did, and register() would faithfully register and record
- * that hostile object as this plugin's own. register() below now forces
- * AAFM_Rate_Limited_Ability as the ability_class on every call it makes, overwriting whatever
- * $args carried, so neither route into this class - through aafm_register_ability_with_log() or
- * directly - can substitute a foreign class for the one this plugin's own decorators expect.
+ * that hostile object as this plugin's own. Forcing the class here means neither route into this
+ * class - through aafm_register_ability_with_log() or directly - can substitute a foreign class
+ * for the one this plugin's own decorators expect.
  *
  * This closes the class-substitution route only. It does NOT touch the limit already documented
  * above: a caller that skips aafm_register_ability_with_log() and calls register() directly can
@@ -68,7 +69,7 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * here because every route to it requires a plugin already executing arbitrary PHP in this same
  * process to bother writing a purpose-built caller against our internal functions, and a plugin
  * willing to do that could as easily unhook our filters or write to the database directly. See
- * planning doc 239 (R12-1) for the full threat-model reasoning.
+ * planning doc 239 for the full threat-model reasoning.
  */
 final class AAFM_Registration_Authority {
 
@@ -76,9 +77,9 @@ final class AAFM_Registration_Authority {
 	 * A WeakReference to the WP_Ability object this plugin's own registration produced, keyed by
 	 * ability name.
 	 *
-	 * Codex round 12 R12-4: a strong reference here used to keep every uniquely named ability this
-	 * plugin ever registered - and its permission/execute closures - alive for the rest of the
-	 * process, even after core's own wp_unregister_ability() had forgotten it: nothing pruned an
+	 * A plain, strong reference here would keep every uniquely named ability this plugin ever
+	 * registered - and its permission/execute closures - alive for the rest of the process, even
+	 * after core's own wp_unregister_ability() had forgotten it, because nothing would prune an
 	 * entry on unregister. Harmless for the usual case of a fixed set of names registered once per
 	 * request, but a real unbounded leak in a long-lived process (WP-CLI, a persistent worker) that
 	 * registers and unregisters many uniquely named abilities over its lifetime - proven by a probe
@@ -103,7 +104,7 @@ final class AAFM_Registration_Authority {
 	 * @return WP_Ability|null Whatever wp_register_ability() returns.
 	 */
 	public static function register( string $name, array $args ): ?WP_Ability {
-		// R12-1: force our own trusted ability class, discarding whatever $args carried. This is
+		// Force our own trusted ability class, discarding whatever $args carried. This is
 		// the only place that actually calls wp_register_ability(), so overriding here closes the
 		// class-substitution route for every caller of this method - see the class docblock.
 		if ( class_exists( 'AAFM_Rate_Limited_Ability' ) ) {

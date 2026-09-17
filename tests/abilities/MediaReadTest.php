@@ -328,13 +328,12 @@ final class MediaReadTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F2: the scoped posts_where filter had no query-identity marker, so it ran
-	 * against EVERY WP_Query built while it was attached, not only its own - an unrelated
-	 * nested WP_Query fired from a hook during the search (e.g. a 'pre_get_posts' callback
-	 * elsewhere in the stack) would incorrectly receive the same title/content/excerpt/meta OR
-	 * clause too. A private per-call marker in the query args must keep the filter scoped to
-	 * its own query only, the same fix already applied to the GeoDirectory listing scan and the
-	 * sitewide replace scan for the identical shape.
+	 * Without a query-identity marker, the scoped posts_where filter would run against EVERY
+	 * WP_Query built while it is attached, not only its own - an unrelated nested WP_Query fired
+	 * from a hook during the search (e.g. a 'pre_get_posts' callback elsewhere in the stack) would
+	 * incorrectly receive the same title/content/excerpt/meta OR clause too. A private per-call
+	 * marker in the query args keeps the filter scoped to its own query only, the same approach
+	 * used for the GeoDirectory listing scan and the sitewide replace scan for the identical shape.
 	 */
 	public function test_get_media_search_filter_does_not_contaminate_a_nested_query(): void {
 		$this->acting_as( 'author' );

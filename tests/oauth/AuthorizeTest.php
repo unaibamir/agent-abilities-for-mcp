@@ -191,12 +191,12 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-2: a failed query leaves the PREVIOUS query's row sitting in
-	 * $wpdb->last_result, so a consent check built on a bare $wpdb->get_var() could not tell "this
-	 * query itself failed" apart from "the previous query found something". At the live
-	 * authorization-code redemption call site, the query immediately before the consent check is
-	 * the code lookup, which just found a real row - so a failed consent read there used to inherit
-	 * that unrelated, non-null value and report consent as granted. This reproduces the shape in
+	 * A failed query leaves the PREVIOUS query's row sitting in $wpdb->last_result, so a consent
+	 * check built on a bare $wpdb->get_var() could not tell "this query itself failed" apart from
+	 * "the previous query found something". At the live authorization-code redemption call site,
+	 * the query immediately before the consent check is the code lookup, which just found a real
+	 * row - so a failed consent read there would inherit that unrelated, non-null value and
+	 * report consent as granted. This reproduces the shape in
 	 * isolation: plant a positive scalar result from an unrelated query, then force the consent
 	 * SELECT itself to fail via one of $wpdb->query()'s two no-flush failure paths (the `query`
 	 * filter returning empty - see aafm_wpdb_scalar()'s docblock), and prove the failure is
@@ -533,10 +533,10 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-6: a failed consent write must not let the approve submission mint and
-	 * redirect a code. Before the fix, aafm_oauth_record_consent() discarded $wpdb->replace()'s
-	 * result, so the approval carried on regardless and handed back a code that redemption would
-	 * later refuse as invalid_grant, after the client was already told approval succeeded.
+	 * A failed consent write must not let the approve submission mint and redirect a code. If
+	 * aafm_oauth_record_consent() discarded $wpdb->replace()'s result, the approval would carry
+	 * on regardless and hand back a code that redemption would later refuse as invalid_grant,
+	 * after the client was already told approval succeeded.
 	 */
 	public function test_approve_does_not_issue_a_code_when_the_consent_write_fails(): void {
 		$this->acting_as( 'administrator' );

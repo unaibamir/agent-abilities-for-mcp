@@ -89,21 +89,20 @@ final class HighRiskSaveGuardTest extends TestCase {
 		$this->assertSame( 'aafm/wc-create-order-refund', $blocked[0]['ability'] );
 		$this->assertSame( 'denied', $blocked[0]['status'] );
 		$this->assertStringContainsString( 'aafm/wc-create-order-refund', $blocked[0]['detail'] );
-		// B37: with read-only mode off, the cause really is the high-risk lock, and the detail
+		// With read-only mode off, the cause really is the high-risk lock, and the detail
 		// says so (the read-only counterpart is pinned in ReadOnlyModeTest).
 		$this->assertStringContainsString( 'high-risk', $blocked[0]['detail'] );
 	}
 
 	/**
-	 * B10 (flipped from the 1.6.1 pin, deliberately): a locked ability already sitting in the
-	 * option is the operator's preserved choice, not stale data to clean up. The registration
-	 * floor (aafm_get_enabled_abilities()) keeps it out of tools/list while locked, so carrying
-	 * it in the option is inert - and stripping it, as 1.6.1 did, meant re-locking the category
-	 * wiped the stored selection on the very next save, so unlocking later handed back a blank
-	 * slate instead of what was ticked. The read-only floor has always had this carve-out; the
-	 * high-risk floor now behaves the same way. Nobody tried to enable anything here, so there is
-	 * still no ability_enable_blocked row, and no ability_disabled row either - the carry is not
-	 * a toggle.
+	 * A locked ability already sitting in the option is the operator's preserved choice, not
+	 * stale data to clean up. The registration floor (aafm_get_enabled_abilities()) keeps it out
+	 * of tools/list while locked, so carrying it in the option is inert - stripping it would mean
+	 * re-locking the category wipes the stored selection on the very next save, so unlocking
+	 * later would hand back a blank slate instead of what was ticked. The read-only floor has
+	 * this same carve-out, and the high-risk floor behaves the same way. Nobody tried to enable
+	 * anything here, so there is still no ability_enable_blocked row, and no ability_disabled row
+	 * either - the carry is not a toggle.
 	 */
 	public function test_a_stored_locked_ability_is_carried_forward_inert_not_stripped(): void {
 		$this->register_woocommerce_fixture( 'aafm/wc-create-order-refund', 'aafm/wc-list-orders' );
@@ -132,7 +131,7 @@ final class HighRiskSaveGuardTest extends TestCase {
 	}
 
 	/**
-	 * B10 end to end: unlock, enable, re-lock, save, unlock again - the operator's selection has
+	 * End to end: unlock, enable, re-lock, save, unlock again - the operator's selection has
 	 * to come back, because that is the exact promise the floor's own docs make ("unlocking the
 	 * category restores exactly what was ticked before"). While locked, the stored name stays
 	 * inert: the floored reader refuses to register it.

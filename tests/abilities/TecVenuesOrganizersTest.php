@@ -192,9 +192,9 @@ final class TecVenuesOrganizersTest extends TestCase {
 		);
 
 		// A role that carries WordPress's GENERIC read_private_posts cap (as Editor does) but not
-		// the venue type's own mapped read_private_tribe_venues cap - Codex final round HIGH:
-		// TEC's own repository defaults to the generic cap when no post_status is supplied, which
-		// would otherwise leak a private venue's address/phone to a caller who cannot edit it.
+		// the venue type's own mapped read_private_tribe_venues cap. TEC's own repository defaults
+		// to the generic cap when no post_status is supplied, which would otherwise leak a private
+		// venue's address/phone to a caller who cannot edit it.
 		$role_name = 'aafm_generic_private_reader';
 		add_role(
 			$role_name,
@@ -369,10 +369,10 @@ final class TecVenuesOrganizersTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 9 MEDIUM: aafm_exec_tec_create_venue()/aafm_exec_tec_create_organizer()
-	 * built their own ORM args arrays instead of routing through aafm_insert_post(), so the
-	 * max-title-length setting never applied to venues/organizers - fixed via
-	 * aafm_tec_enforce_content_safety() (tec/_shared.php), shared with events.
+	 * aafm_exec_tec_create_venue()/aafm_exec_tec_create_organizer() route through
+	 * aafm_insert_post() rather than building their own ORM args arrays directly, so the
+	 * max-title-length setting applies to venues/organizers via the shared
+	 * aafm_tec_enforce_content_safety() chokepoint (tec/_shared.php), the same as events.
 	 */
 	public function test_create_venue_enforces_the_max_title_length(): void {
 		update_option( 'aafm_max_title_len', 5 );
@@ -399,8 +399,8 @@ final class TecVenuesOrganizersTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 9 MEDIUM: force-draft never applied to venues/organizers either - fixed
-	 * at the shared aafm_resolve_create_status() chokepoint (posts.php), same as events.
+	 * Force-draft applies to venues/organizers too, enforced at the shared
+	 * aafm_resolve_create_status() chokepoint (posts.php), same as events.
 	 */
 	public function test_create_venue_honours_force_draft_even_for_an_authorized_publish_request(): void {
 		update_option( 'aafm_force_draft', true );

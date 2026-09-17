@@ -282,10 +282,9 @@ final class TermMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the write-confirmation guard only checked `false ===
-	 * update_term_meta(...)`, so a metadata filter that short-circuits update_term_metadata to a
-	 * truthy value bypassed the write entirely while the guard never noticed - the write reported
-	 * success and returned the old stored value.
+	 * Checking only `false === update_term_meta(...)` would miss a metadata filter that
+	 * short-circuits update_term_metadata to a truthy value: the write would be bypassed entirely
+	 * while the guard never noticed, reporting success and returning the old stored value.
 	 */
 	public function test_update_term_meta_returns_an_error_when_the_write_is_vetoed(): void {
 		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'seo_title' ) );

@@ -159,22 +159,21 @@ final class ServerToolsListExposureTest extends TestCase {
 	 * This test proves that indistinguishability holds for a REAL disabled ability, not just an
 	 * invented name, and additionally proves the same name is absent from tools/list.
 	 *
-	 * Codex round 9, R9-12: this used to enable the FULL catalog via enable_full_catalog_as_admin()
-	 * and go hunting through wp_get_abilities() for whatever the high-risk floor happened to strip
-	 * out - but that floor is subtracted inside aafm_get_enabled_abilities() itself
+	 * The high-risk floor is subtracted inside aafm_get_enabled_abilities() itself
 	 * (includes/registry.php), before register_enabled() ever calls aafm_register_ability_with_log()
-	 * for a high-risk name, so no such name is ever actually registered in this fixture. The search
-	 * found nothing and the test skipped, proving neither the tools/list exclusion nor the
-	 * tools/call refusal its name promises - and any pass in a full-suite run depended entirely on
-	 * some earlier test leaking a process-wide registration into this one.
+	 * for a high-risk name - so enabling the full catalog and hunting through wp_get_abilities() for
+	 * a name the floor stripped out would never find one, since no such name is ever actually
+	 * registered. That search would silently skip instead of proving anything, and any pass in a
+	 * full-suite run would depend entirely on some earlier test leaking a process-wide registration
+	 * into this one.
 	 *
-	 * The fixture is now built directly instead of hunted for: enable every native ability except
-	 * one deliberately held-back name (aafm/get-posts, a plain read with no vendor dependency),
-	 * then register that one name separately through aafm_register_ability_with_log() - the exact
-	 * chokepoint aafm_register_enabled_abilities() itself calls - so it becomes a genuine AAFM-owned
-	 * WP_Ability that simply never made it into the operator's enabled set. That is deterministic
-	 * and independent of suite order, and it fails loudly instead of skipping if the registration
-	 * does not take.
+	 * The fixture is instead built directly: enable every native ability except one deliberately
+	 * held-back name (aafm/get-posts, a plain read with no vendor dependency), then register that
+	 * one name separately through aafm_register_ability_with_log() - the exact chokepoint
+	 * aafm_register_enabled_abilities() itself calls - so it becomes a genuine AAFM-owned WP_Ability
+	 * that simply never made it into the operator's enabled set. That is deterministic and
+	 * independent of suite order, and it fails loudly instead of skipping if the registration does
+	 * not take.
 	 */
 	public function test_a_disabled_but_registered_ability_is_absent_from_list_and_refused_on_call(): void {
 		$registry = aafm_get_abilities_registry();

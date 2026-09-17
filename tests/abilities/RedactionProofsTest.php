@@ -393,7 +393,7 @@ final class RedactionProofsTest extends TestCase {
 	 * @return void
 	 */
 	/**
-	 * R6-6: a real setting whose value IS the marker must be distinguishable from a withheld one.
+	 * A real setting whose value IS the marker must be distinguishable from a withheld one.
 	 *
 	 * The marker lives in the same arbitrary-string domain as real values, so it can always be
 	 * forged by accident. The out-of-band path list is the authoritative signal, and this is the
@@ -419,9 +419,9 @@ final class RedactionProofsTest extends TestCase {
 	}
 
 	/**
-	 * R6-6: nested withheld fields are reported by their full path, and benign siblings survive.
+	 * Nested withheld fields are reported by their full path, and benign siblings survive.
 	 *
-	 * Round 7: the path is an array of key SEGMENTS, not a joined string. A settings key may itself
+	 * The path is an array of key SEGMENTS, not a joined string. A settings key may itself
 	 * contain a separator, so a joined path could not be parsed back to the exact key.
 	 */
 	public function test_nested_withheld_fields_are_reported_by_path(): void {
@@ -441,11 +441,11 @@ final class RedactionProofsTest extends TestCase {
 	}
 
 	/**
-	 * R6-6: the two tokens this release added and got wrong are compounds only now.
+	 * security_badge and terminal_display match only as compounds, not as bare prefixes.
 	 *
 	 * The names security_badge and terminal_display are ordinary UI configuration. Marking them
-	 * withheld an answer the operator actually wanted. The credential compounds those tokens exist for must
-	 * still be caught, which is the other half of the assertion.
+	 * withheld would give an answer the operator doesn't actually want. The credential compounds
+	 * those tokens exist for must still be caught, which is the other half of the assertion.
 	 *
 	 * @dataProvider provide_tightened_token_cases
 	 *
@@ -479,11 +479,11 @@ final class RedactionProofsTest extends TestCase {
 	/**
 	 * The broad tokens stay broad.
 	 *
-	 * The tokens user and number predate this release, and a considered decision keeps them wide
-	 * rather than risk un-redacting something an earlier review relied on being caught. bank and
-	 * login stay broad too, but round 7 released the names whose last segment says how a thing is
-	 * displayed - see GatewayRedactionCorpusTest, which holds both directions of that carve-out.
-	 * Pinned here so a later narrowing has to argue with a test rather than slip through as tidying.
+	 * The tokens user and number are deliberately kept wide rather than risk un-redacting something
+	 * a real deployment relies on being caught. bank and login stay broad too, but names whose last
+	 * segment merely says how a thing is displayed (e.g. terminal_display) are excluded from that -
+	 * see GatewayRedactionCorpusTest, which holds both directions of that carve-out. Pinned here so
+	 * a later narrowing has to argue with a test rather than slip through as tidying.
 	 *
 	 * @return void
 	 */

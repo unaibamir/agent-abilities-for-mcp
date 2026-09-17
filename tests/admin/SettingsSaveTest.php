@@ -441,12 +441,12 @@ final class SettingsSaveTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-4: locking the high-risk switch persists before the OAuth-off write is
-	 * even attempted. If that later OAuth-off write then fails to persist, the handler used to
-	 * return straight to wp_send_json_error() without ever logging the lock that had already
-	 * landed - an applied restrictive change with no activity-log row to show for it. The fix logs
-	 * every attempted, already-certified switch change before this early return, not only in the
-	 * success path further down.
+	 * Locking the high-risk switch persists before the OAuth-off write is even attempted. If that
+	 * later OAuth-off write then fails to persist, the handler must still log the lock that had
+	 * already landed before returning to wp_send_json_error() - an applied restrictive change
+	 * must never leave the activity log with no row to show for it. Every attempted,
+	 * already-certified switch change is logged before this early return, not only in the success
+	 * path further down.
 	 */
 	public function test_ajax_save_settings_logs_high_risk_lock_when_later_oauth_write_fails(): void {
 		$this->acting_as( 'administrator' );

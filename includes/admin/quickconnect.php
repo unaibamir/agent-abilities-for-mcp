@@ -270,7 +270,7 @@ function aafm_quickconnect_apply_abilities( bool $write, ?bool &$read_only_persi
 	//
 	// $enabled_final is the INTENDED set aafm_set_enabled_abilities() always returns, not proof the
 	// database agrees with it - $abilities_persisted (the by-reference out param) is that proof.
-	// The toggle diff is logged exactly like the main save path (B18) - "when did this become
+	// The toggle diff is logged exactly like the main save path - "when did this become
 	// reachable, and who made it so" - but only once the write is known to have actually taken;
 	// logging it unconditionally would leave a success-style row for a change a stale persistent
 	// object cache silently swallowed. $current is the raw stored list read above, before any of

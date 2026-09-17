@@ -166,7 +166,7 @@ function aafm_ajax_save_settings(): void {
 	// attempted for it yet. Track that separately from $high_risk_persisted / $read_only_persisted so
 	// an early exit below can tell "attempted, and this is its real result" apart from "not attempted
 	// yet, this is only a placeholder". Logging a deferred transition here would record a write that
-	// never ran as a success (Codex hotfix re-check, new finding 1).
+	// never ran as a success.
 	$high_risk_attempted = ! $clean['aafm_high_risk_abilities_unlocked'];
 	$read_only_attempted = $clean['aafm_read_only_mode'];
 
@@ -190,15 +190,15 @@ function aafm_ajax_save_settings(): void {
 	// either OFF closes an attack surface (no self-registering OAuth clients, no OAuth at all), so
 	// that direction is written now, before the ordinary settings loop - including the IP
 	// allowlist - below. Turning either ON is the permissive direction and is deferred until every
-	// restrictive write, including a narrowed IP allowlist, has certified (Codex round 5, R5-1): an
-	// operator asking for "OAuth on, restricted to these IPs" must never end up with OAuth on and
+	// restrictive write, including a narrowed IP allowlist, has certified: an operator asking for
+	// "OAuth on, restricted to these IPs" must never end up with OAuth on and
 	// the old, wider allowlist because the allowlist write failed after OAuth had already been
 	// flipped on.
 	$oauth_persisted = ( '1' === $clean['aafm_oauth_enabled'] ) ? true : aafm_update_option_verified( 'aafm_oauth_enabled', '0' );
 	$dcr_persisted   = ( '1' === $clean['aafm_oauth_dcr_enabled'] ) ? true : aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '0' );
 
-	// Gate review, 1.7.4 final round: both writes above are already attempted by this point, so a
-	// failure of exactly ONE of the pair is a genuine partial save, not an all-or-nothing failure.
+	// Both writes above are already attempted by this point, so a failure of exactly ONE of the
+	// pair is a genuine partial save, not an all-or-nothing failure.
 	// This is deliberately NOT aafm_paired_write_partial_failure_message() - that helper's "the
 	// site is now stricter than requested" claim only holds when the failed half is the permissive
 	// one (as it is below, once OAuth/DCR are deferred to the ON branch). Here both writes are the
@@ -212,7 +212,7 @@ function aafm_ajax_save_settings(): void {
 		// audit row yet - it is only written on failure there, or unconditionally much further down
 		// once every write in this handler has succeeded. Without this, an OAuth/DCR OFF failure
 		// here would return before either log call ever ran, leaving an applied restrictive change
-		// with no activity-log row at all (Codex round 6, B6-4).
+		// with no activity-log row at all.
 		if ( $high_risk_attempted ) {
 			aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
 		}
@@ -246,10 +246,9 @@ function aafm_ajax_save_settings(): void {
 		'aafm_block_guard_strict'       => array( $clean['aafm_block_guard_strict'], __( 'Strict block validation', 'agent-abilities-for-mcp' ) ),
 		'aafm_delete_data_on_uninstall' => array( $clean['aafm_delete_data_on_uninstall'], __( 'Delete data on uninstall', 'agent-abilities-for-mcp' ) ),
 		// aafm_oauth_enabled and aafm_oauth_dcr_enabled are NOT here: their OFF direction already
-		// persisted above and their ON direction is deferred below, both restrictive-first (Codex
-		// round 5, R5-1). The IP allowlist stays in this ordinary loop, which runs before that
-		// deferred ON write, so a narrowed allowlist is always in place before OAuth or DCR can
-		// turn on.
+		// persisted above and their ON direction is deferred below, both restrictive-first. The IP
+		// allowlist stays in this ordinary loop, which runs before that deferred ON write, so a
+		// narrowed allowlist is always in place before OAuth or DCR can turn on.
 		'aafm_ip_allowlist'             => array( $clean['aafm_ip_allowlist'], __( 'The IP allowlist', 'agent-abilities-for-mcp' ) ),
 	);
 	foreach ( $verified_settings as $verified_option => $verified_pair ) {
@@ -472,7 +471,7 @@ function aafm_config_option_names(): array {
  * that is allowed to cost a query it would not otherwise need, because what it gates cannot be
  * undone.
  *
- * Codex round 7, R7-2: a bare $wpdb->get_var() returns the PREVIOUS query's row when the current
+ * A bare $wpdb->get_var() returns the PREVIOUS query's row when the current
  * query itself fails - $wpdb->query() returns false, without ever touching last_result, on some
  * failure paths (see aafm_wpdb_scalar()'s docblock) - so a failed read here could inherit a
  * leftover non-null value from whatever query ran just before it and authorize deletion on data
@@ -539,7 +538,7 @@ function aafm_uninstall_site_data(): void {
 	// re-run and could flip a toggle back on.
 	aafm_delete_option_cache_safe( 'aafm_oauth_toggle_migrated' );
 	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_migrated' );
-	// The second, independently keyed DCR migration signal (B2, 1.7.5 deferred) - see
+	// The second, independently keyed DCR migration signal - see
 	// aafm_oauth_dcr_adopt_on_by_default()'s docblock. Same non-reset, uninstall-only treatment
 	// as the guard row above.
 	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_touched' );
@@ -557,13 +556,13 @@ function aafm_uninstall_site_data(): void {
  * so the plugin keeps working immediately afterwards. This cannot be undone.
  *
  * Wiping the activity log is itself security-relevant, so a tamper-evident marker is written
- * after the clear (L4, shared with the direct "Clear log" action in
+ * after the clear (shared with the direct "Clear log" action in
  * aafm_ajax_clear_log()) - the emptied log always shows who reset the plugin and when.
  *
- * Every step now reports its own real outcome instead of being fired and forgotten (Codex round
- * 9, R9-3): a delete that silently failed used to leave a stale option live - most dangerously
+ * Every step reports its own real outcome rather than being fired and forgotten: a delete that
+ * silently fails would otherwise leave a stale option live - most dangerously
  * aafm_enabled_abilities, which reset deliberately leaves the agent user and its application
- * passwords able to reach - while the caller still told the operator everything was cleared.
+ * passwords able to reach - while the caller told the operator everything was cleared.
  *
  * @return bool True when every configuration option, the activity log (plus its marker), and
  *              all four OAuth tables are confirmed cleared.

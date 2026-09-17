@@ -970,7 +970,7 @@ function aafm_register_privacy_policy_content(): void {
  * Clearing is itself a security-relevant action - a manage_options user (or an attacker who
  * has reached that capability) can otherwise wipe the audit trail without leaving any trace
  * that it happened. Write one final row into the freshly emptied log recording who cleared it
- * and when, so the log is never completely silent about its own history (L4).
+ * and when, so the log is never completely silent about its own history.
  *
  * @return void
  */

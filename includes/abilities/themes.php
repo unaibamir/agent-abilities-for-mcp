@@ -482,7 +482,7 @@ function aafm_exec_update_template( array $input ) {
 	if ( ! $refreshed instanceof WP_Block_Template ) {
 		return aafm_generic_error();
 	}
-	// B3 (1.7.5 deferred): the reread above only proved the template still resolves, never that
+	// The reread above only proves the template still resolves, never that
 	// its content matches what this update actually asked for - a wp_insert_post_data filter
 	// silently vetoing or normalizing the write would still report success on the caller's stale
 	// intent. $wp_id is the underlying post; the default $sanitize_context_id (the same $wp_id)

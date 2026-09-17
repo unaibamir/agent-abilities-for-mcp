@@ -25,6 +25,8 @@ use WP_Query;
 final class AioseoRenderedHeadBufferTest extends TestCase {
 
 	/**
+	 * Isolated so the aioseo() stub this test defines never leaks into a later test.
+	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */

@@ -1,10 +1,9 @@
 <?php
 /**
- * Codex round 5, R5-1: the paired exposed/deny AJAX handlers in page.php write the deny
- * (restrictive) option before the exposed (permissive) one, so a second-write failure leaves the
- * site stricter than requested, never wider. Before this fix the order was reversed: an exposed
- * write that succeeded followed by a deny write that failed left a key reachable that the
- * operator asked to deny.
+ * The paired exposed/deny AJAX handlers in page.php must write the deny (restrictive) option
+ * before the exposed (permissive) one, so a second-write failure leaves the site stricter than
+ * requested, never wider. Reversing the order - an exposed write that succeeds followed by a
+ * deny write that fails - would leave a key reachable that the operator asked to deny.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -233,9 +232,9 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-1: a single request that removes a key from BOTH the deny list and the
-	 * exposed list at once (the bundled UI can post both fields together). The simple round-5
-	 * "deny before exposed" order is not direction-aware here: the deny write below drops
+	 * A single request that removes a key from BOTH the deny list and the exposed list at once
+	 * (the bundled UI can post both fields together) is not covered by the simple "deny before
+	 * exposed" order alone: it is not direction-aware here. The deny write below drops
 	 * 'secret' immediately, so if the exposed write (which still lists 'secret') then fails, the
 	 * key would end up neither denied nor freshly un-exposed - still reachable through the old
 	 * exposed list. The three-stage write must instead land the deny option at
@@ -269,11 +268,10 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-1, the other failure point in the same mixed-direction request: the
-	 * union write (stage 1) and the exposed write (stage 2) both land, but narrowing deny down
-	 * from the union to the final requested (empty) list (stage 3) fails. The key stays denied
-	 * (deny remains at the old, broader value), which is still at least as strict as requested,
-	 * never wider.
+	 * The other failure point in the same mixed-direction request: the union write (stage 1) and
+	 * the exposed write (stage 2) both land, but narrowing deny down from the union to the final
+	 * requested (empty) list (stage 3) fails. The key stays denied (deny remains at the old,
+	 * broader value), which is still at least as strict as requested, never wider.
 	 */
 	public function test_post_meta_mixed_direction_stage_three_failure_leaves_deny_at_union(): void {
 		$this->acting_as( 'administrator' );
@@ -319,11 +317,11 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-1: the deny-all sentinel `*` must survive the three-stage union even
-	 * when both requested lists are submitted empty. Before this fix, the "old deny" half of
-	 * the union came from aafm_denied_meta_keys(), which strips `*` for display purposes, so
-	 * stage 1 certified an EMPTY union - discarding a live deny-all - and a subsequent exposed
-	 * write failure left the old exposed key reachable with nothing left denying it, wider than
+	 * The deny-all sentinel `*` must survive the three-stage union even when both requested
+	 * lists are submitted empty. The "old deny" half of the union must not come from
+	 * aafm_denied_meta_keys(), which strips `*` for display purposes: doing so would certify an
+	 * EMPTY union at stage 1 - discarding a live deny-all - and a subsequent exposed write
+	 * failure would leave the old exposed key reachable with nothing left denying it, wider than
 	 * both the old and the requested policy.
 	 */
 	public function test_post_meta_wildcard_deny_survives_stage_one_when_new_lists_are_empty(): void {
@@ -352,12 +350,12 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-1's other origin for a wrong "old deny" snapshot: a persistent object
-	 * cache still answering with a narrower value than the real database row. Before this fix,
-	 * the "old deny" half of the union came from a cache-trusting get_option(), so a stale cache
-	 * claiming the deny list was already empty would make stage 1 certify an empty union even
-	 * though the database still explicitly denied the key - permanently erasing that denial
-	 * regardless of whether the paired exposed write ever succeeds.
+	 * Another origin for a wrong "old deny" snapshot: a persistent object cache still answering
+	 * with a narrower value than the real database row. The "old deny" half of the union must
+	 * not come from a cache-trusting get_option(): a stale cache claiming the deny list is
+	 * already empty would otherwise make stage 1 certify an empty union even though the database
+	 * still explicitly denies the key - permanently erasing that denial regardless of whether
+	 * the paired exposed write ever succeeds.
 	 */
 	public function test_post_meta_stale_cache_old_deny_does_not_narrow_the_union(): void {
 		$this->acting_as( 'administrator' );
@@ -387,7 +385,7 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * R2-4 sibling (1.7.5 deferred, round 2): a query that itself FAILS reading the old deny row
+	 * A query that itself FAILS reading the old deny row
 	 * is not the same as a genuinely absent/empty row - the stale-cache test above already proves
 	 * the read must consult the database, but a failed database read must not then be treated as
 	 * "nothing was denied before", which would build the stage-1 union from an empty old-deny list
@@ -431,9 +429,9 @@ final class PairedSecurityWriteOrderTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-1's settings.php half: the IP allowlist write already runs before any
-	 * OAuth-on write in aafm_ajax_save_settings(), so if the allowlist write fails, OAuth must
-	 * never be turned on in the same request - even when the request explicitly asked for it.
+	 * The IP allowlist write must run before any OAuth-on write in aafm_ajax_save_settings(), so
+	 * if the allowlist write fails, OAuth must never be turned on in the same request - even when
+	 * the request explicitly asked for it.
 	 */
 	public function test_settings_allowlist_failure_blocks_oauth_from_turning_on(): void {
 		$this->acting_as( 'administrator' );

@@ -705,7 +705,8 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			// GROUP-AFTER and the request STILL returned an error, and a
 			// repeater row behaved identically. No data is destroyed - the
 			// caller's intent lands - but the request lies about it, which is
-			// the same silent wrong answer R4-1 exists for.
+			// the same silent-wrong-answer shape this whole guard exists to
+			// catch.
 			//
 			// These are `refuse-before-write`, not the layout verdict: the key
 			// is judged as the ordinary undeclared address it is, which is why

@@ -182,10 +182,10 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	public function test_update_attribute_field_isolation(): void {
-		// Changing 'order_by' must leave 'name' intact. This test used to patch type to 'text',
-		// but B31 removed 'text' from the enum - wc_get_attribute_types() only offers 'select' and
-		// wc_create_attribute() silently coerced anything else - so the isolation check now rides
-		// on order_by, another enum field.
+		// Changing 'order_by' must leave 'name' intact. 'type' is not used for this: it only
+		// accepts 'select' (wc_get_attribute_types() offers nothing else, and
+		// wc_create_attribute() would silently coerce anything else), so the isolation check
+		// rides on order_by, another enum field.
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-product-attribute' )->execute(
 			array(
@@ -199,10 +199,11 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	/**
-	 * B31: the type enum advertised 'text', but wc_get_attribute_types() returns only 'select'
-	 * and wc_create_attribute() silently coerces anything else to select - schema-enum vs
-	 * code-enum drift plus a silent coercion. The enum is now sourced from the vendor's own list
-	 * (falling back to select when WooCommerce is unavailable), so 'text' is gone.
+	 * The type enum must match what wc_get_attribute_types() actually accepts, not drift from it:
+	 * that function returns only 'select', and wc_create_attribute() silently coerces anything
+	 * else to select, so advertising a type the vendor doesn't accept invites a silent coercion.
+	 * The enum is sourced from the vendor's own list (falling back to select when WooCommerce is
+	 * unavailable).
 	 */
 	public function test_attribute_type_enum_matches_what_woocommerce_accepts(): void {
 		$create_enum = aafm_args_wc_create_product_attribute()['input_schema']['properties']['type']['enum'];
@@ -213,8 +214,8 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	/**
-	 * B31 wire check: a create naming the old phantom 'text' type is refused by the schema
-	 * instead of being silently stored as select.
+	 * A create naming the phantom 'text' type is refused by the schema instead of being silently
+	 * stored as select.
 	 */
 	public function test_create_attribute_type_text_is_rejected(): void {
 		$this->acting_as( 'administrator' );

@@ -1,7 +1,7 @@
 <?php
 /**
- * Bridge directory card merge (1.7.2 defect 2): namespaces that resolve to the same known
- * plugin must render as ONE card, not one per namespace.
+ * Bridge directory card merge: namespaces that resolve to the same known plugin must render as
+ * ONE card, not one per namespace.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -164,20 +164,20 @@ final class BridgeDirectoryMergeTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.2 finding 2 (Codex re-review): the merge helper's synthetic key ('aafm-known-' .
-	 * sanitize_title($known[$ns])) shared the SAME string keyspace as real raw namespace keys. A
-	 * real, unmapped foreign namespace literally named 'aafm-known-all-in-one-seo' - which is
-	 * exactly what the old scheme computed for AIOSEO's own merged key (sanitize_title('All in
-	 * One SEO') === 'all-in-one-seo') - would silently absorb AIOSEO's abilities into its own,
+	 * The merge helper's synthetic key ('aafm-known-' . sanitize_title($known[$ns])) must not
+	 * share the SAME string keyspace as real raw namespace keys. A real, unmapped foreign
+	 * namespace literally named 'aafm-known-all-in-one-seo' - which is exactly what a naive
+	 * scheme computes for AIOSEO's own merged key (sanitize_title('All in One SEO') ===
+	 * 'all-in-one-seo') - would otherwise silently absorb AIOSEO's abilities into its own,
 	 * wrongly-labelled group instead of the two staying separate.
 	 *
 	 * Discovery (aafm_discover_foreign_abilities()) ksort()s by namespace, and
-	 * 'aafm-known-all-in-one-seo' sorts before 'aioseo-posts', so under the OLD scheme the raw
-	 * namespace's group is created
-	 * FIRST and the AIOSEO group silently merges into it on the second pass (isset($merged[$key])
-	 * is already true), rather than either overwriting or getting its own card.
+	 * 'aafm-known-all-in-one-seo' sorts before 'aioseo-posts', so a collision here would create
+	 * the raw namespace's group FIRST and silently merge the AIOSEO group into it on the second
+	 * pass (isset($merged[$key]) already true), rather than either overwriting or getting its own
+	 * card.
 	 *
-	 * RED against the unfixed merge: 'aafm-known-all-in-one-seo/probe' and
+	 * RED against a colliding merge: 'aafm-known-all-in-one-seo/probe' and
 	 * 'aioseo-posts/list-posts' end up in the SAME group, and the group's resolved label is the
 	 * raw namespace's generic Title Case, never "All in One SEO".
 	 */
@@ -219,13 +219,12 @@ final class BridgeDirectoryMergeTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.2 finding 2, the second collision this fix closes: the old key derivation
-	 * ('aafm-known-' . sanitize_title($label)) de-duped known plugins on a LOSSY transform of
-	 * their label, so two genuinely different plugin labels that happen to sanitize to the same
-	 * slug (sanitize_title() collapses whitespace/hyphen differences and case) would wrongly land
-	 * in the same merged group. The fix keys on the exact label string instead of a sanitized
-	 * form of it, so only two namespaces whose labels are the literal same string ever share a
-	 * key.
+	 * The key derivation must not de-dupe known plugins on a LOSSY transform of their label:
+	 * ('aafm-known-' . sanitize_title($label)) would let two genuinely different plugin labels
+	 * that happen to sanitize to the same slug (sanitize_title() collapses whitespace/hyphen
+	 * differences and case) wrongly land in the same merged group. Keying on the exact label
+	 * string instead of a sanitized form of it means only two namespaces whose labels are the
+	 * literal same string ever share a key.
 	 *
 	 * Direct unit check on the key-derivation helper itself (aafm_bridge_merge_group_key()),
 	 * independent of the real known-plugin map: 'foo bar' and 'foo-bar' are DIFFERENT labels that
@@ -243,16 +242,15 @@ final class BridgeDirectoryMergeTest extends TestCase {
 	}
 
 	/**
-	 * 1.7.2 residual finding (third Codex re-review): the merge key was still built from the
-	 * TRANSLATED display label (aafm_bridge_known_plugin_labels()), not a canonical untranslated
-	 * plugin id. Two genuinely different known plugins - Yoast SEO and Rank Math here - whose
-	 * English labels happen to translate (or get gettext-filtered) to the SAME localized string on
-	 * a non-English site would therefore compute the same merge key and silently fold into one
-	 * mislabeled card.
+	 * The merge key must not be built from the TRANSLATED display label
+	 * (aafm_bridge_known_plugin_labels()) rather than a canonical untranslated plugin id. Two
+	 * genuinely different known plugins - Yoast SEO and Rank Math here - whose English labels
+	 * happen to translate (or get gettext-filtered) to the SAME localized string on a non-English
+	 * site would otherwise compute the same merge key and silently fold into one mislabeled card.
 	 *
 	 * Forces that collision with a 'gettext' filter that maps both source strings to one
 	 * identical "translated" string, then asserts the two plugins still render as TWO separate
-	 * cards. RED against the label-keyed merge: only one card would render, carrying abilities
+	 * cards. RED against a label-keyed merge: only one card would render, carrying abilities
 	 * from both unrelated plugins.
 	 */
 	public function test_different_known_plugins_with_colliding_translated_labels_stay_separate_cards(): void {

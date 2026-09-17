@@ -1,12 +1,12 @@
 <?php
 /**
- * Pagination bounds sweep (B44).
+ * Pagination bounds sweep.
  *
  * AAFM_LIST_PAGE_MAX's docblock promises the ceiling is "declared on every list tool's
- * `page` arg". That was false: get-pages and the WooCommerce lists declared `minimum`
- * only, and aafm_paginate_args() never clamped the page server-side, so a stray input
- * schema (or a caller reaching the helper outside schema validation) could request an
- * unbounded page offset. This suite makes the docblock structurally true: every
+ * `page` arg". get-pages and the WooCommerce lists only declare `minimum` on that
+ * property, and aafm_paginate_args() does not clamp the page server-side by itself, so a
+ * stray input schema (or a caller reaching the helper outside schema validation) could
+ * request an unbounded page offset. This suite makes the docblock structurally true: every
  * registered ability whose input schema declares a `page` property must bound it, and
  * the shared helper must clamp even without the schema.
  *

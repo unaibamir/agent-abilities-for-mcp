@@ -37,12 +37,11 @@ final class SearchTest extends TestCase {
 	}
 
 	/**
-	 * Sweep review finding (test quality, fix round 2): RichPostTest pins the shared
-	 * aafm_rich_post() excerpt delegation directly, and aafm_exec_search_content() calls that
-	 * same function with no branching of its own (verified: search.php:217 passes each result
-	 * post straight through). This asserts the same excerpt_length behaviour through
-	 * aafm/search-content's own call path, so the caller-level claim is pinned by a test rather
-	 * than only by reading the source.
+	 * RichPostTest pins the shared aafm_rich_post() excerpt delegation directly, and
+	 * aafm_exec_search_content() calls that same function with no branching of its own (verified:
+	 * search.php:217 passes each result post straight through). This asserts the same
+	 * excerpt_length behaviour through aafm/search-content's own call path, so the caller-level
+	 * claim is pinned by a test rather than only by reading the source.
 	 */
 	public function test_search_excerpt_honors_excerpt_length_filter(): void {
 		add_filter( 'excerpt_length', static fn() => 3 );

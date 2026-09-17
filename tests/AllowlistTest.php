@@ -140,13 +140,13 @@ final class AllowlistTest extends TestCase {
 	}
 
 	/**
-	 * R2-4 sibling (1.7.5 deferred, round 2): this is a live authorization read, the opposite
-	 * direction from a migration's certification read - a query that itself fails must not be
-	 * read the same as "no override rows", which permits every call below. Restrictive rows are
-	 * in place; faulting the direct SELECT aafm_read_option_views() issues must deny rather than
-	 * silently grant unrestricted access for the duration of the outage. Fails if
-	 * aafm_ability_allowed_for_principal() stops checking db_error and falls through to treating
-	 * the failed read as an empty (unrestricted) row set.
+	 * This is a live authorization read, the opposite direction from a migration's certification
+	 * read - a query that itself fails must not be read the same as "no override rows", which
+	 * permits every call below. Restrictive rows are in place; faulting the direct SELECT
+	 * aafm_read_option_views() issues must deny rather than silently grant unrestricted access
+	 * for the duration of the outage. Fails if aafm_ability_allowed_for_principal() stops
+	 * checking db_error and falls through to treating the failed read as an empty (unrestricted)
+	 * row set.
 	 */
 	public function test_a_failed_read_denies_rather_than_grants_unrestricted_access(): void {
 		update_option(
@@ -200,11 +200,11 @@ final class AllowlistTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 7 LOW, per 228-allowlist-design.md section 6: a row naming an ability
-	 * slug absent from the registry (a name from a since-removed/renamed integration - the admin
-	 * save no longer accepts one, see AllowlistAdminTest) must skip the whole row, degrading to
-	 * unrestricted, never to deny-everything. Before this fix aafm_allowlist_set_permits() denied
-	 * every real ability for the role, because the stale name matched none of them.
+	 * Per 228-allowlist-design.md section 6: a row naming an ability slug absent from the
+	 * registry (a name from a since-removed/renamed integration - the admin save no longer
+	 * accepts one, see AllowlistAdminTest) must skip the whole row, degrading to unrestricted,
+	 * never to deny-everything, because a stale name would otherwise match none of the real
+	 * abilities and deny all of them for the role.
 	 */
 	public function test_a_row_referencing_an_ability_absent_from_the_registry_is_skipped(): void {
 		update_option(

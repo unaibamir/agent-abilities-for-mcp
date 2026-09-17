@@ -1,6 +1,6 @@
 <?php
 /**
- * Multisite gate for the create-agent-user AJAX handler (finding B17).
+ * Multisite gate for the create-agent-user AJAX handler.
  *
  * On multisite, manage_options is a per-site capability every subsite administrator
  * holds, but create_users maps through map_meta_cap to do_not_allow unless the caller
@@ -90,7 +90,7 @@ final class MsCreateAgentUserTest extends TestCase {
 	}
 
 	/**
-	 * B17: a subsite administrator without create_users (network add_new_users off, the
+	 * A subsite administrator without create_users (network add_new_users off, the
 	 * default) must be refused, even though they hold manage_options.
 	 */
 	public function test_subsite_admin_without_create_users_is_refused(): void {

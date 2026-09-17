@@ -147,11 +147,11 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
-	 * Codex round-b finding 8: two submitted rows for the same scope used to both reach storage,
-	 * and aafm_ability_allowed_for_principal() only ever checks the first match - so an earlier
+	 * Two submitted rows for the same scope must not both reach storage:
+	 * aafm_ability_allowed_for_principal() only ever checks the first match, so an earlier
 	 * permissive "all" row would silently defeat a later restrictive one, regardless of which one
-	 * the operator actually meant to keep. Saving now keys rows by scope_type:scope_id so only
-	 * the LAST submitted row for a given scope survives.
+	 * the operator actually meant to keep. Saving keys rows by scope_type:scope_id so only the
+	 * LAST submitted row for a given scope survives.
 	 */
 	public function test_a_duplicate_client_scope_keeps_only_the_last_row(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -186,11 +186,9 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 3 MEDIUM (per the team lead's explicit fix, superseding an earlier
-	 * drop-and-report design this lane had shipped first): a row naming an unknown role used to
-	 * be silently dropped while the save still reported success, so a restriction the operator
-	 * thought they'd applied never actually took effect. The whole save must be rejected instead,
-	 * with the PREVIOUSLY stored option left untouched.
+	 * A row naming an unknown role must not be silently dropped while the save still reports
+	 * success, or a restriction the operator thought they'd applied never actually takes effect.
+	 * The whole save must be rejected instead, with the PREVIOUSLY stored option left untouched.
 	 */
 	public function test_a_row_with_an_unknown_role_rejects_the_whole_save(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -226,12 +224,11 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 2 MEDIUM, tightened per the team lead in round 3: a client id was
-	 * accepted as arbitrary free text with no check that it named a real client. A mistyped id
-	 * (a real client's id off by one character) matched no OAuth client row, so it added no
-	 * restriction at all for that client - and per the allowlist's own intersection precedence,
-	 * an unmatched client is unrestricted, i.e. the row silently failed open. The whole save must
-	 * be rejected, not merely that one row dropped.
+	 * A client id must be checked against real OAuth clients, not accepted as arbitrary free
+	 * text: a mistyped id (a real client's id off by one character) matches no OAuth client row,
+	 * so it would add no restriction at all for that client - and per the allowlist's own
+	 * intersection precedence, an unmatched client is unrestricted, i.e. the row would silently
+	 * fail open. The whole save must be rejected, not merely that one row dropped.
 	 */
 	public function test_a_row_with_a_mistyped_client_id_rejects_the_whole_save(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -269,10 +266,10 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 7 LOW: a row naming an ability slug not in the registry (typo, or a name
-	 * from a removed integration) used to save successfully and then deny every real ability for
-	 * that role at read time - the opposite of 228-allowlist-design.md section 6's own fail-closed
-	 * statement. Reject the whole save, the same way an unknown role/client already is above.
+	 * A row naming an ability slug not in the registry (typo, or a name from a removed
+	 * integration) must not save successfully and then deny every real ability for that role at
+	 * read time - the opposite of 228-allowlist-design.md section 6's own fail-closed statement.
+	 * Reject the whole save, the same way an unknown role/client already is above.
 	 */
 	public function test_a_row_with_an_unknown_ability_slug_rejects_the_whole_save(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -341,9 +338,9 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
-	 * Codex admin-ui-r1 M3: the scope-type, role and OAuth-connection selects had no <label>,
-	 * aria-label or aria-labelledby at all - the worst case of the finding, three adjacent
-	 * controls with no accessible name between them.
+	 * The scope-type, role and OAuth-connection selects must each carry a persistent <label>,
+	 * aria-label or aria-labelledby: three adjacent controls with no accessible name between
+	 * them is the worst case for a screen-reader user trying to tell them apart.
 	 */
 	public function test_the_new_scope_selects_have_persistent_labels(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -370,7 +367,7 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
-	 * R3-3 (1.7.5 deferred, round 3): a failed read of the allowlist option must never render as
+	 * A failed read of the allowlist option must never render as
 	 * "No scopes narrowed yet" with Add/Save still available - that lookalike empty state is
 	 * exactly what let a transient read failure turn into real data loss (see
 	 * aafm_allowlist_overrides_for_display()'s docblock). Existing stored rows must survive
@@ -412,9 +409,9 @@ final class AllowlistAdminTest extends TestCase {
 	 * false immediately - BEFORE its own $this->flush() call that would otherwise reset
 	 * last_result - so, unlike redirecting a query to a nonexistent table (which fails for real,
 	 * but only after flush() has already run), this leaves $wpdb->last_result holding whatever
-	 * the PREVIOUS successful query left there. That is the exact precondition R8-1 exploits, and
-	 * the only one of $wpdb->query()'s two "false without clearing last_result" paths a test can
-	 * trigger without also faking wpdb::ready.
+	 * the PREVIOUS successful query left there. That is the exact precondition a stale-last-result
+	 * read exploits, and the only one of $wpdb->query()'s two "false without clearing
+	 * last_result" paths a test can trigger without also faking wpdb::ready.
 	 *
 	 * @param string $needle Substring identifying the one query to suppress.
 	 * @return void
@@ -424,13 +421,13 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-1: aafm_oauth_get_client() used to run a bare $wpdb->get_row(), which
-	 * hands back the PREVIOUS query's row when the current one fails without clearing last_result.
-	 * Reproduces the exact shape Codex described: an allowlist save naming a real client FIRST (so
+	 * aafm_oauth_get_client() must not be a bare $wpdb->get_row(), because that call hands back
+	 * the PREVIOUS query's row when the current one fails without clearing last_result. This
+	 * reproduces the exact shape that risk takes: an allowlist save naming a real client FIRST (so
 	 * its lookup succeeds and populates $wpdb->last_result), then a second, nonexistent client
-	 * whose OWN lookup query is suppressed - before the fix, the bare get_row() would silently
-	 * hand back the first client's row for the second's, is_array() would accept it, and the whole
-	 * save (including a row for the nonexistent client) would persist with a success response.
+	 * whose OWN lookup query is suppressed - a bare get_row() would silently hand back the first
+	 * client's row for the second's, is_array() would accept it, and the whole save (including a
+	 * row for the nonexistent client) would persist with a success response.
 	 *
 	 * What would break this: reverting aafm_oauth_get_client() to a bare $wpdb->get_row() makes
 	 * $json['success'] true and a row for the nonexistent client lands in

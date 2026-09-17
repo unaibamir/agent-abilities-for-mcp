@@ -40,8 +40,9 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 
 	/**
 	 * Register a real ability and build the real McpTool the adapter would construct for it, so
-	 * the round 3 identity-classification tests exercise McpTool::get_observability_context() as
-	 * the bundled adapter actually shapes it, not a hand-rolled stand-in.
+	 * the identity-classification tests using the round3-* fixtures below exercise
+	 * McpTool::get_observability_context() as the bundled adapter actually shapes it, not a
+	 * hand-rolled stand-in.
 	 *
 	 * @param string $name Ability name (e.g. 'aafm-bridge/round3-renamed-vendor').
 	 * @return \WP\MCP\Domain\Tools\McpTool
@@ -267,7 +268,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 		);
 	}
 
-	// NOT WIRE COVERAGE, per the final-gate round 2 finding: every test from here down calls
+	// NOT WIRE COVERAGE: every test from here down calls
 	// aafm_filter_bridged_tool_call_result() with a BARE object at the function's top level. On the
 	// real MCP wire this shape never occurs - McpTool::execute() already wraps any non-array
 	// bridged result as array('result' => $value) BEFORE this filter ever runs (vendored
@@ -320,10 +321,10 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, correctness F1: a zero-property stdClass carries nothing to leak. This codebase
-	 * itself uses (object) array() in several places for the "empty map serialises as {} not []"
-	 * idiom, so a bridged ability following the same convention must pass through unchanged, not be
-	 * refused as if it were an unvouched-for object.
+	 * A zero-property stdClass carries nothing to leak. This codebase itself uses (object) array()
+	 * in several places for the "empty map serialises as {} not []" idiom, so a bridged ability
+	 * following the same convention must pass through unchanged, not be refused as if it were an
+	 * unvouched-for object.
 	 */
 	public function test_a_bridged_empty_object_result_passes_through_unchanged(): void {
 		$empty = new \stdClass();
@@ -356,13 +357,12 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
-	 * Final-gate Codex finding 2 (208-final-gate-codex-round1.md): the fix round 1 narrowing was
-	 * exploitable. get_object_vars() called from OUTSIDE a class omits private and protected
-	 * properties, so an object holding only PRIVATE state read as "zero properties" from this
-	 * function's point of view and passed the old guard - but a JsonSerializable object with that
-	 * exact shape still leaks its private data once the adapter calls wp_json_encode() on it via
-	 * jsonSerialize(). This must be REFUSED, not exempted, proving the guard now checks the exact
-	 * class rather than merely the visible property count.
+	 * get_object_vars() called from OUTSIDE a class omits private and protected properties, so an
+	 * object holding only PRIVATE state reads as "zero properties" from this function's point of
+	 * view - but a JsonSerializable object with that exact shape still leaks its private data once
+	 * the adapter calls wp_json_encode() on it via jsonSerialize(). This must be REFUSED, not
+	 * exempted: the guard has to check the exact class, not merely the visible property count,
+	 * because the visible count alone can't rule out a private-data leak like this one.
 	 */
 	public function test_a_bridged_propertyless_jsonserializable_object_with_private_data_is_refused(): void {
 		$leaky = new class() implements \JsonSerializable {
@@ -421,14 +421,13 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
 	}
 
-	// THE REAL WIRE SHAPE, from here down. Final-gate round 2 (208-final-gate-codex-round2.md):
-	// McpTool::execute() already wraps any non-array bridged result as array('result' => $value)
-	// before this filter ever runs, so on a real MCP call $result here is an ARRAY containing the
-	// dangerous object, never the object itself. Every test below drives that exact shape, which is
-	// what the fix round 1 predicate (and the original Task 6 guard before it) never exercised.
+	// THE REAL WIRE SHAPE, from here down. McpTool::execute() already wraps any non-array bridged
+	// result as array('result' => $value) before this filter ever runs, so on a real MCP call
+	// $result here is an ARRAY containing the dangerous object, never the object itself. Every
+	// test below drives that exact shape, which the bare-object predicate above never exercises.
 
 	/**
-	 * The concrete failure scenario from the final-gate report: a bridged ability returns a real
+	 * The concrete failure scenario this guard exists for: a bridged ability returns a real
 	 * WP_User, the adapter wraps it as array('result' => $user), and the wrapped user's public
 	 * `data` property (carrying the password hash) must never reach the wire.
 	 */
@@ -582,7 +581,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 		$this->assertSame( $original, $result );
 	}
 
-	// IDENTITY CLASSIFICATION, final gate round 3. The wire tool-name prefix test alone is
+	// IDENTITY CLASSIFICATION. The wire tool-name prefix test alone is
 	// bypassable: the adapter's PUBLIC mcp_adapter_tool_name filter can rename a tool's wire name
 	// after the ability name is sanitized, in either direction. These tests drive the actual
 	// McpTool instance the adapter passes (accepted_args=4), built via the real

@@ -146,12 +146,13 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * B1: a bridged foreign ability that declares no input schema must EXECUTE, not fail.
+	 * A bridged foreign ability that declares no input schema must EXECUTE, not fail.
 	 *
-	 * Core's WP_Ability::validate_input() accepts only null for an empty schema. The wrapper used
-	 * to forward array(), so every call returned ability_missing_input_schema. The forwarder now
-	 * passes null for an empty foreign schema. Asserted at the returned-shape layer (a WP_Error vs
-	 * the real result object), which is what a strict MCP client actually receives.
+	 * Core's WP_Ability::validate_input() accepts only null for an empty schema, so the forwarder
+	 * passes null for an empty foreign schema rather than array() - array() would trip
+	 * validate_input() into failing every call with ability_missing_input_schema. Asserted at the
+	 * returned-shape layer (a WP_Error vs the real result object), which is what a strict MCP
+	 * client actually receives.
 	 */
 	public function test_bridged_no_input_schema_ability_executes(): void {
 		$this->register_foreign_no_schema();
@@ -171,8 +172,8 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * B1 second class: a foreign ability with a non-object (scalar) input schema must receive the
-	 * caller's scalar argument, not have it discarded and replaced with array().
+	 * A foreign ability with a non-object (scalar) input schema must receive the caller's scalar
+	 * argument, not have it discarded and replaced with array().
 	 */
 	public function test_bridged_scalar_input_schema_forwards_the_argument(): void {
 		$this->in_action(
@@ -600,7 +601,7 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * The regression an adversarial Codex pass found and no existing test covered: a bridged
+	 * The regression this test guards against, previously uncovered: a bridged
 	 * ability that declares a scalar output_schema (e.g. `{type: boolean}`) and legitimately
 	 * returns a matching scalar (e.g. `true`) must succeed and return that scalar unchanged.
 	 * Wrapping it into `array( 'data' => $value )` - as includes/bridge.php did between
@@ -638,7 +639,7 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * Task 8: a foreign ability's output_schema built from a bare `oneOf` - with no top-level
+	 * A foreign ability's output_schema built from a bare `oneOf` - with no top-level
 	 * 'type' - is a legal, spec-compliant JSON Schema (JSON Schema does not require 'type', and
 	 * WP core's rest_validate_value_from_schema() explicitly supports this: it derives the
 	 * effective type from whichever oneOf branch matches the actual value, see
@@ -646,16 +647,16 @@ final class BridgeWrapperTest extends TestCase {
 	 * bare top-level 'type' with nothing else, e.g. {description:'...'}, was tried first here and
 	 * rejected as a fixture: core's own validate_output() throws on that even for a DIRECT call
 	 * (an unrelated core limitation, not this bug), so it could not isolate the bridge defect.
-	 * aafm_bridge_output_schema() used to route every foreign output schema through
-	 * aafm_normalize_json_schema(), which is INPUT-oriented and defaults a typeless schema to
-	 * {type:object, properties:{}} because a call's arguments are always an object. Stamping
-	 * type:object onto a oneOf schema disables core's per-branch type inference (it only fires
-	 * when 'type' is unset), so when the foreign ability legitimately returned a scalar (matching
-	 * its real, typeless oneOf schema), OUR wrapper's own WP_Ability::execute() validated that
-	 * scalar against the FABRICATED {type:object} schema and rejected it with
-	 * ability_invalid_output - even though the identical ability called directly (validated
-	 * against its real schema) succeeded. This proves the bridged call now succeeds and returns
-	 * the exact same value the direct call does.
+	 * aafm_bridge_output_schema() must not route a typeless oneOf schema through
+	 * aafm_normalize_json_schema(), because that helper is INPUT-oriented and defaults a typeless
+	 * schema to {type:object, properties:{}} - correct for a call's arguments, which are always an
+	 * object, but wrong here. Stamping type:object onto a oneOf schema disables core's per-branch
+	 * type inference (it only fires when 'type' is unset), so a foreign ability legitimately
+	 * returning a scalar (matching its real, typeless oneOf schema) would then have OUR wrapper's
+	 * own WP_Ability::execute() validate that scalar against a fabricated {type:object} schema and
+	 * reject it with ability_invalid_output - even though the identical ability called directly
+	 * (validated against its real schema) succeeds. This test proves the bridged call succeeds and
+	 * returns the exact same value the direct call does.
 	 */
 	public function test_bridged_ability_with_typeless_output_schema_returning_scalar_succeeds(): void {
 		$this->acting_as( 'administrator' );
@@ -1014,10 +1015,10 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, test-quality F2: Task 8 delegated BOTH aafm_bridge_input_schema() and
-	 * aafm_bridge_output_schema() to wp_prepare_json_schema_for_client(), but only the input side
-	 * had a test. A regression that removed just the output-schema call would have passed clean.
-	 * Mirrors the input-schema test above, asserting on the specific stripped keyword.
+	 * Both aafm_bridge_input_schema() and aafm_bridge_output_schema() delegate to
+	 * wp_prepare_json_schema_for_client(), but only the input side had a test, so a regression
+	 * that removed just the output-schema call would have passed clean. Mirrors the input-schema
+	 * test above, asserting on the specific stripped keyword.
 	 */
 	public function test_bridged_output_schema_strips_a_keyword_outside_the_client_allowlist(): void {
 		if ( ! function_exists( 'wp_prepare_json_schema_for_client' ) ) {

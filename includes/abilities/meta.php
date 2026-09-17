@@ -344,11 +344,11 @@ function aafm_exec_update_post_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	// Codex round 7 R7-3: pass the post's real type, not the default 'post', so a
-	// sanitize_callback registered for a page or a custom post type is not invisible to the probe.
-	// Codex round 8 R8-2: resolve it through get_object_subtype(), the same filterable call core
-	// itself makes at write time, rather than the raw get_post_type() - a get_object_subtype_post
-	// filter remapping the subtype is honoured here the same way it is at write time.
+	// Passes the post's real type, not the default 'post', so a sanitize_callback registered for
+	// a page or a custom post type is not invisible to the probe, resolved through
+	// get_object_subtype(), the same filterable call core itself makes at write time, rather than
+	// the raw get_post_type() - a get_object_subtype_post filter remapping the subtype is
+	// honoured here the same way it is at write time.
 	$subtype = (string) get_object_subtype( 'post', $id );
 	$value   = aafm_sanitize_meta_value( $key, $input['value'] ?? '', $subtype );
 	if ( is_wp_error( $value ) ) {
@@ -357,12 +357,12 @@ function aafm_exec_update_post_meta( array $input ) {
 	$old = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- single-key read of the pre-write value, not a meta query.
 	update_post_meta( $id, $key, wp_slash( $value ) );
 	$stored = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- single-key read-back of the just-written value, not a meta query.
-	// Codex round 5 R5-2: update_post_meta()'s return value only catches an outright failure. A
-	// metadata filter that short-circuits update_post_metadata to a truthy value bypasses the
-	// write while reporting success, so checking only `false === update_post_meta(...)` never
-	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
-	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
-	// sanitize callback's legitimate normalization is not mistaken for a veto.
+	// update_post_meta()'s return value only catches an outright failure. A metadata filter that
+	// short-circuits update_post_metadata to a truthy value bypasses the write while reporting
+	// success, so checking only `false === update_post_meta(...)` would never catch it. Confirm
+	// what actually landed unconditionally instead, comparing against the CANONICAL
+	// sanitize_meta() form, not the pre-write intent, so a registered sanitize callback's
+	// legitimate normalization is not mistaken for a veto.
 	if ( ! aafm_meta_write_confirmed( $old, $id, $value, $key, 'post', $subtype ) ) {
 		return aafm_generic_error();
 	}

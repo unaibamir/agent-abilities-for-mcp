@@ -164,17 +164,16 @@ function aafm_perm_get_comments( array $input ): bool {
 /**
  * Scan ceiling for aafm_exec_get_comments()'s whole-site, unprivileged branch.
  *
- * Codex round 9, R9-4: that branch used to ask get_comments() for one DB page, THEN drop
- * comments on unreadable posts - so a readable comment could be pushed off page 1 (or off
- * every page) by unreadable ones consuming its slot, with no `total` and no truncation
- * signal to tell the caller a readable result was stranded further in. Comments are now
- * fetched in one bounded, unpaginated scan (default id/date order preserved), filtered by
- * post readability, and only THEN paginated - the same authorize-before-paginate fix
- * already applied to GeoDirectory listings (B184). The filter is narrow-only (matching
- * aafm_geodirectory_listing_batch_cap()'s own posture) so a hook can lower the cap for a
- * test without ever raising it past the hard ceiling.
+ * Asking get_comments() for one DB page and THEN dropping comments on unreadable posts would
+ * let a readable comment get pushed off page 1 (or off every page) by unreadable ones
+ * consuming its slot, with no `total` and no truncation signal to tell the caller a readable
+ * result was stranded further in. So comments are fetched in one bounded, unpaginated scan
+ * (default id/date order preserved), filtered by post readability, and only THEN paginated -
+ * the same authorize-before-paginate approach already applied to GeoDirectory listings. The
+ * filter is narrow-only (matching aafm_geodirectory_listing_batch_cap()'s own posture) so a
+ * hook can lower the cap for a test without ever raising it past the hard ceiling.
  *
- * ponytail: 2000 is a flat, deliberate ceiling on a single call, not a true site-wide
+ * 2000 is a flat, deliberate ceiling on a single call, not a true site-wide
  * limit - a subscriber's own site-wide comment feed rarely needs to look past the newest
  * couple thousand approved comments. If a real site needs this branch to page reliably
  * past that many comments on hidden posts, replace this single bounded scan with
@@ -261,25 +260,26 @@ function aafm_exec_get_comments( array $input ): array {
 
 	$visible = array_values( array_filter( (array) $scanned, $is_readable ) );
 
-	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan
-	// (Codex round 10, R10-8, generalized at F7, then R2-6, then R3-6 across three rounds of
-	// this batch). Every earlier predicate - comparing raw_total against scan_cap, requiring the
-	// whole window to be visible, a bounded second-window lookahead sized or OFFSET from a count
-	// that includes hidden rows - shared the same flaw: inserting or removing ONE hidden comment
-	// anywhere before a count-based boundary shifts every comment after it by one position, which
-	// can push a genuinely visible comment across whichever boundary the predicate was watching,
-	// flipping `truncated` on content the caller never saw and never asked about.
+	// `truncated` must be computed from what THIS caller can see, not the raw site-wide scan.
+	// Any count-based or OFFSET-based predicate - comparing raw_total against scan_cap, requiring
+	// the whole window to be visible, a bounded second-window lookahead sized or OFFSET from a
+	// count that includes hidden rows - shares the same flaw: inserting or removing ONE hidden
+	// comment anywhere before a count-based boundary shifts every comment after it by one
+	// position, which can push a genuinely visible comment across whichever boundary the
+	// predicate was watching, flipping `truncated` on content the caller never saw and never
+	// asked about.
 	//
-	// R3-6's fix: probe by IDENTITY, not by count/offset. `comment__not_in` excludes exactly the
-	// comment ids already examined, so the next probe batch is always "whatever wasn't already
-	// looked at", regardless of how many hidden comments were inserted or removed anywhere in the
-	// approved set - unlike an offset, an id exclusion list cannot be shifted by unrelated rows.
-	// Walk forward in bounded batches (mirrors aafm_exec_geodirectory_get_listings()'s own
-	// keyset-based disambiguation probe) until a readable comment resolves this true, a batch
-	// comes back short of what was asked for (proving no more approved comments exist at all,
-	// resolving this false), or a small reserve of probe batches is exhausted without resolving
-	// either way - at which point, as with that same GeoDirectory probe, an unresolved state
-	// reports true rather than assert a "nothing more" the scan never actually confirmed.
+	// So this probes by IDENTITY instead, not by count/offset. `comment__not_in` excludes exactly
+	// the comment ids already examined, so the next probe batch is always "whatever wasn't
+	// already looked at", regardless of how many hidden comments were inserted or removed
+	// anywhere in the approved set - unlike an offset, an id exclusion list cannot be shifted by
+	// unrelated rows. It walks forward in bounded batches (mirrors
+	// aafm_exec_geodirectory_get_listings()'s own keyset-based disambiguation probe) until a
+	// readable comment resolves this true, a batch comes back short of what was asked for
+	// (proving no more approved comments exist at all, resolving this false), or a small reserve
+	// of probe batches is exhausted without resolving either way - at which point, as with that
+	// same GeoDirectory probe, an unresolved state reports true rather than assert a "nothing
+	// more" the scan never actually confirmed.
 	$truncated = false;
 	if ( count( (array) $scanned ) < $raw_total ) {
 		$excluded  = array_map(
@@ -347,10 +347,10 @@ function aafm_comment_post_is_readable( int $post_id ): bool {
 		return false;
 	}
 
-	// R3-5 (1.7.5 deferred, round 3): a password-protected public post fell straight through to
-	// the read_post branch below, which maps to the ordinary 'read' capability - the password
-	// itself was never checked, so a Subscriber could read approved comments on a password-
-	// protected published post. Matches core's own REST comments controller
+	// A password-protected public post must not fall through to the read_post branch below,
+	// which maps to the ordinary 'read' capability without checking the password itself - that
+	// would let a Subscriber read approved comments on a password-protected published post.
+	// Matches core's own REST comments controller
 	// (WP_REST_Comments_Controller::get_items_permissions_check()): a still-password-required
 	// post is gated on edit_post, not on merely being able to read the post record.
 	// post_password_required() itself already accounts for the caller having supplied the
@@ -645,19 +645,19 @@ function aafm_exec_create_comment( array $input ) {
 	// Pin status to pending in case a filter flipped it on insert.
 	wp_set_comment_status( $comment_id, 'hold' );
 
-	// Codex round 8, R8-4: wp_set_comment_status()'s return value was discarded here, and only
-	// existence was checked afterward - so if its own DB update failed, or a 'wp_set_comment_status'
-	// hook it fires (synchronously, before it returns) moved the comment somewhere other than
-	// pending, this reported success with an approved (or otherwise non-pending) comment,
-	// contradicting the pending-queue guarantee this function exists to enforce. Read the actual
-	// stored status back and require it to be pending ('0', the literal value wp_set_comment_status()
-	// itself writes for 'hold' - wp-includes/comment.php) rather than trusting the call succeeded.
+	// wp_set_comment_status()'s return value is discarded here, so if its own DB update fails, or
+	// a 'wp_set_comment_status' hook it fires (synchronously, before it returns) moves the
+	// comment somewhere other than pending, trusting the call succeeded would report success with
+	// an approved (or otherwise non-pending) comment, contradicting the pending-queue guarantee
+	// this function exists to enforce. Read the actual stored status back and require it to be
+	// pending ('0', the literal value wp_set_comment_status() itself writes for 'hold' -
+	// wp-includes/comment.php) instead.
 	//
-	// Codex round 9, R9-2: that read-back is get_comment(), which serves the object cache before
-	// ever touching the database - so a stale cached entry (an earlier failed, non-flushing write
-	// leaves one behind on a persistent cache) could match the pending check while the row itself
-	// held something else. clean_comment_cache() first forces the read past it, exactly the way
-	// wp_set_comment_status() itself does before firing its own action.
+	// That read-back is get_comment(), which serves the object cache before ever touching the
+	// database, so a stale cached entry (left behind by an earlier failed, non-flushing write) could
+	// match the pending check while the row itself held something else. clean_comment_cache() forces
+	// the read past it first, exactly the way wp_set_comment_status() does before firing its own
+	// action.
 	clean_comment_cache( $comment_id );
 	$created = get_comment( $comment_id );
 	if ( ! $created instanceof WP_Comment || '0' !== $created->comment_approved ) {
@@ -867,20 +867,20 @@ function aafm_exec_moderate_comment( array $input ) {
 			);
 	}
 
-	// Codex round 8, R8-4: this used to branch on each call's own return value ($ok) - true only
-	// proves wp_set_comment_status()'s (or wp_spam_comment()'s/wp_trash_comment()'s, both thin
-	// wrappers around it) OWN $wpdb->update() call landed. It fires the 'wp_set_comment_status'
-	// action synchronously, AFTER that update succeeds but BEFORE returning, so a hook on that
-	// action (an anti-spam plugin, a second moderation rule, a plugin that hard-deletes the row)
-	// can move or remove the comment again before control returns here - leaving the discarded
-	// return value true while the actual stored status is something else entirely. The only signal
-	// this function can trust is a fresh read taken after every hook has already run, compared
-	// against what was actually requested - never a return value from mid-pipeline.
+	// Branching on each call's own return value ($ok) would only prove wp_set_comment_status()'s
+	// (or wp_spam_comment()'s/wp_trash_comment()'s, both thin wrappers around it) OWN
+	// $wpdb->update() call landed. It fires the 'wp_set_comment_status' action synchronously,
+	// AFTER that update succeeds but BEFORE returning, so a hook on that action (an anti-spam
+	// plugin, a second moderation rule, a plugin that hard-deletes the row) can move or remove
+	// the comment again before control returns here - leaving a return value of true while the
+	// actual stored status is something else entirely. The only signal this function can trust is
+	// a fresh read taken after every hook has already run, compared against what was actually
+	// requested - never a return value from mid-pipeline.
 	//
-	// Codex round 9, R9-2: "fresh" only holds if the read actually reaches the database. get_comment()
-	// checks the object cache first, so a stale entry (the shape an earlier failed, non-flushing
-	// write leaves on a persistent cache) can still answer here even though every hook above already
-	// ran. clean_comment_cache() first forces the read past it, exactly the way wp_set_comment_status()
+	// "Fresh" only holds if the read actually reaches the database. get_comment() checks the
+	// object cache first, so a stale entry (the shape an earlier failed, non-flushing write leaves
+	// on a persistent cache) can still answer here even though every hook above already ran.
+	// clean_comment_cache() forces the read past it first, exactly the way wp_set_comment_status()
 	// itself does before firing its own action.
 	clean_comment_cache( $id );
 	$comment = get_comment( $id );
@@ -1029,8 +1029,8 @@ function aafm_exec_update_comment( array $input ) {
 	// wp_update_comment() returning a non-false, non-WP_Error value only means the write did not
 	// hard-fail - not that the requested content is what actually landed. A `wp_update_comment_data`
 	// filter can veto the change by rewriting comment_content back to its prior value, and that
-	// return value is exactly what a genuine already-equal no-op also produces (Codex round 9,
-	// R9-5), so the two are indistinguishable without comparing what was actually stored. Compare
+	// return value is exactly what a genuine already-equal no-op also produces, so the two are
+	// indistinguishable without comparing what was actually stored. Compare
 	// the fresh row against the requested content directly: a match covers both a real update and
 	// a true no-op, and only a real divergence is an error.
 	if ( $saved->comment_content !== $content ) {

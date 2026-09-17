@@ -501,7 +501,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// update_post_meta(), not a display-shaped stand-in - sanitize_meta() (called by
 	// aafm_meta_write_confirmed() below) must see the same value type a registered sanitize
 	// callback actually ran against, an array for rank_math_robots, a scalar everywhere else.
-	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
+	// The subtype is resolved through get_object_subtype(), the same filterable
 	// call core itself makes at write time, rather than the raw get_post_type() - a
 	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
 	// at write time.
@@ -527,9 +527,9 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	}
 
 	// Persist the attachment-id companion meta the frontend actually renders from. A cleared image (0)
-	// blanks the id so the resolver falls through to the featured image, never a stale id. Codex round
-	// 6 B6-2: these companion writes were not confirmed below, so a filter could veto just one of them
-	// while the visible URL field still reported success and the frontend kept rendering a stale image.
+	// blanks the id so the resolver falls through to the featured image, never a stale id. These
+	// companion writes are confirmed below along with the others, so a filter vetoing just one of them
+	// cannot report success while the frontend keeps rendering a stale image.
 	foreach ( $resolved_ids as $field => $attachment_id ) {
 		$companion_value                             = $attachment_id > 0 ? $attachment_id : '';
 		$expected_meta[ $image_id_fields[ $field ] ] = $companion_value;
@@ -561,7 +561,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
 		$expected_meta['rank_math_robots'] = $kept;
 
-		// Delegation audit sweep (210-sweep-B5-report.md): rank_math_robots is the exact meta key
+		// rank_math_robots is the exact meta key
 		// Sitemap::is_object_indexable() reads to decide sitemap inclusion, but Cache_Watcher only
 		// invalidates the cached sitemap on save_post/transition_post_status (class-cache-watcher.php),
 		// never on a bare meta write. A normal robots edit through the classic/Gutenberg metabox is
@@ -577,11 +577,11 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		}
 	}
 
-	// Codex round 5 R5-2: every update_post_meta() call above discarded its return value, unlike
+	// Every update_post_meta() call above discards its return value, unlike
 	// the schema sibling one call below (aafm_exec_rankmath_update_schema()), which already
 	// rereads and compares. A site-installed update_post_metadata filter vetoing any of these
 	// writes would report success while the response still carried the requested value rather
-	// than what storage actually holds. Codex round 6 B6-3: compare against the CANONICAL
+	// than what storage actually holds. So this compares against the CANONICAL
 	// sanitize_meta() form of each write, not its pre-write intent, so a registered sanitize
 	// callback's legitimate normalization is not mistaken for a veto - a robots array runs through
 	// the same sanitize_meta() call a scalar field does, keeping the comparison correct for both.
@@ -770,12 +770,11 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 	// sanitized input also means a successful response always reflects what storage genuinely
 	// holds, never what the caller merely asked for.
 	//
-	// F5 (1.7.5 deferred): the comparison used to be a direct wp_json_encode() equality check
-	// against $clean, this plugin's own pre-write intent, rather than aafm_meta_write_confirmed()'s
-	// canonical sanitize_meta() form - the same B6-3 class the sibling field writer above already
-	// closed. A registered sanitizer on this dynamic rank_math_schema_{Type} key that legitimately
-	// normalizes a value (for example a headline) reported as a write failure even though the
-	// write landed exactly as that sanitizer defines "landed".
+	// A direct wp_json_encode() equality check against $clean, this plugin's own pre-write
+	// intent, would misreport a legitimate normalization as a failure: a registered sanitizer on
+	// this dynamic rank_math_schema_{Type} key (for example, normalizing a headline) can change
+	// the value on write, so the comparison goes through aafm_meta_write_confirmed()'s canonical
+	// sanitize_meta() form instead - the same shape the sibling field writer above already uses.
 	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
 	$stored = is_array( $stored ) ? $stored : array();
 	if ( ! aafm_meta_write_confirmed( $old, $id, $clean, 'rank_math_schema_' . $type, 'post', (string) get_object_subtype( 'post', $id ) ) ) {

@@ -190,12 +190,12 @@ function aafm_exec_search_content( array $input ) {
 		'include_content' => $include_content,
 	);
 
-	// Branch review fix (lang scope and result shaping, round 2): aafm_rich_post() must run
-	// INSIDE the query's own aafm_with_language() scope on BOTH branches, not only 'all' - an
-	// explicit single language has the identical gap, since aafm_with_language() restores the
-	// original language before returning and the shape step used to run after that restore.
-	// Same reasoning as aafm_exec_get_posts() in posts.php - see that function's comment for
-	// the full explanation and WpmlLangAllTest/WpmlLanguageTest for the regression proofs.
+	// aafm_rich_post() must run INSIDE the query's own aafm_with_language() scope on BOTH
+	// branches, not only 'all' - an explicit single language has the identical requirement, since
+	// aafm_with_language() restores the original language before returning, so shaping after that
+	// restore would use the wrong language. Same reasoning as aafm_exec_get_posts() in posts.php -
+	// see that function's comment for the full explanation and WpmlLangAllTest/WpmlLanguageTest
+	// for the regression proofs.
 	$shape_language = static function ( ?string $code ) use ( $build_query, $options ): array {
 		return aafm_with_language(
 			$code,

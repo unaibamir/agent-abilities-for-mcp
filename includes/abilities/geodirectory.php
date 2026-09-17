@@ -130,32 +130,31 @@ function aafm_geodirectory_read_fields( int $post_id ): array {
  * GeoDirectory's own detail table - no GeoDirectory function, and therefore neither of its two
  * public filters, involved at all.
  *
- * Codex final round 2 MEDIUM, then round 3 MEDIUM: aafm_geodirectory_write_fields()'s own
- * write-confirmation check first went through geodir_get_post_info()'s RETURN-value filter
- * ('geodir_get_post_info'), then, once that was suppressed, round 3 found the SAME function's
- * QUERY-building filter ('geodir_post_info_query', post-functions.php:61) still reached the
- * confirmation read - either one could make a legitimate third-party filter that merely
- * reformats a value (or the query that fetches it) look like a mismatch even though the field
- * persisted exactly as written, wrongly rolling back a real, successful create. Round 3 also
- * found the filter-suppression helper this fix used (aafm_call_without_filter(), removed here)
- * was not WP_Hook-lifecycle-safe: a callback added to the hook WHILE it was suppressed would be
- * silently discarded on restore. A direct read of GeoDirectory's own table - the exact query
+ * A direct read of GeoDirectory's own detail table avoids two problems with going through
+ * geodir_get_post_info() for a write-confirmation check instead: its RETURN-value filter
+ * ('geodir_get_post_info') and its QUERY-building filter ('geodir_post_info_query',
+ * post-functions.php:61) can each make a legitimate third-party filter that merely reformats a
+ * value (or the query that fetches it) look like a mismatch even though the field persisted
+ * exactly as written, wrongly rolling back a real, successful create. Suppressing those filters
+ * around the read is not a safe workaround either: a helper that removes and restores a hook is
+ * not WP_Hook-lifecycle-safe, because a callback added to the hook WHILE it is suppressed would
+ * be silently discarded on restore. A direct read of GeoDirectory's own table - the exact query
  * geodir_get_post_info() would run before either filter touches it - has neither problem.
  *
- * Codex round 6, R6-6: $wpdb->get_row() returns null for a failed SELECT and for a genuinely
- * missing row alike, and this used to collapse both into the same display defaults ('', 0.0)
- * as a row that legitimately has an empty street or zero coordinates. The caller compared those
- * defaults against the request and certified success whenever they happened to match, even
- * though a failed read or a missing row proves nothing about what is actually stored. The
- * read's own success is now part of the return value, so the caller can fail confirmation
- * instead of certifying against a default it never actually observed.
+ * $wpdb->get_row() returns null both for a failed SELECT and for a genuinely missing row, which
+ * cannot be allowed to collapse into the same display defaults ('', 0.0) as a row that
+ * legitimately has an empty street or zero coordinates - a caller comparing those defaults
+ * against the request could certify success whenever they happened to match, even though a
+ * failed read or a missing row proves nothing about what is actually stored. So the read's own
+ * success is part of the return value, letting the caller fail confirmation instead of
+ * certifying against a default it never actually observed.
  *
- * Codex round 7, R7-2: that R6-6 fix still ran the read through a bare $wpdb->get_row(), which
- * returns the PREVIOUS query's row - not null - when the CURRENT query itself fails. `is_array()`
- * is true for that stale row too, so a failed read could pass this function's own ok check and
- * hand the caller an unrelated row's values as if they were this listing's. Routed through
- * aafm_wpdb_row(), which checks $wpdb->query()'s own return value, so a genuine failure is
- * reported as such rather than certified against a stale row.
+ * The read itself is routed through aafm_wpdb_row() rather than a bare $wpdb->get_row(), because
+ * a bare call returns the PREVIOUS query's row - not null - when the CURRENT query itself fails.
+ * `is_array()` is true for that stale row too, so a failed read could pass this function's own
+ * ok check and hand the caller an unrelated row's values as if they were this listing's.
+ * aafm_wpdb_row() checks $wpdb->query()'s own return value, so a genuine failure is reported as
+ * such rather than certified against a stale row.
  *
  * @param int $post_id Listing (gd_place) post id.
  * @return array{ok: bool, fields: array<string,mixed>} ok is false when the SELECT itself failed
@@ -200,8 +199,8 @@ function aafm_geodirectory_shape_row( $info ): array {
  * value first - that function concatenates $meta_value directly into raw SQL rather than
  * preparing it (see this file's own docblock), so this plugin must never hand it a raw string.
  *
- * Codex final round MEDIUM: geodir_save_post_meta() returns false only when the detail table or
- * column is missing; on the actual write path it runs $wpdb->query() and returns nothing at all,
+ * geodir_save_post_meta() returns false only when the detail table or column is missing; on the
+ * actual write path it runs $wpdb->query() and returns nothing at all,
  * regardless of whether that query succeeded. This plugin has no way to see a failed
  * UPDATE/INSERT through its return value, so the only way to know a supplied field actually
  * persisted is to read every one of them back and compare - the same "certify against the real
@@ -229,15 +228,15 @@ function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
 		geodir_save_post_meta( $post_id, 'longitude', (float) $input['longitude'] );
 	}
 
-	// Nothing to confirm - skip the read rather than run it needlessly, and (R6-6) so a read
-	// that fails for an unrelated reason can never block a caller who never touched these fields.
+	// Nothing to confirm - skip the read rather than run it needlessly, so a read that fails for
+	// an unrelated reason can never block a caller who never touched these fields.
 	if ( ! $supplied_any_field ) {
 		return true;
 	}
 
 	$read = aafm_geodirectory_read_fields_unfiltered( $post_id );
 	if ( ! $read['ok'] ) {
-		// R6-6: a failed SELECT or a still-missing detail row cannot certify anything the caller
+		// A failed SELECT or a still-missing detail row cannot certify anything the caller
 		// just wrote - fail the same direction aafm_post_field_write_confirmed() and
 		// aafm_meta_write_confirmed() already fail when their own confirmation read comes back
 		// unusable, rather than falling through to defaults that can coincidentally match.
@@ -307,16 +306,16 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return false;
 	}
-	// R3-5 (1.7.5 deferred, round 3): the public-status shortcut below admitted a Contributor to
-	// another author's password-protected published listing (raw content included), because it
-	// never checked the password itself. Same fix as aafm_comment_post_is_readable() (comments.php)
-	// - a still-password-required post is gated on edit_post before the public-status shortcut
+	// The public-status shortcut below must not admit a Contributor to another author's
+	// password-protected published listing (raw content included) without checking the password
+	// itself. Same guard as aafm_comment_post_is_readable() (comments.php) - a
+	// still-password-required post is gated on edit_post before the public-status shortcut
 	// ever runs.
 	if ( post_password_required( $post ) ) {
 		return current_user_can( 'edit_post', $post->ID );
 	}
-	// Codex round C finding 4: the object-independent edit_posts floor alone let an Author read
-	// another user's draft/private listing (raw content and coordinates included). Mirrors
+	// The object-independent edit_posts floor alone would let an Author read another user's
+	// draft/private listing (raw content and coordinates included). Mirrors
 	// aafm_can_read_post_object()'s own public-status-or-per-object-edit rule.
 	if ( in_array( $post->post_status, get_post_stati( array( 'public' => true ) ), true ) ) {
 		return true;
@@ -405,15 +404,15 @@ function aafm_args_geodirectory_get_listings(): array {
 /**
  * The batch-count ceiling for aafm_exec_geodirectory_get_listings()'s enumeration loop.
  *
- * Codex final round 4 MEDIUM: 'aafm_geodirectory_list_batch_cap' used to have no ceiling, so a
- * hook returning e.g. PHP_INT_MAX defeated the cap's whole purpose as protection against a
- * pathological host filter that always returns a full batch. The filter may only narrow the cap,
- * never raise it past this hard ceiling.
+ * 'aafm_geodirectory_list_batch_cap' must have a hard ceiling: without one, a hook returning
+ * e.g. PHP_INT_MAX would defeat the cap's whole purpose as protection against a pathological
+ * host filter that always returns a full batch. The filter may only narrow the cap, never raise
+ * it past this hard ceiling.
  *
- * ponytail: 1000 is the hard ceiling on the enumeration loop's own batches; raise it here (not
- * just in the filter's return value) if a real directory ever legitimately needs more. The
- * truncation probe in aafm_exec_geodirectory_get_listings() draws on a small fixed reserve on
- * top of this, not a second copy of it - see the Codex round 7, R7-5 note there for why.
+ * 1000 is the hard ceiling on the enumeration loop's own batches; raise it here (not just in the
+ * filter's return value) if a real directory ever legitimately needs more. The truncation probe
+ * in aafm_exec_geodirectory_get_listings() draws on a small fixed reserve on top of this, not a
+ * second copy of it - see the note there for why.
  *
  * @return int
  */
@@ -426,10 +425,10 @@ function aafm_geodirectory_listing_batch_cap(): int {
  * current user can edit it. Shared by the enumeration loop and the truncation lookahead probe
  * below so the two can never disagree about what counts as visible.
  *
- * Codex round 5, R5-7: the probe used to rely only on WP_Query's 'perm' => 'readable', which (per
- * this file's own note above) does not exclude 'draft'/'pending' rows the caller cannot edit -
- * so a trailing draft owned by someone else could flip `truncated` to true even though the
- * caller's visible set was already complete.
+ * Relying only on WP_Query's 'perm' => 'readable', which (per this file's own note above) does
+ * not exclude 'draft'/'pending' rows the caller cannot edit, would let a trailing draft owned by
+ * someone else flip `truncated` to true even though the caller's visible set was already
+ * complete - so the probe shares this same visibility rule instead.
  *
  * @param WP_Post  $post Candidate listing.
  * @param string[] $public_stati Public post statuses, from get_post_stati( array( 'public' => true ) ).
@@ -450,41 +449,41 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, absint( $input['per_page'] ) ) ) : 20;
 	$page     = isset( $input['page'] ) ? min( AAFM_LIST_PAGE_MAX, max( 1, absint( $input['page'] ) ) ) : 1;
 
-	// Codex final round MEDIUM: filtering AFTER WP_Query had already paginated and counted meant
-	// an inaccessible listing could displace an accessible one to a later page while `total` still
-	// counted it - the same "reported total doesn't match what was actually returned" shape this
-	// release exists to stop. Fetch every candidate, apply the per-object authorization filter
-	// first, then paginate and count the AUTHORIZED set.
+	// Filtering AFTER WP_Query paginates and counts would let an inaccessible listing displace an
+	// accessible one to a later page while `total` still counted it - a "reported total doesn't
+	// match what was actually returned" mismatch. So every candidate is fetched, the per-object
+	// authorization filter applied first, and only then is the AUTHORIZED set paginated and
+	// counted.
 	//
-	// Codex final round 2 MEDIUM: an earlier fix capped this fetch at a single 2000-row batch,
-	// which reproduces the exact same bug at a larger scale (a directory with 2000+ listings would
-	// silently drop everything past the cap, with no truncation signal). Loop in batches until a
-	// batch comes back short, so every candidate is genuinely examined regardless of directory
-	// size - the filterable batch size lets a test prove multi-batch iteration without creating
-	// thousands of posts.
+	// Capping this fetch at a single batch (rather than looping) would reproduce that same
+	// mismatch at a larger scale - a directory with more listings than one batch holds would
+	// silently drop everything past the cap, with no truncation signal. So this loops in batches
+	// until a batch comes back short, so every candidate is genuinely examined regardless of
+	// directory size - the filterable batch size lets a test prove multi-batch iteration without
+	// creating thousands of posts.
 	//
-	// Codex final round 3 MEDIUM: the first fix advanced with 'paged', an OFFSET into whatever
-	// currently matches - if a row is trashed/deleted between batches, every row after it shifts
+	// Advancing with 'paged' (an OFFSET into whatever currently matches) would break under
+	// concurrent changes: if a row is trashed/deleted between batches, every row after it shifts
 	// down by one and the next offset-based batch skips one real row; the reverse (a row becoming
 	// newly eligible) can duplicate one instead. Keyset pagination (WHERE ID > last-seen-ID, no
 	// offset at all) is immune to both: a row's own position never depends on how many OTHER rows
 	// currently exist before it, only on IDs already fully processed. An iteration cap guards
 	// against a pathological host filter that always returns a full batch.
-	// Codex round 5, R5-4: this filter only had a floor, no ceiling, so a hook returning
-	// PHP_INT_MAX made the FIRST WP_Query itself unbounded - the iteration cap below never gets
-	// a chance to engage, since the damage is inside one batch, not across many. Narrow-only,
-	// same shape as aafm_geodirectory_listing_batch_cap()'s own hard ceiling.
+	// This filter needs a ceiling, not just a floor: a hook returning PHP_INT_MAX would make the
+	// FIRST WP_Query itself unbounded - the iteration cap below never gets a chance to engage,
+	// since the damage is inside one batch, not across many. Narrow-only, same shape as
+	// aafm_geodirectory_listing_batch_cap()'s own hard ceiling.
 	$batch_size = min( 500, max( 1, (int) apply_filters( 'aafm_geodirectory_list_batch_size', 500 ) ) );
-	// Codex hunt F8: the cap below is filterable so a test can reach it without creating a
-	// thousand-plus posts, by lowering the cap instead of the batch size.
+	// The cap below is filterable so a test can reach it without creating a thousand-plus posts,
+	// by lowering the cap instead of the batch size.
 	$batch_cap = aafm_geodirectory_listing_batch_cap();
-	// Codex final round 4 MEDIUM: an unscoped 'posts_where' filter runs against EVERY WP_Query
-	// built while it's attached, not just this function's own - a plugin or theme hook fired
-	// from inside this loop (e.g. its own nested WP_Query in a 'the_posts' callback) would
-	// silently get this same "ID > last-seen" clause appended to an unrelated query. A private,
-	// per-call marker in the query args (harmless to core - an unrecognized key is simply
-	// ignored when building SQL, but still readable back via $query->get()) lets the filter
-	// check "is this actually my query?" before touching $where.
+	// An unscoped 'posts_where' filter runs against EVERY WP_Query built while it's attached, not
+	// just this function's own - a plugin or theme hook fired from inside this loop (e.g. its own
+	// nested WP_Query in a 'the_posts' callback) would silently get this same "ID > last-seen"
+	// clause appended to an unrelated query. A private, per-call marker in the query args
+	// (harmless to core - an unrecognized key is simply ignored when building SQL, but still
+	// readable back via $query->get()) lets the filter check "is this actually my query?" before
+	// touching $where.
 	$query_marker  = 'aafm_geodirectory_list_' . wp_generate_password( 12, false, false );
 	$public_stati  = get_post_stati( array( 'public' => true ) );
 	$visible       = array();
@@ -506,79 +505,78 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 	try {
 		$iterations = 0;
 		do {
-			// ponytail: 1000 batches at the default size of 500 covers 500,000 listings - a
-			// pathological host filter that always returns a full batch stops here instead of
-			// looping forever; raise the multiplier if a real directory ever legitimately exceeds it.
+			// 1000 batches at the default size of 500 covers 500,000 listings - a pathological
+			// host filter that always returns a full batch stops here instead of looping
+			// forever; raise the multiplier if a real directory ever legitimately exceeds it.
 			// The disambiguation probe below adds a small fixed reserve on top of this cap (see
-			// the Codex round 7, R7-5 note below), so the true worst case for one call is this
-			// cap plus that reserve, not a second full copy of it.
+			// the note below), so the true worst case for one call is this cap plus that
+			// reserve, not a second full copy of it.
 			if ( ++$iterations > $batch_cap ) {
-				// Codex hunt F8: signal the cap in the response instead of silently
-				// undercounting - a caller past the cap needs to know `total` is a floor, not
-				// an exact count.
+				// Signal the cap in the response instead of silently undercounting - a caller
+				// past the cap needs to know `total` is a floor, not an exact count.
 				//
-				// Codex final round 4 LOW: reaching this branch only means the LAST permitted batch
-				// came back full, which happens whenever the row count is an exact multiple of the
-				// batch size too - nothing was actually omitted in that case. A lookahead probe
-				// past the last-seen ID (same marker/filter, so it obeys the identical WHERE and
+				// Reaching this branch only means the LAST permitted batch came back full, which
+				// happens whenever the row count is an exact multiple of the batch size too -
+				// nothing was actually omitted in that case. A lookahead probe past the
+				// last-seen ID (same marker/filter, so it obeys the identical WHERE and
 				// ordering) is the only way to tell "one more row exists" from "that batch just
 				// happened to be full".
 				//
-				// Codex round 5, R5-7: a one-row 'perm' => 'readable' probe answered a different
-				// question than the enumeration asks - it could see a trailing draft/pending row
-				// the caller cannot edit and report `truncated` even though the visible set was
-				// already complete. Fetch a full extra batch of real posts (not just ids) and
-				// run each one through the SAME aafm_geodirectory_listing_is_visible() predicate
-				// the enumeration uses below, so a probe never disagrees with what the loop itself
-				// would have kept.
+				// A one-row 'perm' => 'readable' probe answers a different question than the
+				// enumeration asks - it could see a trailing draft/pending row the caller cannot
+				// edit and report `truncated` even though the visible set was already complete.
+				// So instead this fetches a full extra batch of real posts (not just ids) and
+				// runs each one through the SAME aafm_geodirectory_listing_is_visible()
+				// predicate the enumeration uses below, so a probe never disagrees with what the
+				// loop itself would have kept.
 				//
-				// Codex round 6, B6-5: a single probe batch answered a different question again - if
-				// EVERY row in that one batch is invisible, a later visible row past it was still
-				// missed and `truncated` came back false. Keep advancing the same keyset cursor
-				// through further probe batches until a visible row turns up or a short batch
-				// proves the real end of the data was reached.
+				// A single probe batch answers a different question again - if EVERY row in
+				// that one batch is invisible, a later visible row past it would still be
+				// missed and `truncated` would come back false. So the same keyset cursor keeps
+				// advancing through further probe batches until a visible row turns up or a
+				// short batch proves the real end of the data was reached.
 				//
-				// Codex round 7, R7-5: this probe used to get its OWN fresh $batch_cap iterations
-				// (up to 1000) stacked on top of the 1000 the enumeration above already spent, so
-				// the documented "1000 examined in one call" ceiling could silently double to 2000
-				// real queries. Disambiguating "the last batch happened to land exactly on a batch
-				// boundary" from "there is truly more data" only ever needs a couple of extra
-				// batches in practice, not a second full copy of the main budget. A small, fixed
-				// reserve (never more than $batch_cap itself) keeps the true combined ceiling at
+				// Giving this probe its OWN fresh $batch_cap iterations (up to 1000) stacked on
+				// top of the 1000 the enumeration above already spends would silently double the
+				// documented "1000 examined in one call" ceiling to 2000 real queries.
+				// Disambiguating "the last batch happened to land exactly on a batch boundary"
+				// from "there is truly more data" only ever needs a couple of extra batches in
+				// practice, not a second full copy of the main budget. A small, fixed reserve
+				// (never more than $batch_cap itself) keeps the true combined ceiling at
 				// $batch_cap + 2, not 2x $batch_cap.
 				$truncated        = false;
 				$probe_iterations = 0;
 				$probe_cap        = min( 2, $batch_cap );
 				do {
 					if ( ++$probe_iterations > $probe_cap ) {
-						// ponytail: the probe exhausted its small shared reserve without ever
-						// resolving visible-or-not - report truncated rather than assert a "nothing
-						// more" the scan never actually confirmed. Raise the reserve above (still
-						// bounded by $batch_cap) if a real directory legitimately needs to skip past
-						// more than two full invisible batches to disambiguate.
+						// If the probe exhausts its small shared reserve without ever resolving
+						// visible-or-not, report truncated rather than assert a "nothing more"
+						// the scan never actually confirmed. Raise the reserve above (still
+						// bounded by $batch_cap) if a real directory legitimately needs to skip
+						// past more than two full invisible batches to disambiguate.
 						//
-						// R3-6 (1.7.5 deferred, round 3): exhausting this reserve is itself a
-						// caller-observable signal. Codex round 4, R4-5: the boundary stated here in
-						// earlier rounds was off by one batch - this check runs BEFORE the probe
-						// query for the (probe_cap+1)th attempt, so exactly $probe_cap full batches
-						// of trailing invisible rows already resolves true here (the cap is hit
-						// before the extra query that would have proven a short, real end-of-data
-						// batch); one fewer full batch (any of the $probe_cap batches coming back
-						// short) resolves false. So a caller who can pad their OWN listings could
-						// learn which side of that one fixed threshold the trailing invisible count
-						// falls on. Accepted, not fixed: this cursor is already identity-based (keyset on
-						// ID, not a count/offset), so unlike aafm_exec_get_comments()'s pre-R3-6
-						// defect this is NOT walkable position-by-position - inserting or removing
-						// one invisible row only moves the threshold by one, it does not relocate
-						// where a genuinely visible row falls the way an offset-sized lookahead did.
-						// The only alternative is a bigger reserve, and test_get_listings_probe_
-						// draws_from_a_small_shared_reserve_not_a_second_full_budget() deliberately
-						// pins this reserve to a SMALL, fixed size specifically so a broken cap
-						// filter can never double the documented per-call query budget - widening it
-						// to close this one-bit threshold would reopen that larger, already-fixed
-						// problem for a narrower one. Same trade as F8's SSRF residual: safe
-						// direction always (never silently claims completeness), bounded and
-						// documented rather than unresolved.
+						// Exhausting this reserve is itself a caller-observable signal: this
+						// check runs BEFORE the probe query for the (probe_cap+1)th attempt, so
+						// exactly $probe_cap full batches of trailing invisible rows resolves
+						// true here (the cap is hit before the extra query that would have
+						// proven a short, real end-of-data batch); one fewer full batch (any of
+						// the $probe_cap batches coming back short) resolves false. So a caller
+						// who can pad their OWN listings could learn which side of that one
+						// fixed threshold the trailing invisible count falls on. Accepted, not a
+						// defect: this cursor is already identity-based (keyset on ID, not a
+						// count/offset), so unlike a count/offset-based lookahead this is NOT
+						// walkable position-by-position - inserting or removing one invisible
+						// row only moves the threshold by one, it does not relocate where a
+						// genuinely visible row falls. The only alternative is a bigger reserve,
+						// and
+						// test_get_listings_probe_draws_from_a_small_shared_reserve_not_a_second_full_budget()
+						// deliberately pins this reserve to a SMALL, fixed size specifically so a
+						// broken cap filter can never double the documented per-call query
+						// budget - widening it to close this one-bit threshold would reopen that
+						// larger problem for a narrower one. Same trade as the accepted SSRF
+						// residual elsewhere in this codebase: safe direction always (never
+						// silently claims completeness), bounded and documented rather than
+						// unresolved.
 						$truncated = true;
 						break;
 					}
@@ -627,13 +625,12 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 					'aafm_query_marker' => $query_marker,
 				)
 			);
-			// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at
-			// all (only 'private'), so an Author could still see another user's draft listing
-			// through the SQL layer alone. Filter every result through the SAME
-			// public-status-or-per-object-edit rule aafm_perm_geodirectory_get() already uses (now
-			// aafm_geodirectory_listing_is_visible(), shared with the cap-lookahead probe above),
-			// so no non-public listing the caller cannot edit ever reaches the response regardless
-			// of which status 'perm' missed.
+			// 'perm' => 'readable' does not cover 'draft'/'pending' at all (only 'private'), so
+			// an Author could still see another user's draft listing through the SQL layer
+			// alone. Filter every result through the SAME public-status-or-per-object-edit rule
+			// aafm_perm_geodirectory_get() already uses (aafm_geodirectory_listing_is_visible(),
+			// shared with the cap-lookahead probe above), so no non-public listing the caller
+			// cannot edit ever reaches the response regardless of which status 'perm' missed.
 			foreach ( $query->posts as $post ) {
 				if ( ! $post instanceof WP_Post ) {
 					continue;
@@ -778,9 +775,9 @@ function aafm_args_geodirectory_create_listing(): array {
  * succeeded - shared by the core-field check and the address/location-field check below so the
  * "delete, then pick one of two messages" shape lives in one place, not two.
  *
- * Codex final round 2 MEDIUM: wp_delete_post()'s own return was never checked, so a
- * pre_delete_post filter refusing the deletion (any plugin can register one) would leave the
- * half-written post behind while the message claimed nothing remained.
+ * wp_delete_post()'s own return is checked because a pre_delete_post filter refusing the
+ * deletion (any plugin can register one) would otherwise leave the half-written post behind
+ * while the message claimed nothing remained.
  *
  * @param int    $post_id Listing post id to remove.
  * @param string $unconfirmed_what Fragment describing what could not be confirmed, e.g. "its
@@ -813,9 +810,9 @@ function aafm_geodirectory_rollback_unconfirmed_create( int $post_id, string $un
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_geodirectory_create_listing( array $input ) {
-	// Codex final round 9 MEDIUM: this ability builds its own post array instead of routing
-	// through aafm_insert_post(), so the operator's force-draft, max-title-length, and
-	// strict-block-validation settings never applied to it. aafm_perm_geodirectory_create()
+	// This ability builds its own post array instead of routing through aafm_insert_post(), so
+	// the operator's force-draft, max-title-length, and strict-block-validation settings must be
+	// applied here too. aafm_perm_geodirectory_create()
 	// already gates a requested public status on the publish cap; force-draft is a separate,
 	// stronger override on top of that authorization, matching aafm_insert_post()'s own
 	// unconditional create-time rule (it wins even over an authorized 'pending' request).
@@ -851,25 +848,24 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Codex round 5, R5-4: the update path already rereads and compares title/content after its
-	// own wp_update_post() call (Codex hunt F4), but create only ever verified the address/
-	// location fields below - a wp_insert_post_data filter silently reverting the title, content,
-	// or status would still report success. Same confirm-by-reread principle, applied here too.
-	// Codex round 6 B6-3: compare against each field's CANONICAL sanitize_post_field() form, not
-	// the pre-write intent - a false mismatch here used to DELETE an otherwise valid listing, so
-	// this is the highest-stakes site for the false-normalization bug this fix closes. Codex round
-	// 7 R7-4: this is a CREATE, so the real wp_insert_post() sanitized these fields with id 0
-	// (the row did not exist yet) - recompute the canonical form the same way, not with the id
-	// just assigned, or an id-sensitive registered filter can disagree and this rolls back
-	// (deletes) an otherwise valid listing.
-	// R3-1 (1.7.5 deferred, round 3): post_status was confirmed here against the literal
-	// requested value, but wp_insert_post() can normalize it (its publish<->future date
-	// transition) before this reread - no post_date is ever set on this create, so a
-	// legitimately-authorized status:"future" request lands core at "publish" and this
-	// comparison falsely rolled back (deleted) an otherwise valid listing. See posts.php's
-	// create path for why status/slug confirmation was dropped batch-wide rather than
-	// replicated a fourth time: title/content have no such core-side transition and stay
-	// confirmed below.
+	// The update path already rereads and compares title/content after its own wp_update_post()
+	// call, but create only verifies the address/location fields below - a wp_insert_post_data
+	// filter silently reverting the title, content, or status would still report success. Same
+	// confirm-by-reread principle, applied here too, comparing against each field's CANONICAL
+	// sanitize_post_field() form, not the pre-write intent: a false mismatch here would DELETE an
+	// otherwise valid listing (the rollback below), so this is the highest-stakes site for that
+	// false-normalization risk. Because this is a CREATE, the real wp_insert_post() sanitized
+	// these fields with id 0 (the row did not exist yet) - the canonical form must be recomputed
+	// the same way, not with the id just assigned, or an id-sensitive registered filter can
+	// disagree and falsely roll back (delete) an otherwise valid listing.
+	//
+	// post_status is deliberately NOT confirmed here against the literal requested value, because
+	// wp_insert_post() can normalize it (its publish<->future date transition) before this
+	// reread - no post_date is ever set on this create, so a legitimately-authorized
+	// status:"future" request lands core at "publish" and a literal comparison would falsely roll
+	// back (delete) an otherwise valid listing. See posts.php's create path for why status/slug
+	// confirmation was dropped batch-wide rather than replicated a fourth time: title/content
+	// have no such core-side transition and stay confirmed below.
 	$after = get_post( $post_id );
 	if ( ! $after instanceof WP_Post
 		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title, '', 0 )
@@ -943,11 +939,11 @@ function aafm_args_geodirectory_update_listing(): array {
 /**
  * Execute aafm/geodirectory-update-listing. A field omitted from $input is left untouched.
  *
- * Codex final round 8 HIGH: this built and called wp_update_post() directly with no page-builder
- * ownership check anywhere in the function - the same corruption risk aafm_exec_update_post()
- * guards against, just at a chokepoint the generic guard's own coverage sweep
- * (tests/PageBuilderGuardSweepTest.php) never enumerated. Checked unconditionally, right after
- * the post-type validation every other check in this function already depends on.
+ * This calls wp_update_post() directly, so it needs its own page-builder ownership check - the
+ * same corruption risk aafm_exec_update_post() guards against, just at a chokepoint the generic
+ * guard's own coverage sweep (tests/PageBuilderGuardSweepTest.php) never enumerated. Checked
+ * unconditionally, right after the post-type validation every other check in this function
+ * already depends on.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -964,10 +960,10 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		return aafm_page_builder_owned_error( $owning_builder );
 	}
 
-	// Codex final round 9 MEDIUM: this ability builds its own update array instead of routing
-	// through aafm_exec_update_post(), so the operator's max-title-length and
-	// strict-block-validation settings never applied to it (there is no status field on this
-	// ability, so force-draft has nothing to override here).
+	// This ability builds its own update array instead of routing through
+	// aafm_exec_update_post(), so the operator's max-title-length and strict-block-validation
+	// settings are applied directly here (there is no status field on this ability, so
+	// force-draft has nothing to override here).
 	$warnings = array();
 	$update   = array( 'ID' => $id );
 	if ( array_key_exists( 'title', $input ) ) {
@@ -992,13 +988,13 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		if ( is_wp_error( $updated ) ) {
 			return aafm_generic_error();
 		}
-		// Codex hunt F4: only is_wp_error() was checked here, so a wp_insert_post_data (or
-		// similar) filter silently vetoing or normalizing the title/content would report
-		// success while the stored post kept its old values. Confirm by reread, the same
-		// pattern aafm_geodirectory_write_fields() already applies one call below to the
-		// address/location fields, extended to cover the core post fields too. Codex round 6
-		// B6-3: compare against each field's CANONICAL sanitize_post_field() form, not the
-		// pre-write intent, so a legitimate normalization is not mistaken for a veto.
+		// Checking only is_wp_error() here would miss a wp_insert_post_data (or similar) filter
+		// silently vetoing or normalizing the title/content while reporting success and the
+		// stored post kept its old values. Confirm by reread instead, the same pattern
+		// aafm_geodirectory_write_fields() already applies one call below to the address/location
+		// fields, extended to cover the core post fields too, comparing against each field's
+		// CANONICAL sanitize_post_field() form, not the pre-write intent, so a legitimate
+		// normalization is not mistaken for a veto.
 		// $post was read before wp_update_post() ran, so its fields are each field's genuine
 		// pre-write value.
 		$after = get_post( $id );

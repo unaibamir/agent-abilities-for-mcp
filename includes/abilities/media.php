@@ -215,7 +215,7 @@ function aafm_exec_get_media( array $input ) {
 		// before the query and removed in a finally block, so a throw inside WP_Query can never
 		// leave the filter attached to a later, unrelated query in the same request.
 		//
-		// Codex hunt F2: an unscoped 'posts_where' filter runs against EVERY WP_Query built
+		// An unscoped 'posts_where' filter runs against EVERY WP_Query built
 		// while it's attached, not only this function's own - a nested WP_Query fired from any
 		// hook during this query (e.g. a 'pre_get_posts'/'the_posts' callback) would silently
 		// receive this same OR clause too. A private, per-call marker in the query args
@@ -257,11 +257,10 @@ function aafm_exec_get_media( array $input ) {
 		}
 	};
 
-	// Branch review fix (lang scope and result shaping, round 3): aafm_redact_media() must run
-	// INSIDE the query's own aafm_with_language() scope, not after it restores to ambient - on
-	// both branches. aafm_redact_media() calls filterable, language-sensitive accessors
-	// (get_the_title(), wp_get_attachment_url()) that a theme or plugin can key off ambient
-	// language, same defect class as aafm_exec_get_posts() in posts.php.
+	// aafm_redact_media() must run INSIDE the query's own aafm_with_language() scope, not after
+	// it restores to ambient - on both branches. aafm_redact_media() calls filterable,
+	// language-sensitive accessors (get_the_title(), wp_get_attachment_url()) that a theme or
+	// plugin can key off ambient language, same shape as aafm_exec_get_posts() in posts.php.
 	$shape_language = static function ( ?string $code ) use ( $build_query ): array {
 		return aafm_with_language(
 			$code,
@@ -379,9 +378,8 @@ function aafm_exec_get_media_item( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Branch review fix (lang scope and result shaping, round 3): same reasoning as
-	// aafm_exec_get_post() in posts.php - shape under the requested language when one was
-	// resolved, or the attachment's own language for "all"/no lang, never ambient.
+	// Same reasoning as aafm_exec_get_post() in posts.php - shape under the requested language
+	// when one was resolved, or the attachment's own language for "all"/no lang, never ambient.
 	$shape_lang = ( is_string( $lang ) && 'all' !== $lang ) ? $lang : aafm_wpml_post_language( $attachment->ID );
 	return array(
 		'media' => aafm_with_language(
@@ -746,43 +744,40 @@ function aafm_fileinfo_available(): bool {
  * Execute aafm/upload-media - base64 only, byte-sniffed, allow-listed, SVG
  * rejected, size-capped, filename sanitized, delegated to core for the write.
  *
- * Hardening (§6.2), and what changed under the delegation audit (Rule 1: delegate mechanics, own
- * policy):
+ * Hardening (§6.2):
  * - NO URL fetch path exists, so the SSRF class is eliminated outright; the only
  *   input is inline base64 bytes the caller supplies.
  * - The real MIME is derived from the DECODED BYTES (finfo), never the supplied
  *   filename, extension, or any client mime - and must be on the raster-image
  *   allow-list. SVG and executable payloads fail this gate and no file is written.
- *   Kept: this is genuinely stronger than reject-on-mismatch, and core's own path has nothing
+ *   This is genuinely stronger than reject-on-mismatch, and core's own path has nothing
  *   equivalent.
  * - fileinfo availability is guarded (aafm_fileinfo_available) before finfo is
  *   ever instantiated, so a host without the extension errors instead of
  *   fataling on a missing class.
  * - The filename is sanitized (sanitize_file_name, then aafm_sanitize_plain_text for
  *   the control and bidi characters core keeps) and rebuilt with the canonical
- *   extension for the real type; traversal segments cannot survive. Kept: WordPress's own
+ *   extension for the real type; traversal segments cannot survive. WordPress's own
  *   sanitize_file_name() keeps the whole Trojan Source bidi set, so this strip has no core
  *   equivalent either.
  * - The decoded bytes are written to a real temp file and handed to media_handle_sideload(),
  *   which calls wp_handle_sideload() internally - firing wp_handle_sideload_prefilter and
- *   wp_handle_sideload_overrides, and re-checking wp_max_upload_size() - the mechanics the
- *   previous wp_upload_bits()-based path bypassed entirely. media_handle_sideload() also owns
- *   attachment insertion and metadata generation (wp_generate_attachment_metadata()), so this
- *   function no longer calls either directly.
- * - The pixel cap that used to sit here (a decompression-bomb guard core's own media uploader
- *   does not have) was deleted outright: media_handle_sideload() decodes through the exact same
- *   wp_generate_attachment_metadata() path, so the OOM exposure is now identical to wp-admin's
- *   own uploader, matching the audit's own rule - a plugin exposing core's capabilities should
- *   MATCH core's behaviour, not be safer than the admin UI.
+ *   wp_handle_sideload_overrides, and re-checking wp_max_upload_size(). media_handle_sideload()
+ *   also owns attachment insertion and metadata generation (wp_generate_attachment_metadata()),
+ *   so this function calls neither directly.
+ * - There is no pixel cap here (a decompression-bomb guard core's own media uploader does not
+ *   have either): media_handle_sideload() decodes through the exact same
+ *   wp_generate_attachment_metadata() path, so the OOM exposure here matches wp-admin's own
+ *   uploader - a plugin exposing core's capabilities should MATCH core's behaviour, not be safer
+ *   than the admin UI.
  *
- *   ACCEPTED RISK, operator decision (208 fix round 1). A review raised that matching a real
- *   authenticated OOM path in wp-admin is not the same as closing it, since GD's own image editor
- *   raises the memory limit and starts decoding before any dimension check runs, so this ability
- *   again has no pre-decode ceiling on a GD host. The operator chose parity with core over
- *   restoring a plugin-only ceiling for this release. Do not re-open this as a new finding without
- *   a fresh operator decision, and do not silently restore a cap: if this is revisited, size it
- *   deliberately (see the deleted aafm_derive_max_pixels() history in this file's git log) rather
- *   than guessing a constant.
+ *   ACCEPTED RISK, operator decision. Matching a real authenticated OOM path in wp-admin is not
+ *   the same as closing it, since GD's own image editor raises the memory limit and starts
+ *   decoding before any dimension check runs, so this ability has no pre-decode ceiling on a GD
+ *   host. The operator chose parity with core over adding a plugin-only ceiling. Do not re-open
+ *   this as a new finding without a fresh operator decision, and do not silently add a cap: if
+ *   this is revisited, size it deliberately (see the deleted aafm_derive_max_pixels() history in
+ *   this file's git log) rather than guessing a constant.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -808,11 +803,10 @@ function aafm_exec_upload_media( array $input ) {
  * Shared post-decode upload tail: byte-sniff, allow-list, filename sanitize, sideload, kses
  * re-check, alt text, redacted return shape. Both aafm/upload-media (base64) and
  * aafm/upload-media-from-url (fetched bytes) call this so the two entry points share one
- * single-audited pipeline instead of drifting apart (228-url-upload-ssrf-design.md §4,
- * Codex-review amendment item 9).
+ * single-audited pipeline instead of drifting apart (228-url-upload-ssrf-design.md §4).
  *
- * ACCEPTED RISK, operator decision (208 fix round 1, carried forward unchanged). There is no
- * pre-decode pixel/dimension cap: media_handle_sideload() decodes through the exact same
+ * ACCEPTED RISK, operator decision. There is no pre-decode pixel/dimension cap:
+ * media_handle_sideload() decodes through the exact same
  * wp_generate_attachment_metadata() path wp-admin's own uploader uses, so the OOM exposure here
  * matches core's authenticated upload UI rather than being safer than it. Do not re-open this as
  * a new finding without a fresh operator decision (228-url-upload-ssrf-design.md §4 explicitly
@@ -899,8 +893,8 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		return aafm_generic_error();
 	}
 
-	// Security review finding 1 (fix round 1, 208): media_handle_sideload() -> wp_read_image_metadata()
-	// can populate post_content from the uploaded image's own IPTC/EXIF caption. Re-apply this
+	// media_handle_sideload() -> wp_read_image_metadata() can populate post_content from the
+	// uploaded image's own IPTC/EXIF caption. Re-apply this
 	// plugin's own policy to whatever landed there, the same way aafm-update-media already runs its
 	// caller-supplied description through wp_kses_post() before writing the same column (:914) -
 	// this ability's guarantee must not depend on an upstream WP core implementation detail (verified
@@ -923,23 +917,23 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 			true
 		);
 		if ( is_wp_error( $updated ) ) {
-			// Codex hunt F9: media_handle_sideload() already committed the attachment and file
+			// media_handle_sideload() already committed the attachment and file
 			// to the media library above. Leaving it in place on this failure branch orphans it
 			// with its un-renormalized caption and no ID ever returned to the caller for
 			// cleanup, matching the temp-file cleanup discipline already applied a few lines up.
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
-		// Codex round 5 R5-2: is_wp_error() alone does not catch a wp_insert_post_data filter that
-		// reverts this resave, which would leave the un-renormalized, IPTC/EXIF-sourced caption in
-		// storage - exactly the security gap this resave exists to close. Confirm the sanitized
-		// content actually landed before trusting it, same orphan-cleanup discipline as above.
-		// Codex round 5 R5-1: this used to be a raw stored/expected comparison, which cannot tell
-		// a legitimate save-time normalization (emoji/charset re-encoding, a registered
-		// content_save_pre callback) from a genuine veto - a successfully renormalized caption
-		// could fail this check and get its attachment permanently deleted. Route through the
-		// same shared confirmation helper every other post-field write in this codebase uses, so
-		// this sibling gets the identical normalization tolerance and veto detection.
+		// is_wp_error() alone would not catch a wp_insert_post_data filter that reverts this
+		// resave, which would leave the un-renormalized, IPTC/EXIF-sourced caption in storage -
+		// exactly the security gap this resave exists to close. Confirm the sanitized content
+		// actually landed before trusting it, same orphan-cleanup discipline as above. A raw
+		// stored/expected comparison cannot tell a legitimate save-time normalization
+		// (emoji/charset re-encoding, a registered content_save_pre callback) from a genuine
+		// veto - a successfully renormalized caption could fail that check and get its attachment
+		// permanently deleted. So this routes through the same shared confirmation helper every
+		// other post-field write in this codebase uses, giving this sibling the identical
+		// normalization tolerance and veto detection.
 		if ( ! aafm_post_field_write_confirmed( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
@@ -956,13 +950,13 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		$alt_before = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
 		$alt_clean  = aafm_sanitize_plain_text( $alt );
 		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $alt_clean ) );
-		// Codex round 5 R5-2: update_post_meta()'s return value was discarded outright, so a
-		// metadata filter vetoing the alt write would report success with the old alt text still
-		// in storage. Confirm it landed, same orphan-cleanup discipline as the branches above.
-		// Codex round 6 B6-3: compare against the CANONICAL sanitize_meta() form, not the pre-write
-		// intent, so a registered sanitize callback's legitimate normalization is not mistaken for
-		// a veto. Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same
-		// filterable call core itself makes at write time, rather than the literal 'attachment' -
+		// update_post_meta()'s return value is discarded outright, so a metadata filter vetoing
+		// the alt write would report success with the old alt text still in storage. Confirm it
+		// landed, same orphan-cleanup discipline as the branches above, comparing against the
+		// CANONICAL sanitize_meta() form, not the pre-write intent, so a registered sanitize
+		// callback's legitimate normalization is not mistaken for a veto. The subtype is resolved
+		// through get_object_subtype(), the same filterable call core itself makes at write time,
+		// rather than the literal 'attachment' -
 		// a get_object_subtype_post filter remapping the subtype is honoured here the same way it
 		// is at write time.
 		if ( ! aafm_meta_write_confirmed( $alt_before, $attachment_id, $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $attachment_id ) ) ) {
@@ -973,7 +967,7 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 
 	$attachment = get_post( $attachment_id );
 	if ( ! $attachment instanceof WP_Post ) {
-		// Codex hunt F9: same orphan-cleanup discipline as the branch above, for this
+		// Same orphan-cleanup discipline as the branch above, for this
 		// early return too.
 		wp_delete_attachment( $attachment_id, true );
 		return aafm_generic_error();
@@ -1057,10 +1051,10 @@ function aafm_exec_upload_media_from_url( array $input ) {
 
 /**
  * Resolve a hostname to an IPv4 address, behind a filter so a test can inject a resolver double
- * and count invocations (proving the real fetch path resolves exactly once - Codex-review
- * amendment 20 - rather than re-resolving between validation and connection).
+ * and count invocations (proving the real fetch path resolves exactly once rather than
+ * re-resolving between validation and connection).
  *
- * IPv4 only (ponytail: gethostbyname() is a one-line stdlib resolver; a dual-stack resolver adds
+ * IPv4 only (gethostbyname() is a one-line stdlib resolver; a dual-stack resolver adds
  * real complexity for a feature whose only public exposure is fetching a caller-given image URL,
  * and 228-url-upload-ssrf-design.md's own "what was not independently re-verified" section leaves
  * this as an open, explicitly-stated restriction rather than a silent gap - add IPv6 support if a
@@ -1079,7 +1073,7 @@ function aafm_resolve_hostname_to_ip( string $host ) {
  * and the other IANA special-use ranges, IPv4 and IPv6 alike) - the denylist
  * 228-url-upload-ssrf-design.md §2 requires on top of wp_http_validate_url()'s own separate check.
  *
- * Ponytail: PHP's own filter_var() flags already encode this range list; no hand-rolled CIDR
+ * PHP's own filter_var() flags already encode this range list; no hand-rolled CIDR
  * table to keep in sync. If a specific gap is ever found unguarded, add it as a follow-up filter
  * rather than replacing this with a hand-rolled list.
  *
@@ -1097,7 +1091,7 @@ function aafm_ip_is_private_or_reserved( string $ip ): bool {
  * CURLOPT_RESOLVE pinning depends on. Filterable so a test can force the "no cURL" refusal path
  * without uninstalling the extension.
  *
- * Codex final round HIGH: checking only function_exists('curl_init') is not the same test
+ * Checking only function_exists('curl_init') is not the same test
  * Requests itself runs before picking Curl over Fsockopen. \WpOrg\Requests\Transport\Curl::test()
  * additionally requires curl_exec() to exist and, for an HTTPS request specifically, that the
  * installed libcurl was built with SSL support (Requests::request() passes
@@ -1121,7 +1115,7 @@ function aafm_curl_available(): bool {
 /**
  * Whether WordPress would send a request to this URL through an outbound HTTP proxy.
  *
- * Codex final round 2 HIGH: CURLOPT_RESOLVE only pins a DIRECT connection. When an outbound proxy
+ * CURLOPT_RESOLVE only pins a DIRECT connection. When an outbound proxy
  * is configured (WP_PROXY_HOST/WP_PROXY_PORT), libcurl hands the hostname to the proxy and the
  * proxy resolves it independently - the pin never applies, so a hostname that resolves publicly
  * here and privately at the proxy would bypass every check in aafm_ssrf_safe_fetch_url(). Uses
@@ -1130,8 +1124,8 @@ function aafm_curl_available(): bool {
  * pattern, since the real decision depends on PHP constants a test cannot safely define without
  * leaking into every other test in the process.
  *
- * Codex round 8 LOW: this is a plugin-defined filter, unlike http_allowed_safe_ports below, so
- * nothing requires it to carry the URL. Passing $url as an extra arg exposed the full fetch
+ * This is a plugin-defined filter, unlike http_allowed_safe_ports below, so
+ * nothing requires it to carry the URL. Passing $url as an extra arg would expose the full fetch
  * target - including any signed query string - to every 'all' hook observer before any control
  * had a chance to run. The filtered value already answers the only question a caller needs
  * ("would this go through a proxy"), so the URL is dropped rather than redacted.
@@ -1155,7 +1149,7 @@ function aafm_url_would_use_proxy( string $url ): bool {
  * if private/reserved, and the port checked against the same safe-port allowlist
  * wp_http_validate_url() itself uses.
  *
- * Split out of aafm_ssrf_safe_fetch_url() (Codex hunt H2) so the validation step is directly
+ * Split out of aafm_ssrf_safe_fetch_url() so the validation step is directly
  * testable on its own - a test can assert a URL passes or fails this gate without ever reaching
  * the network, which the combined function could not offer once it stopped routing through WP's
  * mockable 'pre_http_request' hook.
@@ -1203,7 +1197,7 @@ function aafm_ssrf_validate_fetch_target( string $url ) {
 	// on top of aafm_resolve_hostname_to_ip() above. Still filterable via 'http_allowed_safe_ports'
 	// so a site customizing that filter for its other HTTP calls gets the same behaviour here.
 	//
-	// Codex round 8 LOW: this call also exposes $url to any 'all' hook observer. Accepted rather
+	// This call also exposes $url to any 'all' hook observer. Accepted rather
 	// than redacted: this is core's own hook with core's own signature (wp-includes/http.php
 	// passes the same $url to it on every ordinary wp_http_validate_url() call a site already
 	// makes), so a site's existing filter callback already expects this exact shape. Diverging
@@ -1224,7 +1218,7 @@ function aafm_ssrf_validate_fetch_target( string $url ) {
 
 /**
  * Turn aafm_ssrf_owned_curl_fetch()'s raw result into fetched bytes or a WP_Error, independent of
- * how the fetch was performed. Split out of aafm_ssrf_safe_fetch_url() (Codex hunt H2) so this
+ * how the fetch was performed. Split out of aafm_ssrf_safe_fetch_url() so this
  * logic is directly testable with a synthetic response array, with no network and no fetch
  * mechanism involved at all.
  *
@@ -1271,46 +1265,40 @@ function aafm_ssrf_process_fetch_response( $response, int $max_bytes ) {
  * (aafm_ssrf_owned_curl_fetch()), then turn the raw result into bytes or an error
  * (aafm_ssrf_process_fetch_response()).
  *
- * Codex round C finding 1: WordPress's HTTP API can fall back from cURL to the Fsockopen
- * transport (that fallback does its OWN, unpinned DNS resolution), and CURLOPT_RESOLVE pinning
- * only applies inside the http_api_curl action, which never fires for that fallback - a silent
- * TOCTOU reopening. Since Requests checks cURL's availability before Fsockopen's and picks cURL
- * whenever it can, refusing outright when cURL is unavailable removes the fallback path entirely
- * rather than trying to detect after the fact whether the pin actually applied.
+ * WordPress's HTTP API can fall back from cURL to the Fsockopen transport (that fallback does its
+ * OWN, unpinned DNS resolution), and CURLOPT_RESOLVE pinning only applies inside the
+ * http_api_curl action, which never fires for that fallback - a silent TOCTOU reopening. Since
+ * Requests checks cURL's availability before Fsockopen's and picks cURL whenever it can, refusing
+ * outright when cURL is unavailable (aafm_curl_available() above) removes the fallback path
+ * entirely rather than trying to detect after the fact whether the pin actually applied.
  *
- * Live-network finding, full gate (2026-09-05): an earlier version of this function set
- * CURLOPT_HEADERFUNCTION/CURLOPT_WRITEFUNCTION on the SAME handle WP_Http_Curl uses, inside the
- * http_api_curl action. WP_Http_Curl::request() (wp-includes/class-wp-http-curl.php) sets its OWN
- * header/write callbacks on that handle BEFORE firing http_api_curl, and curl_setopt() for the
- * same option simply replaces the previous callback - so those callbacks silently starved
- * WP_Http_Curl's internal body/header buffers, which it then read as "no response" and reported
- * as a curl error regardless of the real transfer having succeeded. Every real fetch broke.
+ * This function does not set CURLOPT_HEADERFUNCTION/CURLOPT_WRITEFUNCTION on the SAME handle
+ * WP_Http_Curl uses, inside the http_api_curl action: WP_Http_Curl::request()
+ * (wp-includes/class-wp-http-curl.php) sets its OWN header/write callbacks on that handle first,
+ * and curl_setopt() for the same option simply replaces the previous callback - so those
+ * callbacks would silently starve WP_Http_Curl's internal body/header buffers, which it would
+ * then read as "no response" and report as a curl error regardless of whether the real transfer
+ * succeeded.
  *
- * Codex final round 7/8 MEDIUM: the interim workaround above - bounding the transfer via WP's own
- * 'limit_response_size' request arg instead of aborting it - correctly REJECTS an oversized
- * result, but only after the (bounded) download completes, and remains vulnerable to a LATER
- * http_api_curl callback (from another plugin, at a higher priority) overriding this function's
- * proxy/resolve pin. Both gaps share one root cause: sharing WP_Http_Curl's handle at all. Fixed
- * by NOT sharing it - a cURL handle this function owns OUTRIGHT via aafm_ssrf_owned_curl_fetch()
- * below. Nothing else in the process ever touches that handle, so its own
- * HEADERFUNCTION/WRITEFUNCTION callbacks can safely abort the transfer.
+ * Bounding the transfer via WP's own 'limit_response_size' request arg, instead of aborting it,
+ * would correctly REJECT an oversized result, but only after the (bounded) download completes,
+ * and would remain vulnerable to a LATER http_api_curl callback (from another plugin, at a higher
+ * priority) overriding this function's proxy/resolve pin. Both gaps share one root cause: sharing
+ * WP_Http_Curl's handle at all. So this function does NOT share it - it uses a cURL handle it
+ * owns OUTRIGHT via aafm_ssrf_owned_curl_fetch() below. Nothing else in the process ever touches
+ * that handle, so its own HEADERFUNCTION/WRITEFUNCTION callbacks can safely abort the transfer.
  *
- * Codex final round 9 MEDIUM (superseded by Codex hunt H2 below): this function used to reach
- * aafm_ssrf_owned_curl_fetch() through a `pre_http_request` short-circuit registered around a
- * `wp_safe_remote_get()` call, so the fetch still nominally went through WP's HTTP stack. That
- * still left a global hook in play - any OTHER 'pre_http_request' callback, from another plugin,
- * could in principle run before this one and pre-empt it first, and 'reject_unsafe_urls' passed
- * to wp_safe_remote_get() never actually applied, since WP_Http::request() only acts on it AFTER
- * firing 'pre_http_request'. Round 9 closed the override by registering at PHP_INT_MAX and
- * re-deriving the safe-port check independently (now in aafm_ssrf_validate_fetch_target()).
- *
- * Codex hunt H2 (accepted hardening follow-up, 2026-09-06): removes the `pre_http_request`
- * plumbing entirely. There is no window for a pre-emption question to arise when nothing is
- * registered on a shared hook in the first place: aafm_ssrf_owned_curl_fetch() is called
- * directly, and wp_safe_remote_get()/WP's HTTP stack are no longer part of this path at all. The
- * validation and response-processing halves are their own functions above so they stay testable
- * without a network mock; aafm_ssrf_owned_curl_fetch() itself is directly callable and already has
- * real local-server tests (tests/abilities/SsrfOwnedCurlFetchTest.php).
+ * There is deliberately no `pre_http_request` plumbing and no dependence on
+ * wp_safe_remote_get()/WP's HTTP stack: registering a `pre_http_request` short-circuit (even at a
+ * high priority) still leaves a global hook in play that another plugin's callback could in
+ * principle pre-empt, and 'reject_unsafe_urls' passed to wp_safe_remote_get() never actually
+ * applies, since WP_Http::request() only acts on it AFTER firing 'pre_http_request'. There is no
+ * window for a pre-emption question to arise when nothing is registered on a shared hook in the
+ * first place: aafm_ssrf_owned_curl_fetch() is called directly, and wp_safe_remote_get()/WP's
+ * HTTP stack are not part of this path at all. The validation and response-processing halves are
+ * their own functions above so they stay testable without a network mock; aafm_ssrf_owned_curl_
+ * fetch() itself is directly callable and already has real local-server tests
+ * (tests/abilities/SsrfOwnedCurlFetchTest.php).
  *
  * @param string $url Caller-supplied URL.
  * @return string|WP_Error Fetched bytes, or a WP_Error naming which control refused the request.
@@ -1332,8 +1320,8 @@ function aafm_ssrf_safe_fetch_url( string $url ) {
 	 * sideload, caption re-save) rather than the response-processing logic in isolation.
 	 * Read-only in production: nothing in this codebase adds a callback to it.
 	 *
-	 * Codex round 7 R7-8: this used to also pass the full caller-supplied $url, recreating the
-	 * class of bug B1 fixed on the aafm_media_fetch_before_exec seam - a signed query string or
+	 * Passing the full caller-supplied $url as a second filter argument here would recreate the
+	 * same class of bug fixed on the aafm_media_fetch_before_exec seam - a signed query string or
 	 * embedded credentials in the source URL would reach any logger attached to WordPress's own
 	 * 'all' hook. No fixture in this codebase's own tests reads the second argument, so it is
 	 * dropped rather than reconstructed into a redacted URL.
@@ -1402,14 +1390,14 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 		// TLS at all) for a check the caller has already made redundant.
 		CURLOPT_SSL_VERIFYPEER => true,
 		CURLOPT_SSL_VERIFYHOST => 2,
-		// Disables any environment-configured proxy for this one handle (Codex final round 3 HIGH).
+		// Disables any environment-configured proxy for this one handle.
 		CURLOPT_PROXY          => '',
 		CURLOPT_NOPROXY        => '*', // Belt-and-suspenders alongside CURLOPT_PROXY above.
 		// Pins the connection to the pre-validated IP; SNI/cert still use $host.
 		CURLOPT_RESOLVE        => array( "{$host}:{$port}:{$ip}" ),
 		CURLOPT_TIMEOUT        => 10,
 		CURLOPT_CONNECTTIMEOUT => 10,
-		// Codex final round 2 HIGH: a neutral, non-identifying User-Agent - WP core's default
+		// A neutral, non-identifying User-Agent - WP core's default
 		// discloses this site's own URL to whatever host the caller supplied.
 		CURLOPT_USERAGENT      => 'Agent Abilities for MCP (media fetch)',
 		CURLOPT_HEADERFUNCTION => static function ( $handle, string $header_line ) use ( $max_bytes, &$header_content_length, &$aborted_on_header ): int {
@@ -1434,33 +1422,32 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 	/**
 	 * The exact cURL options this fetch is about to apply, immediately before it does.
 	 *
-	 * Codex hunt H2/F12: a test can hook this to assert the real, final CURLOPT_RESOLVE/
-	 * CURLOPT_PROXY/CURLOPT_FOLLOWLOCATION values a live fetch would actually use, rather than
-	 * only proving aafm_resolve_hostname_to_ip() was called once (what the pre_http_request-based
-	 * mock this replaced could prove) with no way to see whether the pin it produced was ever
-	 * really applied to a cURL handle. Read-only in production: nothing in this codebase adds a
-	 * callback to it, and the returned array is used exactly as filtered.
+	 * A test can hook this to assert the real, final CURLOPT_RESOLVE/CURLOPT_PROXY/
+	 * CURLOPT_FOLLOWLOCATION values a live fetch would actually use, rather than only proving
+	 * aafm_resolve_hostname_to_ip() was called once, with no way to see whether the pin it
+	 * produced was ever really applied to a cURL handle. Read-only in production: nothing in this
+	 * codebase adds a callback to it, and the returned array is used exactly as filtered.
 	 *
-	 * Codex round 7 R7-8: this used to also pass the full caller-supplied $url - a signed query
+	 * Passing the full caller-supplied $url as a second filter argument here would recreate the
+	 * same class of bug fixed on the sibling aafm_media_fetch_before_exec seam - a signed query
 	 * string or embedded credentials in the source URL would reach any logger attached to
-	 * WordPress's own 'all' hook, recreating the class of bug B1 fixed on the sibling
-	 * aafm_media_fetch_before_exec seam. The URL was already set on the handle by curl_init( $url )
-	 * before this filter runs, so nothing about the fetch itself depended on receiving it again
-	 * here; only the extra, logger-visible argument is dropped. No fixture in this codebase's own
-	 * tests reads a second argument here.
+	 * WordPress's own 'all' hook. The URL is already set on the handle by curl_init( $url ) before
+	 * this filter runs, so nothing about the fetch itself depends on receiving it again here; only
+	 * the extra, logger-visible argument is dropped. No fixture in this codebase's own tests reads
+	 * a second argument here.
 	 *
 	 * @param array<int,mixed> $options The cURL options this fetch is about to set.
 	 */
 	$options = apply_filters( 'aafm_media_fetch_curl_options', $options );
-	// B4 (1.7.5 deferred): the curl_setopt_array() fail-closed check below only catches an option
+	// The curl_setopt_array() fail-closed check below only catches an option
 	// that FAILS to apply; it cannot notice one a hooked callback removed from the array outright,
 	// since curl_setopt_array() only ever sees what is still present. Nothing in this codebase
 	// hooks this filter, but assert the DNS pin, proxy neutralization, TLS verification, redirect
 	// refusal, transfer timeouts, and byte-cap enforcement are all still keys in $options before
 	// trusting it, the same fail-closed instinct as the check below.
 	//
-	// F8 (1.7.5 deferred): CURLOPT_TIMEOUT/CURLOPT_CONNECTTIMEOUT were missing from this list, so
-	// a hooked callback removing either one passed the guard, and a public HTTPS server could
+	// CURLOPT_TIMEOUT/CURLOPT_CONNECTTIMEOUT are both included in this list too: without them, a
+	// hooked callback removing either one would pass the guard, and a public HTTPS server could
 	// then stall the transfer past the intended ten-second bound. This still only catches the
 	// option being removed outright, not a callback that raises the value; no callback exists in
 	// this codebase's own source.
@@ -1482,11 +1469,11 @@ function aafm_ssrf_owned_curl_fetch( string $url, string $host, int $port, strin
 			return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
 		}
 	}
-	// Codex final round 4 HIGH: curl_setopt_array()'s return was ignored, so a single option this
-	// array cannot apply (it stops applying at the first failure) still let curl_exec() run with
-	// whichever security options DID make it through - possibly none of the DNS pin, proxy
-	// neutralization, timeout, or byte-cap options above. Fail closed instead: never call
-	// curl_exec() unless every option in the array was confirmed applied.
+	// curl_setopt_array()'s return is checked, because if a single option this
+	// array cannot apply (it stops applying at the first failure) went unnoticed, curl_exec()
+	// would run with whichever security options DID make it through - possibly none of the DNS
+	// pin, proxy neutralization, timeout, or byte-cap options above. Fail closed instead: never
+	// call curl_exec() unless every option in the array was confirmed applied.
 	if ( true !== curl_setopt_array( $ch, $options ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt_array
 		curl_close( $ch ); // phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_close
 		return new WP_Error( 'aafm_fetch_failed', __( 'The URL could not be fetched.', 'agent-abilities-for-mcp' ) );
@@ -1681,13 +1668,13 @@ function aafm_exec_update_media( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Codex round 5 R5-2: the post-field write was only checked via is_wp_error(), and the alt
-	// meta write's return value was discarded outright - a wp_insert_post_data filter reverting a
-	// field, or an update_post_metadata filter vetoing the alt write, would report success while
-	// the response carried the caller's stale value. Confirm every field actually provided. Codex
-	// round 6 B6-3: compare against each field's CANONICAL sanitize_post_field()/sanitize_meta()
-	// form, not the pre-write intent, so a legitimate normalization (kses for a user without
-	// unfiltered_html, the core `trim` on title) is not mistaken for a veto.
+	// Checking the post-field write only via is_wp_error(), and discarding the alt
+	// meta write's return value outright, would miss a wp_insert_post_data filter reverting a
+	// field, or an update_post_metadata filter vetoing the alt write, while the response carried
+	// the caller's stale value. Confirm every field actually provided, comparing against each
+	// field's CANONICAL sanitize_post_field()/sanitize_meta() form, not the pre-write intent, so a
+	// legitimate normalization (kses for a user without unfiltered_html, the core `trim` on
+	// title) is not mistaken for a veto.
 	// $attachment was read before wp_update_post() ran, so its fields are each field's genuine
 	// pre-write value.
 	if ( $has_title && ! aafm_post_field_write_confirmed( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ), (string) $attachment->post_title ) ) {
@@ -1699,7 +1686,7 @@ function aafm_exec_update_media( array $input ) {
 	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'], (string) $attachment->post_content ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
+	// The subtype is resolved through get_object_subtype(), the same filterable
 	// call core itself makes at write time, rather than the literal 'attachment' - a
 	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
 	// at write time.

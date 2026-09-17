@@ -217,11 +217,12 @@ function aafm_exec_wc_list_product_attributes(): array {
  * @return array<string,mixed>
  */
 function aafm_wc_attribute_write_properties(): array {
-	// B31: the accepted attribute types come from WooCommerce's own wc_get_attribute_types() -
-	// for core that is ONLY 'select'. The old enum also advertised a phantom 'text' type, which
-	// wc_create_attribute() silently coerced to select. Sourcing the enum from the vendor keeps
-	// the schema honest, including on a site whose features register extra types; the fallback
-	// pins to select when WooCommerce is unavailable (the manifest's full registry view).
+	// The accepted attribute types come from WooCommerce's own wc_get_attribute_types() rather
+	// than a hardcoded list - for core that is ONLY 'select'. A hardcoded enum can drift from
+	// what wc_create_attribute() actually accepts: it silently coerces an unsupported type like
+	// 'text' to select. Sourcing the enum from the vendor keeps the schema honest, including on
+	// a site whose features register extra types; the fallback pins to select when WooCommerce
+	// is unavailable (the manifest's full registry view).
 	$types = function_exists( 'wc_get_attribute_types' )
 		? array_map( 'strval', array_keys( wc_get_attribute_types() ) )
 		: array( 'select' );

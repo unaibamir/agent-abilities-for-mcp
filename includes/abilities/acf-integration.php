@@ -491,7 +491,6 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 	// a layout genuinely named "5" and let the row through, while ACF compared '5' === 5, failed to
 	// resolve it, and took the destructive branch: the row's stored sub-field values deleted, the
 	// unusable marker written in their place, and a generic read-back failure reported afterwards.
-	// Same shape as R5-1, one type away.
 	//
 	// It falls through to the ordinary string handling rather than returning here, so the existing
 	// plain-text normalisation still applies. A pinned corpus row requires `hero ` to be trimmed

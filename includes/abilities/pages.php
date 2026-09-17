@@ -250,7 +250,7 @@ function aafm_perm_get_page( array $input ): bool {
  */
 function aafm_get_page_lang_resolved_id( int $id, array $input ): int {
 	$lang = aafm_resolve_lang( $input );
-	// A WP_Error (invalid code, B48) resolves nothing here; the executor refuses it
+	// A WP_Error (invalid code) resolves nothing here; the executor refuses it
 	// before serving data, and the permission callback just checks the original id.
 	if ( ! is_string( $lang ) || 'all' === $lang ) {
 		return $id;

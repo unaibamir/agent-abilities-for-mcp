@@ -594,11 +594,22 @@ final class PostMetaTest extends TestCase {
 	 * empty" and "the confirming read itself failed". Reproduces the finding's exact repro: an
 	 * ordinary stored value, a metadata veto that ALSO evicts the object's meta cache (so the
 	 * following read cannot just serve the primed runtime cache), and a failed follow-up SELECT.
-	 * The pre-write read (which must stay correct so $old is genuine) is query occurrence 1 in
-	 * this window; the now-evicted post-write confirming read is occurrence 2 - only that one is
-	 * made to fail. Before the fix this let the veto certify as a landed write;
-	 * aafm_meta_write_confirmed() now reads the confirming value itself through a failure-aware
-	 * read, so a genuine query failure fails the confirmation closed instead.
+	 *
+	 * Codex round 1 (1.7.6), R1-8: this used to break query occurrence 2 expecting it to hit the
+	 * retained, separate get_post_meta() re-read that used to sit between the write and the
+	 * confirmation call. That query happened to make the test pass for the RIGHT-LOOKING reason
+	 * (an unrelated real-world change already rejects an unchanged 'old value' against the
+	 * requested 'new value'), but it never actually exercised aafm_meta_write_confirmed()'s own
+	 * `if ( ! $view['ok'] ) return false;` guard - deleting that guard left this test green.
+	 * aafm_exec_update_post_meta() no longer keeps a separate raw re-read at all (R1-2/R1-3 fix,
+	 * helpers.php); both the pre-write baseline and the post-write value now route through
+	 * aafm_meta_read(), so there are exactly two queries in this window: occurrence 1 is the
+	 * pre-write baseline (must stay correct so $old is genuine) and occurrence 2 is
+	 * aafm_meta_write_confirmed()'s OWN confirming read - the exact query its `!$view['ok']`
+	 * guard is checking. Breaking occurrence 2 now provably exercises that guard: temporarily
+	 * removing it flips this test's expected WP_Error into a false-success array (confirmed by
+	 * hand). The $wpdb->last_error assertion below additionally proves the injected fault
+	 * actually fired, rather than trusting the outcome alone.
 	 */
 	public function test_update_meta_fails_closed_when_a_veto_evicts_cache_and_the_confirming_read_fails(): void {
 		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
@@ -644,6 +655,10 @@ final class PostMetaTest extends TestCase {
 			$out,
 			'A failed confirming read must never certify a vetoed write as landed.'
 		);
+		// Codex round 1 (1.7.6), R1-8: prove the injected fault actually fired, rather than
+		// trusting the WP_Error outcome alone - a real SQL error populates last_error (see
+		// QueryFaultInjector's own docblock and test_break_query_with_real_error_flushes_last_result_and_sets_last_error()).
+		$this->assertNotSame( '', $wpdb->last_error, 'sanity: the injected query fault must actually have fired.' );
 		// The injected real SQL error also left core's own object cache believing this post has
 		// no meta at all (a genuinely failed query caches as "no rows" the same way a real one
 		// would) - bust it before this sanity read so it reflects the database, not that

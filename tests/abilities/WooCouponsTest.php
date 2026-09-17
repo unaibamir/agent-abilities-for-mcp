@@ -272,7 +272,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * B51: a negative usage_limit must be rejected, not sign-flipped by absint into a live limit.
+	 * A negative usage_limit must be rejected, not sign-flipped by absint into a live limit.
 	 *
 	 * The absint(-5) call returns 5, so a negative usage_limit was silently persisted as its positive twin and the
 	 * write reported success. The integer schema now carries minimum:0, so a negative is refused at
@@ -295,7 +295,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * B53: a non-numeric amount used to be silently swallowed (WC casts it toward 0 on the way to
+	 * A non-numeric amount must not be silently swallowed (WC casts it toward 0 on the way to
 	 * storage) while the tax sibling validates its rate. It must be refused with an actionable
 	 * error before any write.
 	 */
@@ -314,9 +314,10 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * B53: an unparseable date_expires was silently swallowed to null (WC_Data::set_date_prop
-	 * catches its own parse exception), so the caller believed an expiry was set when the coupon
-	 * would never expire. It must be refused, and on update the stored expiry must survive.
+	 * An unparseable date_expires must not be silently swallowed to null (WC_Data::set_date_prop
+	 * catches its own parse exception), which would let the caller believe an expiry was set when
+	 * the coupon would never expire. It must be refused, and on update the stored expiry must
+	 * survive.
 	 */
 	public function test_update_coupon_rejects_an_unparseable_expiry_and_keeps_the_stored_one(): void {
 		$this->acting_as( 'administrator' );
@@ -339,7 +340,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * B53 control: null and empty string stay valid ways to clear the expiry.
+	 * Control: null and empty string stay valid ways to clear the expiry.
 	 */
 	public function test_update_coupon_null_expiry_still_clears(): void {
 		$this->acting_as( 'administrator' );

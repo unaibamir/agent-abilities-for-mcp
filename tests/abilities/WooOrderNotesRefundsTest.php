@@ -277,9 +277,10 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * B58: the note text went through sanitize_text_field(), which collapses newlines, flattening
-	 * a multi-line note into one line - while the sibling customer_note field on the order writes
-	 * uses sanitize_textarea_field(). Notes are free-form text; line breaks must survive.
+	 * The note text must not go through sanitize_text_field(), which collapses newlines,
+	 * flattening a multi-line note into one line - the sibling customer_note field on the order
+	 * writes uses sanitize_textarea_field() instead. Notes are free-form text; line breaks must
+	 * survive.
 	 */
 	public function test_create_order_note_preserves_multi_line_text(): void {
 		$this->register_group_b();
@@ -612,7 +613,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * B24: a line_item_id that does not resolve to an item on the order must be refused with an
+	 * A line_item_id that does not resolve to an item on the order must be refused with an
 	 * actionable error BEFORE wc_create_refund() runs. wc_create_refund() silently skips unknown
 	 * item ids, which turned a documented per-line refund into a full-amount refund with no
 	 * per-line record and no download-permission revocation.
@@ -642,7 +643,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * B24: a known line_item_id still refunds normally, proving the new guard only bites bad ids.
+	 * A known line_item_id still refunds normally, proving the guard only bites bad ids.
 	 */
 	public function test_create_order_refund_known_line_item_id_still_succeeds(): void {
 		$this->register_group_c();
@@ -667,11 +668,11 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * R8C-3: a line_item_id resolving to a COUPON order item is a real, existing item - the
-	 * existing B24 guard (which only checks existence) lets it through - but wc_create_refund()'s
-	 * own loop only ever iterates line_item/fee/shipping items, so it silently drops a coupon or
-	 * tax id from the refund with no error. Refuse it before the call, mirroring the exact type set
-	 * wc_create_refund() itself consumes.
+	 * A line_item_id resolving to a COUPON order item is a real, existing item - an
+	 * existence-only guard lets it through - but wc_create_refund()'s own loop only ever iterates
+	 * line_item/fee/shipping items, so it silently drops a coupon or tax id from the refund with
+	 * no error. Refuse it before the call, mirroring the exact type set wc_create_refund() itself
+	 * consumes.
 	 */
 	public function test_create_order_refund_refuses_a_coupon_line_item_id(): void {
 		$this->register_group_c();

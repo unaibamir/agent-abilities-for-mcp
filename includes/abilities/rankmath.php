@@ -532,9 +532,17 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw              = (string) $input[ $field ];
-		$clean            = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
-		$old_meta[ $key ] = get_post_meta( $id, $key, true );
+		$raw   = (string) $input[ $field ];
+		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		// Codex round 1 (1.7.6), R1-2: a raw get_post_meta() read cannot tell "genuinely absent"
+		// from "the confirming SELECT itself failed" - both return ''. Fail closed when the
+		// baseline is unknown, rather than letting a failed read masquerade as a real one (see
+		// aafm_meta_read()'s own docblock).
+		$old_read = aafm_meta_read( $id, $key, 'post' );
+		if ( ! $old_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$old_meta[ $key ] = $old_read['value'];
 		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
 		// is stripped unless it is slashed first. Every sibling meta writer (meta.php, terms.php,
 		// user-meta.php) slashes; these SEO writers must too.
@@ -549,7 +557,14 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	foreach ( $resolved_ids as $field => $attachment_id ) {
 		$companion_value                             = $attachment_id > 0 ? $attachment_id : '';
 		$expected_meta[ $image_id_fields[ $field ] ] = $companion_value;
-		$old_meta[ $image_id_fields[ $field ] ]      = get_post_meta( $id, $image_id_fields[ $field ], true );
+		// Codex round 1 (1.7.6), R1-2: fail closed when the baseline read itself is unknown,
+		// rather than letting a failed get_post_meta() read masquerade as a genuine '' baseline
+		// (see aafm_meta_read()'s own docblock).
+		$companion_old_read = aafm_meta_read( $id, $image_id_fields[ $field ], 'post' );
+		if ( ! $companion_old_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$old_meta[ $image_id_fields[ $field ] ] = $companion_old_read['value'];
 		update_post_meta( $id, $image_id_fields[ $field ], $companion_value );
 	}
 
@@ -559,21 +574,34 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// Rank Math's normalize_data() (includes/helpers/class-options.php:51-62) reads only the exact
 	// string 'off' as false; an empty string, '0', or boolean false falls back to the truthy default.
 	if ( aafm_rankmath_twitter_fields_provided( $input ) ) {
-		$old_meta['rank_math_twitter_use_facebook'] = get_post_meta( $id, 'rank_math_twitter_use_facebook', true );
+		// Codex round 1 (1.7.6), R1-2: fail closed when the baseline read itself is unknown (see
+		// aafm_meta_read()'s own docblock).
+		$twitter_old_read = aafm_meta_read( $id, 'rank_math_twitter_use_facebook', 'post' );
+		if ( ! $twitter_old_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$old_meta['rank_math_twitter_use_facebook'] = $twitter_old_read['value'];
 		update_post_meta( $id, 'rank_math_twitter_use_facebook', 'off' );
 		$expected_meta['rank_math_twitter_use_facebook'] = 'off';
 	}
 
 	if ( array_key_exists( 'robots', $input ) ) {
-		$allowed                      = aafm_rankmath_robots_tokens();
-		$tokens                       = array_filter( array_map( 'trim', explode( ',', (string) $input['robots'] ) ) );
-		$kept                         = array_values(
+		$allowed = aafm_rankmath_robots_tokens();
+		$tokens  = array_filter( array_map( 'trim', explode( ',', (string) $input['robots'] ) ) );
+		$kept    = array_values(
 			array_filter(
 				$tokens,
 				static fn( string $t ): bool => in_array( $t, $allowed, true )
 			)
 		);
-		$old_meta['rank_math_robots'] = get_post_meta( $id, 'rank_math_robots', true );
+		// Codex round 1 (1.7.6), R1-1/R1-2: fail closed when the baseline read itself is unknown,
+		// rather than letting a failed get_post_meta() read masquerade as a genuine '' baseline
+		// (see aafm_meta_read()'s own docblock).
+		$robots_old_read = aafm_meta_read( $id, 'rank_math_robots', 'post' );
+		if ( ! $robots_old_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$old_meta['rank_math_robots'] = $robots_old_read['value'];
 		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
 		$expected_meta['rank_math_robots'] = $kept;
 
@@ -771,8 +799,15 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 		return aafm_generic_error();
 	}
 	$clean = aafm_sanitize_schema_array( $schema );
-	// Read before the write, matching the field writer above.
-	$old = get_post_meta( $id, 'rank_math_schema_' . $type, true );
+	// Read before the write, matching the field writer above. Codex round 1 (1.7.6), R1-2: a raw
+	// get_post_meta() read cannot tell "genuinely absent" from "the confirming SELECT itself
+	// failed" - both return ''. Fail closed when the baseline is unknown (see aafm_meta_read()'s
+	// own docblock).
+	$old_read = aafm_meta_read( $id, 'rank_math_schema_' . $type, 'post' );
+	if ( ! $old_read['ok'] ) {
+		return aafm_generic_error();
+	}
+	$old = $old_read['value'];
 	$old = is_array( $old ) ? $old : array();
 	// update_post_meta() unslashes the value, so a backslash inside the schema is stripped unless
 	// it is slashed first (see the field writer above and the sibling meta writers).
@@ -792,14 +827,20 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 	// closed. A registered sanitizer on this dynamic rank_math_schema_{Type} key that legitimately
 	// normalizes a value (for example a headline) reported as a write failure even though the
 	// write landed exactly as that sanitizer defines "landed".
-	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
-	$stored = is_array( $stored ) ? $stored : array();
 	if ( ! aafm_meta_write_confirmed( $old, $id, $clean, 'rank_math_schema_' . $type, 'post', (string) get_object_subtype( 'post', $id ) ) ) {
 		return new WP_Error(
 			'aafm_rankmath_schema_write_failed',
 			__( 'The schema could not be saved. Nothing was changed.', 'agent-abilities-for-mcp' )
 		);
 	}
+	// Codex round 1 (1.7.6), R1-3: return the same authoritative, failure-aware read the
+	// confirmation above already trusts, rather than a second raw get_post_meta() call that could
+	// itself fail and report an empty schema for a write that genuinely landed.
+	$stored_read = aafm_meta_read( $id, 'rank_math_schema_' . $type, 'post' );
+	if ( ! $stored_read['ok'] ) {
+		return aafm_generic_error();
+	}
+	$stored = is_array( $stored_read['value'] ) ? $stored_read['value'] : array();
 
 	return array(
 		'post_id' => $id,

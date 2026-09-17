@@ -953,7 +953,15 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 	if ( null !== $alt ) {
 		// Read before the write: media_handle_sideload() may already have seeded this key from
 		// the image's own EXIF/IPTC metadata, so '' is not a safe assumption for $old here.
-		$alt_before = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
+		// Codex round 1 (1.7.6), R1-2: a raw get_post_meta() read cannot tell "genuinely absent"
+		// from "the confirming SELECT itself failed" - both return ''. Fail closed when the
+		// baseline is unknown (see aafm_meta_read()'s own docblock).
+		$alt_before_read = aafm_meta_read( $attachment_id, '_wp_attachment_image_alt', 'post' );
+		if ( ! $alt_before_read['ok'] ) {
+			wp_delete_attachment( $attachment_id, true );
+			return aafm_generic_error();
+		}
+		$alt_before = $alt_before_read['value'];
 		$alt_clean  = aafm_sanitize_plain_text( $alt );
 		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $alt_clean ) );
 		// Codex round 5 R5-2: update_post_meta()'s return value was discarded outright, so a
@@ -1668,8 +1676,15 @@ function aafm_exec_update_media( array $input ) {
 	$alt_before = null;
 	if ( $has_alt ) {
 		// Read before the write, so the confirmation below can tell a landed change from a
-		// silent veto rather than only replaying sanitize_meta().
-		$alt_before = get_post_meta( $att_id, '_wp_attachment_image_alt', true );
+		// silent veto rather than only replaying sanitize_meta(). Codex round 1 (1.7.6), R1-2: a
+		// raw get_post_meta() read cannot tell "genuinely absent" from "the confirming SELECT
+		// itself failed" - both return ''. Fail closed when the baseline is unknown (see
+		// aafm_meta_read()'s own docblock).
+		$alt_before_read = aafm_meta_read( $att_id, '_wp_attachment_image_alt', 'post' );
+		if ( ! $alt_before_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$alt_before = $alt_before_read['value'];
 		// update_post_meta() unslashes its value, so slash here too (matches
 		// aafm_exec_update_post_meta) to preserve literal backslashes in alt text.
 		$alt_clean = aafm_sanitize_plain_text( (string) $input['alt'] );

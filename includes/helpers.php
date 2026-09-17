@@ -2122,6 +2122,65 @@ function aafm_generic_error(): WP_Error {
 }
 
 /**
+ * Authoritative, failure-aware read of a single meta value, straight from the object's own meta
+ * table - the same {ok,value} shape aafm_wpdb_row() already gives every other direct reader in
+ * this codebase (option-cache.php, geodirectory.php, the OAuth stores), so a genuine query
+ * failure is never mistaken for a legitimately absent or empty value.
+ *
+ * Codex round 1 (1.7.6), R1-2/R1-3: every meta writer used to establish its pre-write baseline
+ * and its post-write response value with a raw get_post_meta()/get_term_meta()/get_user_meta()
+ * call. Those getters return '' both when the key is genuinely absent/empty AND when the
+ * confirming SELECT itself fails (an evicted object-cache entry plus a failed follow-up query
+ * land on the exact same ''), so a caller could not tell "nothing is here" from "I don't know
+ * what's here" - and the second one got treated as the first, letting a vetoed write read as
+ * confirmed (a stale, still-correct '' baseline compared against a real value looks like a
+ * change) or letting a genuinely-landed write report an empty value in the response (a failed
+ * confirming read after a successful write). This one query, routed through by both the baseline
+ * read and aafm_meta_write_confirmed()'s own post-write check, replaces every one of those raw
+ * getter calls, so "unknown" is always distinguishable from "empty" and a caller that gets ok:
+ * false can fail the whole request closed instead of guessing.
+ *
+ * @param int    $object_id   The post/term/user id the meta is stored against.
+ * @param string $meta_key    Meta key.
+ * @param string $object_type 'post', 'term', or 'user' - also the wpdb table/column prefix
+ *                             ({$object_type}meta, {$object_type}_id) this query uses.
+ * @return array{ok:bool,value:mixed} ok is false when the query itself failed - value is not
+ *              trustworthy either way in that case. value is the unserialized stored value, or ''
+ *              when the query succeeded but matched no row (a genuinely absent/empty key).
+ */
+function aafm_meta_read( int $object_id, string $meta_key, string $object_type ): array {
+	global $wpdb;
+
+	$table  = $object_type . 'meta';
+	$id_col = $object_type . '_id';
+	$view   = aafm_wpdb_row(
+		$wpdb->prepare(
+			'SELECT %i AS value FROM %i WHERE %i = %d AND meta_key = %s LIMIT 1',
+			'meta_value',
+			$wpdb->$table,
+			$id_col,
+			$object_id,
+			$meta_key
+		)
+	);
+	if ( ! $view['ok'] ) {
+		return array(
+			'ok'    => false,
+			'value' => null,
+		);
+	}
+	$row = $view['value'];
+	// maybe_unserialize() mirrors core's own update_meta_cache() (wp-includes/meta.php), which
+	// unserializes each raw meta_value column before it ever reaches a getter - an array-valued
+	// meta key (a serialized token list, e.g. Rank Math's schema array) must be read back in that
+	// real shape, not as the raw serialized string a direct column read returns.
+	return array(
+		'ok'    => true,
+		'value' => ( is_array( $row ) && isset( $row['value'] ) ) ? maybe_unserialize( (string) $row['value'] ) : '',
+	);
+}
+
+/**
  * Whether a scalar meta write actually landed as requested, judged against the value's CANONICAL
  * stored form rather than the plugin's own pre-write intent.
  *
@@ -2218,29 +2277,11 @@ function aafm_generic_error(): WP_Error {
  * @return bool
  */
 function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
-	global $wpdb;
-
-	$table  = $object_type . 'meta';
-	$id_col = $object_type . '_id';
-	$view   = aafm_wpdb_row(
-		$wpdb->prepare(
-			'SELECT %i AS value FROM %i WHERE %i = %d AND meta_key = %s LIMIT 1',
-			'meta_value',
-			$wpdb->$table,
-			$id_col,
-			$object_id,
-			$meta_key
-		)
-	);
+	$view = aafm_meta_read( $object_id, $meta_key, $object_type );
 	if ( ! $view['ok'] ) {
 		return false;
 	}
-	$row = $view['value'];
-	// maybe_unserialize() mirrors core's own update_meta_cache() (wp-includes/meta.php), which
-	// unserializes each raw meta_value column before it ever reaches a getter - an array-valued
-	// meta key (a serialized token list, e.g. Rank Math's schema array) must be compared in that
-	// real shape, not as the raw serialized string a direct column read returns.
-	$stored = ( is_array( $row ) && isset( $row['value'] ) ) ? maybe_unserialize( (string) $row['value'] ) : '';
+	$stored = $view['value'];
 
 	$expected = sanitize_meta( $meta_key, $intended, $object_type, $object_subtype );
 	// Any array-valued meta key (a serialized token list, e.g. Slim SEO's schema array) is
@@ -2248,13 +2289,19 @@ function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $met
 	// not a comparison. A single is_array() check covers all four values consistently, since they
 	// all describe the same meta key and therefore share its shape.
 	$is_arr = is_array( $old ) || is_array( $stored ) || is_array( $intended ) || is_array( $expected );
-	// Every call site normalizes a missing/non-array $old and $intended to array() for an
-	// array-shaped key (get_post_meta()'s own '' default coerced the same way, e.g.
-	// aafm_exec_rankmath_update_schema()'s `is_array( $old ) ? $old : array()`). A missing row
-	// from the read above is '' - the scalar-key convention - so it must be coerced to array()
-	// here too once $is_arr is known, or a genuinely absent array value never equals the
-	// caller's own array()-shaped $old and a landed no-op change reads as a real one.
-	if ( $is_arr && ! is_array( $stored ) ) {
+	// $old and $stored both come from a getter that returns the literal string '' for a key that
+	// has no row at all (see aafm_meta_read()'s own docblock) - that empty-string sentinel is the
+	// ONLY non-array reading treated as compatible with an empty array here. A genuinely stored,
+	// non-empty scalar (a legacy CSV or single-token string a field used to accept before it moved
+	// to an array shape, for example) is never coerced away: doing so would make any such value
+	// compare equal to array(), so a veto that leaves a real scalar in place could be mistaken for
+	// a landed clear-to-empty-array write. Coercion only ever collapses "nothing is stored" into
+	// the empty array a first-ever write's absent baseline needs to compare against, never a value
+	// that is actually there.
+	if ( $is_arr && '' === $old ) {
+		$old = array();
+	}
+	if ( $is_arr && '' === $stored ) {
 		$stored = array();
 	}
 	if ( $is_arr ? $stored === $expected : (string) $stored === (string) $expected ) {

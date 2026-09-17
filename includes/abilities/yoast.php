@@ -417,9 +417,17 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw              = (string) $input[ $field ];
-		$clean            = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
-		$old_meta[ $key ] = get_post_meta( $id, $key, true );
+		$raw   = (string) $input[ $field ];
+		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		// Codex round 1 (1.7.6), R1-2: a raw get_post_meta() read cannot tell "genuinely absent"
+		// from "the confirming SELECT itself failed" - both return ''. Fail closed when the
+		// baseline is unknown, rather than letting a failed read masquerade as a real one (see
+		// aafm_meta_read()'s own docblock).
+		$old_read = aafm_meta_read( $id, $key, 'post' );
+		if ( ! $old_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$old_meta[ $key ] = $old_read['value'];
 		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
 		// is stripped unless it is slashed first, exactly like the sibling meta writers.
 		update_post_meta( $id, $key, wp_slash( $clean ) );
@@ -434,21 +442,33 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( isset( $spec['enum'] ) ) {
 			// An out-of-enum value is dropped (not written), so a bad directive cannot persist.
 			if ( in_array( $raw, $spec['enum'], true ) ) {
-				$old_meta[ $spec['key'] ] = get_post_meta( $id, $spec['key'], true );
+				// Codex round 1 (1.7.6), R1-2: fail closed when the baseline read itself is
+				// unknown (see aafm_meta_read()'s own docblock).
+				$robots_old_read = aafm_meta_read( $id, $spec['key'], 'post' );
+				if ( ! $robots_old_read['ok'] ) {
+					return aafm_generic_error();
+				}
+				$old_meta[ $spec['key'] ] = $robots_old_read['value'];
 				update_post_meta( $id, $spec['key'], wp_slash( $raw ) );
 				$expected_meta[ $spec['key'] ] = $raw;
 			}
 			continue;
 		}
 		// adv: filter the CSV against the allowlist, drop unknown tokens, write the clean CSV.
-		$tokens                   = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
-		$kept                     = array_values(
+		$tokens = array_filter( array_map( 'trim', explode( ',', $raw ) ) );
+		$kept   = array_values(
 			array_filter(
 				$tokens,
 				static fn( string $t ): bool => in_array( $t, $spec['allow'], true )
 			)
 		);
-		$old_meta[ $spec['key'] ] = get_post_meta( $id, $spec['key'], true );
+		// Codex round 1 (1.7.6), R1-2: fail closed when the baseline read itself is unknown (see
+		// aafm_meta_read()'s own docblock).
+		$adv_old_read = aafm_meta_read( $id, $spec['key'], 'post' );
+		if ( ! $adv_old_read['ok'] ) {
+			return aafm_generic_error();
+		}
+		$old_meta[ $spec['key'] ] = $adv_old_read['value'];
 		update_post_meta( $id, $spec['key'], wp_slash( implode( ',', $kept ) ) );
 		$expected_meta[ $spec['key'] ] = implode( ',', $kept );
 	}

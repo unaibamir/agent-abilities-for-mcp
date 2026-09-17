@@ -631,9 +631,16 @@ function aafm_exec_update_term_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	$old = get_term_meta( $term_id, $key, true );
+	// Codex round 1 (1.7.6), R1-2: a raw get_term_meta() read cannot tell "genuinely absent" from
+	// "the confirming SELECT itself failed" - both return ''. Fail closed when the baseline is
+	// unknown rather than letting a failed read masquerade as a real one (see aafm_meta_read()'s
+	// own docblock).
+	$old_read = aafm_meta_read( $term_id, $key, 'term' );
+	if ( ! $old_read['ok'] ) {
+		return aafm_generic_error();
+	}
+	$old = $old_read['value'];
 	update_term_meta( $term_id, $key, wp_slash( $value ) );
-	$stored = get_term_meta( $term_id, $key, true );
 	// Codex round 5 R5-2: update_term_meta()'s return value only catches an outright failure. A
 	// metadata filter that short-circuits update_term_metadata to a truthy value bypasses the
 	// write while reporting success, so checking only `false === update_term_meta(...)` never
@@ -643,10 +650,17 @@ function aafm_exec_update_term_meta( array $input ) {
 	if ( ! aafm_meta_write_confirmed( $old, $term_id, $value, $key, 'term', $subtype ) ) {
 		return aafm_generic_error();
 	}
+	// Codex round 1 (1.7.6), R1-3: return the same authoritative, failure-aware read the
+	// confirmation above already trusts, rather than a second raw get_term_meta() call that could
+	// itself fail and report an empty value for a write that genuinely landed.
+	$stored_read = aafm_meta_read( $term_id, $key, 'term' );
+	if ( ! $stored_read['ok'] ) {
+		return aafm_generic_error();
+	}
 	return array(
 		'term_id'  => $term_id,
 		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
-		'value'    => $stored,
+		'value'    => $stored_read['value'],
 	);
 }
 

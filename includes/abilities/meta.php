@@ -354,9 +354,17 @@ function aafm_exec_update_post_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	$old = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- single-key read of the pre-write value, not a meta query.
+	// Codex round 1 (1.7.6), R1-2: a raw get_post_meta() read here cannot tell "the key is
+	// genuinely absent" from "the confirming SELECT itself failed" - both return ''. A failed
+	// read masquerading as a genuine baseline can certify a vetoed write as landed (see
+	// aafm_meta_read()'s own docblock). Fail the whole request closed when the baseline itself is
+	// unknown, rather than guessing.
+	$old_read = aafm_meta_read( $id, $key, 'post' );
+	if ( ! $old_read['ok'] ) {
+		return aafm_generic_error();
+	}
+	$old = $old_read['value'];
 	update_post_meta( $id, $key, wp_slash( $value ) );
-	$stored = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- single-key read-back of the just-written value, not a meta query.
 	// Codex round 5 R5-2: update_post_meta()'s return value only catches an outright failure. A
 	// metadata filter that short-circuits update_post_metadata to a truthy value bypasses the
 	// write while reporting success, so checking only `false === update_post_meta(...)` never
@@ -366,10 +374,19 @@ function aafm_exec_update_post_meta( array $input ) {
 	if ( ! aafm_meta_write_confirmed( $old, $id, $value, $key, 'post', $subtype ) ) {
 		return aafm_generic_error();
 	}
+	// Codex round 1 (1.7.6), R1-3: a second raw get_post_meta() read here was returned straight
+	// in the response - if THIS read failed while the write above genuinely landed, the response
+	// reported an empty value for a successful write. Read back through the same authoritative,
+	// failure-aware query aafm_meta_write_confirmed() itself already trusts, and fail closed
+	// rather than reporting a value that was never actually confirmed.
+	$stored_read = aafm_meta_read( $id, $key, 'post' );
+	if ( ! $stored_read['ok'] ) {
+		return aafm_generic_error();
+	}
 	return array(
 		'post_id'  => $id,
 		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
-		'value'    => $stored,
+		'value'    => $stored_read['value'],
 	);
 }
 

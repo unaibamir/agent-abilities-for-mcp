@@ -52,7 +52,10 @@ final class MenusTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/list-menus' )->execute( array() );
 		$this->assertArrayHasKey( 'menus', $res );
-		$this->assertSame( array( 'id', 'name', 'slug', 'count' ), array_keys( $res['menus'][0] ) );
+		$this->assertSame(
+			array( 'id', 'name', 'slug', 'count', 'attached_theme_locations', 'registered_theme_locations' ),
+			array_keys( $res['menus'][0] )
+		);
 	}
 
 	public function test_get_menu_and_list_items(): void {
@@ -102,6 +105,44 @@ final class MenusTest extends TestCase {
 		$deleted = wp_get_ability( 'aafm/delete-menu' )->execute( array( 'menu_id' => $menu_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $deleted );
 		$this->assertFalse( wp_get_nav_menu_object( $menu_id ), 'menu permanently removed.' );
+	}
+
+	/**
+	 * Register 1.5 (disclosure only): a freshly created menu is never auto-assigned to a theme
+	 * location, so create-menu must say so rather than reading as plain, silent success.
+	 */
+	public function test_create_menu_discloses_it_is_not_attached_to_any_location(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/create-menu' )->execute( array( 'name' => 'Unattached Menu' ) );
+
+		$this->assertArrayHasKey( 'attached_theme_locations', $created );
+		$this->assertSame( array(), $created['attached_theme_locations'], 'a brand-new menu is never auto-assigned to a location.' );
+		$this->assertArrayHasKey( 'registered_theme_locations', $created );
+	}
+
+	/**
+	 * Register 1.5: registered_theme_locations must name what the active theme actually
+	 * registered, and attached_theme_locations must reflect a REAL assignment
+	 * (get_nav_menu_locations(), a theme_mod), not a guess.
+	 */
+	public function test_menu_shape_reports_registered_and_attached_theme_locations(): void {
+		register_nav_menu( 'aafm-test-primary', 'Primary' );
+		$menu_id = $this->make_menu( 'Header Menu' );
+		set_theme_mod( 'nav_menu_locations', array( 'aafm-test-primary' => $menu_id ) );
+
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/get-menu' )->execute( array( 'menu_id' => $menu_id ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertContains( 'aafm-test-primary', $res['registered_theme_locations'] );
+		$this->assertSame( array( 'aafm-test-primary' ), $res['attached_theme_locations'] );
+
+		remove_theme_mod( 'nav_menu_locations' );
+		unregister_nav_menu( 'aafm-test-primary' );
 	}
 
 	public function test_menu_writes_deny_an_editor(): void {

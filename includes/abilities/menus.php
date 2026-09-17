@@ -61,7 +61,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-menu']      = array(
 		'label'        => __( 'Create menu', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Creates a navigation menu by name. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Creates a navigation menu by name. The menu is not attached to any theme location; wiring it in is a manual step. On a block theme it stays invisible on the front end until a human adds it to a template, since the core/navigation block reads from a separate mechanism this ability does not touch. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',

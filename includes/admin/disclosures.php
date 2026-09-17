@@ -127,7 +127,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/update-user'                 => __( 'Edits a user\'s display name, name, or email. Changing a role needs the promote-users capability and never demotes the last administrator. Requires edit access to that user.', 'agent-abilities-for-mcp' ),
 		'aafm/create-block'                => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability, and respects force-draft if you turned it on.', 'agent-abilities-for-mcp' ),
 		'aafm/update-block'                => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),
-		'aafm/create-menu'                 => __( 'Creates a navigation menu. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'aafm/create-menu'                 => __( 'Creates a navigation menu. The menu is not attached to any theme location; that step is manual. On a block theme it is invisible on the front end until a human wires it into a template, since the core/navigation block reads from a separate mechanism this ability does not touch. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-menu'                 => __( 'Renames a navigation menu by id. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'aafm/create-menu-item'            => __( 'Adds an item (link) to a navigation menu. The URL is sanitized. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-menu-item'            => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),

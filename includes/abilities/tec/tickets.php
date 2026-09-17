@@ -39,8 +39,8 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_tec_tickets_f
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_tec_tickets_definitions( array $registry ): array {
-	// Codex final round 3 MEDIUM: Event Tickets can run standalone, attaching tickets to an
-	// ordinary post or page with no Events Calendar installed at all - but every read here is
+	// Event Tickets can run standalone, attaching tickets to an ordinary post or page with no
+	// Events Calendar installed at all - but every read here is
 	// gated on the ticket's PARENT EVENT (this file's own docblock), and that lookup hard-
 	// references Tribe__Events__Main::POSTTYPE and edit_tribe_event, both defined by TEC itself.
 	// Without TEC active those abilities would still register and appear in tools/list, then

@@ -341,8 +341,8 @@ function aafm_tec_event_orm_args( array $input ): array {
 /**
  * Confirm venue_id/organizer_ids in $input actually name existing venue/organizer posts.
  *
- * Codex hunt F5: aafm_tec_event_orm_args() above passes these ids through absint() alone.
- * TEC's own repository (Repositories/Event.php, confirmed against the installed plugin)
+ * aafm_tec_event_orm_args() above passes these ids through absint() alone. TEC's own
+ * repository (Repositories/Event.php, confirmed against the installed plugin)
  * silently drops an invalid venue/organizer relationship on save rather than erroring, so a
  * caller-supplied id naming an ordinary post would be dropped with no error and no signal
  * in the response - the exact silent-wrong-answer shape this validation exists to stop.
@@ -527,12 +527,12 @@ function aafm_args_tec_update_event(): array {
 /**
  * Execute aafm/tec-update-event.
  *
- * Codex final round 8 HIGH: this maps 'content' straight to post_content and persists it through
- * the ORM (aafm_tec_event_orm_args()) with no page-builder ownership check anywhere in the
- * function - the same corruption risk aafm_exec_update_post() guards against, just at a
- * chokepoint the generic guard's own coverage sweep (tests/PageBuilderGuardSweepTest.php) never
- * enumerated. Checked unconditionally, before any field is even read, matching every other
- * content-write execute callback's own placement.
+ * This maps 'content' straight to post_content and persists it through the ORM
+ * (aafm_tec_event_orm_args()) with no page-builder ownership check anywhere in the function - the
+ * same corruption risk aafm_exec_update_post() guards against, just at a chokepoint the generic
+ * guard's own coverage sweep (tests/PageBuilderGuardSweepTest.php) never enumerated. Checked
+ * unconditionally, before any field is even read, matching every other content-write execute
+ * callback's own placement.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -562,9 +562,8 @@ function aafm_exec_tec_update_event( array $input ) {
 		return array( 'event' => aafm_tec_event_shape( $id ) ); // Nothing to change; no-op success.
 	}
 
-	// Codex final round 10 MEDIUM: round 9's content-safety fix wired this call into event
-	// create and both venue/organizer paths, but missed this one - the fifth-of-six call sites
-	// that got left out.
+	// Content safety is enforced here too, matching every other TEC content-write call site
+	// (event create and both venue/organizer paths), so no chokepoint is left uncovered.
 	$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
 	if ( is_wp_error( $safety ) ) {
 		return $safety;
@@ -577,8 +576,8 @@ function aafm_exec_tec_update_event( array $input ) {
 	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}
-	// Documented contract exception to "every event write goes through the ORM" (Codex final
-	// round MEDIUM, re-verified against the installed plugin): TEC's own repository save step
+	// Documented contract exception to "every event write goes through the ORM" (re-verified
+	// against the installed plugin): TEC's own repository save step
 	// (Repositories/Event.php) unsets the all-day meta input rather than writing a falsy value
 	// whenever the requested all_day is falsy, so the ORM's own update never touches the existing
 	// meta row - a real event that was already all-day stays all-day, silently, under a
@@ -591,10 +590,10 @@ function aafm_exec_tec_update_event( array $input ) {
 	// TEC quirk (see TecStubStore.php's write_meta()), not one that would pass regardless.
 	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
 		delete_post_meta( $id, '_EventAllDay' );
-		// Codex hunt F4: delete_post_meta()'s bool return was discarded here, so a
-		// delete_post_metadata filter vetoing the delete would leave the event still marked
-		// all-day while this ability reported an ordinary success. Confirm the key is
-		// actually gone rather than trusting the call didn't error.
+		// delete_post_meta()'s bool return is not enough on its own: a delete_post_metadata
+		// filter vetoing the delete would leave the event still marked all-day while this
+		// ability reported an ordinary success. Confirm the key is actually gone rather than
+		// trusting the call didn't error.
 		if ( metadata_exists( 'post', $id, '_EventAllDay' ) ) {
 			return new WP_Error(
 				'aafm_tec_write_unconfirmed',
@@ -657,11 +656,9 @@ function aafm_args_tec_delete_event(): array {
  * the event to Trash the normal way, matching this plugin's own trash-post/trash-page/
  * delete-block abilities.
  *
- * Codex hunt F6, gate round 1 finding 6: the disclosure only weakened the "always recoverable"
- * claim to name the Trash-disabled risk (core's own wp_trash_post() permanently deletes when
- * EMPTY_TRASH_DAYS is falsy) rather than closing it, leaving this the one "trash" ability that
- * could still silently, permanently destroy data. Now guarded exactly like trash-post/trash-page/
- * delete-block: refuse outright on a Trash-disabled site instead of documenting the risk.
+ * Guarded exactly like trash-post/trash-page/delete-block: refused outright on a Trash-disabled
+ * site, because core's own wp_trash_post() permanently deletes when EMPTY_TRASH_DAYS is falsy, and
+ * without this guard "trash" here could still silently, permanently destroy data.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error

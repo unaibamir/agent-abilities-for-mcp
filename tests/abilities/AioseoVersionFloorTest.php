@@ -1,8 +1,7 @@
 <?php
 /**
- * AIOSEO version floor (fix round 2, sweep review security finding):
- * aafm_aioseo_active() gates registration on AIOSEO being both present AND at or above
- * AAFM_AIOSEO_MIN_VERSION.
+ * AIOSEO version floor: aafm_aioseo_active() gates registration on AIOSEO being both present AND
+ * at or above AAFM_AIOSEO_MIN_VERSION.
  *
  * Deliberately its own file, mirroring WooVersionFloorTest.php: proving the version-compare
  * branch requires function_exists('aioseo') to be true, and every AIOSEO test file in this suite

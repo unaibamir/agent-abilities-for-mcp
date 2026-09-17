@@ -113,8 +113,18 @@ function aafm_aioseo_rendered_head( string $head, int $post_id, string $source )
 		// Unwind only back down to the level that existed before this call, whether the throw
 		// happened before our own ob_start() (WP_Query, the_post()) or inside output() itself - never
 		// below that, or we close a buffer belonging to whatever caller had one open already.
+		//
+		// Codex round 1 (1.7.6), R1-5: a hook can open a buffer with ob_start( null, 0, 0 ) - the
+		// PHP_OUTPUT_HANDLER_REMOVABLE flag cleared - which ob_end_clean() then refuses to close,
+		// returning false WITHOUT reducing the buffer level. The old loop ignored that return value
+		// and looped on the same unchanged level forever, a hang worse than the stale-buffer bug it
+		// replaced. Stop as soon as a close fails: a non-removable buffer is left in place (still
+		// bounded - never below $saved_ob_level, since this only ever ran up to that point) and the
+		// finally block below still runs to restore the globals.
 		while ( ob_get_level() > $saved_ob_level ) {
-			ob_end_clean();
+			if ( ! ob_end_clean() ) {
+				break;
+			}
 		}
 		$rendered = '';
 	} finally {

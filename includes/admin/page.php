@@ -209,9 +209,9 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'allowlistZeroSelected'    => __( 'No abilities selected. Saving now will block this scope from every ability.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: number of abilities selected in the allowlist picker. */
 				'allowlistSelectedCount'   => __( '%s selected', 'agent-abilities-for-mcp' ),
-				// Codex admin-ui-r1 L3: a row added client-side (before reload) used to build this
-				// label from a hardcoded English template literal instead of these translated
-				// strings, which is what every server-rendered row already used.
+				// A row added client-side (before reload) builds this label from these translated
+				// strings, the same as every server-rendered row, rather than a hardcoded English
+				// template literal.
 				/* translators: %s: role display name. */
 				'allowlistRoleLabel'       => __( 'Role: %s', 'agent-abilities-for-mcp' ),
 				/* translators: %s: OAuth client id or display name. */
@@ -272,10 +272,10 @@ function aafm_get_stored_enabled_abilities_raw(): array {
  * control, not intent to disable it), and this function keeps it stored. The registration floor
  * (aafm_get_enabled_abilities()) is what keeps a locked name out of tools/list, so a stored
  * locked name is inert while locked - and unlocking the category restores exactly the selection
- * that was ticked before, which is the floor's stated promise. Stripping stored names here was
- * B10: re-locking the category wiped the operator's selection on the very next save. Only a
- * locked name that was NOT already stored is stripped (and logged): it cannot have come from the
- * screen, since the screen rendered no control for it.
+ * that was ticked before, which is the floor's stated promise. Stripping stored names here would
+ * wipe the operator's selection the very next time the category is re-locked. Only a locked name
+ * that was NOT already stored is stripped (and logged): it cannot have come from the screen,
+ * since the screen rendered no control for it.
  *
  * The optional $persisted by-reference parameter carries out aafm_update_option_verified()'s
  * write-actually-took boolean, so a caller that needs to know whether the write itself persisted -
@@ -375,7 +375,7 @@ function aafm_sanitize_enabled_input( array $posted ): array {
 		// the first save made while the mode is on, and turning the mode back off would hand back a
 		// blank slate instead of the selection it promised to restore.
 		//
-		// Both lock reasons are carried (B10). A high-risk-locked name renders no checkbox
+		// Both lock reasons are carried. A high-risk-locked name renders no checkbox
 		// either, so its absence from a full-replace POST is the lock speaking, not the operator
 		// turning it off - and aafm_set_enabled_abilities() keeps a previously-stored locked name
 		// on purpose, so dropping it here would wipe the selection the unlock is supposed to
@@ -536,8 +536,8 @@ function aafm_ajax_save_post_types(): void {
 	$types = aafm_sanitize_allowed_post_types_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 
 	// Verified, not a bare update_option(): this option gates which content types an agent can
-	// even see, so a stale persistent object cache silently keeping the old list live (Codex hunt
-	// F1) must be reported as a failed save, not a success.
+	// even see, so a stale persistent object cache silently keeping the old list live must be
+	// reported as a failed save, not a success.
 	if ( ! aafm_update_option_verified( 'aafm_allowed_post_types', $types ) ) {
 		aafm_log_ability_persist_failure( 'aafm_allowed_post_types', __( 'Exposed content types', 'agent-abilities-for-mcp' ) );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed content types', 'agent-abilities-for-mcp' ) ) ) );
@@ -720,15 +720,14 @@ function aafm_detected_meta_keys(): array {
 /**
  * Write a paired exposed/deny option pair through the three-stage sequence that keeps every
  * intermediate state at least as strict as the state before the request, even when the same
- * request narrows BOTH lists at once (Codex round 6, B6-1).
+ * request narrows BOTH lists at once.
  *
- * The round-5 fix (deny always written before exposed) is not direction-aware: it only protects
- * a request that ADDS to deny or REMOVES from exposed. A request that REMOVES a key from deny
- * and REMOVES it from exposed in the same submission (the bundled UI can post both fields
- * together) is a live counter-example: if the exposed write fails after the deny write already
- * dropped the key, the key ends up off deny and still on the old exposed list - reachable, when
- * both edits meant to make it unreachable. The three stages below stay deny-monotonic at every
- * point in between:
+ * Simply writing deny before exposed is not direction-aware: it only protects a request that
+ * ADDS to deny or REMOVES from exposed. A request that REMOVES a key from deny and REMOVES it
+ * from exposed in the same submission (the bundled UI can post both fields together) is a live
+ * counter-example: if the exposed write fails after the deny write already dropped the key, the
+ * key ends up off deny and still on the old exposed list - reachable, when both edits meant to
+ * make it unreachable. The three stages below stay deny-monotonic at every point in between:
  *
  *   1. deny := union(old deny, new deny) - never narrower than either list, so nothing either
  *      side wanted denied is ever briefly undenied.
@@ -738,7 +737,7 @@ function aafm_detected_meta_keys(): array {
  *      simply stays at the stage-1 union instead of reaching its final, narrower value.
  *
  * The "old deny" half of the union is read here, authoritatively, from the database row itself
- * (Codex round 7, R7-1) rather than accepted as a caller-supplied snapshot. The getters
+ * rather than accepted as a caller-supplied snapshot. The getters
  * (aafm_denied_meta_keys() and its user/term siblings) both trust a cache-backed get_option()
  * and strip the `*` deny-all sentinel for display purposes, so a caller-supplied snapshot could
  * either be stale (a persistent cache still answering for a since-changed row) or silently drop
@@ -747,7 +746,7 @@ function aafm_detected_meta_keys(): array {
  * pre-request state. Reading the raw row directly, sentinel included, keeps the union at least
  * as strict as whatever is really in the database right now.
  *
- * R2-4 sibling (1.7.5 deferred, round 2): the "old deny" read above must not treat a failed
+ * The "old deny" read above must not treat a failed
  * read (db_error) the same as a genuinely empty/absent row - that would build the stage-1 union
  * from an empty old-deny list, silently dropping whatever was actually denied before this
  * request, the same direction of mistake the OAuth migration reads had. This is a WRITE path, not
@@ -807,9 +806,9 @@ function aafm_ajax_save_meta_keys(): void {
 	$exposed_label = __( 'Exposed post meta keys', 'agent-abilities-for-mcp' );
 
 	// Verified, not a bare update_option(): these two options gate which post meta an agent can
-	// read or write, so a stale persistent object cache silently keeping the old list live (Codex
-	// hunt F1) must be reported as a failed save, not a success. The three-stage write order keeps
-	// every intermediate state at least as strict as before this request (Codex round 6, B6-1).
+	// read or write, so a stale persistent object cache silently keeping the old list live must be
+	// reported as a failed save, not a success. The three-stage write order keeps every
+	// intermediate state at least as strict as before this request.
 	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_meta_keys', 'aafm_allowed_meta_keys', $denied, $keys );
 	if ( 1 === $stage ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', $deny_label );
@@ -848,7 +847,7 @@ function aafm_ajax_save_denied_meta_keys(): void {
 	}
 	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 
-	// Verified, not a bare update_option(): see aafm_ajax_save_meta_keys() above (Codex hunt F1).
+	// Verified, not a bare update_option(): see aafm_ajax_save_meta_keys() above.
 	if ( ! aafm_update_option_verified( 'aafm_denied_meta_keys', $keys ) ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) ) ) );
@@ -874,9 +873,10 @@ function aafm_ajax_save_user_meta_keys(): void {
 	$exposed_label = __( 'Exposed user meta keys', 'agent-abilities-for-mcp' );
 
 	// Verified, not a bare update_option(): these two options gate which user meta an agent can
-	// read or write (Codex hunt F1). The three-stage write order keeps every intermediate state
-	// at least as strict as before this request, even when this request narrows both lists at
-	// once (Codex round 6, B6-1; superseding the simple deny-first order from round 5, R5-1).
+	// read or write. The three-stage write order keeps every intermediate state at least as
+	// strict as before this request, even when this request narrows both lists at once - simply
+	// writing deny before exposed is not enough, since it only protects a request that adds to
+	// deny or removes from exposed.
 	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_user_meta_keys', 'aafm_exposed_user_meta_keys', $denied, $exposed );
 	if ( 1 === $stage ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_user_meta_keys', $deny_label );
@@ -916,9 +916,10 @@ function aafm_ajax_save_term_meta_keys(): void {
 	$exposed_label = __( 'Exposed term meta keys', 'agent-abilities-for-mcp' );
 
 	// Verified, not a bare update_option(): these two options gate which term meta an agent can
-	// read or write (Codex hunt F1). The three-stage write order keeps every intermediate state
-	// at least as strict as before this request, even when this request narrows both lists at
-	// once (Codex round 6, B6-1; superseding the simple deny-first order from round 5, R5-1).
+	// read or write. The three-stage write order keeps every intermediate state at least as
+	// strict as before this request, even when this request narrows both lists at once - simply
+	// writing deny before exposed is not enough, since it only protects a request that adds to
+	// deny or removes from exposed.
 	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_term_meta_keys', 'aafm_exposed_term_meta_keys', $denied, $exposed );
 	if ( 1 === $stage ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_term_meta_keys', $deny_label );
@@ -998,9 +999,9 @@ function aafm_ajax_clear_log(): void {
  * markers written before schema v5 have no event_type, and keeping the name means an operator's
  * old and new markers still read as the same event.
  *
- * @return bool True when the marker row was actually inserted (Codex round 9, R9-8): a failed
- *              insert here would otherwise leave the freshly emptied log with no tamper
- *              evidence at all while the caller still reported success.
+ * @return bool True when the marker row was actually inserted: a failed insert here would
+ *              otherwise leave the freshly emptied log with no tamper evidence at all while the
+ *              caller still reported success.
  */
 function aafm_log_activity_cleared_marker(): bool {
 	$user = wp_get_current_user();
@@ -1077,14 +1078,14 @@ function aafm_log_ability_toggle_diff( array $before, array $after ): int {
  * Called by aafm_set_enabled_abilities() with the locked names it just stripped and that were
  * genuinely new (not already sitting in the option). A locked ability has no rendered checkbox
  * (see aafm_render_ability_row() and aafm_render_integration_ability_row()), so its name arriving
- * here means the request bypassed the UI - a forged POST, a stale cached form, or a bug like the
- * one this replaces: the Integrations tab used to skip the lock branch, save the name, and log it
- * as a real "Enabled" event even though it was never actually reachable. A refused attempt is
- * still security signal, so it is recorded explicitly rather than left silent.
+ * here means the request bypassed the UI - a forged POST, a stale cached form, or a code path
+ * that fails to honor the lock (for example, skipping the lock branch and logging the name as a
+ * real "Enabled" event even though it was never actually reachable). A refused attempt is still
+ * security signal, so it is recorded explicitly rather than left silent.
  *
- * The detail names the ACTUAL cause per name (B37). This row exists to record the forged/stale
- * POST event, so a hardcoded "(high-risk locked)" was a false statement whenever the real refusal
- * came from read-only mode. When no reason is supplied it is resolved per name through
+ * The detail names the ACTUAL cause per name. This row exists to record the forged/stale POST
+ * event, so a hardcoded "(high-risk locked)" would be a false statement whenever the real refusal
+ * came from read-only mode instead. When no reason is supplied it is resolved per name through
  * aafm_ability_lock_reason(), whose read-only-first precedence already answers "which switch is
  * actually holding this down". Native aafm/* names only on that path - a bridged caller passes
  * its own reason explicitly, because aafm_ability_lock_reason() must never see a bridged slug
@@ -1644,10 +1645,10 @@ function aafm_render_abilities_tab(): void {
 	// Kept OUTSIDE the form: the form has a type="submit" Save button, and a search field
 	// inside it would let Enter trigger a save instead of filtering.
 	echo '<div class="aafm-integration-filter aafm-abilities-search">';
-	// Codex admin-ui-r1 M3: a placeholder is not a persistent accessible name - it disappears the
-	// moment the field has a value, so a screen reader or voice-control user loses the field's
-	// identity mid-search. Same visually-hidden <label for> pattern aafm_render_bridge_filter()
-	// already uses for the same control shape.
+	// A placeholder is not a persistent accessible name - it disappears the moment the field has
+	// a value, so a screen reader or voice-control user loses the field's identity mid-search.
+	// Same visually-hidden <label for> pattern aafm_render_bridge_filter() already uses for the
+	// same control shape.
 	printf(
 		'<label class="screen-reader-text" for="aafm-abilities-search">%s</label>',
 		esc_html__( 'Search abilities', 'agent-abilities-for-mcp' )
@@ -2484,7 +2485,7 @@ function aafm_csv_cell( string $value ): string {
 
 /**
  * Append one unmistakable CSV row flagging that the export stopped early because a database read
- * failed, rather than because the log was exhausted (R9-3).
+ * failed, rather than because the log was exhausted.
  *
  * A failed page read and "no more rows" both surface as an empty result from
  * aafm_query_activity() - a caller that cannot tell them apart writes a file that LOOKS complete
@@ -2521,8 +2522,8 @@ function aafm_write_export_failure_row( $out ): void {
  * while the export is mid-run shifts the OFFSET window and the same row can be written twice -
  * nothing is skipped, but a duplicate in a compliance export is still a real defect.
  *
- * A failed read - the id snapshot, or any page - is never treated as "nothing left to export"
- * (R9-3): both aafm_activity_max_id_result() and aafm_query_activity_result() report ok=false
+ * A failed read - the id snapshot, or any page - is never treated as "nothing left to export":
+ * both aafm_activity_max_id_result() and aafm_query_activity_result() report ok=false
  * separately from a genuine empty result, and either one stops the export and appends an
  * unmistakable failure row via aafm_write_export_failure_row() rather than completing quietly.
  * Headers (admin-post.php's handler) are already sent by the time this runs, so an HTTP-level

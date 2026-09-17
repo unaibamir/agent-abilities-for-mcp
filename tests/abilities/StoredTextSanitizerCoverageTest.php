@@ -47,7 +47,7 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	 *    entry has to name the validator.
 	 *
 	 * `calls` carries the normalised text of each justified call rather than a bare count, and that
-	 * is what stops a justification transferring (R3-3). A count is satisfied by any call in the
+	 * is what stops a justification transferring. A count is satisfied by any call in the
 	 * right function, so swapping a justified query call for an unsafe stored write in one edit kept
 	 * the total the same and inherited the reason. Naming the calls means a new one has to be argued
 	 * for on its own. It also makes the list read better: the entry shows the code it is defending.
@@ -286,7 +286,8 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	 * The headline guard: a raw sanitizer call nobody has justified fails the build.
 	 *
 	 * This is the one that would have caught update-user, the order addresses and the textarea
-	 * family the day each of them was written, instead of one review round at a time.
+	 * family the day each of them was written, rather than one at a time whenever somebody
+	 * happens to notice.
 	 */
 	public function test_every_raw_sanitizer_call_is_allowlisted(): void {
 		$records  = StoredTextSanitizerScanner::scan();
@@ -332,7 +333,7 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	/**
 	 * A justification covers the exact calls it was written for, and no others.
 	 *
-	 * R3-3. A count alone was transferable: convert a justified query call to the helper and add an
+	 * A count alone is transferable: convert a justified query call to the helper and add an
 	 * unsafe stored write to the same function in one edit, and the count is unchanged, so the old
 	 * reason silently covers the new call. Comparing what each call actually sanitizes closes that
 	 * - the new call does not match the justified one, so it has to be argued for on its own.
@@ -391,12 +392,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	}
 
 	/**
-	 * Every receiver form any round has ever fixed, pinned in one place.
+	 * Every receiver form this scanner has ever mishandled, pinned in one place.
 	 *
 	 * APPEND-ONLY. Never delete a case. Each one is a fingerprint collision that shipped or nearly
 	 * did, and each was found only after an earlier fix handled one receiver form and left its
-	 * sibling: R5-3 fixed the bare `$a->map()` pair, R6-5 fixed parenthesized receivers, and round 7
-	 * found that a subscript with an ANONYMOUS owner still collapsed to `[0]->map( … )`. A named
+	 * sibling: the bare `$a->map()` pair, parenthesized receivers, and a subscript with an
+	 * ANONYMOUS owner that still collapsed to `[0]->map( … )`. A named
 	 * owner such as `$rows[0]` always resolved correctly, which is why no real call site ever hit it.
 	 *
 	 * The last pair is the relative-name head, and it belongs to the family of collisions that are
@@ -504,7 +505,7 @@ PHP;
 	}
 
 	/**
-	 * R3-3: a fully-qualified call is the same function and must be seen.
+	 * A fully-qualified call is the same function and must be seen.
 	 *
 	 * On PHP 8 `\sanitize_text_field(...)` is a single T_NAME_FULLY_QUALIFIED token, not the
 	 * T_STRING the scan used to look for, so it slipped past entirely - a real bypass, and the
@@ -579,7 +580,7 @@ PHP;
 	}
 
 	/**
-	 * R3-3: an aliased import renames the sanitizer to something no grep would look for.
+	 * An aliased import renames the sanitizer to something no grep would look for.
 	 *
 	 * `use function sanitize_text_field as clean;` makes every later `clean( $v )` a raw sanitizer
 	 * call under a name the allowlist has never heard of. The scan resolves the import so the call
@@ -603,10 +604,10 @@ PHP;
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): a comment inside the `use function` statement, or a
-	 * non-ASCII alias identifier, used to defeat this scanner's own hand-rolled import parser
+	 * A comment inside the `use function` statement, or a
+	 * non-ASCII alias identifier, would defeat a naive hand-rolled import parser
 	 * (a `preg_split( '~\s+as\s+~i', ... )` over the whole statement's text, comments and all).
-	 * Both now go through the shared UseImportScanner.
+	 * Both go through the shared UseImportScanner instead.
 	 */
 	public function test_the_scanner_resolves_an_aliased_import_with_a_comment_and_a_non_ascii_alias(): void {
 		$source = <<<'PHP'
@@ -639,7 +640,7 @@ PHP;
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): `use function Vendor\sanitize_text_field as clean;` imports
+	 * `use function Vendor\sanitize_text_field as clean;` imports
 	 * SOMEBODY ELSE'S function of the same bare name, not the WordPress core sanitizer - this
 	 * scanner's exact-match filter (unlike the other two scanners' intentionally imprecise
 	 * trailing-name matching) must not record it as a tracked alias.
@@ -658,7 +659,7 @@ PHP;
 	}
 
 	/**
-	 * R4-6 (1.7.5 deferred, round 4): `use` imports are scoped to the namespace block they appear
+	 * `use` imports are scoped to the namespace block they appear
 	 * in - an alias declared before a `namespace` boundary must not still resolve after it.
 	 */
 	public function test_the_scanner_does_not_carry_an_alias_across_a_namespace_boundary(): void {
@@ -722,7 +723,7 @@ PHP;
 	}
 
 	/**
-	 * R4-3: two callable-string uses in one function must be distinguishable.
+	 * Two callable-string uses in one function must be distinguishable.
 	 *
 	 * Recording only the literal made every callable string identical, so the multiset could not
 	 * tell one from another. aafm_oauth_register_client() has exactly this shape in real code -
@@ -799,12 +800,12 @@ PHP;
 	}
 
 	/**
-	 * R5-3: two calls that differ ONLY in their receiver must be distinguishable.
+	 * Two calls that differ ONLY in their receiver must be distinguishable.
 	 *
-	 * Taking the last name token before the parenthesis meant `$a->map( … )` and `$b->map( … )`
-	 * produced the same identity. The pair here differs in nothing except the receiver, because
-	 * that is precisely what the chain walk changes - a pair that also differed in arguments would
-	 * have passed before the fix and proved nothing.
+	 * Taking only the last name token before the parenthesis would make `$a->map( … )` and
+	 * `$b->map( … )` produce the same identity. The pair here differs in nothing except the
+	 * receiver, because that is precisely what the chain walk changes - a pair that also differed
+	 * in arguments would pass even with a receiver-blind identity, and would prove nothing.
 	 */
 	public function test_two_calls_differing_only_in_receiver_are_distinguishable(): void {
 		$source = <<<'PHP'
@@ -849,9 +850,10 @@ PHP;
 	}
 
 	/**
-	 * The half of R5-3 that was not reported: when no callee can be named at all, the old fallback
-	 * was the bare literal, which is the SAME string at every such site. Two variable-function
-	 * calls therefore matched each other silently - R4-3's collision arriving through another door.
+	 * The other half of the same receiver-collision problem: when no callee can be named at all, a
+	 * fallback to the bare literal would be the SAME string at every such site. Two variable-function
+	 * calls would therefore match each other silently - the same collision arriving through
+	 * another door.
 	 *
 	 * The rule the fallback now follows: a fingerprint may be imprecise, but it may never be
 	 * ambiguous. The statement is a coarser identity than the call, and that is fine, because a
@@ -880,10 +882,10 @@ PHP;
 	}
 
 	/**
-	 * R6-5: a parenthesized receiver is still a receiver.
+	 * A parenthesized receiver is still a receiver.
 	 *
-	 * The chain walk stepped back over a bracketed group only when a variable or name owned it, so
-	 * `(new A())->map( … )` found no owner, gave up, and returned the bare method - two different
+	 * If the chain walk only stepped back over a bracketed group when a variable or name owned it,
+	 * `(new A())->map( … )` would find no owner, give up, and return the bare method - two different
 	 * receivers collapsing to one fingerprint again.
 	 */
 	public function test_a_parenthesized_receiver_is_kept(): void {
@@ -944,7 +946,7 @@ PHP;
 	/**
 	 * The scan must reach every file that actually ships.
 	 *
-	 * The file that proved the hand-picked list was the wrong shape (R3-3) was uninstall.php: it
+	 * The file that proved the hand-picked list was the wrong shape was uninstall.php: it
 	 * ships, it was outside the scan, and only a source review caught it. The list is derived from
 	 * git archive now, so this asserts the derivation really does reach it.
 	 */

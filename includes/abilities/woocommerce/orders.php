@@ -207,7 +207,7 @@ function aafm_rich_wc_order( \WC_Order $order ): array {
 	// Line items: each raw item from get_items() is mapped to a clean scalar shape. The `id` is the
 	// ORDER-ITEM id (not a product id) - it is the exact value wc-create-order-refund's
 	// line_items[].line_item_id contract documents ("as returned by reading the order"), so the
-	// read has to expose it or the documented per-line refund is unusable (B24).
+	// read has to expose it or the documented per-line refund is unusable.
 	$line_items = array();
 	foreach ( (array) $order->get_items() as $item ) {
 		if ( is_array( $item ) ) {
@@ -374,7 +374,7 @@ function aafm_exec_wc_list_orders( array $input ): array {
 	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
 	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
 
-	// B57: 'any' passed through to wc_get_orders() is backend-dependent - HPOS resolves it to a
+	// 'any' passed through to wc_get_orders() is backend-dependent - HPOS resolves it to a
 	// status set that INCLUDES the internal checkout-draft status while legacy CPT storage
 	// excludes it, so the same call answered differently per backend. Expand 'any' to the
 	// registered statuses from wc_get_order_statuses() explicitly (custom statuses included);
@@ -646,7 +646,7 @@ function aafm_wc_order_status_valid( string $status ): bool {
  *                                            afterwards can undo them if its own step fails.
  * @return array<int,int>|\WP_Error Requested product IDs that could not be resolved to a product
  *                                  (empty when all resolved), or a WP_Error when adding threw
- *                                  mid-loop (already-written items rolled back; see B27 note below).
+ *                                  mid-loop (already-written items rolled back; see the note below).
  */
 function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$added_item_ids = array() ) {
 	if ( array_key_exists( 'status', $input ) ) {
@@ -781,7 +781,7 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$adde
 		return $unresolved;
 	}
 
-	// B27: resolution up front only covers unresolvable ids - add_product() itself can still throw
+	// Resolution up front only covers unresolvable ids - add_product() itself can still throw
 	// mid-loop, and because it persists each item row IMMEDIATELY ($item->save() runs inside it,
 	// before $order->save()), a bare loop would leave every earlier item written (attached on
 	// update; orphaned at order_id 0 on create) while the caller is told the request failed. Track
@@ -834,7 +834,7 @@ function aafm_wc_input_adds_line_items( array $input ): bool {
  * When every already-written row is removed, the returned error states the order is unchanged.
  * When a row cannot be removed (or wc_delete_order_item() is unavailable), the error instead
  * states exactly which order-item ids persisted, so the caller is never told "failed" about
- * state that actually changed (B27).
+ * state that actually changed.
  *
  * The deletion helper reports an id it could not CONFIRM removing, which is not the same as an id
  * that survived: WooCommerce fires woocommerce_delete_order_item AFTER the row is gone, so an
@@ -1774,10 +1774,10 @@ function aafm_exec_wc_update_order( array $input ) {
 	// stood when the request arrived, and it has already been answered above.
 	//
 	// The recalculation is its own failure point, and it runs AFTER add_product() has already
-	// written each item row. B27's rollback wraps the add loop only, so a throw here used to leave
-	// the new item on the order, the total still at the old figure, and a raw Throwable escaping
-	// the ability -- goods the order carries but never bills for, which is the exact harm this
-	// recalculation was added to stop.
+	// written each item row. The add-loop rollback above covers only that loop, so a throw here
+	// would otherwise leave the new item on the order, the total still at the old figure, and a
+	// raw Throwable escaping the ability -- goods the order carries but never bills for. The
+	// rollback below exists specifically to close that gap.
 	//
 	// Deleting the added rows is not enough on its own, because calculate_totals() is not atomic.
 	// It runs calculate_taxes() first, which persists as it goes, and only fires
@@ -1875,8 +1875,8 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	// real WC_Order::update_status() both accept the short form.
 	$short = str_starts_with( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
 
-	// B55: WC_Order::update_status() catches its own exceptions internally and returns FALSE on a
-	// failed transition (class-wc-order.php:402-426), so ignoring the return turned a failed
+	// WC_Order::update_status() catches its own exceptions internally and returns FALSE on a
+	// failed transition (class-wc-order.php:402-426), so ignoring the return would turn a failed
 	// transition into a success payload carrying the old status. Check it, and verify the
 	// re-read order actually carries the requested status before reporting success.
 	if ( true !== $order->update_status( $short ) ) {
@@ -2143,7 +2143,7 @@ function aafm_args_wc_create_order_note(): array {
  */
 function aafm_exec_wc_create_order_note( array $input ) {
 	$order_id = (int) ( $input['order_id'] ?? 0 );
-	// B58: textarea sanitizer, matching the customer_note sibling - sanitize_text_field() would
+	// Textarea sanitizer, matching the customer_note sibling - sanitize_text_field() would
 	// collapse the newlines out of a multi-line note.
 	$note_text     = aafm_sanitize_multiline_text( (string) ( $input['note'] ?? '' ) );
 	$customer_note = ! empty( $input['customer_note'] );
@@ -2160,7 +2160,7 @@ function aafm_exec_wc_create_order_note( array $input ) {
 
 	// Re-read the saved note so the response reflects WooCommerce's stored row (real date_created,
 	// real added_by, normalized content) instead of fabricating a date and hardcoding
-	// added_by_user (B2). Fall back to a minimal truthful shape only if the re-read fails.
+	// added_by_user. Fall back to a minimal truthful shape only if the re-read fails.
 	$saved = aafm_wc_get_order_note( $order_id, (int) $note_id );
 	if ( $saved instanceof \stdClass || is_object( $saved ) ) {
 		return aafm_wc_redact_note( $saved );
@@ -2430,8 +2430,8 @@ function aafm_args_wc_create_order_refund(): array {
 function aafm_exec_wc_create_order_refund( array $input ) {
 	$order_id = (int) ( $input['order_id'] ?? 0 );
 	$amount   = sanitize_text_field( (string) ( $input['amount'] ?? '0.00' ) );
-	// B58 sweep: the refund reason is the same class of free-form text as an order note, so it
-	// gets the textarea sanitizer too - line breaks survive.
+	// The refund reason is the same class of free-form text as an order note, so it gets the
+	// textarea sanitizer too - line breaks survive.
 	$reason = aafm_sanitize_multiline_text( (string) ( $input['reason'] ?? '' ) );
 
 	$order = aafm_wc_get_order_object( $order_id );
@@ -2454,7 +2454,7 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 			$refund_total = isset( $item['refund_total'] ) ? trim( (string) $item['refund_total'], " \t\n\r\0\x0B\f" ) : '0.00';
 			$refund_tax   = isset( $item['refund_tax'] ) ? trim( (string) $item['refund_tax'], " \t\n\r\0\x0B\f" ) : '0.00';
 
-			// B24: wc_create_refund() silently SKIPS any line_items key that does not match an item
+			// wc_create_refund() silently SKIPS any line_items key that does not match an item
 			// on the order (it iterates the order's own items and ignores unmatched ids), which would
 			// turn this documented per-line refund into a full-amount refund with no per-line record
 			// and no download-permission revocation. Refuse an unresolvable id before any refund runs.
@@ -2590,15 +2590,14 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 		$refund_args['line_items'] = $line_items;
 	}
 
-	// R8C-9, resolved by verification rather than a new check (delegation audit, 2026-08-22):
 	// wc_create_refund() (wc-order-functions.php:584), WC_AJAX::refund_line_items()
 	// (class-wc-ajax.php:2416-2417, the admin Refund screen's own handler), and
 	// WC_REST_Order_Refunds_Controller::create_item() (v3, line 50-51) were all read end to end -
 	// NONE of WooCommerce's own three refund-creation surfaces reconciles the sum of per-line
 	// refund_total against the top-level amount; each validates only the top-level amount against
 	// $order->get_remaining_refund_amount(). Adding that reconciliation here would make this
-	// plugin stricter than WooCommerce's own admin UI and REST API - the exact anti-pattern the
-	// delegation audit exists to stop. KEEP, DOCUMENTED: no reconciliation check is added.
+	// plugin stricter than WooCommerce's own admin UI and REST API, which this ability defers to.
+	// KEEP, DOCUMENTED: no reconciliation check is added.
 	$refund = wc_create_refund( $refund_args );
 
 	if ( is_wp_error( $refund ) || ! ( $refund instanceof \WC_Order_Refund ) ) {

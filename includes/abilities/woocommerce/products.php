@@ -178,7 +178,7 @@ function aafm_rich_wc_product( \WC_Product $product ): array {
 			// grouped product reads its child list from the grouped data store, which persists the
 			// array verbatim on save (class-wc-product-grouped-data-store-cpt.php:35) rather than
 			// imploding it back to a clean sequence the way the gallery meta does.
-			// B56: get_children() is not variation-specific - on a grouped product it returns the
+			// get_children() is not variation-specific - on a grouped product it returns the
 			// grouped child PRODUCT ids, which are not variations. Only a variable product's
 			// children are variations, so every other type reports an empty list.
 			'variation_ids'     => 'variable' === $product->get_type()
@@ -427,8 +427,8 @@ function aafm_exec_wc_list_products( array $input ) {
 	// With paginate => true WooCommerce returns an object carrying ->products (the page) and ->total
 	// (the full matching count); total is the grand total for pagination, not the page row count.
 	//
-	// Branch review fix (lang scope and result shaping, round 3): aafm_redact_wc_product() must
-	// run INSIDE the query's own aafm_with_language() scope, not after it restores to ambient -
+	// aafm_redact_wc_product() must run INSIDE the query's own aafm_with_language() scope, not
+	// after it restores to ambient -
 	// on both branches. WooCommerce's get_name(), get_price(), and get_category_ids() all apply
 	// vendor filters a theme or plugin can key off ambient language, same defect class as
 	// aafm_exec_get_posts() in posts.php.
@@ -665,10 +665,10 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 	}
 	if ( array_key_exists( 'status', $input ) ) {
 		$status = sanitize_key( (string) $input['status'] );
-		// The operator's force-draft setting covers products too (B7): an explicit request
-		// for a publish-equivalent status is coerced to draft, mirroring the update-post
-		// behaviour. An update that sends no status field never reaches here, so force-draft
-		// can never retro-unpublish an already-published product.
+		// The operator's force-draft setting covers products too: an explicit request for a
+		// publish-equivalent status is coerced to draft, mirroring the update-post behaviour.
+		// An update that sends no status field never reaches here, so force-draft can never
+		// retro-unpublish an already-published product.
 		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status ) ) {
 			$status = 'draft';
 		}
@@ -689,10 +689,9 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 			);
 		}
 	}
-	// WooCommerce stores these two fields as the product post's post_content/post_excerpt
-	// (Codex round 9 R9-1), so they go through the same block-content guard every other
-	// post_content write uses -- strict mode refuses markup that would show as invalid in the
-	// editor instead of silently storing it.
+	// WooCommerce stores these two fields as the product post's post_content/post_excerpt, so
+	// they go through the same block-content guard every other post_content write uses -- strict
+	// mode refuses markup that would show as invalid in the editor instead of silently storing it.
 	if ( array_key_exists( 'description', $input ) ) {
 		$description = wp_kses_post( (string) $input['description'] );
 		$guard       = aafm_block_guard_evaluate( $description );
@@ -1153,7 +1152,7 @@ function aafm_exec_wc_create_product( array $input ) {
 		return $error;
 	}
 	// WooCommerce defaults an unset status to publish on save, so with the operator's
-	// force-draft setting on, an omitted status must land as draft (B7). An explicit
+	// force-draft setting on, an omitted status must land as draft. An explicit
 	// publish-equivalent request was already coerced inside aafm_wc_apply_product_input().
 	if ( aafm_force_draft() && ! array_key_exists( 'status', $input ) ) {
 		$product->set_status( 'draft' );
@@ -1230,14 +1229,14 @@ function aafm_exec_wc_update_product( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Codex round 9 R9-1 / round 10 R10-6: description/short_description are the only two fields
-	// aafm_wc_apply_product_input() routes to this product post's post_content/post_excerpt, so an
-	// EXISTING product owned by a foreign page builder gets the same refusal every other
-	// content-write ability gives -- but only when one of those two fields is actually present.
-	// Checking this unconditionally (the original R9-1 fix) refused unrelated price/SKU/stock/
-	// category/status updates on a builder-owned product, which never touch post_content or
-	// post_excerpt and so have nothing for the builder to silently ignore. A brand-new product has
-	// no prior owner, so aafm_exec_wc_create_product() does not need this check either way.
+	// description/short_description are the only two fields aafm_wc_apply_product_input() routes
+	// to this product post's post_content/post_excerpt, so an EXISTING product owned by a foreign
+	// page builder gets the same refusal every other content-write ability gives -- but only when
+	// one of those two fields is actually present. Checking unconditionally would refuse unrelated
+	// price/SKU/stock/category/status updates on a builder-owned product, which never touch
+	// post_content or post_excerpt and so have nothing for the builder to silently ignore. A
+	// brand-new product has no prior owner, so aafm_exec_wc_create_product() does not need this
+	// check either way.
 	if ( array_key_exists( 'description', $input ) || array_key_exists( 'short_description', $input ) ) {
 		$owning_builder = aafm_post_has_foreign_builder_ownership( $product->get_id() );
 		if ( false !== $owning_builder ) {

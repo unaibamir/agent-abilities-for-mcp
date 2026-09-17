@@ -401,10 +401,9 @@ function aafm_exec_yoast_update_post( array $input ) {
 
 	// Tracked by real META KEY, not the unified field name, so the confirmation pass below runs
 	// sanitize_meta() against the exact key a registered sanitize callback would fire on.
-	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
-	// call core itself makes at write time, rather than the raw get_post_type() - a
-	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
-	// at write time.
+	// Resolve the subtype through get_object_subtype(), the same filterable call core itself
+	// makes at write time, rather than the raw get_post_type() - a get_object_subtype_post
+	// filter remapping the subtype is honoured here the same way it is at write time.
 	$post_type     = (string) get_object_subtype( 'post', $id );
 	$expected_meta = array();
 
@@ -453,12 +452,12 @@ function aafm_exec_yoast_update_post( array $input ) {
 		$expected_meta[ $spec['key'] ] = implode( ',', $kept );
 	}
 
-	// Codex round 5 R5-2: every update_post_meta() call above discarded its return value, so a
+	// Every update_post_meta() call above discards its return value on its own, so a
 	// site-installed update_post_metadata filter vetoing any of these writes would report success
 	// while the response still carried the requested value rather than what storage actually
-	// holds. Codex round 6 B6-3: compare against the CANONICAL sanitize_meta() form of each write,
-	// not its pre-write intent, so a registered sanitize callback's legitimate normalization is not
-	// mistaken for a veto (matches the sibling meta writers in meta.php, terms.php, user-meta.php).
+	// holds. Compare against the CANONICAL sanitize_meta() form of each write, not its pre-write
+	// intent, so a registered sanitize callback's legitimate normalization is not mistaken for a
+	// veto (matches the sibling meta writers in meta.php, terms.php, user-meta.php).
 	foreach ( $expected_meta as $key => $value ) {
 		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', $id, $value, $key, 'post', $post_type ) ) {
 			return new WP_Error(

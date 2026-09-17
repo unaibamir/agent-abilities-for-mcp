@@ -144,8 +144,8 @@ function aafm_wc_tax_rate_shape( array $row ): array {
  *
  * Uses a direct DB query, the same strategy as the WooCommerce REST API v3 /taxes endpoint.
  *
- * Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
- * see aafm_oauth_list_clients()'s docblock for why a failed query must not be allowed to return
+ * Routed through aafm_wpdb_results() rather than a bare get_results() - see
+ * aafm_oauth_list_clients()'s docblock for why a failed query must not be allowed to return
  * an earlier, unrelated query's rows here, which an agent could otherwise act on as if they were
  * this store's real tax rates.
  *
@@ -212,8 +212,8 @@ function aafm_args_wc_list_tax_rates(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
-			// B54: this was the one unbounded list while every sibling pages; it now takes the
-			// standard page/per_page pair (same shapes as wc-list-orders).
+			// Paginated with the standard page/per_page pair (same shapes as wc-list-orders),
+			// matching every sibling list ability.
 			'properties'           => aafm_pagination_schema_props(
 				100,
 				__( 'Number of tax rates to return per page, from 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
@@ -270,7 +270,7 @@ function aafm_exec_wc_list_tax_rates( array $input ) {
 	$rates = aafm_wc_get_all_tax_rates();
 	$total = count( $rates );
 
-	// B54: page over the full rate list; total stays the grand total, like every sibling list.
+	// Page over the full rate list; total stays the grand total, like every sibling list.
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
 	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
 	$rates    = array_slice( $rates, ( $page - 1 ) * $per_page, $per_page );
@@ -464,9 +464,9 @@ function aafm_wc_normalize_tax_rate( $raw ) {
 /**
  * Validate a requested tax-class slug against the classes that actually exist.
  *
- * B30: both rate write paths run WC_Tax::format_tax_rate_class(), which maps ANY unknown slug to
- * '' - so a rate meant for "reduced-rate" (typo, or a class not yet created) silently lands in the
- * Standard class, changes checkout tax, and reports success. An empty string and 'standard' are
+ * Both rate write paths run WC_Tax::format_tax_rate_class(), which maps ANY unknown slug to '' -
+ * so a rate meant for "reduced-rate" (typo, or a class not yet created) would silently land in
+ * the Standard class, change checkout tax, and report success. An empty string and 'standard' are
  * the Standard class by convention; anything else must match an existing class slug.
  *
  * @param string $slug Sanitized requested class slug.
@@ -896,11 +896,10 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 	$name = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$slug = isset( $input['slug'] ) ? sanitize_title( (string) $input['slug'] ) : '';
 
-	// B29: WC_Tax::create_tax_class() does NOT de-duplicate a colliding slug (the old description
-	// claimed it did) - it returns a tax_class_slug_exists / tax_class_exists WP_Error. Surface the
-	// collision as one clean, actionable error before calling WC, checking the same effective slug
-	// WC would derive ('' slug falls back to the sanitized name) against Standard plus every
-	// existing class slug and name.
+	// WC_Tax::create_tax_class() does NOT de-duplicate a colliding slug - it returns a
+	// tax_class_slug_exists / tax_class_exists WP_Error. Surface the collision as one clean,
+	// actionable error before calling WC, checking the same effective slug WC would derive ('' slug
+	// falls back to the sanitized name) against Standard plus every existing class slug and name.
 	$effective_slug = '' !== $slug ? $slug : sanitize_title( $name );
 
 	$early_error = aafm_wc_tax_class_collision_error( $effective_slug, $name );
@@ -929,7 +928,7 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 	// the life of the request (class-wc-tax.php:818-833). Without forcing that cache out first,
 	// this "final" check would silently re-read the SAME snapshot the early check already
 	// warmed a few lines above, making it a no-op duplicate of the early check rather than a
-	// genuine live re-check (Codex review, 2026-09-05).
+	// genuine live re-check.
 	wp_cache_delete( 'tax-rate-classes', 'taxes' );
 	$race_error = aafm_wc_tax_class_collision_error( $effective_slug, $name );
 	if ( $race_error instanceof \WP_Error ) {
@@ -962,7 +961,7 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 		);
 	}
 
-	// $stored_slug_check is already the CANONICAL stored slug (B12: falls back to $effective_slug,
+	// $stored_slug_check is already the CANONICAL stored slug (falls back to $effective_slug,
 	// never dropping an explicit slug), now confirmed against the database above rather than just
 	// trusted from WC_Tax::create_tax_class()'s return value.
 	return array(

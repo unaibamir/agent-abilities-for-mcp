@@ -163,9 +163,9 @@ function aafm_exec_wc_get_sales_report( array $input ) {
 
 	// HPOS-aware: aggregate through wc_get_orders() so the totals come from WooCommerce's own
 	// order storage (custom order tables OR legacy posts) instead of a raw shop_order/postmeta
-	// join that only ever sees the legacy tables (B3). The date window is pushed into the query
-	// and results are paged so a large order history never loads in one unbounded fetch (mirrors
-	// the top-sellers path).
+	// join that only ever sees the legacy tables. The date window is pushed into the query and
+	// results are paged so a large order history never loads in one unbounded fetch (mirrors the
+	// top-sellers path).
 	// strtotime() returns false for an unparseable date, which cast to 0 would silently widen the
 	// window to all-time (bad start) or empty it (bad end) and return a confidently wrong money
 	// figure as success. Reject an unparseable date instead.
@@ -486,15 +486,15 @@ function aafm_exec_wc_count_orders( array $input ) { // phpcs:ignore Generic.Cod
 
 	// HPOS-aware: count per status through wc_get_orders() (which targets the custom order tables
 	// when HPOS is on, and the legacy posts otherwise) rather than wp_count_posts('shop_order'),
-	// which never sees the HPOS tables and would under-report on an HPOS site (B3). Each status is
+	// which never sees the HPOS tables and would under-report on an HPOS site. Each status is
 	// a paginated 1-row probe so only the storage-side total is read, not the order rows.
 	//
-	// B52: the status list comes from wc_get_order_statuses() - whose map plugins extend through
-	// the wc_order_statuses filter - not a hardcoded seven-status list. The old hardcoded sum
-	// excluded every custom status from `total` while the shape claimed completeness. The named
+	// The status list comes from wc_get_order_statuses() - whose map plugins extend through the
+	// wc_order_statuses filter - rather than a hardcoded seven-status list, so a custom status is
+	// never silently excluded from `total` while the shape claims completeness. The named
 	// breakdown below still reports the built-in seven; anything beyond them is counted into
 	// `total` only. Trashed orders stay excluded either way, matching the non-trash "active"
-	// total convention shared by count-products and count-coupons (B4).
+	// total convention shared by count-products and count-coupons.
 	$statuses = array();
 	foreach ( array_keys( wc_get_order_statuses() ) as $status_key ) {
 		$status_key = (string) $status_key;
@@ -540,7 +540,7 @@ function aafm_wc_count_orders_by_status( string $status ): int {
 	// 'type' is not optional: under HPOS refunds live in the same wc_orders table with type
 	// shop_order_refund, and a refund against a completed order carries status wc-completed itself.
 	// An untyped count therefore counts refunds as orders - a store with no completed orders and
-	// three refunds reported three completed orders (B3). wc_orders_count() takes the identical
+	// three refunds would report three completed orders. wc_orders_count() takes the identical
 	// $type parameter for the identical reason, so the pin carries over unchanged.
 	return wc_orders_count( $status, 'shop_order' );
 }
@@ -615,7 +615,7 @@ function aafm_exec_wc_count_products( array $input ) {
 	$pending = (int) ( $counts['pending'] ?? 0 );
 	$trash   = (int) ( $counts['trash'] ?? 0 );
 	// total counts ACTIVE (non-trashed) products only - trash is reported as its own line but is
-	// deliberately excluded from total, the shared count convention across the count siblings (B4).
+	// deliberately excluded from total, the shared count convention across the count siblings.
 	return array(
 		'publish'  => $publish,
 		'draft'    => $draft,

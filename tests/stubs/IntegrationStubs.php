@@ -2135,6 +2135,26 @@ class WC_Payment_Gateway {
 		}
 		return $empty_value;
 	}
+
+	/**
+	 * Mirrors real WooCommerce's WC_Payment_Gateway::get_title(): applies the
+	 * 'woocommerce_gateway_title' filter, which translation and white-label plugins hook.
+	 *
+	 * @return string
+	 */
+	public function get_title() {
+		return apply_filters( 'woocommerce_gateway_title', $this->title, $this->id );
+	}
+
+	/**
+	 * Mirrors real WooCommerce's WC_Payment_Gateway::get_description(): applies the
+	 * 'woocommerce_gateway_description' filter.
+	 *
+	 * @return string
+	 */
+	public function get_description() {
+		return apply_filters( 'woocommerce_gateway_description', $this->description, $this->id );
+	}
 }
 PHP;
 	}

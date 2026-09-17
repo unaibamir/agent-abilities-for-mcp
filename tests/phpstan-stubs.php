@@ -1169,6 +1169,10 @@ if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 		public function get_option_key() { return ''; }
 		/** @return bool */
 		public function save() { return false; }
+		/** @return string */
+		public function get_title() { return $this->title; }
+		/** @return string */
+		public function get_description() { return $this->description; }
 	}
 }
 if ( ! class_exists( 'WC_Payment_Gateways' ) ) {

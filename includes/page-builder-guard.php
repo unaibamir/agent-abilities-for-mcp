@@ -67,6 +67,15 @@ function aafm_post_has_foreign_builder_ownership( int $post_id ) {
  * underscore rule; blocking the whole map here rather than only the two gap keys keeps this
  * automatically correct for any marker added later through the aafm_page_builder_markers filter.
  *
+ * `vcv-pageContent`'s marker was confirmed against the real plugin zip from wordpress.org (Visual
+ * Composer Website Builder, free edition, slug `visualcomposer`, stable 45.16.2): read at
+ * Helpers/PostType.php:67, written at Modules/Editors/DataAjax/Controller.php:399, non-empty JSON
+ * means the builder owns the post. This builder is a hybrid: it also writes rendered output into
+ * post_content on every editor save, so an unguarded write here would not simply be invisible -
+ * it desyncs from vcv-pageContent and is reverted the next time someone opens the builder and
+ * saves. The guard still refuses the write; the failure mode is just "the change disappears
+ * later" rather than "the change never appears".
+ *
  * @return array<string,string> Meta key => builder short name.
  */
 function aafm_page_builder_markers(): array {
@@ -78,6 +87,7 @@ function aafm_page_builder_markers(): array {
 			'_fl_builder_data'         => 'beaver-builder',
 			'fusion_builder_status'    => 'avada',
 			'fusion_builder_converted' => 'avada',
+			'vcv-pageContent'          => 'visual-composer',
 		)
 	);
 }

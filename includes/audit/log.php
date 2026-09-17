@@ -130,16 +130,16 @@ function aafm_install_activity_log(): void {
 function aafm_activity_log_finalize_schema(): void {
 	if ( aafm_activity_log_schema_verify() ) {
 		delete_transient( 'aafm_activity_log_schema_error' );
-		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_activity_log()
+		// Verified, not a bare update_option(): aafm_maybe_upgrade_activity_log()
 		// below trusts this stamp to decide whether the installer needs to run again, so a write
 		// that a persistent cache silently no-ops must not be allowed to look like it landed.
 		if ( ! aafm_update_option_verified( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION ) ) {
-			// Codex round 8 R8-3: this return value used to be discarded. The table itself is
-			// genuinely fine, but with the version left un-stamped, aafm_maybe_upgrade_activity_log()
-			// reruns dbDelta() every request instead of settling - and the error transient above
-			// was already cleared on the strength of the schema check alone, hiding the persist
-			// failure from the admin notice. Re-set the transient and log the failure so it is
-			// visible instead of silent.
+			// This return value matters: the table itself is genuinely fine, but with the version
+			// left un-stamped, aafm_maybe_upgrade_activity_log() reruns dbDelta() every request
+			// instead of settling - and the error transient above was already cleared on the
+			// strength of the schema check alone, hiding the persist failure from the admin
+			// notice. Re-set the transient and log the failure so it stays visible instead of
+			// silent.
 			set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
 			aafm_log_ability_persist_failure( 'aafm_activity_log_schema_version', __( 'The activity-log schema version', 'agent-abilities-for-mcp' ) );
 		}
@@ -179,15 +179,14 @@ function aafm_activity_log_schema_verify(): bool {
  * not list, so existence is probed with a trivial select. The %i placeholder quotes the identifier
  * (an internal constant).
  *
- * 1.7.5 round 4, R4-4: this used to read '' === $wpdb->last_error as its success signal.
- * $wpdb->query() (wp-includes/class-wpdb.php) can return false, leaving last_error untouched at
- * '', on paths that never actually ran the query - $wpdb->ready is false, the `query` filter
- * returns an empty query, a failed reconnection after the server has gone away - the exact
- * last_error pitfall aafm_wpdb_scalar()'s own docblock documents (R10-1) for the option-cache
- * reads. Under that failure shape this returned true for an ABSENT table, and finalization could
- * stamp the current schema version despite the table never having been verified. Delegating to
- * aafm_wpdb_scalar(), which checks $wpdb->query()'s own return value instead, closes the same gap
- * here.
+ * Existence is probed through aafm_wpdb_scalar() rather than by checking
+ * '' === $wpdb->last_error as a success signal: $wpdb->query() (wp-includes/class-wpdb.php) can
+ * return false, leaving last_error untouched at '', on paths that never actually ran the query -
+ * $wpdb->ready is false, the `query` filter returns an empty query, a failed reconnection after
+ * the server has gone away. Checking $wpdb->query()'s own return value instead of trusting
+ * last_error (see aafm_wpdb_scalar()'s own docblock for the full set of blind spots it closes)
+ * stops that failure shape from reporting an absent table as present, which would otherwise let
+ * finalization stamp the current schema version despite the table never having been verified.
  *
  * @param string $table Fully-prefixed table name.
  * @return bool
@@ -203,7 +202,7 @@ function aafm_activity_log_table_present( string $table ): bool {
 /**
  * Whether a named column exists on the activity-log table. Works on the harness's TEMPORARY table.
  *
- * Codex round 7, R7-2: a bare $wpdb->get_var() returns the PREVIOUS query's row when the current
+ * A bare $wpdb->get_var() returns the PREVIOUS query's row when the current
  * query itself fails, so a failed SHOW COLUMNS could inherit an unrelated non-empty value left
  * over from an earlier, successful check and report a missing column as present - letting schema
  * finalization stamp the current version over an incomplete upgrade. Routed through
@@ -278,10 +277,10 @@ add_action( 'admin_notices', 'aafm_activity_log_schema_admin_notice' );
  * Cheap early return when the option already matches, so this is safe to hook on every admin
  * request. dbDelta() is safe to re-run. Mirrors aafm_maybe_upgrade_oauth_tables().
  *
- * Reads the database row directly rather than get_option()'s cache-trusting view (Codex round 7,
- * R7-2): a stale cached current version over an old/absent database row would skip a genuinely
- * needed repair, and this function's own docblock identifies missing audit rows as the failure
- * this guard exists to catch.
+ * Reads the database row directly rather than get_option()'s cache-trusting view: a stale cached
+ * current version over an old/absent database row would skip a genuinely needed repair, and this
+ * function's own docblock identifies missing audit rows as the failure this guard exists to
+ * catch.
  *
  * @return void
  */
@@ -526,14 +525,11 @@ function aafm_log_activity( array $record ): int {
  * status 'error', naming the option so the real cause (option-cache.php's stale-cache class of
  * bug) is legible straight from the log, without implying any setting actually changed.
  *
- * R3-2 (1.7.5 deferred, round 3): originally defined in includes/admin/page.php, loaded inside
- * aafm_bootstrap() at 'plugins_loaded' priority 10. Four failure paths call this function at or
- * before priority 1 - the OAuth-preservation and DCR-adoption migration callbacks on
- * 'plugins_loaded' priority 1 (includes/oauth/discovery.php), and the activity-log/OAuth schema
- * version stamps run directly from aafm_activate() during plugin activation, before bootstrap has
- * ever run. Moved here because this file is required at the plugin's top level (before
- * aafm_bootstrap() exists at all), so it is defined before every one of those early callers can
- * possibly run.
+ * Defined at this file's top level, before aafm_bootstrap() exists, so it is available to four
+ * failure paths that call it at or before 'plugins_loaded' priority 1: the OAuth-preservation and
+ * DCR-adoption migration callbacks (includes/oauth/discovery.php), and the activity-log/OAuth
+ * schema version stamps that run directly from aafm_activate() during plugin activation, before
+ * bootstrap has ever run.
  *
  * @param string $option Option name that failed to persist.
  * @param string $label  Human-readable label for the option, used in the detail message.
@@ -814,7 +810,7 @@ function aafm_query_activity( array $args ): array {
  * is fine for a caller that only ever renders what it gets back, but the CSV exporter
  * (aafm_export_activity_csv()) uses "fewer than a full page came back" as its own loop-termination
  * signal, so a failed read looked exactly like reaching the end of the table and the export
- * completed - silently missing every row after the failure (R9-3). This gives that caller the
+ * completed - silently missing every row after the failure. This gives that caller the
  * ok/rows split it needs to tell the two apart, without changing aafm_query_activity()'s existing
  * contract for its many other callers.
  *
@@ -859,7 +855,7 @@ function aafm_query_activity_result( array $args ): array {
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 	$sql = "SELECT * FROM %i WHERE {$where} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
-	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
+	// Routed through aafm_wpdb_results() rather than a bare get_results() -
 	// a failed query here could otherwise return an EARLIER, unrelated query's rows (see
 	// aafm_oauth_list_clients()'s docblock for the mechanism), silently showing the admin a
 	// different page/filter's log rows instead of an empty result.
@@ -886,7 +882,7 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
 	global $wpdb;
 	$table = aafm_activity_log_table();
 
-	// Codex round 7, R7-2: both reads routed through aafm_wpdb_scalar() - see
+	// Both reads routed through aafm_wpdb_scalar() - see
 	// aafm_activity_count()'s docblock for why a bare get_var() risks displaying an adjacent
 	// count's stale value when this one's own query fails.
 	if ( null === $status || '' === $status ) {
@@ -968,7 +964,7 @@ function aafm_agent_call_count( ?string $status = null ): int {
 	// whose every value is a placeholder, the only thing ever appended is the constant literal
 	// ' AND status = %s', and all five or six values reach the query through $params - the table
 	// name via %i, and $status, the one caller-influenced value, via %s. Nothing is interpolated.
-	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
+	// Routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
 	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 	$view = aafm_wpdb_scalar( $wpdb->prepare( $sql, $params ) );
@@ -982,7 +978,7 @@ function aafm_agent_call_count( ?string $status = null ): int {
  * this once, before the first page runs, and passes it back as max_id on every page - so a row
  * inserted mid-run can never shift an OFFSET window and be exported twice.
  *
- * Codex round 7, R7-2: routed through aafm_wpdb_scalar() rather than a bare get_var() - the
+ * Routed through aafm_wpdb_scalar() rather than a bare get_var() - the
  * exporter treats this as the snapshot bound for every page it fetches, so a failed query
  * inheriting a stale MAX(id) from an earlier, different-sized snapshot would silently mis-bound
  * the whole export rather than fail visibly.
@@ -998,7 +994,7 @@ function aafm_activity_max_id(): int {
  * Same read as aafm_activity_max_id(), but honest about a failed query instead of collapsing it
  * to 0 - the same value an empty table produces.
  *
- * The CSV exporter takes this as its pagination snapshot before its first page runs (R9-3): if the
+ * The CSV exporter takes this as its pagination snapshot before its first page runs: if the
  * read fails, folding that into 0 makes every page's `id <= 0` filter come back empty, and the
  * export completes looking like a genuinely empty log instead of a failed one. Collapsing failure
  * into 0 here is exactly the mistake aafm_query_activity_result()'s docblock describes for the row
@@ -1021,13 +1017,13 @@ function aafm_activity_max_id_result(): array {
  * Delete every activity row.
  *
  * Certifies the table is actually empty afterward rather than trusting the TRUNCATE's own
- * result (Codex round 9, R9-8): a failed truncate must not let a caller go on to write a
- * marker row claiming the clear happened, or report success while the original rows survive.
+ * result: a failed truncate must not let a caller go on to write a marker row claiming the
+ * clear happened, or report success while the original rows survive.
  *
- * The confirmation read goes through aafm_wpdb_scalar() rather than a bare get_var() (Codex round
- * 10, R10-3): a get_var() read that itself failed used to cast straight to `(int) null === 0`, the
- * same "unreadable, so call it empty" mistake as a stale TRUNCATE, letting the memo flush and the
- * marker row below both run as if the clear had genuinely happened.
+ * The confirmation read goes through aafm_wpdb_scalar() rather than a bare get_var(): a
+ * get_var() read that itself fails would otherwise cast straight to `(int) null === 0`, the
+ * same "unreadable, so call it empty" mistake as a stale TRUNCATE, letting the memo flush and
+ * the marker row below both run as if the clear had genuinely happened.
  *
  * @return bool True when the table is confirmed empty after this call.
  */

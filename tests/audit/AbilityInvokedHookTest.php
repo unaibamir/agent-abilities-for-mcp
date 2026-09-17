@@ -149,24 +149,24 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, Codex finding 1: aafm_log_ability_invocation() pushes a pending row before core
-	 * does any work, but a real WP 7.1 execute() returns directly - without ever reaching
-	 * check_permissions() or the decorated execute_callback - when validate_input() fails on a
-	 * malformed input. Before the fix that pending entry stayed on the per-name stack, and a LATER
-	 * call for the SAME ability, denied at a preliminary permission check that never goes through
-	 * execute() (exactly how the MCP adapter's own check_permission() call and this suite's own
-	 * test_denied_is_audited cases work), would pop and resolve the FIRST call's row instead of
-	 * writing its own - misattributing the second call's denial onto the first call, and leaving the
-	 * second call with no audit row of its own at all.
+	 * aafm_log_ability_invocation() pushes a pending row before core does any work, but a real WP
+	 * 7.1 execute() returns directly - without ever reaching check_permissions() or the decorated
+	 * execute_callback - when validate_input() fails on a malformed input. Left unresolved, that
+	 * pending entry would stay on the per-name stack, and a LATER call for the SAME ability,
+	 * denied at a preliminary permission check that never goes through execute() (exactly how the
+	 * MCP adapter's own check_permission() call and this suite's own test_denied_is_audited cases
+	 * work), would pop and resolve the FIRST call's row instead of writing its own -
+	 * misattributing the second call's denial onto the first call, and leaving the second call
+	 * with no audit row of its own at all.
 	 *
-	 * 1.7.1 CI review: the fixture's first row used to stay stuck at 'started' forever, on both WP
-	 * 6.9 and 7.1 - a real, deterministic, core-owned refusal recorded as though the call were still
-	 * in flight. AAFM_Rate_Limited_Ability::execute() now resolves that class of dangling row (see
-	 * aafm_resolve_dangling_invocation_if_mine() in includes/register.php), so the first assertion
-	 * below pins the NEW contract: a terminal 'error' status naming the schema refusal, never
-	 * 'denied' (no capability decision was ever made) and never the old permanent 'started'. The
-	 * rest of the test is unchanged: it still proves the resolved first row is never touched again
-	 * by a later, unrelated call for the same ability.
+	 * AAFM_Rate_Limited_Ability::execute() resolves that class of dangling row (see
+	 * aafm_resolve_dangling_invocation_if_mine() in includes/register.php): the fixture's first
+	 * row must never stay stuck at 'started' forever on either WP 6.9 or 7.1, since that would
+	 * record a real, deterministic, core-owned refusal as though the call were still in flight.
+	 * The first assertion below pins the contract: a terminal 'error' status naming the schema
+	 * refusal, never 'denied' (no capability decision was ever made) and never a permanent
+	 * 'started'. The rest of the test proves the resolved first row is never touched again by a
+	 * later, unrelated call for the same ability.
 	 */
 	public function test_a_validation_failure_resolves_to_error_and_leaves_no_dangling_row_for_a_later_denied_call(): void {
 		$name = 'aafm-test/invoked-hook-validation-then-denial';
@@ -269,10 +269,10 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, Codex finding 1, short-circuit variant: an intentional wp_pre_execute_ability
-	 * short-circuit is the other real WP 7.1 exit path that returns from execute() without ever
-	 * reaching check_permissions() or the decorated execute_callback. Same contamination risk as the
-	 * validation-failure case above, same fix, separate proof.
+	 * Short-circuit variant: an intentional wp_pre_execute_ability short-circuit is the other real
+	 * WP 7.1 exit path that returns from execute() without ever reaching check_permissions() or
+	 * the decorated execute_callback. Same contamination risk as the validation-failure case
+	 * above, same guard, separate proof.
 	 */
 	public function test_a_short_circuited_call_leaves_no_dangling_row_for_a_later_denied_call(): void {
 		$this->skip_unless_wp_71_abilities_surface();
@@ -399,9 +399,9 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Codex finding 1's suggested second case: a permission callback that throws and is configured
-	 * to re-throw must not leak its pending-stack entry into a LATER, unrelated call for the same
-	 * ability name that completes normally.
+	 * A permission callback that throws and is configured to re-throw must not leak its
+	 * pending-stack entry into a LATER, unrelated call for the same ability name that completes
+	 * normally.
 	 *
 	 * Core's own WP_Ability::invoke_callback() (since 6.9.0) already wraps every permission_callback
 	 * fire in a try/catch and converts any Throwable - including one this plugin's own decorated
@@ -464,8 +464,8 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * Final-gate fix, Codex finding 1 (the minimum test it names): a wp_pre_execute_ability filter
-	 * that recursively executes the SAME ability is not misuse - the Abilities API places no
+	 * A wp_pre_execute_ability filter that recursively executes the SAME ability is not misuse -
+	 * the Abilities API places no
 	 * restriction on same-name nesting. A per-name-only correlation stack cannot tell whose frame
 	 * is on top: the nested call's own cleanup discarded the OUTER call's still-open frame, so the
 	 * outer's own execute_callback later found nothing pending and opened a duplicate row, while

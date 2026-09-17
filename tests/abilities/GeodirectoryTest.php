@@ -40,8 +40,8 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F10: discovery for geodirectory-get-listing used the broader
-	 * edit_posts/edit_others_posts/edit_published_posts family, while its real permission
+	 * Discovery for geodirectory-get-listing must not use the broader
+	 * edit_posts/edit_others_posts/edit_published_posts family, since its real permission
 	 * callback (aafm_perm_geodirectory_get()) requires the literal edit_posts capability as an
 	 * unconditional first check. A role holding only edit_others_posts saw the tool in
 	 * tools/list but could never actually call it - discovery must match that literal floor.
@@ -97,15 +97,16 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * R3-1 (1.7.5 deferred, round 3): this create never sets a post_date, so core's own
+	 * This create never sets a post_date, so core's own
 	 * publish<->future date transition (wp_insert_post()) lands a status:"future" request at
-	 * "publish" - the confirmation used to compare against the literal requested "future",
-	 * disagree, and roll back (delete) the listing that had just been legitimately created.
+	 * "publish" instead. The confirmation must therefore compare against the actual resulting
+	 * status rather than the literal requested "future", or it would disagree and roll back
+	 * (delete) a listing that had just been legitimately created.
 	 *
 	 * What would break this: reverting the create path to confirm post_status against $status
 	 * makes this assert an error instead of an array, and the listing would not survive.
 	 *
-	 * R4-7 (1.7.5 deferred, round 4): "future" is outside the create-listing ability's own public
+	 * "future" is outside the create-listing ability's own public
 	 * schema (geodirectory.php's status argument is `'enum' => array( 'publish', 'draft',
 	 * 'pending' )`), so no MCP agent request can actually reach this executor with that value -
 	 * this test reaches it only because it calls aafm_exec_geodirectory_create_listing() directly,
@@ -166,9 +167,8 @@ final class GeodirectoryTest extends TestCase {
 
 	/**
 	 * An Author must not be able to read another user's draft/private listing via
-	 * aafm/geodirectory-get-listing - only edit_posts plus a post-type check was checked before
-	 * this fix, with no per-object ownership gate for a non-public listing (Codex round C
-	 * finding 4).
+	 * aafm/geodirectory-get-listing - edit_posts plus a post-type check alone is not enough;
+	 * a non-public listing also needs a per-object ownership gate.
 	 */
 	public function test_get_listing_denies_a_non_public_listing_the_caller_cannot_edit(): void {
 		$owner_id = self::factory()->user->create( array( 'role' => 'author' ) );
@@ -204,10 +204,10 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * R3-5 (1.7.5 deferred, round 3): a password-protected published listing is still a PUBLIC
-	 * status, so it used to pass the public-status shortcut with no password check at all - a
-	 * Contributor could read another author's password-protected listing body. Mirrors the fix
-	 * in CommentsReadTest for the same class of bug.
+	 * A password-protected published listing is still a PUBLIC
+	 * status, so the public-status shortcut must not skip the password check - otherwise a
+	 * Contributor could read another author's password-protected listing body. Mirrors the same
+	 * check in CommentsReadTest for the identical class of bug.
 	 *
 	 * What would break this: reverting aafm_perm_geodirectory_get() to skip the
 	 * post_password_required() check makes the first assertion below fail (a non-owning
@@ -233,8 +233,7 @@ final class GeodirectoryTest extends TestCase {
 
 	/**
 	 * The list query must not disclose another user's draft/private listing either - 'any'
-	 * status with no 'perm' argument returns every listing regardless of ownership (Codex round C
-	 * finding 4, second half).
+	 * status with no 'perm' argument returns every listing regardless of ownership.
 	 */
 	public function test_get_listings_excludes_a_private_listing_the_caller_cannot_edit(): void {
 		$owner_id   = self::factory()->user->create( array( 'role' => 'author' ) );
@@ -265,11 +264,11 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round MEDIUM: filtering after WP_Query had already paginated and counted meant
-	 * an inaccessible listing could occupy a page slot the caller's own listing should have had,
-	 * while `total` still counted listings the caller never saw. Twenty newer, inaccessible drafts
-	 * owned by another author plus the caller's own older draft: page 1 must still surface the
-	 * caller's listing, and `total` must equal exactly what the caller can see (1), not 21.
+	 * Filtering after WP_Query has already paginated and counted would let
+	 * an inaccessible listing occupy a page slot the caller's own listing should have had,
+	 * while `total` would still count listings the caller never saw. Twenty newer, inaccessible
+	 * drafts owned by another author plus the caller's own older draft: page 1 must still surface
+	 * the caller's listing, and `total` must equal exactly what the caller can see (1), not 21.
 	 */
 	public function test_get_listings_authorizes_before_pagination_and_counting(): void {
 		$other_id = self::factory()->user->create( array( 'role' => 'author' ) );
@@ -300,11 +299,11 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 2 MEDIUM: an earlier fix capped the underlying fetch at a single
-	 * 2000-row batch, silently dropping every listing past it with no truncation signal -
-	 * reproducing the exact same undercount bug the fix above was meant to close, just at a
-	 * larger scale. Forces a tiny batch size so 7 real listings require 3 batches (3+3+1) to
-	 * prove the loop actually exhausts the table instead of stopping after one page.
+	 * The underlying fetch must not cap at a single batch: capping silently drops every
+	 * listing past it with no truncation signal, the same undercount failure the test above
+	 * guards against, just at a larger scale. Forces a tiny batch size so 7 real listings
+	 * require 3 batches (3+3+1) to prove the loop actually exhausts the table instead of
+	 * stopping after one page.
 	 */
 	public function test_get_listings_exhausts_every_batch_not_just_the_first(): void {
 		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 3 );
@@ -330,7 +329,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F8: the enumeration loop caps out silently after a fixed number of full
+	 * The enumeration loop caps out silently after a fixed number of full
 	 * batches, undercounting `total` with no signal. `truncated` must be false below the cap.
 	 */
 	public function test_get_listings_reports_not_truncated_below_the_cap(): void {
@@ -352,7 +351,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F8: lowering the (filterable) batch cap, rather than creating a thousand-plus
+	 * Lowering the (filterable) batch cap, rather than creating a thousand-plus
 	 * posts, is the only practical way to exercise the cap in a test. With a batch size of 2 and
 	 * a cap of 2, the loop can examine at most 4 rows before breaking - 5 real rows guarantees
 	 * the cap is hit.
@@ -379,7 +378,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 LOW: hitting the cap only proves the last permitted batch came back
+	 * Hitting the cap only proves the last permitted batch came back
 	 * full, not that a row was actually omitted - the row count here is an exact multiple of the
 	 * batch size (cap 2 x batch size 2 = 4 rows, 4 real rows), so nothing was left out and
 	 * `truncated` must be false.
@@ -406,7 +405,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5, R5-7: the cap-lookahead probe used only 'perm' => 'readable', which does not
+	 * The cap-lookahead probe must not rely on 'perm' => 'readable' alone, which does not
 	 * exclude a draft/pending row the caller cannot edit - so a trailing draft owned by another
 	 * user could flip `truncated` to true even though the caller's own visible set (four published
 	 * listings) was already complete. The author here cannot edit the other user's draft, so it
@@ -449,10 +448,10 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-5: the cap-lookahead probe used to fetch only ONE extra batch. If every
-	 * row in that single batch happened to be invisible to the caller, a later visible row past
-	 * it was still missed and `truncated` came back false even though more visible data existed.
-	 * Four visible listings exactly fill the cap (batch size 2, cap 2), a full batch of another
+	 * The cap-lookahead probe must fetch more than one extra batch: if every
+	 * row in a single extra batch happened to be invisible to the caller, a later visible row past
+	 * it would still be missed and `truncated` would come back false even though more visible data
+	 * existed. Four visible listings exactly fill the cap (batch size 2, cap 2), a full batch of another
 	 * user's drafts follows (all invisible), and one more visible listing sits after that - the
 	 * probe must keep advancing past the all-invisible batch to find it.
 	 */
@@ -500,7 +499,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, B6-5: the mirror case. Once the probe has advanced past every invisible
+	 * The mirror case: once the probe has advanced past every invisible
 	 * batch and reaches the real end of the data with nothing visible left, `truncated` must
 	 * settle back to false rather than get stuck true from having looped at all.
 	 */
@@ -541,9 +540,9 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 MEDIUM: the batch cap filter had no ceiling, so a hook returning
-	 * PHP_INT_MAX defeated the cap's purpose entirely. It may only narrow the cap, never raise it
-	 * past the hard 1000 ceiling.
+	 * The batch cap filter must have a ceiling: a hook returning
+	 * PHP_INT_MAX must not be able to defeat the cap's purpose entirely. It may only narrow the
+	 * cap, never raise it past the hard 1000 ceiling.
 	 */
 	public function test_geodirectory_listing_batch_cap_cannot_be_raised_past_1000(): void {
 		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => PHP_INT_MAX );
@@ -556,7 +555,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5, R5-6: the test above only proves aafm_geodirectory_listing_batch_cap()
+	 * The test above only proves aafm_geodirectory_listing_batch_cap()
 	 * itself clamps correctly - it says nothing about whether the executor's own loop actually
 	 * calls that helper rather than reading the raw filter value. A 'the_posts' filter that keeps
 	 * padding every batch back up to full size, the way a pathological host filter would, means
@@ -575,7 +574,7 @@ final class GeodirectoryTest extends TestCase {
 			)
 		);
 
-		// B7 (1.7.5 deferred): a broken production clamp used to have nothing to stop this loop -
+		// Without this clamp, a broken production loop would have nothing to stop it -
 		// the padding below reports a full batch forever, so a regression would run until PHP's
 		// own execution-time limit killed the test, not until an assertion failed. $query_count
 		// turns that into a bounded, diagnosable failure: 1010 comfortably covers the documented
@@ -616,9 +615,9 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-5: the test above only checks `truncated`, not how many real queries it
-	 * took to get there - it stayed green while the disambiguation probe quietly doubled the
-	 * documented ceiling (1000 for enumeration, then a fresh 1000 more for the probe). Padding
+	 * The test above only checks `truncated`, not how many real queries it
+	 * takes to get there, so it would stay green even if the disambiguation probe quietly doubled
+	 * the documented ceiling (1000 for enumeration, then a fresh 1000 more for the probe). Padding
 	 * every batch with drafts the caller cannot edit means the probe can never resolve truncation
 	 * by finding a visible row, so it can only stop by exhausting its own reserve - proving the
 	 * combined total stays near the documented 1000-iteration ceiling instead of doubling it.
@@ -640,7 +639,7 @@ final class GeodirectoryTest extends TestCase {
 			)
 		);
 
-		// F12 (1.7.5 deferred): the same escape as the sibling ceiling test above (B7) - a broken
+		// The same escape as the sibling ceiling test above - a broken
 		// production clamp has nothing else to stop this loop, since the padding below reports a
 		// full batch forever with the cap filtered to PHP_INT_MAX. Without this, a regression here
 		// hangs until PHP's own execution-time limit kills the test instead of failing on the
@@ -676,7 +675,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 3 MEDIUM: an OFFSET-based batch loop is unstable under mutation - trashing
+	 * An OFFSET-based batch loop is unstable under mutation - trashing
 	 * a row from an earlier batch shifts every later OFFSET window down by one, so the next batch
 	 * skips exactly one real row. Keyset pagination (WHERE ID > last-seen-ID, no offset at all)
 	 * must not exhibit this: the 4th listing by ID is exactly the row an offset-based scan would
@@ -720,11 +719,11 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 MEDIUM: the keyset filter was attached to 'posts_where' unscoped, so it
-	 * ran against EVERY WP_Query built while it was active, not only this function's own batch
+	 * The keyset filter must not attach to 'posts_where' unscoped: unscoped, it would run against
+	 * EVERY WP_Query built while active, not only this function's own batch
 	 * queries - an unrelated nested WP_Query (fired from any hook during the scan) for an
 	 * already-passed ID would incorrectly receive the same "ID > last-seen" clause and come back
-	 * empty. A private per-call marker in the query args must keep the filter scoped to its own
+	 * empty. A private per-call marker in the query args keeps the filter scoped to its own
 	 * queries only.
 	 */
 	public function test_get_listings_does_not_contaminate_an_unrelated_nested_query(): void {
@@ -797,8 +796,8 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F4: the title/content wp_update_post() call was checked only via
-	 * is_wp_error(), never confirmed by reread - a wp_insert_post_data filter that reverts the
+	 * The title/content wp_update_post() call must be confirmed by reread, not merely
+	 * checked via is_wp_error() - a wp_insert_post_data filter that reverts the
 	 * title back to its old value must surface as a structured error, not a success response
 	 * claiming the requested title landed.
 	 */
@@ -870,12 +869,12 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round MEDIUM: geodir_save_post_meta()'s return value never reflects a real
+	 * geodir_save_post_meta()'s return value never reflects a real
 	 * underlying write failure (it returns false only for a missing column, nothing at all
 	 * otherwise), so a create that silently failed to persist its street field would otherwise be
 	 * reported as a successful listing with an empty/stale address - the same silent-wrong-answer
-	 * shape this release exists to stop. A newly created listing whose fields cannot be confirmed
-	 * must be removed, not left half-created under a success response.
+	 * shape this confirmation logic exists to stop. A newly created listing whose fields cannot be
+	 * confirmed must be removed, not left half-created under a success response.
 	 */
 	public function test_create_rolls_back_and_errors_when_a_field_write_cannot_be_confirmed(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -910,9 +909,9 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5, R5-4: create only ever verified the address/location fields (the test
-	 * above), never the core title/content/status the update path already confirms (Codex hunt
-	 * F4) - a wp_insert_post_data filter that silently reverts the requested title must roll the
+	 * Create must also verify the core title/content/status fields, not only the
+	 * address/location fields the test above covers, the way the update path already does -
+	 * a wp_insert_post_data filter that silently reverts the requested title must roll the
 	 * create back and report an error, not a success response claiming the requested title landed.
 	 */
 	public function test_create_rolls_back_and_errors_when_the_title_write_is_vetoed(): void {
@@ -942,10 +941,10 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6 B6-3: the title/content/status confirmation compared the fresh read against
-	 * the pre-write intent, so a legitimate save-time normalization was indistinguishable from a
-	 * veto - and here that false mismatch DELETES an otherwise valid listing
-	 * (aafm_geodirectory_rollback_unconfirmed_create()), not merely reports an error. An acting
+	 * If the title/content/status confirmation compared the fresh read naively against
+	 * the pre-write intent, a legitimate save-time normalization would be indistinguishable from a
+	 * veto - and here that false mismatch would DELETE an otherwise valid listing
+	 * (aafm_geodirectory_rollback_unconfirmed_create()), not merely report an error. An acting
 	 * user who lacks unfiltered_html gets core's own title_save_pre kses on save (kses_init()),
 	 * which unconditionally entity-encodes a bare ampersand the same way it always does for that
 	 * role. The listing must survive with its title in the canonical, actually-stored form.
@@ -961,12 +960,12 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7 R7-4: core's own wp_insert_post() sanitizes a CREATE's fields
+	 * Core's own wp_insert_post() sanitizes a CREATE's fields
 	 * (sanitize_post( $postarr, 'db' ), wp-includes/post.php) BEFORE the row exists and before an
-	 * id is assigned - sanitize_post() defaults the missing id to 0. The confirmation guard used
-	 * to recompute the expected value with the newly assigned, positive id instead, so an
-	 * id-sensitive registered filter could disagree with what core actually did and the guard
-	 * would roll back (delete) an otherwise valid listing.
+	 * id is assigned - sanitize_post() defaults the missing id to 0. The confirmation guard must
+	 * recompute the expected value with that same id 0, not the newly assigned, positive id:
+	 * recomputing with the wrong id would let an id-sensitive registered filter disagree with what
+	 * core actually did, rolling back (deleting) an otherwise valid listing.
 	 *
 	 * Pre_post_title/title_save_pre receive only the value, never the post id, as an argument
 	 * (verified by reading sanitize_post_field()'s 'db' branch and by probing it directly against
@@ -998,7 +997,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 2 MEDIUM: a legitimate third-party filter on 'geodir_get_post_info' that
+	 * A legitimate third-party filter on 'geodir_get_post_info' that
 	 * merely reformats the returned value (not GeoDirectory's own default behavior - something
 	 * another active plugin or theme could add) must not make the write-confirmation check see a
 	 * mismatch and wrongly roll back a listing that was actually written correctly.
@@ -1032,10 +1031,10 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 3 MEDIUM: geodir_get_post_info() has a SECOND filter point the round-2
-	 * fix missed - 'geodir_post_info_query' reshapes the SQL query itself, before either the
-	 * database read or the round-2 filter ever run. Reproduces Codex's own repro: a filter that
-	 * rewrites the query to return an uppercased street column. The confirmation must not go
+	 * geodir_get_post_info() has a SECOND filter point beyond the one the test
+	 * above covers - 'geodir_post_info_query' reshapes the SQL query itself, before either the
+	 * database read or that other filter ever runs. A filter that rewrites the query to return an
+	 * uppercased street column reproduces the same class of bug. The confirmation must not go
 	 * through geodir_get_post_info() at all (query filter included), only a direct table read.
 	 */
 	public function test_create_survives_a_decorating_geodir_post_info_query_filter(): void {
@@ -1090,10 +1089,10 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-6: the confirmation SELECT in aafm_geodirectory_read_fields_unfiltered()
-	 * used to shape a failed read or a missing row into the same display defaults ('', 0.0) as a
-	 * row that legitimately has an empty street - so a request to CLEAR the street, combined with
-	 * a verification read that fails for an unrelated reason, used to certify success even though
+	 * The confirmation SELECT in aafm_geodirectory_read_fields_unfiltered()
+	 * must not shape a failed read or a missing row into the same display defaults ('', 0.0) as a
+	 * row that legitimately has an empty street - otherwise a request to CLEAR the street, combined
+	 * with a verification read that fails for an unrelated reason, would certify success even though
 	 * the real UPDATE never ran and the old, non-empty street is still what is actually stored.
 	 * Forces exactly that: the vendor write for 'street' silently fails (the existing stub
 	 * failure filter), AND the confirmation SELECT that would normally catch the mismatch is
@@ -1152,9 +1151,9 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 9 MEDIUM: aafm_exec_geodirectory_create_listing() built its own
-	 * wp_insert_post() call instead of routing through aafm_insert_post(), so none of the
-	 * operator's three global content-safety settings ever applied to it.
+	 * aafm_exec_geodirectory_create_listing() must route through aafm_insert_post() rather than
+	 * building its own wp_insert_post() call, or none of the operator's three global
+	 * content-safety settings would apply to it.
 	 */
 	public function test_create_listing_honours_force_draft_even_for_an_authorized_publish_request(): void {
 		update_option( 'aafm_force_draft', true );

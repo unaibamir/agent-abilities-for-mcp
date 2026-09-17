@@ -83,8 +83,8 @@ final class TecEventsWireTest extends TestCase {
 					'start_date' => '2027-01-01 09:00:00',
 					'end_date'   => '2027-01-01 12:00:00',
 					// tec-create-event defaults to draft, and tec-get-events' default list is
-					// published-only (Codex round-b finding 6) - explicit here so this round trip
-					// exercises the ordinary case rather than accidentally depending on both
+					// published-only, so the status is explicit here. That keeps this round trip
+					// exercising the ordinary case rather than accidentally depending on both
 					// defaults staying "any".
 					'status'     => 'publish',
 				),

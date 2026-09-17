@@ -100,9 +100,8 @@ final class RichPostTest extends TestCase {
 	}
 
 	/**
-	 * Fix round (Task 15 sweep, finding C1): the auto-excerpt fallback must delegate to
-	 * get_the_excerpt() so a site's excerpt_length customization is honored, exactly like every
-	 * other part of the same site.
+	 * The auto-excerpt fallback must delegate to get_the_excerpt() so a site's excerpt_length
+	 * customization is honored, exactly like every other part of the same site.
 	 */
 	public function test_rich_post_auto_excerpt_honors_excerpt_length_filter(): void {
 		add_filter( 'excerpt_length', static fn() => 3 );

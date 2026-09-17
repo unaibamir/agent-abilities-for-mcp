@@ -59,9 +59,9 @@ final class MenuItemVisibilityCorpusTest extends TestCase {
 			'post_type_archive, real type'    => array( 'live_archive', true ),
 
 			// -----------------------------------------------------------------
-			// Round-3 traffic simulation, L4-01: the target was trashed after
-			// the item was created. Core hides it; the ability listed it, url
-			// degraded to a bare ?p= query.
+			// The target was trashed after the item was created. Core hides it,
+			// but the ability listed it anyway, with the url degraded to a bare
+			// ?p= query.
 			// -----------------------------------------------------------------
 			'post_type item, TRASHED post'    => array( 'trashed_post', false ),
 			'post_type item, TRASHED page'    => array( 'trashed_page', false ),

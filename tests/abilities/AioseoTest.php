@@ -232,8 +232,8 @@ final class AioseoTest extends TestCase {
 	/**
 	 * Companion to the vendor-save-path test above: fields this ability refuses (anything outside
 	 * its allowlisted input schema) must stay refused after the delegation rewrite. Schema-level
-	 * rejection happens before the executor runs, so this is unaffected by the save-path change,
-	 * but the fix round dispatch asks for it to be pinned explicitly rather than assumed.
+	 * rejection happens before the executor runs, so this is unaffected by the save-path change.
+	 * It is pinned explicitly here rather than assumed.
 	 */
 	public function test_aioseo_update_post_still_rejects_an_unallowlisted_field_after_the_savepost_rewrite(): void {
 		$this->acting_as( 'administrator' );

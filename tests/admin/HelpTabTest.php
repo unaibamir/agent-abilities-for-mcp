@@ -70,7 +70,7 @@ final class HelpTabTest extends TestCase {
 	}
 
 	/**
-	 * aafm_rate_limit_consume() (includes/safety.php) keys its transient bucket by
+	 * The aafm_rate_limit_consume() helper (includes/safety.php) keys its transient bucket by
 	 * user_id alone, so two connections authenticated as the same agent user share one
 	 * budget - the help text must not claim the opposite ("do not eat into each other's budget").
 	 */

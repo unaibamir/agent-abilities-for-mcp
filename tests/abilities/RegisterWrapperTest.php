@@ -142,7 +142,7 @@ final class RegisterWrapperTest extends TestCase {
 	}
 
 	/**
-	 * T3-4: a permission callback returning a non-true, non-false value (null) is still a
+	 * A permission callback returning a non-true, non-false value (null) is still a
 	 * denial - the WP Abilities API admits only true - so it must be audited as denied.
 	 */
 	public function test_null_permission_return_is_logged_as_denied(): void {
@@ -168,7 +168,7 @@ final class RegisterWrapperTest extends TestCase {
 	}
 
 	/**
-	 * L5: the activity log recorded argument KEYS but never how much data a list/read call
+	 * The activity log records argument KEYS but never how much data a list/read call
 	 * actually returned. A read ability whose result carries a 'total' key (the shape every
 	 * list ability in this plugin already returns - see aafm_exec_get_posts()) logs that count.
 	 */
@@ -300,7 +300,7 @@ final class RegisterWrapperTest extends TestCase {
 	}
 
 	/**
-	 * M16: a plain (non-OAuth) call - no bearer ever resolved this request - logs client_id as ''.
+	 * A plain (non-OAuth) call - no bearer ever resolved this request - logs client_id as ''.
 	 */
 	public function test_activity_log_has_no_client_id_for_a_non_oauth_call(): void {
 		$this->acting_as( 'administrator' );
@@ -323,7 +323,7 @@ final class RegisterWrapperTest extends TestCase {
 	}
 
 	/**
-	 * M16: once an OAuth bearer has resolved a client_id for the request (see
+	 * Once an OAuth bearer has resolved a client_id for the request (see
 	 * aafm_oauth_current_client_id() in includes/oauth/validator.php, populated at the end of
 	 * aafm_oauth_resolve_current_user()), a successful ability call's activity row is attributed
 	 * to that client. Calling the read-only recorder directly here stands in for a full bearer
@@ -352,7 +352,7 @@ final class RegisterWrapperTest extends TestCase {
 	}
 
 	/**
-	 * M16: a denied call under a resolved OAuth client is attributed too, not only a success.
+	 * A denied call under a resolved OAuth client is attributed too, not only a success.
 	 */
 	public function test_activity_log_attributes_denied_call_to_resolved_oauth_client(): void {
 		$this->acting_as( 'subscriber' );

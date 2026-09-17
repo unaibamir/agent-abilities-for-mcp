@@ -83,7 +83,7 @@ final class LogTest extends TestCase {
 	}
 
 	/**
-	 * M16: the activity log carries a client_id column so an OAuth-attributed call can be
+	 * The activity log carries a client_id column so an OAuth-attributed call can be
 	 * traced back to the client that made it. Additive dbDelta migration, mirroring the pattern
 	 * proven in tests/oauth/SchemaTest.php's test_scope_column_present_on_codes_and_tokens().
 	 */

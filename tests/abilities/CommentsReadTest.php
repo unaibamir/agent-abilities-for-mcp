@@ -141,10 +141,10 @@ final class CommentsReadTest extends TestCase {
 	}
 
 	/**
-	 * Phase 3 review P1: get-comments leaked approved comment bodies on non-public
-	 * posts. A read-only caller passing the id of a private/draft post must be
-	 * DENIED before any of that post's approved comment bodies are returned -
-	 * get-comments needs the same per-object visibility gate the post itself has.
+	 * The get-comments ability must not leak approved comment bodies on non-public posts. A
+	 * read-only caller passing the id of a private/draft post must be DENIED before any of
+	 * that post's approved comment bodies are returned - it needs the same per-object
+	 * visibility gate the post itself has.
 	 */
 	public function test_get_comments_denies_subscriber_on_non_public_post(): void {
 		$post = self::factory()->post->create( array( 'post_status' => 'private' ) );

@@ -411,7 +411,7 @@ final class IntegrationsTabTest extends TestCase {
 	}
 
 	/**
-	 * WS-B: a WooCommerce site running below the abilities' required version floor is genuinely
+	 * A WooCommerce site running below the abilities' required version floor is genuinely
 	 * active as a WP plugin - it must NOT get the generic "Not installed"/"Inactive" copy, but a
 	 * specific "requires WooCommerce X.Y+" reason naming the version actually detected.
 	 */

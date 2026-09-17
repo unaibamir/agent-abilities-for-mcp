@@ -1235,7 +1235,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * T2-3: a failed variation delete (the WC data store reports failure) returns the generic
+	 * A failed variation delete (the WC data store reports failure) returns the generic
 	 * error, not deleted:true, and the variation is still present.
 	 */
 	public function test_delete_variation_store_failure_returns_error(): void {

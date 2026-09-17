@@ -108,10 +108,11 @@ final class WooShippingTest extends TestCase {
 	/**
 	 * Every seeded zone comes back with its real fields and the total matches.
 	 *
-	 * Guards the C1 regression: WC_Shipping_Zones::get_zones() has no zone_object key, so the
-	 * old reader (which kept only rows whose zone_object was a WC_Shipping_Zone) dropped every
-	 * real zone and returned {"zones":[],"total":0} on a store that actually had zones. The
-	 * stub now mirrors the real get_zones() shape, so this asserts the fix reads the row fields.
+	 * Guards against a silent-empty regression: WC_Shipping_Zones::get_zones() has no
+	 * zone_object key, so a reader that keeps only rows whose zone_object is a
+	 * WC_Shipping_Zone would drop every real zone and return {"zones":[],"total":0} on a
+	 * store that actually has zones. The stub mirrors the real get_zones() shape, so this
+	 * asserts the reader reads the row fields directly instead.
 	 */
 	public function test_list_shipping_zones_returns_seeded_zones(): void {
 		$this->acting_as( 'administrator' );
@@ -986,13 +987,13 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * FIX-3 item 2 (sweep finding A1): the shared zone resolver used by 7 of this file's 8
-	 * abilities now delegates to WC_Shipping_Zones::get_zone() instead of hand-instantiating
-	 * WC_Shipping_Zone in a try/catch with a redundant id re-check. Traced both paths line by
-	 * line against real WooCommerce source and found no observable difference today (the vendor
-	 * resolver does the identical instantiate-inside-try/catch internally), so there is no
-	 * behavioural difference to drive a test red - this pins the source-level fact instead, as the
-	 * finding predicted, and states plainly it could not go red any other way.
+	 * The shared zone resolver used by 7 of this file's 8 abilities delegates to
+	 * WC_Shipping_Zones::get_zone() rather than hand-instantiating WC_Shipping_Zone in a
+	 * try/catch with a redundant id re-check. Traced both paths line by line against real
+	 * WooCommerce source and found no observable difference today (the vendor resolver does
+	 * the identical instantiate-inside-try/catch internally), so there is no behavioural
+	 * difference to drive a test red - this pins the source-level fact instead, and states
+	 * plainly it could not go red any other way.
 	 */
 	public function test_zone_resolver_delegates_to_wc_shipping_zones(): void {
 		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/shipping.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.

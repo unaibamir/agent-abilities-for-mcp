@@ -128,7 +128,7 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
-	 * T2-2: when the model's save() reports failure (nothing persisted in the custom table), the
+	 * When the model's save() reports failure (nothing persisted in the custom table), the
 	 * write returns the generic error rather than a successful stale read.
 	 */
 	public function test_aioseo_update_save_failure_returns_error(): void {
@@ -148,7 +148,7 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
-	 * L11 read-back tolerance: AIOSEO can reformat a URL on save (a trailing-slash change, re-encoding).
+	 * Read-back tolerance: AIOSEO can reformat a URL on save (a trailing-slash change, re-encoding).
 	 * A write that genuinely persisted must not be reported as a failure just because it reads back in
 	 * that normalized form. Here the store strips the trailing slash the caller sent; the tolerant
 	 * read-back still counts the write as a success and returns the stored (normalized) value.
@@ -445,7 +445,7 @@ final class AioseoTest extends TestCase {
 
 	/**
 	 * Setting a twitter_title (a Twitter-specific text field) must likewise turn off twitter_use_og so
-	 * the written title renders instead of the OG title - the same M2 inertness the image write hits.
+	 * the written title renders instead of the OG title - the same use_og inertness the image write hits.
 	 */
 	public function test_aioseo_twitter_title_write_disables_use_og(): void {
 		$admin_id = $this->acting_as( 'administrator' );

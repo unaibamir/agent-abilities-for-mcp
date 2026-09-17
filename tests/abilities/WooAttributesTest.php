@@ -229,7 +229,7 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	public function test_update_attribute_field_isolation_preserves_archives_and_order(): void {
-		// M3: below WC 9.1, wc_update_attribute() resets any field the caller omits back to its
+		// Below WC 9.1, wc_update_attribute() resets any field the caller omits back to its
 		// default, so a name-only PATCH silently wiped has_archives and order_by. The version-safe
 		// fix always resends the CURRENT value for every untouched field, so this must hold
 		// regardless of the WooCommerce version installed.
@@ -242,8 +242,8 @@ final class WooAttributesTest extends TestCase {
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'Colour', $res['name'] );
-		$this->assertFalse( $res['has_archives'], 'has_archives is untouched (the M3 destructive field).' );
-		$this->assertSame( 'menu_order', $res['order_by'], 'order_by is untouched (the M3 destructive field).' );
+		$this->assertFalse( $res['has_archives'], 'has_archives is untouched (the version-cliff destructive field).' );
+		$this->assertSame( 'menu_order', $res['order_by'], 'order_by is untouched (the version-cliff destructive field).' );
 	}
 
 	public function test_update_attribute_unknown_id_is_graceful_error(): void {

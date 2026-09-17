@@ -441,7 +441,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * T2-4: requesting a non-simple product type must NOT silently create a simple product and
+	 * Requesting a non-simple product type must NOT silently create a simple product and
 	 * report success. The schema enumerates variable/grouped/external but this generic create
 	 * only builds simple products, so a non-simple request is rejected with an error.
 	 */
@@ -1024,7 +1024,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * T2-3: when the WC data store reports the delete failed, the ability returns the generic
+	 * When the WC data store reports the delete failed, the ability returns the generic
 	 * error rather than deleted:true. The product is still present afterwards.
 	 */
 	public function test_delete_product_store_failure_returns_error(): void {

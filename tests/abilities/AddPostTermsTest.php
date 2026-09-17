@@ -1,7 +1,7 @@
 <?php
 /**
  * Append-terms-to-post ability: APPENDS terms (does not replace), is gated per-object
- * on edit_post AND the taxonomy's assign_terms cap + term-existence (reused C2 validator),
+ * on edit_post AND the taxonomy's assign_terms cap + term-existence (reused validator),
  * and returns the post's resulting terms in that taxonomy.
  *
  * @package AgentAbilitiesForMCP
@@ -113,7 +113,7 @@ final class AddPostTermsTest extends TestCase {
 				'post_type'   => 'post',
 			)
 		);
-		// A post_tag id passed as a category term must be rejected by the C2 validator.
+		// A post_tag id passed as a category term must be rejected by the term-existence validator.
 		$this->assertInstanceOf(
 			WP_Error::class,
 			aafm_exec_add_post_terms(

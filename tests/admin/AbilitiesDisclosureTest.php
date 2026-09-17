@@ -43,7 +43,7 @@ final class AbilitiesDisclosureTest extends TestCase {
 	}
 
 	/**
-	 * aafm/get-post and aafm/get-page (aafm_exec_get_post()/aafm_exec_get_page() in
+	 * Both aafm/get-post and aafm/get-page (aafm_exec_get_post()/aafm_exec_get_page() in
 	 * includes/abilities/) both call aafm_rich_post() with include_content left at its
 	 * default of true, so a single-object read DOES return the full body - the disclosure
 	 * must not claim the opposite.

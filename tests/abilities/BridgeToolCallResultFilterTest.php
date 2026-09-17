@@ -108,8 +108,8 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	 * filter exists to prevent (upstream mcp-adapter#253). {"data":[]} is the correct wire shape
 	 * here, matching what 1.6.0 sent and what every other non-empty list gets.
 	 *
-	 * KNOWN LIMITATION, deliberately not fixed in 1.6.1 (the schema-fidelity plan's MEDIUM
-	 * finding M2), and a characterization pin, not an aspiration: the wrap is unconditional for
+	 * KNOWN LIMITATION, deliberately unfixed, and a characterization pin, not an aspiration: the
+	 * wrap is unconditional for
 	 * ANY empty bridged result. A reasoned consequence - not a state this test constructs, since
 	 * the filter never sees a schema - is that a foreign ability declaring {type:object,
 	 * additionalProperties:false} and returning array() gets a {"data":[]} its own schema

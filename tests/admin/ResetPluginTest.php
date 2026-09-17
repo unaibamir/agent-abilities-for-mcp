@@ -182,7 +182,7 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
-	 * aafm_reset_plugin() also empties the activity log, so it must leave the same
+	 * The aafm_reset_plugin() function also empties the activity log, so it must leave the same
 	 * tamper-evident marker aafm_ajax_clear_log() does - proving who reset the plugin and when,
 	 * rather than leaving a completely silent, empty log.
 	 */
@@ -201,7 +201,7 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
-	 * aafm_reset_plugin() truncates all four OAuth data tables (clients, codes, access
+	 * The aafm_reset_plugin() function truncates all four OAuth data tables (clients, codes, access
 	 * tokens, consents) - see its own docblock - but the confirm dialog the operator actually
 	 * reads before clicking never said so. State it, alongside the other real consequences.
 	 */

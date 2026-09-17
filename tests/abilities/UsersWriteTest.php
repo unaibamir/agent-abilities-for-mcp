@@ -189,7 +189,7 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	/**
-	 * Reviewer note M2: refuse to demote the SOLE remaining administrator to a
+	 * Refuse to demote the SOLE remaining administrator to a
 	 * non-admin role. promote_users gates the role change itself; this floor sits on
 	 * top so a capable admin can't lock the site out of administration by demoting
 	 * the last admin (the mirror image of the delete-user last-admin guard).
@@ -236,7 +236,7 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	/**
-	 * T3-5: with more than one administrator, demoting one IS allowed and runs through the
+	 * With more than one administrator, demoting one IS allowed and runs through the
 	 * last-admin critical section without breaking the happy path.
 	 */
 	public function test_update_user_demote_allowed_when_other_admins_remain(): void {
@@ -256,7 +256,7 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	/**
-	 * T3-5: the named-lock critical-section helper runs its callback and returns its value
+	 * The named-lock critical-section helper runs its callback and returns its value
 	 * (and releases the lock so a second acquisition succeeds in the same process).
 	 */
 	public function test_named_lock_runs_callback_and_releases(): void {
@@ -316,7 +316,7 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	/**
-	 * Reviewer note M1: prove the last-admin guard in ISOLATION from the self-guard.
+	 * Prove the last-admin guard in ISOLATION from the self-guard.
 	 *
 	 * The actor must be capable (delete_users + delete_user) but must NOT be the victim,
 	 * and the victim must be the sole remaining administrator. We grant the actor

@@ -242,7 +242,7 @@ final class LogInternalsTest extends TestCase {
 	}
 
 	/**
-	 * The core of F2: a failed migration must NOT advance the version, and must flag a bounded
+	 * A failed migration must NOT advance the version, and must flag a bounded
 	 * error, so the admin_init / rest_api_init self-heal keeps retrying instead of going quiet
 	 * and losing the security trail.
 	 */

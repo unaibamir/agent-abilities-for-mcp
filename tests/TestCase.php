@@ -67,7 +67,7 @@ abstract class TestCase extends WP_UnitTestCase {
 			}
 		}
 		delete_option( 'aafm_allowed_post_types' );
-		// M16: the resolved-client_id store is a process-wide static (see the file header on
+		// The resolved-client_id store is a process-wide static (see the file header on
 		// aafm_oauth_current_client_id()), so a test that resolves an OAuth bearer must not leak
 		// that client_id into an unrelated test's activity-log assertions.
 		if ( function_exists( 'aafm_oauth_current_client_id' ) ) {

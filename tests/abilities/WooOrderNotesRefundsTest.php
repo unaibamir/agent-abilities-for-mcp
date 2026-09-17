@@ -169,7 +169,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * M12: real WooCommerce never emits the literal string 'user' for added_by - a programmatic
+	 * Real WooCommerce never emits the literal string 'user' for added_by - a programmatic
 	 * note is attributed 'system', a user-added note is attributed the acting user's display name.
 	 * added_by_user must be derived from "not 'system'", not from a check for the literal 'user'.
 	 */
@@ -1269,7 +1269,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * Refund crash risk (Info, audit F3): get_taxes() lives on WC_Order_Item_Product, NOT the base
+	 * Refund crash risk: get_taxes() lives on WC_Order_Item_Product, NOT the base
 	 * WC_Order_Item. A refund targeting a coupon/base-shaped line id (no product_id) must not fatal -
 	 * the executor's method_exists() guard must simply omit refund_tax for that line.
 	 */

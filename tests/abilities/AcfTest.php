@@ -104,7 +104,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * A2: post fields.
+	 * Post fields.
 	 */
 	public function test_get_post_fields_returns_hydrated_values_per_object_gated(): void {
 		$admin_id = $this->acting_as( 'administrator' );
@@ -191,7 +191,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * T2-1: when update_field() fails (nothing stored), the write returns the generic error,
+	 * When update_field() fails (nothing stored), the write returns the generic error,
 	 * not a fake-success refreshed read.
 	 */
 	public function test_update_post_fields_update_failure_returns_error(): void {
@@ -308,7 +308,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * A3: term fields.
+	 * Term fields.
 	 */
 	public function test_get_term_fields_returns_hydrated_values_per_object_gated(): void {
 		$this->acting_as( 'administrator' );
@@ -416,7 +416,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * A4: user fields (PII under the disclaimer).
+	 * User fields (PII under the disclaimer).
 	 *
 	 * Re-seed the ACF stub with a user_email-type field carrying a real address, then re-register.
 	 *
@@ -731,7 +731,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * TF-1: an image/file field stores an attachment ID but ACF reads it back FORMATTED (an array).
+	 * An image/file field stores an attachment ID but ACF reads it back FORMATTED (an array).
 	 * A successful write must not be reported as an error just because the formatted read-back
 	 * differs from the stored attachment id. The verify step has to compare the RAW stored value.
 	 */
@@ -760,7 +760,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * TF-1: a date_picker field stores Ymd but reads back FORMATTED (d/m/Y). A successful write
+	 * A date_picker field stores Ymd but reads back FORMATTED (d/m/Y). A successful write
 	 * must not surface as an error from the format divergence alone.
 	 */
 	public function test_update_post_fields_date_writes_without_false_error(): void {
@@ -788,7 +788,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * TF-1: the genuine-failure detection from T2-1 still holds for a formatted field - when
+	 * The genuine-failure detection above still holds for a formatted field - when
 	 * update_field() stores nothing, the write still returns the generic error.
 	 */
 	public function test_update_post_fields_formatted_field_real_failure_still_errors(): void {
@@ -1036,7 +1036,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * T1-6: a repeater whose sub_fields include a URL subfield must run that nested leaf through
+	 * A repeater whose sub_fields include a URL subfield must run that nested leaf through
 	 * esc_url_raw, not the plain-text sanitizer - otherwise a javascript: scheme stored in a
 	 * repeater row survives to be rendered by a theme. The plain-text sub_field round-trips
 	 * intact, and the structured shape is preserved.

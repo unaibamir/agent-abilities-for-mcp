@@ -243,7 +243,7 @@ final class OutputSchemaFidelityTest extends TestCase {
 	}
 
 	/**
-	 * Task 10 / L3: variation_ids has the identical key-gap risk via get_children(), and it never
+	 * Task 10: variation_ids has the identical key-gap risk via get_children(), and it never
 	 * self-heals - the data store persists the array verbatim on save rather than imploding it
 	 * back to a clean sequence the way the gallery meta does. Same seed-the-gap-directly approach
 	 * as the images test above. Seeded as a VARIABLE product: variation_ids is

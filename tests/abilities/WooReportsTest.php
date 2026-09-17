@@ -258,7 +258,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * T2-5: a seeded completed order with line items produces a non-empty, correct top-sellers
+	 * A seeded completed order with line items produces a non-empty, correct top-sellers
 	 * row - product ids come from order ITEM data, not shop_order post meta.
 	 */
 	public function test_get_top_sellers_aggregates_order_line_items(): void {
@@ -770,7 +770,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * M13: WC_Payment_Gateway declares no `order` property, so order must be derived from the
+	 * WC_Payment_Gateway declares no `order` property, so order must be derived from the
 	 * gateway's position in WooCommerce's own sorted payment_gateways() list, not a fabricated
 	 * property read. The fixture seeds paypal then stripe, so paypal is position 0, stripe is 1.
 	 */
@@ -1064,7 +1064,7 @@ final class WooReportsTest extends TestCase {
 		$ordering = get_option( 'woocommerce_gateway_order' );
 		$this->assertIsArray( $ordering );
 		$this->assertSame( 4, (int) $ordering['paypal'] );
-		$this->assertSame( 4, $res['order'], 'The response order must reflect what was just requested (M13).' );
+		$this->assertSame( 4, $res['order'], 'The response order must reflect what was just requested.' );
 	}
 
 	/**

@@ -213,7 +213,7 @@ final class UserMetaTest extends TestCase {
 	}
 
 	/**
-	 * M3 scalar-guard: an allowlisted key whose stored value is a serialized ARRAY must not
+	 * Scalar guard: an allowlisted key whose stored value is a serialized ARRAY must not
 	 * leak its structure through the read - the reader refuses rather than dumping the array.
 	 */
 	public function test_get_user_meta_scalar_guards_a_serialized_array_value(): void {

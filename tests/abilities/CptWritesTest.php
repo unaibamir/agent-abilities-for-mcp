@@ -79,7 +79,7 @@ final class CptWritesTest extends TestCase {
 		$this->assertSame( 'string', $schema['properties']['post_type']['type'] );
 		$this->assertContains( 'post_type', $schema['required'] );
 		$this->assertContains( 'title', $schema['required'] );
-		// Inherits C2 enrichment fields.
+		// Inherits the shared post/page enrichment fields.
 		$this->assertArrayHasKey( 'terms', $schema['properties'] );
 		$this->assertArrayHasKey( 'featured_media', $schema['properties'] );
 		$this->assertArrayHasKey( 'meta', $schema['properties'] );

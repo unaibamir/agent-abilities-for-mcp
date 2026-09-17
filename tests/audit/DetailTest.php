@@ -466,7 +466,7 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
-	 * F3: create-post's detail reads the real return shape, not a hand-built fixture.
+	 * The create-post ability's detail reads the real return shape, not a hand-built fixture.
 	 *
 	 * Calling the real executor is what would have caught the bare `id` bug an earlier draft of
 	 * this map shipped: aafm_exec_create_post() delegates to the same aafm_insert_post() as
@@ -489,7 +489,7 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
-	 * F3: create-draft's detail reads the real return shape.
+	 * The create-draft ability's detail reads the real return shape.
 	 */
 	public function test_create_draft_detail_reads_the_real_return_shape(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -508,7 +508,7 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
-	 * F3: create-user's detail reads the real return shape (`user.id`, not a top-level `id`).
+	 * The create-user ability's detail reads the real return shape (`user.id`, not a top-level `id`).
 	 */
 	public function test_create_user_detail_reads_the_real_return_shape(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );

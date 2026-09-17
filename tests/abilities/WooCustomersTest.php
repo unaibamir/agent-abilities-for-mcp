@@ -787,12 +787,12 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	// =========================================================================
-	// M4: role input, so a buyer on a non-customer role is not silently invisible.
+	// role input, so a buyer on a non-customer role is not silently invisible.
 	// =========================================================================
 
 	/**
 	 * A buyer who holds the 'subscriber' role (typical on an LMS/membership store) is invisible to
-	 * the default role=customer query - the M4 blind spot. Passing role=all must surface them.
+	 * the default role=customer query - a blind spot. Passing role=all must surface them.
 	 */
 	public function test_list_customers_role_all_includes_non_customer_roles(): void {
 		WcCustomerStubStore::reset();

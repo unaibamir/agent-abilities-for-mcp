@@ -413,7 +413,7 @@ final class WpmlLangAllTest extends TestCase {
 		// The expected sequence is ['en', 'is'], not the iteration order ['is', 'en']: the ambient
 		// language starts at 'is' (fake_wpml_with_post_filtering()'s default), the FIRST iterated
 		// code, so aafm_with_language() legitimately skips firing the action for it (target already
-		// equals ambient - the same optimization A1's report documents for the post-side fix) and
+		// equals ambient - the same optimization documented for the post-side case) and
 		// only switches for 'en', then restores to 'is' in its finally block. Still fully
 		// discriminating: the pre-fix single aafm_with_language('all', ...) call logs ['all', 'is']
 		// instead, so this distinguishes the fix from the defect just as precisely.

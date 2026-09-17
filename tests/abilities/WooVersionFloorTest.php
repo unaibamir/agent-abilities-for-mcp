@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce version floor (WS-B / M3): aafm_woocommerce_active() gates registration on
+ * WooCommerce version floor: aafm_woocommerce_active() gates registration on
  * WooCommerce being both present AND at or above AAFM_WOOCOMMERCE_MIN_VERSION.
  *
  * Deliberately its own file rather than folded into IntegrationDetectionTest: proving the

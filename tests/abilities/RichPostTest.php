@@ -346,7 +346,7 @@ final class RichPostTest extends TestCase {
 	}
 
 	public function test_rich_post_meta_only_includes_allowlisted_scalar_keys(): void {
-		// SECURITY (M3): the allowlisted-meta block is gated on a per-object edit capability, so
+		// SECURITY: the allowlisted-meta block is gated on a per-object edit capability, so
 		// the value-shape assertions must run as a user who can actually edit the post. An admin
 		// edits any post; without this, the meta block is correctly empty and there is nothing to
 		// assert about its contents.
@@ -424,7 +424,7 @@ final class RichPostTest extends TestCase {
 	}
 
 	/**
-	 * SECURITY (M3): the allowlisted-meta block is withheld from a reader who cannot edit the post.
+	 * SECURITY: the allowlisted-meta block is withheld from a reader who cannot edit the post.
 	 *
 	 * The dedicated get-post-meta ability gates on edit_post; surfacing the same allowlisted meta
 	 * unconditionally in the content reads would leak editor-only meta to any authenticated reader.

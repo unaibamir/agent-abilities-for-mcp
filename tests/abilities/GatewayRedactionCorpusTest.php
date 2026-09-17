@@ -9,7 +9,7 @@
  * denylist has now been rewritten three times: widened when a traffic sim read real bank fields
  * back off a live gateway, narrowed when the widening started marking a logo and a piece of button
  * copy, and re-shaped when the withheld-fields report turned out not to be parseable. Each pass
- * pinned only what the round in front of it had found, so a later pass could drop an earlier one's
+ * pinned only what the pass in front of it had found, so a later pass could drop an earlier one's
  * coverage with every gate green.
  *
  * This file is the union instead. Each row carries where it came from, and the rows are pinned
@@ -103,12 +103,12 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			// that it matched - it was that matching DELETED it, so the agent
 			// answered that no such setting existed. Marking it keeps the key
 			// visible with its value withheld, which resolves that. Releasing
-			// it would be a separate argument about the loose group, which no
-			// round has made.
+			// it would be a separate argument about the loose group, one this
+			// corpus has not made.
 			'sim signature_required marked'   => array( 'signature_required', true ),
 
 			// -----------------------------------------------------------------
-			// R6-6: security and terminal became compounds only. Bare, this
+			// security and terminal became compounds only. Bare, this
 			// release's own widening had marked a badge and a display setting.
 			// -----------------------------------------------------------------
 			'R6-6 security_badge released'    => array( 'security_badge', false ),
@@ -119,18 +119,16 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'R6-6 terminal_secret held'       => array( 'terminal_secret', true ),
 
 			// -----------------------------------------------------------------
-			// R6-6: the tokens deliberately left broad. user and number predate
-			// this release; narrowing them on a review's say-so trades a
-			// withheld benign value for a possible leak, and those are not
-			// symmetric.
+			// the tokens deliberately left broad. user and number predate
+			// this release; narrowing them trades a withheld benign value for
+			// a possible leak, and those are not symmetric.
 			// -----------------------------------------------------------------
 			'R6-6 broad user'                 => array( 'user', true ),
 			'R6-6 broad account_number'       => array( 'account_number', true ),
 
 			// -----------------------------------------------------------------
-			// ROUND 7, this fix. bank and login stayed broad but stopped
-			// marking names whose last segment says how a thing is displayed.
-			// The two the reviewer named come first.
+			// bank and login stayed broad but stopped marking names whose last
+			// segment says how a thing is displayed.
 			// -----------------------------------------------------------------
 			'R7 bank_logo released'           => array( 'bank_logo', false ),
 			'R7 login_button_label released'  => array( 'login_button_label', false ),
@@ -180,10 +178,10 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'ordinary sandbox'                => array( 'sandbox', false ),
 
 			// -----------------------------------------------------------------
-			// camelCase, from Codex round 8 (R8C-8). Until then this whole file
-			// held not one camelCase row, which is exactly why a rewrite could
-			// move bare `key`, `api`, `auth` and `sign` behind an underscore or
-			// hyphen boundary with every gate green: a camelCase hump is not a
+			// camelCase. Until this corpus covered it, this whole file held not
+			// one camelCase row, which is exactly why a rewrite could move bare
+			// `key`, `api`, `auth` and `sign` behind an underscore or hyphen
+			// boundary with every gate green: a camelCase hump is not a
 			// boundary, so twelve names that 1.6.3 withheld came back exposed.
 			// Authorize.Net's own field names are in here for a reason.
 			// -----------------------------------------------------------------
@@ -205,12 +203,12 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'camel routingNumber'             => array( 'routingNumber', true ),
 
 			// -----------------------------------------------------------------
-			// Leading ACRONYMS, from the round 8 follow-up. Splitting only the
-			// lower-to-upper hump leaves `SSLCertificate` untouched, so an
-			// anchored-only token never sees a boundary and the key goes out in
-			// full. `APIKey` and `APIToken` masked how bad this was: they
-			// survive on the LOOSE `api[_-]?key` and bare `token`, so the hole
-			// only shows on tokens that are anchored-only.
+			// Leading ACRONYMS. Splitting only the lower-to-upper hump leaves
+			// `SSLCertificate` untouched, so an anchored-only token never sees a
+			// boundary and the key goes out in full. `APIKey` and `APIToken`
+			// masked how bad this was: they survive on the LOOSE
+			// `api[_-]?key` and bare `token`, so the hole only shows on tokens
+			// that are anchored-only.
 			// -----------------------------------------------------------------
 			'acronym SSLCertificate'          => array( 'SSLCertificate', true ),
 			'acronym MIDValue'                => array( 'MIDValue', true ),
@@ -261,7 +259,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 	 * evidence is already gone: the row count is simply one lower than the file appears to declare,
 	 * every remaining row still passes, and all four gates stay green. That is a corpus which
 	 * structurally cannot report the one failure it exists to prevent, and it is the same shape as
-	 * B2-02 attempt 2, which deleted attempt 1's protection with everything passing.
+	 * a rewrite that silently deletes an earlier protection while every test still passes.
 	 *
 	 * So this counts the row names in the SOURCE and compares against what the provider actually
 	 * returns. The source is the only place the duplicate is still visible.
@@ -370,12 +368,13 @@ final class GatewayRedactionCorpusTest extends TestCase {
 	// =========================================================================
 
 	/**
-	 * ROUND 7: two structurally different settings arrays must never produce the same report.
+	 * Two structurally different settings arrays must never produce the same report.
 	 *
 	 * This is the defect, stated as a test. A settings key is an arbitrary array key, so it may
 	 * contain a dot; the nested key "api_key" under "a" and a single flat key literally named
-	 * "a.api_key" both used to report the string "a.api_key". A caller could not tell which field
-	 * had been withheld, which makes the channel that is meant to be authoritative unparseable.
+	 * "a.api_key" are easy to collapse into the same reported string "a.api_key" if paths are
+	 * joined rather than kept as segments, and a caller could then not tell which field had been
+	 * withheld - which makes the channel that is meant to be authoritative unparseable.
 	 *
 	 * Segments cannot collide by construction, and the assertion is equality against the exact
 	 * expected structure rather than a "not equal to the other one" check, so it stays meaningful
@@ -407,7 +406,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 	}
 
 	/**
-	 * ROUND 7: the segments round-trip, so a caller can reach the exact value that was withheld.
+	 * The segments round-trip, so a caller can reach the exact value that was withheld.
 	 *
 	 * Reporting an unambiguous path is only half of it. The path has to actually index the returned
 	 * settings, or the caller has an identifier they cannot use.
@@ -442,7 +441,7 @@ final class GatewayRedactionCorpusTest extends TestCase {
 	}
 
 	/**
-	 * R6-6: a real value that happens to BE the marker must not read as withheld.
+	 * A real value that happens to BE the marker must not read as withheld.
 	 *
 	 * The marker sits in the same arbitrary-string domain as real data, so it can always be forged
 	 * by accident. This is the assertion that the out-of-band list, not the marker, carries the

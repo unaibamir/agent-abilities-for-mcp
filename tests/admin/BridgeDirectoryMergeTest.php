@@ -1,7 +1,7 @@
 <?php
 /**
- * Bridge directory card merge (1.7.2 defect 2): namespaces that resolve to the same known
- * plugin must render as ONE card, not one per namespace.
+ * Bridge directory card merge: namespaces that resolve to the same known plugin must render as
+ * ONE card, not one per namespace.
  *
  * @package AgentAbilitiesForMCP
  */

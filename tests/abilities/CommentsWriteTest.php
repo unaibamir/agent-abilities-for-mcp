@@ -369,16 +369,15 @@ final class CommentsWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-4: wp_set_comment_status() fires its 'wp_set_comment_status' action
-	 * AFTER its own DB update has already succeeded, and returns `true` unconditionally once that
-	 * update ran - the old code branched on that return value, so a hook on the action that moves
-	 * the comment again (here, straight back to its pre-moderation status - the same shape as a
-	 * second plugin's moderation rule overriding this one, or a spam filter reverting an
-	 * unwarranted approval) went unreported: the discarded/truthy return value said success while
-	 * the comment sat at a status the caller never asked for. Same route as the sibling
-	 * vanish-mid-write test above, but the row survives with the WRONG status instead of
-	 * disappearing - the shape the old `! $ok && mismatch` gate could never catch, because $ok was
-	 * true.
+	 * wp_set_comment_status() fires its 'wp_set_comment_status' action AFTER its own DB update has
+	 * already succeeded, and returns `true` unconditionally once that update ran. Branching on
+	 * that return value alone would miss a hook on the action that moves the comment again (here,
+	 * straight back to its pre-moderation status - the same shape as a second plugin's moderation
+	 * rule overriding this one, or a spam filter reverting an unwarranted approval): the truthy
+	 * return value would say success while the comment sat at a status the caller never asked for.
+	 * Same route as the sibling vanish-mid-write test above, but here the row survives with the
+	 * WRONG status instead of disappearing, a shape a bare success/mismatch check on the return
+	 * value alone could never catch.
 	 */
 	public function test_moderate_comment_errors_when_a_hook_reverts_the_status_after_a_successful_update(): void {
 		global $wpdb;

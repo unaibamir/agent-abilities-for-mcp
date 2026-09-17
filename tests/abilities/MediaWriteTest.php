@@ -452,31 +452,29 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Security review finding 1 (fix round 1, 208).
-	 *
-	 * The finding as filed: media_handle_sideload() writes an IPTC/EXIF-derived caption straight
-	 * into the attachment's post_content, and core's wp_read_image_metadata() applies only trim(),
-	 * no HTML/JS stripping. Reproducing it directly (a real JPEG with an IPTC 2#120 caption of
+	 * media_handle_sideload() writes an IPTC/EXIF-derived caption straight into the attachment's
+	 * post_content, and core's wp_read_image_metadata() applies only trim(), no HTML/JS stripping.
+	 * Reproducing that directly (a real JPEG with an IPTC 2#120 caption of
 	 * "<script>alert(1)</script>", driven through this exact ability) does NOT go red on the WP
 	 * core installed in this environment (7.1): wp_read_image_metadata() itself unconditionally runs
 	 * the whole metadata array through wp_kses_post_deep() (wp-admin/includes/image.php:1061) before
 	 * ever returning it, regardless of the acting user's unfiltered_html capability, so the caption
 	 * already comes back as "alert(1)" before media_handle_sideload() or this ability's own code
-	 * ever sees it. A test driving the reported payload through the real path on this core version
-	 * would pass with or without this fix and would prove nothing - a can-go-red check exists to
-	 * catch exactly that, and it did.
+	 * ever sees it. A test driving that payload through the real path on this core version would
+	 * pass whether or not this plugin's own sanitization runs, and would prove nothing - a
+	 * can-go-red check exists to catch exactly that, and it does here.
 	 *
 	 * That upstream behavior is WP core's own implementation detail inside a private-in-spirit
 	 * helper, not a documented contract this plugin can rely on, and this plugin's stated floor is
-	 * WP 6.9 (not verifiable in this session - no 6.9 core checkout was available). The fix is
-	 * applied anyway, matching aafm-update-media's own explicit policy at media.php:914, so this
-	 * ability's guarantee does not depend on an upstream detail nobody promised. This test proves
-	 * the fix on the case it is actually responsible for: content reaching post_content AFTER
-	 * core's own sanitization pass, the shape a less careful third-party wp_read_image_metadata
-	 * filter callback (or a future core change) could produce. It hooks the real, documented
-	 * wp_read_image_metadata filter at a later priority than core's own processing to simulate that,
-	 * rather than trying to defeat wp_kses_post_deep() through the real IPTC path, which cannot be
-	 * done from this plugin's own execution context.
+	 * WP 6.9 (not verifiable in this session - no 6.9 core checkout was available). This plugin
+	 * sanitizes the caption anyway, matching aafm-update-media's own explicit policy at
+	 * media.php:914, so this ability's guarantee does not depend on an upstream detail nobody
+	 * promised. This test proves that sanitization on the case it is actually responsible for:
+	 * content reaching post_content AFTER core's own sanitization pass, the shape a less careful
+	 * third-party wp_read_image_metadata filter callback (or a future core change) could produce.
+	 * It hooks the real, documented wp_read_image_metadata filter at a later priority than core's
+	 * own processing to simulate that, rather than trying to defeat wp_kses_post_deep() through the
+	 * real IPTC path, which cannot be done from this plugin's own execution context.
 	 */
 	public function test_upload_media_sanitizes_metadata_reintroduced_after_cores_own_pass(): void {
 		$this->acting_as( 'administrator' );
@@ -507,10 +505,10 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the caption resave after core's own sanitization pass was only
-	 * checked via is_wp_error(), so a wp_insert_attachment_data filter reverting that resave
-	 * would leave the un-renormalized, potentially unsafe caption in storage while this ability
-	 * still reported success. This is the exact security gap the resave exists to close.
+	 * Checking only is_wp_error() on the caption resave after core's own sanitization pass would
+	 * miss a wp_insert_attachment_data filter reverting that resave: the un-renormalized,
+	 * potentially unsafe caption would stay in storage while this ability still reported success.
+	 * This is the exact security gap the write-confirmation guard on the resave exists to close.
 	 *
 	 * Attachment writes never fire wp_insert_post_data - wp_insert_post() branches on post
 	 * type and applies wp_insert_attachment_data instead (wp-includes/post.php), so the veto
@@ -551,9 +549,9 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: update_post_meta()'s return value for the caller's alt text was
-	 * discarded outright, so a metadata filter vetoing that write must surface as a structured
-	 * error, not a success response for an attachment whose alt text never actually landed.
+	 * update_post_meta()'s return value for the caller's alt text is checked, not discarded: a
+	 * metadata filter vetoing that write must surface as a structured error, not a success
+	 * response for an attachment whose alt text never actually landed.
 	 */
 	public function test_upload_media_returns_an_error_when_the_alt_write_is_vetoed(): void {
 		$this->acting_as( 'administrator' );
@@ -683,9 +681,9 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: the post-field write was only checked via is_wp_error(), so a
-	 * wp_insert_attachment_data filter reverting the title must surface as a structured error,
-	 * not a success response claiming the new title was saved.
+	 * Checking only is_wp_error() on the post-field write would miss a wp_insert_attachment_data
+	 * filter reverting the title: that must surface as a structured error, not a success response
+	 * claiming the new title was saved.
 	 *
 	 * Attachment writes never fire wp_insert_post_data - wp_insert_post() branches on post
 	 * type and applies wp_insert_attachment_data instead (wp-includes/post.php), so the veto
@@ -724,9 +722,9 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: update_post_meta()'s return value for the alt text write was
-	 * discarded outright, so a metadata filter vetoing that write must surface as a structured
-	 * error, not a success response reporting the old alt text as though it were replaced.
+	 * update_post_meta()'s return value for the alt text write is checked, not discarded: a
+	 * metadata filter vetoing that write must surface as a structured error, not a success
+	 * response reporting the old alt text as though it were replaced.
 	 */
 	public function test_update_media_returns_an_error_when_the_alt_write_is_vetoed(): void {
 		$this->acting_as( 'administrator' );

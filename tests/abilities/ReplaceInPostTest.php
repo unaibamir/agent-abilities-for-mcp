@@ -86,12 +86,12 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * B8: a replace must never mutate bytes OUTSIDE the replaced spans. The old code ran
-	 * wp_kses_post() over the whole rewritten body, so a one-word edit by an
-	 * unfiltered_html-capable user silently stripped their script/iframe markup elsewhere
-	 * in the post and reported success. Only the inserted replacement text is sanitized by
-	 * this ability now; a user who lacks unfiltered_html still gets the full-body kses from
-	 * core's own save path, exactly like a normal editor save.
+	 * A replace must never mutate bytes OUTSIDE the replaced spans. Running wp_kses_post() over
+	 * the whole rewritten body would let a one-word edit by an unfiltered_html-capable user
+	 * silently strip their script/iframe markup elsewhere in the post while still reporting
+	 * success. Only the inserted replacement text is sanitized by this ability; a user who lacks
+	 * unfiltered_html still gets the full-body kses from core's own save path, exactly like a
+	 * normal editor save.
 	 */
 	public function test_replace_does_not_mutate_unfiltered_html_outside_the_replaced_span(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -145,7 +145,7 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * B2-02: the stored-XSS reproduction, asserted on the ASSEMBLED document.
+	 * The stored-XSS reproduction, asserted on the ASSEMBLED document.
 	 *
 	 * The replacement is judged by wp_kses_post() in isolation, and in isolation
 	 * `x" onmouseover="alert(1)" data-z="` is plain text with no tags in it - kses returns it
@@ -238,11 +238,11 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * R6-2: the refusal was evadable, so the stored XSS was still live.
+	 * The refusal must not be evadable, or the stored XSS stays live even with a check in place.
 	 *
-	 * The first lexer called the first `>` the end of the tag. A perfectly valid `>` inside an
-	 * earlier quoted attribute value ended the tag early in its eyes, so everything after it -
-	 * including the rest of that same tag - looked like ordinary body text and the splice went
+	 * A lexer that calls the first `>` the end of the tag is fooled by a perfectly valid `>`
+	 * inside an earlier quoted attribute value: it ends the tag early, so everything after it -
+	 * including the rest of that same tag - looks like ordinary body text and the splice goes
 	 * through. An evadable refusal is worse than none: it reads as protection while protecting
 	 * nothing.
 	 */
@@ -269,10 +269,9 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * R6-4, the other direction and a regression of my own making. A literal `<` in visible prose
-	 * is ordinary text - HTML5 only starts a tag when `<` is followed by a letter - but the first
-	 * lexer treated it as a tag opener through the next `>` and refused a replacement that was
-	 * never near any markup.
+	 * The other direction: a literal `<` in visible prose is ordinary text - HTML5 only starts a
+	 * tag when `<` is followed by a letter - and must not be treated as a tag opener through the
+	 * next `>`, which would wrongly refuse a replacement that was never near any markup.
 	 *
 	 * Both directions need their own test. One that only covers the attack leaves this live, and
 	 * users hit it while writing perfectly normal sentences.
@@ -340,9 +339,9 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: only is_wp_error() was checked on the wp_update_post() result, so a
-	 * wp_insert_post_data filter that reverts the content must surface as a structured error, not
-	 * a success response reporting a positive replacement count for a change that never landed.
+	 * is_wp_error() alone is not enough to confirm the write landed: a wp_insert_post_data filter
+	 * that reverts the content must surface as a structured error, not a success response
+	 * reporting a positive replacement count for a change that never landed.
 	 */
 	public function test_returns_an_error_when_the_write_is_vetoed(): void {
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
@@ -377,11 +376,11 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6 B6-3: the confirmation guard compared the fresh read against $new (the
-	 * pre-write intent), so a legitimate save-time normalization looked identical to a veto. Only
-	 * the INSERTED text is run through this ability's own wp_kses_post() (B8/687ff62's whole
-	 * point); the untouched surrounding content is spliced in as-is and reaches wp_update_post()
-	 * unfiltered. For an acting user who lacks unfiltered_html, core's own content_save_pre kses
+	 * A confirmation guard that compares the fresh read against $new (the pre-write intent) will
+	 * mistake a legitimate save-time normalization for a veto. Only the INSERTED text is run
+	 * through this ability's own wp_kses_post(); the untouched surrounding content is spliced in
+	 * as-is and reaches wp_update_post() unfiltered. For an acting user who lacks unfiltered_html,
+	 * core's own content_save_pre kses
 	 * (kses_init(), attached whenever current_user_can('unfiltered_html') is false) runs over the
 	 * WHOLE assembled document and legitimately entity-encodes a bare ampersand the way it always
 	 * does for that role, producing storage that genuinely differs from $new even though the write

@@ -41,6 +41,12 @@ final class PageBuilderGuardTest extends TestCase {
 		$this->assertSame( 'avada', aafm_post_has_foreign_builder_ownership( $id ) );
 	}
 
+	public function test_visual_composer_marker_is_detected(): void {
+		$id = self::factory()->post->create();
+		update_post_meta( $id, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
+		$this->assertSame( 'visual-composer', aafm_post_has_foreign_builder_ownership( $id ) );
+	}
+
 	public function test_a_plain_post_has_no_builder_ownership(): void {
 		$id = self::factory()->post->create();
 		$this->assertFalse( aafm_post_has_foreign_builder_ownership( $id ) );

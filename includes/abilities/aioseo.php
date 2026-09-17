@@ -79,6 +79,10 @@ function aafm_aioseo_rendered_head( string $head, int $post_id, string $source )
 	$saved_wp_the_query = $GLOBALS['wp_the_query'] ?? null;
 	$saved_post         = $GLOBALS['post'] ?? null;
 
+	// Snapshot the buffer depth before this call touches anything, so the catch below can never
+	// close a buffer the caller already had open - only ones this call opened itself.
+	$saved_ob_level = ob_get_level();
+
 	$rendered = '';
 	try {
 		$temp_query = new WP_Query(
@@ -106,8 +110,10 @@ function aafm_aioseo_rendered_head( string $head, int $post_id, string $source )
 		$aioseo->head->output();
 		$rendered = (string) ob_get_clean();
 	} catch ( \Throwable $e ) {
-		// Make sure a half-open buffer from a throw inside output() is closed before we bail.
-		if ( ob_get_level() > 0 ) {
+		// Unwind only back down to the level that existed before this call, whether the throw
+		// happened before our own ob_start() (WP_Query, the_post()) or inside output() itself - never
+		// below that, or we close a buffer belonging to whatever caller had one open already.
+		while ( ob_get_level() > $saved_ob_level ) {
 			ob_end_clean();
 		}
 		$rendered = '';

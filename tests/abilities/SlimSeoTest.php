@@ -102,8 +102,8 @@ final class SlimSeoTest extends TestCase {
 	}
 
 	/**
-	 * Codex hunt F4: a site-installed update_post_metadata filter that vetoes the write must
-	 * surface as a structured error, not a success response carrying the stale stored value.
+	 * A site-installed update_post_metadata filter that vetoes the write must surface as a
+	 * structured error, not a success response carrying the stale stored value.
 	 */
 	public function test_update_post_returns_an_error_when_the_write_is_vetoed(): void {
 		$post = self::factory()->post->create_and_get();
@@ -128,10 +128,10 @@ final class SlimSeoTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8 R8-1: the canonical-form recomputation used to run sanitize_meta() against
-	 * wp_slash( $stored ) and then unslash the sanitizer's OUTPUT, feeding a slash-sensitive
-	 * registered sanitizer a backslash-quote sequence that core's own write-time call, which
-	 * unslashes the incoming value BEFORE sanitizing, never sees.
+	 * The canonical-form recomputation must not run sanitize_meta() against wp_slash( $stored )
+	 * and then unslash the sanitizer's OUTPUT: that would feed a slash-sensitive registered
+	 * sanitizer a backslash-quote sequence that core's own write-time call, which unslashes the
+	 * incoming value BEFORE sanitizing, never sees.
 	 */
 	public function test_update_post_confirms_a_write_whose_title_contains_a_quote_and_backslash(): void {
 		$post = self::factory()->post->create_and_get();
@@ -167,9 +167,9 @@ final class SlimSeoTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-4: the string-field "nothing asked" fallback used to be judged from the
-	 * raw $old alone ($intended_field === $old_field), blind to whether $old was already in its
-	 * canonical (sanitized) form. Resubmitting a non-canonical title is a real ask - the write is
+	 * The string-field "nothing asked" fallback must not be judged from the raw $old alone
+	 * ($intended_field === $old_field), blind to whether $old was already in its canonical
+	 * (sanitized) form. Resubmitting a non-canonical title is a real ask - the write is
 	 * still expected to land on the canonical form a genuinely different title would have to
 	 * reach - so a persistence veto that instead keeps storage at the non-canonical title must not
 	 * read as a confirmed no-op purely because the caller's literal input matched it.
@@ -215,8 +215,8 @@ final class SlimSeoTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-4: the boolean noindex fallback carried the identical raw-$old defect as
-	 * the string fields above.
+	 * The boolean noindex fallback must not carry the identical raw-$old defect as the string
+	 * fields above.
 	 */
 	public function test_update_post_noindex_rejects_a_veto_that_blocks_canonicalization_of_a_same_value_resubmission(): void {
 		$post = self::factory()->post->create_and_get();
@@ -273,10 +273,10 @@ final class SlimSeoTest extends TestCase {
 	}
 
 	/**
-	 * Bootstrap-wiring proof (Codex-review amendment 13): enabling the integration through its
-	 * own detection seam must make the ability appear in the registry WITHOUT this test itself
-	 * requiring includes/abilities/slim-seo.php - proving the plugin's own bootstrap require list
-	 * wires the file, not merely that the file's functions work when manually loaded.
+	 * Bootstrap-wiring proof: enabling the integration through its own detection seam must make
+	 * the ability appear in the registry WITHOUT this test itself requiring
+	 * includes/abilities/slim-seo.php - proving the plugin's own bootstrap require list wires the
+	 * file, not merely that the file's functions work when manually loaded.
 	 */
 	public function test_slim_seo_abilities_register_through_the_normal_bootstrap(): void {
 		$this->register_enabled( array( 'aafm/slim-seo-get-post', 'aafm/slim-seo-update-post' ) );

@@ -293,7 +293,7 @@ final class SafetyEnforcementTest extends TestCase {
 			'aafm/rl-leak-probe',
 			array(
 				'label'               => 'RL Leak Probe',
-				'description'         => 'Throwaway ability for the B12 stale-memo regression.',
+				'description'         => 'Throwaway ability for a stale-memo regression probe.',
 				'category'            => 'aafm-reads',
 				'input_schema'        => array(
 					'type'                 => 'object',

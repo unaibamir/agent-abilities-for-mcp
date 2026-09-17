@@ -275,7 +275,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			 * discard the caller's removal while the filtered response confirms the state they
 			 * asked for - a false success on a write. Refused instead, because that is the worse failure.
 			 */
-			'R7B-1 a filter hid a stored term, sent set matches' => array(
+			'a filter hid a stored term, sent set matches' => array(
 				$global,
 				array(
 					'id'      => 7,
@@ -296,7 +296,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			 * A caller who sends the STORED set is asking for nothing whichever way they meant it,
 			 * so there is nothing to guess and nothing to discard. Still accepted, filter and all.
 			 */
-			'R7B-1 the stored set is accepted despite the filter' => array(
+			'the stored set is accepted despite the filter' => array(
 				$global,
 				array(
 					'id'      => 7,
@@ -316,7 +316,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			 * Same masking, but the caller sends neither the stored nor the displayed set.
 			 * That is an ordinary genuine change and gets the ordinary message.
 			 */
-			'R7B-1 a change matching neither stored nor shown' => array(
+			'a change matching neither stored nor shown'   => array(
 				$global,
 				array(
 					'id'      => 7,
@@ -337,7 +337,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			 * options are literal strings. Stored is still global, so the request is refused; the
 			 * masked code is what says why, because the caller was handed those strings.
 			 */
-			'R7B-1 a filter demoted it to custom in the view' => array(
+			'a filter demoted it to custom in the view'    => array(
 				$global,
 				array(
 					'id'      => 0,
@@ -358,7 +358,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			 * shown nothing for it, so shown falls back to stored: the stored set is still a no-op,
 			 * and anything else is an ordinary refusal.
 			 */
-			'R7B-1 a filter hid the whole attribute, stored set' => array(
+			'a filter hid the whole attribute, stored set' => array(
 				$global,
 				null,
 				array(
@@ -369,7 +369,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 				),
 				null,
 			),
-			'R7B-1 a filter hid the whole attribute, a change' => array(
+			'a filter hid the whole attribute, a change'   => array(
 				$global,
 				null,
 				array(
@@ -387,7 +387,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			 * one and its remedy is different. The whole request is refused either way, so nothing
 			 * is written and the second attribute is refused again, with its own message, next turn.
 			 */
-			'R7B-1 masked wins over an ordinary change'    => array(
+			'masked wins over an ordinary change'          => array(
 				$global,
 				array(
 					'id'      => 7,
@@ -568,7 +568,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 		$this->assertSame(
 			array( $this->terms['blue'], $this->terms['green'] ),
 			array_map( 'intval', (array) $built[0]->get_options() ),
-			'Both stored term ids must survive. Losing one here is the R7B-1 harm, one layer down.'
+			'Both stored term ids must survive. Losing one here is the same harm as above, one layer down.'
 		);
 	}
 

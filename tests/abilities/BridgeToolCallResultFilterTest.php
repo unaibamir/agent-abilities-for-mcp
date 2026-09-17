@@ -27,34 +27,34 @@ use WP_Error;
 final class BridgeToolCallResultFilterTest extends TestCase {
 
 	public function tear_down(): void {
-		foreach ( array( 'aafm-bridge/round3-renamed-vendor', 'aafm/round3-native-thing' ) as $slug ) {
+		foreach ( array( 'aafm-bridge/bridge-filter-renamed-vendor', 'aafm/bridge-filter-native-thing' ) as $slug ) {
 			if ( wp_has_ability( $slug ) ) {
 				wp_unregister_ability( $slug );
 			}
 		}
-		if ( wp_has_ability_category( 'round3-demo' ) ) {
-			wp_unregister_ability_category( 'round3-demo' );
+		if ( wp_has_ability_category( 'bridge-filter-demo' ) ) {
+			wp_unregister_ability_category( 'bridge-filter-demo' );
 		}
 		parent::tear_down();
 	}
 
 	/**
 	 * Register a real ability and build the real McpTool the adapter would construct for it, so
-	 * the identity-classification tests using the round3-* fixtures below exercise
+	 * the identity-classification tests using the bridge-filter-* fixtures below exercise
 	 * McpTool::get_observability_context() as the bundled adapter actually shapes it, not a
 	 * hand-rolled stand-in.
 	 *
-	 * @param string $name Ability name (e.g. 'aafm-bridge/round3-renamed-vendor').
+	 * @param string $name Ability name (e.g. 'aafm-bridge/bridge-filter-renamed-vendor').
 	 * @return \WP\MCP\Domain\Tools\McpTool
 	 */
 	private function build_mcp_tool_for_ability( string $name ): \WP\MCP\Domain\Tools\McpTool {
 		global $wp_current_filter;
 		$wp_current_filter[] = 'wp_abilities_api_categories_init';
-		if ( ! wp_has_ability_category( 'round3-demo' ) ) {
+		if ( ! wp_has_ability_category( 'bridge-filter-demo' ) ) {
 			wp_register_ability_category(
-				'round3-demo',
+				'bridge-filter-demo',
 				array(
-					'label'       => 'Round 3 demo',
+					'label'       => 'Bridge filter demo',
 					'description' => 'Demo fixture category for the identity-classification tests.',
 				)
 			);
@@ -65,9 +65,9 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 		wp_register_ability(
 			$name,
 			array(
-				'label'               => 'Round 3 demo ability',
+				'label'               => 'Bridge filter demo ability',
 				'description'         => 'Demo fixture ability for the identity-classification tests.',
-				'category'            => 'round3-demo',
+				'category'            => 'bridge-filter-demo',
 				'input_schema'        => array( 'type' => 'object' ),
 				'execute_callback'    => static fn() => array(),
 				'permission_callback' => '__return_true',
@@ -593,7 +593,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	 * inspected: the guard must not be skippable just by renaming the wire tool.
 	 */
 	public function test_a_renamed_bridged_tool_still_refuses_a_wrapped_unsafe_object(): void {
-		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm-bridge/round3-renamed-vendor' );
+		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm-bridge/bridge-filter-renamed-vendor' );
 
 		$leaky              = new \stdClass();
 		$leaky->still_leaky = 'must still be refused after a wire-name rename';
@@ -614,7 +614,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	 * `data` wrap, so identity classification fixes refusal without breaking the shaping half.
 	 */
 	public function test_a_renamed_bridged_tool_still_shapes_a_bare_list(): void {
-		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm-bridge/round3-renamed-vendor' );
+		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm-bridge/bridge-filter-renamed-vendor' );
 
 		$result = aafm_filter_bridged_tool_call_result(
 			array( 'a', 'b', 'c' ),
@@ -633,7 +633,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	 * execute() call - bridge shaping must not touch it, and a bare list must not be wrapped either.
 	 */
 	public function test_a_native_tool_renamed_into_the_bridge_prefix_is_not_treated_as_bridged(): void {
-		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm/round3-native-thing' );
+		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm/bridge-filter-native-thing' );
 
 		$bare_list = array( 1, 2, 3 );
 

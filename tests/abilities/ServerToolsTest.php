@@ -182,7 +182,7 @@ final class ServerToolsTest extends TestCase {
 			static function ( array $registry ) use ( $name ): array {
 				$registry[ $name ] = array(
 					'label'        => 'Name Collision Probe',
-					'description'  => 'Registry fixture for the R9-7 regression.',
+					'description'  => 'Registry fixture for a name-collision probe.',
 					'group'        => 'reads',
 					'risk'         => 'read',
 					'args_builder' => static function () use ( $name ): array {
@@ -340,7 +340,7 @@ final class ServerToolsTest extends TestCase {
 			static function ( array $registry ) use ( $name ): array {
 				$registry[ $name ] = array(
 					'label'        => 'Subclass Collision Probe',
-					'description'  => 'Registry fixture for the R10-4 regression.',
+					'description'  => 'Registry fixture for a subclass-collision probe.',
 					'group'        => 'reads',
 					'risk'         => 'read',
 					'args_builder' => static function () use ( $name ): array {

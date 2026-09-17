@@ -111,59 +111,59 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			// security and terminal became compounds only. Bare, this
 			// release's own widening had marked a badge and a display setting.
 			// -----------------------------------------------------------------
-			'R6-6 security_badge released'    => array( 'security_badge', false ),
-			'R6-6 terminal_display released'  => array( 'terminal_display', false ),
-			'R6-6 security_code held'         => array( 'security_code', true ),
-			'R6-6 security_key held'          => array( 'security_key', true ),
-			'R6-6 terminal_id held'           => array( 'terminal_id', true ),
-			'R6-6 terminal_secret held'       => array( 'terminal_secret', true ),
+			'security_badge released'         => array( 'security_badge', false ),
+			'terminal_display released'       => array( 'terminal_display', false ),
+			'security_code held'              => array( 'security_code', true ),
+			'security_key held'               => array( 'security_key', true ),
+			'terminal_id held'                => array( 'terminal_id', true ),
+			'terminal_secret held'            => array( 'terminal_secret', true ),
 
 			// -----------------------------------------------------------------
 			// the tokens deliberately left broad. user and number predate
 			// this release; narrowing them trades a withheld benign value for
 			// a possible leak, and those are not symmetric.
 			// -----------------------------------------------------------------
-			'R6-6 broad user'                 => array( 'user', true ),
-			'R6-6 broad account_number'       => array( 'account_number', true ),
+			'broad user'                      => array( 'user', true ),
+			'broad account_number'            => array( 'account_number', true ),
 
 			// -----------------------------------------------------------------
 			// bank and login stayed broad but stopped marking names whose last
 			// segment says how a thing is displayed.
 			// -----------------------------------------------------------------
-			'R7 bank_logo released'           => array( 'bank_logo', false ),
-			'R7 login_button_label released'  => array( 'login_button_label', false ),
-			'R7 bank_title released'          => array( 'bank_title', false ),
-			'R7 login_logo released'          => array( 'login_logo', false ),
-			'R7 bank_transfer_note released'  => array( 'bank_transfer_note', false ),
-			'R7 login_message released'       => array( 'login_message', false ),
+			'bank_logo released'              => array( 'bank_logo', false ),
+			'login_button_label released'     => array( 'login_button_label', false ),
+			'bank_title released'             => array( 'bank_title', false ),
+			'login_logo released'             => array( 'login_logo', false ),
+			'bank_transfer_note released'     => array( 'bank_transfer_note', false ),
+			'login_message released'          => array( 'login_message', false ),
 
 			// The other direction, and the reason the fix is subtractive rather
 			// than a narrowing: everything bank and login were ADDED to catch
 			// must still be caught. bank_details and x_login are the two the sim
 			// proved leak; the rest are the credential-shaped neighbours a
 			// compound rewrite would have had to enumerate and would have missed.
-			'R7 bank_details still held'      => array( 'bank_details', true ),
-			'R7 x_login still held'           => array( 'x_login', true ),
-			'R7 bare bank held'               => array( 'bank', true ),
-			'R7 bare login held'              => array( 'login', true ),
-			'R7 bank_account held'            => array( 'bank_account', true ),
-			'R7 bank_iban held'               => array( 'bank_iban', true ),
-			'R7 bank_reference held'          => array( 'bank_reference', true ),
-			'R7 bank_name held'               => array( 'bank_name', true ),
-			'R7 login_token held'             => array( 'login_token', true ),
-			'R7 login_id held'                => array( 'login_id', true ),
+			'bank_details still held'         => array( 'bank_details', true ),
+			'x_login still held'              => array( 'x_login', true ),
+			'bare bank held'                  => array( 'bank', true ),
+			'bare login held'                 => array( 'login', true ),
+			'bank_account held'               => array( 'bank_account', true ),
+			'bank_iban held'                  => array( 'bank_iban', true ),
+			'bank_reference held'             => array( 'bank_reference', true ),
+			'bank_name held'                  => array( 'bank_name', true ),
+			'login_token held'                => array( 'login_token', true ),
+			'login_id held'                   => array( 'login_id', true ),
 
 			// A URL is deliberately NOT presentational. A secret carried in a
 			// query string is the one failure mode the name denylist is already
 			// documented as unable to see, so releasing a login URL by name
 			// would open a hole exactly where the value-shaped hole already is.
-			'R7 login_url held'               => array( 'login_url', true ),
-			'R7 login_redirect held'          => array( 'login_redirect', true ),
+			'login_url held'                  => array( 'login_url', true ),
+			'login_redirect held'             => array( 'login_redirect', true ),
 
 			// The carve-out fires ONLY when bank or login was the sole
 			// credential signal. Any other signal wins outright.
-			'R7 bank_logo_password held'      => array( 'bank_logo_password', true ),
-			'R7 bank_account_label held'      => array( 'bank_account_label', true ),
+			'bank_logo_password held'         => array( 'bank_logo_password', true ),
+			'bank_account_label held'         => array( 'bank_account_label', true ),
 
 			// -----------------------------------------------------------------
 			// Ordinary configuration, from the shapes these abilities actually

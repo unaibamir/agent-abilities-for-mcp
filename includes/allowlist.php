@@ -43,18 +43,17 @@ const AAFM_ALLOWLIST_MAX_ROWS = 200;
 /**
  * Read the raw override rows straight from the database, tolerating a missing/malformed option.
  *
- * 1.7.5 round 4, R4-8: this docblock used to describe this function as the live permission-gating
- * reader, evaluated on every ability check. It no longer has any production caller - the actual
- * gate is aafm_ability_allowed_for_principal() below, which reads the database view directly
- * rather than through this helper, because this helper's "no rows found" and "the query itself
- * failed" both collapse to the same empty array, and an empty array here reads as unrestricted.
- * That collapse would fail OPEN on a transient read failure if used for authorization (see
+ * This function has no production caller for permission gating - the actual gate is
+ * aafm_ability_allowed_for_principal() below, which reads the database view directly rather than
+ * through this helper, because this helper's "no rows found" and "the query itself failed" both
+ * collapse to the same empty array, and an empty array here reads as unrestricted. That collapse
+ * would fail OPEN on a transient read failure if used for authorization (see
  * aafm_ability_allowed_for_principal()'s own docblock for why it must fail the opposite way).
  * What remains here is a plain raw-read helper for callers that only need the stored rows as-is,
  * such as the test suite and aafm_allowlist_overrides_for_display() below (which adds the failure
  * signal this bare read discards). It still reads through aafm_read_option_views() rather than
- * get_option(), for the same stale-persistent-object-cache reason the 1.7.3 hotfix fixed for the
- * read-only-mode and high-risk switches.
+ * get_option(), for the same stale-persistent-object-cache reason that applies to the read-only-
+ * mode and high-risk switches.
  *
  * @return array<int,array<string,mixed>>
  */
@@ -72,11 +71,11 @@ function aafm_allowlist_overrides(): array {
  * trusted - unlike aafm_allowlist_overrides() above, which collapses "genuinely no rows" and "the
  * query itself failed" to the same empty array.
  *
- * R3-3 (1.7.5 deferred, round 3): that collapse is wrong here, for a display the operator can
- * then edit and Save from - it is also wrong for authorization, which is exactly why
- * aafm_ability_allowed_for_principal() below does not use aafm_allowlist_overrides() either, and
- * instead reads the database view directly so a failed read denies rather than grants
- * unrestricted access (see that function's own docblock). A failed read rendered here as "No
+ * That collapse is wrong here, for a display the operator can then edit and Save from - it is
+ * also wrong for authorization, which is exactly why aafm_ability_allowed_for_principal() below
+ * does not use aafm_allowlist_overrides() either, and instead reads the database view directly
+ * so a failed read denies rather than grants unrestricted access (see that function's own
+ * docblock). A failed read rendered here as "No
  * scopes narrowed yet", with Add and Save still available, is not cosmetic: if the database
  * recovers before the operator clicks Save, the empty editor submits a full replacement and
  * silently erases every existing restriction. The caller here must be told the read failed, not
@@ -106,7 +105,7 @@ function aafm_allowlist_overrides_for_display(): array {
  * Returns null for a malformed allowed_abilities value, so the caller can skip the row entirely
  * (fail-closed: a bad row is treated as absent, never as all-permissive).
  *
- * Codex final round 7 LOW, per 228-allowlist-design.md section 6's own fail-closed statement:
+ * Per 228-allowlist-design.md section 6's own fail-closed statement:
  * "an override row that references an ability slug no longer in the registry ... is never
  * interpreted as allow everything. The exact fallback: skip the row entirely." A row whose
  * allowed_abilities lists ONLY a stale or mistyped name (the admin save no longer accepts one at
@@ -156,17 +155,17 @@ function aafm_allowlist_set_permits( $set, string $ability_name ): bool {
  * layer ALONE - callers must still clear the global enabled-abilities list and every other
  * existing floor themselves; this function only evaluates the new override option.
  *
- * R2-4 sibling (1.7.5 deferred, round 2): this is a LIVE AUTHORIZATION read, not a migration
- * certification read, so it must fail in the OPPOSITE direction from
- * aafm_oauth_dcr_adopt_on_by_default() (includes/oauth/discovery.php). aafm_allowlist_overrides()
+ * This is a LIVE AUTHORIZATION read, not a migration certification read, so it must fail in the
+ * OPPOSITE direction from aafm_oauth_dcr_adopt_on_by_default() (includes/oauth/discovery.php).
+ * aafm_allowlist_overrides()
  * collapses "genuinely no rows" and "the query itself failed" to the same empty array, and an
  * empty array here means "unrestricted" - so a transient read failure would silently grant every
  * call through this layer instead of enforcing whatever restriction is actually stored. Reading
  * the database view directly here, rather than through that lenient helper, lets this deny the
  * call when the restriction state cannot be determined.
  *
- * 1.7.5 round 4, R4-8: a failed read has a security consequence for the admin display too (R3-3,
- * above) - it is not exempt from this problem, it has its own dedicated failure-aware reader,
+ * A failed read has a security consequence for the admin display too (see the note above) - it
+ * is not exempt from this problem, it has its own dedicated failure-aware reader,
  * aafm_allowlist_overrides_for_display(). Neither production caller of this option still goes
  * through the lenient aafm_allowlist_overrides() helper; it survives only as the plain raw read
  * described on its own docblock.

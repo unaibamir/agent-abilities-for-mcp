@@ -36,11 +36,12 @@ function aafm_allowlist_sanitize_row( $row ) {
 	if ( 'role' === $scope_type && ! array_key_exists( $scope_id, wp_roles()->roles ) ) {
 		return null; // Refuse a role slug that does not exist on this site.
 	}
-	// Codex final round 2 MEDIUM: an OAuth client id was accepted as arbitrary free text, so a
-	// mistyped id saved successfully but matched no real client - the allowlist has no override
-	// for that client at all, and per the design's own intersection precedence (global list only,
-	// no narrowing), an unmatched client is UNRESTRICTED. Reject an id that names no real client,
-	// the same way a nonexistent role slug is already refused above.
+	// An OAuth client id that names no real client is rejected here, the same way a nonexistent
+	// role slug is refused above. The allowlist carries no override for an unmatched client, and
+	// per the design's own intersection precedence (global list only, no narrowing), an
+	// unmatched client is UNRESTRICTED - so accepting arbitrary free text would let a mistyped
+	// id save successfully while silently granting full access instead of the intended
+	// restriction.
 	if ( 'oauth_client' === $scope_type && null === aafm_oauth_get_client( $scope_id ) ) {
 		return null;
 	}
@@ -56,15 +57,14 @@ function aafm_allowlist_sanitize_row( $row ) {
 			)
 		);
 		$allowed = array_values( array_unique( $names ) );
-		// Codex final round 7 LOW: a row naming an ability slug absent from the registry (typo,
-		// or a name from a since-removed integration) used to save successfully and then, at
-		// read time, deny EVERY real ability for that scope - the row matched no real name, so
-		// aafm_allowlist_set_permits() refused everything rather than degrading to unrestricted,
-		// the opposite of 228-allowlist-design.md section 6's fail-closed statement. Reject the
-		// save the same way an unknown role/client is already rejected below, rather than let a
-		// typo silently lock out a role. Checked against the FULL registry (every registered
-		// ability, including an inactive integration's) so a name is not refused merely because
-		// its host plugin happens to be off right now.
+		// A row naming an ability slug absent from the registry (typo, or a name from a
+		// since-removed integration) is rejected here, the same way an unknown role or OAuth
+		// client is rejected below. Left unrejected, the row would match no real name, so
+		// aafm_allowlist_set_permits() would deny EVERY real ability for that scope instead of
+		// degrading to unrestricted - a typo must not be allowed to silently lock out a role.
+		// Checked against the FULL registry (every registered ability, including an inactive
+		// integration's) so a name is not refused merely because its host plugin happens to be
+		// off right now.
 		$registry = aafm_get_abilities_registry_full();
 		foreach ( $allowed as $name ) {
 			if ( ! array_key_exists( $name, $registry ) ) {
@@ -198,11 +198,10 @@ function aafm_ajax_save_allowlist(): void {
 		);
 	}
 
-	// Codex final round 3 MEDIUM: a row naming an unknown role or OAuth client used to be
-	// silently dropped while the save still reported success, so the operator could believe a
-	// restriction had taken effect when the row that was meant to apply it never reached
-	// storage. Reject the WHOLE save with a row-specific error instead, and leave the
-	// previously-stored option untouched - a half-applied allowlist under a "saved" report is
+	// A row naming an unknown role or OAuth client rejects the WHOLE save with a row-specific
+	// error, leaving the previously-stored option untouched. Silently dropping just that row
+	// while still reporting success would let the operator believe a restriction had taken
+	// effect when it never reached storage - a half-applied allowlist under a "saved" report is
 	// exactly the silent-wrong-answer shape this project treats as a release blocker.
 	//
 	// Keyed by "scope_type:scope_id" so two rows for the same scope can never both reach
@@ -281,10 +280,10 @@ function aafm_render_allowlist_section(): void {
 	// explanation toggled the card. It belongs in the body, as prose, not in the disclosure control.
 	echo '<p class="aafm-card-head-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
 
-	// R3-3 (1.7.5 deferred, round 3): a failed read must never be rendered as "no restrictions
-	// exist" - this card is editable and Save replaces the whole option, so that lookalike empty
-	// state could otherwise be saved over the real, still-stored rows the moment the database
-	// recovers. Say the read failed and refuse to offer Add/Save until a reload gets a real read.
+	// A failed read must never be rendered as "no restrictions exist" - this card is editable and
+	// Save replaces the whole option, so that lookalike empty state could otherwise be saved over
+	// the real, still-stored rows the moment the database recovers. Say the read failed and refuse
+	// to offer Add/Save until a reload gets a real read.
 	if ( $read_failed ) {
 		echo '<div class="notice notice-error inline"><p>' . esc_html__( 'The current allowlist could not be read, so it is not safe to show or edit here. Reload this page once the underlying issue clears before adding or saving a scope - saving now could silently erase the existing restrictions.', 'agent-abilities-for-mcp' ) . '</p></div>';
 	}
@@ -330,9 +329,8 @@ function aafm_render_allowlist_section(): void {
 	// still the real boundary, this only makes the common mistake unreachable through the UI.
 	$clients = aafm_oauth_list_clients();
 
-	// Codex admin-ui-r1 M3: three adjacent selects with no visible label at all - the worst case
-	// the finding named - each got a visually-hidden <label for>, the same pattern the Abilities
-	// search field above now uses.
+	// Three adjacent selects had no visible label at all; each now gets a visually-hidden
+	// <label for>, the same pattern the Abilities search field above uses.
 	echo '<div class="aafm-allowlist-add" id="aafm-allowlist-add">';
 	echo '<label class="screen-reader-text" for="aafm-allowlist-new-scope-type">' . esc_html__( 'Scope type', 'agent-abilities-for-mcp' ) . '</label>';
 	echo '<select id="aafm-allowlist-new-scope-type">';

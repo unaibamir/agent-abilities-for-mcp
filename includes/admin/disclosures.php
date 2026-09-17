@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
  * Keys match aafm_get_abilities_registry() one-to-one; the render layer falls back to the
  * registry description if a key is ever missing.
  *
- * Outbound-request exemption (Codex hunt F3): the only ability-facing outbound HTTP call
+ * Outbound-request exemption: the only ability-facing outbound HTTP call
  * is the SSRF-hardened aafm/upload-media-from-url fetch. One admin-only exception sits
  * outside the ability surface entirely: aafm_ajax_test_connection() (connection.php)
  * self-calls the MCP endpoint to confirm it answers, gated behind manage_options plus a
@@ -200,9 +200,9 @@ function aafm_ability_disclosures(): array {
 		'aafm/tec-get-event'               => __( 'Reads a single event by id, including its dates, venue, and organizers.', 'agent-abilities-for-mcp' ),
 		'aafm/tec-create-event'            => __( 'Creates an event. Defaults to draft; a publicly-visible status additionally requires the publish-events capability. Requires the edit-events capability.', 'agent-abilities-for-mcp' ),
 		'aafm/tec-update-event'            => __( 'Updates an event by id. A publicly-visible status additionally requires the publish-events capability. Requires edit access to that event.', 'agent-abilities-for-mcp' ),
-		// Codex hunt F6, gate round 1 finding 6: now guarded by the same aafm_trash_is_enabled()
-		// check as trash-post/trash-page/delete-block, so this claim is true the same way theirs
-		// is - refuses outright rather than falling through to WordPress's own permanent delete.
+		// Guarded by the same aafm_trash_is_enabled() check as trash-post/trash-page/delete-block,
+		// so this claim is true the same way theirs is - refuses outright rather than falling
+		// through to WordPress's own permanent delete.
 		'aafm/tec-delete-event'            => __( 'Moves an event to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that event.', 'agent-abilities-for-mcp' ),
 		'aafm/tec-get-venues'              => __( 'Lists venues via the Events Calendar. An optional status filter can include draft/pending/future venues you can edit, or private venues if you have that access.', 'agent-abilities-for-mcp' ),
 		'aafm/tec-get-venue'               => __( 'Reads a single venue by id.', 'agent-abilities-for-mcp' ),
@@ -222,7 +222,7 @@ function aafm_ability_disclosures(): array {
 
 		// Avada / Fusion Builder.
 		'aafm/avada-get-page-content'      => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
-		// Codex hunt F7: shortcode_parse_atts() (what the guard actually compares) discards
+		// shortcode_parse_atts() (what the guard actually compares) discards
 		// quoting style and whitespace inside a tag, so a change limited to those is not caught
 		// even though the tree it builds otherwise stays equal. Worded to the real guarantee
 		// (structure and attribute values) rather than the "byte-identical" claim that didn't hold.

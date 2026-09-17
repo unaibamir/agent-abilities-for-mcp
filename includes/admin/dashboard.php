@@ -16,8 +16,8 @@ defined( 'ABSPATH' ) || exit;
  * email, display name, or any password material.
  *
  * Queries by the application-passwords meta key directly rather than paging through every
- * user on the site: a fixed page (M11) meant an agent user created after the cap was
- * invisible to the dashboard on any site with more users than the page held. A user still
+ * user on the site: a fixed page would leave an agent user created after the cap invisible
+ * to the dashboard on any site with more users than the page held. A user still
  * carries the meta key after deleting all their passwords (WP_Application_Passwords stores
  * an empty array rather than removing the key), so the per-user emptiness check below still
  * does the real filtering; this query only narrows the candidate set.
@@ -135,10 +135,10 @@ function aafm_mcp_protocol_version(): string {
 /**
  * Total number of rows in the activity log.
  *
- * Codex round 7, R7-2: routed through aafm_wpdb_scalar() rather than a bare get_var() - the
- * dashboard renders several of these counts back to back, so a failed query here could
- * otherwise inherit whichever OTHER count's query ran just before it and display a plausible
- * but wrong number instead of the real (or a failure-signalling) count.
+ * Routed through aafm_wpdb_scalar() rather than a bare get_var() because the dashboard renders
+ * several of these counts back to back, so a failed query here could otherwise inherit whichever
+ * OTHER count's query ran just before it and display a plausible but wrong number instead of the
+ * real (or a failure-signalling) count.
  *
  * @return int Non-negative row count.
  */
@@ -167,8 +167,8 @@ function aafm_recent_agent_count(): int {
 	$table  = aafm_activity_log_table();
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
 
-	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
-	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
+	// Routed through aafm_wpdb_scalar() - see aafm_activity_count()'s docblock for why a bare
+	// get_var() risks displaying an adjacent count's stale value.
 	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s', $table, $cutoff ) );
 
 	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;

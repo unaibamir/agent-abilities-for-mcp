@@ -249,9 +249,9 @@ function aafm_review_request_flush_display_count(): void {
  * bundle every front-end request pays for to answer questions only wp-admin asks.
  *
  * @param array<string,mixed> $state The full state array to store.
- * @return bool True when the option now certifies as $state (Codex round 9, R9-10) - callers
- *              that report a verdict back to the operator must act on this rather than assume
- *              a bare update_option() always lands.
+ * @return bool True when the option now certifies as $state - callers that report a verdict
+ *              back to the operator must act on this rather than assume a bare update_option()
+ *              always lands.
  */
 function aafm_review_request_save_state( array $state ): bool {
 	return aafm_update_option_verified( 'aafm_review_request', $state, false );
@@ -691,7 +691,7 @@ JS;
  *
  * @param string $verdict One of 'review', 'later', 'dismiss'.
  * @return array{state:array{status:string,first_success_seen_at:int,snooze_until:int,snooze_count:int,threshold_met:int},persisted:bool}
- *              persisted is false when the save did not actually take (Codex round 9, R9-10);
+ *              persisted is false when the save did not actually take;
  *              the returned state is still the caller's in-memory copy of what was requested,
  *              never a claim that it is what the database now holds.
  */
@@ -799,9 +799,8 @@ function aafm_handle_review_request_post(): void {
 	}
 
 	$result = aafm_review_request_record_verdict( $verdict );
-	// Honour the same persistence result the AJAX twin above already checks (Codex round 10,
-	// R10-9): this path used to discard it and redirect back as though the answer had saved,
-	// even when it had not.
+	// Honours the same persistence result the AJAX twin above already checks: redirecting back as
+	// though the answer had saved when it had not would silently lose the operator's verdict.
 	if ( ! $result['persisted'] ) {
 		wp_die( esc_html( aafm_switch_not_persisted_message( __( 'Your answer', 'agent-abilities-for-mcp' ) ) ), '', array( 'response' => 500 ) );
 	}

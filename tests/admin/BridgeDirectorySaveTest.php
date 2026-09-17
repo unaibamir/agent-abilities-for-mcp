@@ -15,7 +15,7 @@ final class BridgeDirectorySaveTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// The save handler audits its toggles (B18), so the log table has to exist or the write
+		// The save handler audits its toggles, so the log table has to exist or the write
 		// surfaces as raw wpdb output mid-test and corrupts the captured JSON body.
 		aafm_install_activity_log();
 		delete_option( 'aafm_enabled_bridged_abilities' );
@@ -147,10 +147,10 @@ final class BridgeDirectorySaveTest extends TestCase {
 	}
 
 	/**
-	 * B18: the bridge tab changes ability exposure outside the main save path and wrote no audit
-	 * rows at all - no ability_enabled when a foreign tool became reachable, no ability_disabled
-	 * when it was turned off. It must route through the same toggle-diff logging the native save
-	 * uses.
+	 * The bridge tab changes ability exposure outside the main save path, and must not skip audit
+	 * rows for it: an ability_enabled row when a foreign tool becomes reachable, an
+	 * ability_disabled row when it is turned off. It routes through the same toggle-diff logging
+	 * the native save uses.
 	 */
 	public function test_save_audits_bridged_toggles(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
@@ -190,9 +190,9 @@ final class BridgeDirectorySaveTest extends TestCase {
 	}
 
 	/**
-	 * B18, blocked half: while read-only mode is on, a posted bridged WRITE that is not already
+	 * The blocked half: while read-only mode is on, a posted bridged WRITE that is not already
 	 * stored is refused (it cannot have come from the screen, which rendered no switch for it),
-	 * and that refusal previously left no ability_enable_blocked row - the exact forged/stale-POST
+	 * and that refusal must write an ability_enable_blocked row - the exact forged/stale-POST
 	 * event the row exists to record. The detail names read-only mode, never the high-risk floor.
 	 */
 	public function test_read_only_blocked_bridge_enable_is_audited(): void {

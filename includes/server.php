@@ -38,25 +38,25 @@ function aafm_mcp_tool_name( string $ability_name ): string {
  * agent user IS resolved. The hard gate remains each ability's own permission_callback at
  * execute time. (See ROADMAP "Carried issues" for the timing correction to Phase 0.5 #2.)
  *
- * Codex round 9 R9-7: a reserved enabled name is only safe to serve when the object registered
+ * A reserved enabled name is only safe to serve when the object registered
  * under it is genuinely this plugin's own. aafm_register_enabled_abilities() (register.php)
  * treats an already-registered name as an idempotent re-fire and skips re-registering it - the
  * right call for a real re-fire, but wrong when a DIFFERENT plugin's ability claimed the name
- * first: wp_get_ability() then resolves to the foreign object, which this function used to admit
+ * first: wp_get_ability() then resolves to the foreign object, which would otherwise be admitted
  * into the server with none of this plugin's permission, allowlist, rate-limit, or audit
  * chokepoints behind it (those all live on AAFM's own decorated callbacks, never reached).
  *
- * Codex round 10 R10-4: the R9-7 fix first shipped as `instanceof AAFM_Rate_Limited_Ability`, but
+ * A class check alone (`instanceof AAFM_Rate_Limited_Ability`) is not enough:
  * that class is public and non-final, and `wp_register_ability()` accepts a caller-chosen
- * `ability_class`, so a foreign plugin can preclaim the name using this exact class with its own
+ * `ability_class`, so a foreign plugin could preclaim the name using this exact class with its own
  * permissive callbacks and pass a class check. Object identity closes that: the object admitted
  * here must be the SAME object aafm_register_ability_with_log() (register.php) actually returned
  * for this name, not merely an instance of the class it happens to use.
  *
- * Codex round 11 R11-3: the record this check compares against used to be writable through a
- * public setter that trusted whatever object it was handed - forgeable the same way the class
- * check was. AAFM_Registration_Authority (includes/class-aafm-registration-authority.php) now
- * owns that record and never accepts a ready-made object; see its docblock for the mechanism.
+ * The record this check compares against can only be written through
+ * AAFM_Registration_Authority (includes/class-aafm-registration-authority.php), which never
+ * accepts a ready-made object; see its docblock for the mechanism. A public setter that trusted
+ * whatever object it was handed would be forgeable the same way a bare class check is.
  *
  * @param array<int,string>    $enabled Enabled ability names.
  * @param array<string,string> $omitted Receives name => reason for every enabled name left out
@@ -93,25 +93,25 @@ function aafm_build_server_tools( array $enabled, array &$omitted = array() ): a
  * cap the result, and only then run the (potentially expensive) discovery check over the
  * already-bounded set.
  *
- * Codex round 9 R9-7: a reserved enabled name is only safe to serve when the object registered
+ * A reserved enabled name is only safe to serve when the object registered
  * under it is genuinely this plugin's own. aafm_register_enabled_abilities() (register.php)
  * treats an already-registered name as an idempotent re-fire and skips re-registering it - the
  * right call for a real re-fire, but wrong when a DIFFERENT plugin's ability claimed the name
- * first: wp_get_ability() then resolves to the foreign object, which this function used to admit
+ * first: wp_get_ability() then resolves to the foreign object, which would otherwise be admitted
  * into the server with none of this plugin's permission, allowlist, rate-limit, or audit
  * chokepoints behind it (those all live on AAFM's own decorated callbacks, never reached).
  *
- * Codex round 10 R10-4: the R9-7 fix first shipped as `instanceof AAFM_Rate_Limited_Ability`, but
+ * A class check alone (`instanceof AAFM_Rate_Limited_Ability`) is not enough:
  * that class is public and non-final, and `wp_register_ability()` accepts a caller-chosen
- * `ability_class`, so a foreign plugin can preclaim the name using this exact class with its own
+ * `ability_class`, so a foreign plugin could preclaim the name using this exact class with its own
  * permissive callbacks and pass a class check. Object identity closes that: the object admitted
  * here must be the SAME object aafm_register_ability_with_log() (register.php) actually returned
  * for this name, not merely an instance of the class it happens to use.
  *
- * Codex round 11 R11-3: the record this check compares against used to be writable through a
- * public setter that trusted whatever object it was handed - forgeable the same way the class
- * check was. AAFM_Registration_Authority (includes/class-aafm-registration-authority.php) now
- * owns that record and never accepts a ready-made object; see its docblock for the mechanism.
+ * The record this check compares against can only be written through
+ * AAFM_Registration_Authority (includes/class-aafm-registration-authority.php), which never
+ * accepts a ready-made object; see its docblock for the mechanism. A public setter that trusted
+ * whatever object it was handed would be forgeable the same way a bare class check is.
  *
  * @param array<int,string>    $enabled Enabled ability names.
  * @param array<string,string> $omitted Receives name => reason for every enabled name left out
@@ -492,7 +492,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// (create) are object-independent and need no case here - each falls through to its
 		// real permission_callback with empty input, the correct discovery answer.
 		//
-		// Codex hunt F10: aafm_perm_geodirectory_get() gates on the LITERAL edit_posts
+		// aafm_perm_geodirectory_get() gates on the LITERAL edit_posts
 		// capability as an unconditional first check, not the wider edit family, so discovery
 		// must match that exact floor - the family() approximation below was showing the tool
 		// to a caller (e.g. one holding only edit_others_posts) who could never actually call
@@ -525,7 +525,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// way posts do. The taxonomy is unknown at discovery (empty input), so this loops the
 		// exposed set, the same shape create-term/update-term and term-meta below use.
 		//
-		// Deliberately its OWN case, split from term-meta below (round 3), rather than sharing
+		// Deliberately its OWN case, split from term-meta below, rather than sharing
 		// that loop: aafm_perm_acf_term() accepts ANY existing term and checks edit_term($id)
 		// directly, with NO aafm_validate_taxonomy()-style public-taxonomy restriction - unlike
 		// term-meta, which routes every request through aafm_validate_term_meta_request() ->
@@ -633,10 +633,11 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// CPT updates: per-object edit (aafm_can_edit_post_object / aafm_writable_type_caps),
 		// the identical shape to update-post above, but resolved through EACH exposed type's
 		// OWN cap object rather than the literal core primitive names, for the same
-		// custom-capability_type reason as create-cpt-item just above. Previously this shared
-		// create-cpt-item's bare literal edit_posts check, which was wrong twice over: wrong for
-		// a custom capability_type, AND missing the edit_others_posts/edit_published_posts
-		// widening every sibling per-object case already got in round 2. aafm_writable_type_caps
+		// custom-capability_type reason as create-cpt-item just above - and, unlike
+		// create-cpt-item's bare literal edit_posts check, widened with the
+		// edit_others_posts/edit_published_posts arms every other per-object case already
+		// carries: a bare literal check is wrong twice over for a custom capability_type, both
+		// for the type mismatch and for missing that widening. aafm_writable_type_caps
 		// additionally requires map_meta_cap===true before it will return a cap object at all
 		// (a non-mapped type's per-object edit_post check degrades to a bare singular primitive
 		// with no author/status containment and is refused outright), so the loop below skips
@@ -704,10 +705,8 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				// paired with edit_others_posts, for SOMEONE ELSE'S private page - so a role
 				// holding edit_private_pages ALONE (without edit_others_pages) can never satisfy
 				// map_meta_cap for any object, on any branch. Keeping it as a standalone OR arm
-				// would show the tool to a role that can never actually call it - the same class of
-				// defect this comment used to defend keeping, before that was found to be wrong
-				// (Codex, fix round 1) and corrected. Removal is safe: anyone who also holds
-				// edit_others_pages still matches through that arm.
+				// would show the tool to a role that can never actually call it. Removal is safe:
+				// anyone who also holds edit_others_pages still matches through that arm.
 				return current_user_can( $pto->cap->edit_posts )
 					|| current_user_can( $pto->cap->edit_others_posts )
 					|| current_user_can( $pto->cap->edit_published_posts );
@@ -725,11 +724,11 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				// delete_published_posts (author's own published/scheduled page) - the page
 				// post-type object's own cap names for those primitives. Never a standalone
 				// delete_private_posts arm, for the identical reason edit_private_pages is
-				// excluded above: core only ever pairs it with delete_others_posts. Previously
-				// this checked delete_posts alone, hiding trash-page/delete-page from a role
-				// holding only delete_others_pages or only delete_published_pages even though the
-				// per-object check genuinely passes for them on a real page (the mismatch Codex
-				// found, mirroring update-page's original Task 8 defect one field over).
+				// excluded above: core only ever pairs it with delete_others_posts. Checking
+				// delete_posts alone would hide trash-page/delete-page from a role holding only
+				// delete_others_pages or only delete_published_pages, even though the per-object
+				// check genuinely passes for them on a real page - mirroring update-page's
+				// edit_posts-alone gap one field over.
 				return current_user_can( $pto->cap->delete_posts )
 					|| current_user_can( $pto->cap->delete_others_posts )
 					|| current_user_can( $pto->cap->delete_published_posts );
@@ -738,7 +737,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// create-comment has NO per-object component at all (aafm_perm_create_comment is a bare
 		// moderate_comments check - the comment doesn't exist yet and its author is forced to the
 		// current user), so moderate_comments is the exact, complete execute-time floor for it.
-		// Split into its own case (round 3) so it stops sharing a closure with the three
+		// Split into its own case so it stops sharing a closure with the three
 		// per-object comment tools below, which genuinely need a different floor.
 		case 'aafm/create-comment':
 			return static fn(): bool => current_user_can( 'moderate_comments' );
@@ -831,11 +830,11 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// included, since term meta can hold private data) - the term id is unknown at
 		// discovery, so this loops the exposed set the same way the acf-*-term-fields case above
 		// does, for the identical reason: edit_term resolves through map_meta_cap to the TARGET
-		// TAXONOMY's own edit_terms capability, not edit_posts. Previously this checked edit_posts,
-		// which - exactly as documented on the acf-term-fields case above - is neither necessary
-		// nor sufficient for edit_terms on a real taxonomy.
+		// TAXONOMY's own edit_terms capability, not edit_posts - which, exactly as documented on
+		// the acf-term-fields case above, is neither necessary nor sufficient for edit_terms on a
+		// real taxonomy.
 		//
-		// PUBLIC TAXONOMIES ONLY, unlike acf-term-fields' now-broader loop (round 3): every
+		// PUBLIC TAXONOMIES ONLY, unlike acf-term-fields' broader loop: every
 		// term-meta request routes through aafm_validate_term_meta_request() ->
 		// aafm_validate_taxonomy(), which genuinely denies a non-public taxonomy at execute time
 		// (aafm_perm_acf_term has no such restriction), so this loop staying public-only still
@@ -979,7 +978,7 @@ function aafm_transport_permission_callback( $request ) {
 	}
 
 	if ( ! aafm_ip_is_allowed( aafm_source_ip() ) ) {
-		// Bounded per source IP (B38), reusing the failed-app-password cap: a caller holding a
+		// Bounded per source IP, reusing the failed-app-password cap: a caller holding a
 		// VALID credential from a blocked address hits this branch on every request, so an
 		// uncapped row per denial lets one address flood the 30-day activity table. Only the
 		// row is capped - the denial below is returned every time regardless.
@@ -1047,7 +1046,7 @@ function aafm_reject_scalar_mcp_body( $result, $server, $request ) {
 		);
 	}
 
-	// B39: the second crash of the same class, one level down. The vendor treats any array with a
+	// The second crash of the same class, one level down: the vendor treats any array with a
 	// 0 key as a batch (JsonRpcResponseBuilder::is_batch_request) and feeds each element into
 	// process_single_message(array $message), so a non-array element ([1,2,3]) is a TypeError that
 	// the transport's blanket Throwable catch converts into a blanket 500 internal_error. JSON-RPC
@@ -1292,12 +1291,12 @@ function aafm_schema_bounds_violation( string $ability_name ): ?string {
  * omission (schema breach OR cap overflow) is recorded so it is never a silent drop.
  *
  * $tools is expected to already be ownership-filtered by the caller (aafm_build_server_tools())
- * before it reaches here (Codex round 10, R10-7): the cap must count only abilities this plugin
+ * before it reaches here: the cap must count only abilities this plugin
  * actually owns, or a foreign name sitting inside the cap spends its budget and is then stripped
  * anyway, stranding an owned ability beyond the cap for nothing. $extra_omitted carries omissions
  * from that earlier ownership pass (name_claimed) so this call's single reconcile records the
- * whole picture in one write rather than the caller reconciling a second time on top of it
- * (R10-5 - see aafm_register_mcp_server()).
+ * whole picture in one write rather than the caller reconciling a second time on top of it - see
+ * aafm_register_mcp_server().
  *
  * @param array<int,string>    $tools         Ownership-filtered, enabled native + bridged ability
  *                                              names (order preserved).
@@ -1375,9 +1374,9 @@ function aafm_preflight_cache_key( array $tools ): string {
  *
  * $tools is expected to already be ownership-filtered by the caller, same as the uncached
  * function above, so the cache key and the cap both key off the owned set rather than the raw
- * enabled set (Codex round 10, R10-7). $extra_omitted (the ownership pass's own name_claimed
+ * enabled set. $extra_omitted (the ownership pass's own name_claimed
  * omissions) is merged in on both the hit and miss branches so every reconcile this function
- * performs is the single, complete one for this pass (R10-5).
+ * performs is the single, complete one for this pass.
  *
  * @param array<int,string>    $tools         Ownership-filtered, enabled native + bridged ability
  *                                              names, in order.
@@ -1445,8 +1444,7 @@ function aafm_reconcile_omitted_abilities( array $omitted ): void {
 		return;
 	}
 
-	// Bare update_option() is deliberate here (Codex round 5, R5-3 asked this call site to be
-	// checked against the option-cache rule): this option is not a security or configuration
+	// Bare update_option() is deliberate here: this option is not a security or configuration
 	// decision an operator makes, it is a diagnostic snapshot the plugin recomputes fresh on
 	// every registration pass from the real ability set. A stale cache can only make the admin
 	// notice this drives lag by one pass; the very next pass above compares against a fresh
@@ -1558,12 +1556,12 @@ function aafm_register_mcp_server( $adapter ): void {
 		return;
 	}
 
-	// Ownership first, then the preflight bound, then one reconcile (Codex round 10, R10-5 and
-	// R10-7). Ownership filtering (aafm_ownership_filter_server_tools()) is a cheap per-name
+	// Ownership first, then the preflight bound, then one reconcile. Ownership filtering
+	// (aafm_ownership_filter_server_tools()) is a cheap per-name
 	// lookup with no schema walk, so running it over the full enabled set here costs nothing worth
 	// capping; doing it before the preflight means the tool-count cap only ever spends its budget
 	// on abilities this plugin actually owns, instead of a foreign name occupying a slot and then
-	// being stripped anyway, stranding an owned ability beyond the cap (R10-7). The preflight
+	// being stripped anyway, stranding an owned ability beyond the cap. The preflight
 	// bound then drops any ability whose schema breaches the measurement limits and caps the total
 	// tool count over that owned set, so neither the adapter's recursive schema serialization nor
 	// the request-time per-tool permission loop can be driven into an uncatchable memory/time
@@ -1573,16 +1571,17 @@ function aafm_register_mcp_server( $adapter ): void {
 	// meant a stable name_claimed omission produced by ownership was invisible to the preflight's
 	// own reconcile, so that first call saw an empty omission map, deleted the stored option, and
 	// the second call then recreated it and re-logged the same ability as newly omitted, every
-	// request (R10-5). Omissions are logged and surfaced via aafm_reconcile_omitted_abilities,
+	// request. Omissions are logged and surfaced via aafm_reconcile_omitted_abilities,
 	// never silently dropped.
 	//
-	// F2 (1.7.5 deferred): the ownership pass above used to run through aafm_build_server_tools(),
-	// which ALSO runs the discovery-permission check (aafm_user_can_discover_ability()) on every
-	// resolved user - so a site with well over 1,000 enabled bridged abilities invoked every
-	// foreign permission callback on ordinary authenticated traffic, before the cap ever bounded
-	// the work. aafm_ownership_filter_server_tools() is the ownership-only half of that function;
-	// the full aafm_build_server_tools() call below now only ever walks the already-bounded,
-	// already-owned set, so the discovery check's cost is capped the same way the schema walk is.
+	// The ownership pass above runs through aafm_ownership_filter_server_tools() rather than the
+	// full aafm_build_server_tools(), which ALSO runs the discovery-permission check
+	// (aafm_user_can_discover_ability()) on every resolved user - running the full check here
+	// would invoke every foreign permission callback on ordinary authenticated traffic, on a site
+	// with well over 1,000 enabled bridged abilities, before the cap ever bounded the work.
+	// aafm_ownership_filter_server_tools() is the ownership-only half of that function; the full
+	// aafm_build_server_tools() call below only ever walks the already-bounded, already-owned
+	// set, so the discovery check's cost is capped the same way the schema walk is.
 	$claimed = array();
 	$owned   = aafm_ownership_filter_server_tools( aafm_all_server_ability_names(), $claimed );
 	$bounded = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
@@ -1591,7 +1590,7 @@ function aafm_register_mcp_server( $adapter ): void {
 	// Per-connection capability gate at request time (the user is anonymous here; see
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.
 	//
-	// Codex hunt F11: a separate plugin's own later-priority mcp_adapter_tools_list callback
+	// A separate plugin's own later-priority mcp_adapter_tools_list callback
 	// could still re-add a tool DTO this filter already removed - discovery narrowing here is
 	// best-effort, not the real gate. Execution stays authoritative and independent: every call
 	// still passes through aafm_user_can_call_ability() at the register.php chokepoint, so a
@@ -1606,13 +1605,13 @@ function aafm_register_mcp_server( $adapter ): void {
 	// hidden unsafe object anywhere in it (see aafm_filter_bridged_tool_call_result() in
 	// bridge.php for the full rationale). Accepts 4 args (not 3) so the callback receives the
 	// McpTool instance and can classify by backing ability identity rather than by wire tool
-	// name alone - final gate round 3: a site can rename a tool via mcp_adapter_tool_name, so
+	// name alone - a site can rename a tool via mcp_adapter_tool_name, so
 	// the wire name is not a reliable bridged/native discriminator on its own.
 	add_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result', 10, 4 );
 
 	// A consumer WP_Error on this filter aborts a call AFTER the adapter's permission fire consumed
 	// a rate token but BEFORE execute(); release the aborted call's memo so the next same-ability
-	// call consumes fresh instead of reusing the dead call's allow (B12). Last priority so it sees a
+	// call consumes fresh instead of reusing the dead call's allow. Last priority so it sees a
 	// short-circuit from any consumer registered before it; a same-priority consumer registered later
 	// runs after this hook and is not visible here.
 	add_filter( 'mcp_adapter_pre_tool_call', 'aafm_release_rate_memo_on_aborted_tool_call', PHP_INT_MAX, 3 );

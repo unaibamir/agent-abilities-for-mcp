@@ -158,7 +158,7 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 			$wpdb->prefix . 'capabilities',
 			$wpdb->prefix . 'user_level',
 		),
-		// Codex final round 7 HIGH: every page-builder ownership marker (includes/page-
+		// Every page-builder ownership marker (includes/page-
 		// builder-guard.php) must be absolutely blocked from the generic meta abilities, not
 		// merely left off the operator's allowlist - a caller who cleared a marker via
 		// update-post-meta/delete-post-meta made aafm_exec_update_post()'s ownership check pass
@@ -537,8 +537,8 @@ function aafm_non_destructive_risk_values(): array {
  * Its implementation belongs to that plugin, so we cannot promise its removals
  * land anywhere recoverable, and claiming otherwise is the defect this guards.
  *
- * The same rule now covers a native ability added through the
- * aafm_abilities_registry filter (R2-11). The three classification lists name
+ * The same rule also covers a native ability added through the
+ * aafm_abilities_registry filter. The three classification lists name
  * abilities this plugin ships, so a third-party destructive one appeared in none
  * of them, and reading that silence as "not a permanent delete" reproduced the
  * original false promise through a door the lists cannot see. Unknown plus
@@ -550,14 +550,14 @@ function aafm_non_destructive_risk_values(): array {
  * on permanent together - 'destructive', a blank value, no annotation at all, a
  * typo like 'destrutive', an invented word like 'permanent-delete'. Asking
  * whether the value is known-safe rather than whether it is known-dangerous is
- * what stops a misspelling from reading as a promise (R3-4).
+ * what stops a misspelling from reading as a promise.
  *
  * All of those resolve the same way for one reason: the two ways of being wrong
  * are not worth the same. Promising "removals are recoverable" about an ability
  * that deletes for good is a false reassurance, while warning about permanence
  * on a site where nothing permanent is enabled is a false alarm. On the screen
  * where someone is about to hand over an access token, the reassurance is the
- * far more expensive mistake, and it is the reason B-08 exists. The remedy for
+ * far more expensive mistake, and it is the reason this check exists. The remedy for
  * the false alarm is also good: annotate risk with a recognised value, which the
  * Abilities API expects anyway, or use one of the two filters. Every ability
  * this plugin ships declares one, so this can only ever fire for a third-party
@@ -659,27 +659,26 @@ function aafm_delete_guarantee(): array {
  * cannot double-apply it to what gets written. aafm_meta_write_confirmed() independently
  * recomputes the same canonical form afterward to confirm the write landed.
  *
- * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
- * regardless of the post's real type. sanitize_meta() only checks the subtype-specific
- * sanitize_{type}_meta_{key}_for_{subtype} hook when a subtype is given (wp-includes/meta.php),
- * so a sanitize_callback registered via register_post_meta() for a non-'post' type (a page, a
- * custom post type) was invisible to this probe - a scalar-to-array coercion registered for that
- * type would sail through undetected. $post_type is now the caller's real post type.
+ * The probe passes the caller's real post type as the object subtype, not a hardcoded 'post',
+ * because sanitize_meta() only checks the subtype-specific
+ * sanitize_{type}_meta_{key}_for_{subtype} hook when a subtype is given (wp-includes/meta.php) -
+ * a sanitize_callback registered via register_post_meta() for a non-'post' type (a page, a
+ * custom post type) would otherwise be invisible to this probe, letting a scalar-to-array
+ * coercion registered for that type sail through undetected.
  *
- * Codex round 8 R8-2: "the caller's real post type" is not necessarily what update_metadata()
- * itself resolves at write time - core resolves the write-time subtype through
- * get_object_subtype( 'post', $object_id ), which is filterable via get_object_subtype_post
- * (wp-includes/meta.php). A caller that already has the object id should pass
- * get_object_subtype( 'post', $id ) rather than the raw get_post_type() result, so a site
- * filtering that hook is honoured here the same way it is at write time. A create-path caller
- * has no id yet and passes the intended post type instead - see aafm_validate_write_enrichment().
+ * The caller's real post type is not necessarily what update_metadata() itself resolves at write
+ * time - core resolves the write-time subtype through get_object_subtype( 'post', $object_id ),
+ * which is filterable via get_object_subtype_post (wp-includes/meta.php). A caller that already
+ * has the object id should pass get_object_subtype( 'post', $id ) rather than the raw
+ * get_post_type() result, so a site filtering that hook is honoured here the same way it is at
+ * write time. A create-path caller has no id yet and passes the intended post type instead - see
+ * aafm_validate_write_enrichment().
  *
  * @param string $key       Meta key (already validated/allowlisted by the caller).
  * @param mixed  $value     Raw value from input.
  * @param string $post_type The post's real object subtype (get_object_subtype( 'post', $id )
  *                           where an id exists), or the intended post type on a create where it
- *                           does not yet. Defaults to 'post' for callers that do not yet know it
- *                           (matches this function's pre-round-7 behavior).
+ *                           does not yet. Defaults to 'post' for callers that do not yet know it.
  * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
  */
 function aafm_sanitize_meta_value( string $key, $value, string $post_type = 'post' ) {
@@ -783,15 +782,15 @@ function aafm_validate_term_meta_key( string $key ) {
  * aafm_sanitize_meta_value()'s docblock for why the actual write-time sanitize_meta() call
  * inside update_metadata() must remain the only one whose output is ever stored.
  *
- * Codex round 7 R7-3: the probe used to pass the literal string 'term' as the object subtype,
- * which is never a real taxonomy name, so a sanitize_callback registered via
- * register_term_meta( $taxonomy, ... ) for ANY taxonomy was always invisible to this probe. Now
- * takes the real taxonomy the same way aafm_sanitize_meta_value() takes the real post type.
+ * The probe takes the real taxonomy, the same way aafm_sanitize_meta_value() takes the real post
+ * type, rather than the literal string 'term': that string is never a real taxonomy name, so a
+ * sanitize_callback registered via register_term_meta( $taxonomy, ... ) for any taxonomy would
+ * otherwise be invisible to this probe.
  *
- * Codex round 8 R8-2: a term's taxonomy is filterable at write time via get_object_subtype_term
+ * A term's taxonomy is filterable at write time via get_object_subtype_term
  * (wp-includes/meta.php's get_object_subtype()), so a caller that already has the term id should
- * pass get_object_subtype( 'term', $term_id ) rather than the raw, requested taxonomy - see
- * aafm_sanitize_meta_value()'s matching R8-2 note.
+ * pass get_object_subtype( 'term', $term_id ) rather than the raw, requested taxonomy - see the
+ * matching note on aafm_sanitize_meta_value().
  *
  * @param string $key      Term-meta key (already validated/allowlisted by the caller).
  * @param mixed  $value    Raw value from input.
@@ -944,7 +943,7 @@ function aafm_user_meta_deny_has_star(): bool {
  * out the whole site. A filter may NARROW this set (remove keys) but can never ADD one:
  * the filtered result is intersected with the fixed base AFTER the filter runs, so a rogue
  * filter cannot widen the list to ANY option outside the base - not just the takeover-class
- * keys the old array_diff() stripped, but template, active_plugins, or anything else (B50).
+ * keys the old array_diff() stripped, but template, active_plugins, or anything else.
  *
  * @return list<string>
  */
@@ -1001,18 +1000,17 @@ function aafm_validate_user_meta_key( string $key ) {
  *
  * Mirrors aafm_sanitize_term_meta_value() but is user-scoped.
  *
- * Codex round 7 R7-3 was raised against this function too, but was judged not to apply: unlike a
- * post type or a taxonomy, a user object's subtype is not caller-supplied - core's own
+ * Unlike a post type or a taxonomy, a user object's subtype is not caller-supplied - core's own
  * get_object_subtype( 'user', $user_id ) (wp-includes/meta.php) resolves to the literal string
  * 'user' for any user that exists, never ''.
  *
- * Codex round 8 R8-2: that resolution is still filterable, via get_object_subtype_user, the same
- * way get_object_subtype_post and get_object_subtype_term are - a site remapping a user's
- * subtype for its own register_meta() scoping was invisible to the hardcoded 'user' literal this
- * probe used to pass. $object_subtype now defaults to 'user' (this function's pre-round-8
- * behavior for a caller that has not resolved it) but a caller that already has the user id
- * should pass get_object_subtype( 'user', $user_id ) instead, exactly as aafm_sanitize_meta_value()
- * and aafm_sanitize_term_meta_value() already do for their object types.
+ * That resolution is still filterable, via get_object_subtype_user, the same way
+ * get_object_subtype_post and get_object_subtype_term are - a site remapping a user's subtype
+ * for its own register_meta() scoping would otherwise be invisible to a hardcoded 'user' literal.
+ * $object_subtype defaults to 'user' for a caller that has not resolved it, but a caller that
+ * already has the user id should pass get_object_subtype( 'user', $user_id ) instead, exactly as
+ * aafm_sanitize_meta_value() and aafm_sanitize_term_meta_value() already do for their object
+ * types.
  *
  * @param string $key            User-meta key (already validated/allowlisted by the caller).
  * @param mixed  $value          Raw value from input.
@@ -1244,10 +1242,9 @@ function aafm_validate_featured_attachment_id( $attachment_id ) {
  *
  * @param array<string,mixed> $meta      Raw meta object from input.
  * @param string              $post_type The post's real (or, for a create, about-to-be-assigned)
- *                                       post type. Codex round 7 R7-3: threaded through to
- *                                       aafm_sanitize_meta_value() so its coercion-to-array probe
- *                                       is not blind to a sanitize_callback registered for a
- *                                       non-'post' post type.
+ *                                       post type, threaded through to aafm_sanitize_meta_value()
+ *                                       so its coercion-to-array probe is not blind to a
+ *                                       sanitize_callback registered for a non-'post' post type.
  * @return array<string,mixed>|WP_Error Sanitized key=>value map, or error.
  */
 function aafm_validate_meta_payload( array $meta, string $post_type = 'post' ) {
@@ -1280,7 +1277,7 @@ function aafm_validate_meta_payload( array $meta, string $post_type = 'post' ) {
  * @param array<string,mixed> $input     Raw ability input.
  * @param string              $post_type The target post's real (create: about-to-be-assigned)
  *                                       post type, threaded through to aafm_validate_meta_payload()
- *                                       - see its docblock (Codex round 7 R7-3).
+ *                                       - see its docblock.
  * @return array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>}|WP_Error
  */
 function aafm_validate_write_enrichment( array $input, string $post_type = 'post' ) {
@@ -1665,14 +1662,15 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// any authenticated reader. Gate the block on the same per-object edit check the
 	// meta ability uses; readers who cannot edit this post get no meta block at all.
 	//
-	// Codex round 6, R6-5: edit permission is a DIFFERENT axis from the operator's meta
-	// exposure policy, and this loop used to iterate aafm_allowed_meta_keys() directly -
-	// the raw allow list, with no deny/deny-`*`/hard-block applied. An editable post with
-	// an explicitly denied key, or a site with the deny-`*` kill switch on, still had that
-	// key returned here even though the dedicated meta-reading abilities correctly refuse
-	// it. Every candidate key now goes through aafm_validate_meta_key(), the same
-	// chokepoint the bulk reader (aafm_exec_get_all_post_meta(), meta.php) already uses,
-	// so hard-block/deny/deny-`*` are honoured here exactly as they are everywhere else.
+	// Every candidate key goes through aafm_validate_meta_key(), the same chokepoint the
+	// bulk reader (aafm_exec_get_all_post_meta(), meta.php) already uses, rather than
+	// iterating aafm_allowed_meta_keys() directly - the raw allow list, with no
+	// deny/deny-`*`/hard-block applied. Edit permission is a DIFFERENT axis from the
+	// operator's meta exposure policy: an editable post with an explicitly denied key, or
+	// a site with the deny-`*` kill switch on, would otherwise still have that key returned
+	// here even though the dedicated meta-reading abilities correctly refuse it. Routing
+	// through aafm_validate_meta_key() keeps hard-block/deny/deny-`*` honoured here exactly
+	// as they are everywhere else.
 	$meta = array();
 	if ( aafm_can_edit_post_object( $post ) ) {
 		foreach ( aafm_allowed_meta_keys() as $meta_key ) {
@@ -2016,7 +2014,7 @@ function aafm_validate_revision( int $revision_id, int $post_id ) {
  *
  * The page is clamped to AAFM_LIST_PAGE_MAX server-side, matching the `maximum` every list
  * tool's `page` arg declares - so the bound holds even for a caller that reaches this helper
- * without schema validation (B44).
+ * without schema validation.
  *
  * @param array<string,mixed> $input Raw input.
  * @param int                 $max   Maximum allowed per_page.
@@ -2133,30 +2131,31 @@ function aafm_generic_error(): WP_Error {
  * (register_meta()'s sanitize_callback lands here) can legitimately trim, cast, or otherwise
  * normalize the value on the way in. Comparing a fresh read against the plugin's pre-write intent
  * instead of that canonical form reports a false error on a write that landed exactly as the
- * site's own registered sanitizer defines "landed" - Codex round 6 B6-3. Running the same
+ * site's own registered sanitizer defines "landed". Running the same
  * sanitize_meta() call here keeps a genuine veto caught: a filter that reverts to the OLD value,
  * or an update_*_metadata short-circuit that never wrote at all, still differs from the sanitized
  * NEW value.
  *
- * Codex round 8 R8-1: every call site passes wp_slash( $value ) to update_post_meta()/
+ * Every call site passes wp_slash( $value ) to update_post_meta()/
  * update_term_meta()/update_user_meta() so that core's own internal wp_unslash() is a no-op
  * round trip back to $value - core's sanitize_meta() call therefore sees exactly the unslashed
- * $intended this function receives, never a slashed form of it. This function used to run
- * sanitize_meta() against wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, which
- * feeds a slash-sensitive registered sanitizer a different input than core's own call ever sees
- * and can misjudge its output. Passing $intended straight through matches core's pipeline
- * exactly: no slashing in, no unslashing out. A scalar meta value round-trips through a longtext
+ * $intended this function receives, never a slashed form of it. Running sanitize_meta() here
+ * against $intended directly, rather than against wp_slash( $intended ) with the sanitizer's
+ * OUTPUT then unslashed, matters because a slash-sensitive registered sanitizer would otherwise
+ * be fed a different input than core's own call ever sees, which can misjudge its output. Passing
+ * $intended straight through matches core's pipeline exactly: no slashing in, no unslashing out.
+ * A scalar meta value round-trips through a longtext
  * column, so the stored value reads back as a string; comparing stringified forms also avoids a
  * false mismatch on a genuine no-op (re-sending an int or bool unchanged). An array-valued meta
  * key (a serialized token list, for example) is compared by exact array equality instead, since
  * casting an array to string is a PHP warning, not a comparison.
  *
- * 1.7.5 round 4, R4-1: replaying sanitize_meta() in-process cannot always reproduce what the
+ * Replaying sanitize_meta() in-process cannot always reproduce what the
  * REAL write actually stored, because not every registered sanitizer is a pure function of its
  * input. A sanitizer keyed on invocation count, current time, or existing storage (an
  * incrementing counter, for example) can legitimately return a different value on replay than it
  * did during the real write, and this helper has no way to tell that apart from a genuine veto by
- * comparing replayed output alone. So the canonical-replay comparison above is now the FIRST
+ * comparing replayed output alone. So the canonical-replay comparison above is the FIRST
  * check, not the only one: when it matches, that is the strongest evidence and this returns true
  * immediately. When it disagrees, this falls back to change detection against $old, the value
  * read back BEFORE the write ran. If the requested $intended is identical to $old, nothing was
@@ -2180,11 +2179,11 @@ function aafm_generic_error(): WP_Error {
  * post field's wp_insert_post_data filter can (aafm_post_field_write_confirmed() does not carry
  * this same fallback for exactly that reason - see its own docblock).
  *
- * Codex round 6, R6-4: the "nothing asked" branch above used to compare $intended against $old
- * directly (their raw forms), which cannot tell "$old is already canonical, so resubmitting it is
- * a genuine no-op" apart from "$old is NOT canonical, so resubmitting it should still trigger the
- * same canonicalization a changed value would" - both look identical as raw values. The second
- * shape let a veto that blocks canonicalization (keeping a non-canonical $old in place) read as a
+ * The "nothing asked" branch above cannot simply compare $intended against $old directly in
+ * their raw forms: that cannot tell "$old is already canonical, so resubmitting it is a genuine
+ * no-op" apart from "$old is NOT canonical, so resubmitting it should still trigger the same
+ * canonicalization a changed value would" - both look identical as raw values. That shape would
+ * let a veto that blocks canonicalization (keeping a non-canonical $old in place) read as a
  * confirmed no-op purely because the caller's literal input matched what was already stored. See
  * $old_is_canonical below.
  *
@@ -2261,14 +2260,14 @@ function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $met
 		return true;
 	}
 
-	// Codex round 6, R6-4: "nothing was asked to change" used to be judged purely from the raw
-	// values - $intended === $old - which is blind to the site's OWN sanitizer. When $old was not
+	// "Nothing was asked to change" cannot be judged purely from the raw
+	// values - $intended === $old - because that is blind to the site's OWN sanitizer. When $old was not
 	// already in its canonical form (sanitize_meta() would legitimately transform it if resaved),
 	// resubmitting that same raw value is NOT actually a no-op: the real write is still expected to
 	// land on $expected, the same canonical form a genuinely different intended value would have to
-	// reach. A persistence veto that instead leaves storage at the old, non-canonical value used to
-	// read as a confirmed no-op purely because the raw input matched $old, silently accepting a
-	// blocked canonicalization as success. Recomputing whether $old itself survives a resave
+	// reach. A persistence veto that instead leaves storage at the old, non-canonical value would
+	// otherwise read as a confirmed no-op purely because the raw input matched $old, silently
+	// accepting a blocked canonicalization as success. Recomputing whether $old itself survives a resave
 	// through the same sanitizer closes that: the common case (a value already stored in its
 	// canonical form) is completely unaffected, since re-sanitizing an already-canonical value
 	// through an idempotent sanitizer reproduces it exactly.
@@ -2277,8 +2276,8 @@ function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $met
 
 	$nothing_asked = $old_is_canonical && ( $is_arr ? $intended === $old : (string) $intended === (string) $old );
 	$unchanged     = $is_arr ? $stored === $old : (string) $stored === (string) $old;
-	// Codex round 5 R5-2: a no-op resubmission used to short-circuit to true purely because
-	// nothing was asked to change, without checking that storage actually stayed put. That let a
+	// A no-op resubmission cannot simply short-circuit to true purely because
+	// nothing was asked to change, without checking that storage actually stayed put: that would let a
 	// filter that redirects an unchanged resubmission to some THIRD value (never $old, never
 	// $intended) report as confirmed. Requiring $unchanged too closes that: a genuine no-op still
 	// confirms, but a redirect on a no-op is caught the same way a redirect on a real change is.
@@ -2304,7 +2303,7 @@ function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $met
  * longer reports as an error; a genuine veto (a filter reverting to the OLD value) still differs
  * from the canonical NEW value and is still caught.
  *
- * Codex round 7 R7-4: on a CREATE, core's own sanitize_post( $postarr, 'db' ) inside
+ * On a CREATE, core's own sanitize_post( $postarr, 'db' ) inside
  * wp_insert_post() runs before the row exists and before an ID is assigned - $postarr['ID'] is
  * unset, and sanitize_post() defaults that to 0 (wp-includes/post.php) before calling
  * sanitize_post_field() for every field. Recomputing the expected value with the newly assigned,
@@ -2314,18 +2313,18 @@ function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $met
  * context (0) the real write used; it defaults to $post_id, matching every existing update-path
  * caller, which already sanitizes with the real, existing id and is unaffected by this parameter.
  *
- * 1.7.5 round 4, R4-1: the in-process replay above used to miss one concrete, legitimate
- * normalization: core's own wpdb layer transcodes emoji into their entity-encoded form for a
- * title/content/excerpt column stored on a non-utf8mb4 charset (wp_encode_emoji(), applied
+ * The in-process replay applies the same charset check and wp_encode_emoji() call, in the same
+ * position in the pipeline, to the replayed value before unslashing it, matching one concrete,
+ * legitimate normalization: core's own wpdb layer transcodes emoji into their entity-encoded form
+ * for a title/content/excerpt column stored on a non-utf8mb4 charset (wp_encode_emoji(), applied
  * directly inside wp_insert_post()/wp_update_post(), wp-includes/post.php, on the already-slashed
  * $data array - AFTER sanitize_post_field() has run and BEFORE the wp_insert_post_data filter and
- * the final wp_unslash()). Replaying sanitize_post_field() alone never saw that step, so a
- * genuinely successful emoji-title write reported as an unconfirmed one - on GeoDirectory's create
- * path, that false failure rolled back and deleted a valid listing. This now applies the same
- * charset check and wp_encode_emoji() call, in the same position in the pipeline, to the replayed
- * value before unslashing it, so the replay matches what core actually stores.
+ * the final wp_unslash()). Replaying sanitize_post_field() alone would never see that step, so a
+ * genuinely successful emoji-title write would report as an unconfirmed one - on GeoDirectory's
+ * create path, that false failure rolls back and deletes a valid listing. Matching the pipeline
+ * here keeps the replay aligned with what core actually stores.
  *
- * A second, more general concern was raised in the same round: a save-time filter could in
+ * A second, more general concern is worth naming too: a save-time filter could in
  * principle be stateful (an incrementing counter, current-time-dependent output) and legitimately
  * return a different value on this same-process replay than it did during the real write.
  * Deliberately NOT accommodated by a fallback that accepts any change away from $old: an existing,
@@ -2341,13 +2340,13 @@ function aafm_meta_write_confirmed( $old, int $object_id, $intended, string $met
  * codebase's own write paths, and weakening detection to accommodate a hypothetical one would
  * reopen the exact veto class this function is relied on to catch.
  *
- * Codex round 7, R7-4: mirrors aafm_meta_write_confirmed()'s own round 6, R6-4 fix - the
- * "nothing asked" branch below used to compare $intended against $old directly (their raw forms),
- * which cannot tell "$old is already canonical, so resubmitting it is a genuine no-op" apart from
+ * Mirrors aafm_meta_write_confirmed()'s own treatment of the same problem: the "nothing asked"
+ * branch below cannot simply compare $intended against $old directly in their raw forms, which
+ * cannot tell "$old is already canonical, so resubmitting it is a genuine no-op" apart from
  * "$old is NOT canonical, so resubmitting it should still trigger the same canonicalization a
  * changed value would". A persistence veto that instead left storage at the old, non-canonical
- * value used to read as a confirmed no-op purely because the caller's literal input matched what
- * was already stored. Replaying $old through the exact same pipeline this function already runs
+ * value would otherwise read as a confirmed no-op purely because the caller's literal input
+ * matched what was already stored. Replaying $old through the exact same pipeline this function already runs
  * for $intended closes that; a value already in canonical form, the overwhelmingly common case, is
  * unaffected, since replaying an idempotent sanitizer against an already-canonical value
  * reproduces it exactly.
@@ -2373,13 +2372,13 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
 	$context_id = $sanitize_context_id ?? $post_id;
 	$expected   = aafm_post_field_canonical_replay( $field, $intended, $context_id );
 
-	// Codex round 8, R8-2: get_post_field() cannot tell "the field is genuinely empty" apart
+	// get_post_field() cannot tell "the field is genuinely empty" apart
 	// from "the read meant to confirm it failed" - get_post() (wp-includes/post.php) returns
 	// null on a failed query exactly the same way it does on a real cache miss with no matching
 	// row, and get_post_field() maps that null to '' just like it maps a real empty field to ''.
 	// A clearing write (post_title/content/excerpt -> "") is indistinguishable from an
-	// unconfirmable read, so a failed confirming read used to certify as a successful clear. Read
-	// through the same {ok,value} wpdb helper this codebase already uses everywhere else a
+	// unconfirmable read, so a failed confirming read would otherwise certify as a successful
+	// clear. Read through the same {ok,value} wpdb helper this codebase already uses everywhere else a
 	// failed/stale query result must not be mistaken for a real value (aafm_wpdb_row(), see
 	// option-cache.php), so a failed read fails the write instead of certifying it.
 	$view = aafm_wpdb_row( $wpdb->prepare( 'SELECT %i AS value FROM %i WHERE ID = %d', $field, $wpdb->posts, $post_id ) );
@@ -2391,13 +2390,13 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
 		return true;
 	}
 
-	// R7-4: $old itself must survive the same replay unchanged before a resubmission of it counts
+	// $old itself must survive the same replay unchanged before a resubmission of it counts
 	// as "nothing asked" - see the docblock above.
 	$old_is_canonical = aafm_post_field_canonical_replay( $field, $old, $context_id ) === $old;
 
-	// Codex round 5 R5-2: a genuine no-op resubmission (the caller asked to "change" the field to
-	// the value it already held) used to be accepted on that basis alone, without checking that
-	// storage actually stayed at $old. That missed a wp_insert_post_data filter that redirects an
+	// A genuine no-op resubmission (the caller asked to "change" the field to the value it
+	// already held) cannot be accepted on that basis alone, without checking that storage
+	// actually stayed at $old: that would miss a wp_insert_post_data filter that redirects an
 	// unchanged resubmission to some THIRD value - a real, unrequested change the caller must
 	// know about, not a successful no-op. Requiring $stored === $old too closes that.
 	return $old_is_canonical && $intended === $old && $stored === $old;
@@ -2408,7 +2407,7 @@ function aafm_post_field_write_confirmed( int $post_id, string $field, string $i
  * wp_insert_post()/wp_update_post() applies before storage: sanitize_post_field() at 'db' context,
  * then, for the three charset-sensitive fields, the same emoji-encoding step core runs before its
  * final wp_unslash(). Factored out of aafm_post_field_write_confirmed() so it can replay both
- * $intended (the real change-detection read) and $old (the R7-4 canonical-no-op check) through
+ * $intended (the real change-detection read) and $old (the canonical-no-op check) through
  * one identical pipeline rather than keeping two copies of it in sync by hand.
  *
  * @param string $field      Post field name (post_title, post_content, post_excerpt, post_status, ...).
@@ -2678,8 +2677,7 @@ function aafm_switch_not_persisted_message( string $label ): string {
 /**
  * The operator-facing explanation when a paired write persisted its restrictive half but not
  * its permissive half, so the operator can see exactly what state the site is left in rather
- * than a generic "could not be changed" that implies nothing at all was saved (Codex round 5,
- * R5-1).
+ * than a generic "could not be changed" that implies nothing at all was saved.
  *
  * @param string $saved_label  Human name of the half that persisted, already translated.
  * @param string $failed_label Human name of the half that did not, already translated.

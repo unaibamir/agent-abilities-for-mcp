@@ -379,13 +379,11 @@ function aafm_activity_detail_map(): array {
 			),
 		),
 
-		// The permanent-delete sweep (B2-07). Every ability named by
-		// aafm_permanent_delete_abilities() in helpers.php now records the identifier of what it
-		// destroyed. Before this, nine of those thirteen logged detail:null, so the audit trail
-		// could say that an agent permanently deleted something but never say WHAT - measured on
-		// the wire, where aafm/delete-comment resolved to detail:null carrying only the key NAME
-		// "comment_id", one second after aafm/delete-post resolved to "Deleted post #355935".
-		// That asymmetry shipped in 1.6.3 and earlier.
+		// Every ability named by aafm_permanent_delete_abilities() in helpers.php records the
+		// identifier of what it destroyed, so the audit trail always says not just that something
+		// was permanently deleted but what - aafm/delete-comment resolves to "Deleted comment
+		// #123" the same way aafm/delete-post resolves to "Deleted post #355935", rather than a
+		// bare detail:null that carries only the key name.
 		//
 		// The completeness of this block is not maintained by hand. DetailTest's
 		// test_every_permanent_delete_ability_records_an_identifier derives the destructive set

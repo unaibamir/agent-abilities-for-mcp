@@ -318,7 +318,7 @@ function aafm_resolve_adapter_owner_plugin(): string {
  * subscriber - sixteen read-only tools, no write ability anywhere - sent a two-million-character
  * clientInfo.name, repeated it to the cap, and grew their own usermeta row from 288 bytes to 64 MB.
  * Every call answered 200, and their next ordinary handshake took nearly four times as long,
- * because that row is unserialised on every request that primes their meta (B2-12).
+ * because that row is unserialised on every request that primes their meta.
  *
  * The storage belongs to the vendored adapter, but the gate belongs here: this plugin is the
  * governance layer in front of it, and "the library wrote it" is not a defence a governance layer
@@ -356,8 +356,8 @@ function aafm_bound_mcp_initialize_params( $result, $server = null, $request = n
 		return $result;
 	}
 
-	// A JSON-RPC batch is a list of call objects. Handling only the single-object form let the same
-	// oversized handshake through simply by wrapping it in brackets (R6-3), so both shapes walk the
+	// A JSON-RPC batch is a list of call objects. Handling only the single-object form would let an
+	// oversized handshake through simply by wrapping it in brackets, so both shapes walk the
 	// same path and every element is bounded on its own.
 	$is_batch = array_keys( $body ) === range( 0, count( $body ) - 1 );
 	$calls    = $is_batch ? $body : array( $body );

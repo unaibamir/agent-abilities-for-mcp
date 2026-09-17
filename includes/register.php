@@ -65,23 +65,21 @@ function aafm_remember_raw_permission( string $name, ?callable $callback = null 
  * Read the exact WP_Ability object this plugin's own registration chokepoint returned for a
  * name, so server construction can require that same object rather than trust its class.
  *
- * Codex round 10 R10-4: R9-7's original fix required `instanceof AAFM_Rate_Limited_Ability`, but
- * that class is public and non-final and `wp_register_ability()` accepts a caller-chosen
- * `ability_class`, so a foreign plugin can preclaim a reserved name using this exact class with
+ * A class check alone (`instanceof AAFM_Rate_Limited_Ability`) is not enough: that
+ * class is public and non-final and `wp_register_ability()` accepts a caller-chosen
+ * `ability_class`, so a foreign plugin could preclaim a reserved name using this exact class with
  * its own permissive callbacks and pass the check. Object identity cannot be forged that way: a
  * caller can name our class, but cannot hand back the specific object our own call to
  * wp_register_ability() produced.
  *
- * Codex round 11 R11-3: this function used to also take a second, optional argument and write
- * the store directly - a public two-argument function that trusts whatever WP_Ability object it
- * is handed is exactly as forgeable as the class check it replaced, just one indirection later:
- * a foreign plugin could register a name directly with wp_register_ability() and then call THIS
- * function itself to make its own object believed. The write is gone from here entirely; it now
- * happens only inside AAFM_Registration_Authority::register()
+ * This function is read-only, a thin pass-through kept so every existing call site (server.php)
+ * is unchanged. The write happens only inside AAFM_Registration_Authority::register()
  * (includes/class-aafm-registration-authority.php), which never accepts a ready-made object -
- * see that class's docblock for the full mechanism and its honestly-bounded limits. This
- * function is now read-only, a thin pass-through kept so every existing call site (server.php)
- * is unchanged.
+ * see that class's docblock for the full mechanism and its honestly-bounded limits. Keeping the
+ * write there matters: a public, two-argument function here that trusted whatever WP_Ability
+ * object it was handed would be exactly as forgeable as the class check it replaced, just one
+ * indirection later - a foreign plugin could register a name directly with wp_register_ability()
+ * and then call such a function itself to make its own object believed.
  *
  * @param string $name Ability name.
  * @return WP_Ability|null Stored object, or null if this plugin never registered $name itself.
@@ -96,7 +94,7 @@ function aafm_remember_registered_ability( string $name ): ?WP_Ability {
  * request-scoped state without each keeping its own copy. Never call this directly outside this
  * file - use the named functions that follow.
  *
- * Final-gate fix (Codex finding 1, its first review's proposal, not taken until now): a plain
+ * A plain
  * per-name stack (no token) cannot tell whose frame is on top when the SAME ability is invoked
  * recursively - a wp_pre_execute_ability filter that itself calls the same ability is the
  * concrete case, but the Abilities API places no restriction on same-name nesting. Under the
@@ -104,9 +102,8 @@ function aafm_remember_registered_ability( string $name ): ?WP_Ability {
  * the outer row was left stuck at 'started' forever while the outer callback, finding nothing
  * pending, opened and resolved a DUPLICATE row for the same call. A token turns every discard
  * into "is this specific frame mine," not merely "is there a frame for this name," which closes
- * the whole class of nesting bugs rather than the three exit paths (short-circuit,
- * normalize_input() failure, validate_input() failure) a name-only stack happened to be tested
- * against in fix round 1.
+ * the whole class of nesting bugs rather than only the three exit paths (short-circuit,
+ * normalize_input() failure, validate_input() failure) a name-only stack was tested against.
  *
  * @return array<string,array<int,array{token:string,row_id:int|null}>>
  */
@@ -427,7 +424,7 @@ function aafm_result_magnitude( $result ): ?int {
  * (a limit of 60 delivered 30). The memo records the consume decision per ability for the span of
  * one call so the second fire reuses it; aafm_rate_limit_call_reset() clears it when the call
  * resolves or is denied, so the next call consumes fresh. The release sites, covering every way a
- * call can end (B12): a rate denial and a non-true permission result reset inline below; every
+ * call can end: a rate denial and a non-true permission result reset inline below; every
  * resolution of core's execute() - including the input-schema refusal that returns before the
  * decorated execute callback - resets via AAFM_Rate_Limited_Ability::execute()'s finally; a
  * consumer WP_Error on mcp_adapter_pre_tool_call resets via
@@ -483,8 +480,7 @@ function aafm_rate_limit_call_reset( string $name ): void {
  * aafm_log_ability_invocation() listens for) only fires from inside execute(), which this
  * short-circuit prevents from ever running. Without this handler a call our own permission check
  * ALLOWED, then a third party's pre_tool_call filter killed, left no trace anywhere: no rate-memo
- * release (finding B12, doc 167) and no audit row (the round-14 panel's finding 2, doc 214) - the
- * client sees an error, and the activity log shows nothing happened.
+ * release and no audit row - the client sees an error, and the activity log shows nothing happened.
  *
  * Wired at PHP_INT_MAX in aafm_register_mcp_server() so it runs after the adapter's own permission
  * fire and sees a WP_Error short-circuit from any consumer whose filter registered before this one;
@@ -800,7 +796,8 @@ function aafm_unreachable_scoped_meta_key_error( string $name, array $input, str
  * FAIL-CLOSED, for the same reason aafm_missing_input_error() is. A WP_Error is a denial
  * everywhere it can be seen - the Abilities API admits only a strict true - so the worst this can
  * do is refuse something, never allow it. It returns BEFORE the permission callback for the same
- * reason R6-2 does: an answer that never consults the callback provably cannot depend on it, and
+ * reason the missing-argument branch does (see aafm_missing_input_error()): an answer that never
+ * consults the callback provably cannot depend on it, and
  * for a hard-blocked key the callback's answer is false anyway.
  *
  * WHERE THE MESSAGE ACTUALLY LANDS, and where it does not. The MCP path stops at the permission
@@ -809,7 +806,7 @@ function aafm_unreachable_scoped_meta_key_error( string $name, array $input, str
  * refuses to relay a permission WP_Error - it _doing_it_wrong()s over one and returns its own
  * generic 'ability_invalid_permissions' instead. So a REST caller's answer is byte-for-byte what it
  * was before this existed, and the only difference on that path is a WP_DEBUG-only notice. That is
- * unlike R6-2, which core never reaches because core validates input before permissions; a reserved
+ * unlike the missing-argument branch, which core never reaches because core validates input before permissions; a reserved
  * key is valid input, so it does reach the gate. Accepted rather than dodged: giving the REST path
  * the same message would mean a second choke point inside execute(), which is more surface on this
  * plugin's most regression-sensitive code for a path nobody reported a problem with.
@@ -960,14 +957,14 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		);
 	};
 
-	// WP 7.1 note (delegation audit, not a code change): core's WP_Ability::check_permissions()
+	// WP 7.1 note: core's WP_Ability::check_permissions()
 	// fires apply_filters('wp_ability_permission_result', ...) AFTER whatever this closure returns,
 	// and a filter attached there can flip our denial into a grant - for both the adapter's
 	// check_permission() call before execute() and core's own re-check inside execute(). This is
 	// not exploitable by this plugin's own code (nothing here hooks that filter) and there is no
 	// code fix available: a filter that runs after this closure returns can always override it, by
 	// design of the hook, the same way current_user_can() has always been overridable via
-	// map_meta_cap/user_has_cap. Decision (2026-08-22, delegation audit): ACCEPT and DOCUMENT rather
+	// map_meta_cap/user_has_cap. Decision: ACCEPT and DOCUMENT rather
 	// than attempt a third permission check that would only race the filter's own intent. See
 	// .claude/planning/ROADMAP.md's decision log for the full reasoning.
 	$args['permission_callback'] = static function ( $input = null ) use ( $original_permission, $name, $principal, $required_input ) {
@@ -1051,7 +1048,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		}
 		// A call naming a WordPress-reserved meta key is answered the same way and for the same
 		// reason: the refusal is structural, identical for every caller, and there is a different
-		// tool that does the job. Ordered AFTER the missing-argument branch so R6-2's answer is
+		// tool that does the job. Ordered AFTER the missing-argument branch so that check's answer is
 		// unchanged when a call is both malformed and reserved, and evaluated only on that branch
 		// so a malformed call is never asked about its key. See aafm_unreachable_meta_key_error()
 		// for why this discloses nothing a capability message would.
@@ -1090,7 +1087,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
 					// The consume above may have memoized an allow before the callback crashed, and this
 					// throw skips the non-true reset below - release the memo here or the dead call's
-					// allow pays for the next same-ability fire (the B12 leak, on its crash path).
+					// allow pays for the next same-ability fire, on its crash path.
 					aafm_rate_limit_call_reset( $name );
 					throw $e;
 				}
@@ -1333,11 +1330,11 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		return $result;
 	};
 
-	// Register and record atomically through AAFM_Registration_Authority (R11-3, R12-1): it
+	// Register and record atomically through AAFM_Registration_Authority: it
 	// performs this same wp_register_ability() call itself, forces its own trusted
 	// AAFM_Rate_Limited_Ability class (so the per-call rate memo is always released however
 	// core's execute() resolves - including the input-schema refusal that returns BEFORE the
-	// decorated execute callback ever runs, the B12 batch leak) rather than honoring any
+	// decorated execute callback ever runs) rather than honoring any
 	// `ability_class` this $args might carry, and records only what THAT call returns. See that
 	// class's docblock for why the earlier two-step version (register here, then separately tell
 	// a public setter what to remember) was forgeable, why trusting a caller-chosen

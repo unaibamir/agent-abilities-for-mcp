@@ -330,9 +330,9 @@ function aafm_title_within_limit( string $title ): bool {
  * Enforce the max-title-length setting, returning the standard WP_Error when it fails.
  *
  * The chokepoints aafm_insert_post()/aafm_exec_update_post() already run this check on their own
- * behalf. Codex final round 9 MEDIUM: TEC events/venues/organizers and GeoDirectory build
- * their own args arrays instead of routing through either of those, so the setting silently
- * never applied to them. This is the same check, reused rather than re-derived, for those
+ * behalf. TEC events/venues/organizers and GeoDirectory build
+ * their own args arrays instead of routing through either of those, so the setting would
+ * otherwise never apply to them. This is the same check, reused rather than re-derived, for those
  * write paths.
  *
  * @param string $title Sanitized title about to be persisted.

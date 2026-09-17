@@ -421,8 +421,7 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
-	 * aafm_oauth_get_client() must not be a bare $wpdb->get_row(), because that call hands back
-	 * the PREVIOUS query's row when the current one fails without clearing last_result. This
+	 * Aafm_oauth_get_client() must not be a bare $wpdb->get_row(), because that call hands back     * the PREVIOUS query's row when the current one fails without clearing last_result. This
 	 * reproduces the exact shape that risk takes: an allowlist save naming a real client FIRST (so
 	 * its lookup succeeds and populates $wpdb->last_result), then a second, nonexistent client
 	 * whose OWN lookup query is suppressed - a bare get_row() would silently hand back the first

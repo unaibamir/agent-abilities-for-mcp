@@ -300,7 +300,7 @@ final class ReplaceInPostStructureTest extends TestCase {
 				'x" onmouseover="alert(1)" data-z="',
 				false,
 			),
-			'literal bracket in prose'               => array(
+			'literal bracket in prose'              => array(
 				'<p>if x < y then MARK holds</p>',
 				'MARK',
 				'the bound',

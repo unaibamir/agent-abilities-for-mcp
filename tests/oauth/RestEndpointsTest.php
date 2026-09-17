@@ -679,8 +679,7 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * aafm_oauth_count_active_clients() must not cast a failed COUNT(*) to 0: that would make the
-	 * DCR soft cap read an unreadable clients table as zero active clients - spare capacity - and
+	 * Aafm_oauth_count_active_clients() must not cast a failed COUNT(*) to 0: that would make the   * DCR soft cap read an unreadable clients table as zero active clients - spare capacity - and
 	 * let registration through during an outage instead of refusing it the same way a
 	 * confirmed-at-cap read does. Fault only the cap's own COUNT query; registration must still
 	 * be refused with the identical temporarily_unavailable/503 shape the cap-reached branch uses.

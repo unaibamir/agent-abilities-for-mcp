@@ -505,8 +505,7 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * aafm_sanitize_meta_value()'s coercion-to-array probe must pass the post's real object
-	 * subtype, not the literal string 'post' - a sanitize_callback registered for a
+	 * Aafm_sanitize_meta_value()'s coercion-to-array probe must pass the post's real object     * subtype, not the literal string 'post' - a sanitize_callback registered for a
 	 * page (or any other non-'post' type) would otherwise never reach the subtype-specific hook
 	 * the probe checks, so the value's own documented scalar-only guarantee would not actually
 	 * apply to it.

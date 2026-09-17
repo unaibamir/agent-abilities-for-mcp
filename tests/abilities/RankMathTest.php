@@ -505,8 +505,7 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
-	 * aafm_exec_rankmath_update_post() must not discard every update_post_meta() return value and
-	 * answer with a fresh read that carries no comparison against what was requested, unlike its
+	 * Aafm_exec_rankmath_update_post() must not discard every update_post_meta() return value and   * answer with a fresh read that carries no comparison against what was requested, unlike its
 	 * schema sibling above. A filter that vetoes the postmeta write must surface as a structured
 	 * error, not a success response echoing the caller's stale value.
 	 */
@@ -608,8 +607,7 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
-	 * get-head must honour the operator's post-type exposure allowlist, not a bare edit_post.
-	 *
+	 * Get-head must honour the operator's post-type exposure allowlist, not a bare edit_post.   *
 	 * A public CPT the operator has NOT exposed is editable by an admin through core (edit_post is
 	 * true), but every per-object SEO ability refuses it via aafm_can_edit_post_object(), which
 	 * enforces the exposure allowlist. get-head used a bare edit_post and would leak the rendered SEO

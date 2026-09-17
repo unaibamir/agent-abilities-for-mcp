@@ -281,8 +281,7 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
-	 * wc-list-tax-rates must not be the only unbounded list while every sibling pages. It
-	 * accepts the standard page/per_page pair, slices the rows, and keeps total as the grand
+	 * Wc-list-tax-rates must not be the only unbounded list while every sibling pages. It   * accepts the standard page/per_page pair, slices the rows, and keeps total as the grand
 	 * total.
 	 */
 	public function test_list_tax_rates_pages_like_every_other_list(): void {

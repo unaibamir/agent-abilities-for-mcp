@@ -385,8 +385,7 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
-	 * mcp_adapter_pre_tool_call may short-circuit a call with a WP_Error AFTER the adapter's
-	 * permission fire consumed a token but BEFORE execute() runs - the one dead-call path
+	 * Mcp_adapter_pre_tool_call may short-circuit a call with a WP_Error AFTER the adapter's    * permission fire consumed a token but BEFORE execute() runs - the one dead-call path
 	 * core's execute() cannot see. The abort hook must release the stale memo so the next
 	 * same-ability call consumes fresh, and a pass-through (non-error) filter result must leave the
 	 * in-flight call's memo alone or core's re-check would consume a second token per call.

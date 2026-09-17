@@ -227,8 +227,7 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
-	 * aafm_reset_plugin() must check every aafm_delete_option_cache_safe() result, or a failed
-	 * configuration-option delete could still let the caller report a full reset. Because reset
+	 * Aafm_reset_plugin() must check every aafm_delete_option_cache_safe() result, or a failed  * configuration-option delete could still let the caller report a full reset. Because reset
 	 * deliberately preserves the agent user and its application passwords, a survived
 	 * aafm_enabled_abilities row means the agent keeps exactly the access the operator was told
 	 * had been cleared. This must come back false, and the option must survive.

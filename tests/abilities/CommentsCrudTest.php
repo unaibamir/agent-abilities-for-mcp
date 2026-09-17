@@ -432,8 +432,7 @@ final class CommentsCrudTest extends TestCase {
 	}
 
 	/**
-	 * wp_update_comment() returns 0 (not false, not WP_Error) both when a filter vetoes the
-	 * change AND when the request is a genuine no-op, so the executor cannot tell the two apart
+	 * Wp_update_comment() returns 0 (not false, not WP_Error) both when a filter vetoes the     * change AND when the request is a genuine no-op, so the executor cannot tell the two apart
 	 * from that return value alone. A wp_update_comment_data filter that rewrites the content
 	 * back to its original value is the veto case: the requested content never actually landed,
 	 * so this must report an error, not success carrying the old content.

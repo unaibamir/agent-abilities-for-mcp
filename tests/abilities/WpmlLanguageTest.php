@@ -182,8 +182,7 @@ final class WpmlLanguageTest extends TestCase {
 	}
 
 	/**
-	 * get-post pinned the WPML element type to 'post' for every id, while WPML's
-	 * wpml_object_id filter resolves per the element's REAL type - so a lang request on a
+	 * Get-post pinned the WPML element type to 'post' for every id, while WPML's    * wpml_object_id filter resolves per the element's REAL type - so a lang request on a
 	 * CPT item never matched a translation and silently served the untranslated item.
 	 * The element type must be derived from the actual post type.
 	 */

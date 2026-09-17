@@ -725,8 +725,7 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
-	 * aafm_review_request_save_state()'s write must be confirmed, not a bare update_option()
-	 * whose result is discarded: otherwise aafm_review_request_record_verdict() would return its
+	 * Aafm_review_request_save_state()'s write must be confirmed, not a bare update_option()    * whose result is discarded: otherwise aafm_review_request_record_verdict() would return its
 	 * in-memory state as if it had been stored and the AJAX handler would report success
 	 * regardless. A failed write must report an error and leave the option at its prior state.
 	 */

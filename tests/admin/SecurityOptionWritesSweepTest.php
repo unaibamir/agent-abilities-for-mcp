@@ -419,8 +419,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * count_bare_option_writes() must tell one matching call apart from two -
-	 * has_bare_option_write() (a plain existence check) cannot, which would let a second,
+	 * Count_bare_option_writes() must tell one matching call apart from two -   * has_bare_option_write() (a plain existence check) cannot, which would let a second,
 	 * unreviewed add_option() inside the exempt function pass the sweep unnoticed. Fails if the
 	 * counter stops at the first match instead of counting every one.
 	 */
@@ -494,8 +493,7 @@ final class SecurityOptionWritesSweepTest extends TestCase {
 	}
 
 	/**
-	 * extract_function_body() returns only the function's own tokens - a file-level
-	 * `use function add_option as seed;` never survives that extraction, so re-parsing aliases
+	 * Extract_function_body() returns only the function's own tokens - a file-level     * `use function add_option as seed;` never survives that extraction, so re-parsing aliases
 	 * from the extracted body alone (as in
 	 * test_no_bare_option_write_names_a_security_allowlist_option()) would find none, and an
 	 * aliased second call inside the function would resolve to nothing recognisable. Resolving

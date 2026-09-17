@@ -281,8 +281,7 @@ class ClientsTest extends TestCase {
 	}
 
 	/**
-	 * aafm_oauth_client_is_deactivated() must not read a client_id with no row at all as "not
-	 * deactivated" - the same verdict as a confirmed-active row - or an access token whose owning
+	 * Aafm_oauth_client_is_deactivated() must not read a client_id with no row at all as "not   * deactivated" - the same verdict as a confirmed-active row - or an access token whose owning
 	 * client was deleted (a partial table clear, a manual repair, a race with the
 	 * abandoned-client reaper) would keep authenticating. Every live gate calling this function
 	 * must see a missing row, an empty client id, and any non-1 is_active value all deny alike;

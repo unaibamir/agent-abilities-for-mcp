@@ -87,8 +87,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * venue_id/organizer_ids must not pass through absint() alone. The real TEC repository
-	 * silently drops an invalid relationship id rather than erroring, so a caller naming an
+	 * Venue_id/organizer_ids must not pass through absint() alone. The real TEC repository  * silently drops an invalid relationship id rather than erroring, so a caller naming an
 	 * ordinary post as the venue would otherwise get a normal success response with the venue
 	 * relationship simply missing. It must be refused up front instead.
 	 */
@@ -148,8 +147,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * aafm_exec_tec_create_event() must call aafm_force_draft(), so the operator's
-	 * force-draft-on-create setting applies to events too - routed through the shared
+	 * Aafm_exec_tec_create_event() must call aafm_force_draft(), so the operator's  * force-draft-on-create setting applies to events too - routed through the shared
 	 * aafm_resolve_create_status()/aafm_authorize_post_status() chokepoint (posts.php) that this
 	 * ability, like every other create ability, routes status through.
 	 */
@@ -173,8 +171,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * aafm_exec_tec_create_event() builds its own ORM args array instead of routing through
-	 * aafm_insert_post(), so the max-title-length setting needs its own enforcement here too, via
+	 * Aafm_exec_tec_create_event() builds its own ORM args array instead of routing through     * aafm_insert_post(), so the max-title-length setting needs its own enforcement here too, via
 	 * aafm_tec_enforce_content_safety() (tec/_shared.php).
 	 */
 	public function test_create_event_enforces_the_max_title_length(): void {
@@ -263,8 +260,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * aafm_tec_enforce_content_safety() must be wired into event updates too, not only creation
-	 * and the venue/organizer paths: the update path is a separate execute function that builds
+	 * Aafm_tec_enforce_content_safety() must be wired into event updates too, not only creation     * and the venue/organizer paths: the update path is a separate execute function that builds
 	 * and saves its own ORM args, so the check has to be called here explicitly, not inherited
 	 * from the create-side wiring.
 	 */
@@ -326,8 +322,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * delete_post_meta()'s bool return must not be discarded here: a delete_post_metadata filter
-	 * vetoing the delete must surface as a structured error, not a success response claiming the
+	 * Delete_post_meta()'s bool return must not be discarded here: a delete_post_metadata filter    * vetoing the delete must surface as a structured error, not a success response claiming the
 	 * all-day flag was cleared while the meta row survives.
 	 */
 	public function test_update_event_returns_an_error_when_the_all_day_clear_is_vetoed(): void {
@@ -363,8 +358,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * tec-delete-event must refuse, not silently permanently delete, on a Trash-disabled site -
-	 * matching the trash-post/trash-page/delete-block guarantee (see
+	 * Tec-delete-event must refuse, not silently permanently delete, on a Trash-disabled site -     * matching the trash-post/trash-page/delete-block guarantee (see
 	 * tests/abilities/TrashDisabledTest.php's identical disable_trash() pattern).
 	 */
 	public function test_delete_event_refuses_and_keeps_event_when_trash_disabled(): void {
@@ -397,8 +391,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * tec-get-events must not default to the repository's own published-only query, or a draft
-	 * event a caller had just created (tec-create-event defaults to draft) would be invisible to
+	 * Tec-get-events must not default to the repository's own published-only query, or a draft  * event a caller had just created (tec-create-event defaults to draft) would be invisible to
 	 * the matching list ability. This admin fixture holds every TEC capability (stub_tec()), so it
 	 * does not by itself distinguish which capability actually authorizes status=draft - that
 	 * split (edit_tribe_events for draft/pending/future, read_private_tribe_events for private) is
@@ -478,8 +471,7 @@ final class TecEventsTest extends TestCase {
 	}
 
 	/**
-	 * read_private_tribe_events alone must not widen a draft/pending/
-	 * future listing to every author's events - a role with the private-read cap but not
+	 * Read_private_tribe_events alone must not widen a draft/pending/   * future listing to every author's events - a role with the private-read cap but not
 	 * edit_others_tribe_events is still contained to its own.
 	 */
 	public function test_a_role_with_read_private_but_not_edit_others_cannot_see_another_authors_draft(): void {

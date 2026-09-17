@@ -369,8 +369,7 @@ final class CommentsWriteTest extends TestCase {
 	}
 
 	/**
-	 * wp_set_comment_status() fires its 'wp_set_comment_status' action AFTER its own DB update has
-	 * already succeeded, and returns `true` unconditionally once that update ran. Branching on
+	 * Wp_set_comment_status() fires its 'wp_set_comment_status' action AFTER its own DB update has  * already succeeded, and returns `true` unconditionally once that update ran. Branching on
 	 * that return value alone would miss a hook on the action that moves the comment again (here,
 	 * straight back to its pre-moderation status - the same shape as a second plugin's moderation
 	 * rule overriding this one, or a spam filter reverting an unwarranted approval): the truthy

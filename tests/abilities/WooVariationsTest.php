@@ -366,8 +366,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * stock_status on a variation that INHERITS the parent's stock management must
-	 * be refused, not silently discarded.
+	 * Stock_status on a variation that INHERITS the parent's stock management must  * be refused, not silently discarded.
 	 *
 	 * When the variation's own manage_stock is false but the parent manages stock,
 	 * WC_Product_Variation::get_manage_stock() returns the string 'parent', which validate_props()

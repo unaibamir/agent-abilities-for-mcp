@@ -250,8 +250,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * aafm_oauth_deactivate_client() must not collapse a real SQL failure and "0 rows matched"
-	 * into the same false-turned-true(0) result, which would make the handler always send success.
+	 * Aafm_oauth_deactivate_client() must not collapse a real SQL failure and "0 rows matched"  * into the same false-turned-true(0) result, which would make the handler always send success.
 	 * The client must stay active and the handler must report failure.
 	 */
 	public function test_revoke_client_reports_failure_when_the_deactivate_write_fails(): void {
@@ -317,8 +316,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	}
 
 	/**
-	 * aafm_oauth_client_is_deactivated() casts a failed SELECT to "not deactivated" - the very
-	 * read aafm_oauth_deactivate_client() uses to certify. Faulting only the mutation while
+	 * Aafm_oauth_client_is_deactivated() casts a failed SELECT to "not deactivated" - the very  * read aafm_oauth_deactivate_client() uses to certify. Faulting only the mutation while
 	 * leaving the confirming read healthy would miss that. Faulting the deactivating UPDATE and
 	 * its confirming SELECT together must still report failure, not a false success from two
 	 * failures cancelling out.

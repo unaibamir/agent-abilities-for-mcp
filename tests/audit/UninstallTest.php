@@ -39,8 +39,7 @@ final class UninstallTest extends TestCase {
 	}
 
 	/**
-	 * aafm_uninstall_should_delete_data() must not read the flag with a bare $wpdb->get_var(),
-	 * which would return the PREVIOUS query's row when the current query itself fails. Plant a
+	 * Aafm_uninstall_should_delete_data() must not read the flag with a bare $wpdb->get_var(),  * which would return the PREVIOUS query's row when the current query itself fails. Plant a
 	 * positive scalar from an unrelated query, then force the flag's own SELECT to
 	 * fail via one of $wpdb->query()'s no-flush paths (the `query` filter returning empty), and
 	 * confirm the failure is refused rather than certified as permission to delete every option,

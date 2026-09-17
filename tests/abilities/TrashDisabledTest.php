@@ -68,8 +68,7 @@ final class TrashDisabledTest extends TestCase {
 	}
 
 	/**
-	 * delete-block must return the same actionable trash-disabled error as its
-	 * trash-post/trash-page siblings, not the generic error that tells the agent nothing.
+	 * Delete-block must return the same actionable trash-disabled error as its  * trash-post/trash-page siblings, not the generic error that tells the agent nothing.
 	 */
 	public function test_delete_block_refuses_with_the_trash_disabled_error(): void {
 		$this->disable_trash();

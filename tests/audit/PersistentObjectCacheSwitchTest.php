@@ -442,8 +442,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * aafm_read_option_views() must not detect a failed certification read only from
-	 * $wpdb->last_error: $wpdb->query() (wp-includes/class-wpdb.php) returns false, before
+	 * Aafm_read_option_views() must not detect a failed certification read only from    * $wpdb->last_error: $wpdb->query() (wp-includes/class-wpdb.php) returns false, before
 	 * last_error is ever touched, when $wpdb->ready is false - so a certifying read run while the
 	 * database connection itself is down would otherwise look like a clean query that simply
 	 * found nothing, and a delete this call never actually reached would certify as a confirmed
@@ -584,8 +583,7 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 	}
 
 	/**
-	 * aafm_quickconnect_apply_abilities() must not discard aafm_set_enabled_abilities()'s
-	 * verified-write boolean, and the finish handler must not check only whether read-only mode
+	 * Aafm_quickconnect_apply_abilities() must not discard aafm_set_enabled_abilities()'s   * verified-write boolean, and the finish handler must not check only whether read-only mode
 	 * persisted: otherwise a run whose enabled-abilities write silently fails under a stale
 	 * persistent object cache would still report success and mark the wizard finished, even
 	 * though the abilities the operator asked for were never actually made reachable. Mirrors the

@@ -407,8 +407,7 @@ final class ServerDiscoveryTest extends TestCase {
 	 */
 
 	/**
-	 * aafm/update-post, aafm/replace-in-post, and aafm/set-featured-image share the
-	 * identical discovery case in server.php - testing update-post proves the shared closure for
+	 * Aafm/update-post, aafm/replace-in-post, and aafm/set-featured-image share the     * identical discovery case in server.php - testing update-post proves the shared closure for
 	 * all three. aafm_perm_update_post delegates to aafm_can_edit_post_object, which resolves the
 	 * same edit_posts/edit_others_posts/edit_published_posts OR that update-page's per-object
 	 * check does; edit_others_posts was the missing arm.
@@ -443,8 +442,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * aafm/trash-post and aafm/delete-post's delete floor needs the same widening as
-	 * the edit floor above, on the delete side (delete_others_posts).
+	 * Aafm/trash-post and aafm/delete-post's delete floor needs the same widening as    * the edit floor above, on the delete side (delete_others_posts).
 	 */
 	public function test_trash_post_discoverable_with_delete_others_posts_alone(): void {
 		add_role(
@@ -468,8 +466,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * aafm/trash-page and aafm/delete-page must not check only
-	 * delete_pages (i.e. the page type's delete_posts cap): missing delete_others_posts and
+	 * Aafm/trash-page and aafm/delete-page must not check only  * delete_pages (i.e. the page type's delete_posts cap): missing delete_others_posts and
 	 * delete_published_posts is the exact mismatch already fixed on update-page but
 	 * never carried to this sibling.
 	 */
@@ -560,8 +557,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * add-post-terms shares the same per-object edit floor as update-post.
-	 */
+	 * Add-post-terms shares the same per-object edit floor as update-post.  */
 	public function test_add_post_terms_discoverable_with_edit_others_posts_alone(): void {
 		add_role(
 			'aafm_others_posts_terms',
@@ -836,8 +832,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * create-cpt-item must not check only the literal core
-	 * 'edit_posts' string, which is wrong for a CPT registered with its own
+	 * Create-cpt-item must not check only the literal core  * 'edit_posts' string, which is wrong for a CPT registered with its own
 	 * capability_type - a role holding that type's own edit_posts-equivalent cap (e.g.
 	 * edit_aafm_widgets) but not literal edit_posts can genuinely create a draft item of that
 	 * type, and discovery must not hide the tool from it.
@@ -879,8 +874,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * update-cpt-item has the identical per-object edit_post shape
-	 * as update-post (aafm_can_edit_post_object), so it must not share create-cpt-item's bare
+	 * Update-cpt-item has the identical per-object edit_post shape  * as update-post (aafm_can_edit_post_object), so it must not share create-cpt-item's bare
 	 * literal edit_posts check - wrong for the same custom-capability_type reason - and it also
 	 * needs the same edit_others/edit_published widening every sibling per-object case already
 	 * has.
@@ -925,8 +919,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * create-comment has NO per-object component (the comment
-	 * doesn't exist yet and its author is forced to the current user), so splitting it into its
+	 * Create-comment has NO per-object component (the comment   * doesn't exist yet and its author is forced to the current user), so splitting it into its
 	 * own case must not change its behaviour - moderate_comments alone is still the exact,
 	 * complete floor.
 	 */
@@ -978,8 +971,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * aafm_perm_acf_term() accepts any EXISTING term and checks
-	 * edit_term($id) directly, with no aafm_validate_taxonomy()-style public-taxonomy
+	 * Aafm_perm_acf_term() accepts any EXISTING term and checks     * edit_term($id) directly, with no aafm_validate_taxonomy()-style public-taxonomy
 	 * restriction (unlike term-meta, which routes through aafm_validate_term_meta_request() and
 	 * DOES enforce that restriction). So ACF term-fields must not share term-meta's taxonomy
 	 * loop, since that loop is too narrow for it: a user whose only usable taxonomy is non-public

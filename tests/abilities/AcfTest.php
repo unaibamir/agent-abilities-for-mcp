@@ -1639,8 +1639,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * update_field() persists through update_metadata(), which wp_unslash()es the value, so a
-	 * backslash written unslashed loses one level on store. The write path must wp_slash() before
+	 * Update_field() persists through update_metadata(), which wp_unslash()es the value, so a   * backslash written unslashed loses one level on store. The write path must wp_slash() before
 	 * update_field() (matching the meta.php/terms.php/user-meta.php writers) - without it a value
 	 * like C:\Users corrupts in storage AND the read-back verify reports the mangled persist as a
 	 * failed write. The stub models the real unslash-on-store.

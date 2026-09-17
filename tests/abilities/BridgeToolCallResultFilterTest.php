@@ -357,8 +357,7 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
-	 * get_object_vars() called from OUTSIDE a class omits private and protected properties, so an
-	 * object holding only PRIVATE state reads as "zero properties" from this function's point of
+	 * Get_object_vars() called from OUTSIDE a class omits private and protected properties, so an   * object holding only PRIVATE state reads as "zero properties" from this function's point of
 	 * view - but a JsonSerializable object with that exact shape still leaks its private data once
 	 * the adapter calls wp_json_encode() on it via jsonSerialize(). This must be REFUSED, not
 	 * exempted: the guard has to check the exact class, not merely the visible property count,

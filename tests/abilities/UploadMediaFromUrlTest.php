@@ -126,8 +126,7 @@ final class UploadMediaFromUrlTest extends TestCase {
 	}
 
 	/**
-	 * media_handle_sideload() already commits the attachment before this ability re-sanitizes an
-	 * IPTC/EXIF caption that landed in post_content. If that re-save fails, the attachment must
+	 * Media_handle_sideload() already commits the attachment before this ability re-sanitizes an    * IPTC/EXIF caption that landed in post_content. If that re-save fails, the attachment must
 	 * not be left behind with its un-renormalized caption.
 	 */
 	public function test_a_failed_caption_resave_deletes_the_orphaned_attachment(): void {

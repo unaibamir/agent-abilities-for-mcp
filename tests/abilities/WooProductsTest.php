@@ -197,8 +197,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * get_children() is not variation-specific - on a grouped product it returns the grouped
-	 * child PRODUCT ids, not variations. Only a variable product's children are variations, so a
+	 * Get_children() is not variation-specific - on a grouped product it returns the grouped    * child PRODUCT ids, not variations. Only a variable product's children are variations, so a
 	 * grouped product must report an empty variation_ids.
 	 */
 	public function test_get_product_grouped_children_are_not_variation_ids(): void {
@@ -397,8 +396,7 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
-	 * stock_status alongside manage_stock:true must be refused, not silently discarded.
-	 *
+	 * Stock_status alongside manage_stock:true must be refused, not silently discarded.     *
 	 * When stock is managed, WooCommerce derives stock_status from stock_quantity in
 	 * validate_props() on save, so accepting a caller-supplied stock_status there would let it be
 	 * silently overwritten while the write still reported success. The contradictory pair is

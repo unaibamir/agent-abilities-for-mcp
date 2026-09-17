@@ -199,8 +199,7 @@ function aafm_geodirectory_shape_row( $info ): array {
  * value first - that function concatenates $meta_value directly into raw SQL rather than
  * preparing it (see this file's own docblock), so this plugin must never hand it a raw string.
  *
- * geodir_save_post_meta() returns false only when the detail table or column is missing; on the
- * actual write path it runs $wpdb->query() and returns nothing at all,
+ * Geodir_save_post_meta() returns false only when the detail table or column is missing; on the * actual write path it runs $wpdb->query() and returns nothing at all,
  * regardless of whether that query succeeded. This plugin has no way to see a failed
  * UPDATE/INSERT through its return value, so the only way to know a supplied field actually
  * persisted is to read every one of them back and compare - the same "certify against the real
@@ -775,8 +774,7 @@ function aafm_args_geodirectory_create_listing(): array {
  * succeeded - shared by the core-field check and the address/location-field check below so the
  * "delete, then pick one of two messages" shape lives in one place, not two.
  *
- * wp_delete_post()'s own return is checked because a pre_delete_post filter refusing the
- * deletion (any plugin can register one) would otherwise leave the half-written post behind
+ * Wp_delete_post()'s own return is checked because a pre_delete_post filter refusing the * deletion (any plugin can register one) would otherwise leave the half-written post behind
  * while the message claimed nothing remained.
  *
  * @param int    $post_id Listing post id to remove.

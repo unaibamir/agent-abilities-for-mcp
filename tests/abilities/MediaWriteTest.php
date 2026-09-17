@@ -452,8 +452,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * media_handle_sideload() writes an IPTC/EXIF-derived caption straight into the attachment's
-	 * post_content, and core's wp_read_image_metadata() applies only trim(), no HTML/JS stripping.
+	 * Media_handle_sideload() writes an IPTC/EXIF-derived caption straight into the attachment's    * post_content, and core's wp_read_image_metadata() applies only trim(), no HTML/JS stripping.
 	 * Reproducing that directly (a real JPEG with an IPTC 2#120 caption of
 	 * "<script>alert(1)</script>", driven through this exact ability) does NOT go red on the WP
 	 * core installed in this environment (7.1): wp_read_image_metadata() itself unconditionally runs
@@ -549,8 +548,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * update_post_meta()'s return value for the caller's alt text is checked, not discarded: a
-	 * metadata filter vetoing that write must surface as a structured error, not a success
+	 * Update_post_meta()'s return value for the caller's alt text is checked, not discarded: a  * metadata filter vetoing that write must surface as a structured error, not a success
 	 * response for an attachment whose alt text never actually landed.
 	 */
 	public function test_upload_media_returns_an_error_when_the_alt_write_is_vetoed(): void {
@@ -722,8 +720,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * update_post_meta()'s return value for the alt text write is checked, not discarded: a
-	 * metadata filter vetoing that write must surface as a structured error, not a success
+	 * Update_post_meta()'s return value for the alt text write is checked, not discarded: a     * metadata filter vetoing that write must surface as a structured error, not a success
 	 * response reporting the old alt text as though it were replaced.
 	 */
 	public function test_update_media_returns_an_error_when_the_alt_write_is_vetoed(): void {

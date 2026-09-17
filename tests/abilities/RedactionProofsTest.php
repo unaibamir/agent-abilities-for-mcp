@@ -441,8 +441,7 @@ final class RedactionProofsTest extends TestCase {
 	}
 
 	/**
-	 * security_badge and terminal_display match only as compounds, not as bare prefixes.
-	 *
+	 * Security_badge and terminal_display match only as compounds, not as bare prefixes.    *
 	 * The names security_badge and terminal_display are ordinary UI configuration. Marking them
 	 * withheld would give an answer the operator doesn't actually want. The credential compounds
 	 * those tokens exist for must still be caught, which is the other half of the assertion.

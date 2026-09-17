@@ -711,8 +711,7 @@ final class WpmlLangAllTest extends TestCase {
 	}
 
 	/**
-	 * aafm/get-media has the identical shape-under-own-language requirement as the post/search
-	 * list paths: aafm_redact_media() (which calls the filterable get_the_title()) must run
+	 * Aafm/get-media has the identical shape-under-own-language requirement as the post/search  * list paths: aafm_redact_media() (which calls the filterable get_the_title()) must run
 	 * before the language scope restores to ambient, not after. Covers both explicit lang and
 	 * "all", since both share the same $shape_language closure.
 	 */

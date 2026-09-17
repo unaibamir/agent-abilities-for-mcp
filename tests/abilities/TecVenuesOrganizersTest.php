@@ -369,8 +369,7 @@ final class TecVenuesOrganizersTest extends TestCase {
 	}
 
 	/**
-	 * aafm_exec_tec_create_venue()/aafm_exec_tec_create_organizer() route through
-	 * aafm_insert_post() rather than building their own ORM args arrays directly, so the
+	 * Aafm_exec_tec_create_venue()/aafm_exec_tec_create_organizer() route through   * aafm_insert_post() rather than building their own ORM args arrays directly, so the
 	 * max-title-length setting applies to venues/organizers via the shared
 	 * aafm_tec_enforce_content_safety() chokepoint (tec/_shared.php), the same as events.
 	 */

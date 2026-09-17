@@ -548,8 +548,7 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * register_post_meta() for a non-'post' type registers its sanitize_callback on the
-	 * subtype-specific sanitize_post_meta_{key}_for_{subtype} hook (wp-includes/meta.php), which
+	 * Register_post_meta() for a non-'post' type registers its sanitize_callback on the     * subtype-specific sanitize_post_meta_{key}_for_{subtype} hook (wp-includes/meta.php), which
 	 * sanitize_meta() only consults when given that same subtype - so a probe that hardcodes the
 	 * literal string 'post' as the object subtype, no matter what post type the meta actually
 	 * belongs to, would make a coercion callback registered for 'page' invisible to it. Passing
@@ -679,8 +678,7 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * aafm_post_field_write_confirmed()'s "nothing asked" branch must not be judged from the raw
-	 * values alone ($intended === $old): that would be blind to whether $old was already in the
+	 * Aafm_post_field_write_confirmed()'s "nothing asked" branch must not be judged from the raw    * values alone ($intended === $old): that would be blind to whether $old was already in the
 	 * field's own canonical (sanitized) form, the same defect aafm_meta_write_confirmed() (commit
 	 * 2781422) closes for meta. Resubmitting a non-canonical $old is a real
 	 * ask, since the write is still expected to land on the canonical form a genuinely different
@@ -715,8 +713,7 @@ final class HelpersTest extends TestCase {
 	}
 
 	/**
-	 * get_post_field() returns '' both when a field is genuinely empty and when the read that was
-	 * meant to confirm it failed - get_post() (wp-includes/post.php) returns null on a failed
+	 * Get_post_field() returns '' both when a field is genuinely empty and when the read that was   * meant to confirm it failed - get_post() (wp-includes/post.php) returns null on a failed
 	 * query the same way it does on a real "no such row", and get_post_field() maps that null to
 	 * '' exactly like it maps a real empty field to ''. A clearing write
 	 * (post_title/content/excerpt -> "") is therefore indistinguishable from an unconfirmable read

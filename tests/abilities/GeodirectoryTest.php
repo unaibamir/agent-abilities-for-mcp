@@ -869,8 +869,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * geodir_save_post_meta()'s return value never reflects a real
-	 * underlying write failure (it returns false only for a missing column, nothing at all
+	 * Geodir_save_post_meta()'s return value never reflects a real  * underlying write failure (it returns false only for a missing column, nothing at all
 	 * otherwise), so a create that silently failed to persist its street field would otherwise be
 	 * reported as a successful listing with an empty/stale address - the same silent-wrong-answer
 	 * shape this confirmation logic exists to stop. A newly created listing whose fields cannot be
@@ -1031,8 +1030,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * geodir_get_post_info() has a SECOND filter point beyond the one the test
-	 * above covers - 'geodir_post_info_query' reshapes the SQL query itself, before either the
+	 * Geodir_get_post_info() has a SECOND filter point beyond the one the test  * above covers - 'geodir_post_info_query' reshapes the SQL query itself, before either the
 	 * database read or that other filter ever runs. A filter that rewrites the query to return an
 	 * uppercased street column reproduces the same class of bug. The confirmation must not go
 	 * through geodir_get_post_info() at all (query filter included), only a direct table read.
@@ -1151,8 +1149,7 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * aafm_exec_geodirectory_create_listing() must route through aafm_insert_post() rather than
-	 * building its own wp_insert_post() call, or none of the operator's three global
+	 * Aafm_exec_geodirectory_create_listing() must route through aafm_insert_post() rather than     * building its own wp_insert_post() call, or none of the operator's three global
 	 * content-safety settings would apply to it.
 	 */
 	public function test_create_listing_honours_force_draft_even_for_an_authorized_publish_request(): void {

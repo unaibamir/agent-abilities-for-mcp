@@ -144,8 +144,7 @@ final class SsrfOwnedCurlFetchTest extends TestCase {
 	}
 
 	/**
-	 * aafm_ssrf_safe_fetch_url() composes aafm_ssrf_owned_curl_fetch() and
-	 * aafm_ssrf_process_fetch_response() directly, with no pre_http_request mock possible or
+	 * Aafm_ssrf_safe_fetch_url() composes aafm_ssrf_owned_curl_fetch() and  * aafm_ssrf_process_fetch_response() directly, with no pre_http_request mock possible or
 	 * needed in between. This proves the SECOND half of that pipe - a REAL fetch result feeding
 	 * cleanly into aafm_ssrf_process_fetch_response() - against a real fetch result rather than a
 	 * synthetic array. It does NOT call aafm_ssrf_safe_fetch_url() itself, so it cannot prove the

@@ -658,8 +658,7 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * file_get_contents() is only an outbound-fetch primitive when its argument is an http(s)
-	 * URL - the local, non-network calls this codebase actually makes are legitimate. Confirm the
+	 * File_get_contents() is only an outbound-fetch primitive when its argument is an http(s)   * URL - the local, non-network calls this codebase actually makes are legitimate. Confirm the
 	 * call is real (same rule as count_function_call_tokens()), then walk the balanced parens
 	 * collecting the raw argument text and look for 'http' in THAT text only, matching against the
 	 * actual argument rather than the whole file's text.

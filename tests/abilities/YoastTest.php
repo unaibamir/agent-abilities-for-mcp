@@ -326,8 +326,7 @@ final class YoastTest extends TestCase {
 	}
 
 	/**
-	 * aafm_exec_yoast_update_post() must not discard update_post_meta()
-	 * return values and answer with a fresh read that carries no comparison against what was
+	 * Aafm_exec_yoast_update_post() must not discard update_post_meta()     * return values and answer with a fresh read that carries no comparison against what was
 	 * requested. A filter that vetoes the postmeta write must surface as a structured error, not
 	 * a success response echoing the caller's stale value.
 	 */

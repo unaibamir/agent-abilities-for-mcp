@@ -339,8 +339,7 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	/**
-	 * is_wp_error() alone is not enough to confirm the write landed: a wp_insert_post_data filter
-	 * that reverts the content must surface as a structured error, not a success response
+	 * Is_wp_error() alone is not enough to confirm the write landed: a wp_insert_post_data filter   * that reverts the content must surface as a structured error, not a success response
 	 * reporting a positive replacement count for a change that never landed.
 	 */
 	public function test_returns_an_error_when_the_write_is_vetoed(): void {

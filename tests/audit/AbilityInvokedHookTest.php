@@ -149,8 +149,7 @@ final class AbilityInvokedHookTest extends TestCase {
 	}
 
 	/**
-	 * aafm_log_ability_invocation() pushes a pending row before core does any work, but a real WP
-	 * 7.1 execute() returns directly - without ever reaching check_permissions() or the decorated
+	 * Aafm_log_ability_invocation() pushes a pending row before core does any work, but a real WP   * 7.1 execute() returns directly - without ever reaching check_permissions() or the decorated
 	 * execute_callback - when validate_input() fails on a malformed input. Left unresolved, that
 	 * pending entry would stay on the per-name stack, and a LATER call for the SAME ability,
 	 * denied at a preliminary permission check that never goes through execute() (exactly how the

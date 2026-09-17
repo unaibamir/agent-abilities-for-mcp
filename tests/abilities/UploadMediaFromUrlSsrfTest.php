@@ -5,8 +5,7 @@
  * by a call-count assertion, not just a refusal), no redirects, a
  * size cap enforced even against a synthetic fetch result, and the existing byte-sniff allow-list.
  *
- * aafm_ssrf_safe_fetch_url() does not route through
- * `wp_safe_remote_get()`/`pre_http_request` at all - it calls aafm_ssrf_owned_curl_fetch()
+ * Aafm_ssrf_safe_fetch_url() does not route through * `wp_safe_remote_get()`/`pre_http_request` at all - it calls aafm_ssrf_owned_curl_fetch()
  * directly (includes/abilities/media.php). Mocking a fetch result via `pre_http_request`
  * therefore cannot intercept anything, so every test below that needs a fake response instead
  * calls either aafm_ssrf_validate_fetch_target() directly (the validation half, before
@@ -79,8 +78,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * function_exists('curl_init') is not the test Requests itself runs
-	 * before selecting the Curl transport over Fsockopen for an https:// request - Requests also
+	 * Function_exists('curl_init') is not the test Requests itself runs     * before selecting the Curl transport over Fsockopen for an https:// request - Requests also
 	 * requires curl_exec() to exist and the installed libcurl to have SSL support. This CI/dev
 	 * container has a real, SSL-capable cURL build, so the true default (with no filter override)
 	 * must be true - guards the common path against the stricter check regressing to false.
@@ -113,8 +111,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * aafm_url_would_use_proxy() must not pass the full URL as a second filter
-	 * argument, or any 'all' hook observer could read a signed query string before any control had
+	 * Aafm_url_would_use_proxy() must not pass the full URL as a second filter  * argument, or any 'all' hook observer could read a signed query string before any control had
 	 * run. This is a plugin-defined filter (unlike the core-mirrored http_allowed_safe_ports below,
 	 * which legitimately still carries the URL), so a call-count assertion is what proves the URL
 	 * is dropped rather than merely unread by this particular observer.
@@ -260,8 +257,7 @@ final class UploadMediaFromUrlSsrfTest extends TestCase {
 	}
 
 	/**
-	 * curl_setopt_array()'s return value must be checked: a single option
-	 * it cannot apply (CURLOPT_PROXYTYPE with an out-of-range value, verified separately to make
+	 * Curl_setopt_array()'s return value must be checked: a single option   * it cannot apply (CURLOPT_PROXYTYPE with an out-of-range value, verified separately to make
 	 * curl_setopt_array() return false without throwing, per the cURL manual's documented behavior)
 	 * must not let curl_exec() run anyway. This injects exactly that failure via the aafm_media_fetch_curl_options
 	 * seam and proves two things: a WP_Error comes back, and curl_exec() itself was never reached.

@@ -224,8 +224,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * aafm_oauth_client_is_deactivated() must not cast a failed SELECT to false ("not
-	 * deactivated"), or a live bearer token whose owning client cannot actually be checked would
+	 * Aafm_oauth_client_is_deactivated() must not cast a failed SELECT to false ("not   * deactivated"), or a live bearer token whose owning client cannot actually be checked would
 	 * keep validating for the duration of a transient database failure. The client here is
 	 * genuinely ACTIVE and the token is genuinely fresh; only the deactivation-check read fails.
 	 * The token must still be refused, not accepted, because the live gate cannot tell "confirmed
@@ -259,8 +258,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * aafm_oauth_client_is_deactivated() must not read a missing client row as "not deactivated"
-	 * (the same as a confirmed-active row), or a token whose owning client row was later deleted
+	 * Aafm_oauth_client_is_deactivated() must not read a missing client row as "not deactivated"    * (the same as a confirmed-active row), or a token whose owning client row was later deleted
 	 * - a partial table clear, a manual repair, or a race with the abandoned-client reaper - would
 	 * keep validating indefinitely. The token here is genuinely fresh; only the client row is
 	 * gone. The live gate must require a positively confirmed active row, not merely the absence
@@ -985,8 +983,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * aafm_oauth_client_is_deactivated() correctly fails closed on an unreadable clients table,
-	 * but the caller must not always report "the client is no longer active" for that: that
+	 * Aafm_oauth_client_is_deactivated() correctly fails closed on an unreadable clients table,     * but the caller must not always report "the client is no longer active" for that: that
 	 * message is true only when the client was genuinely confirmed inactive, not when this
 	 * pipeline simply could not check.
 	 */

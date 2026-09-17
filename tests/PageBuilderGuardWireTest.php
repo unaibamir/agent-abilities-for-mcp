@@ -163,8 +163,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 	}
 
 	/**
-	 * tec-update-event writes post_content through the ORM, so this proves a real
-	 * ownership check on a real tools/call, not just the direct-PHP proof in
+	 * Tec-update-event writes post_content through the ORM, so this proves a real   * ownership check on a real tools/call, not just the direct-PHP proof in
 	 * PageBuilderGuardSweepTest.php, since a guard wired into the wrong seam could still pass
 	 * a direct call.
 	 */
@@ -201,8 +200,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 	}
 
 	/**
-	 * geodirectory-update-listing calls wp_update_post() directly, so this is the
-	 * same real-tools/call proof as the TEC test above.
+	 * Geodirectory-update-listing calls wp_update_post() directly, so this is the   * same real-tools/call proof as the TEC test above.
 	 */
 	public function test_geodirectory_update_listing_refuses_an_avada_owned_listing_over_a_real_tools_call(): void {
 		$this->register_enabled( array( 'aafm/geodirectory-update-listing' ) );

@@ -341,8 +341,7 @@ function aafm_tec_event_orm_args( array $input ): array {
 /**
  * Confirm venue_id/organizer_ids in $input actually name existing venue/organizer posts.
  *
- * aafm_tec_event_orm_args() above passes these ids through absint() alone. TEC's own
- * repository (Repositories/Event.php, confirmed against the installed plugin)
+ * Aafm_tec_event_orm_args() above passes these ids through absint() alone. TEC's own * repository (Repositories/Event.php, confirmed against the installed plugin)
  * silently drops an invalid venue/organizer relationship on save rather than erroring, so a
  * caller-supplied id naming an ordinary post would be dropped with no error and no signal
  * in the response - the exact silent-wrong-answer shape this validation exists to stop.
@@ -590,10 +589,10 @@ function aafm_exec_tec_update_event( array $input ) {
 	// TEC quirk (see TecStubStore.php's write_meta()), not one that would pass regardless.
 	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
 		delete_post_meta( $id, '_EventAllDay' );
-		// delete_post_meta()'s bool return is not enough on its own: a delete_post_metadata
-		// filter vetoing the delete would leave the event still marked all-day while this
-		// ability reported an ordinary success. Confirm the key is actually gone rather than
-		// trusting the call didn't error.
+		// A truthy return from that delete isn't enough on its own: a filter vetoing the
+		// underlying meta delete would leave the event still marked all-day while this ability
+		// reported an ordinary success. Confirm the key is actually gone rather than trusting
+		// that the call didn't error.
 		if ( metadata_exists( 'post', $id, '_EventAllDay' ) ) {
 			return new WP_Error(
 				'aafm_tec_write_unconfirmed',

@@ -17,7 +17,7 @@ use AAFM\Tests\TestCase;
 final class LogInternalsTest extends TestCase {
 
 	/**
-	 * B5: the schema self-heal must ride the paths that actually take traffic. admin_init only
+	 * The schema self-heal must ride the paths that actually take traffic. admin_init only
 	 * fires on admin requests, so a headless site that auto-updates over cron and serves MCP over
 	 * REST would keep failing every audit insert against a stale schema while calls keep
 	 * succeeding, and nobody would ever open wp-admin to trigger the heal. The audit log is a
@@ -266,7 +266,7 @@ final class LogInternalsTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-3: the version-stamp write's return value used to be discarded. A schema
+	 * The version-stamp write's return value must be checked, not discarded. A schema
 	 * that is genuinely healthy but whose stamp write fails to persist must not be allowed to
 	 * look settled - the version must stay behind (so the self-heal keeps retrying) and the error
 	 * transient, already cleared on the strength of the schema check alone, must be re-set so the

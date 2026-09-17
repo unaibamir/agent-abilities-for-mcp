@@ -64,8 +64,8 @@ function aafm_post_has_foreign_builder_ownership( int $post_id ) {
  * The page-builder ownership marker map: meta key => detected builder's short name.
  *
  * Extracted to its own function so aafm_hard_blocked_meta_key() (includes/helpers.php) can hard-
- * block every configured marker key from the generic post-meta abilities - Codex final round 7
- * HIGH: `et_pb_use_builder`/`fusion_builder_status`/`fusion_builder_converted` are NOT `_`-prefixed
+ * block every configured marker key from the generic post-meta abilities:
+ * `et_pb_use_builder`/`fusion_builder_status`/`fusion_builder_converted` are NOT `_`-prefixed
  * so is_protected_meta() never protects them, and neither did the built-in hard-block list, so an
  * operator who exposes `*` (or one of these keys by name) via the meta allowlist let the agent
  * clear the marker with update-post-meta/delete-post-meta and then have aafm_exec_update_post()'s
@@ -97,7 +97,7 @@ function aafm_page_builder_markers(): array {
  * Wording covers BOTH outcomes an unguarded write could have, not only "no visible effect":
  * Avada/Fusion Builder is the one covered builder that DOES render from post_content (Fusion
  * shortcodes), so an unguarded generic write there would alter or corrupt the shortcode tree
- * rather than silently do nothing - Codex final round 7 LOW.
+ * rather than silently do nothing.
  *
  * @param string $builder The detected builder's short name (from aafm_post_has_foreign_builder_ownership()).
  * @return WP_Error

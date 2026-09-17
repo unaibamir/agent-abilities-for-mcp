@@ -7,25 +7,20 @@
  * aafm_exec_update_post() covers all three - this sweep proves that delegation actually carries
  * the guard through, rather than trusting the delegation claim.
  *
- * Codex final round 8 HIGH: tec-update-event and geodirectory-update-listing both wrote
- * post_content with no ownership check at all, and this file's own hand-written list of write
- * callbacks never enumerated either one - the sweep's coverage was itself the gap, not just the
- * two missing checks. test_every_post_content_write_site_is_guarded_or_explicitly_exempt() below
- * is the structural fix for THAT: it scans every includes/abilities/**\/*.php file for a
- * post_content write and asserts the enclosing function either calls the ownership check itself
- * or is named in an explicit, reasoned exemption list, so a FUTURE write path that skips the
- * guard fails this test by construction rather than needing a human to remember to add a row
- * above.
+ * tec-update-event and geodirectory-update-listing both write post_content, so both need the
+ * ownership check too - a hand-written list of write callbacks is exactly the kind of list a
+ * future write path can slip past unnoticed.
+ * test_every_post_content_write_site_is_guarded_or_explicitly_exempt() below is the structural
+ * fix for that: it scans every includes/abilities/**\/*.php file for a post_content write and
+ * asserts the enclosing function either calls the ownership check itself or is named in an
+ * explicit, reasoned exemption list, so a FUTURE write path that skips the guard fails this test
+ * by construction rather than needing a human to remember to add a row above.
  *
- * Codex hunt H1 (2026-09-06, accepted hardening follow-up logged in
- * 231-1-7-4-build-record-2026-09-05.md): the scan's own signals were narrower than the write
- * shapes a future ability could actually use. Broadened to also catch wp_insert_post() called
- * with an 'ID' (WordPress core treats that as an update, not a create - the same commit-an-
- * existing-post verb wp_update_post() is), a direct update_post_meta()/add_post_meta() write to
- * one of the page builders' own rendering-source meta keys (aafm_page_builder_markers()), and a
- * raw $wpdb write to the posts or postmeta table. Each addition was checked against the current
- * source tree for new false positives before landing (none found) - see the per-signal comments
- * below for what each one is scoped to and why.
+ * The scan also catches wp_insert_post() called with an 'ID' (WordPress core treats that as an
+ * update, not a create - the same commit-an-existing-post verb wp_update_post() is), a direct
+ * update_post_meta()/add_post_meta() write to one of the page builders' own rendering-source
+ * meta keys (aafm_page_builder_markers()), and a raw $wpdb write to the posts or postmeta table
+ * - see the per-signal comments below for what each one is scoped to and why.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -59,7 +54,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 	 * key, calls wp_update_post(), calls a repository ->save() (outside woocommerce/ - see
 	 * find_ability_php_files()'s own scoping), or calls a WC_Product content setter
 	 * (set_description()/set_short_description(), which WooCommerce persists as
-	 * post_content/post_excerpt - Codex round 9 R9-1) must either call
+	 * post_content/post_excerpt) must either call
 	 * aafm_post_has_foreign_builder_ownership() in its own body, or be listed here with a reason.
 	 * This is the mechanical half of the sweep: it does not run any PHP, it only reads source
 	 * text, so it catches a future write path the moment it's written, before any test author has
@@ -85,7 +80,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			// (aafm_exec_tec_create_event, which needs no guard, and aafm_exec_tec_update_event,
 			// which now has one) are checked at their own chokepoint.
 			'aafm_tec_event_orm_args'               => 'Builds an args array only; the actual write (and its own ownership check) happens in the calling create/update function.',
-			// Codex round 9 R9-1: shared setter helper, not itself a write site - it is called by
+			// Shared setter helper, not itself a write site - it is called by
 			// BOTH aafm_exec_wc_create_product() (a brand-new product, nothing pre-existing to
 			// protect) and aafm_exec_wc_update_product() (which now runs the ownership check on
 			// the existing product BEFORE calling this), so the check belongs at the caller, the
@@ -104,9 +99,9 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			'aafm_exec_update_menu_item'            => 'nav_menu_item post type - an internal menu-structure record, not a page a classic page builder ever owns.',
 			// Known false positives from the mechanical scan matching TEXT, not code: a
 			// translatable description string and a comment, not an actual write call.
-			// Codex final round 4 MEDIUM: the scan is now comment-blind (see strip_comments()
-			// below), which resolves two of this list's three former "matches only in prose"
-			// entries on its own - aafm_exec_moderate_comment and aafm_exec_aioseo_update_post
+			// The scan is comment-blind (see strip_comments() below), which resolves two of this
+			// list's three former "matches only in prose" entries on its own -
+			// aafm_exec_moderate_comment and aafm_exec_aioseo_update_post
 			// both matched only inside a // comment, never in real code, and are no longer in
 			// this list at all. aafm_args_replace_sitewide stays: its false-positive text lives
 			// inside a translatable __() description string, which is real, executed code, not a
@@ -153,12 +148,12 @@ final class PageBuilderGuardSweepTest extends TestCase {
 	 * Strip every // and /* comment (docblocks included) out of a function body before the
 	 * signal regexes run against it.
 	 *
-	 * Codex final round 4 MEDIUM: the broadened Signal B ('wp_insert_post(' as a substring) also
-	 * matches that literal text sitting inside a comment explaining unrelated behavior - a real
-	 * false positive this file used to paper over with a blanket function-level exemption, which
-	 * also hid any FUTURE real unguarded write in that same function. Tokenizing with
-	 * token_get_all() and dropping T_COMMENT/T_DOC_COMMENT is the actual fix: it makes the scanner
-	 * blind to prose while staying fully sensitive to real code, comments and all, everywhere else.
+	 * Signal B ('wp_insert_post(' as a substring) also matches that literal text sitting inside a
+	 * comment explaining unrelated behavior - a bare substring match would be a false positive
+	 * there, and papering over it with a blanket function-level exemption would also hide any
+	 * FUTURE real unguarded write in that same function. Tokenizing with token_get_all() and
+	 * dropping T_COMMENT/T_DOC_COMMENT is the fix: it makes the scanner blind to prose while
+	 * staying fully sensitive to real code, comments and all, everywhere else.
 	 * A string literal (e.g. a translatable description built with __()) is a real, executed
 	 * token - not a comment - and is deliberately left untouched.
 	 *
@@ -217,9 +212,8 @@ final class PageBuilderGuardSweepTest extends TestCase {
 		foreach ( $files as $file ) {
 			// Signal B (wp_update_post()/repository ->save()) is scoped OUT of woocommerce/:
 			// most ->save() calls there are a WC_Order/WC_Coupon/etc CRUD-object save with no
-			// content field at all. Codex round 9 R9-1: this used to exclude EVERY WooCommerce
-			// ->save(), including WC_Product's, on that same assumption - wrong for
-			// description/short_description, which WooCommerce persists as the product post's
+			// content field at all. WC_Product's ->save() is the exception - WooCommerce persists
+			// description/short_description as the product post's
 			// post_content/post_excerpt. Signal E below catches that write shape specifically
 			// (the setter call, not the generic ->save()), so the blanket Signal B/D exclusion
 			// can stay narrow instead of widening it to a signal that would false-positive on
@@ -231,7 +225,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			$source    = (string) file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading this plugin's own local source files to scan them, not a remote URL.
 			$functions = $this->extract_function_bodies( $source );
 			foreach ( $functions as $function_name => $body ) {
-				// Codex final round 4 MEDIUM: match against a comment-blind copy of the body, not
+				// Match against a comment-blind copy of the body, not
 				// the raw source, so prose in a // or /* comment can never trip a signal or hide
 				// a real one behind an exemption. See strip_comments() for why a string literal
 				// (a translatable __() description, say) is deliberately left untouched.
@@ -289,7 +283,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 						|| false !== strpos( $body, '$wpdb->query(' )
 					);
 				// Signal E: a WC_Product content setter, on the $product variable specifically.
-				// Codex round 9 R9-1: WooCommerce persists description/short_description as the
+				// WooCommerce persists description/short_description as the
 				// product post's post_content/post_excerpt, so this is the WooCommerce-specific
 				// write shape Signal B's blanket exclusion above cannot see. Scoped to the
 				// literal `$product->set_description(`/`$product->set_short_description(` call
@@ -300,8 +294,8 @@ final class PageBuilderGuardSweepTest extends TestCase {
 				// owned by a page builder, the same reasoning the nav_menu_item exemption above
 				// already uses) and WC_Coupon::set_description() (coupons.php - free-form admin
 				// text through aafm_sanitize_multiline_text(), not page content a builder could
-				// ever own). Both are pre-existing, unfixed gaps outside this round's scope, not
-				// new false positives this signal introduces - see the round 9 findings write-up.
+				// ever own). Both are pre-existing gaps this signal does not need to catch, not
+				// new false positives it introduces.
 				$writes_wc_product_content = false !== strpos( $body, '$product->set_description(' )
 					|| false !== strpos( $body, '$product->set_short_description(' );
 
@@ -366,9 +360,9 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			),
 			'update-page'                 => array( 'aafm_exec_update_page', array( 'title' => 'x' ), 'page_id', 'page' ),
 			'update-cpt-item'             => array( 'aafm_exec_update_cpt_item', array( 'title' => 'x' ), 'post_id', 'post' ),
-			// Codex final round 8 HIGH: both added after the earlier rows above were the ONLY
-			// ones this sweep enumerated, which is exactly why they were missed the first time.
-			// Literal 'tribe_events', not Tribe__Events__Main::POSTTYPE - that stub class is only
+			// This data provider must enumerate every write execute callback, tec-update-event
+			// and geodirectory-update-listing included, or the sweep above silently stops
+			// covering them. Literal 'tribe_events', not Tribe__Events__Main::POSTTYPE - that stub class is only
 			// declared inside stub_tec() (set_up()), which PHPUnit runs AFTER this data provider.
 			'tec-update-event'            => array( 'aafm_exec_tec_update_event', array( 'title' => 'x' ), 'event_id', 'tribe_events' ),
 			'geodirectory-update-listing' => array( 'aafm_exec_geodirectory_update_listing', array( 'title' => 'x' ), 'listing_id', 'gd_place' ),

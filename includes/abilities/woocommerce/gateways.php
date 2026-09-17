@@ -667,7 +667,7 @@ function aafm_args_wc_update_payment_gateway(): array {
 /**
  * Build the error for a gateway update whose read-back verification found unpersisted fields.
  *
- * B32: the caller must never be told a bare "error" about a request that partially changed state.
+ * The caller must never be told a bare "error" about a request that partially changed state.
  * Two branches (the third, full success, never reaches here): nothing persisted, or a partial
  * write naming both sides. The machine-readable split rides in the error data.
  *
@@ -736,10 +736,10 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	// error on unchanged values. Instead, apply every write, then verify the desired end-state by
 	// reading each value back; only a genuine read-back mismatch is a failure.
 	//
-	// B32: verification runs ONCE, after the whole batch, and a mismatch reports exactly which
-	// fields persisted and which did not. The old sequence verified the order write mid-batch and
-	// bailed with a bare generic error on the first settings mismatch, so a caller could be told
-	// "error" after the title (or more) had already landed, with nothing saying so.
+	// Verification runs ONCE, after the whole batch, and a mismatch reports exactly which fields
+	// persisted and which did not - rather than checking mid-batch and bailing with a bare generic
+	// error on the first settings mismatch, which would tell the caller "error" after the title
+	// (or more) had already landed, with nothing saying so.
 	$desired = array();
 	if ( isset( $input['enabled'] ) ) {
 		$desired['enabled'] = $input['enabled'] ? 'yes' : 'no';
@@ -762,17 +762,16 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$gateway->update_option( $key, $value );
 	}
 
-	// FIX-3 item 4 (sweep finding, B4 batch, the one live gap in this dispatch): WC_Settings_API::
-	// process_admin_options() - the method that runs when a gateway is saved through wp-admin >
-	// WooCommerce > Settings > Payments - fires this action once per settings save, immediately
-	// before its own update_option() call (abstract-wc-settings-api.php:237). This ability wrote
-	// every field through WC_Payment_Gateway::update_option() without ever firing it. A verified
-	// real consumer exists: WC_Settings_Tracking::add_option_to_list() is wired to this exact hook,
-	// feeding WooCommerce's own opt-in anonymous usage-tracking snapshot of which settings admins
-	// touch - so a gateway change made through this ability previously would not appear in that
-	// tracker's snapshot the way an identical wp-admin save would. Fired only when a gateway
-	// setting was actually sent, mirroring process_admin_options()'s own scope (the order write
-	// below is a separate option, not part of this gateway's own settings).
+	// WC_Settings_API::process_admin_options() - the method that runs when a gateway is saved
+	// through wp-admin > WooCommerce > Settings > Payments - fires this action once per settings
+	// save, immediately before its own update_option() call (abstract-wc-settings-api.php:237).
+	// The loop above writes every field through WC_Payment_Gateway::update_option() without firing
+	// it. A verified real consumer exists: WC_Settings_Tracking::add_option_to_list() is wired to
+	// this exact hook, feeding WooCommerce's own opt-in anonymous usage-tracking snapshot of which
+	// settings admins touch - so without this call, a gateway change made through this ability
+	// would not appear in that tracker's snapshot the way an identical wp-admin save would. Fired
+	// only when a gateway setting was actually sent, mirroring process_admin_options()'s own scope
+	// (the order write below is a separate option, not part of this gateway's own settings).
 	if ( array() !== $desired ) {
 		// This hook is documented in WooCommerce: includes/abstracts/abstract-wc-settings-api.php.
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce-core action; fired with WC's own signature so extensions hooking the save (e.g. usage tracking) stay in sync.

@@ -328,8 +328,8 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 	}
 	if ( array_key_exists( 'amount', $input ) ) {
 		$amount = sanitize_text_field( (string) $input['amount'] );
-		// B53: a non-numeric amount sails through set_amount() - WC casts it toward 0 on the way
-		// to storage - where the tax sibling (aafm_wc_normalize_tax_rate) refuses. Refuse it here
+		// A non-numeric amount sails through set_amount() - WC casts it toward 0 on the way to
+		// storage - where the tax sibling (aafm_wc_normalize_tax_rate) refuses it. Refuse it here
 		// with the same is_numeric gate; an empty string keeps its long-standing clear-to-zero
 		// meaning.
 		if ( '' !== $amount && ! is_numeric( trim( $amount ) ) ) {
@@ -364,16 +364,16 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 		}
 	}
 	if ( array_key_exists( 'description', $input ) ) {
-		// B58 sweep: the coupon description is free-form admin text; the textarea sanitizer keeps
-		// its line breaks where sanitize_text_field() would flatten them.
+		// The coupon description is free-form admin text; the textarea sanitizer keeps its line
+		// breaks where sanitize_text_field() would flatten them.
 		$coupon->set_description( aafm_sanitize_multiline_text( (string) $input['description'] ) );
 	}
 	if ( array_key_exists( 'date_expires', $input ) ) {
 		$val = null === $input['date_expires'] ? null : sanitize_text_field( (string) $input['date_expires'] );
-		// B53: WC_Data::set_date_prop() swallows its own parse exception, so an unparseable date
-		// used to be silently stored as null - the caller believed an expiry was set on a coupon
-		// that would never expire. Refuse anything strtotime() cannot parse; null and '' keep
-		// their documented no-expiry meaning.
+		// WC_Data::set_date_prop() swallows its own parse exception, so an unparseable date would
+		// otherwise be stored silently as null - the caller would believe an expiry was set on a
+		// coupon that will never expire. Refuse anything strtotime() cannot parse; null and ''
+		// keep their documented no-expiry meaning.
 		if ( null !== $val && '' !== $val && false === strtotime( $val ) ) {
 			return new \WP_Error(
 				'aafm_wc_invalid_coupon_expiry',

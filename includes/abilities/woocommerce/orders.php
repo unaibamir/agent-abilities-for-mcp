@@ -1965,7 +1965,7 @@ function aafm_wc_redact_note( object $note ): array {
 	$customer_note = ! empty( $note->customer_note );
 	// wc_get_order_notes() normalizes ->added_by to the literal 'system' for a programmatic note
 	// (comment_author 'WooCommerce'), or the acting user's display name for a human-authored one -
-	// it never emits the literal string 'user' (M12). A note is user-authored when it is NOT 'system'.
+	// it never emits the literal string 'user'. A note is user-authored when it is NOT 'system'.
 	$added_by_user = isset( $note->added_by ) && 'system' !== (string) $note->added_by;
 
 	return array(

@@ -24,10 +24,10 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_rankmath_full
 // Production rendered-head seam. Registered unconditionally because host plugins may load after us
 // on plugins_loaded (so a load-time activity check could miss Rank Math); the callback's own
 // function_exists('rank_math') + rank_math()->head guards make it inert until Rank Math is genuinely
-// present. Under the PHPUnit stubs rank_math() is undefined, so this passes through and the test
-// stub's own filter supplies the canned head - production and test wiring never collide (M1: until
-// this was added, no production callback ever ran, so rankmath-get-head returned head:'' on every
-// real store; the unit test only ever exercised the test stub's canned filter, never this path).
+// present. Without this registration, rankmath-get-head would return head:'' on every real store,
+// since nothing would call the actual rendering path even when Rank Math is active. Under the
+// PHPUnit stubs rank_math() is undefined, so this passes through and the test stub's own filter
+// supplies the canned head - production and test wiring never collide.
 add_filter( 'aafm_seo_rendered_head', 'aafm_rankmath_rendered_head', 10, 3 );
 
 /**

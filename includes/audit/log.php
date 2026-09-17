@@ -12,10 +12,10 @@ defined( 'ABSPATH' ) || exit;
 if ( ! defined( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION' ) ) {
 	// v2 adds composite (status, created_at) and (ability, created_at) indexes so the filtered
 	// admin query (WHERE status/ability = ? ORDER BY created_at DESC) is index-backed instead of
-	// filesorting. v3 adds the client_id column (M16) so an OAuth-attributed call can be traced
+	// filesorting. v3 adds the client_id column so an OAuth-attributed call can be traced
 	// back to the client that made it; NOT NULL DEFAULT '' so every existing row (and every
 	// caller that never supplies one) is unaffected. v4 adds the nullable result_count column
-	// (L5) so a list/read call's magnitude is observable; NULL by default so an unmeasured or
+	// so a list/read call's magnitude is observable; NULL by default so an unmeasured or
 	// write call is distinguishable from a genuine zero-item result, and every existing row is
 	// unaffected. v5 adds event_type and detail so the log can hold events that are not ability
 	// calls (an ability being toggled, a security-relevant setting change, the log-cleared
@@ -605,7 +605,7 @@ function aafm_prune_activity_log(): void {
 /**
  * Update an existing activity row's status in place (used to resolve a 'started' row).
  *
- * $result_count (L5) is written only when the caller supplies one - omitting it leaves the
+ * $result_count is written only when the caller supplies one - omitting it leaves the
  * column at its NULL default rather than overwriting it, so a write call or an unmeasured
  * result never gets a fabricated magnitude. $detail follows the same rule: a resolve that has
  * nothing new to say leaves whatever the insert wrote in place rather than blanking it.

@@ -457,7 +457,7 @@ function aafm_acf_active(): bool {
  *
  * 9.1.0 is a real behavioural cliff, not an arbitrary line: from that release
  * wc_update_attribute() backfills any field a caller omits from its own current value, so a
- * name-only update no longer wipes has_archives/order_by/type back to their defaults (M3). Below
+ * name-only update no longer wipes has_archives/order_by/type back to their defaults. Below
  * 9.1 the same call is destructive. Kept at the actual cliff (never raised past it) so a site
  * running a working older-but-still-safe version is never disabled by a floor that outran the
  * real requirement.

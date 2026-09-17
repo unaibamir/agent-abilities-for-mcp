@@ -551,7 +551,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 
 	// Desired values keyed by unified field name (not the savePost() data key), so they can be
 	// diffed straight against aafm_aioseo_read_fields()'s output after save() - see the read-back
-	// comment below (L11). $data is keyed by AIOSEO's OWN savePost() patch keys instead.
+	// comment below. $data is keyed by AIOSEO's OWN savePost() patch keys instead.
 	$desired = array();
 	$data    = array();
 
@@ -632,7 +632,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 	// than rely on that early return, so the test-stub model does not need to replicate it too.
 	if ( array() !== $data ) {
 		// AIOSEO's savePost() reports failure as a DB error string or void, never a bool worth
-		// branching on directly (mirrors the prior ->save() shape, L11: SeoContractTest::
+		// branching on directly (same shape as ->save(), pinned by SeoContractTest::
 		// test_aioseo_model_save_returns_void_not_bool()). Verify persistence a different way: force
 		// a fresh read of the model and diff it against what we just asked to be written, field by
 		// field. A real write failure still surfaces as a read-back mismatch.

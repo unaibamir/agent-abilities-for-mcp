@@ -563,8 +563,8 @@ function aafm_with_named_lock( string $name, callable $callback ) {
  *
  * Edits the safe profile fields by id. A role change is honored ONLY when the caller can
  * promote_users (the admin cap WP gates the role dropdown behind) and the target role is
- * a real role. Reviewer note M2: a role change that would demote the SOLE remaining
- * administrator is refused - a lockout is as damaging as deleting the last admin. Uses
+ * a real role. A role change that would demote the SOLE remaining administrator is refused -
+ * a lockout is as damaging as deleting the last admin. Uses
  * core wp_update_user().
  *
  * @param array<string,mixed> $input Validated input.

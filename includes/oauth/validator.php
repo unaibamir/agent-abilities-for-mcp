@@ -31,8 +31,8 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
 /**
  * Remember (or read) the OAuth client_id a bearer token resolved for the current request.
  *
- * Read-only observability for M16: this store has no bearing on authentication or capability
- * decisions - aafm_oauth_resolve_current_user() writes to it only AFTER a token has already fully
+ * This store is read-only observability: it has no bearing on authentication or capability
+ * decisions. aafm_oauth_resolve_current_user() writes to it only AFTER a token has already fully
  * resolved a user, purely so the activity-log wrapper in register.php can attribute the resulting
  * ability call to the OAuth client that made it. Mirrors the aafm_remember_raw_permission() static
  * store in register.php. A non-OAuth (Application Password/cookie) request never writes it.
@@ -239,7 +239,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			(string) $row['client_id']
 		);
 
-		// 12. M16: record the resolved client_id purely for activity-log attribution. Read-only -
+		// 12. Record the resolved client_id purely for activity-log attribution. Read-only -
 		// this happens only after the token has fully resolved a user through every guard above, so
 		// it can never influence the auth decision itself, only observability of its outcome.
 		aafm_oauth_current_client_id( (string) $row['client_id'] );

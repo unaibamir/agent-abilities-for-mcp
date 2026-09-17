@@ -402,9 +402,9 @@ function aafm_wc_redact_gateway_settings( array $settings ): array {
 /**
  * Compute a gateway's display order from its position in WooCommerce's own sorted gateway list.
  *
- * M13: WC_Payment_Gateway declares no `order` property - reading $gateway->order was always an
- * undefined dynamic property, so every gateway reported order:0. WooCommerce never stores order on
- * the gateway object either; WC_Payment_Gateways::init() derives it from the `woocommerce_gateway_order`
+ * WC_Payment_Gateway declares no `order` property, so reading $gateway->order is an undefined
+ * dynamic property that always resolves to null. WooCommerce never stores order on the gateway
+ * object either; WC_Payment_Gateways::init() derives it from the `woocommerce_gateway_order`
  * option (gateways with no stored preference are appended at the end) and hands back payment_gateways()
  * already sorted by it. Reading the real order back means locating this gateway's zero-based position
  * in that same sorted list, not re-deriving the option ourselves.
@@ -781,7 +781,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	$order_val = null;
 	if ( isset( $input['order'] ) ) {
 		// Display order is not a per-gateway setting, and WC_Payment_Gateway has no `order` property
-		// to set (M13) - WooCommerce keeps order in the woocommerce_gateway_order option (a
+		// to set - WooCommerce keeps order in the woocommerce_gateway_order option (a
 		// gateway_id => position map). Persist it there so the change survives the next request.
 		$order_val               = (int) $input['order'];
 		$ordering                = get_option( 'woocommerce_gateway_order', array() );
@@ -824,7 +824,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	// The response order reflects what was just requested when the request set one (the
 	// woocommerce_gateway_order write above is confirmed, but WC only re-sorts payment_gateways() on
 	// its own object's next init(), not against $gateways already fetched above). Otherwise fall back
-	// to the gateway's real position in WooCommerce's own sorted list (M13).
+	// to the gateway's real position in WooCommerce's own sorted list.
 	$order = isset( $input['order'] ) ? (int) $input['order'] : aafm_wc_gateway_order( $gateway_id, $gateways );
 	return aafm_wc_gateway_shape( $gateway, $order );
 }

@@ -936,7 +936,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 	$original_permission = $args['permission_callback'];
 	$original_execute    = $args['execute_callback'];
-	// L5: only a list/read ability's result gets a logged magnitude - a write ability's return
+	// Only a list/read ability's result gets a logged magnitude - a write ability's return
 	// shape is never guessed at. Read before the closures below capture it, so a plain scalar
 	// is what gets captured rather than the whole (still-mutating) $args array.
 	$is_read_ability = 'aafm-reads' === (string) ( $args['category'] ?? '' );
@@ -1280,7 +1280,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			);
 		}
 
-		// L5: a list/read call's magnitude is observability only - it is never used to alter
+		// A list/read call's magnitude is observability only - it is never used to alter
 		// $result or the logged status, so a mis-shaped result simply logs no count.
 		$result_count = ( $is_read_ability && ! is_wp_error( $result ) ) ? aafm_result_magnitude( $result ) : null;
 

@@ -85,13 +85,12 @@ function aafm_build_server_tools( array $enabled, array &$omitted = array() ): a
  * The ownership-only half of aafm_build_server_tools(): every enabled name that resolves to an
  * ability this plugin actually registered, with no discovery-permission check.
  *
- * F2 (1.7.5 deferred): aafm_register_mcp_server() used to run the combined ownership+discovery
- * pass (aafm_build_server_tools()) over the FULL enabled set before the preflight cap, so a site
- * with well over 1,000 enabled bridged abilities and a resolved user invoked every foreign
- * permission callback on ordinary traffic, before the cap ever got a chance to bound the work.
- * Splitting ownership out lets aafm_register_mcp_server() run this cheap, schema-free pass first,
- * cap the result, and only then run the (potentially expensive) discovery check over the
- * already-bounded set.
+ * Running the combined ownership+discovery pass (aafm_build_server_tools()) over the FULL enabled
+ * set before the preflight cap would mean a site with well over 1,000 enabled bridged abilities and
+ * a resolved user invokes every foreign permission callback on ordinary traffic, before the cap
+ * ever gets a chance to bound the work. Splitting ownership out lets aafm_register_mcp_server() run
+ * this cheap, schema-free pass first, cap the result, and only then run the (potentially expensive)
+ * discovery check over the already-bounded set.
  *
  * A reserved enabled name is only safe to serve when the object registered
  * under it is genuinely this plugin's own. aafm_register_enabled_abilities() (register.php)

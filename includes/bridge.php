@@ -732,7 +732,7 @@ function aafm_bridge_result_is_for_a_bridged_tool( string $tool_name, $mcp_tool 
  * worse: it left a bare `[...]` in structuredContent against an advertised object schema, where
  * the unconditional wrap at least produces a valid JSON object.
  *
- * Known, deliberately unfixed limitation (plan finding M2): a foreign ability that declares
+ * Known, deliberately unfixed limitation: a foreign ability that declares
  * {type:object, additionalProperties:false} and returns array() for "nothing found" still
  * receives {"data":[]} from this filter, which its own schema forbids. The only alternative is to
  * leave that one case as a bare [], which is a top-level JSON array and violates the MCP spec for
@@ -763,7 +763,7 @@ function aafm_bridge_result_is_for_a_bridged_tool( string $tool_name, $mcp_tool 
  *                         add_filter() call in server.php); used to classify by backing ability
  *                         identity rather than by the (renamable) wire tool name.
  * @return mixed The result, wrapped under `data` for every bridged, bare-list result (including
- *               an empty one - see the M2 note above).
+ *               an empty one - see the known-limitation note above).
  */
 function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name, $mcp_tool = null ) {
 	unset( $args );

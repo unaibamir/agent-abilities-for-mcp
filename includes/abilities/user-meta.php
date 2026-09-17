@@ -233,7 +233,7 @@ function aafm_perm_user_meta_access( array $input ): bool {
  *
  * Re-validates the key (defence in depth - the permission callback already gated it),
  * confirms the user exists, then reads a single value. Non-scalar values are refused so a
- * serialized array/object stored under an allowlisted key can never leak its structure (M3).
+ * serialized array/object stored under an allowlisted key can never leak its structure.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error

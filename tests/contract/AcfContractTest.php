@@ -93,7 +93,7 @@ final class AcfContractTest extends TestCase {
 	}
 
 	/**
-	 * R4-1 / the unknown-sub-field floor, against the real vendor rather than the stub.
+	 * The unknown-sub-field floor, against the real vendor rather than the stub.
 	 *
 	 * Two contracts in one test, because the fix depends on both and only the vendor can settle
 	 * them. First, ACF resolves a container row against its OWN declared sub-fields and writes
@@ -385,7 +385,7 @@ final class AcfContractTest extends TestCase {
 	}
 
 	/**
-	 * R6-1, the vendor half, with ZERO plugin code in the path.
+	 * The vendor half, with ZERO plugin code in the path.
 	 *
 	 * ACF resolves a field DEFINITION for a write through a database query and reads the VALUE back
 	 * through an exact meta read, so an address that merely collates equal writes successfully and
@@ -424,10 +424,10 @@ final class AcfContractTest extends TestCase {
 	}
 
 	/**
-	 * R6-1, our half: the write is refused BEFORE it lands, so the failure report is true.
+	 * Our half: the write is refused BEFORE it lands, so the failure report is true.
 	 *
-	 * The assertion that matters is not the error, it is that storage is byte-identical afterwards.
-	 * Before the fourth floor this same call reported failure with the new value already stored.
+	 * The assertion that matters is not the error, it is that storage is byte-identical
+	 * afterwards: a failure report paired with the new value already stored would be a lie.
 	 */
 	public function test_an_inexact_field_address_is_refused_before_anything_is_written(): void {
 		$this->make_db_stored_field( 'aafm_db_text', 'field_aafm_db_text' );

@@ -543,11 +543,11 @@ final class QuickConnectTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-10: the dismiss flag used to be a bare update_option() whose result was
-	 * discarded, so a failed write still reported success and the client-side handler closed the
-	 * modal regardless - the wizard would then silently reopen on the next visit with the operator
-	 * believing they had permanently dismissed it. A failed write must now report an error and
-	 * leave the option undismissed.
+	 * The dismiss flag write must be confirmed, not a bare update_option() whose result is
+	 * discarded: a failed write that still reports success would let the client-side handler
+	 * close the modal regardless - the wizard would then silently reopen on the next visit with
+	 * the operator believing they had permanently dismissed it. A failed write must report an
+	 * error and leave the option undismissed.
 	 */
 	public function test_dismiss_ajax_reports_failure_when_the_write_fails(): void {
 		$this->acting_as( 'administrator' );

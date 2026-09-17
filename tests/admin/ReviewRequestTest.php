@@ -725,10 +725,10 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-10: aafm_review_request_save_state() was a bare update_option() whose
-	 * result was discarded, so aafm_review_request_record_verdict() returned its in-memory state
-	 * as if it had been stored and the AJAX handler reported success regardless. A failed write
-	 * must now report an error and leave the option at its prior state.
+	 * aafm_review_request_save_state()'s write must be confirmed, not a bare update_option()
+	 * whose result is discarded: otherwise aafm_review_request_record_verdict() would return its
+	 * in-memory state as if it had been stored and the AJAX handler would report success
+	 * regardless. A failed write must report an error and leave the option at its prior state.
 	 */
 	public function test_ajax_reports_failure_when_the_verdict_write_fails(): void {
 		$this->acting_as( 'administrator' );

@@ -451,11 +451,12 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
-	 * B23: an invalid billing email must be refused, not sanitized to '' and used to erase stored PII.
+	 * An invalid billing email must be refused, not sanitized to '' and used to erase stored PII.
 	 *
-	 * The sanitize_email('not-an-email') call returns '', so set_billing_email('') silently wiped the stored email
-	 * and reported success, returning the field as an empty string. The write now refuses a non-empty
-	 * invalid email before touching the customer, so the stored PII survives.
+	 * The sanitize_email('not-an-email') call returns '', so a bare set_billing_email('') would
+	 * silently wipe the stored email and report success, returning the field as an empty string.
+	 * The write must refuse a non-empty invalid email before touching the customer, so the stored
+	 * PII survives.
 	 */
 	public function test_update_customer_invalid_billing_email_does_not_erase_stored_pii(): void {
 		$this->acting_as( 'administrator' );

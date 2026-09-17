@@ -911,8 +911,9 @@ PHP;
 	/**
 	 * The invariant that closes the family rather than the next instance.
 	 *
-	 * Five rounds have each found one more receiver shape. Enumerating shapes forever is a losing
-	 * game, so the walk now refuses to return a HALF-resolved chain: if a chain operator still sits
+	 * Each new receiver shape found has meant enumerating one more case. Enumerating shapes
+	 * forever is a losing game, so the walk refuses to return a HALF-resolved chain: if a chain
+	 * operator still sits
 	 * in front of what it consumed, it met something it does not understand and falls back to the
 	 * statement. Imprecise, and visibly so - but never two different receivers sharing one string.
 	 */

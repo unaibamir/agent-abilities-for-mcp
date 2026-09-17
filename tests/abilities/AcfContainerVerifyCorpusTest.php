@@ -8,8 +8,8 @@
  * Same reasoning as the replace-in-post and settings-redaction corpora next door, and the same
  * failure behind it. This comparison has been reshaped several times - normalised for ACF's storage
  * typing, taught to read the raw value instead of the formatted one, taught to re-key container
- * sub-fields, taught to recurse into nested containers - and every pass pinned only the shape the
- * round in front of it had found. A traffic simulation then drove the one shape nobody had pinned,
+ * sub-fields, taught to recurse into nested containers - and every pass pinned only the shape that
+ * prompted it. A traffic simulation then drove the one shape nobody had pinned,
  * a repeater row carrying some of its sub-fields rather than all of them, and found the ability
  * reporting failure on a write that had persisted correctly. That defect shipped in 1.6.3 and
  * earlier: an agent told the write failed retries it, or reports failure to a user, while the data
@@ -365,12 +365,12 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 
 		return array(
 			// -----------------------------------------------------------------
-			// Round-3 traffic simulation, L5-01. The shape that shipped broken:
+			// Found by a traffic simulation. The shape that shipped broken:
 			// a repeater row carrying three of its eight sub-fields, which is
 			// the ordinary way an agent writes one. Persisted correctly and was
 			// reported as a failure.
 			// -----------------------------------------------------------------
-			'L5-01 partial repeater row'        => array(
+			'partial repeater row'              => array(
 				'repeater',
 				array(
 					'field_emails' => array(
@@ -384,7 +384,7 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 				true,
 				null,
 			),
-			'L5-01 two partial repeater rows'   => array(
+			'two partial repeater rows'         => array(
 				'repeater',
 				array(
 					'field_emails' => array(
@@ -395,7 +395,7 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 				true,
 				null,
 			),
-			'L5-01 single sub-field row'        => array(
+			'single sub-field row'              => array(
 				'repeater',
 				array( 'field_emails' => array( array( 'subject' => 'only this' ) ) ),
 				true,
@@ -404,7 +404,7 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 			// Same finding, second shape: clearing a container. ACF stores "no
 			// rows" and reads the whole field back as false, so the sent empty
 			// list never matched and a successful clear reported failure too.
-			'L5-01 clear the repeater'          => array(
+			'clear the repeater'                => array(
 				'repeater',
 				array( 'field_emails' => array() ),
 				true,
@@ -412,8 +412,8 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 			),
 
 			// -----------------------------------------------------------------
-			// The accept-cases that already worked before L5-01 was fixed, kept
-			// as regression pins: a relaxed comparison must not have broken the
+			// The accept-cases that already worked before the partial-repeater-row fix above,
+			// kept as regression pins: a relaxed comparison must not have broken the
 			// shapes the earlier passes were built for.
 			// -----------------------------------------------------------------
 			'full eight-sub-field row'          => array(

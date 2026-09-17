@@ -2,10 +2,10 @@
 /**
  * Shared `use`-import parser for the plugin's source-scanning tests.
  *
- * 1.7.5 deferred, test-infrastructure closure round: three tests each grew their own copy of this
+ * Three tests each grew their own copy of this
  * parser (SecurityRegressionTest, SecurityOptionWritesSweepTest, StoredTextSanitizerScanner), and
- * each copy was "fixed" for the one syntax case a reviewer happened to quote, then reopened when
- * the next round tried a different one - group prefixes, then whitespace, then comments, three
+ * each copy was "fixed" for the one syntax case someone happened to quote, then reopened when
+ * a different one turned up - group prefixes, then whitespace, then comments, three
  * times over. All three actually need the same thing: given a token stream, tell them which
  * imported alias resolves to which real class/function/const name.
  *

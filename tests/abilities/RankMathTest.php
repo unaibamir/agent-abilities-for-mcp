@@ -105,7 +105,7 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
-	 * B20: a backslash in a written value must survive the update_post_meta unslash.
+	 * A backslash in a written value must survive the update_post_meta unslash.
 	 *
 	 * The update_post_meta() call unslashes the value it stores, so a title/description carrying a backslash
 	 * (a Windows path, a regex) lost one level unless the writer slashed first. The write reported
@@ -240,8 +240,8 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
-	 * Fix round 1, delegation audit sweep (210-sweep-B5-report.md): a robots write must invalidate
-	 * Rank Math's own sitemap cache, since Cache_Watcher only listens on save_post/
+	 * A robots write must invalidate Rank Math's own sitemap cache, since Cache_Watcher only
+	 * listens on save_post/
 	 * transition_post_status, never on updated_post_meta, and sitemap inclusion reads exactly the
 	 * rank_math_robots meta key this ability writes.
 	 */
@@ -266,8 +266,8 @@ final class RankMathTest extends TestCase {
 	/**
 	 * Companion negative case, pinning the scoping decision: title/description/focus_keyword writes
 	 * must NOT invalidate the sitemap cache. Rank Math's own bulk-edit REST controller writes those
-	 * same fields via raw update_post_meta with no invalidation either (210-sweep-B5-report.md), so
-	 * matching that vendor behaviour there is deliberate - only the robots field drives sitemap
+	 * same fields via raw update_post_meta with no invalidation either, so matching that vendor
+	 * behaviour there is deliberate - only the robots field drives sitemap
 	 * inclusion and needs the extra call.
 	 */
 	public function test_rankmath_update_post_non_robots_fields_do_not_invalidate_the_sitemap_cache(): void {
@@ -505,10 +505,10 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 5 R5-2: aafm_exec_rankmath_update_post() discarded every update_post_meta()
-	 * return value and answered with a fresh read that carried no comparison against what was
-	 * requested, unlike its schema sibling above. A filter that vetoes the postmeta write must
-	 * surface as a structured error, not a success response echoing the caller's stale value.
+	 * aafm_exec_rankmath_update_post() must not discard every update_post_meta() return value and
+	 * answer with a fresh read that carries no comparison against what was requested, unlike its
+	 * schema sibling above. A filter that vetoes the postmeta write must surface as a structured
+	 * error, not a success response echoing the caller's stale value.
 	 */
 	public function test_update_post_returns_an_error_when_the_write_is_vetoed(): void {
 		$this->acting_as( 'administrator' );
@@ -533,10 +533,10 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6 B6-2: the attachment-id companion meta and the Twitter fallback flag were written
-	 * but never included in the confirmation pass, so a filter vetoing only one of them still reported
-	 * success while the frontend kept rendering a stale image. Veto only the companion key here (the
-	 * visible URL field is left alone) and assert the ability now surfaces an error instead of a false
+	 * The attachment-id companion meta and the Twitter fallback flag must be included in the
+	 * confirmation pass, or a filter vetoing only one of them still reports success while the
+	 * frontend keeps rendering a stale image. Veto only the companion key here (the
+	 * visible URL field is left alone) and assert the ability surfaces an error instead of a false
 	 * success.
 	 */
 	public function test_update_post_returns_an_error_when_only_the_image_id_companion_is_vetoed(): void {
@@ -608,7 +608,7 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
-	 * B16: get-head must honour the operator's post-type exposure allowlist, not a bare edit_post.
+	 * get-head must honour the operator's post-type exposure allowlist, not a bare edit_post.
 	 *
 	 * A public CPT the operator has NOT exposed is editable by an admin through core (edit_post is
 	 * true), but every per-object SEO ability refuses it via aafm_can_edit_post_object(), which
@@ -668,7 +668,7 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
-	 * B59: the description and disclosure must not promise the empty-string fallback the Yoast and
+	 * The description and disclosure must not promise the empty-string fallback the Yoast and
 	 * AIOSEO siblings really have; an unrenderable Rank Math head is refused with a 409 instead.
 	 */
 	public function test_rankmath_get_head_copy_matches_the_refusal_contract(): void {

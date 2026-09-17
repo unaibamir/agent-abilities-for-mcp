@@ -50,22 +50,22 @@ if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
  * Run one transaction-control statement (START TRANSACTION, COMMIT, ROLLBACK, or SAVEPOINT) and
  * report whether it actually succeeded, using $wpdb->query()'s own return value.
  *
- * 1.7.5 round 4, R4-3: both OAuth grant pipelines (aafm_oauth_rotate_refresh() below and
- * aafm_oauth_rest_token_authorization_code(), oauth/rest.php) used to fire these statements and
- * discard the result outright. $wpdb->query() returns false on failure and an integer (often 0,
- * since a transaction-control statement affects no rows) on success - a successful call must not
- * be compared against a falsy check like `! $wpdb->query(...)`, only against the literal `false`
+ * Both OAuth grant pipelines (aafm_oauth_rotate_refresh() below and
+ * aafm_oauth_rest_token_authorization_code(), oauth/rest.php) check this result rather than
+ * discarding it. $wpdb->query() returns false on failure and an integer (often 0, since a
+ * transaction-control statement affects no rows) on success - a successful call must not be
+ * compared against a falsy check like `! $wpdb->query(...)`, only against the literal `false`
  * that marks failure. A failed START TRANSACTION means nothing downstream is actually wrapped; a
  * failed COMMIT means the pipeline cannot tell whether what it just did persisted; a failed
  * ROLLBACK means the stated recovery ("the old row stays usable", "the chain was revoked") did
  * not happen. All three need the same one-line check, so it lives here once rather than being
  * reinvented at each site.
  *
- * Codex round 5 R5-4: every production ROLLBACK call site discarded this return value outright,
- * so a rollback that itself failed (the recovery the surrounding comment promised - "the old row
- * stays usable", "the code stays redeemable" - not actually happening) went completely unobserved.
- * Every ROLLBACK call site now checks it and fires 'aafm_oauth_rollback_failed' when it is false,
- * so an operator can hook it rather than the failure vanishing silently.
+ * Every production ROLLBACK call site checks this return value: a rollback that itself failed
+ * (the recovery the surrounding comment promised - "the old row stays usable", "the code stays
+ * redeemable" - not actually happening) must not go unobserved. Every ROLLBACK call site fires
+ * 'aafm_oauth_rollback_failed' when it is false, so an operator can hook it rather than the
+ * failure vanishing silently.
  *
  * @param string $sql The literal transaction-control statement to run.
  * @return bool True when the statement itself succeeded.
@@ -200,12 +200,11 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		)
 	);
 
-	// R6-2: a failed SELECT and a genuinely unknown token both used to read as $row === null,
-	// reported to the client as "your refresh token is invalid" either way - telling a client
-	// presenting a perfectly usable token that its grant was rejected when this pipeline could not
-	// even look it up. aafm_oauth_rest_token_refresh() already maps any code other than
-	// 'invalid_grant' to a 500 server_error, so returning that code here is enough to fix the
-	// client-visible response.
+	// A failed SELECT must not be reported the same way as a genuinely unknown token ($row ===
+	// null either way would tell a client presenting a perfectly usable token that its grant was
+	// rejected, when this pipeline could not even look it up). aafm_oauth_rest_token_refresh()
+	// already maps any code other than 'invalid_grant' to a 500 server_error, so returning that
+	// code here is enough to produce the correct client-visible response.
 	if ( ! $lookup['ok'] ) {
 		return new WP_Error(
 			'server_error',
@@ -229,9 +228,9 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( 0 === (int) $row['is_active'] ) {
 		$chain_revoked = aafm_oauth_revoke_chain( (int) $row['id'] );
 
-		// R4-2: the request is denied either way - a replayed refresh token never rotates - but
-		// the message must not claim the chain was revoked when aafm_oauth_revoke_chain() could
-		// not certify that it was.
+		// The request is denied either way - a replayed refresh token never rotates - but the
+		// message must not claim the chain was revoked when aafm_oauth_revoke_chain() could not
+		// certify that it was.
 		return new WP_Error(
 			'invalid_grant',
 			$chain_revoked
@@ -252,11 +251,10 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// rolling its tokens forward. is_active is otherwise only checked at authorize-time.
 	$client_view = aafm_oauth_client_deactivation_view( $client_id );
 	if ( $client_view['deactivated'] ) {
-		// Codex round 6, R6-2, then round 7, R7-3: a failed read fails closed (denies), but that
-		// is an operational fault, not a genuine "this client was disabled" finding - telling the
-		// client the latter when it is really the former misreports the cause.
-		// aafm_oauth_client_deactivation_view() answers both from the one read (R7-3), replacing
-		// the query-per-decision pair this site used to run.
+		// A failed read fails closed (denies), but that is an operational fault, not a genuine
+		// "this client was disabled" finding - telling the client the latter when it is really the
+		// former misreports the cause. aafm_oauth_client_deactivation_view() answers both from the
+		// one read, rather than needing a separate query per decision.
 		if ( ! $client_view['ok'] ) {
 			return new WP_Error(
 				'server_error',
@@ -288,23 +286,22 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// declares ENGINE=InnoDB and aafm_oauth_enforce_lifecycle_engine() (schema.php)
 	// converts a pre-existing MyISAM table and warns if it cannot. On a non-transactional
 	// engine START/ROLLBACK is a no-op and the atomicity below would be lost.
-	// KNOWN BOUND, and the sentence that used to sit here claimed the opposite. It said the WP
-	// test harness wraps each test in its own transaction so this nested START/COMMIT is
-	// "effectively a no-op there". It is not. MySQL and MariaDB have no nested transactions:
-	// issuing START TRANSACTION while one is open IMPLICITLY COMMITS the open one
+	// KNOWN BOUND: MySQL and MariaDB have no nested transactions. Issuing START TRANSACTION while
+	// one is open IMPLICITLY COMMITS the open one
 	// (dev.mysql.com/doc/refman/8.4/en/commit.html, "Statements That Cause an Implicit Commit").
-	// So under the harness this commits the harness's wrapper, and in production it would commit
-	// any transaction another component happens to be holding on the shared $wpdb connection,
-	// leaving that component's later ROLLBACK with nothing to undo.
+	// This is not a no-op under the WP test harness, which wraps each test in its own
+	// transaction: under the harness this nested START TRANSACTION commits the harness's wrapper,
+	// and in production it would commit any transaction another component happens to be holding
+	// on the shared $wpdb connection, leaving that component's later ROLLBACK with nothing to
+	// undo.
 	//
 	// Not fixed here on purpose. A correct fix needs to know whether a transaction is already
 	// open, and neither MySQL nor $wpdb exposes that portably, so it would mean this plugin
 	// growing its own transaction-nesting manager on top of a platform that deliberately has
-	// none. That is the reimplementing-platform-mechanics habit the delegation audit exists to
-	// stop, and the trigger needs another component to hold an open transaction across a REST
+	// none, and the trigger needs another component to hold an open transaction across a REST
 	// dispatch. Stating the bound is the honest half; building the manager is not this
 	// release's change to make.
-	// R4-3: if the transaction itself never started, nothing below is actually wrapped - refuse
+	// If the transaction itself never started, nothing below is actually wrapped - refuse
 	// the rotation rather than run the consume+mint pair unprotected.
 	if ( ! aafm_oauth_txn( 'START TRANSACTION' ) ) {
 		return aafm_generic_error();
@@ -332,17 +329,17 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		// A failed ROLLBACK does not change this response - the token is being rejected either
 		// way - but it does mean the row may still be locked/consumed against a connection that
 		// never actually released it; there is nothing further this function can do about that,
-		// since it cannot force a rollback to succeed. R5-4: fire an action so that failure is
+		// since it cannot force a rollback to succeed. Fire an action so that failure is
 		// never silent, rather than discarding the return value outright.
 		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
 			do_action( 'aafm_oauth_rollback_failed', 'rotate_refresh_consume', (int) $row['id'] );
 		}
 
-		// R6-2: $wpdb->update() returns false on a genuine query failure and an integer (0 when the
+		// $wpdb->update() returns false on a genuine query failure and an integer (0 when the
 		// single-winner gate lost the race, because the token was already consumed by a concurrent
-		// request) on success - both used to collapse into the same invalid_grant response. Losing
-		// the race is a real grant-validity answer; the query itself failing is this pipeline's own
-		// fault and must not be told to the client as "your token is invalid".
+		// request) on success - the two must not collapse into the same invalid_grant response.
+		// Losing the race is a real grant-validity answer; the query itself failing is this
+		// pipeline's own fault and must not be told to the client as "your token is invalid".
 		if ( false === $consumed ) {
 			return new WP_Error(
 				'server_error',
@@ -370,7 +367,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// If the new pair did not persist, roll back the rotation so the old refresh row stays
 	// usable rather than committing a consumed parent with no child.
 	if ( is_wp_error( $new ) ) {
-		// R5-4: fire an action on a failed rollback rather than discarding the return value -
+		// Fire an action on a failed rollback rather than discarding the return value -
 		// the stated recovery ("the old refresh row stays usable") is not established otherwise.
 		if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
 			do_action( 'aafm_oauth_rollback_failed', 'rotate_refresh_mint', (int) $row['id'] );
@@ -378,7 +375,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		return $new;
 	}
 
-	// R4-3: a failed COMMIT means this pipeline cannot tell whether the consumption and the new
+	// A failed COMMIT means this pipeline cannot tell whether the consumption and the new
 	// pair actually persisted together. Reporting the minted tokens anyway would risk handing the
 	// caller a refresh token whose own row never committed - refuse instead of claiming success
 	// for a write this function cannot confirm landed.
@@ -396,13 +393,13 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
  * prefix). The value is hashed and matched against token_hash OR refresh_hash;
  * the matching row is marked inactive.
  *
- * 1.7.5 round 4, R4-2: this used to discard $wpdb->query()'s own return value and derive success
- * purely from $wpdb->rows_affected - a genuine query failure and "no matching active token"
- * (an unknown token, an already-revoked one, or an expired one that some other path already
- * deactivated) both left rows_affected at 0, and the REST caller reported the identical 200
- * either way. RFC 7009 requires concealing whether a TOKEN is valid, never whether the SERVER
- * could complete the request - so this now returns null on a genuine query failure, distinct
- * from false ("ran fine, matched nothing").
+ * Checks $wpdb->query()'s own return value rather than deriving success purely from
+ * $wpdb->rows_affected: a genuine query failure and "no matching active token" (an unknown
+ * token, an already-revoked one, or an expired one that some other path already deactivated)
+ * both leave rows_affected at 0, and a caller that only reads rows_affected would report the
+ * identical 200 either way. RFC 7009 requires concealing whether a TOKEN is valid, never whether
+ * the SERVER could complete the request - so this returns null on a genuine query failure,
+ * distinct from false ("ran fine, matched nothing").
  *
  * @param string $raw The raw token presented for revocation.
  * @return bool|null True when a row was found and revoked, false when the query ran but matched
@@ -507,13 +504,13 @@ function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id )
  *
  * Used by the admin "Revoke client" handler to certify a full revocation against the tokens
  * table directly, rather than trusting aafm_oauth_revoke_client_tokens()'s own affected-row
- * count: a real SQL failure and "nothing left to revoke" both leave that count at zero (Codex
- * round 9, R9-2), so the count alone cannot tell the handler whether the client is actually
+ * count: a real SQL failure and "nothing left to revoke" both leave that count at zero, so the
+ * count alone cannot tell the handler whether the client is actually
  * clear. Deliberately ignores expires_at - a still-flagged-active row is what a caller
  * elsewhere would treat as live, so it is what this check treats as live too.
  *
- * The count read goes through aafm_wpdb_scalar() rather than a bare get_var() (Codex round 10,
- * R10-2): a get_var() read that itself failed used to cast straight to `(int) null > 0 === false`
+ * The count read goes through aafm_wpdb_scalar() rather than a bare get_var(): a get_var() read
+ * that itself failed would cast straight to `(int) null > 0 === false`
  * - a database this function cannot read reported the exact same "no active tokens" answer as a
  * database it genuinely found none in. This function has exactly one caller shape (a revoke
  * handler certifying full revocation), so the correct bias for that failure is the opposite one:
@@ -584,14 +581,12 @@ function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_
  * there, deactivating every row BEFORE reading its children. After this runs, no token anywhere
  * in the lineage validates - which is the whole point of reuse detection.
  *
- * 1.7.5 round 4, R4-2, then round 5 R5-3, then round 6 R6-1: three prior shapes of this
- * function - a one-shot walk, a one-shot walk plus a single post-UPDATE re-check, and a DOWN
- * walk repeated until a pass converges - were each verified by execution against a real
- * concurrent rotation and each still left a window open. All three collected ids first and only
- * deactivated them in one final UPDATE at the end; convergence was declared before anything was
- * actually deactivated, so a successor minted after the last stable read was invisible no matter
- * how many times the read was repeated. Round 7, R7-1: this is structural, not a missing case,
- * and no amount of re-reading closes it - only deactivating each node before moving past it does.
+ * A one-shot walk, or any design that collects ids first and only deactivates them in one final
+ * UPDATE at the end, leaves a window open under concurrent rotation: convergence gets declared
+ * before anything is actually deactivated, so a successor minted after the last stable read is
+ * invisible no matter how many times the read is repeated. This is structural, not a missing
+ * case, and no amount of re-reading closes it - only deactivating each node before moving past
+ * it does.
  *
  * The DOWN walk below deactivates a node with an UNCONDITIONAL `UPDATE ... WHERE id = %d` -
  * deliberately NOT `AND is_active = 1` - before it ever reads that node's children. Skipping an
@@ -613,7 +608,7 @@ function aafm_oauth_user_client_has_active_tokens( int $user_id, string $client_
  * lock or bounded retry is needed. This depends on the access-tokens table actually being InnoDB
  * (aafm_oauth_enforce_lifecycle_engine() in schema.php pins and converts it) and on
  * aafm_oauth_rotate_refresh()'s consume-then-mint pair staying inside one transaction, which it
- * already refuses to proceed without (see its own R4-3 comment).
+ * already refuses to proceed without.
  *
  * A read or write that itself fails (not merely "found nothing") stops the walk at that point,
  * the same way reaching a genuine boundary does, but does not silently mask the incompleteness:
@@ -757,7 +752,7 @@ function aafm_oauth_revoke_chain( int $seed_id ): bool {
  * aafm_oauth_delete_all_user_consents() and the read-only listings in clients.php already
  * follow. The return value distinguishes a failed query from a clean no-op: $wpdb->rows_affected
  * is not read when the query itself returned false, because a real SQL failure and "nothing to
- * revoke" both leave that count at zero (the same R9-2 shape aafm_oauth_deactivate_client() and
+ * revoke" both leave that count at zero (the same shape aafm_oauth_deactivate_client() and
  * aafm_oauth_delete_consent() already guard against with a certifying re-read).
  *
  * @param int $user_id The WordPress user id whose tokens are revoked.

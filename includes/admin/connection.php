@@ -598,18 +598,18 @@ function aafm_ajax_oauth_revoke_client(): void {
 	aafm_oauth_revoke_client_codes( $client_id );
 
 	// Authoritative final-state read: report success only when the client is really
-	// deactivated, no active token for it survives, and no code row survives either, whatever
-	// any single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to
-	// still send success; Codex round 10, R10-2 - the code-table delete above was never
-	// certified at all).
+	// deactivated, no active token for it survives, and no code row survives either, regardless
+	// of what any single write above reported on its own. A failed UPDATE can still report
+	// success, and the code-table delete above is never independently certified, so only this
+	// final read can be trusted.
 	//
-	// F6 (1.7.5 deferred): aafm_oauth_revoke_client_tokens() reports a genuine query failure as
-	// -1 (N1), and the final-state read above can still find zero active tokens even when that
-	// UPDATE itself failed (there was nothing to update either way) - so this response used to
-	// send the -1 sentinel straight through as revoked_tokens. The admin JS reads it as
-	// Number(revoked_tokens) and subtracts it from the displayed count, so a -1 INCREASED the
-	// shown token count instead of decreasing it. A genuine query failure is refused the same as
-	// any other unconfirmed revoke.
+	// aafm_oauth_revoke_client_tokens() reports a genuine query failure as -1, and the
+	// final-state read above can still find zero active tokens even when that UPDATE itself
+	// failed (there was nothing to update either way). Sending the -1 sentinel straight through
+	// as revoked_tokens would be wrong: the admin JS reads it as Number(revoked_tokens) and
+	// subtracts it from the displayed count, so a -1 would INCREASE the shown token count instead
+	// of decreasing it. A genuine query failure is refused the same as any other unconfirmed
+	// revoke.
 	if ( ! $deactivated || -1 === $revoked || aafm_oauth_client_has_active_tokens( $client_id ) || aafm_oauth_client_has_pending_codes( $client_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the client. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
@@ -686,15 +686,15 @@ function aafm_ajax_oauth_revoke_grant(): void {
 	aafm_oauth_revoke_user_client_codes( $user_id, $client_id );
 
 	// Authoritative final-state read: report success only when the consent is really gone, no
-	// active token for this user+client survives, and no code row survives either, whatever any
-	// single write above reported on its own (Codex round 9, R9-2 - a failed UPDATE used to still
-	// send success while the bearer token kept validating; Codex round 10, R10-2 - the code-table
-	// delete above was never certified at all).
+	// active token for this user+client survives, and no code row survives either, regardless of
+	// what any single write above reported on its own. A failed UPDATE can still report success
+	// while the bearer token keeps validating, and the code-table delete above is never
+	// independently certified, so only this final read can be trusted.
 	//
-	// F6 (1.7.5 deferred): same sentinel leak as aafm_ajax_oauth_revoke_client() above -
-	// aafm_oauth_revoke_user_client_tokens() reports a genuine query failure as -1 (N1), and the
-	// final-state read can still find zero active tokens even when that UPDATE itself failed, so
-	// this response used to send the -1 sentinel straight through as revoked_tokens, which the
+	// Same sentinel leak as aafm_ajax_oauth_revoke_client() above:
+	// aafm_oauth_revoke_user_client_tokens() reports a genuine query failure as -1, and the
+	// final-state read can still find zero active tokens even when that UPDATE itself failed. So
+	// this response must not send the -1 sentinel straight through as revoked_tokens, which the
 	// admin JS then subtracted, INCREASING the displayed count instead of decreasing it.
 	if ( ! $consent_deleted || -1 === $revoked || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_pending_codes( $user_id, $client_id ) ) {
 		wp_send_json_error( array( 'message' => __( 'Could not fully revoke the grant. Please try again.', 'agent-abilities-for-mcp' ) ) );
@@ -720,7 +720,7 @@ function aafm_ajax_oauth_revoke_grant(): void {
  * never implies "this is what your agent will see," and it never sends or logs the
  * Application Password.
  *
- * Codex hunt F3: the target URL comes from aafm_endpoint_url(), which calls core's own
+ * The target URL comes from aafm_endpoint_url(), which calls core's own
  * rest_url() and is therefore filterable by any active plugin to a different host.
  * Sending this call's scoped auth cookies there trusts whatever rest_url filter the site
  * already runs - already-privileged, already-installed code, not attacker input - the

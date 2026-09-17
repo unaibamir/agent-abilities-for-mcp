@@ -344,7 +344,7 @@ function aafm_exec_restore_revision( array $input ) {
 	if ( false !== $owning_builder ) {
 		return aafm_page_builder_owned_error( $owning_builder );
 	}
-	// Reversibility guard (B49): the fresh pre-restore snapshot is taken by core's
+	// Reversibility guard: the fresh pre-restore snapshot is taken by core's
 	// wp_save_post_revision() hook, which bails when revisions are disabled for this post
 	// (WP_POST_REVISIONS false / the wp_revisions_to_keep filter returning 0) or the type
 	// dropped 'revisions' support. Restoring in that state would silently destroy the

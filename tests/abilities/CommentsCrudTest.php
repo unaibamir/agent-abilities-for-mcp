@@ -232,13 +232,13 @@ final class CommentsCrudTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-2: same gap as the moderate-comment path, same shape here - the
-	 * pending-pin confirming read at line ~655 never busts the comment object cache first, so it
-	 * can trust a stale cached object instead of the row it just tried (and failed) to pin. This
-	 * plants a stale cached "pending" object over a database row that a hook already flipped to
-	 * "approved", then fails the pin's own UPDATE the same no-flush way as the sibling test above
-	 * so core's own cache-clearing never runs. A confirming read that trusts the stale cache sees
-	 * pending == pending and hands back an "approved" comment as a confirmed pending create.
+	 * Same shape as the moderate-comment path: the pending-pin confirming read must bust the
+	 * comment object cache first, or it can trust a stale cached object instead of the row it
+	 * just tried (and failed) to pin. This plants a stale cached "pending" object over a database
+	 * row that a hook already flipped to "approved", then fails the pin's own UPDATE the same
+	 * no-flush way as the sibling test above so core's own cache-clearing never runs. A confirming
+	 * read that trusts the stale cache sees pending == pending and hands back an "approved"
+	 * comment as a confirmed pending create.
 	 */
 	public function test_create_comment_confirms_against_the_database_not_a_stale_cache_entry(): void {
 		global $wpdb;

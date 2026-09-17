@@ -591,15 +591,15 @@ final class PostMetaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-1: get_post_meta() returns '' identically for "the meta is genuinely
-	 * empty" and "the confirming read itself failed". Reproduces the finding's exact repro: an
-	 * ordinary stored value, a metadata veto that ALSO evicts the object's meta cache (so the
-	 * following read cannot just serve the primed runtime cache), and a failed follow-up SELECT.
-	 * The pre-write read (which must stay correct so $old is genuine) is query occurrence 1 in
-	 * this window; the now-evicted post-write confirming read is occurrence 2 - only that one is
-	 * made to fail. Before the fix this let the veto certify as a landed write;
-	 * aafm_meta_write_confirmed() now reads the confirming value itself through a failure-aware
-	 * read, so a genuine query failure fails the confirmation closed instead.
+	 * Reproduces the ambiguity in get_post_meta()'s return value: it returns '' identically for
+	 * "the meta is genuinely empty" and "the confirming read itself failed". The setup is an
+	 * ordinary stored value, a metadata veto that ALSO evicts the object's meta cache (so the following
+	 * read cannot just serve the primed runtime cache), and a failed follow-up SELECT. The
+	 * pre-write read (which must stay correct so $old is genuine) is query occurrence 1 in this
+	 * window; the now-evicted post-write confirming read is occurrence 2 - only that one is made
+	 * to fail. aafm_meta_write_confirmed() reads the confirming value itself through a
+	 * failure-aware read, so a genuine query failure fails the confirmation closed instead of
+	 * letting the veto certify as a landed write.
 	 */
 	public function test_update_meta_fails_closed_when_a_veto_evicts_cache_and_the_confirming_read_fails(): void {
 		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );

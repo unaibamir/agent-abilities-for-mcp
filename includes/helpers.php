@@ -2187,20 +2187,19 @@ function aafm_generic_error(): WP_Error {
  * confirmed no-op purely because the caller's literal input matched what was already stored. See
  * $old_is_canonical below.
  *
- * Codex round 9, R9-1: this used to take the confirming read as a $stored parameter, sourced by
- * every call site from get_post_meta()/get_term_meta()/get_user_meta(). Those getters cannot tell
- * "the meta is genuinely empty" apart from "the confirming read itself failed" - both return ''
- * (an evicted object-cache entry plus a failed follow-up SELECT lands on the same '' a real empty
- * value would). Comparing that unsignalled '' against $old and $intended could satisfy the
- * "something changed" branch and certify a vetoed write - the same class of bug R8-2 closed one
- * layer further in, at the direct database reader. This now reads the confirming value itself,
- * straight from the object's own meta table, through the same failure-aware {ok,value} shape the
- * direct-reader class already uses everywhere else (aafm_wpdb_row(), option-cache.php): a genuine
- * query failure now fails the confirmation closed, while a legitimate empty or missing row (the
- * query succeeded and simply found nothing) still reads as '', exactly what the getter would have
- * returned for that same real state. This is not a reimplementation of core's cache/error
- * internals - it is one authoritative read replacing an unsignalled one, mirroring
- * aafm_post_field_write_confirmed()'s own R8-2 fix rather than inventing a new mechanism.
+ * This function reads the confirming value itself, straight from the object's own meta table,
+ * through the same failure-aware {ok,value} shape the direct-reader class already uses everywhere
+ * else (aafm_wpdb_row(), option-cache.php), rather than accepting it as a $stored parameter sourced
+ * from get_post_meta()/get_term_meta()/get_user_meta(). Those getters cannot tell "the meta is
+ * genuinely empty" apart from "the confirming read itself failed" - both return '' (an evicted
+ * object-cache entry plus a failed follow-up SELECT lands on the same '' a real empty value would).
+ * Comparing that unsignalled '' against $old and $intended could satisfy the "something changed"
+ * branch and certify a vetoed write. Reading the meta table directly means a genuine query failure
+ * fails the confirmation closed, while a legitimate empty or missing row (the query succeeded and
+ * simply found nothing) still reads as '', exactly what the getter would have returned for that
+ * same real state. This is not a reimplementation of core's cache/error internals - it is one
+ * authoritative read replacing an unsignalled one, the same approach
+ * aafm_post_field_write_confirmed() takes at the direct database reader.
  *
  * @param mixed  $old            The value read back from storage BEFORE the write ran.
  * @param int    $object_id      The post/term/user id the meta is stored against.

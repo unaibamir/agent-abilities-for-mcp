@@ -1382,7 +1382,7 @@ function aafm_perm_replace_in_post( array $input ): bool {
  * tokens, so the body is reported as the element's own modifiable text rather than as separate
  * text tokens between an opener and a closer - the element has no closer in the token stream at
  * all. Anything spliced into one of these bodies is therefore invisible to a comparison that only
- * looks at tag names and attributes, which is exactly how the round-7 regression happened.
+ * looks at tag names and attributes.
  *
  * Taken from the switch in WP_HTML_Tag_Processor that decides which openers to skip past whole,
  * not from memory. Verified identical on the WP 6.9 floor and on 7.0. NOSCRIPT is deliberately

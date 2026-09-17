@@ -415,14 +415,14 @@ final class CommentsWriteTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-2: the confirming get_comment() call R8-4 added never busts the comment
-	 * object cache first, so it can serve a stale cached object instead of the real row. This
-	 * plants that exact divergence directly - a cached "pending" object sitting over a database
-	 * row that genuinely still says "approved" - the state a prior failed, non-flushing write
-	 * would plausibly leave behind, then fails the moderation call's own UPDATE the same no-flush
-	 * way so it never reaches core's own cache-clearing. A read that trusts the stale cache
-	 * confirms the requested unapprove against pending == pending and reports success while the
-	 * database never moved off approved.
+	 * The confirming get_comment() call must bust the comment object cache first, or it can
+	 * serve a stale cached object instead of the real row. This plants that exact divergence
+	 * directly - a cached "pending" object sitting over a database row that genuinely still says
+	 * "approved" - the state a prior failed, non-flushing write would plausibly leave behind,
+	 * then fails the moderation call's own UPDATE the same no-flush way so it never reaches
+	 * core's own cache-clearing. A read that trusts the stale cache confirms the requested
+	 * unapprove against pending == pending and reports success while the database never moved
+	 * off approved.
 	 */
 	public function test_moderate_comment_confirms_against_the_database_not_a_stale_cache_entry(): void {
 		global $wpdb;

@@ -333,10 +333,10 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * Doc 214, finding 6: the WC_Order stub's getters used to apply no WooCommerce filter at
-	 * all, unlike real WC_Order (a mix of get_prop()-backed getters filtered
-	 * 'woocommerce_order_get_{prop}', get_order_number()'s own 'woocommerce_order_number', and
-	 * get_items()'s 'woocommerce_order_get_items'). Hook three of the getters this ability's own
+	 * The WC_Order stub's getters must apply the same WooCommerce filters real WC_Order does (a
+	 * mix of get_prop()-backed getters filtered 'woocommerce_order_get_{prop}',
+	 * get_order_number()'s own 'woocommerce_order_number', and get_items()'s
+	 * 'woocommerce_order_get_items'), not skip them. Hook three of the getters this ability's own
 	 * shaping reads - a plain prop, the order-number's distinctly-named filter, and a billing
 	 * address prop - and confirm the filtered value reaches the wire.
 	 */

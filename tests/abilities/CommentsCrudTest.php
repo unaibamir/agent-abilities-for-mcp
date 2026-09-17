@@ -172,11 +172,11 @@ final class CommentsCrudTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-4: the post-insert wp_set_comment_status( $id, 'hold' ) pin's return
-	 * value used to be discarded, and only the comment's existence was checked afterward - so if
-	 * a 'wp_set_comment_status' hook (fired synchronously, AFTER that pin's own DB update
-	 * succeeds but BEFORE it returns) moved the comment away from pending again, creation still
-	 * reported success, contradicting the pending-queue guarantee this ability exists to enforce.
+	 * The post-insert wp_set_comment_status( $id, 'hold' ) pin's return value must be checked, not
+	 * just the comment's existence afterward: a 'wp_set_comment_status' hook (fired synchronously,
+	 * AFTER that pin's own DB update succeeds but BEFORE it returns) can move the comment away
+	 * from pending again, and checking existence alone would still report success, contradicting
+	 * the pending-queue guarantee this ability exists to enforce.
 	 */
 	public function test_create_comment_errors_when_a_hook_undoes_the_pending_pin(): void {
 		global $wpdb;
@@ -188,7 +188,8 @@ final class CommentsCrudTest extends TestCase {
 		// bypasses wp_allow_comment()/wp_new_comment() by design - see the docblock above); the
 		// only way a real install ends up with an approved-on-insert comment here is a plugin
 		// hook on the post-insert action forcing it directly, which this simulates with a raw
-		// update - the same shape as "an insert filter approves the new comment" in the finding.
+		// update - the shape of an insert filter approving the new comment out from under the
+		// pending pin.
 		$comment_id        = null;
 		$approve_on_insert = static function ( $id ) use ( &$comment_id, $wpdb ) {
 			$comment_id = $id;
@@ -199,9 +200,9 @@ final class CommentsCrudTest extends TestCase {
 		add_action( 'wp_insert_comment', $approve_on_insert );
 
 		// Now the pending-status pin's own UPDATE (approved '1' -> '0') is a real, non-no-op
-		// write - fail that one query so its return value is false, the same fault-injection
-		// shape R8-2's repro uses: suppress a single targeted query via the 'query' filter, never
-		// the whole request.
+		// write - fail that one query so its return value is false, using the same
+		// fault-injection shape as elsewhere in this suite: suppress a single targeted query via
+		// the 'query' filter, never the whole request.
 		$fail_pin_update = static function ( $query ) use ( &$comment_id, $wpdb ) {
 			if ( null !== $comment_id
 				&& false !== strpos( $query, "UPDATE `{$wpdb->comments}` SET `comment_approved` = '0'" )
@@ -370,11 +371,11 @@ final class CommentsCrudTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-5: wp_update_comment() returns 0 (not false, not WP_Error) both when a
-	 * filter vetoes the change AND when the request is a genuine no-op, so the executor cannot
-	 * tell the two apart from that return value alone. A wp_update_comment_data filter that
-	 * rewrites the content back to its original value is the veto case: the requested content
-	 * never actually landed, so this must report an error, not success carrying the old content.
+	 * wp_update_comment() returns 0 (not false, not WP_Error) both when a filter vetoes the
+	 * change AND when the request is a genuine no-op, so the executor cannot tell the two apart
+	 * from that return value alone. A wp_update_comment_data filter that rewrites the content
+	 * back to its original value is the veto case: the requested content never actually landed,
+	 * so this must report an error, not success carrying the old content.
 	 */
 	public function test_update_comment_errors_when_a_filter_vetoes_the_content_change(): void {
 		$this->acting_as( 'editor' );

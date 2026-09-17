@@ -201,7 +201,7 @@ function aafm_exec_update_site_settings( array $input ) {
 
 	// Scalar-only with a string-type guard: a non-scalar value (array/object) is refused outright,
 	// and a boolean is refused for the string-typed settings (sending true/false for a name or
-	// format is almost always a mistake and would silently store "1"/"" - B10). The two integer
+	// format is almost always a mistake and would silently store "1"/""). The two integer
 	// settings DO accept a boolean, since the int clamp turns it into a sane 0/1 in range.
 	$integer_keys = array( 'posts_per_page', 'start_of_week' );
 	foreach ( $settings as $key => $value ) {

@@ -181,7 +181,7 @@ function aafm_exec_list_blocks( array $input ): array {
 		'no_found_rows'  => false,
 	);
 	// Only pass a search term when one was actually given: an empty 's' makes WP_Query run a
-	// pointless LIKE on every row, so omit it entirely when no search is requested (B6).
+	// pointless LIKE on every row, so omit it entirely when no search is requested.
 	$search = isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '';
 	if ( '' !== $search ) {
 		$query_args['s'] = $search;
@@ -201,10 +201,10 @@ function aafm_exec_list_blocks( array $input ): array {
 	return array(
 		'blocks' => $blocks,
 		// total is the query-wide found_posts, as the description promises - the page-slice
-		// count made total <= per_page always, so an agent paginating by ceil(total/per_page)
-		// never fetched past page 1 (B34). The per-object edit_post row filter above still
-		// applies per page, so on a role that cannot edit every block (e.g. a contributor)
-		// total can exceed the rows returned; the description discloses that.
+		// count would make total <= per_page always, so an agent paginating by
+		// ceil(total/per_page) would never fetch past page 1. The per-object edit_post row
+		// filter above still applies per page, so on a role that cannot edit every block
+		// (e.g. a contributor) total can exceed the rows returned; the description discloses that.
 		'total'  => (int) $query->found_posts,
 	);
 }
@@ -329,7 +329,7 @@ function aafm_exec_create_block( array $input ) {
 			array(
 				'post_type'    => 'wp_block',
 				// The operator's force-draft setting covers every content object an agent
-				// creates (B7): with it on, the block lands as a draft for a human to publish.
+				// creates: with it on, the block lands as a draft for a human to publish.
 				'post_status'  => aafm_force_draft() ? 'draft' : 'publish',
 				'post_title'   => $title,
 				'post_content' => $content,
@@ -349,11 +349,11 @@ function aafm_exec_create_block( array $input ) {
 	if ( ! $saved instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	// B3 (1.7.5 deferred): the reread above only proved the row exists, never that what came
-	// back matches what this create actually asked for - a wp_insert_post_data filter silently
-	// vetoing or normalizing a field would still report success on the caller's stale intent.
-	// $sanitize_context_id is 0, not (int) $id: core's own sanitize_post( $postarr, 'db' ) inside
-	// wp_insert_post() ran BEFORE this row existed, with ID defaulted to 0 (R7-4).
+	// The reread above only proves the row exists, never that what came back matches what this
+	// create actually asked for - a wp_insert_post_data filter silently vetoing or normalizing a
+	// field would still report success on the caller's stale intent. $sanitize_context_id is 0,
+	// not (int) $id: core's own sanitize_post( $postarr, 'db' ) inside wp_insert_post() runs
+	// before this row exists, with ID defaulted to 0.
 	if ( ! aafm_post_field_write_confirmed( (int) $id, 'post_title', $title, '', 0 )
 		|| ! aafm_post_field_write_confirmed( (int) $id, 'post_content', $content, '', 0 )
 	) {
@@ -463,8 +463,8 @@ function aafm_exec_update_block( array $input ) {
 	if ( ! $saved instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	// B3 (1.7.5 deferred): only the fields THIS update actually set are checked, each against
-	// its CANONICAL sanitize_post_field() form - same shape as create-block above, but the
+	// Only the fields THIS update actually set are checked, each against its CANONICAL
+	// sanitize_post_field() form - same shape as create-block above, but the
 	// default $sanitize_context_id (the existing $id: this is an update, the row already
 	// existed at sanitize time).
 	// $block was read before wp_update_post() ran, so its fields are each field's genuine
@@ -537,7 +537,7 @@ function aafm_exec_delete_block( array $input ) {
 	}
 	if ( ! aafm_trash_is_enabled() ) {
 		// The same actionable refusal trash-post/trash-page return, so the agent learns WHY
-		// the delete was refused instead of getting the generic error (B43).
+		// the delete was refused instead of getting the generic error.
 		return aafm_trash_disabled_error();
 	}
 	$result = wp_trash_post( $id );

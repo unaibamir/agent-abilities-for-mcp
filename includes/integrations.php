@@ -115,12 +115,12 @@ function aafm_rankmath_active(): bool {
 /**
  * The minimum AIOSEO version aafm/aioseo-update-post requires.
  *
- * Fix round 2 (sweep review security finding, 208-sweep-review-security.md): AIOSEO's own docblock
+ * AIOSEO's own docblock
  * at Post.php:908-910 dates its patch-aware partial-save behavior ("only syncs meta for keys
  * present in $data, so partial saves ... don't warn on, or wipe, fields they didn't touch") to
  * this exact version. Before 4.9.8, per the vendor's own words, a partial save through
  * Post::savePost() could wipe fields the caller never touched. This plugin's delegation to
- * savePost() (fix round 1) depends on that patch-aware behavior being present.
+ * savePost() depends on that patch-aware behavior being present.
  */
 if ( ! defined( 'AAFM_AIOSEO_MIN_VERSION' ) ) {
 	define( 'AAFM_AIOSEO_MIN_VERSION', '4.9.8' );

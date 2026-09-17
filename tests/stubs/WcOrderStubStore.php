@@ -95,7 +95,7 @@ class WcOrderStubStore {
 	/**
 	 * The map wc_get_order_statuses() serves, mirroring the real function's default seven plus
 	 * whatever a test adds - real WooCommerce passes its map through the wc_order_statuses filter,
-	 * so plugins can register custom statuses (B52). reset() restores the default seven.
+	 * so plugins can register custom statuses. reset() restores the default seven.
 	 *
 	 * @var array<string,string>
 	 */
@@ -145,7 +145,7 @@ class WcOrderStubStore {
 
 	/**
 	 * When true, WC_Order::update_status() returns false without changing anything - the real
-	 * method swallows its own exceptions and returns false on a failed transition (B55).
+	 * method swallows its own exceptions and returns false on a failed transition.
 	 *
 	 * @var bool
 	 */

@@ -7,12 +7,11 @@
  * TecStubStore.php's own "not unconditionally at bootstrap" discipline, since defining a global
  * function is a one-way, process-wide operation that would otherwise leak into every later test.
  *
- * Codex final round 3 MEDIUM: this stub used to store fields as ordinary post meta, which meant
- * neither of the real geodir_get_post_info()'s two filter points ('geodir_post_info_query' on
- * the SQL, 'geodir_get_post_info' on the returned object - see includes/abilities/
- * geodirectory.php's own docblock) could be genuinely exercised against it, and a raw direct-DB
- * confirmation read (this plugin's own fix for the false-negative-rollback finding) had nothing
- * real to read. This stub now creates and uses the REAL detail table
+ * Storing fields as ordinary post meta would leave neither of the real geodir_get_post_info()'s
+ * two filter points ('geodir_post_info_query' on the SQL, 'geodir_get_post_info' on the returned
+ * object - see includes/abilities/geodirectory.php's own docblock) genuinely exercisable, and a
+ * raw direct-DB confirmation read (this plugin's own fix for the false-negative-rollback defect)
+ * would have nothing real to read. This stub instead creates and uses the REAL detail table
  * ({$wpdb->prefix}geodir_gd_place_detail, same columns as the installed plugin's own schema-
  * creation code) and reproduces geodir_save_post_meta()'s exact raw-SQL-concatenation write and
  * geodir_get_post_info()'s exact two-filter read, so a test can exercise either filter for real.

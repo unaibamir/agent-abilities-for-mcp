@@ -375,9 +375,9 @@ final class RichPostTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-5: edit permission and the operator's meta exposure policy are different
+	 * Edit permission and the operator's meta exposure policy are different
 	 * axes. This proves an explicitly DENIED key is withheld here even though the requester can
-	 * edit the post and the key is on the allow list - the exact bypass the finding describes.
+	 * edit the post and the key is on the allow list.
 	 */
 	public function test_rich_post_meta_omits_an_explicitly_denied_key_even_for_an_editor(): void {
 		$this->acting_as( 'administrator' );
@@ -400,7 +400,7 @@ final class RichPostTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 6, R6-5: the deny-`*` kill switch must also be honoured here, not just by the
+	 * The deny-`*` kill switch must also be honoured here, not just by the
 	 * dedicated metadata-reading abilities.
 	 */
 	public function test_rich_post_meta_is_empty_under_the_deny_all_kill_switch(): void {

@@ -204,12 +204,12 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-3: R9-3's fix certified each table's DELETE against a fresh row-count
-	 * read, but that read was a bare get_var(), which casts a failed read straight to
-	 * `(int) null === 0` - the same "unreadable, so call it empty" mistake as trusting the
-	 * DELETE's own affected-row count. Faulting the clients-table DELETE and its confirming COUNT
-	 * together must still report failure for that table, and the row it never actually reached
-	 * must survive; the other three tables (never faulted) must still come back genuinely clear.
+	 * Each table's DELETE must be certified against a fresh row-count read that itself can fail
+	 * closed: a bare get_var() casts a failed read straight to `(int) null === 0` - the same
+	 * "unreadable, so call it empty" mistake as trusting the DELETE's own affected-row count.
+	 * Faulting the clients-table DELETE and its confirming COUNT together must still report
+	 * failure for that table, and the row it never actually reached must survive; the other
+	 * three tables (never faulted) must still come back genuinely clear.
 	 */
 	public function test_truncate_reports_failure_for_a_table_whose_delete_and_confirming_count_both_fail(): void {
 		aafm_install_oauth_tables();
@@ -267,11 +267,11 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 7, R7-2: the version guard used to read get_option()'s cache-trusting view, so
-	 * a stale persistent cache still claiming the current version was stored, over a database row
-	 * that was actually missing (or behind), would make the guard skip the installer for good.
-	 * Drop a table directly, delete the real version row, and plant a stale cache claiming the
-	 * current version is already stored - the installer must still run from the real row.
+	 * The version guard must not read get_option()'s cache-trusting view: a stale persistent
+	 * cache still claiming the current version is stored, over a database row that is actually
+	 * missing (or behind), would otherwise make the guard skip the installer for good. Drop a
+	 * table directly, delete the real version row, and plant a stale cache claiming the current
+	 * version is already stored - the installer must still run from the real row.
 	 */
 	public function test_upgrade_runs_when_a_stale_cache_hides_a_missing_version(): void {
 		global $wpdb;
@@ -300,10 +300,9 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * B5 sibling: the OAuth schema self-heal is hooked on admin_init only in 1.6.1, so a
-	 * headless site whose plugin auto-updates over cron never upgrades its OAuth tables while
-	 * bearer traffic keeps hitting them. Same cheap option-version gate, hooked on the REST
-	 * path too.
+	 * The OAuth schema self-heal is hooked on admin_init only in 1.6.1, so a headless site whose
+	 * plugin auto-updates over cron never upgrades its OAuth tables while bearer traffic keeps
+	 * hitting them. Same cheap option-version gate, hooked on the REST path too.
 	 */
 	public function test_oauth_schema_self_heals_on_rest_traffic_not_only_admin(): void {
 		$this->assertNotFalse(
@@ -349,8 +348,8 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 8, R8-3: the version-stamp write's return value used to be discarded. A schema
-	 * that is genuinely healthy but whose stamp write fails to persist must not be allowed to look
+	 * The version-stamp write's return value must be checked, not discarded. A schema that is
+	 * genuinely healthy but whose stamp write fails to persist must not be allowed to look
 	 * settled - the version must stay behind (so the self-heal keeps retrying) and the error
 	 * transient, already cleared on the strength of the schema check alone, must be re-set so the
 	 * admin notice reflects reality.

@@ -146,9 +146,9 @@ final class RevisionsTest extends TestCase {
 
 	/**
 	 * A restore rewrites title/content/excerpt exactly like aafm/update-post, so a builder-owned
-	 * post must refuse it the same way (Codex round-b finding 9): restoring a pre-builder
-	 * revision over a post the builder now owns would report success while the builder's own
-	 * meta (which actually drives the rendered output) stays untouched.
+	 * post must refuse it the same way: restoring a pre-builder revision over a post the builder
+	 * now owns would report success while the builder's own meta (which actually drives the
+	 * rendered output) stays untouched.
 	 */
 	public function test_restore_revision_refuses_a_builder_owned_post(): void {
 		$author = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -185,13 +185,13 @@ final class RevisionsTest extends TestCase {
 	 * A restore whose underlying write fails must surface the generic error, never a false
 	 * {restored:true}. wp_restore_post_revision() returns the wp_update_post() result, which is
 	 * falsy (0/false/null) on failure and - per its documented int|false|null contract being
-	 * incomplete - may be a WP_Error. A WP_Error is a truthy object, so the old falsy-only guard
-	 * would have reported success for a failed write and the audit layer would have logged it as
-	 * one. We force the restore write to fail (via wp_insert_post_empty_content, which makes
-	 * wp_update_post bail), then assert the guard returns a WP_Error.
+	 * incomplete - may be a WP_Error. A WP_Error is a truthy object, so a falsy-only guard would
+	 * report success for a failed write and the audit layer would log it as one. We force the
+	 * restore write to fail (via wp_insert_post_empty_content, which makes wp_update_post bail),
+	 * then assert the guard returns a WP_Error.
 	 */
 	/**
-	 * B49: the description claims "the current state is first saved as a fresh revision, so
+	 * The description claims "the current state is first saved as a fresh revision, so
 	 * the restore is reversible". When revisions are disabled for the post (WP_POST_REVISIONS
 	 * false, or the wp_revisions_to_keep filter returning 0), core takes NO fresh snapshot
 	 * and the pre-restore state is lost forever. The ability must refuse rather than perform

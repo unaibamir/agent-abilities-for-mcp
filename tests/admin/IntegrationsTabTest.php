@@ -319,11 +319,11 @@ final class IntegrationsTabTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 MEDIUM: Event Tickets abilities require TEC active too (they're gated
-	 * on a parent event), but the card reported a bare 'active' from Event Tickets alone - the
-	 * operator could enable abilities that would never actually register. The card must report a
-	 * distinct status instead of claiming a readiness the runtime registration gate doesn't grant,
-	 * and its checkboxes must render disabled ($disabled derives directly from status !== 'active').
+	 * Event Tickets abilities require TEC active too (they're gated on a parent event).
+	 * Reporting a bare 'active' from Event Tickets alone would let the operator enable abilities
+	 * that would never actually register. The card must report a distinct status instead of
+	 * claiming a readiness the runtime registration gate doesn't grant, and its checkboxes must
+	 * render disabled ($disabled derives directly from status !== 'active').
 	 */
 	public function test_event_tickets_reports_missing_dependency_without_tec(): void {
 		// Force TEC off explicitly rather than assuming it's off by default: once any
@@ -450,10 +450,10 @@ final class IntegrationsTabTest extends TestCase {
 	}
 
 	/**
-	 * Codex final round 4 MEDIUM: the below-floor status note hardcoded WooCommerce's own
-	 * constant and version-reader function for EVERY integration, so a TEC site below its real
-	 * floor was told to install a WooCommerce version it likely already had. Must resolve the
-	 * minimum and installed version from TEC's own pair instead.
+	 * The below-floor status note must resolve the minimum and installed version from each
+	 * integration's own constant and version-reader function, not hardcode WooCommerce's for
+	 * EVERY integration - that would tell a TEC site below its real floor to install a
+	 * WooCommerce version it likely already has.
 	 */
 	public function test_tec_card_shows_its_own_below_floor_reason_not_woocommerces(): void {
 		$this->acting_as( 'administrator' );

@@ -120,10 +120,10 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 9, R9-8: a failed TRUNCATE used to still let the handler write the "Activity
-	 * log cleared" marker and report success, leaving the original row plus a marker falsely
-	 * claiming the clear happened. Both must now fail: the handler must report an error and the
-	 * original row must survive untouched by any marker.
+	 * A failed TRUNCATE must not let the handler write the "Activity log cleared" marker or
+	 * report success, which would leave the original row plus a marker falsely claiming the clear
+	 * happened. Both must fail: the handler must report an error and the original row must
+	 * survive untouched by any marker.
 	 */
 	public function test_clear_log_reports_failure_and_writes_no_marker_when_truncate_fails(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -162,12 +162,11 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
-	 * Codex round 10, R10-3: the round 9 fix above only faulted the TRUNCATE and left the
-	 * confirming COUNT healthy, so it could not see that a get_var()-style confirming read that
-	 * itself fails casts straight to `(int) null === 0` - the same "unreadable, so call it empty"
-	 * mistake the TRUNCATE fix was meant to close, one query later. Faulting the TRUNCATE and its
-	 * confirming COUNT together must still report failure and write no marker, not a false success
-	 * from an unreadable table looking exactly like a genuinely empty one.
+	 * A get_var()-style confirming read that itself fails casts straight to `(int) null === 0` -
+	 * the same "unreadable, so call it empty" mistake as an unconfirmed TRUNCATE, just one query
+	 * later. Faulting the TRUNCATE and its confirming COUNT together must still report failure and
+	 * write no marker, not a false success from an unreadable table looking exactly like a
+	 * genuinely empty one.
 	 */
 	public function test_clear_log_reports_failure_and_writes_no_marker_when_truncate_and_its_confirming_count_both_fail(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );

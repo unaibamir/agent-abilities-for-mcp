@@ -4,22 +4,23 @@
  *
  * ROWS IN THIS FILE ARE APPEND-ONLY. NEVER DELETE ONE.
  *
- * Read that literally. This guard has been written three times. Each attempt fixed the case the
- * current review round had found and left or reopened one an earlier attempt had handled, because the
- * suite only ever pinned the newest round's findings:
+ * Read that literally. This guard has been written three times. Each rewrite fixed the case that
+ * was found broken and left or reopened one an earlier version had handled correctly, because the
+ * suite only ever pinned the most recently discovered case:
  *
  *   9fab08d  introduced the guard (a read-modify-write must not demote a global attribute to a local
  *            one) and compared the caller's options against a VIEW-context read. That comparison is
- *            what R7B-1 turned out to be.
- *   f291ea7  fixed R6-1 by splitting stored from shown and handing the BUILDER the stored objects,
- *            so a display filter could no longer be persisted. It left the comparison on shown.
- *   R7B-1    a filter that hides a stored term makes the displayed set a legitimate edit request in
- *            its own right, so sending it back was classified as an unchanged echo, allowed, and
- *            applied as a no-op. The caller's removal was discarded and the same filter shaped a
- *            response that looked like it had worked.
+ *            what the display-masking case below turns out to be.
+ *   f291ea7  fixed the display-filter-append case by splitting stored from shown and handing the
+ *            BUILDER the stored objects, so a display filter could no longer be persisted. It left
+ *            the comparison on shown.
+ *   this version fixes the display-masking case: a filter that hides a stored term makes the
+ *            displayed set a legitimate edit request in its own right, so sending it back was
+ *            classified as an unchanged echo, allowed, and applied as a no-op. The caller's removal
+ *            was discarded and the same filter shaped a response that looked like it had worked.
  *
  * So this file is not a list of tests. It is the union of every case any version of this guard
- * protected or got wrong, each row labelled with the commit or finding it came from, pinned
+ * protected or got wrong, each row labelled with the commit or case it came from, pinned
  * simultaneously, so a fourth rewrite fails loudly instead of quietly shipping a hole. If you are
  * here to rewrite the guard: add rows, do not remove them. A row you cannot satisfy is a
  * conversation to have, not a line to delete.
@@ -143,7 +144,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 		return array(
 
 			/*
-			 * 9fab08d (B2-01/B2-03). The case the guard was built for: the field models a name and a
+			 * 9fab08d. The case the guard was built for: the field models a name and a
 			 * list of literal strings, so it cannot express a change to terms in a shared taxonomy.
 			 * Accepting it rebuilt the attribute with set_id( 0 ), which flipped is_taxonomy to 0 and
 			 * stranded every variation keyed on it.
@@ -246,10 +247,10 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 
 			/*
-			 * f291ea7 (R6-1). A filter that APPENDS a display-only string. aafm_wc_attribute_shape()
+			 * f291ea7. A filter that APPENDS a display-only string. aafm_wc_attribute_shape()
 			 * drops an option it cannot resolve to a term read-only, so shown and stored agree again
 			 * by the time they are compared and the echo is still accepted. That is deliberate, and
-			 * it is why the R7B-1 direction below is the dangerous one: this direction self-heals.
+			 * it is why the masking direction below is the dangerous one: this direction self-heals.
 			 */
 			'f291ea7 a filter appended an unresolvable option' => array(
 				$global,
@@ -268,11 +269,11 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 
 			/*
-			 * R7B-1. A filter HIDES one of two stored terms, so the caller is shown a set that is a
+			 * A filter HIDES one of two stored terms, so the caller is shown a set that is a
 			 * legitimate edit request in its own right, and nothing in the request says which they
-			 * meant. This used to be read as an echo, accepted, and applied as a no-op against stored
-			 * state: the removal was discarded and the filtered response confirmed the state they
-			 * asked for. Refused now, because a false success on a write is the worse failure.
+			 * meant. Reading that as an echo and applying it as a no-op against stored state would
+			 * discard the caller's removal while the filtered response confirms the state they
+			 * asked for - a false success on a write. Refused instead, because that is the worse failure.
 			 */
 			'R7B-1 a filter hid a stored term, sent set matches' => array(
 				$global,
@@ -291,7 +292,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 
 			/*
-			 * R7B-1, and the row that stops this being fixed by refusing every filtered attribute.
+			 * The row that stops this being fixed by refusing every filtered attribute.
 			 * A caller who sends the STORED set is asking for nothing whichever way they meant it,
 			 * so there is nothing to guess and nothing to discard. Still accepted, filter and all.
 			 */
@@ -312,7 +313,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 
 			/*
-			 * R7B-1. Same masking, but the caller sends neither the stored nor the displayed set.
+			 * Same masking, but the caller sends neither the stored nor the displayed set.
 			 * That is an ordinary genuine change and gets the ordinary message.
 			 */
 			'R7B-1 a change matching neither stored nor shown' => array(
@@ -332,7 +333,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 
 			/*
-			 * R7B-1 sweep. A filter that demotes a global attribute in the VIEW, so the displayed
+			 * A filter that demotes a global attribute in the VIEW, so the displayed
 			 * options are literal strings. Stored is still global, so the request is refused; the
 			 * masked code is what says why, because the caller was handed those strings.
 			 */
@@ -353,7 +354,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 
 			/*
-			 * R7B-1 sweep. A filter that hides the attribute from the view entirely. The caller was
+			 * A filter that hides the attribute from the view entirely. The caller was
 			 * shown nothing for it, so shown falls back to stored: the stored set is still a no-op,
 			 * and anything else is an ordinary refusal.
 			 */
@@ -381,7 +382,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 
 			/*
-			 * R7B-1. Precedence, pinned so it cannot drift: a request carrying both a masked
+			 * Precedence, pinned so it cannot drift: a request carrying both a masked
 			 * attribute and an ordinary change reports the masked one. Its cause is the surprising
 			 * one and its remedy is different. The whole request is refused either way, so nothing
 			 * is written and the second attribute is refused again, with its own message, next turn.
@@ -409,7 +410,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * R7B-1. The refusal a masked caller gets must not tell them to do the thing that just failed.
+	 * The refusal a masked caller gets must not tell them to do the thing that just failed.
 	 *
 	 * The ordinary message ends "or send its current options back unchanged to leave it alone". A
 	 * caller who was shown a filtered set and sent it back did exactly that, so repeating the advice
@@ -535,7 +536,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 5, from f291ea7 (R6-1): the builder leaves a global attribute's object exactly as handed
+	 * Behaviour 5, from f291ea7: the builder leaves a global attribute's object exactly as handed
 	 * to it, so whatever the caller is given, the object that reaches set_attributes() is the one the
 	 * caller of the builder chose. That is what makes passing STORED objects sufficient.
 	 *
@@ -572,7 +573,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 5's other half, from f291ea7 (R6-1): an attribute the caller did not mention outlives
+	 * Behaviour 5's other half, from f291ea7: an attribute the caller did not mention outlives
 	 * set_attributes()'s pre-null, and a custom attribute the caller DID mention is rebuilt from the
 	 * sent options while keeping its visibility, variation flag, and slot.
 	 */
@@ -623,7 +624,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 9, from 9fab08d (B2-03): the read emits a global attribute's options as term SLUGS plus a
+	 * Behaviour 9, from 9fab08d: the read emits a global attribute's options as term SLUGS plus a
 	 * taxonomy flag, and a custom attribute's as its literal strings with the flag off.
 	 *
 	 * This is the same function the guard compares through, which is the point: the read and the
@@ -693,7 +694,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 7, from ae074f1 (R2-9): a variation keyed on a parent attribute the parent does not use
+	 * Behaviour 7, from ae074f1: a variation keyed on a parent attribute the parent does not use
 	 * FOR VARIATIONS is refused. WooCommerce never matches such a key, so the write would land in
 	 * postmeta and mean nothing.
 	 */
@@ -710,7 +711,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			'A key the parent DECLARES but does not vary on has its own code, distinct from a key it has never heard of.'
 		);
 
-		// And a key the parent has never heard of at all, which is the other half of R2-9.
+		// And a key the parent has never heard of at all, the other half of this behaviour.
 		$unknown = aafm_wc_unknown_variation_attributes_error( $this->corpus_parent(), array( 'pa_nonesuch' => 'x' ) );
 		$this->assertInstanceOf( WP_Error::class, $unknown );
 		$this->assertSame( 'aafm_wc_unknown_variation_attribute', $unknown->get_error_code() );
@@ -723,7 +724,7 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
-	 * Behaviour 8, from f285327 (R2-10): a value the parent never declared for that attribute is refused,
+	 * Behaviour 8, from f285327: a value the parent never declared for that attribute is refused,
 	 * and the error names the real options. An empty value is exempt: that is WooCommerce's
 	 * "Any <attribute>", a supported configuration.
 	 */

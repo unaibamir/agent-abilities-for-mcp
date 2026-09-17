@@ -62,8 +62,8 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * B50: "the set can only be NARROWED" was only true for the five takeover-class keys the
-	 * array_diff stripped. Any OTHER option - template, active_plugins, WPLANG - could be
+	 * "The set can only be NARROWED" holds only for the five takeover-class keys the
+	 * array_diff strips. Any OTHER option - template, active_plugins, WPLANG - could otherwise be
 	 * ADDED by a filter, and update-site-settings would then happily write it. Narrowing must
 	 * mean the filtered set intersects the fixed base, so a filter can remove but never add.
 	 */
@@ -83,7 +83,7 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * B50 companion: narrowing itself still works after the intersect.
+	 * Narrowing itself still works after the intersect.
 	 */
 	public function test_allowlist_filter_can_still_narrow(): void {
 		$narrow = static fn( array $base ): array => array_diff( $base, array( 'posts_per_page' ) );
@@ -124,13 +124,13 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * B11: re-submitting the current blogname as its human-readable form must be a no-op success,
+	 * Re-submitting the current blogname as its human-readable form must be a no-op success,
 	 * not a false rejection that also kills every co-submitted setting.
 	 *
 	 * Core stores blogname escaped ("Bob's Store" -> "Bob&#039;s Store"), so our unescaped sanitize
-	 * of the same value differs from the stored value, yet sanitize_option() escapes it back to the
-	 * stored value. The old code read that as core rejecting an invalid value and errored out,
-	 * blocking the co-submitted posts_per_page too. The write must now succeed.
+	 * of the same value differs from the stored value, even though sanitize_option() escapes it
+	 * back to the stored value. Reading that mismatch as core rejecting an invalid value would
+	 * error out and block the co-submitted posts_per_page too, so the write must succeed instead.
 	 */
 	public function test_update_site_settings_accepts_a_valid_no_op_on_an_escaped_name(): void {
 		$this->register_all();
@@ -156,8 +156,9 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * The B11 fix must not swallow the guard's real purpose: an invalid value core silently reverts
-	 * to the current one still has to be an error, not a no-op success.
+	 * Treating a resubmission as a no-op must not swallow the guard's real purpose: an invalid
+	 * value core silently reverts to the current one still has to be an error, not a no-op
+	 * success.
 	 */
 	public function test_update_site_settings_still_rejects_an_invalid_timezone_revert(): void {
 		$this->register_all();

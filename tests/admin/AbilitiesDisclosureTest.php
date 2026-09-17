@@ -56,7 +56,7 @@ final class AbilitiesDisclosureTest extends TestCase {
 	}
 
 	/**
-	 * B9: the list-read disclosures claimed "never the full body", but include_content=true
+	 * The list-read disclosures claimed "never the full body", but include_content=true
 	 * on get-posts (and get-pages via delegation, and search-content) returns exactly that.
 	 * The parameter is a shipped, useful feature - the disclosure must disclose it honestly:
 	 * metadata by default, full body only when the agent asks for it.

@@ -77,9 +77,9 @@ final class WpmlLanguageTest extends TestCase {
 		$this->assertSame( 'all', aafm_resolve_lang( array( 'lang' => 'all' ) ) );
 		$this->assertNull( aafm_resolve_lang( array() ) ); // None requested.
 
-		// B48 contract change: an unknown code used to coerce to null, which both served the
-		// default language silently AND reported `language: null` - documented as "WPML
-		// inactive". Two false statements; now it is an actionable refusal naming the codes.
+		// An unknown code must not coerce to null, which would both serve the
+		// default language silently AND report `language: null` - documented as "WPML
+		// inactive", two false statements. It is instead an actionable refusal naming the codes.
 		$invalid = aafm_resolve_lang( array( 'lang' => 'zz' ) );
 		$this->assertInstanceOf( \WP_Error::class, $invalid );
 		$this->assertSame( 'aafm_invalid_lang', $invalid->get_error_code() );
@@ -87,7 +87,7 @@ final class WpmlLanguageTest extends TestCase {
 	}
 
 	/**
-	 * B48 at the wire layer: a list read with an invalid lang refuses instead of silently
+	 * At the wire layer: a list read with an invalid lang refuses instead of silently
 	 * answering in the default language with language:null.
 	 */
 	public function test_get_posts_refuses_an_invalid_lang_instead_of_coercing(): void {
@@ -102,7 +102,7 @@ final class WpmlLanguageTest extends TestCase {
 	}
 
 	/**
-	 * B48: without WPML the lang input stays documented as ignored - no refusal.
+	 * Without WPML the lang input stays documented as ignored - no refusal.
 	 */
 	public function test_get_posts_ignores_lang_when_wpml_is_off(): void {
 		$this->acting_as( 'administrator' );
@@ -182,7 +182,7 @@ final class WpmlLanguageTest extends TestCase {
 	}
 
 	/**
-	 * B47: get-post pinned the WPML element type to 'post' for every id, while WPML's
+	 * get-post pinned the WPML element type to 'post' for every id, while WPML's
 	 * wpml_object_id filter resolves per the element's REAL type - so a lang request on a
 	 * CPT item never matched a translation and silently served the untranslated item.
 	 * The element type must be derived from the actual post type.

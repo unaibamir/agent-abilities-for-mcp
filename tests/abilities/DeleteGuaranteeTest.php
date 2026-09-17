@@ -136,10 +136,10 @@ final class DeleteGuaranteeTest extends TestCase {
 	}
 
 	/**
-	 * R2-11. The three classification lists name NATIVE abilities, so a destructive ability added
+	 * The three classification lists name NATIVE abilities, so a destructive ability added
 	 * by a third party through the aafm_abilities_registry filter appears in none of them. The
-	 * guarantee used to read that silence as "not a permanent delete" and keep promising the
-	 * Trash, which is the same false promise the thirteen native slugs caused, arriving through a
+	 * guarantee must not read that silence as "not a permanent delete" and promise the
+	 * Trash - the same false promise the thirteen native slugs would cause, arriving through a
 	 * door the hardcoded list cannot see.
 	 *
 	 * Unknown plus destructive resolves to permanent, matching the rule already applied to bridged
@@ -266,15 +266,15 @@ final class DeleteGuaranteeTest extends TestCase {
 	}
 
 	/**
-	 * R3-4: an unrecognised risk value must not read as safe.
+	 * An unrecognised risk value must not read as safe.
 	 *
-	 * Matching only 'destructive' and '' was a denylist, and a denylist is exactly as complete as
-	 * whoever wrote it imagined. A typo sails through it: 'destrutive' is not 'destructive' and is
-	 * not blank, so it used to clear the warning while the ability deleted for good. So does an
-	 * invented spelling like 'permanent-delete', which is what an extension author reaching for a
-	 * stronger-sounding word would plausibly write.
+	 * Matching only 'destructive' and '' is a denylist, and a denylist is exactly as complete as
+	 * whoever wrote it imagined. A typo slips through it: 'destrutive' is not 'destructive' and is
+	 * not blank, so a naive denylist would clear the warning while the ability deletes for good.
+	 * So would an invented spelling like 'permanent-delete', which is what an extension author
+	 * reaching for a stronger-sounding word would plausibly write.
 	 *
-	 * The values are checked from the outside in now: only the recognised non-destructive ones
+	 * The values are checked from the outside in: only the recognised non-destructive ones
 	 * clear the warning, and everything else - known-bad, misspelt, invented or absent - resolves
 	 * to permanent.
 	 *

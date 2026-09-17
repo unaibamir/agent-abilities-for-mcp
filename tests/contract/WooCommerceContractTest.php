@@ -658,13 +658,13 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * The B-05 recalculation added calculate_totals() to the UPDATE path, which 1.6.3 never called
-	 * there. That put a second, unguarded failure point AFTER add_product() has already persisted
-	 * its item rows: WooCommerce fires woocommerce_order_before_calculate_totals from inside
-	 * calculate_totals(), and any extension listening on it can throw. B27's rollback wraps the add
-	 * loop only, so a throw at that later point left the new item row written, the order total
-	 * stale, and a raw Throwable escaping the ability -- goods on the order that the total never
-	 * bills for, which is the exact harm B-05 exists to stop. Pins that a recalculation failure
+	 * The order-total recalculation added calculate_totals() to the UPDATE path, which 1.6.3 never
+	 * called there. That put a second, unguarded failure point AFTER add_product() has already
+	 * persisted its item rows: WooCommerce fires woocommerce_order_before_calculate_totals from
+	 * inside calculate_totals(), and any extension listening on it can throw. The rollback around
+	 * the add loop alone does not cover that later point, so a throw there would leave the new item
+	 * row written, the order total stale, and a raw Throwable escaping the ability -- goods on the
+	 * order that the total never bills for. Pins that a recalculation failure
 	 * returns a WP_Error and leaves the order exactly as it was found.
 	 */
 	public function test_update_order_recalculation_failure_leaves_no_partial_line_item_write(): void {
@@ -728,7 +728,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * R3-2: the same failure, but from the hook that fires AFTER WooCommerce has already saved.
+	 * The same failure, but from the hook that fires AFTER WooCommerce has already saved.
 	 *
 	 * The sibling test above throws from woocommerce_order_before_calculate_totals, which runs
 	 * before any mutation, so it proves only the easy half. calculate_totals() is not atomic: it
@@ -897,7 +897,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * R4-2: the rollback must survive an extension that throws while the rollback is cleaning up.
+	 * The rollback must survive an extension that throws while the rollback is cleaning up.
 	 *
 	 * WooCommerce's wc_delete_order_item() fires woocommerce_before_delete_order_item before removing the row, so
 	 * a callback listening there throws straight out of the deletion helper. Uncaught, that skipped
@@ -968,7 +968,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * R4-1: the strong "totals and taxes were put back" message must not be returned over a tax row
+	 * The strong "totals and taxes were put back" message must not be returned over a tax row
 	 * whose rate identity is still the new rate's.
 	 *
 	 * WooCommerce's update_taxes() rewrites a tax row's rate code, label, compound flag AND rate percent from the
@@ -1088,7 +1088,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * R5-2: a DISPLAY value must never be written back as stored order history.
+	 * A DISPLAY value must never be written back as stored order history.
 	 *
 	 * WooCommerce getters default to 'view' context, and view context runs the property's display
 	 * filter (WC_Data::get_prop). A snapshot built from default getters therefore records what an
@@ -1207,9 +1207,9 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * B2-01 / B2-03: reading a product and writing it straight back must change nothing.
+	 * Reading a product and writing it straight back must change nothing.
 	 *
-	 * The most ordinary turn an agent takes, and it used to silently demote a global attribute to a
+	 * The most ordinary turn an agent takes must not silently demote a global attribute to a
 	 * local one. The read reported a taxonomy attribute's options as term IDS; echoing those back
 	 * rebuilt the attribute with set_id( 0 ), which dropped the taxonomy binding, so
 	 * `_product_attributes` flipped is_taxonomy 1 to 0 and every variation keyed on it was left
@@ -1243,7 +1243,7 @@ final class WooCommerceContractTest extends TestCase {
 		$this->assertIsArray( $read );
 		$row = (array) ( (array) $read['attributes'] )[ $taxonomy ];
 
-		// B2-03: the read must speak the vocabulary the write paths accept, and say which kind it is.
+		// The read must speak the vocabulary the write paths accept, and say which kind it is.
 		$this->assertTrue( (bool) $row['taxonomy'], 'A global attribute must be flagged as taxonomy-backed.' );
 		$this->assertSame(
 			array( 'blue', 'green' ),
@@ -1251,7 +1251,7 @@ final class WooCommerceContractTest extends TestCase {
 			'A global attribute\'s options must be reported as term SLUGS, not the term ids the write path rejects.'
 		);
 
-		// B2-01: echo exactly what the read gave back.
+		// Echo exactly what the read gave back.
 		$result = aafm_exec_wc_update_product(
 			array(
 				'product_id' => $fixture['product_id'],
@@ -1289,7 +1289,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * B2-01: a genuine CHANGE to a global attribute is refused, and both custom-attribute controls
+	 * A genuine CHANGE to a global attribute is refused, and both custom-attribute controls
 	 * still work.
 	 *
 	 * Refusing is right because the `attributes` field models a custom attribute and nothing else:
@@ -1370,7 +1370,7 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * R6-1: a DISPLAY filter on the attributes must never reach storage, and must never create a term.
+	 * A DISPLAY filter on the attributes must never reach storage, and must never create a term.
 	 *
 	 * WC_Product::get_attributes() defaults to view context, which runs
 	 * woocommerce_product_get_attributes. Preserving that object on the unchanged-echo path carried
@@ -1681,12 +1681,12 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
-	 * R5-1: a throw from the hook that fires AFTER deletion must not become a phantom survivor.
+	 * A throw from the hook that fires AFTER deletion must not become a phantom survivor.
 	 *
 	 * The sibling cleanup test throws from woocommerce_before_delete_order_item, which fires while
 	 * the row still exists, so it cannot reach this path at all. WooCommerce fires
-	 * woocommerce_delete_order_item AFTER the row is gone, and the catch added for R4-2 reports that
-	 * id as unconfirmed. Unconfirmed is correct; treating it as a survivor is not.
+	 * woocommerce_delete_order_item AFTER the row is gone, and the catch added for the cleanup
+	 * rollback reports that id as unconfirmed. Unconfirmed is correct; treating it as a survivor is not.
 	 *
 	 * Measured before the fix: the order held zero item rows and the error said
 	 * "Order item ids still persisted: 77" for an id that did not exist. A caller acting on that id

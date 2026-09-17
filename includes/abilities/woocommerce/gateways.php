@@ -435,11 +435,15 @@ function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway, int $order ): arra
 	$settings = (array) $report['settings'];
 	return array(
 		'id'              => $gateway->id,
-		// WC_Payment_Gateway declares $title and $description with no default; a gateway that
-		// never assigns them (a third-party gateway that skips the usual __construct wiring) reads
-		// back as null, which would violate the declared string schema. Cast defensively.
-		'title'           => (string) $gateway->title,
-		'description'     => (string) $gateway->description,
+		// get_title()/get_description() apply the woocommerce_gateway_title /
+		// woocommerce_gateway_description filters that the raw $title/$description properties skip
+		// - translation and white-label plugins both hook these, so reading the properties directly
+		// reported the untranslated, unbranded name to the caller. WC_Payment_Gateway declares
+		// neither property with a default; a gateway that never assigns them (a third-party gateway
+		// that skips the usual __construct wiring) reads back as null through the getters too, which
+		// would violate the declared string schema. Cast defensively.
+		'title'           => (string) $gateway->get_title(),
+		'description'     => (string) $gateway->get_description(),
 		'enabled'         => 'yes' === $gateway->enabled,
 		'order'           => $order,
 		// A gateway that never calls init_settings() (again, a non-conforming third-party

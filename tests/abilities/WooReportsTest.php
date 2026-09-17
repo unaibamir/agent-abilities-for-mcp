@@ -798,6 +798,38 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * Register 1.7: title and description must go through get_title()/get_description(), which
+	 * apply the 'woocommerce_gateway_title' and 'woocommerce_gateway_description' filters that
+	 * translation and white-label plugins hook. Reading the raw $title/$description properties
+	 * skips those filters and reports the wrong name.
+	 */
+	public function test_get_payment_gateway_title_and_description_are_filtered(): void {
+		add_filter(
+			'woocommerce_gateway_title',
+			static function ( $title, $gateway_id ) {
+				return 'paypal' === $gateway_id ? 'PayPal (translated)' : $title;
+			},
+			10,
+			2
+		);
+		add_filter(
+			'woocommerce_gateway_description',
+			static function ( $description, $gateway_id ) {
+				return 'paypal' === $gateway_id ? 'Translated description.' : $description;
+			},
+			10,
+			2
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'PayPal (translated)', $res['title'], 'The filtered title must be reported, not the raw property.' );
+		$this->assertSame( 'Translated description.', $res['description'], 'The filtered description must be reported, not the raw property.' );
+	}
+
+	/**
 	 * Get gateway strips stripe_secret from stripe gateway.
 	 */
 	public function test_get_payment_gateway_redacts_stripe_secret(): void {

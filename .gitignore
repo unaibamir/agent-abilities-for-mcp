@@ -2,7 +2,28 @@
 /wp/
 
 # Dependencies
-# vendor/ is bundled and shipped (mcp-adapter); do not ignore.
+# vendor/ is bundled and shipped (mcp-adapter, jetpack autoloader); do not ignore those.
+# Dev-only packages from composer require-dev are local and mirror the export-ignore list
+# in .gitattributes; keep the two lists in step.
+/vendor/bin/
+/vendor/dealerdirect/
+/vendor/doctrine/
+/vendor/myclabs/
+/vendor/nikic/
+/vendor/phar-io/
+/vendor/php-stubs/
+/vendor/phpcompatibility/
+/vendor/phpcsstandards/
+/vendor/phpstan/
+/vendor/phpunit/
+/vendor/sebastian/
+/vendor/squizlabs/
+/vendor/szepeviktor/
+/vendor/theseer/
+/vendor/wp-coding-standards/
+/vendor/yoast/
+# Generated only when the dev packages above are installed; the shipped tree has no files autoload.
+/vendor/composer/autoload_files.php
 /node_modules/
 
 # Build artifacts
@@ -41,8 +62,13 @@ Thumbs.db
 /campaign-state/
 /.github/release-notes.md
 
-# Note: .ddev/ is intentionally committed - it is shareable, version-controlled config.
-# The exception is .ddev/php/, which DDEV generates and rewrites on start; its values are
+# .ddev/: only the three shareable config files are tracked. Everything else DDEV or an add-on
+# drops in there (redis add-on, commands/, addon-metadata/, generated php/) stays local.
+/.ddev/*
+!/.ddev/config.yaml
+!/.ddev/docker-compose.pluginsrc.yaml
+!/.ddev/nginx/
+# .ddev/php/ is generated and rewritten by DDEV on start; its values are
 # machine-local and nothing in the repo depends on them.
 /.ddev/php/
 

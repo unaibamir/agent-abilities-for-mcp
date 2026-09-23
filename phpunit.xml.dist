@@ -42,6 +42,7 @@
 			<file>tests/GeodirectoryWireTest.php</file>
 			<file>tests/AllNew174AbilitiesWireTest.php</file>
 			<file>tests/StaleWpdbReaderSweepTest.php</file>
+			<file>tests/MetaWriteSweepTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

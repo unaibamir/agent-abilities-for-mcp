@@ -16,6 +16,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -337,5 +338,136 @@ final class SiteSettingsTest extends TestCase {
 
 		$this->assertIsArray( $res );
 		$this->assertSame( 'Europe/Berlin', get_option( 'timezone_string' ) );
+	}
+
+	/**
+	 * Write-outcome logging; every case attaches the observer itself.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function write_outcome_rows(): array {
+		global $wpdb;
+		$table = aafm_activity_log_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i WHERE event_type = %s ORDER BY id', $table, 'write_outcome' ), ARRAY_A );
+	}
+
+	public function test_update_site_settings_logs_one_written_row_per_key(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'       => 'New Name',
+					'posts_per_page' => 7,
+				),
+			)
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertIsArray( $res );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 2, $rows, 'one row per submitted key.' );
+		foreach ( $rows as $row ) {
+			$this->assertSame( 'written', json_decode( (string) $row['detail'], true )['status'] );
+		}
+	}
+
+	public function test_resubmitting_posts_per_page_as_the_same_int_logs_unchanged_and_the_response_is_unchanged(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'posts_per_page', 10 );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'posts_per_page' => 10 ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertIsArray( $res, 'the response body must stay byte-identical to 1.7.5.' );
+		$this->assertSame( '10', $res['settings']['posts_per_page'], 'get_option() reports the stored form, same as 1.7.5.' );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'unchanged', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	public function test_resubmitting_bobs_store_logs_unchanged_and_the_response_is_unchanged(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', "Bob's Store" );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => "Bob's Store" ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertIsArray( $res, 'the response body must stay byte-identical to 1.7.5.' );
+		$this->assertSame( 'Bob&#039;s Store', $res['settings']['blogname'] );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'unchanged', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	public function test_a_pre_update_option_blogname_filter_that_keeps_the_old_value_logs_refused(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		add_filter(
+			'pre_update_option_blogname',
+			static function () {
+				return 'Old Name';
+			}
+		);
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+		remove_all_filters( 'pre_update_option_blogname' );
+
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'refused', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	public function test_a_faulted_read_after_a_false_update_option_logs_unconfirmed(): void {
+		update_option( 'blogname', 'Old Name' );
+		add_filter(
+			'pre_update_option_blogname',
+			static function () {
+				return 'Old Name';
+			}
+		);
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		// Direct at the execute callback (not through wp_get_ability()->execute()), so the fault
+		// targets only the option-cache read this case is about, not every $wpdb->options touch a
+		// full permission-checked dispatch would also make.
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		QueryFaultInjector::fail_query(
+			$wpdb->options,
+			static function () {
+				return aafm_exec_update_site_settings( array( 'settings' => array( 'blogname' => 'New Name' ) ) );
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+		remove_all_filters( 'pre_update_option_blogname' );
+
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'unconfirmed', json_decode( (string) $rows[0]['detail'], true )['status'] );
 	}
 }

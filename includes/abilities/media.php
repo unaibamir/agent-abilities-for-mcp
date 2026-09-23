@@ -940,7 +940,7 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		// could fail this check and get its attachment permanently deleted. Route through the
 		// same shared confirmation helper every other post-field write in this codebase uses, so
 		// this sibling gets the identical normalization tolerance and veto detection.
-		if ( ! aafm_post_field_write_confirmed( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
+		if ( ! aafm_post_field_confirm_logged( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
 			wp_delete_attachment( $attachment_id, true );
 			return aafm_generic_error();
 		}
@@ -1690,13 +1690,13 @@ function aafm_exec_update_media( array $input ) {
 	// unfiltered_html, the core `trim` on title) is not mistaken for a veto.
 	// $attachment was read before wp_update_post() ran, so its fields are each field's genuine
 	// pre-write value.
-	if ( $has_title && ! aafm_post_field_write_confirmed( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ), (string) $attachment->post_title ) ) {
+	if ( $has_title && ! aafm_post_field_confirm_logged( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ), (string) $attachment->post_title ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_caption && ! aafm_post_field_write_confirmed( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ), (string) $attachment->post_excerpt ) ) {
+	if ( $has_caption && ! aafm_post_field_confirm_logged( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ), (string) $attachment->post_excerpt ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'], (string) $attachment->post_content ) ) {
+	if ( $has_description && ! aafm_post_field_confirm_logged( $att_id, 'post_content', (string) $postarr['post_content'], (string) $attachment->post_content ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
 	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable

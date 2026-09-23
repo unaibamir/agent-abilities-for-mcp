@@ -529,6 +529,16 @@ function aafm_uninstall_site_data(): void {
 		return;
 	}
 
+	// The write-outcome observer stays detached for the whole teardown: with the plugin loaded (how
+	// the test suite calls this function), the six deletes below would otherwise insert into the
+	// activity-log table this same teardown just dropped, and wpdb would print its own error. In
+	// production this function only ever runs from uninstall.php, which never loads the helper file
+	// that attaches the observer, so nothing would have emitted there either way.
+	$observer_priority = has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' );
+	if ( false !== $observer_priority ) {
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', $observer_priority );
+	}
+
 	aafm_uninstall_site();
 	aafm_drop_oauth_tables();
 	aafm_delete_option_cache_safe( 'aafm_oauth_schema_version' );
@@ -544,6 +554,10 @@ function aafm_uninstall_site_data(): void {
 	// as the guard row above.
 	aafm_delete_option_cache_safe( 'aafm_oauth_dcr_default_on_touched' );
 	aafm_delete_option_cache_safe( 'aafm_delete_data_on_uninstall' );
+
+	if ( false !== $observer_priority ) {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', $observer_priority, 2 );
+	}
 }
 
 /**

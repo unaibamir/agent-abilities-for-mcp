@@ -42,7 +42,24 @@ abstract class TestCase extends WP_UnitTestCase {
 		if ( function_exists( 'aafm_flush_registry_cache' ) ) {
 			aafm_flush_registry_cache();
 		}
+		// The write-outcome log observer is attached in production from the moment
+		// includes/write-contract.php loads, at the earliest possible priority. Recorded here,
+		// before the detach, so a test can assert the production priority directly instead of
+		// trusting that this fixture's own remove_action() call names the right one.
+		// Detached here so the existing suites that count activity-log rows keep counting exactly
+		// what 1.7.5 wrote; a case that asserts a write_outcome row attaches the observer itself.
+		$this->write_outcome_observer_priority = has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' );
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
 	}
+
+	/**
+	 * The write-outcome log observer's priority as production had it attached, captured in
+	 * set_up() before this fixture detaches it. False when the observer was not attached
+	 * at all.
+	 *
+	 * @var int|false
+	 */
+	protected $write_outcome_observer_priority = false;
 
 	/**
 	 * Tear down plugin state after each test.

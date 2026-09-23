@@ -966,7 +966,7 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 		// A CREATE: the field never existed before this row did, so its pre-write value is
 		// always ''. See aafm_post_field_write_confirmed()'s docblock for why the exact-replay
 		// check is no longer the only signal.
-		if ( ! aafm_post_field_write_confirmed( (int) $id, $field, $intended, '', 0 ) ) {
+		if ( ! aafm_post_field_confirm_logged( (int) $id, $field, $intended, '', 0 ) ) {
 			return aafm_generic_error();
 		}
 	}
@@ -1306,7 +1306,7 @@ function aafm_exec_update_post( array $input ) {
 		if ( ! isset( $postarr[ $field ] ) ) {
 			continue;
 		}
-		if ( ! aafm_post_field_write_confirmed( $id, $field, (string) $postarr[ $field ], (string) $post->$field ) ) {
+		if ( ! aafm_post_field_confirm_logged( $id, $field, (string) $postarr[ $field ], (string) $post->$field ) ) {
 			return aafm_generic_error();
 		}
 	}
@@ -1711,7 +1711,7 @@ function aafm_exec_replace_in_post( array $input ) {
 	// CANONICAL sanitize_post_field() form, not $new itself, so a legitimate normalization (kses
 	// for a user without unfiltered_html re-running over the whole assembled document) is not
 	// mistaken for a veto.
-	if ( ! $updated instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new, $content ) ) {
+	if ( ! $updated instanceof WP_Post || ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $content ) ) {
 		return new WP_Error(
 			'aafm_replace_write_unconfirmed',
 			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )
@@ -2005,7 +2005,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
 		// mistaken for a veto.
 		$after = get_post( (int) $result );
-		if ( ! $after instanceof WP_Post || ! aafm_post_field_write_confirmed( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
+		if ( ! $after instanceof WP_Post || ! aafm_post_field_confirm_logged( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
 			++$failed;
 			continue;
 		}

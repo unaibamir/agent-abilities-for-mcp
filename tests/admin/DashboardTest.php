@@ -438,4 +438,47 @@ final class DashboardTest extends TestCase {
 		$this->assertStringContainsString( 'nav-tab-active', $html );
 		$this->assertStringContainsString( 'tab=dashboard', $html );
 	}
+
+	/**
+	 * Write_outcome rows from an admin save must not inflate "agents active in 24h" - the same
+	 * admin principal already counts once, from their own ability_call/setting_changed row.
+	 */
+	public function test_write_outcome_rows_do_not_raise_the_recent_agent_count(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		aafm_log_activity(
+			array(
+				'ability'           => 'aafm/write-outcome',
+				'principal_user_id' => $admin,
+				'principal_login'   => 'admin',
+				'status'            => 'success',
+				'event_type'        => 'write_outcome',
+				'detail'            => '{"kind":"option"}',
+			)
+		);
+
+		$this->assertSame( 0, aafm_recent_agent_count(), 'a write_outcome row alone must not count as an active agent.' );
+	}
+
+	/**
+	 * The companion half: an ability_call row from the same window still counts, so the exclusion
+	 * narrows only write_outcome and nothing else.
+	 */
+	public function test_ability_call_rows_still_raise_the_recent_agent_count(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		aafm_log_activity(
+			array(
+				'ability'           => 'aafm/get-posts',
+				'principal_user_id' => $admin,
+				'principal_login'   => 'admin',
+				'status'            => 'success',
+				'event_type'        => 'ability_call',
+			)
+		);
+
+		$this->assertSame( 1, aafm_recent_agent_count() );
+	}
 }

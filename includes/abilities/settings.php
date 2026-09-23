@@ -260,7 +260,7 @@ function aafm_exec_update_site_settings( array $input ) {
 	$updated = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
-		update_option( $key, aafm_sanitize_site_setting( $key, $value ) );
+		aafm_option_write( $key, aafm_sanitize_site_setting( $key, $value ) );
 		// Report the value the option layer gives back right after the write, rather than echoing
 		// the submission. That is what makes the clamp, the sanitize, and core's own escaping of a
 		// stored value visible to the agent, which is why the read-back is here.

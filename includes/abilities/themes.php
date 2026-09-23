@@ -487,7 +487,7 @@ function aafm_exec_update_template( array $input ) {
 	// silently vetoing or normalizing the write would still report success on the caller's stale
 	// intent. $wp_id is the underlying post; the default $sanitize_context_id (the same $wp_id)
 	// is correct here since this is an update against a row that already existed.
-	if ( ! aafm_post_field_write_confirmed( $wp_id, 'post_content', $content, $content_was ) ) {
+	if ( ! aafm_post_field_confirm_logged( $wp_id, 'post_content', $content, $content_was ) ) {
 		return aafm_generic_error();
 	}
 	$out            = aafm_redact_template( $refreshed );

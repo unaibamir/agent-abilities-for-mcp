@@ -354,8 +354,8 @@ function aafm_exec_create_block( array $input ) {
 	// vetoing or normalizing a field would still report success on the caller's stale intent.
 	// $sanitize_context_id is 0, not (int) $id: core's own sanitize_post( $postarr, 'db' ) inside
 	// wp_insert_post() ran BEFORE this row existed, with ID defaulted to 0 (R7-4).
-	if ( ! aafm_post_field_write_confirmed( (int) $id, 'post_title', $title, '', 0 )
-		|| ! aafm_post_field_write_confirmed( (int) $id, 'post_content', $content, '', 0 )
+	if ( ! aafm_post_field_confirm_logged( (int) $id, 'post_title', $title, '', 0 )
+		|| ! aafm_post_field_confirm_logged( (int) $id, 'post_content', $content, '', 0 )
 	) {
 		return aafm_generic_error();
 	}
@@ -473,7 +473,7 @@ function aafm_exec_update_block( array $input ) {
 		if ( ! isset( $update[ $field ] ) ) {
 			continue;
 		}
-		if ( ! aafm_post_field_write_confirmed( $id, $field, (string) $update[ $field ], (string) $block->$field ) ) {
+		if ( ! aafm_post_field_confirm_logged( $id, $field, (string) $update[ $field ], (string) $block->$field ) ) {
 			return aafm_generic_error();
 		}
 	}

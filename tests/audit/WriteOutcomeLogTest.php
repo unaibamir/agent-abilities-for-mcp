@@ -370,6 +370,69 @@ final class WriteOutcomeLogTest extends TestCase {
 		delete_option( 'aafm_wol_opt' );
 	}
 
+	public function test_option_write_reports_refused_without_throwing_when_the_option_holds_an_object(): void {
+		add_option( 'aafm_wol_opt', (object) array( 'k' => 'old' ) );
+		add_filter(
+			'pre_update_option_aafm_wol_opt',
+			static function ( $value, $old_value ) {
+				return $old_value;
+			},
+			10,
+			2
+		);
+
+		$thrown = '';
+		$result = array();
+		try {
+			$result = aafm_option_write( 'aafm_wol_opt', 'new' );
+		} catch ( \Throwable $e ) {
+			$thrown = get_class( $e ) . ': ' . $e->getMessage();
+		}
+
+		remove_all_filters( 'pre_update_option_aafm_wol_opt' );
+
+		$this->assertSame( '', $thrown, 'a stored object must be compared by value, never cast to a string.' );
+		$this->assertSame( 'refused', $result['status'] );
+		$this->assertFalse( $result['returned'] );
+		$this->assertCount( 1, $this->write_outcome_rows() );
+
+		delete_option( 'aafm_wol_opt' );
+	}
+
+	public function test_option_write_reports_refused_without_a_warning_when_the_option_holds_an_array(): void {
+		add_option( 'aafm_wol_opt', array( 'k' => 'old' ) );
+		add_filter(
+			'pre_update_option_aafm_wol_opt',
+			static function ( $value, $old_value ) {
+				return $old_value;
+			},
+			10,
+			2
+		);
+
+		$warnings = array();
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- captures any warning the comparison raises, restored below.
+		set_error_handler(
+			static function ( int $errno, string $errstr ) use ( &$warnings ): bool {
+				$warnings[] = $errstr;
+				return true;
+			},
+			E_WARNING | E_NOTICE
+		);
+		try {
+			$result = aafm_option_write( 'aafm_wol_opt', 'new' );
+		} finally {
+			restore_error_handler();
+		}
+
+		remove_all_filters( 'pre_update_option_aafm_wol_opt' );
+
+		$this->assertSame( array(), $warnings, 'a stored array must be compared by value, never cast to a string.' );
+		$this->assertSame( 'refused', $result['status'] );
+
+		delete_option( 'aafm_wol_opt' );
+	}
+
 	public function test_an_observer_that_throws_leaves_the_returned_result_unchanged(): void {
 		add_action(
 			'aafm_write_completed',
@@ -400,6 +463,13 @@ final class WriteOutcomeLogTest extends TestCase {
 		$this->assertSame( AAFM_WRITE_WRITTEN, $result['status'], 'the returned result must stay unchanged.' );
 		$rows = $this->write_outcome_rows();
 		$this->assertCount( 1, $rows, 'the log observer runs at the earliest priority, so a throwing listener at any other priority cannot stop its row.' );
+	}
+
+	public function test_the_observer_is_registered_in_production_at_php_int_min(): void {
+		// TestCase::set_up() records the priority the observer was attached at, before detaching
+		// it, so this proves the production wiring directly rather than trusting that this
+		// fixture's own attach/detach calls name the right priority.
+		$this->assertSame( PHP_INT_MIN, $this->write_outcome_observer_priority );
 	}
 
 	/**
@@ -441,6 +511,316 @@ final class WriteOutcomeLogTest extends TestCase {
 
 		$this->assertStringContainsString( 'key=-', $contents );
 		$this->assertStringNotContainsString( $long_key, $contents );
+	}
+
+	/**
+	 * Post-field and option-cache production callers.
+	 */
+	public function test_create_post_logs_one_post_field_row_per_confirmed_field(): void {
+		$this->acting_as( 'editor' );
+
+		$result = aafm_exec_create_post(
+			array(
+				'title'   => 'A title',
+				'content' => 'Body copy.',
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$post_id = (int) $result['post']['id'];
+
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 3, $rows );
+		$rows_by_key = array();
+		foreach ( $rows as $row ) {
+			$this->assertSame( 'success', $row['status'] );
+			$detail = json_decode( (string) $row['detail'], true );
+			$this->assertSame( 'post_field', $detail['kind'] );
+			$rows_by_key[ $detail['key'] ] = $detail;
+		}
+		// aafm_insert_post() confirms exactly these three fields on every create, excerpt included
+		// even when the caller never sent one, so a missing or duplicated row must fail this.
+		$this->assertSame( array( 'post_content', 'post_excerpt', 'post_title' ), $this->sorted_keys_of( $rows_by_key ) );
+		foreach ( array( 'post_title', 'post_content', 'post_excerpt' ) as $field ) {
+			$this->assertSame( (string) $post_id, $rows_by_key[ $field ]['object_id'], "$field must be logged against the created post id" );
+			$this->assertSame( 'written', $rows_by_key[ $field ]['status'] );
+		}
+	}
+
+	/**
+	 * A detail array's own keys, sorted, for a literal comparison.
+	 *
+	 * @param array $rows_by_key Detail arrays keyed by field name.
+	 * @return string[]
+	 */
+	private function sorted_keys_of( array $rows_by_key ): array {
+		$keys = array_keys( $rows_by_key );
+		sort( $keys );
+		return $keys;
+	}
+
+	public function test_a_rewriting_filter_logs_unconfirmed_for_that_field_while_the_ability_still_returns_its_own_error(): void {
+		$this->acting_as( 'editor' );
+
+		add_filter(
+			'wp_insert_post_data',
+			static function ( array $data ): array {
+				$data['post_title'] = 'rewritten by a filter';
+				return $data;
+			}
+		);
+
+		$result = aafm_exec_create_post(
+			array(
+				'title'   => 'A title',
+				'content' => 'Body copy.',
+			)
+		);
+
+		remove_all_filters( 'wp_insert_post_data' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'the ability must still return its existing error on an unconfirmed field.' );
+
+		$rows          = $this->write_outcome_rows();
+		$title_details = array();
+		foreach ( $rows as $row ) {
+			$detail = json_decode( (string) $row['detail'], true );
+			if ( 'post_field' === $detail['kind'] ) {
+				$title_details[] = $detail;
+			}
+		}
+		// aafm_insert_post() checks post_title first and returns on its first unconfirmed field, so
+		// a rewritten title logs exactly that one row: post_content and post_excerpt never run.
+		$this->assertCount( 1, $title_details );
+		$this->assertSame( 'post_title', $title_details[0]['key'] );
+		$this->assertSame( 'unconfirmed', $title_details[0]['status'] );
+	}
+
+	public function test_update_option_verified_logs_one_written_row_for_an_admin_save(): void {
+		add_option( 'aafm_wol_verified_opt', 'old' );
+
+		aafm_update_option_verified( 'aafm_wol_verified_opt', 'new' );
+
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'success', $rows[0]['status'] );
+		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'] );
+
+		delete_option( 'aafm_wol_verified_opt' );
+	}
+
+	public function test_update_option_verified_logs_written_for_a_same_value_resubmission(): void {
+		add_option( 'aafm_wol_verified_opt', 'same' );
+
+		aafm_update_option_verified( 'aafm_wol_verified_opt', 'same' );
+
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'], 'the bool confirmer certifies true as written, even for a same-value write.' );
+
+		delete_option( 'aafm_wol_verified_opt' );
+	}
+
+	/**
+	 * A $wp_object_cache double whose set() refuses the alloptions/notoptions rewrite is what
+	 * makes aafm_forget_option_caches() report failure and take the early exit
+	 * aafm_update_option_verified() takes when its cache rewrite could not be trusted. Everything
+	 * but set() forwards to the real cache, so the option's own read views stay real.
+	 */
+	public function test_update_option_verified_logs_one_unconfirmed_row_when_the_cache_rewrite_is_refused(): void {
+		add_option( 'aafm_wol_verified_opt', 'old' );
+		wp_cache_get( 'alloptions', 'options', true ); // Prime the runtime cache before the double takes over.
+
+		global $wp_object_cache;
+		$real            = $wp_object_cache;
+		$wp_object_cache = new class( $real ) {
+			/**
+			 * The real object cache every method but set() forwards to.
+			 *
+			 * @var mixed
+			 */
+			private $real;
+
+			/**
+			 * Remember the real object cache.
+			 *
+			 * @param mixed $real The real object cache to forward every other call to.
+			 */
+			public function __construct( $real ) {
+				$this->real = $real;
+			}
+
+			/**
+			 * Refuse the alloptions/notoptions rewrite; forward every other set() call.
+			 *
+			 * @param string $key    Cache key.
+			 * @param mixed  $data   Value to cache.
+			 * @param string $group  Cache group.
+			 * @param int    $expire Expiration, in seconds.
+			 * @return bool
+			 */
+			public function set( $key, $data, $group = '', $expire = 0 ) {
+				if ( 'options' === $group && in_array( $key, array( 'alloptions', 'notoptions' ), true ) ) {
+					return false;
+				}
+				return $this->real->set( $key, $data, $group, $expire );
+			}
+
+			/**
+			 * Forward every other object-cache method to the real cache.
+			 *
+			 * @param string  $name Method name.
+			 * @param mixed[] $args Method arguments.
+			 * @return mixed
+			 */
+			public function __call( $name, $args ) {
+				return $this->real->$name( ...$args );
+			}
+		};
+
+		$result = aafm_update_option_verified( 'aafm_wol_verified_opt', 'new' );
+
+		$wp_object_cache = $real;
+
+		$this->assertFalse( $result, 'a refused alloptions rewrite must take the early exit and report false.' );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'unconfirmed', json_decode( (string) $rows[0]['detail'], true )['status'] );
+
+		delete_option( 'aafm_wol_verified_opt' );
+	}
+
+	public function test_persist_operator_switch_off_logs_one_deleted_row(): void {
+		update_option( 'aafm_wol_switch', true );
+
+		$result = aafm_persist_operator_switch( 'aafm_wol_switch', false );
+
+		$this->assertTrue( $result );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'deleted', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	/**
+	 * The off branch runs aafm_option_write_certified()'s own database read twice: once inside
+	 * aafm_delete_option_cache_safe()'s own certification, once again for the switch's own
+	 * certification. Targeting the read's own SQL text ("SELECT option_value FROM"), occurrence 2,
+	 * hits only the outer switch certification, after the inner delete's own certification has
+	 * already passed clean.
+	 */
+	public function test_persist_operator_switch_off_logs_one_unconfirmed_row_when_its_own_certification_read_fails(): void {
+		update_option( 'aafm_wol_switch', true );
+		QueryFaultInjector::reset_fired_count();
+
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$result = QueryFaultInjector::fail_nth_query(
+			'SELECT option_value FROM',
+			2,
+			static function () {
+				return aafm_persist_operator_switch( 'aafm_wol_switch', false );
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the fault must hit exactly the outer certification read, its own second occurrence.' );
+		$this->assertFalse( $result );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows, 'the inner delete helper call must not emit its own row; only the outer switch call emits.' );
+		$this->assertSame( 'unconfirmed', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	public function test_delete_option_cache_safe_on_an_option_that_never_existed_logs_one_deleted_row(): void {
+		delete_option( 'aafm_wol_never_existed' );
+
+		$result = aafm_delete_option_cache_safe( 'aafm_wol_never_existed' );
+
+		$this->assertTrue( $result );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'deleted', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	private function intercept_die(): void {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+	}
+
+	/**
+	 * Run an AJAX handler and return its captured JSON payload.
+	 *
+	 * @param callable $handler The AJAX action's callback.
+	 * @return array<string,mixed>
+	 */
+	private function run_ajax_handler( callable $handler ): array {
+		ob_start();
+		try {
+			$handler();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		}
+		$body = (string) ob_get_clean();
+		$json = json_decode( $body, true );
+		return is_array( $json ) ? $json : array();
+	}
+
+	public function test_bridge_no_op_resave_logs_exactly_one_option_row(): void {
+		$this->acting_as( 'administrator' );
+		$this->intercept_die();
+
+		delete_option( 'aafm_enabled_bridged_abilities' );
+		update_option( 'aafm_enabled_bridged_abilities', array() );
+
+		$nonce                      = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']             = $nonce;
+		$_REQUEST['nonce']          = $nonce;
+		$_POST['bridged_abilities'] = array();
+
+		$this->run_ajax_handler( 'aafm_ajax_save_bridged_abilities' );
+
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows, 'a no-op resave must log exactly one option row and nothing else.' );
+		$this->assertSame( 'option', json_decode( (string) $rows[0]['detail'], true )['kind'] );
+		$this->assertSame( 'aafm_enabled_bridged_abilities', json_decode( (string) $rows[0]['detail'], true )['key'] );
+		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'] );
+
+		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['bridged_abilities'] );
+	}
+
+	public function test_uninstall_with_delete_data_detaches_the_observer_during_teardown_and_reattaches_it_after(): void {
+		aafm_install_activity_log();
+		update_option( 'aafm_delete_data_on_uninstall', true );
+
+		// aafm_delete_data_on_uninstall is the last of the six deletes the teardown runs after the
+		// table drop, so this catches the detach directly, from inside the teardown, rather than
+		// only proving the table guard kept a post-drop row from printing.
+		$observed_during_teardown = 'not observed';
+		$capture                  = static function ( string $option ) use ( &$observed_during_teardown ): void {
+			if ( 'aafm_delete_data_on_uninstall' === $option ) {
+				$observed_during_teardown = has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' );
+			}
+		};
+		add_action( 'delete_option', $capture );
+
+		ob_start();
+		aafm_uninstall_site_data();
+		$printed = ob_get_clean();
+
+		remove_action( 'delete_option', $capture );
+
+		$this->assertSame( '', $printed, 'the teardown must print nothing even with the plugin loaded.' );
+		$this->assertFalse( $observed_during_teardown, 'the observer must be detached while the teardown deletes options.' );
+		$this->assertSame(
+			\PHP_INT_MIN,
+			has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' ),
+			'the observer must be re-attached at its original priority after the teardown.'
+		);
 	}
 }
 

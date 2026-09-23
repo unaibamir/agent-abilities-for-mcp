@@ -169,7 +169,15 @@ function aafm_recent_agent_count(): int {
 
 	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
 	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
-	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s', $table, $cutoff ) );
+	//
+	// event_type <> 'write_outcome' excludes the write-and-confirm contract's own rows: a
+	// write_outcome row carries the same principal as the ability_call row for the same request,
+	// so excluding it drops no agent from the count, and including it would inflate this number
+	// for an admin save (a write_outcome row with the admin's own principal) exactly as it already
+	// would for the schema-stamp row's principal 0 (audit/log.php:136). 'ability_call' is not
+	// excluded here: unlike aafm_agent_call_count(), this count already includes admin-only event
+	// types such as setting_changed in 1.7.5, and narrowing it further would change today's number.
+	$view = aafm_wpdb_scalar( $wpdb->prepare( "SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s AND event_type <> 'write_outcome'", $table, $cutoff ) );
 
 	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }

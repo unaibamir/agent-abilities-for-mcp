@@ -56,6 +56,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/text.php';
 require_once AAFM_PLUGIN_DIR . 'includes/option-cache.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/detail.php';
+// The write-and-confirm contract: readers, writer, delete, the checked-read scope, the option
+// rule, the post-field wrapper, and the write-outcome log observer it registers on load. Required
+// here, after the option-cache, audit-log and detail files it calls and before any hook,
+// migration or activation callback runs, since activation runs without plugins_loaded.
+require_once AAFM_PLUGIN_DIR . 'includes/write-contract.php';
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin
 // screens and the registration walk read it, and neither should have to care which ran first.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';

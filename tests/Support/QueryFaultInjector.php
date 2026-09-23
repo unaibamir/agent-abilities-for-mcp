@@ -53,6 +53,34 @@ namespace AAFM\Tests\Support;
 final class QueryFaultInjector {
 
 	/**
+	 * How many times an armed fault has actually fired (a matching query was redirected), across
+	 * every call since the last reset. Lets a test assert a fault fired exactly once, or did not
+	 * fire at all, rather than only inferring it from the callback's return value.
+	 *
+	 * @var int
+	 */
+	private static int $fired = 0;
+
+	/**
+	 * The current fired count.
+	 *
+	 * @return int
+	 */
+	public static function fired_count(): int {
+		return self::$fired;
+	}
+
+	/**
+	 * Reset the fired count to zero. Tests call this in set_up() so counts never leak between
+	 * cases.
+	 *
+	 * @return void
+	 */
+	public static function reset_fired_count(): void {
+		self::$fired = 0;
+	}
+
+	/**
 	 * Run $callback with the $occurrence-th (1-based) query matching $needle made to fail via
 	 * the no-flush path (see class docblock). Every other query - including earlier/later
 	 * matches of $needle - passes through unmodified, which is what lets a test fail one read in
@@ -125,7 +153,11 @@ final class QueryFaultInjector {
 				return $query;
 			}
 			++$seen;
-			return ( 0 === $occurrence || $seen === $occurrence ) ? '' : $query;
+			if ( 0 === $occurrence || $seen === $occurrence ) {
+				++self::$fired;
+				return '';
+			}
+			return $query;
 		};
 	}
 
@@ -146,9 +178,11 @@ final class QueryFaultInjector {
 				return $query;
 			}
 			++$seen;
-			return ( 0 === $occurrence || $seen === $occurrence )
-				? 'SELECT * FROM aafm_missing_table_for_test'
-				: $query;
+			if ( 0 === $occurrence || $seen === $occurrence ) {
+				++self::$fired;
+				return 'SELECT * FROM aafm_missing_table_for_test';
+			}
+			return $query;
 		};
 	}
 

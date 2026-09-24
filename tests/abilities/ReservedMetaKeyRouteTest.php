@@ -710,4 +710,45 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 			'The sweep must have walked real routes; an emptied map must not pass this quietly.'
 		);
 	}
+
+	/**
+	 * The database compares meta keys ignoring case, accents and trailing spaces, so the user-meta
+	 * hard block has to refuse an accented or mixed-case spelling of a blocked key too.
+	 */
+	public function test_the_user_meta_hard_block_refuses_accented_and_mixed_case_spellings(): void {
+		global $wpdb;
+		$per_blog = ucfirst( $wpdb->prefix ) . '2_Capabilitiés';
+
+		foreach ( array( 'two_factor_sécret', 'wp_capabilitiés', 'séssion_tokens', $per_blog ) as $key ) {
+			$this->assertTrue( aafm_hard_blocked_user_meta_key( $key ), $key . ' must be hard-blocked.' );
+			$this->assertWPError( aafm_validate_user_meta_key( $key ), $key . ' must not validate.' );
+		}
+	}
+
+	public function test_the_post_meta_hard_block_refuses_accented_page_builder_markers(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+
+		foreach ( array( 'ét_pb_use_builder', 'fusion_buildér_status' ) as $key ) {
+			$this->assertTrue( aafm_hard_blocked_meta_key( $key ), $key . ' must be hard-blocked.' );
+			$this->assertWPError( aafm_validate_meta_key( $key ), $key . ' must not validate under allow-star.' );
+		}
+	}
+
+	public function test_the_deny_list_refuses_case_and_accent_variants_of_a_denied_key(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		update_option( 'aafm_denied_meta_keys', array( 'secret', 'Café' ) );
+
+		foreach ( array( 'secret', 'SECRET', 'sécret', 'cafe' ) as $key ) {
+			$this->assertWPError( aafm_validate_meta_key( $key ), $key . ' must be denied.' );
+		}
+		$this->assertSame( 'secretary', aafm_validate_meta_key( 'secretary' ) );
+	}
+
+	public function test_the_allowlist_stays_byte_exact(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$this->assertSame( 'subtitle', aafm_validate_meta_key( 'subtitle' ) );
+		$this->assertWPError( aafm_validate_meta_key( 'Subtitle' ) );
+		$this->assertWPError( aafm_validate_meta_key( 'subtitlé' ) );
+	}
 }

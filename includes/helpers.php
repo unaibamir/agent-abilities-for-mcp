@@ -113,6 +113,21 @@ function aafm_resolve_search_post_types( array $requested ): array {
 }
 
 /**
+ * Fold a meta key for the hard-block and deny comparisons: trim, remove_accents(), strtolower().
+ *
+ * The meta_key column's collation treats keys that differ only by case, accents or trailing
+ * spaces as the same row, and this fold catches most of those spellings on the PHP side. It is
+ * not the collation, and misses some equivalences such as full-width letters, so it is used only
+ * where an extra match refuses a key, never to allow one.
+ *
+ * @param string $key Meta key.
+ * @return string
+ */
+function aafm_fold_meta_key( string $key ): string {
+	return strtolower( remove_accents( trim( $key ) ) );
+}
+
+/**
  * Whether a meta key is permanently blocked from agent access (even if allowlisted).
  *
  * Blocks protected (`_`-prefixed) meta, the auth-sensitive denylist stolen from
@@ -129,16 +144,12 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	if ( '' === trim( $key ) ) {
 		return true;
 	}
-	// Every check below is byte-exact or end-anchored; MySQL's meta_key comparison is neither.
-	// Under the PAD SPACE, case-insensitive collation WordPress gives that column, update_metadata's
-	// `WHERE meta_key = %s` treats 'wp_capabilities ' and 'wp_capabilities' as the same row, so a
-	// candidate carrying trailing whitespace missed every check here and still landed on the real
-	// capability row. Candidates are derived from a field DEFINITION rather than from caller input,
-	// so this needs a site-side field named with stray whitespace, which is why it is not remotely
-	// reachable. Comparing on the trimmed copy is one-directional by construction: the blank case
-	// has already returned above, is_protected_meta() reads a LEADING underscore that trimming can
-	// only expose, and both the membership test and the anchored regex can only gain matches. No
-	// key that is blocked today becomes allowed.
+	// The meta_key column compares under a collation that ignores case, accents and trailing
+	// spaces, so update_metadata()'s `WHERE meta_key = %s` treats 'wp_capabilitiés ' as the real
+	// 'wp_capabilities' row. The list and the pattern below therefore compare folded keys, with
+	// aafm_fold_meta_key() applied to both sides. The fold can only add matches, so no key blocked
+	// before becomes allowed. It misses some collation equivalences, full-width letters for one;
+	// every write through the write-contract helper refuses those rows on its own.
 	$key = trim( $key );
 	if ( is_protected_meta( $key, 'post' ) ) {
 		return true;
@@ -178,14 +189,13 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	 */
 	$extra   = (array) apply_filters( 'aafm_hard_blocked_meta_keys', array() );
 	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	// Case-insensitive compare (defense in depth): a mixed-case variant of a protected key
-	// (e.g. wp_Capabilities) must be blocked just like its canonical lowercase spelling.
-	if ( in_array( strtolower( $key ), array_map( 'strtolower', $blocked ), true ) ) {
+	$folded  = aafm_fold_meta_key( $key );
+	if ( in_array( $folded, array_map( 'aafm_fold_meta_key', $blocked ), true ) ) {
 		return true;
 	}
-	// Any prefix*capabilities form, including multisite per-blog keys (wp_2_capabilities). The `i`
-	// modifier keeps a mixed-case spelling from slipping past.
-	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/i', $key );
+	// Any prefix*capabilities form, including multisite per-blog keys (wp_2_capabilities), matched
+	// on the folded key.
+	return (bool) preg_match( '/^' . preg_quote( aafm_fold_meta_key( $wpdb->prefix ), '/' ) . '\d*_?capabilities$/', $folded );
 }
 
 /**
@@ -312,7 +322,7 @@ function aafm_validate_scoped_meta_key( string $key, callable $hard_block, calla
 		&& '*' !== $key                             // floor 1: the sentinel is never addressable.
 		&& ! $hard_block( $key )                    // floor 1 (absolute).
 		&& ! $deny_has_star()                       // floor 2: deny-all kill switch.
-		&& ! in_array( $key, $denied_keys(), true ) // floor 2: explicit deny.
+		&& ! in_array( aafm_fold_meta_key( $key ), array_map( 'aafm_fold_meta_key', $denied_keys() ), true ) // floor 2: explicit deny, folded like the hard block.
 		&& ( $allow_has_star() || in_array( $key, $allowed_keys(), true ) ); // floor 3.
 
 	if ( ! $exposed ) {
@@ -835,16 +845,12 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 	if ( '' === trim( $key ) ) {
 		return true;
 	}
-	// Every check below is byte-exact or end-anchored; MySQL's meta_key comparison is neither.
-	// Under the PAD SPACE, case-insensitive collation WordPress gives that column, update_metadata's
-	// `WHERE meta_key = %s` treats 'wp_capabilities ' and 'wp_capabilities' as the same row, so a
-	// candidate carrying trailing whitespace missed every check here and still landed on the real
-	// capability row. Candidates are derived from a field DEFINITION rather than from caller input,
-	// so this needs a site-side field named with stray whitespace, which is why it is not remotely
-	// reachable. Comparing on the trimmed copy is one-directional by construction: the blank case
-	// has already returned above, is_protected_meta() reads a LEADING underscore that trimming can
-	// only expose, and both the membership test and the anchored regex can only gain matches. No
-	// key that is blocked today becomes allowed.
+	// The meta_key column compares under a collation that ignores case, accents and trailing
+	// spaces, so update_metadata()'s `WHERE meta_key = %s` treats 'wp_capabilitiés ' as the real
+	// 'wp_capabilities' row. The list and the pattern below therefore compare folded keys, with
+	// aafm_fold_meta_key() applied to both sides. The fold can only add matches, so no key blocked
+	// before becomes allowed. It misses some collation equivalences, full-width letters for one;
+	// every write through the write-contract helper refuses those rows on its own.
 	$key = trim( $key );
 	if ( is_protected_meta( $key, 'user' ) ) {
 		return true;
@@ -874,14 +880,13 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 	 */
 	$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
 	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	// Case-insensitive compare (defense in depth): a mixed-case variant of a protected key
-	// (e.g. wp_Capabilities) must be blocked just like its canonical lowercase spelling.
-	if ( in_array( strtolower( $key ), array_map( 'strtolower', $blocked ), true ) ) {
+	$folded  = aafm_fold_meta_key( $key );
+	if ( in_array( $folded, array_map( 'aafm_fold_meta_key', $blocked ), true ) ) {
 		return true;
 	}
-	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities). The
-	// `i` modifier keeps a mixed-case spelling from slipping past.
-	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i', $key );
+	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities),
+	// matched on the folded key.
+	return (bool) preg_match( '/^' . preg_quote( aafm_fold_meta_key( $wpdb->prefix ), '/' ) . '\d*_?(capabilities|user_level)$/', $folded );
 }
 
 /**

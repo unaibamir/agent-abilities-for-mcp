@@ -829,21 +829,26 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 	}
 
 	/**
-	 * Whether a trailing no-break space matches is up to the database (MariaDB and MySQL can
-	 * differ), so the test asserts that the gate refuses the spelling whenever the database would
-	 * land it on the real row.
+	 * A trailing no-break space: the ASCII reduction always brings it back to session_tokens, so
+	 * the gate refuses it on every database, including one whose collation matches it to the real
+	 * row.
 	 */
-	public function test_a_trailing_no_break_space_is_refused_when_the_database_matches_it_to_the_real_row(): void {
+	public function test_a_trailing_no_break_space_spelling_of_session_tokens_is_always_refused(): void {
 		global $wpdb;
 		$this->allow_star_everywhere();
 		$user_id = self::factory()->user->create();
 		update_user_meta( $user_id, 'session_tokens', array( 'x' => 1 ) );
 
 		$spelling = "session_tokens\u{00A0}";
+		$refused  = aafm_hard_blocked_user_meta_key( $spelling );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE user_id = %d AND meta_key = %s', $wpdb->usermeta, $user_id, $spelling ) );
 
-		$this->assertSame( $count > 0, aafm_hard_blocked_user_meta_key( $spelling ), 'refused if and only if the database matches the real row' );
+		if ( $count > 0 ) {
+			$this->assertTrue( $refused, 'the database matches the real row, so the gate must refuse' );
+		}
+		$this->assertTrue( $refused, 'the gate refuses this spelling whatever the database says' );
+		$this->assertWPError( aafm_validate_user_meta_key( $spelling ) );
 	}
 
 	/**

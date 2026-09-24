@@ -113,48 +113,189 @@ function aafm_resolve_search_post_types( array $requested ): array {
 }
 
 /**
- * Every listed entry and every stored meta_key spelling that the database treats as the same key
- * as $key, compared under the meta_key column collation of the post, term and user meta tables.
+ * For each requested key, every listed entry and every stored meta_key spelling that the database
+ * treats as the same key, compared under the meta_key column collation of the post, term and user
+ * meta tables.
  *
- * One query, one union branch pair per table. The list branch carries the entries through
- * CONCAT() with a meta_key value from an empty read of that table, so the entries take the
- * column's collation, not the connection's, and it keeps the entries equal to $key. The row branch
- * returns every stored spelling equal to $key, distinct by bytes: a plain DISTINCT would collapse
- * the spellings under the collation and could hand back only a harmless one. Every value comes back
- * as bytes, so tables with different collations still union.
+ * One query for the whole batch. Per table, the requested keys and the listed entries are each
+ * carried through CONCAT() with a meta_key value from an empty read of that table, so both take
+ * the column's collation, not the connection's. The list branch joins the keys with the entries,
+ * and the row branch joins the keys with the stored rows, distinct by bytes: a plain DISTINCT
+ * would collapse the spellings under the collation and could hand back only a harmless one. Every
+ * value comes back as bytes, so tables with different collations still union.
  *
- * ponytail: no memo. Each gate call on a non-ASCII key, or on any key once a listed entry is
- * non-ASCII, costs one query; validating a key makes at most two (hard block, then deny list) and
- * floor 3 makes none, so the allowlist loops cost O(N) per post. Add a request memo on the list
- * branch only if a profile shows it. The row branch reads stored rows and must never be memoised
- * across a write.
+ * ponytail: no memo. One call costs one query, whatever the batch size, and only a key or list
+ * outside [A-Za-z0-9_-] makes one. Validating a key makes at most four (hard block, deny list, and
+ * the allowlist's two floors), so the allowlist loops cost O(N) per post. Add a request memo on
+ * the list branch only if a profile shows it. The row branch reads stored rows and must never be
+ * memoised across a write.
  *
- * @param string   $key     The trimmed meta key.
- * @param string[] $entries The listed keys to compare with it.
- * @return string[]|null The matched entries and stored spellings, or null when the query failed.
+ * @param string[] $keys    The trimmed meta keys.
+ * @param string[] $entries The listed keys to compare with them.
+ * @return array<int, string[]>|null The matches per key, in the order of $keys, or null when the
+ *                                   query failed.
  */
-function aafm_meta_key_collation_matches( string $key, array $entries ): ?array {
+function aafm_meta_key_collation_matches( array $keys, array $entries ): ?array {
 	global $wpdb;
 
+	$keys    = array_values( array_map( 'strval', $keys ) );
 	$entries = array_values( array_map( 'strval', $entries ) );
-	$parts   = array();
-	$args    = array();
+	$out     = array_fill( 0, count( $keys ), array() );
+	if ( array() === $keys ) {
+		return $out;
+	}
+
+	$parts = array();
+	$args  = array();
 	foreach ( array( $wpdb->postmeta, $wpdb->termmeta, $wpdb->usermeta ) as $table ) {
-		if ( array() !== $entries ) {
-			$parts[] = "( SELECT CAST( e.k AS BINARY ) AS aafm_gate_match FROM ( SELECT CONCAT( IFNULL( m.meta_key, '' ), %s ) AS k FROM ( SELECT 1 AS one ) AS d LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS m ON 1 = 1" . str_repeat( ' UNION ALL SELECT %s', count( $entries ) - 1 ) . ' ) AS e WHERE e.k = %s )';
-			$args    = array_merge( $args, array( $entries[0], $table ), array_slice( $entries, 1 ), array( $key ) );
+		$requested      = "SELECT 0 AS i, CONCAT( IFNULL( mk.meta_key, '' ), %s ) AS k FROM ( SELECT 1 AS one ) AS dk LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS mk ON 1 = 1" . str_repeat( ' UNION ALL SELECT %d, %s', count( $keys ) - 1 );
+		$requested_args = array( $keys[0], $table );
+		foreach ( array_slice( $keys, 1, null, true ) as $index => $key ) {
+			$requested_args[] = $index;
+			$requested_args[] = $key;
 		}
-		$parts[] = '( SELECT DISTINCT CAST( meta_key AS BINARY ) AS aafm_gate_match FROM %i WHERE meta_key = %s )';
-		$args    = array_merge( $args, array( $table, $key ) );
+
+		if ( array() !== $entries ) {
+			$listed  = "SELECT CONCAT( IFNULL( me.meta_key, '' ), %s ) AS k FROM ( SELECT 1 AS one ) AS de LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS me ON 1 = 1" . str_repeat( ' UNION ALL SELECT %s', count( $entries ) - 1 );
+			$parts[] = "( SELECT q.i AS i, CAST( e.k AS BINARY ) AS aafm_gate_match FROM ( {$requested} ) AS q JOIN ( {$listed} ) AS e ON e.k = q.k )";
+			$args    = array_merge( $args, $requested_args, array( $entries[0], $table ), array_slice( $entries, 1 ) );
+		}
+		$parts[] = "( SELECT DISTINCT q.i AS i, CAST( m.meta_key AS BINARY ) AS aafm_gate_match FROM ( {$requested} ) AS q JOIN %i AS m ON m.meta_key = q.k )";
+		$args    = array_merge( $args, $requested_args, array( $table ) );
 	}
 
 	$sql = implode( ' UNION ALL ', $parts );
 	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql holds only placeholders and fixed SQL.
-	$view = aafm_wpdb_col( $wpdb->prepare( $sql, $args ) );
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $args ) );
 	if ( ! $view['ok'] ) {
 		return null;
 	}
-	return array_map( 'strval', (array) $view['value'] );
+	foreach ( (array) $view['value'] as $row ) {
+		$out[ (int) $row['i'] ][] = (string) $row['aafm_gate_match'];
+	}
+	return $out;
+}
+
+/**
+ * The hard block for a whole list of keys at once: for each key, whether it is permanently blocked
+ * from agent access in the post floor (post and term meta) or the user floor.
+ *
+ * Three checks, and any one refuses. (a) The trimmed key against the list after strtolower(),
+ * is_protected_meta(), and the capabilities pattern (plus user_level for users),
+ * case-insensitive. (b) The meta_key column compares under a collation that also ignores accents,
+ * trailing spaces and some invisible characters, so every key that holds anything outside
+ * [A-Za-z0-9_-], or every key once a listed entry does, goes into one query that says which
+ * entries and which stored spellings the database treats as that key, and (a) runs on each of
+ * them. A failed query refuses every key it covered. (c) For those same keys, (a) also runs on the
+ * key reduced to [A-Za-z0-9_-] after remove_accents() with the en_US map, for a per-blog key no row
+ * carries yet; that reduction is best effort. A key and a list of only [A-Za-z0-9_-] skip (b) and
+ * (c): the collations WordPress installs equate no two such strings strtolower() keeps apart.
+ *
+ * @param string[] $keys  Meta keys.
+ * @param string   $scope 'post' for the post and term meta floor, 'user' for the user meta floor.
+ * @return bool[] Whether each key is blocked, in the order of $keys.
+ */
+function aafm_hard_blocked_meta_keys( array $keys, string $scope = 'post' ): array {
+	global $wpdb;
+
+	if ( 'user' === $scope ) {
+		$builtin = array(
+			'session_tokens',
+			'_application_passwords',
+			'wp_capabilities',
+			'wp_user_level',
+			'default_password_nonce',
+			'_password_reset_key',
+			'_password_reset_time',
+			'two_factor_enabled',
+			'_two_factor_provider',
+			'_two_factor_totp_key',
+			'two_factor_secret',
+			'_two_factor_backup_codes',
+			'webauthn_credentials',
+			$wpdb->prefix . 'capabilities',
+			$wpdb->prefix . 'user_level',
+		);
+		/**
+		 * Filters EXTRA user-meta keys to hard-block. Built-ins are re-merged after, so this
+		 * can only add blocks, never remove them.
+		 *
+		 * @param list<string> $extra Extra keys to block.
+		 */
+		$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
+		$subtype = 'user';
+		$pattern = '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i';
+	} else {
+		$builtin = array_merge(
+			array(
+				'session_tokens',
+				'_application_passwords',
+				'wp_capabilities',
+				'wp_user_level',
+				'wp_user-settings',
+				'wp_user-settings-time',
+				'default_password_nonce',
+				'_password_reset_key',
+				'community-events-location',
+				'_new_email',
+				$wpdb->prefix . 'capabilities',
+				$wpdb->prefix . 'user_level',
+			),
+			// Every page-builder ownership marker (includes/page-builder-guard.php) is blocked
+			// outright from the generic meta abilities, not merely left off the operator's
+			// allowlist: a caller who cleared a marker through update-post-meta or
+			// delete-post-meta would otherwise pass aafm_exec_update_post()'s ownership check on
+			// the next call. `_elementor_data` and `_fl_builder_data` are already protected by
+			// their leading underscore; `et_pb_use_builder`, `fusion_builder_status` and
+			// `fusion_builder_converted` are not. The whole marker map comes in, which is harmless
+			// for term meta, and keeps any marker added through aafm_page_builder_markers covered.
+			array_keys( aafm_page_builder_markers() )
+		);
+		/**
+		 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this
+		 * can only add blocks, never remove them.
+		 *
+		 * @param list<string> $extra Extra keys to block.
+		 */
+		$extra   = (array) apply_filters( 'aafm_hard_blocked_meta_keys', array() );
+		$subtype = 'post';
+		$pattern = '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/i';
+	}
+	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
+	$lower   = array_map( 'strtolower', $blocked );
+
+	// Check (a).
+	$blocks = static function ( string $candidate ) use ( $lower, $subtype, $pattern ): bool {
+		return is_protected_meta( $candidate, $subtype )
+			|| in_array( strtolower( $candidate ), $lower, true )
+			|| (bool) preg_match( $pattern, $candidate );
+	};
+
+	$plain_list = 1 === preg_match( '/^[A-Za-z0-9_-]*\z/', implode( '', $blocked ) );
+	$result     = array();
+	$slow       = array();
+	foreach ( array_values( $keys ) as $index => $raw ) {
+		$key              = trim( (string) $raw );
+		$result[ $index ] = '' === $key || $blocks( $key );
+		if ( ! $result[ $index ] && ( ! $plain_list || 1 !== preg_match( '/^[A-Za-z0-9_-]*\z/', $key ) ) ) {
+			$slow[ $index ] = $key;
+		}
+	}
+	if ( array() === $slow ) {
+		return $result;
+	}
+
+	// Checks (b) and (c), one query for every key that needs them.
+	$matches  = aafm_meta_key_collation_matches( array_values( $slow ), $blocked );
+	$position = 0;
+	foreach ( $slow as $index => $key ) {
+		$hits             = null === $matches ? null : $matches[ $position ];
+		$result[ $index ] = null === $hits
+			|| array() !== array_filter( $hits, $blocks )
+			|| $blocks( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) );
+		++$position;
+	}
+	return $result;
 }
 
 /**
@@ -169,80 +310,7 @@ function aafm_meta_key_collation_matches( string $key, array $entries ): ?array 
  * @return bool
  */
 function aafm_hard_blocked_meta_key( string $key ): bool {
-	global $wpdb;
-	$key = (string) $key;
-	if ( '' === trim( $key ) ) {
-		return true;
-	}
-	// Three checks, and any one refuses. (a) The trimmed key against the list after strtolower(),
-	// is_protected_meta(), and the capabilities pattern, case-insensitive. (b) The meta_key column
-	// compares under a collation that also ignores accents, trailing spaces and some invisible
-	// characters, so when the key or a listed entry holds anything outside [A-Za-z0-9_-] the
-	// database says which entries and which stored spellings it treats as this key, and (a) runs on
-	// each of them. A failed query refuses. (c) On the same condition, (a) also runs on the key
-	// reduced to [A-Za-z0-9_-] after remove_accents() with the en_US map, for a per-blog key no row
-	// carries yet; that reduction is best effort. A key and a list of only [A-Za-z0-9_-] skip (b)
-	// and (c): the collations WordPress installs equate no two such strings strtolower() keeps apart.
-	$key     = trim( $key );
-	$builtin = array_merge(
-		array(
-			'session_tokens',
-			'_application_passwords',
-			'wp_capabilities',
-			'wp_user_level',
-			'wp_user-settings',
-			'wp_user-settings-time',
-			'default_password_nonce',
-			'_password_reset_key',
-			'community-events-location',
-			'_new_email',
-			$wpdb->prefix . 'capabilities',
-			$wpdb->prefix . 'user_level',
-		),
-		// Codex final round 7 HIGH: every page-builder ownership marker (includes/page-
-		// builder-guard.php) must be absolutely blocked from the generic meta abilities, not
-		// merely left off the operator's allowlist - a caller who cleared a marker via
-		// update-post-meta/delete-post-meta made aafm_exec_update_post()'s ownership check pass
-		// on the next call, writing straight through the refusal guard. `_elementor_data` and
-		// `_fl_builder_data` were already covered by is_protected_meta()'s leading-underscore
-		// rule above; `et_pb_use_builder`, `fusion_builder_status`, and `fusion_builder_converted`
-		// were not, and neither list is scoped to post meta only, so pulling the whole marker map
-		// in here (harmless for term/user meta, where these names never legitimately occur) keeps
-		// this correct for any marker added later through the aafm_page_builder_markers filter.
-		array_keys( aafm_page_builder_markers() )
-	);
-	/**
-	 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this
-	 * can only add blocks, never remove them.
-	 *
-	 * @param list<string> $extra Extra keys to block.
-	 */
-	$extra   = (array) apply_filters( 'aafm_hard_blocked_meta_keys', array() );
-	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	$lower   = array_map( 'strtolower', $blocked );
-	// Check (a). The pattern takes any prefix*capabilities form, including multisite per-blog keys
-	// (wp_2_capabilities), and the `i` modifier keeps a mixed-case spelling from slipping past.
-	$blocks = static function ( string $candidate ) use ( $lower, $wpdb ): bool {
-		return is_protected_meta( $candidate, 'post' )
-			|| in_array( strtolower( $candidate ), $lower, true )
-			|| (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/i', $candidate );
-	};
-	if ( $blocks( $key ) ) {
-		return true;
-	}
-	if ( 1 === preg_match( '/^[A-Za-z0-9_-]*\z/', $key . implode( '', $blocked ) ) ) {
-		return false;
-	}
-	$matches = aafm_meta_key_collation_matches( $key, $blocked );
-	if ( null === $matches ) {
-		return true;
-	}
-	foreach ( $matches as $match ) {
-		if ( $blocks( $match ) ) {
-			return true;
-		}
-	}
-	return $blocks( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) );
+	return aafm_hard_blocked_meta_keys( array( $key ), 'post' )[0];
 }
 
 /**
@@ -252,13 +320,12 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
  * rather than flattening:
  *
  * - $pre_filter_floor: post-meta hard-block-floors the option value BEFORE handing it to the
- *   filter as the filter's own default, so the allowlist the admin screen shows and exports never
- *   passes a blocked key to the filter; term-meta and user-meta skip this pre-floor and pass the
- *   raw option straight through, because their filter result is unioned with the option
- *   afterward anyway (see next point), making a pre-floor on the base redundant rather than
- *   protective for them. Floor 3 of aafm_validate_scoped_meta_key() reads the list with neither
- *   floor, so on that path the post-meta filter gets the raw option too; floor 1 has already
- *   refused a blocked key, so a blocked entry there can never match.
+ *   filter as the filter's own default (so a filter reading its $default argument never sees a
+ *   blocked key); term-meta and user-meta skip this pre-floor and pass the raw option straight
+ *   through, because their filter result is unioned with the option afterward anyway (see next
+ *   point), making a pre-floor on the base redundant rather than protective for them. The floor
+ *   is the full hard block, so the default can also lose an entry only checks (b) and (c) block,
+ *   such as an accented spelling of a blocked key, which 1.7.5 passed on.
  * - $filter_replaces: post-meta's filter result REPLACES the base outright, so a legacy or
  *   rogue filter that returns an unrelated array (or empty) can shrink or clear the whole
  *   allowlist. Term-meta and user-meta instead UNION the filter result with the option base
@@ -279,21 +346,32 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
  * @return list<string>
  */
 function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag, callable $hard_block, bool $pre_filter_floor, bool $filter_replaces ): array {
-	// Set only by floor 3 of aafm_validate_scoped_meta_key(), for the length of one read.
-	$floored = empty( $GLOBALS['aafm_allowlist_read_unfloored'] );
+	// Both floors check the whole list at once through the scope's list-form hard block, so a
+	// floor pass costs at most one query however long the list is. Any other checker is asked
+	// once per entry.
+	$scopes    = array(
+		'aafm_hard_blocked_meta_key'      => 'post',
+		'aafm_hard_blocked_user_meta_key' => 'user',
+	);
+	$unblocked = static function ( array $keys ) use ( $hard_block, $scopes ): array {
+		$keys    = array_values( $keys );
+		$blocked = is_string( $hard_block ) && isset( $scopes[ $hard_block ] )
+			? aafm_hard_blocked_meta_keys( $keys, $scopes[ $hard_block ] )
+			: array_map( $hard_block, $keys );
+		$kept    = array();
+		foreach ( $keys as $index => $key ) {
+			if ( ! $blocked[ $index ] ) {
+				$kept[] = $key;
+			}
+		}
+		return $kept;
+	};
 
 	$stored = get_option( $option_name, array() );
 	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
 
-	if ( $pre_filter_floor && $floored ) {
-		$stored = array_values(
-			array_filter(
-				$stored,
-				static function ( string $k ) use ( $hard_block ): bool {
-					return ! $hard_block( $k );
-				}
-			)
-		);
+	if ( $pre_filter_floor ) {
+		$stored = $unblocked( $stored );
 	}
 
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- $filter_tag is always one of the three fixed, already-prefixed, already-documented tags each caller below passes literally (aafm_allowed_meta_keys, aafm_allowed_term_meta_keys, aafm_allowed_user_meta_keys); this is parameterization across three known call sites, not a genuinely dynamic hook name.
@@ -302,16 +380,13 @@ function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag,
 
 	$merged = $filter_replaces ? $filtered : array_merge( $stored, $filtered );
 
-	return array_values(
-		array_unique(
-			array_filter(
-				array_map( 'strval', $merged ),
-				static function ( string $k ) use ( $hard_block, $floored ): bool {
-					return '' !== $k && '*' !== $k && ( ! $floored || ! $hard_block( $k ) );
-				}
-			)
-		)
+	$candidates = array_filter(
+		array_map( 'strval', $merged ),
+		static function ( string $k ): bool {
+			return '' !== $k && '*' !== $k;
+		}
 	);
+	return array_values( array_unique( $unblocked( $candidates ) ) );
 }
 
 /**
@@ -392,26 +467,14 @@ function aafm_validate_scoped_meta_key( string $key, callable $hard_block, calla
 		return $error;
 	}
 	if ( array() !== $denied && 1 !== preg_match( '/^[A-Za-z0-9_-]*\z/', $key . implode( '', $denied ) ) ) {
-		$matches = aafm_meta_key_collation_matches( $key, $denied );
-		if ( null === $matches || array() !== array_filter( $matches, $denies ) || $denies( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) ) ) {
+		$matches = aafm_meta_key_collation_matches( array( $key ), $denied );
+		if ( null === $matches || array() !== array_filter( $matches[0], $denies ) || $denies( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) ) ) {
 			return $error;
 		}
 	}
 
-	// Floor 3, byte-exact. The key has already passed floor 1, so an entry equal to it is not
-	// blocked, and the list is read without running the hard block on each entry again: that
-	// would cost a gate query per entry on every validate once any key is non-ASCII.
-	if ( ! $allow_has_star() ) {
-		$previous                                 = $GLOBALS['aafm_allowlist_read_unfloored'] ?? false;
-		$GLOBALS['aafm_allowlist_read_unfloored'] = true;
-		try {
-			$allowed = $allowed_keys();
-		} finally {
-			$GLOBALS['aafm_allowlist_read_unfloored'] = $previous;
-		}
-		if ( ! in_array( $key, $allowed, true ) ) {
-			return $error;
-		}
+	if ( ! $allow_has_star() && ! in_array( $key, $allowed_keys(), true ) ) { // floor 3, byte-exact.
+		return $error;
 	}
 	return $key;
 }
@@ -925,70 +988,7 @@ function aafm_sanitize_term_meta_value( string $key, $value, string $taxonomy = 
  * @return bool
  */
 function aafm_hard_blocked_user_meta_key( string $key ): bool {
-	global $wpdb;
-	$key = (string) $key;
-	if ( '' === trim( $key ) ) {
-		return true;
-	}
-	// Three checks, and any one refuses. (a) The trimmed key against the list after strtolower(),
-	// is_protected_meta(), and the capabilities pattern, case-insensitive. (b) The meta_key column
-	// compares under a collation that also ignores accents, trailing spaces and some invisible
-	// characters, so when the key or a listed entry holds anything outside [A-Za-z0-9_-] the
-	// database says which entries and which stored spellings it treats as this key, and (a) runs on
-	// each of them. A failed query refuses. (c) On the same condition, (a) also runs on the key
-	// reduced to [A-Za-z0-9_-] after remove_accents() with the en_US map, for a per-blog key no row
-	// carries yet; that reduction is best effort. A key and a list of only [A-Za-z0-9_-] skip (b)
-	// and (c): the collations WordPress installs equate no two such strings strtolower() keeps apart.
-	$key     = trim( $key );
-	$builtin = array(
-		'session_tokens',
-		'_application_passwords',
-		'wp_capabilities',
-		'wp_user_level',
-		'default_password_nonce',
-		'_password_reset_key',
-		'_password_reset_time',
-		'two_factor_enabled',
-		'_two_factor_provider',
-		'_two_factor_totp_key',
-		'two_factor_secret',
-		'_two_factor_backup_codes',
-		'webauthn_credentials',
-		$wpdb->prefix . 'capabilities',
-		$wpdb->prefix . 'user_level',
-	);
-	/**
-	 * Filters EXTRA user-meta keys to hard-block. Built-ins are re-merged after, so this
-	 * can only add blocks, never remove them.
-	 *
-	 * @param list<string> $extra Extra keys to block.
-	 */
-	$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
-	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	$lower   = array_map( 'strtolower', $blocked );
-	// Check (a). The pattern takes any prefix*capabilities / *user_level form, incl. multisite
-	// per-blog (wp_2_capabilities), and the `i` modifier keeps a mixed-case spelling from slipping past.
-	$blocks = static function ( string $candidate ) use ( $lower, $wpdb ): bool {
-		return is_protected_meta( $candidate, 'user' )
-			|| in_array( strtolower( $candidate ), $lower, true )
-			|| (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i', $candidate );
-	};
-	if ( $blocks( $key ) ) {
-		return true;
-	}
-	if ( 1 === preg_match( '/^[A-Za-z0-9_-]*\z/', $key . implode( '', $blocked ) ) ) {
-		return false;
-	}
-	$matches = aafm_meta_key_collation_matches( $key, $blocked );
-	if ( null === $matches ) {
-		return true;
-	}
-	foreach ( $matches as $match ) {
-		if ( $blocks( $match ) ) {
-			return true;
-		}
-	}
-	return $blocks( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) );
+	return aafm_hard_blocked_meta_keys( array( $key ), 'user' )[0];
 }
 
 /**

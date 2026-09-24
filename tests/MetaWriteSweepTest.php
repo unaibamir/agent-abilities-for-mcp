@@ -224,14 +224,14 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	/**
-	 * Decode a T_CONSTANT_ENCAPSED_STRING token's literal value (single or double quoted, binary
-	 * prefix included, simple escapes only - fixtures and real source never need more).
+	 * Decode a T_CONSTANT_ENCAPSED_STRING token's literal value the way PHP decodes it, binary prefix
+	 * included, so a name spelled with an escape such as `\x70` reads as the name it spells.
 	 *
 	 * @param string $raw The raw token text, quotes included.
 	 */
 	private function decode_string_literal( string $raw ): string {
-		$inner = substr( $this->strip_binary_prefix( $raw ), 1, -1 );
-		return str_replace( array( "\\'", '\\"', '\\\\' ), array( "'", '"', '\\' ), $inner );
+		$context = '"' === $this->strip_binary_prefix( $raw )[0] ? 'double' : 'single';
+		return $this->decode_sql_literal( $raw, $context );
 	}
 
 	/**
@@ -1050,6 +1050,21 @@ final class MetaWriteSweepTest extends TestCase {
 	public function test_flags_a_binary_string_literal_holding_a_banned_name(): void {
 		$source = "<?php\n" . 'function f() {' . "\n" . 'call_user_func( b\'update_post_meta\', 1, \'k\', \'v\' );' . "\n" . 'call_user_func( B"delete_post_meta", 1, \'k\' ); }';
 		$this->assertSame( array( 'includes/fixture.php|f|update_post_meta|1', 'includes/fixture.php|f|delete_post_meta|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_banned_name_spelled_with_an_escape_in_a_binary_string(): void {
+		$source = "<?php\n" . 'function f() { call_user_func(b"update_\x70ost_meta", 1, \'k\', \'v\'); }';
+		$this->assertSame( array( 'includes/fixture.php|f|update_post_meta|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_banned_name_spelled_with_an_escape_in_a_double_quoted_string(): void {
+		$source = "<?php\n" . 'function f() { call_user_func("update_\x70ost_meta", 1, \'k\', \'v\'); }';
+		$this->assertSame( array( 'includes/fixture.php|f|update_post_meta|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_braced_wpdb_method_selector_spelled_with_an_escape(): void {
+		$source = "<?php\n" . 'function f($wpdb) { $wpdb->{b"\x75pdate"}($wpdb->postmeta, [], []); }';
+		$this->assertSame( array( 'includes/fixture.php|f|$wpdb->update|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
 	}
 
 	public function test_flags_a_sql_string_joined_across_an_out_of_string_variable_variable(): void {

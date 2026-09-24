@@ -520,12 +520,12 @@ function aafm_perm_get_term_meta( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
-	if ( is_wp_error( $taxonomy ) ) {
-		return $taxonomy;
+	$request = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $request ) ) {
+		return $request;
 	}
 	$term_id = absint( $input['term_id'] );
-	$key     = (string) $input['meta_key'];
+	$key     = $request['key'];
 	$value   = aafm_meta_get( 'term', $term_id, $key, true );
 	if ( '' !== $value && ! is_scalar( $value ) ) {
 		return aafm_generic_error();
@@ -617,12 +617,12 @@ function aafm_perm_update_term_meta( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_update_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
-	if ( is_wp_error( $taxonomy ) ) {
-		return $taxonomy;
+	$request = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $request ) ) {
+		return $request;
 	}
 	$term_id = absint( $input['term_id'] );
-	$key     = (string) $input['meta_key'];
+	$key     = $request['key'];
 	// Codex round 7 R7-3: pass the term's real taxonomy, not the empty default, so a
 	// sanitize_callback registered via register_term_meta() for that taxonomy is not invisible
 	// to the probe. Codex round 8 R8-2: resolve it through get_object_subtype(), the same
@@ -723,12 +723,12 @@ function aafm_perm_delete_term_meta( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_delete_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
-	if ( is_wp_error( $taxonomy ) ) {
-		return $taxonomy;
+	$request = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $request ) ) {
+		return $request;
 	}
 	$term_id = absint( $input['term_id'] );
-	$key     = (string) $input['meta_key'];
+	$key     = $request['key'];
 	return aafm_meta_delete_response( 'term', $term_id, $key, aafm_meta_delete( 'term', $term_id, $key ) );
 }
 

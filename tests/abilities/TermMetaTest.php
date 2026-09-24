@@ -632,4 +632,32 @@ final class TermMetaTest extends TestCase {
 			$out->get_error_data()
 		);
 	}
+
+	/**
+	 * A key with surrounding spaces is the trimmed key, as it is for post meta: the gate validates
+	 * the trimmed key, so get, update and delete all act on that key and name it in the response.
+	 */
+	public function test_a_term_meta_key_with_surrounding_spaces_acts_on_the_trimmed_key(): void {
+		$id = $this->note_term();
+		foreach ( array( ' aafm_note', 'aafm_note ' ) as $decorated ) {
+			$args = array(
+				'taxonomy' => 'category',
+				'term_id'  => $id,
+				'meta_key' => $decorated, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+			);
+
+			$updated = aafm_exec_update_term_meta( $args + array( 'value' => 'v' . strlen( $decorated ) ) );
+			$this->assertIsArray( $updated, 'key "' . $decorated . '"' );
+			$this->assertSame( 'aafm_note', $updated['meta_key'] );
+			$this->assertSame( array( 'aafm_note' ), array_keys( get_term_meta( $id ) ) );
+
+			$read = aafm_exec_get_term_meta( $args );
+			$this->assertSame( 'aafm_note', $read['meta_key'] );
+			$this->assertSame( 'v' . strlen( $decorated ), $read['value'] );
+
+			$deleted = aafm_exec_delete_term_meta( $args );
+			$this->assertSame( 'deleted', $deleted['status'] );
+			$this->assertSame( array(), get_term_meta( $id ) );
+		}
+	}
 }

@@ -1146,9 +1146,10 @@ function aafm_sanitize_user_meta_value( string $key, $value, string $object_subt
  * Shared term-meta gate: the term must be readable (exists in a public-allowlisted
  * taxonomy) AND the key must clear the hard-block + allowlist. Write/delete callbacks add
  * the per-object edit_term check on top of this (see the ability permission callbacks).
+ * Callers act on the returned key, the one the gate validated, never the raw input.
  *
  * @param array<string,mixed> $input Ability input.
- * @return string|WP_Error The validated taxonomy on success (callers also need it), or error.
+ * @return array{taxonomy: string, key: string}|WP_Error The validated taxonomy and key, or error.
  */
 function aafm_validate_term_meta_request( array $input ) {
 	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
@@ -1163,7 +1164,10 @@ function aafm_validate_term_meta_request( array $input ) {
 	if ( is_wp_error( $key ) ) {
 		return $key;
 	}
-	return $taxonomy;
+	return array(
+		'taxonomy' => $taxonomy,
+		'key'      => $key,
+	);
 }
 
 /**

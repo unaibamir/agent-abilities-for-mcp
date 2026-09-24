@@ -870,8 +870,8 @@ function aafm_post_field_confirm_logged( int $post_id, string $field, string $in
  */
 function aafm_emit_write_outcome( array $result, array $target ): void {
 	// Under WP_DEBUG alone: a verbose line for whoever is actively debugging, carrying identifiers
-	// only, never a value. The key goes through the same allowlist the log row uses: a malformed
-	// key prints as `-`, but one trailing newline still passes the rule (audit/detail.php:79).
+	// only, never a value. The key goes through the same allowlist the log row uses, so a malformed
+	// key, including one that ends in a newline, prints as `-`.
 	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 		$key = aafm_activity_detail_field( 'key', $target['key'] ?? null );
 		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- gated behind WP_DEBUG, identifiers only, never a value.

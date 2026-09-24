@@ -76,11 +76,11 @@ function aafm_activity_detail_field( string $type, $value, array $allowed = arra
 
 		case 'key':
 			$key = (string) $value;
-			return preg_match( '/^[A-Za-z0-9_\-]{1,64}$/', $key ) ? $key : null;
+			return preg_match( '/^[A-Za-z0-9_\-]{1,64}\z/', $key ) ? $key : null;
 
 		case 'slug':
 			$slug = (string) $value;
-			return preg_match( '#^[a-z0-9\-]+/[a-z0-9\-]+$#', $slug ) ? $slug : null;
+			return preg_match( '#^[a-z0-9\-]+/[a-z0-9\-]+\z#', $slug ) ? $slug : null;
 
 		case 'enum':
 			$member = (string) $value;
@@ -136,7 +136,7 @@ function aafm_activity_detail_key_list( $value, array $allowed ): ?string {
 		if ( ! is_string( $name ) || ! in_array( $name, $members, true ) ) {
 			continue;
 		}
-		if ( ! preg_match( '/^[A-Za-z0-9_\-]{1,64}$/', $name ) ) {
+		if ( ! preg_match( '/^[A-Za-z0-9_\-]{1,64}\z/', $name ) ) {
 			continue;
 		}
 		$names[] = $name;

@@ -1443,6 +1443,25 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
+	 * A regex ending in `$` also matches just before one final newline, so each anchored rule has to
+	 * reject a value that ends in one.
+	 */
+	public function test_a_key_ending_in_a_newline_is_rejected(): void {
+		$this->assertSame( 'abc', aafm_activity_detail_field( 'key', 'abc' ) );
+		$this->assertNull( aafm_activity_detail_field( 'key', "abc\n" ) );
+	}
+
+	public function test_a_slug_ending_in_a_newline_is_rejected(): void {
+		$this->assertSame( 'a/b', aafm_activity_detail_field( 'slug', 'a/b' ) );
+		$this->assertNull( aafm_activity_detail_field( 'slug', "a/b\n" ) );
+	}
+
+	public function test_a_key_list_name_ending_in_a_newline_is_rejected(): void {
+		$this->assertSame( 'abc', aafm_activity_detail_field( 'keys', array( 'abc' => 1 ), array( 'abc' ) ) );
+		$this->assertNull( aafm_activity_detail_field( 'keys', array( "abc\n" => 1 ), array( "abc\n" ) ) );
+	}
+
+	/**
 	 * The argument VALUE must appear in no column of the row, not just in the detail.
 	 *
 	 * @param array<string,mixed> $row An activity row.

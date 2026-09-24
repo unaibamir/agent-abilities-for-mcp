@@ -575,4 +575,150 @@ final class MetaWriteWireTest extends TestCase {
 			$written->getStructuredContent()
 		);
 	}
+
+	/**
+	 * The three families crossed with a stored baseline that is not a scalar.
+	 *
+	 * @return iterable<string,array{0:string,1:string}>
+	 */
+	public function data_non_scalar_baselines(): iterable {
+		foreach ( array( 'post', 'term', 'user' ) as $type ) {
+			foreach ( array( 'array', 'object', 'null' ) as $kind ) {
+				yield "$type $kind" => array( $type, $kind );
+			}
+		}
+	}
+
+	/**
+	 * Store one row for the key holding exactly the given raw meta_value.
+	 *
+	 * @param string $type 'post', 'term' or 'user'.
+	 * @param int    $id   Object id.
+	 * @param string $raw  The meta_value column as stored.
+	 */
+	private function plant_raw_meta( string $type, int $id, string $raw ): void {
+		global $wpdb;
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- plants an exact serialized row core would double-serialize.
+			_get_meta_table( $type ),
+			array(
+				"{$type}_id" => $id,
+				'meta_key'   => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture row.
+				'meta_value' => $raw, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- test fixture row.
+			)
+		);
+		wp_cache_delete( $id, "{$type}_meta" );
+	}
+
+	/**
+	 * An array, object or null baseline leaves `previous` off the update and the delete body
+	 * (254 4B.19), the same rule the get-meta read applies to such values.
+	 *
+	 * @dataProvider data_non_scalar_baselines
+	 * @param string $type Family.
+	 * @param string $kind Baseline shape.
+	 */
+	public function test_a_non_scalar_baseline_leaves_previous_off_the_wire( string $type, string $kind ): void {
+		list( $id, $handler, $args, $identity ) = $this->family( $type );
+
+		$raw = array(
+			'array'  => serialize( array( 'secret' => 'structure' ) ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- builds the stored row.
+			'object' => serialize( (object) array( 'secret' => 'structure' ) ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- builds the stored row.
+			'null'   => serialize( null ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- builds the stored row.
+		);
+		$this->plant_raw_meta( $type, $id, $raw[ $kind ] );
+
+		$written = $this->call( $handler, "aafm/update-$type-meta", $args + array( 'value' => 'new' ) );
+		$this->assertSame(
+			$identity + array(
+				'value'        => 'new',
+				'status'       => 'written',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => true,
+					'count'  => 1,
+				),
+			),
+			$written->getStructuredContent()
+		);
+
+		$this->plant_raw_meta( $type, $id, $raw[ $kind ] );
+		delete_metadata( $type, $id, 'aafm_note', 'new' );
+		$deleted = $this->call( $handler, "aafm/delete-$type-meta", $args );
+		$this->assertSame(
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
+			$deleted->getStructuredContent()
+		);
+	}
+
+	/**
+	 * A scalar baseline that is not a string (a serialized integer) keeps `previous` on the update
+	 * and the delete body, with its type.
+	 *
+	 * @dataProvider data_meta_families
+	 * @param string $type Family.
+	 */
+	public function test_a_non_string_scalar_baseline_keeps_previous_on_the_wire( string $type ): void {
+		list( $id, $handler, $args, $identity ) = $this->family( $type );
+		$this->plant_raw_meta( $type, $id, 'i:7;' );
+
+		$written = $this->call( $handler, "aafm/update-$type-meta", $args + array( 'value' => 'new' ) );
+		$this->assertSame(
+			$identity + array(
+				'value'        => 'new',
+				'status'       => 'written',
+				'previous'     => 7,
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => true,
+					'count'  => 1,
+				),
+			),
+			$written->getStructuredContent()
+		);
+
+		delete_metadata( $type, $id, 'aafm_note' );
+		$this->plant_raw_meta( $type, $id, 'b:1;' );
+		$deleted = $this->call( $handler, "aafm/delete-$type-meta", $args );
+		$this->assertSame(
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => true,
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
+			$deleted->getStructuredContent()
+		);
+	}
+
+	/**
+	 * The update and delete tools declare `previous` as a scalar only.
+	 *
+	 * @dataProvider data_meta_families
+	 * @param string $type Family.
+	 */
+	public function test_previous_is_declared_scalar_only_in_the_output_schema( string $type ): void {
+		$this->family( $type );
+		foreach ( array( "aafm/update-$type-meta", "aafm/delete-$type-meta" ) as $name ) {
+			$ability = wp_get_ability( $name );
+			$this->assertNotNull( $ability, $name );
+			$schema = $ability->get_output_schema();
+			$this->assertSame(
+				array( 'string', 'number', 'integer', 'boolean' ),
+				$schema['properties']['previous']['type'],
+				$name
+			);
+		}
+	}
 }

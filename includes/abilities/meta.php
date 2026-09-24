@@ -501,6 +501,8 @@ function aafm_meta_delete_response( string $type, int $id, string $key, array $r
  * The outcome fields a meta write or delete adds to its response, each present exactly when the
  * helper's own result carries it, in this order: status, previous, rows, acknowledged, observed
  * and modified_by_site. `value` is not among them; aafm_meta_update_response() reads its own.
+ * `previous` goes out only when it is a scalar: get-meta never returns an array, object or null
+ * value to an agent, so an overwrite or delete does not hand one back either.
  *
  * @param array<string,mixed> $result The aafm_meta_set() or aafm_meta_delete() result.
  * @return array<string,mixed>
@@ -508,7 +510,7 @@ function aafm_meta_delete_response( string $type, int $id, string $key, array $r
 function aafm_meta_write_response_fields( array $result ): array {
 	$fields = array();
 	foreach ( array( 'status', 'previous', 'rows', 'acknowledged', 'observed', 'modified_by_site' ) as $name ) {
-		if ( array_key_exists( $name, $result ) ) {
+		if ( array_key_exists( $name, $result ) && ( 'previous' !== $name || is_scalar( $result[ $name ] ) ) ) {
 			$fields[ $name ] = $result[ $name ];
 		}
 	}
@@ -527,7 +529,7 @@ function aafm_meta_write_output_properties(): array {
 			'enum' => array( 'written', 'unchanged' ),
 		),
 		'previous'         => array(
-			'type' => array( 'string', 'number', 'integer', 'boolean', 'array', 'object', 'null' ),
+			'type' => array( 'string', 'number', 'integer', 'boolean' ),
 		),
 		'rows'             => array( 'type' => 'integer' ),
 		'acknowledged'     => array( 'type' => 'boolean' ),

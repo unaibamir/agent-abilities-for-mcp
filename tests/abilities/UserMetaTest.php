@@ -551,4 +551,117 @@ final class UserMetaTest extends TestCase {
 		wp_cache_delete( $id, 'user_meta' );
 		$this->assertSame( 'old', get_user_meta( $id, 'aafm_note', true ) );
 	}
+
+	/**
+	 * `value` is read through core after the write, exactly as get_user_meta( ..., true )
+	 * reads it, so a read filter shapes it as it always has, on written and on unchanged.
+	 */
+	public function test_update_user_meta_value_is_read_through_core_with_its_filters(): void {
+		global $wpdb;
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', '7' );
+		$table  = $wpdb->usermeta;
+		$column = 'user_id';
+		$as_int = static function ( $value, $object_id, $meta_key, $single ) use ( $wpdb, $table, $column ) {
+			if ( 'aafm_note' !== $meta_key ) {
+				return $value;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$stored = $wpdb->get_var( $wpdb->prepare( 'SELECT meta_value FROM %i WHERE %i = %d AND meta_key = %s', $table, $column, $object_id, $meta_key ) );
+			if ( null === $stored ) {
+				return $value;
+			}
+			return $single ? (int) $stored : array( (int) $stored );
+		};
+		add_filter( 'get_user_metadata', $as_int, 10, 4 );
+
+		$unchanged = $this->update_note( $id, '7' );
+		$written   = $this->update_note( $id, '8' );
+		$core      = get_user_meta( $id, 'aafm_note', true );
+
+		remove_filter( 'get_user_metadata', $as_int, 10 );
+
+		$this->assertSame( 'unchanged', $unchanged['status'] );
+		$this->assertSame( 7, $unchanged['value'] );
+		$this->assertSame( 'written', $written['status'] );
+		$this->assertSame( 8, $written['value'] );
+		$this->assertSame( $core, $written['value'] );
+	}
+
+	/**
+	 * A failed load on that response read is an error, never a made-up value.
+	 */
+	public function test_update_user_meta_with_its_response_read_faulted_returns_the_unconfirmed_error(): void {
+		global $wpdb;
+		foreach ( array( 'no-flush', 'real-error' ) as $shape ) {
+			$id = $this->note_user();
+			update_user_meta( $id, 'aafm_note', 'old' );
+			$run        = function () use ( $id ) {
+				return $this->update_note( $id, 'old' );
+			};
+			$needle     = array( 'meta_key, meta_value FROM', $wpdb->usermeta, ' IN (' );
+			$suppressed = $wpdb->suppress_errors( true );
+			\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+			ob_start();
+			$out = 'no-flush' === $shape
+				? \AAFM\Tests\Support\QueryFaultInjector::fail_query( $needle, $run )
+				: \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error( $needle, $run );
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+
+			$this->assertGreaterThan( 0, \AAFM\Tests\Support\QueryFaultInjector::fired_count(), $shape );
+			$this->assert_meta_error( $out, 'unconfirmed', 'The write could not be confirmed; read the key to see its current state.', $id );
+		}
+	}
+
+	public function test_update_user_meta_with_a_failed_baseline_read_returns_the_read_failed_error(): void {
+		global $wpdb;
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$out = \AAFM\Tests\Support\QueryFaultInjector::fail_query(
+			$wpdb->usermeta,
+			function () use ( $id ) {
+				return $this->update_note( $id, 'new' );
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assert_meta_error( $out, 'read_failed', 'The current value could not be read, so nothing was written. Try again.', $id );
+		wp_cache_delete( $id, 'user_meta' );
+		$this->assertSame( 'old', get_user_meta( $id, 'aafm_note', true ) );
+	}
+
+	/**
+	 * A key that fails the activity-log key rule reaches error_data as null, still present, so an
+	 * agent-supplied string never lands in the error log.
+	 */
+	public function test_a_user_meta_error_for_a_malformed_key_carries_a_null_key(): void {
+		update_option( 'aafm_exposed_user_meta_keys', array( '*' ) );
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->user->create();
+		add_filter( 'update_user_metadata', '__return_false' );
+		$out = aafm_exec_update_user_meta(
+			array(
+				'user_id' => $id,
+				'key'     => 'bad key',
+				'value'   => 'x',
+			)
+		);
+		remove_filter( 'update_user_metadata', '__return_false' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame(
+			array(
+				'status'    => 'refused',
+				'kind'      => 'user_meta',
+				'object_id' => $id,
+				'key'       => null,
+			),
+			$out->get_error_data()
+		);
+	}
 }

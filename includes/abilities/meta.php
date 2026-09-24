@@ -361,16 +361,15 @@ function aafm_exec_update_post_meta( array $input ) {
 	if ( is_wp_error( $result ) ) {
 		return $result;
 	}
-	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
-		return aafm_meta_write_error( $result['status'], 'write', 'post', $id, $key );
-	}
-	return array_merge(
+	return aafm_meta_update_response(
+		'post',
+		$id,
+		$key,
+		$result,
 		array(
 			'post_id'  => $id,
 			'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
-			'value'    => $result['value'],
-		),
-		aafm_meta_write_response_fields( $result )
+		)
 	);
 }
 
@@ -447,17 +446,61 @@ function aafm_exec_delete_post_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$result = aafm_meta_delete( 'post', $id, $key );
-	if ( ! in_array( $result['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
-		return aafm_meta_write_error( $result['status'], 'delete', 'post', $id, $key );
+	return aafm_meta_delete_response( 'post', $id, $key, aafm_meta_delete( 'post', $id, $key ) );
+}
+
+/**
+ * The response update-post-meta, update-term-meta and update-user-meta return.
+ *
+ * A write that did not land as `written` or `unchanged` is its error. Otherwise the response is
+ * the family's identity fields, then `value`, then the outcome fields. `value` is read after the
+ * helper returns, through core with `single` true, exactly as get_*_meta( ..., true ) reads it,
+ * so read filters shape it as they always have. That read runs inside a checked-read scope: a
+ * failed load is the `unconfirmed` error, never a made-up value. `status` still comes from the
+ * helper.
+ *
+ * @param string              $type     'post', 'term' or 'user'.
+ * @param int                 $id       Object id.
+ * @param string              $key      Meta key.
+ * @param array<string,mixed> $result   The aafm_meta_set() result.
+ * @param array<string,mixed> $identity The family's identity fields, in wire order.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_meta_update_response( string $type, int $id, string $key, array $result, array $identity ) {
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+		return aafm_meta_write_error( $result['status'], 'write', $type, $id, $key );
 	}
-	// Deleting an already-absent key is an idempotent success: the key is gone either way.
+	return aafm_with_checked_reads(
+		static function () use ( $type, $id, $key, $result, $identity ): array {
+			$identity['value'] = aafm_meta_get( $type, $id, $key, true );
+			return array_merge( $identity, aafm_meta_write_response_fields( $result ) );
+		},
+		aafm_meta_write_error( AAFM_WRITE_UNCONFIRMED, 'write', $type, $id, $key )
+	);
+}
+
+/**
+ * The response delete-post-meta, delete-term-meta and delete-user-meta return: `deleted: true`
+ * for `deleted` and `absent`, since deleting an absent key is an idempotent success, then the
+ * outcome fields. Any other status is its error.
+ *
+ * @param string              $type   'post', 'term' or 'user'.
+ * @param int                 $id     Object id.
+ * @param string              $key    Meta key.
+ * @param array<string,mixed> $result The aafm_meta_delete() result.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_meta_delete_response( string $type, int $id, string $key, array $result ) {
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
+		return aafm_meta_write_error( $result['status'], 'delete', $type, $id, $key );
+	}
 	return array_merge( array( 'deleted' => true ), aafm_meta_write_response_fields( $result ) );
 }
 
 /**
- * The fields a meta write or delete adds to its ability's response: the outcome, in the helper's
- * own presence rules. `value` is not among them, because every response already carries its own.
+ * The outcome fields a meta write or delete adds to its response, each present exactly when the
+ * helper's own result carries it, in this order: status, previous, rows, acknowledged, observed
+ * and modified_by_site. `value` is not among them; aafm_meta_update_response() reads its own.
  *
  * @param array<string,mixed> $result The aafm_meta_set() or aafm_meta_delete() result.
  * @return array<string,mixed>
@@ -539,6 +582,8 @@ function aafm_meta_write_error( string $status, string $operation, string $type,
 				? __( 'The site refused or failed the delete; read the key to see its current state.', 'agent-abilities-for-mcp' )
 				: __( 'The site refused or failed the write; read the key to see its current state.', 'agent-abilities-for-mcp' );
 	}
+	// The adapter's error handler writes error_data to error_log() whether or not WP_DEBUG is on,
+	// so the key goes through the activity-log key rule first and is null when it fails it.
 	$target = aafm_meta_write_target( $type, $id, $key );
 	return new WP_Error(
 		'aafm_error',
@@ -547,7 +592,7 @@ function aafm_meta_write_error( string $status, string $operation, string $type,
 			'status'    => $status,
 			'kind'      => $target['kind'],
 			'object_id' => $target['object_id'],
-			'key'       => $target['key'],
+			'key'       => aafm_activity_detail_field( 'key', $target['key'] ),
 		)
 	);
 }

@@ -638,16 +638,15 @@ function aafm_exec_update_term_meta( array $input ) {
 	if ( is_wp_error( $result ) ) {
 		return $result;
 	}
-	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
-		return aafm_meta_write_error( $result['status'], 'write', 'term', $term_id, $key );
-	}
-	return array_merge(
+	return aafm_meta_update_response(
+		'term',
+		$term_id,
+		$key,
+		$result,
 		array(
 			'term_id'  => $term_id,
 			'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
-			'value'    => $result['value'],
-		),
-		aafm_meta_write_response_fields( $result )
+		)
 	);
 }
 
@@ -730,12 +729,7 @@ function aafm_exec_delete_term_meta( array $input ) {
 	}
 	$term_id = absint( $input['term_id'] );
 	$key     = (string) $input['meta_key'];
-	$result  = aafm_meta_delete( 'term', $term_id, $key );
-	if ( ! in_array( $result['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
-		return aafm_meta_write_error( $result['status'], 'delete', 'term', $term_id, $key );
-	}
-	// Deleting an already-absent key is an idempotent success: the key is gone either way.
-	return array_merge( array( 'deleted' => true ), aafm_meta_write_response_fields( $result ) );
+	return aafm_meta_delete_response( 'term', $term_id, $key, aafm_meta_delete( 'term', $term_id, $key ) );
 }
 
 /**

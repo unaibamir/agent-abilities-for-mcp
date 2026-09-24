@@ -435,4 +435,144 @@ final class MetaWriteWireTest extends TestCase {
 			$absent->getStructuredContent()
 		);
 	}
+
+	/**
+	 * The three meta families: object creation, the update/delete tools and their arguments.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_meta_families(): iterable {
+		yield 'post' => array( 'post' );
+		yield 'term' => array( 'term' );
+		yield 'user' => array( 'user' );
+	}
+
+	/**
+	 * An object of the family with `aafm_note` allowlisted, the handler, and the base arguments.
+	 *
+	 * @param string $type 'post', 'term' or 'user'.
+	 * @return array{0:int,1:\WP\MCP\Handlers\Tools\ToolsHandler,2:array<string,mixed>,3:array<string,mixed>}
+	 */
+	private function family( string $type ): array {
+		if ( 'post' === $type ) {
+			update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+			$this->acting_as( 'editor' );
+			$id       = self::factory()->post->create();
+			$args     = array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+			);
+			$identity = array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response key.
+			);
+		} elseif ( 'term' === $type ) {
+			update_option( 'aafm_exposed_term_meta_keys', array( 'aafm_note' ) );
+			$this->acting_as( 'editor' );
+			$id       = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+			$args     = array(
+				'taxonomy' => 'category',
+				'term_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+			);
+			$identity = array(
+				'term_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response key.
+			);
+		} else {
+			update_option( 'aafm_exposed_user_meta_keys', array( 'aafm_note' ) );
+			$this->acting_as( 'administrator' );
+			$id       = self::factory()->user->create();
+			$args     = array(
+				'user_id' => $id,
+				'key'     => 'aafm_note',
+			);
+			$identity = array(
+				'user_id' => $id,
+				'key'     => 'aafm_note',
+			);
+		}
+		$handler = $this->handler( array( "aafm/update-$type-meta", "aafm/delete-$type-meta" ) );
+		return array( $id, $handler, $args, $identity );
+	}
+
+	/**
+	 * A two-row baseline reports rows: 2 on written and on deleted, in the exact body.
+	 *
+	 * @dataProvider data_meta_families
+	 * @param string $type Family.
+	 */
+	public function test_a_two_row_baseline_reports_rows_on_the_wire( string $type ): void {
+		list( $id, $handler, $args, $identity ) = $this->family( $type );
+		add_metadata( $type, $id, 'aafm_note', 'a' );
+		add_metadata( $type, $id, 'aafm_note', 'b' );
+
+		$written = $this->call( $handler, "aafm/update-$type-meta", $args + array( 'value' => 'c' ) );
+		$this->assertSame(
+			$identity + array(
+				'value'        => 'c',
+				'status'       => 'written',
+				'previous'     => 'a',
+				'rows'         => 2,
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => true,
+					'count'  => 2,
+				),
+			),
+			$written->getStructuredContent()
+		);
+
+		$deleted = $this->call( $handler, "aafm/delete-$type-meta", $args );
+		$this->assertSame(
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => 'c',
+				'rows'         => 2,
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
+			$deleted->getStructuredContent()
+		);
+	}
+
+	/**
+	 * A sanitizer that gives a different result on every call stores a value that is neither the
+	 * canonical form nor the baseline, reported as modified_by_site: true in the exact body.
+	 *
+	 * @dataProvider data_meta_families
+	 * @param string $type Family.
+	 */
+	public function test_a_value_the_site_changed_reports_modified_by_site_on_the_wire( string $type ): void {
+		list( $id, $handler, $args, $identity ) = $this->family( $type );
+		add_metadata( $type, $id, 'aafm_note', 'old' );
+		$calls   = 0;
+		$counter = static function ( $value ) use ( &$calls ) {
+			++$calls;
+			return is_string( $value ) ? $value . '-' . $calls : $value;
+		};
+		add_filter( "sanitize_{$type}_meta_aafm_note", $counter );
+		$written = $this->call( $handler, "aafm/update-$type-meta", $args + array( 'value' => 'new' ) );
+		remove_filter( "sanitize_{$type}_meta_aafm_note", $counter );
+
+		$stored = get_metadata( $type, $id, 'aafm_note', true );
+		$this->assertSame(
+			$identity + array(
+				'value'            => $stored,
+				'status'           => 'written',
+				'previous'         => 'old',
+				'acknowledged'     => true,
+				'observed'         => array(
+					'exists' => true,
+					'count'  => 1,
+				),
+				'modified_by_site' => true,
+			),
+			$written->getStructuredContent()
+		);
+	}
 }

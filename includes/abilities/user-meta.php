@@ -294,16 +294,15 @@ function aafm_exec_update_user_meta( array $input ) {
 	if ( is_wp_error( $result ) ) {
 		return $result;
 	}
-	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
-		return aafm_meta_write_error( $result['status'], 'write', 'user', $id, $key );
-	}
-	return array_merge(
+	return aafm_meta_update_response(
+		'user',
+		$id,
+		$key,
+		$result,
 		array(
 			'user_id' => $id,
 			'key'     => $key,
-			'value'   => $result['value'],
-		),
-		aafm_meta_write_response_fields( $result )
+		)
 	);
 }
 
@@ -323,10 +322,5 @@ function aafm_exec_delete_user_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
-	$result = aafm_meta_delete( 'user', $id, $key );
-	if ( ! in_array( $result['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
-		return aafm_meta_write_error( $result['status'], 'delete', 'user', $id, $key );
-	}
-	// Deleting an already-absent key is an idempotent success: the key is gone either way.
-	return array_merge( array( 'deleted' => true ), aafm_meta_write_response_fields( $result ) );
+	return aafm_meta_delete_response( 'user', $id, $key, aafm_meta_delete( 'user', $id, $key ) );
 }

@@ -210,14 +210,14 @@ function aafm_oauth_set_client_agent_identity( string $client_id, bool $flag ): 
  * A request-local static cache keys the client-row lookup by client_id: a caller such as
  * aafm/get-activity-log resolves this per row for up to 200 rows a page, and most of those rows
  * share a handful of client_ids, so this avoids one uncached query per row for the same client.
- * get_user_meta() needs no equivalent cache - core's own object-cache layer already dedupes it.
+ * The marker read needs no equivalent cache - core's own object-cache layer already dedupes it.
  *
  * @param int         $user_id         Acting WordPress user id, or 0 when unresolved.
  * @param string|null $oauth_client_id OAuth client id the call is attributed to, or null/'' for none.
  * @return bool
  */
 function aafm_principal_is_agent_identity( int $user_id, ?string $oauth_client_id ): bool {
-	if ( $user_id > 0 && get_user_meta( $user_id, aafm_agent_user_marker_meta_key(), true ) ) {
+	if ( $user_id > 0 && aafm_meta_get( 'user', $user_id, aafm_agent_user_marker_meta_key(), true ) ) {
 		return true;
 	}
 

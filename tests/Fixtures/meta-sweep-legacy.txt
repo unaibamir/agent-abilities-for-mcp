@@ -106,7 +106,4 @@ includes/admin/onboarding-pointer.php|aafm_quickconnect_mark_pointer_dismissed_f
 includes/admin/onboarding-pointer.php|aafm_quickconnect_mark_pointer_dismissed_for_user|update_user_meta|1
 includes/admin/onboarding-pointer.php|aafm_quickconnect_pointer_dismissed_for_user|get_user_meta|1
 includes/helpers.php|aafm_redact_media|get_post_meta|1
-includes/helpers.php|aafm_rich_user|get_user_meta|1
-includes/oauth/clients.php|aafm_principal_is_agent_identity|get_user_meta|1
 includes/page-builder-guard.php|aafm_post_has_foreign_builder_ownership|get_post_meta|1
-includes/server.php|aafm_mcp_guard_unpersisted_session|get_user_meta|1

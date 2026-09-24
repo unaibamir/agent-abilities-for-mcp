@@ -1887,7 +1887,7 @@ function aafm_rich_user( $user, ?int $post_count = null ) {
 	 */
 	$base               = aafm_redact_user( $user, $post_count );
 	$base['registered'] = $user->user_registered;
-	$base['bio']        = (string) get_user_meta( $user->ID, 'description', true );
+	$base['bio']        = (string) aafm_meta_get( 'user', $user->ID, 'description', true );
 	return $base;
 }
 

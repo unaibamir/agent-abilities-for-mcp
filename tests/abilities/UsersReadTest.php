@@ -268,4 +268,189 @@ final class UsersReadTest extends TestCase {
 		$res = wp_get_ability( 'aafm/get-user' )->execute( array( 'user_id' => 999999 ) );
 		$this->assertInstanceOf( \WP_Error::class, $res );
 	}
+
+	/**
+	 * Run $run with every query that contains all of $needles failed once $armed is true, in
+	 * the given fault shape: no-flush (the query never runs, last_result is left stale) or
+	 * real-error (the query is sent to a table that does not exist).
+	 *
+	 * @param string[] $needles Substrings that together identify the query.
+	 * @param string   $shape   'no-flush' or 'real-error'.
+	 * @param bool     $armed   By reference: the switch the caller's hook flips.
+	 * @param callable $run     Code to run.
+	 * @param int      $fired   By reference: how many queries were failed.
+	 * @return mixed $run()'s result.
+	 */
+	private function with_armed_fault( array $needles, string $shape, bool &$armed, callable $run, int &$fired ) {
+		global $wpdb;
+		$fault      = static function ( string $query ) use ( $needles, $shape, &$armed, &$fired, $wpdb ): string {
+			if ( ! $armed ) {
+				return $query;
+			}
+			foreach ( $needles as $needle ) {
+				if ( false === strpos( $query, $needle ) ) {
+					return $query;
+				}
+			}
+			++$fired;
+			return 'no-flush' === $shape ? '' : str_replace( $wpdb->prefix, $wpdb->prefix . 'aafm_missing_', $query );
+		};
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $fault );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $fault );
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * Both fault shapes.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_fault_shapes(): iterable {
+		yield 'no-flush' => array( 'no-flush' );
+		yield 'real-error' => array( 'real-error' );
+	}
+
+	/**
+	 * A create-user whose response-time metadata load fails returns the error instead of a user
+	 * with an empty bio.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_create_user_with_its_metadata_load_faulted_returns_the_error( string $shape ): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$armed = false;
+		$fired = 0;
+		$arm   = static function ( int $user_id ) use ( &$armed ): void {
+			wp_cache_delete( $user_id, 'user_meta' );
+			$armed = true;
+		};
+		add_action( 'user_register', $arm, PHP_INT_MAX );
+		$result = $this->with_armed_fault(
+			array( 'meta_key, meta_value FROM', $wpdb->usermeta ),
+			$shape,
+			$armed,
+			static function () {
+				return aafm_exec_create_user(
+					array(
+						'username' => 'aafm-meta-fault-user',
+						'email'    => 'aafm-meta-fault-user@example.com',
+					)
+				);
+			},
+			$fired
+		);
+		remove_action( 'user_register', $arm, PHP_INT_MAX );
+
+		$this->assertGreaterThan( 0, $fired );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_error', $result->get_error_code() );
+	}
+
+	/**
+	 * The same for update-user.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_update_user_with_its_metadata_load_faulted_returns_the_error( string $shape ): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$id    = self::factory()->user->create();
+		$armed = false;
+		$fired = 0;
+		$arm   = static function ( int $user_id ) use ( &$armed ): void {
+			wp_cache_delete( $user_id, 'user_meta' );
+			$armed = true;
+		};
+		add_action( 'profile_update', $arm, PHP_INT_MAX );
+		$result = $this->with_armed_fault(
+			array( 'meta_key, meta_value FROM', $wpdb->usermeta ),
+			$shape,
+			$armed,
+			static function () use ( $id ) {
+				return aafm_exec_update_user(
+					array(
+						'user_id'      => $id,
+						'display_name' => 'Renamed',
+					)
+				);
+			},
+			$fired
+		);
+		remove_action( 'profile_update', $arm, PHP_INT_MAX );
+
+		$this->assertGreaterThan( 0, $fired );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_error', $result->get_error_code() );
+	}
+
+	public function test_create_user_with_its_user_read_faulted_returns_the_error(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$armed = false;
+		$fired = 0;
+		$arm   = static function ( int $user_id ) use ( &$armed ): void {
+			clean_user_cache( $user_id );
+			$armed = true;
+		};
+		add_action( 'user_register', $arm, PHP_INT_MAX );
+		$result = $this->with_armed_fault(
+			array( 'SELECT * FROM ' . $wpdb->users ),
+			'real-error',
+			$armed,
+			static function () {
+				return aafm_exec_create_user(
+					array(
+						'username' => 'aafm-row-fault-user',
+						'email'    => 'aafm-row-fault-user@example.com',
+					)
+				);
+			},
+			$fired
+		);
+		remove_action( 'user_register', $arm, PHP_INT_MAX );
+
+		$this->assertGreaterThan( 0, $fired );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_error', $result->get_error_code() );
+	}
+
+	/**
+	 * count_user_posts() reads 0 when its query fails; update-user must not report that 0.
+	 */
+	public function test_update_user_with_the_post_count_query_faulted_returns_the_error(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->user->create();
+		self::factory()->post->create( array( 'post_author' => $id ) );
+		$armed  = true;
+		$fired  = 0;
+		$result = $this->with_armed_fault(
+			array( 'SELECT COUNT(*) FROM', $wpdb->posts ),
+			'real-error',
+			$armed,
+			static function () use ( $id ) {
+				return aafm_exec_update_user(
+					array(
+						'user_id'      => $id,
+						'display_name' => 'Counted',
+					)
+				);
+			},
+			$fired
+		);
+
+		$this->assertGreaterThan( 0, $fired, 'the count query must have been faulted' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_error', $result->get_error_code() );
+	}
 }

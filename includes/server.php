@@ -1860,7 +1860,7 @@ function aafm_mcp_guard_unpersisted_session( $response, $server, $request ) {
 			$session_meta_key .= '_' . $current_blog_id;
 		}
 	}
-	$sessions = get_user_meta( $user_id, $session_meta_key, true );
+	$sessions = aafm_meta_get( 'user', $user_id, $session_meta_key, true );
 	if ( is_array( $sessions ) && isset( $sessions[ $session_id ] ) ) {
 		return $response; // Persisted: the normal path. Byte-identical pass-through.
 	}

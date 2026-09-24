@@ -405,7 +405,47 @@ function aafm_exec_create_user( array $input ) {
 		return aafm_generic_error();
 	}
 
-	return array( 'user' => aafm_rich_user( get_userdata( (int) $result ) ) );
+	return aafm_user_write_response( (int) $result );
+}
+
+/**
+ * Build the {user: ...} response create-user and update-user return after their write, so a
+ * failed read fails the call instead of returning an empty or zeroed field.
+ *
+ * The post count the response carries comes from count_user_posts(), which reads 0 when its query
+ * fails, so the same count query runs first through a failure-aware reader, and a failure is the
+ * error. The user is then read and the response built inside a checked-read scope: loading a
+ * WP_User loads its metadata, so a failed load there, and any later metadata read such as the
+ * bio, is the error too. A result that is not a WP_User is the error. A healthy database answers
+ * exactly as before.
+ *
+ * @param int $user_id The user just written.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_user_write_response( int $user_id ) {
+	global $wpdb;
+
+	$where = get_posts_by_author_sql( array( 'post' ), true, $user_id, false );
+	$sql   = "SELECT COUNT(*) FROM %i {$where}";
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $where is core's own get_posts_by_author_sql() output, the clause count_user_posts() uses.
+	$count = aafm_wpdb_scalar( $wpdb->prepare( $sql, $wpdb->posts ) );
+	if ( ! $count['ok'] ) {
+		return aafm_generic_error();
+	}
+
+	$missing  = false;
+	$response = aafm_with_checked_reads(
+		static function () use ( $user_id, &$missing ): array {
+			$user = get_userdata( $user_id );
+			if ( ! $user instanceof WP_User ) {
+				$missing = true;
+				return array();
+			}
+			return array( 'user' => aafm_rich_user( $user ) );
+		},
+		aafm_generic_error()
+	);
+	return $missing ? aafm_generic_error() : $response;
 }
 
 /**
@@ -645,7 +685,7 @@ function aafm_exec_update_user( array $input ) {
 			return aafm_generic_error();
 		}
 
-		return array( 'user' => aafm_rich_user( get_userdata( $id ) ) );
+		return aafm_user_write_response( $id );
 	};
 
 	return $demotes_admin

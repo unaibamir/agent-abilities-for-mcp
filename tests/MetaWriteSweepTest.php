@@ -730,6 +730,9 @@ final class MetaWriteSweepTest extends TestCase {
 				continue;
 			}
 
+			// PHP resolves a string callable with a leading namespace separator, such as
+			// '\update_post_meta', to the global function, so the name is read without it.
+			$value                  = ltrim( $value, '\\' );
 			$lvalue                 = strtolower( $value );
 			$is_banned_literal      = in_array( $lvalue, self::BANNED_FUNCTIONS, true );
 			$is_path_scoped_literal = $scoped_to_abilities && self::PATH_SCOPED_FUNCTION === $lvalue;
@@ -1065,6 +1068,11 @@ final class MetaWriteSweepTest extends TestCase {
 	public function test_flags_a_braced_wpdb_method_selector_spelled_with_an_escape(): void {
 		$source = "<?php\n" . 'function f($wpdb) { $wpdb->{b"\x75pdate"}($wpdb->postmeta, [], []); }';
 		$this->assertSame( array( 'includes/fixture.php|f|$wpdb->update|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_banned_name_literal_with_a_leading_namespace_separator(): void {
+		$source = "<?php\n" . 'function f() { call_user_func( \'\update_post_meta\', 1, \'k\', \'v\' ); }';
+		$this->assertSame( array( 'includes/fixture.php|f|update_post_meta|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
 	}
 
 	public function test_flags_a_sql_string_joined_across_an_out_of_string_variable_variable(): void {

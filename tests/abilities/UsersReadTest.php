@@ -425,7 +425,7 @@ final class UsersReadTest extends TestCase {
 	}
 
 	/**
-	 * count_user_posts() reads 0 when its query fails; update-user must not report that 0.
+	 * Core's count_user_posts() reads 0 when its query fails; update-user must not report that 0.
 	 */
 	public function test_update_user_with_the_post_count_query_faulted_returns_the_error(): void {
 		global $wpdb;

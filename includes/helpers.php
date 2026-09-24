@@ -113,18 +113,45 @@ function aafm_resolve_search_post_types( array $requested ): array {
 }
 
 /**
- * Fold a meta key for the hard-block and deny comparisons: trim, remove_accents(), strtolower().
+ * Every listed entry and every stored meta_key spelling that the database treats as the same key
+ * as $key, compared under the meta_key column collation of the post, term and user meta tables.
  *
- * The meta_key column's collation treats keys that differ only by case, accents or trailing
- * spaces as the same row, and this fold catches most of those spellings on the PHP side. It is
- * not the collation, and misses some equivalences such as full-width letters, so it is used only
- * where an extra match refuses a key, never to allow one.
+ * One query, one union branch pair per table. The list branch carries the entries through
+ * CONCAT() with a meta_key value from an empty read of that table, so the entries take the
+ * column's collation, not the connection's, and it keeps the entries equal to $key. The row branch
+ * returns every stored spelling equal to $key, distinct by bytes: a plain DISTINCT would collapse
+ * the spellings under the collation and could hand back only a harmless one. Every value comes back
+ * as bytes, so tables with different collations still union.
  *
- * @param string $key Meta key.
- * @return string
+ * ponytail: no memo, so every call on a non-ASCII key costs one indexed query; memoise per request
+ * if a caller ever loops over many such keys.
+ *
+ * @param string   $key     The trimmed meta key.
+ * @param string[] $entries The listed keys to compare with it.
+ * @return string[]|null The matched entries and stored spellings, or null when the query failed.
  */
-function aafm_fold_meta_key( string $key ): string {
-	return strtolower( remove_accents( trim( $key ) ) );
+function aafm_meta_key_collation_matches( string $key, array $entries ): ?array {
+	global $wpdb;
+
+	$entries = array_values( array_map( 'strval', $entries ) );
+	$parts   = array();
+	$args    = array();
+	foreach ( array( $wpdb->postmeta, $wpdb->termmeta, $wpdb->usermeta ) as $table ) {
+		if ( array() !== $entries ) {
+			$parts[] = "( SELECT CAST( e.k AS BINARY ) AS aafm_gate_match FROM ( SELECT CONCAT( IFNULL( m.meta_key, '' ), %s ) AS k FROM ( SELECT 1 AS one ) AS d LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS m ON 1 = 1" . str_repeat( ' UNION ALL SELECT %s', count( $entries ) - 1 ) . ' ) AS e WHERE e.k = %s )';
+			$args    = array_merge( $args, array( $entries[0], $table ), array_slice( $entries, 1 ), array( $key ) );
+		}
+		$parts[] = '( SELECT DISTINCT CAST( meta_key AS BINARY ) AS aafm_gate_match FROM %i WHERE meta_key = %s )';
+		$args    = array_merge( $args, array( $table, $key ) );
+	}
+
+	$sql = implode( ' UNION ALL ', $parts );
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql holds only placeholders and fixed SQL.
+	$view = aafm_wpdb_col( $wpdb->prepare( $sql, $args ) );
+	if ( ! $view['ok'] ) {
+		return null;
+	}
+	return array_map( 'strval', (array) $view['value'] );
 }
 
 /**
@@ -144,16 +171,16 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	if ( '' === trim( $key ) ) {
 		return true;
 	}
-	// The meta_key column compares under a collation that ignores case, accents and trailing
-	// spaces, so update_metadata()'s `WHERE meta_key = %s` treats 'wp_capabilitiés ' as the real
-	// 'wp_capabilities' row. The list and the pattern below therefore compare folded keys, with
-	// aafm_fold_meta_key() applied to both sides. The fold can only add matches, so no key blocked
-	// before becomes allowed. It misses some collation equivalences, full-width letters for one;
-	// every write through the write-contract helper refuses those rows on its own.
-	$key = trim( $key );
-	if ( is_protected_meta( $key, 'post' ) ) {
-		return true;
-	}
+	// Three checks, and any one refuses. (a) The trimmed key against the list after strtolower(),
+	// is_protected_meta(), and the capabilities pattern, case-insensitive. (b) The meta_key column
+	// compares under a collation that also ignores accents, trailing spaces and some invisible
+	// characters, so when the key or a listed entry holds anything outside [A-Za-z0-9_-] the
+	// database says which entries and which stored spellings it treats as this key, and (a) runs on
+	// each of them. A failed query refuses. (c) On the same condition, (a) also runs on the key
+	// reduced to [A-Za-z0-9_-] after remove_accents() with the en_US map, for a per-blog key no row
+	// carries yet; that reduction is best effort. A key and a list of only [A-Za-z0-9_-] skip (b)
+	// and (c): the collations WordPress installs equate no two such strings strtolower() keeps apart.
+	$key     = trim( $key );
 	$builtin = array_merge(
 		array(
 			'session_tokens',
@@ -189,13 +216,30 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	 */
 	$extra   = (array) apply_filters( 'aafm_hard_blocked_meta_keys', array() );
 	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	$folded  = aafm_fold_meta_key( $key );
-	if ( in_array( $folded, array_map( 'aafm_fold_meta_key', $blocked ), true ) ) {
+	$lower   = array_map( 'strtolower', $blocked );
+	// Check (a). The pattern takes any prefix*capabilities form, including multisite per-blog keys
+	// (wp_2_capabilities), and the `i` modifier keeps a mixed-case spelling from slipping past.
+	$blocks = static function ( string $candidate ) use ( $lower, $wpdb ): bool {
+		return is_protected_meta( $candidate, 'post' )
+			|| in_array( strtolower( $candidate ), $lower, true )
+			|| (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/i', $candidate );
+	};
+	if ( $blocks( $key ) ) {
 		return true;
 	}
-	// Any prefix*capabilities form, including multisite per-blog keys (wp_2_capabilities), matched
-	// on the folded key.
-	return (bool) preg_match( '/^' . preg_quote( aafm_fold_meta_key( $wpdb->prefix ), '/' ) . '\d*_?capabilities$/', $folded );
+	if ( 1 === preg_match( '/^[A-Za-z0-9_-]*\z/', $key . implode( '', $blocked ) ) ) {
+		return false;
+	}
+	$matches = aafm_meta_key_collation_matches( $key, $blocked );
+	if ( null === $matches ) {
+		return true;
+	}
+	foreach ( $matches as $match ) {
+		if ( $blocks( $match ) ) {
+			return true;
+		}
+	}
+	return $blocks( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) );
 }
 
 /**
@@ -317,16 +361,36 @@ function aafm_scoped_meta_has_star( string $option_name ): bool {
  * @return string|WP_Error
  */
 function aafm_validate_scoped_meta_key( string $key, callable $hard_block, callable $deny_has_star, callable $denied_keys, callable $allow_has_star, callable $allowed_keys, string $error_code, string $error_message ) {
-	$key     = trim( (string) $key );
-	$exposed = '' !== $key
-		&& '*' !== $key                             // floor 1: the sentinel is never addressable.
-		&& ! $hard_block( $key )                    // floor 1 (absolute).
-		&& ! $deny_has_star()                       // floor 2: deny-all kill switch.
-		&& ! in_array( aafm_fold_meta_key( $key ), array_map( 'aafm_fold_meta_key', $denied_keys() ), true ) // floor 2: explicit deny, folded like the hard block.
-		&& ( $allow_has_star() || in_array( $key, $allowed_keys(), true ) ); // floor 3.
+	$key   = trim( (string) $key );
+	$error = new WP_Error( $error_code, $error_message );
+	if ( '' === $key
+		|| '*' === $key         // floor 1: the sentinel is never addressable.
+		|| $hard_block( $key )  // floor 1 (absolute).
+		|| $deny_has_star()     // floor 2: deny-all kill switch.
+	) {
+		return $error;
+	}
 
-	if ( ! $exposed ) {
-		return new WP_Error( $error_code, $error_message );
+	// Floor 2, explicit deny, with the hard block's three checks: (a) strtolower() membership; for
+	// a key or entry outside [A-Za-z0-9_-], (b) every entry and stored spelling the database treats
+	// as this key, with a failed query refusing, and (c) the en_US ASCII reduction.
+	$denied = array_values( array_map( 'strval', $denied_keys() ) );
+	$lower  = array_map( 'strtolower', $denied );
+	$denies = static function ( string $candidate ) use ( $lower ): bool {
+		return in_array( strtolower( $candidate ), $lower, true );
+	};
+	if ( $denies( $key ) ) {
+		return $error;
+	}
+	if ( array() !== $denied && 1 !== preg_match( '/^[A-Za-z0-9_-]*\z/', $key . implode( '', $denied ) ) ) {
+		$matches = aafm_meta_key_collation_matches( $key, $denied );
+		if ( null === $matches || array() !== array_filter( $matches, $denies ) || $denies( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) ) ) {
+			return $error;
+		}
+	}
+
+	if ( ! $allow_has_star() && ! in_array( $key, $allowed_keys(), true ) ) { // floor 3, byte-exact.
+		return $error;
 	}
 	return $key;
 }
@@ -845,16 +909,16 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 	if ( '' === trim( $key ) ) {
 		return true;
 	}
-	// The meta_key column compares under a collation that ignores case, accents and trailing
-	// spaces, so update_metadata()'s `WHERE meta_key = %s` treats 'wp_capabilitiés ' as the real
-	// 'wp_capabilities' row. The list and the pattern below therefore compare folded keys, with
-	// aafm_fold_meta_key() applied to both sides. The fold can only add matches, so no key blocked
-	// before becomes allowed. It misses some collation equivalences, full-width letters for one;
-	// every write through the write-contract helper refuses those rows on its own.
-	$key = trim( $key );
-	if ( is_protected_meta( $key, 'user' ) ) {
-		return true;
-	}
+	// Three checks, and any one refuses. (a) The trimmed key against the list after strtolower(),
+	// is_protected_meta(), and the capabilities pattern, case-insensitive. (b) The meta_key column
+	// compares under a collation that also ignores accents, trailing spaces and some invisible
+	// characters, so when the key or a listed entry holds anything outside [A-Za-z0-9_-] the
+	// database says which entries and which stored spellings it treats as this key, and (a) runs on
+	// each of them. A failed query refuses. (c) On the same condition, (a) also runs on the key
+	// reduced to [A-Za-z0-9_-] after remove_accents() with the en_US map, for a per-blog key no row
+	// carries yet; that reduction is best effort. A key and a list of only [A-Za-z0-9_-] skip (b)
+	// and (c): the collations WordPress installs equate no two such strings strtolower() keeps apart.
+	$key     = trim( $key );
 	$builtin = array(
 		'session_tokens',
 		'_application_passwords',
@@ -880,13 +944,30 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 	 */
 	$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
 	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	$folded  = aafm_fold_meta_key( $key );
-	if ( in_array( $folded, array_map( 'aafm_fold_meta_key', $blocked ), true ) ) {
+	$lower   = array_map( 'strtolower', $blocked );
+	// Check (a). The pattern takes any prefix*capabilities / *user_level form, incl. multisite
+	// per-blog (wp_2_capabilities), and the `i` modifier keeps a mixed-case spelling from slipping past.
+	$blocks = static function ( string $candidate ) use ( $lower, $wpdb ): bool {
+		return is_protected_meta( $candidate, 'user' )
+			|| in_array( strtolower( $candidate ), $lower, true )
+			|| (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i', $candidate );
+	};
+	if ( $blocks( $key ) ) {
 		return true;
 	}
-	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities),
-	// matched on the folded key.
-	return (bool) preg_match( '/^' . preg_quote( aafm_fold_meta_key( $wpdb->prefix ), '/' ) . '\d*_?(capabilities|user_level)$/', $folded );
+	if ( 1 === preg_match( '/^[A-Za-z0-9_-]*\z/', $key . implode( '', $blocked ) ) ) {
+		return false;
+	}
+	$matches = aafm_meta_key_collation_matches( $key, $blocked );
+	if ( null === $matches ) {
+		return true;
+	}
+	foreach ( $matches as $match ) {
+		if ( $blocks( $match ) ) {
+			return true;
+		}
+	}
+	return $blocks( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) );
 }
 
 /**

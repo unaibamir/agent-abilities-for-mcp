@@ -131,4 +131,29 @@ final class GetAllPostMetaTest extends TestCase {
 		$this->assertSame( '{}', wp_json_encode( $out['meta'] ) );
 		$this->assertEmpty( (array) $out['meta'] );
 	}
+
+	/**
+	 * A pure read through core: a register_meta() default still appears for a key the post does
+	 * not carry, exactly as get_post_meta() returns it.
+	 */
+	public function test_a_register_meta_default_still_appears_for_an_absent_key(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_with_default' ) );
+		register_post_meta(
+			'post',
+			'aafm_with_default',
+			array(
+				'type'    => 'string',
+				'single'  => true,
+				'default' => 'from-default',
+			)
+		);
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		$out = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
+		unregister_post_meta( 'post', 'aafm_with_default' );
+
+		$this->assertSame( array( 'aafm_with_default' => 'from-default' ), (array) $out['meta'] );
+	}
 }

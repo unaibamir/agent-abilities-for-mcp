@@ -14,14 +14,6 @@ includes/abilities/media.php|aafm_finish_media_upload|get_post_meta|2
 includes/abilities/media.php|aafm_finish_media_upload|update_post_meta|1
 includes/abilities/menus.php|aafm_menu_item_target_is_gone|get_post_meta|1
 includes/abilities/menus.php|aafm_menu_item_target_is_gone|get_post_meta|2
-includes/abilities/meta.php|aafm_exec_delete_post_meta|delete_post_meta|1
-includes/abilities/meta.php|aafm_exec_delete_post_meta|metadata_exists|1
-includes/abilities/meta.php|aafm_exec_get_all_post_meta|get_post_meta|1
-includes/abilities/meta.php|aafm_exec_get_all_post_meta|get_post_meta|2
-includes/abilities/meta.php|aafm_exec_get_post_meta|get_post_meta|1
-includes/abilities/meta.php|aafm_exec_update_post_meta|get_post_meta|1
-includes/abilities/meta.php|aafm_exec_update_post_meta|get_post_meta|2
-includes/abilities/meta.php|aafm_exec_update_post_meta|update_post_meta|1
 includes/abilities/rankmath.php|aafm_exec_rankmath_get_schema|get_post_meta|1
 includes/abilities/rankmath.php|aafm_exec_rankmath_update_post|get_post_meta|1
 includes/abilities/rankmath.php|aafm_exec_rankmath_update_post|get_post_meta|2

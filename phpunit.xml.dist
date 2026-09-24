@@ -43,6 +43,7 @@
 			<file>tests/AllNew174AbilitiesWireTest.php</file>
 			<file>tests/StaleWpdbReaderSweepTest.php</file>
 			<file>tests/MetaWriteSweepTest.php</file>
+			<file>tests/MetaWriteWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

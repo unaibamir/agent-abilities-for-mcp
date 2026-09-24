@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -243,7 +244,16 @@ final class PostMetaTest extends TestCase {
 		$id = self::factory()->post->create( array( 'post_author' => $author ) );
 		update_post_meta( $id, 'subtitle', 'gone' );
 		$this->assertSame(
-			array( 'deleted' => true ),
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => 'gone',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
 			aafm_exec_delete_post_meta(
 				array(
 					'post_id'  => $id,
@@ -586,5 +596,221 @@ final class PostMetaTest extends TestCase {
 			$out,
 			'A sanitize_callback registered for a get_object_subtype_post-remapped subtype must be caught, not missed because the probe read get_post_type() instead of following the filter.'
 		);
+	}
+
+	/**
+	 * An author's post with `aafm_note` allowlisted, the current user set to that author.
+	 *
+	 * @return int Post id.
+	 */
+	private function note_post(): int {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		return self::factory()->post->create( array( 'post_author' => $author ) );
+	}
+
+	/**
+	 * Run update-post-meta for `aafm_note`.
+	 *
+	 * @param int   $id    Post id.
+	 * @param mixed $value Value.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function update_note( int $id, $value ) {
+		return aafm_exec_update_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => $value,
+			)
+		);
+	}
+
+	/**
+	 * Run delete-post-meta for `aafm_note`.
+	 *
+	 * @param int $id Post id.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function delete_note( int $id ) {
+		return aafm_exec_delete_post_meta(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+			)
+		);
+	}
+
+	/**
+	 * Assert an error with the ability's code, the status's message and identifier-only data.
+	 *
+	 * @param mixed  $out     The ability result.
+	 * @param string $status  Expected status.
+	 * @param string $message Expected message.
+	 * @param int    $id      Post id.
+	 */
+	private function assert_meta_error( $out, string $status, string $message, int $id ): void {
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( $message, $out->get_error_message() );
+		$this->assertSame(
+			array(
+				'status'    => $status,
+				'kind'      => 'post_meta',
+				'object_id' => $id,
+				'key'       => 'aafm_note',
+			),
+			$out->get_error_data()
+		);
+	}
+
+	public function test_update_meta_reports_written_with_the_previous_value(): void {
+		$id = $this->note_post();
+		update_post_meta( $id, 'aafm_note', 'old' );
+
+		$this->assertSame(
+			array(
+				'post_id'      => $id,
+				'meta_key'     => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key.
+				'value'        => 'new',
+				'status'       => 'written',
+				'previous'     => 'old',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => true,
+					'count'  => 1,
+				),
+			),
+			$this->update_note( $id, 'new' )
+		);
+	}
+
+	public function test_update_meta_reports_unchanged_with_no_write(): void {
+		$id = $this->note_post();
+		update_post_meta( $id, 'aafm_note', 'old' );
+
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key.
+				'value'    => 'old',
+				'status'   => 'unchanged',
+				'previous' => 'old',
+			),
+			$this->update_note( $id, 'old' )
+		);
+	}
+
+	public function test_update_meta_under_a_veto_false_filter_returns_the_refused_error(): void {
+		$id = $this->note_post();
+		update_post_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'update_post_metadata', '__return_false' );
+		$out = $this->update_note( $id, 'new' );
+		remove_filter( 'update_post_metadata', '__return_false' );
+
+		$this->assert_meta_error( $out, 'refused', 'The site refused or failed the write; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_post_meta( $id, 'aafm_note', true ) );
+	}
+
+	public function test_update_meta_under_a_veto_true_filter_returns_the_unconfirmed_error(): void {
+		$id = $this->note_post();
+		update_post_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'update_post_metadata', '__return_true' );
+		$out = $this->update_note( $id, 'new' );
+		remove_filter( 'update_post_metadata', '__return_true' );
+
+		$this->assert_meta_error( $out, 'unconfirmed', 'The write could not be confirmed; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_post_meta( $id, 'aafm_note', true ) );
+	}
+
+	public function test_update_meta_with_a_failed_read_back_returns_the_unconfirmed_error(): void {
+		global $wpdb;
+		$id = $this->note_post();
+		update_post_meta( $id, 'aafm_note', 'old' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		$armed      = false;
+		$arm        = static function () use ( &$armed ): void {
+			$armed = true;
+		};
+		add_action( 'updated_post_meta', $arm );
+		$fail = static function ( string $query ) use ( &$armed, $wpdb ): string {
+			return ( $armed && false !== strpos( $query, $wpdb->postmeta ) && 0 === stripos( ltrim( $query ), 'SELECT' ) ) ? '' : $query;
+		};
+		add_filter( 'query', $fail );
+		ob_start();
+		$out = $this->update_note( $id, 'new' );
+		ob_end_clean();
+		remove_filter( 'query', $fail );
+		remove_action( 'updated_post_meta', $arm );
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assert_meta_error( $out, 'unconfirmed', 'The write could not be confirmed; read the key to see its current state.', $id );
+		wp_cache_delete( $id, 'post_meta' );
+		$this->assertSame( 'new', get_post_meta( $id, 'aafm_note', true ), 'the write itself landed' );
+	}
+
+	public function test_delete_meta_reports_deleted_with_the_previous_value(): void {
+		$id = $this->note_post();
+		update_post_meta( $id, 'aafm_note', 'old' );
+
+		$this->assertSame(
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => 'old',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
+			$this->delete_note( $id )
+		);
+	}
+
+	public function test_delete_meta_of_an_absent_key_reports_absent(): void {
+		$id = $this->note_post();
+
+		$this->assertSame(
+			array(
+				'deleted' => true,
+				'status'  => 'absent',
+			),
+			$this->delete_note( $id )
+		);
+	}
+
+	public function test_delete_meta_with_a_surviving_row_returns_the_refused_error(): void {
+		$id = $this->note_post();
+		update_post_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'delete_post_metadata', '__return_true' );
+		$out = $this->delete_note( $id );
+		remove_filter( 'delete_post_metadata', '__return_true' );
+
+		$this->assert_meta_error( $out, 'refused', 'The site refused or failed the delete; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_post_meta( $id, 'aafm_note', true ) );
+	}
+
+	public function test_delete_meta_with_a_failed_baseline_read_returns_the_read_failed_error(): void {
+		global $wpdb;
+		$id = $this->note_post();
+		update_post_meta( $id, 'aafm_note', 'old' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$out = QueryFaultInjector::fail_query(
+			$wpdb->postmeta,
+			function () use ( $id ) {
+				return $this->delete_note( $id );
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assert_meta_error( $out, 'read_failed', 'The current value could not be read, so nothing was deleted. Try again.', $id );
+		wp_cache_delete( $id, 'post_meta' );
+		$this->assertSame( 'old', get_post_meta( $id, 'aafm_note', true ) );
 	}
 }

@@ -1981,7 +1981,7 @@ function aafm_redact_media( WP_Post $attachment ): array {
 		'title'     => get_the_title( $attachment ),
 		'mime_type' => $attachment->post_mime_type,
 		'url'       => (string) wp_get_attachment_url( $attachment->ID ),
-		'alt'       => (string) get_post_meta( $attachment->ID, '_wp_attachment_image_alt', true ),
+		'alt'       => (string) aafm_meta_get( 'post', $attachment->ID, '_wp_attachment_image_alt', true ),
 		'width'     => isset( $meta['width'] ) ? (int) $meta['width'] : null,
 		'height'    => isset( $meta['height'] ) ? (int) $meta['height'] : null,
 	);

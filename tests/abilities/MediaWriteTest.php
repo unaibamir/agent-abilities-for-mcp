@@ -861,4 +861,243 @@ final class MediaWriteTest extends TestCase {
 		}
 		return $count;
 	}
+
+	/**
+	 * An image attachment with image metadata, and optionally an alt row.
+	 *
+	 * @param string|null $alt Alt text to store, or null for no alt row.
+	 * @return int Attachment id.
+	 */
+	private function image_attachment( ?string $alt ): int {
+		$id = self::factory()->attachment->create_object(
+			'fixture.png',
+			0,
+			array(
+				'post_mime_type' => 'image/png',
+				'post_type'      => 'attachment',
+				'post_title'     => 'Fixture',
+			)
+		);
+		wp_update_attachment_metadata(
+			$id,
+			array(
+				'width'  => 10,
+				'height' => 20,
+				'file'   => 'fixture.png',
+			)
+		);
+		if ( null !== $alt ) {
+			update_post_meta( $id, '_wp_attachment_image_alt', $alt );
+		}
+		return $id;
+	}
+
+	/**
+	 * Run $run with every post meta load query failed once $armed is true, in the given shape.
+	 *
+	 * @param string   $shape 'no-flush' or 'real-error'.
+	 * @param bool     $armed By reference: the switch a hook flips.
+	 * @param callable $run   Code to run.
+	 * @param int      $fired By reference: how many queries were failed.
+	 * @return mixed
+	 */
+	private function with_meta_load_fault( string $shape, bool &$armed, callable $run, int &$fired ) {
+		global $wpdb;
+		$fault      = static function ( string $query ) use ( $shape, &$armed, &$fired, $wpdb ): string {
+			if ( ! $armed || false === strpos( $query, 'meta_key, meta_value FROM' ) || false === strpos( $query, $wpdb->postmeta ) ) {
+				return $query;
+			}
+			++$fired;
+			return 'no-flush' === $shape ? '' : str_replace( $wpdb->postmeta, $wpdb->postmeta . '_aafm_missing', $query );
+		};
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $fault );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $fault );
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * Both fault shapes, with and without an alt row, with and without cache addition suspended.
+	 *
+	 * @return iterable<string,array{0:string,1:?string,2:bool}>
+	 */
+	public function data_update_media_load_faults(): iterable {
+		foreach ( array( 'no-flush', 'real-error' ) as $shape ) {
+			yield "$shape, alt row" => array( $shape, 'kept', false );
+			yield "$shape, no alt row" => array( $shape, null, false );
+			yield "$shape, no alt row, cache addition suspended" => array( $shape, null, true );
+		}
+	}
+
+	/**
+	 * An update that omits alt, whose attachment metadata load fails while the response is built,
+	 * returns the error instead of a payload with null or empty fields.
+	 *
+	 * @dataProvider data_update_media_load_faults
+	 * @param string      $shape    Fault shape.
+	 * @param string|null $alt      Stored alt, or null for none.
+	 * @param bool        $suspend  Whether wp_suspend_cache_addition( true ) is set.
+	 */
+	public function test_update_media_with_its_metadata_load_faulted_returns_the_unconfirmed_error( string $shape, ?string $alt, bool $suspend ): void {
+		$this->acting_as( 'editor' );
+		$id    = $this->image_attachment( $alt );
+		$armed = false;
+		$fired = 0;
+		$arm   = static function ( int $post_id ) use ( &$armed, $id ): void {
+			if ( $post_id === $id ) {
+				wp_cache_delete( $id, 'post_meta' );
+				$armed = true;
+			}
+		};
+		add_action( 'attachment_updated', $arm, PHP_INT_MAX );
+		if ( $suspend ) {
+			wp_suspend_cache_addition( true );
+		}
+		$result = $this->with_meta_load_fault(
+			$shape,
+			$armed,
+			static function () use ( $id ) {
+				return aafm_exec_update_media(
+					array(
+						'attachment_id' => $id,
+						'title'         => 'Renamed',
+					)
+				);
+			},
+			$fired
+		);
+		if ( $suspend ) {
+			wp_suspend_cache_addition( false );
+		}
+		remove_action( 'attachment_updated', $arm, PHP_INT_MAX );
+
+		$this->assertGreaterThan( 0, $fired );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_media_write_unconfirmed', $result->get_error_code() );
+	}
+
+	public function test_update_media_alt_reports_alt_status(): void {
+		$this->acting_as( 'editor' );
+		$id = $this->image_attachment( 'old' );
+
+		$with_alt = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'alt'           => 'new',
+			)
+		);
+		$this->assertIsArray( $with_alt );
+		$this->assertArrayHasKey( 'alt_status', $with_alt );
+		$this->assertSame( 'written', $with_alt['alt_status'] );
+		$this->assertSame( 'new', $with_alt['media']['alt'] );
+
+		$again = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'alt'           => 'new',
+			)
+		);
+		$this->assertSame( 'unchanged', $again['alt_status'] );
+
+		$no_alt = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'title'         => 'Other',
+			)
+		);
+		$this->assertArrayNotHasKey( 'alt_status', $no_alt );
+	}
+
+	public function test_update_media_with_a_vetoed_alt_write_returns_the_unconfirmed_error(): void {
+		$this->acting_as( 'editor' );
+		$id   = $this->image_attachment( 'old' );
+		$veto = static function ( $check, $object_id, $meta_key ) {
+			return '_wp_attachment_image_alt' === $meta_key ? false : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$result = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'alt'           => 'new',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_media_write_unconfirmed', $result->get_error_code() );
+		$this->assertSame( 'The site refused or failed the write; read the key to see its current state.', $result->get_error_message() );
+		$this->assertSame( 'old', get_post_meta( $id, '_wp_attachment_image_alt', true ) );
+	}
+
+	/**
+	 * An upload whose response read fails removes the attachment it created: the attachment
+	 * count is the same before and after.
+	 */
+	public function test_an_upload_whose_response_read_fails_deletes_the_attachment_it_created(): void {
+		global $wpdb;
+		$this->acting_as( 'author' );
+		$count   = static function () use ( $wpdb ): int {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE post_type = %s', $wpdb->posts, 'attachment' ) );
+		};
+		$before  = $count();
+		$armed   = false;
+		$fired   = 0;
+		$created = 0;
+		$arm     = static function ( int $post_id ) use ( &$armed, &$created ): void {
+			$created = $post_id;
+			wp_cache_delete( $post_id, 'post_meta' );
+			$armed = true;
+		};
+		// The last write of the upload tail is the alt; arm once its outcome is decided, so only
+		// the response read fails.
+		$on_outcome = static function ( $outcome, $target ) use ( $arm ): void {
+			if ( '_wp_attachment_image_alt' === ( $target['key'] ?? '' ) ) {
+				$arm( (int) $target['object_id'] );
+			}
+		};
+		add_action( 'aafm_write_completed', $on_outcome, 10, 2 );
+		$result = $this->with_meta_load_fault(
+			'real-error',
+			$armed,
+			static function () {
+				return wp_get_ability( 'aafm/upload-media' )->execute(
+					array(
+						'filename'    => 'pixel.png',
+						'data_base64' => self::PNG_B64,
+						'alt'         => 'a pixel',
+					)
+				);
+			},
+			$fired
+		);
+		remove_action( 'aafm_write_completed', $on_outcome, 10 );
+
+		$this->assertGreaterThan( 0, $created, 'the upload created an attachment' );
+		$this->assertGreaterThan( 0, $fired, 'the response read was faulted' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $before, $count(), 'the attachment the upload created is gone' );
+	}
+
+	public function test_an_upload_with_alt_reports_alt_status(): void {
+		$this->acting_as( 'author' );
+		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 'pixel.png',
+				'data_base64' => self::PNG_B64,
+				'alt'         => 'a pixel',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->track_attachment_files( (int) $out['attachment_id'] );
+		$this->assertArrayHasKey( 'alt_status', $out );
+		$this->assertSame( 'written', $out['alt_status'] );
+	}
 }

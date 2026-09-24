@@ -229,13 +229,22 @@ final class WriteOutcomeLogTest extends TestCase {
 			),
 			$target
 		);
+		aafm_emit_write_outcome(
+			array(
+				'status'   => 'refused',
+				'returned' => array( (object) array( 'k' => 1 ) ),
+			),
+			$target
+		);
 
 		remove_action( 'aafm_write_completed', $observer );
 
-		$this->assertCount( 2, $seen );
+		$this->assertCount( 3, $seen );
 		$this->assertArrayHasKey( 'returned', $seen[0] );
 		$this->assertNull( $seen[0]['returned'] );
 		$this->assertFalse( $seen[1]['returned'] );
+		$this->assertArrayHasKey( 'returned', $seen[2] );
+		$this->assertNull( $seen[2]['returned'] );
 	}
 
 	public function test_a_value_whose_wakeup_throws_reaches_observers_as_null_and_the_call_returns(): void {

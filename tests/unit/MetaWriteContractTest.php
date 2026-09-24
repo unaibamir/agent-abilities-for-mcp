@@ -1269,14 +1269,16 @@ final class MetaWriteContractTest extends TestCase {
 					return null; // absent: handled as a delete call by the caller.
 			}
 		}
-		// change.
-		if ( 'array' === $baseline ) {
-			return array( 'k' => 'b' );
+		// change: array-shaped for both array baselines, 'c' for duplicate, 'new' for the rest.
+		switch ( $baseline ) {
+			case 'array':
+			case 'serialized-empty':
+				return array( 'k' => 'b' );
+			case 'duplicate':
+				return 'c';
+			default:
+				return 'new';
 		}
-		if ( 'duplicate' === $baseline ) {
-			return 'c';
-		}
-		return 'new';
 	}
 
 	private function register_transform( string $type ): void {
@@ -1682,13 +1684,13 @@ final class MetaWriteContractTest extends TestCase {
 				'confirm-read-fault'  => array( 'unchanged', null, array( array() ) ),
 			),
 			'change' => array(
-				'clean'               => array( 'written', null, array( 'new' ) ),
+				'clean'               => array( 'written', null, array( array( 'k' => 'b' ) ) ),
 				'veto-false'          => array( 'refused', null, array( array() ) ),
 				'veto-true'           => array( 'unconfirmed', null, array( array() ) ),
-				'transform'           => array( 'written', null, array( 'NEW' ) ),
+				'transform'           => array( 'written', null, array( array( 'k' => 'B' ) ) ),
 				'baseline-read-fault' => array( 'read_failed', null, array( array() ) ),
 				'write-fault'         => array( 'refused', null, array( array() ) ),
-				'confirm-read-fault'  => array( 'unconfirmed', null, array( 'new' ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( array( 'k' => 'b' ) ) ),
 			),
 			'clear'  => array(
 				'clean'               => array( 'written', null, array( '' ) ),

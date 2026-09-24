@@ -1029,10 +1029,11 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 	}
 
 	/**
-	 * Floor 3 matches the key byte for byte against the allowlist and re-runs no hard block on its
-	 * entries, so a non-ASCII entry elsewhere in the list costs an ASCII key nothing.
+	 * Floor 3 reads the floored allowlist, and the floor after the filter checks the whole filtered
+	 * list in one query, so a non-ASCII entry elsewhere in the list costs an ASCII key one gate
+	 * query, not one per entry.
 	 */
-	public function test_validating_an_ascii_key_costs_no_gate_query_when_the_allowlist_holds_a_non_ascii_entry(): void {
+	public function test_validating_an_ascii_key_costs_one_gate_query_when_the_allowlist_holds_a_non_ascii_entry(): void {
 		$allow = static function (): array {
 			return array( 'plain_key-1', 'clé_publique' );
 		};
@@ -1074,8 +1075,9 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 			);
 		}
 
-		// Per non-ASCII entry: two in the allowlist getter the loop reads (before and after its
-		// filter) and one when the loop validates that key.
+		// The loop's own read of the allowlist costs two queries (one floor pass before its filter,
+		// one after). Validating each key reads the floored list again, two more, plus one for the
+		// key's own hard block when the key is non-ASCII: 2 + 2 per ASCII key + 3 per non-ASCII key.
 		$this->assertSame(
 			array(
 				10 => 27,

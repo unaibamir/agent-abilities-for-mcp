@@ -999,4 +999,134 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 			}
 		}
 	}
+
+	/**
+	 * Run $run and count the queries that carry the gate's marker.
+	 *
+	 * @param callable $run Code to measure.
+	 * @return int
+	 */
+	private function gate_queries( callable $run ): int {
+		$count   = 0;
+		$counter = static function ( string $query ) use ( &$count ): string {
+			if ( false !== strpos( $query, 'aafm_gate_match' ) ) {
+				++$count;
+			}
+			return $query;
+		};
+		add_filter( 'query', $counter );
+		try {
+			$run();
+		} finally {
+			remove_filter( 'query', $counter );
+		}
+		return $count;
+	}
+
+	/**
+	 * Floor 3 matches the key byte for byte against the allowlist and re-runs no hard block on its
+	 * entries, so a non-ASCII entry elsewhere in the list costs an ASCII key nothing.
+	 */
+	public function test_validating_an_ascii_key_costs_no_gate_query_when_the_allowlist_holds_a_non_ascii_entry(): void {
+		$allow = static function (): array {
+			return array( 'plain_key-1', 'clé_publique' );
+		};
+		add_filter( 'aafm_allowed_meta_keys', $allow );
+		update_option( 'aafm_denied_meta_keys', array( 'secret' ) );
+
+		$result  = null;
+		$queries = $this->gate_queries(
+			static function () use ( &$result ): void {
+				$result = aafm_validate_meta_key( 'plain_key-1' );
+			}
+		);
+
+		remove_filter( 'aafm_allowed_meta_keys', $allow );
+
+		$this->assertSame( 'plain_key-1', $result );
+		$this->assertSame( 0, $queries );
+	}
+
+	/**
+	 * The rich-post meta loop validates every allowlisted key. Its gate queries grow with the
+	 * number of non-ASCII entries, not with its square.
+	 */
+	public function test_the_rich_post_meta_loop_costs_gate_queries_linear_in_the_allowlist(): void {
+		$this->acting_as( 'administrator' );
+		$post = get_post( self::factory()->post->create() );
+
+		$counts = array();
+		foreach ( array( 10, 20 ) as $n ) {
+			$keys = array();
+			for ( $i = 0; $i < $n; $i++ ) {
+				$keys[] = 0 === $i % 2 ? "plain_key_$i" : "clé_$i";
+			}
+			update_option( 'aafm_allowed_meta_keys', $keys );
+			$counts[ $n ] = $this->gate_queries(
+				static function () use ( $post ): void {
+					aafm_rich_post( $post, array( 'include_content' => false ) );
+				}
+			);
+		}
+
+		// Per non-ASCII entry: two in the allowlist getter the loop reads (before and after its
+		// filter) and one when the loop validates that key.
+		$this->assertSame(
+			array(
+				10 => 15,
+				20 => 30,
+			),
+			$counts
+		);
+	}
+
+	/**
+	 * A hard-blocked allowlist entry is still refused (by floor 1) and still left out of the
+	 * allowlist the admin screen shows and exports.
+	 */
+	public function test_a_hard_blocked_allowlist_entry_is_refused_and_left_out_of_the_allowlist(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle', 'wp_capabilities', 'wp_capabilitiés' ) );
+
+		$this->assertWPError( aafm_validate_meta_key( 'wp_capabilities' ) );
+		$this->assertWPError( aafm_validate_meta_key( 'wp_capabilitiés' ) );
+		$this->assertSame( 'subtitle', aafm_validate_meta_key( 'subtitle' ) );
+		$this->assertSame( array( 'subtitle' ), aafm_allowed_meta_keys() );
+	}
+
+	/**
+	 * The allowlist getters the admin screen and the export read keep their output: the stored
+	 * option floored before and after the post filter, and unioned with the filter for term and
+	 * user meta, with blocked keys, empties, `*` and duplicates dropped.
+	 */
+	public function test_the_allowlist_getters_keep_their_output(): void {
+		global $wpdb;
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle', 'wp_capabilities', 'clé', '', '*', 'subtitle', 'ét_pb_use_builder' ) );
+		update_option( 'aafm_exposed_term_meta_keys', array( 'color', 'wp_capabilitiés', '*' ) );
+		update_option( 'aafm_exposed_user_meta_keys', array( 'nickname', 'séssion_tokens', $wpdb->prefix . 'capabilities' ) );
+
+		$seen_default = null;
+		$post_filter  = static function ( array $base ) use ( &$seen_default ): array {
+			$seen_default = $base;
+			return array_merge( $base, array( 'from_filter', 'session_tokens', '_edit_lock' ) );
+		};
+		$add_filter   = static function ( array $base ): array {
+			return array_merge( $base, array( 'from_filter', 'two_factor_secret' ) );
+		};
+		add_filter( 'aafm_allowed_meta_keys', $post_filter );
+		add_filter( 'aafm_allowed_term_meta_keys', $add_filter );
+		add_filter( 'aafm_allowed_user_meta_keys', $add_filter );
+
+		$post = aafm_allowed_meta_keys();
+		$term = aafm_allowed_term_meta_keys();
+		$user = aafm_allowed_user_meta_keys();
+
+		remove_filter( 'aafm_allowed_meta_keys', $post_filter );
+		remove_filter( 'aafm_allowed_term_meta_keys', $add_filter );
+		remove_filter( 'aafm_allowed_user_meta_keys', $add_filter );
+
+		$this->assertSame( array( 'subtitle', 'clé', '*', 'subtitle' ), $seen_default, 'the post filter gets the floored option as its default' );
+		$this->assertSame( array( 'subtitle', 'clé', 'from_filter' ), $post );
+		$this->assertSame( array( 'color', 'from_filter', 'two_factor_secret' ), $term, 'the term floor is the post-meta hard block, which does not list two_factor_secret' );
+		$this->assertSame( array( 'nickname', 'from_filter' ), $user );
+	}
 }

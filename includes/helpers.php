@@ -123,8 +123,11 @@ function aafm_resolve_search_post_types( array $requested ): array {
  * the spellings under the collation and could hand back only a harmless one. Every value comes back
  * as bytes, so tables with different collations still union.
  *
- * ponytail: no memo, so every call on a non-ASCII key costs one indexed query; memoise per request
- * if a caller ever loops over many such keys.
+ * ponytail: no memo. Each gate call on a non-ASCII key, or on any key once a listed entry is
+ * non-ASCII, costs one query; validating a key makes at most two (hard block, then deny list) and
+ * floor 3 makes none, so the allowlist loops cost O(N) per post. Add a request memo on the list
+ * branch only if a profile shows it. The row branch reads stored rows and must never be memoised
+ * across a write.
  *
  * @param string   $key     The trimmed meta key.
  * @param string[] $entries The listed keys to compare with it.
@@ -249,10 +252,13 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
  * rather than flattening:
  *
  * - $pre_filter_floor: post-meta hard-block-floors the option value BEFORE handing it to the
- *   filter as the filter's own default (so a filter reading its $default argument never sees a
- *   blocked key); term-meta and user-meta skip this pre-floor and pass the raw option straight
- *   through, because their filter result is unioned with the option afterward anyway (see next
- *   point), making a pre-floor on the base redundant rather than protective for them.
+ *   filter as the filter's own default, so the allowlist the admin screen shows and exports never
+ *   passes a blocked key to the filter; term-meta and user-meta skip this pre-floor and pass the
+ *   raw option straight through, because their filter result is unioned with the option
+ *   afterward anyway (see next point), making a pre-floor on the base redundant rather than
+ *   protective for them. Floor 3 of aafm_validate_scoped_meta_key() reads the list with neither
+ *   floor, so on that path the post-meta filter gets the raw option too; floor 1 has already
+ *   refused a blocked key, so a blocked entry there can never match.
  * - $filter_replaces: post-meta's filter result REPLACES the base outright, so a legacy or
  *   rogue filter that returns an unrelated array (or empty) can shrink or clear the whole
  *   allowlist. Term-meta and user-meta instead UNION the filter result with the option base
@@ -273,10 +279,13 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
  * @return list<string>
  */
 function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag, callable $hard_block, bool $pre_filter_floor, bool $filter_replaces ): array {
+	// Set only by floor 3 of aafm_validate_scoped_meta_key(), for the length of one read.
+	$floored = empty( $GLOBALS['aafm_allowlist_read_unfloored'] );
+
 	$stored = get_option( $option_name, array() );
 	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
 
-	if ( $pre_filter_floor ) {
+	if ( $pre_filter_floor && $floored ) {
 		$stored = array_values(
 			array_filter(
 				$stored,
@@ -297,8 +306,8 @@ function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag,
 		array_unique(
 			array_filter(
 				array_map( 'strval', $merged ),
-				static function ( string $k ) use ( $hard_block ): bool {
-					return '' !== $k && '*' !== $k && ! $hard_block( $k );
+				static function ( string $k ) use ( $hard_block, $floored ): bool {
+					return '' !== $k && '*' !== $k && ( ! $floored || ! $hard_block( $k ) );
 				}
 			)
 		)
@@ -389,8 +398,20 @@ function aafm_validate_scoped_meta_key( string $key, callable $hard_block, calla
 		}
 	}
 
-	if ( ! $allow_has_star() && ! in_array( $key, $allowed_keys(), true ) ) { // floor 3, byte-exact.
-		return $error;
+	// Floor 3, byte-exact. The key has already passed floor 1, so an entry equal to it is not
+	// blocked, and the list is read without running the hard block on each entry again: that
+	// would cost a gate query per entry on every validate once any key is non-ASCII.
+	if ( ! $allow_has_star() ) {
+		$previous                                 = $GLOBALS['aafm_allowlist_read_unfloored'] ?? false;
+		$GLOBALS['aafm_allowlist_read_unfloored'] = true;
+		try {
+			$allowed = $allowed_keys();
+		} finally {
+			$GLOBALS['aafm_allowlist_read_unfloored'] = $previous;
+		}
+		if ( ! in_array( $key, $allowed, true ) ) {
+			return $error;
+		}
 	}
 	return $key;
 }

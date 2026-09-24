@@ -1100,4 +1100,153 @@ final class MediaWriteTest extends TestCase {
 		$this->assertArrayHasKey( 'alt_status', $out );
 		$this->assertSame( 'written', $out['alt_status'] );
 	}
+
+	/**
+	 * Count attachments by a direct query.
+	 *
+	 * @return int
+	 */
+	private function attachment_count(): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE post_type = %s', $wpdb->posts, 'attachment' ) );
+	}
+
+	/**
+	 * Record the id of the next attachment media_handle_sideload() creates.
+	 *
+	 * @param int $created By reference: the created attachment id.
+	 * @return callable The listener, to remove afterwards.
+	 */
+	private function capture_created_attachment( int &$created ): callable {
+		$listener = static function ( int $post_id ) use ( &$created ): void {
+			$created = $post_id;
+		};
+		add_action( 'add_attachment', $listener );
+		return $listener;
+	}
+
+	/**
+	 * An upload whose response read fails deletes exactly the attachment it created, and returns
+	 * the media error.
+	 */
+	public function test_a_failed_upload_deletes_only_the_attachment_it_created(): void {
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$before    = $this->attachment_count();
+		$created   = 0;
+		$capture   = $this->capture_created_attachment( $created );
+		$armed     = false;
+		$fired     = 0;
+		$arm       = static function ( $outcome, $target ) use ( &$armed ): void {
+			if ( '_wp_attachment_image_alt' === ( $target['key'] ?? '' ) ) {
+				wp_cache_delete( (int) $target['object_id'], 'post_meta' );
+				$armed = true;
+			}
+		};
+		add_action( 'aafm_write_completed', $arm, 10, 2 );
+		$result = $this->with_meta_load_fault(
+			'real-error',
+			$armed,
+			static function () {
+				return aafm_exec_upload_media(
+					array(
+						'filename'    => 'pixel.png',
+						'data_base64' => self::PNG_B64,
+						'alt'         => 'a pixel',
+					)
+				);
+			},
+			$fired
+		);
+		remove_action( 'aafm_write_completed', $arm, 10 );
+		remove_action( 'add_attachment', $capture );
+
+		$this->assertGreaterThan( 0, $created );
+		$this->assertGreaterThan( 0, $fired );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_media_write_unconfirmed', $result->get_error_code() );
+		$this->assertNull( get_post( $created ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+		$this->assertSame( $before, $this->attachment_count() );
+	}
+
+	/**
+	 * A throw after the attachment exists deletes it and reaches the caller unchanged.
+	 */
+	public function test_a_throw_after_the_sideload_deletes_the_attachment_and_is_rethrown(): void {
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$before    = $this->attachment_count();
+		$created   = 0;
+		$capture   = $this->capture_created_attachment( $created );
+		$throw     = static function () {
+			throw new \RuntimeException( 'sanitizer exploded' );
+		};
+		add_filter( 'sanitize_post_meta__wp_attachment_image_alt', $throw );
+
+		$thrown = null;
+		try {
+			aafm_exec_upload_media(
+				array(
+					'filename'    => 'pixel.png',
+					'data_base64' => self::PNG_B64,
+					'alt'         => 'a pixel',
+				)
+			);
+		} catch ( \RuntimeException $e ) {
+			$thrown = $e;
+		} finally {
+			remove_filter( 'sanitize_post_meta__wp_attachment_image_alt', $throw );
+			remove_action( 'add_attachment', $capture );
+		}
+
+		$this->assertInstanceOf( \RuntimeException::class, $thrown );
+		$this->assertSame( 'sanitizer exploded', $thrown->getMessage() );
+		$this->assertGreaterThan( 0, $created );
+		$this->assertNull( get_post( $created ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+		$this->assertSame( $before, $this->attachment_count() );
+	}
+
+	/**
+	 * An alt value the site's sanitizer turns into an array fails validation in the helper. Each
+	 * ability keeps the code it returned for that case before: upload-media aafm_error with its
+	 * attachment deleted, update-media aafm_media_write_unconfirmed.
+	 */
+	public function test_an_alt_the_site_turns_into_an_array_keeps_each_abilitys_error_code(): void {
+		$this->acting_as( 'editor' );
+		$to_array = static function ( $value ) {
+			return array( $value );
+		};
+		add_filter( 'sanitize_post_meta__wp_attachment_image_alt', $to_array );
+
+		$id     = $this->image_attachment( 'old' );
+		$update = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'alt'           => 'new',
+			)
+		);
+
+		$before  = $this->attachment_count();
+		$created = 0;
+		$capture = $this->capture_created_attachment( $created );
+		$upload  = aafm_exec_upload_media(
+			array(
+				'filename'    => 'pixel.png',
+				'data_base64' => self::PNG_B64,
+				'alt'         => 'a pixel',
+			)
+		);
+		remove_action( 'add_attachment', $capture );
+		remove_filter( 'sanitize_post_meta__wp_attachment_image_alt', $to_array );
+
+		$this->assertInstanceOf( \WP_Error::class, $update );
+		$this->assertSame( 'aafm_media_write_unconfirmed', $update->get_error_code() );
+		$this->assertInstanceOf( \WP_Error::class, $upload );
+		$this->assertSame( 'aafm_error', $upload->get_error_code() );
+		$this->assertNull( get_post( $created ) );
+		$this->assertSame( $before, $this->attachment_count() );
+	}
 }

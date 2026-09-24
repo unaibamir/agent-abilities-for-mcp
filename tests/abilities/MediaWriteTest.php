@@ -41,6 +41,20 @@ final class MediaWriteTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/set-featured-image', 'aafm/upload-media', 'aafm/update-media', 'aafm/delete-media' ) );
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+
+		// Record every file core's upload handler writes, before any attachment row exists. A test
+		// whose attachment row is deleted, or never gets its file path, would otherwise leave the
+		// file behind, because track_attachment_files() reads the path from the row.
+		add_filter(
+			'wp_handle_upload',
+			function ( $upload ) {
+				if ( is_array( $upload ) && isset( $upload['file'] ) && is_string( $upload['file'] ) && '' !== $upload['file'] ) {
+					$this->written_files[] = $upload['file'];
+				}
+				return $upload;
+			},
+			PHP_INT_MAX
+		);
 	}
 
 	public function tear_down(): void {

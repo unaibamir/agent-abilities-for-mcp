@@ -71,6 +71,13 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 	 */
 	private int $listing_id;
 
+	/**
+	 * Absolute paths written by upload cases, cleaned up in tear_down().
+	 *
+	 * @var array<int,string>
+	 */
+	private array $written_files = array();
+
 	public function set_up(): void {
 		parent::set_up();
 
@@ -125,9 +132,29 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 				'post_status' => 'publish',
 			)
 		);
+
+		// Record every file core's upload handler writes, before any attachment row exists. The
+		// upload-media-from-url case creates an attachment that is rolled back with the test's
+		// database changes, while its file stays on disk unless tear_down() deletes it.
+		add_filter(
+			'wp_handle_upload',
+			function ( $upload ) {
+				if ( is_array( $upload ) && isset( $upload['file'] ) && is_string( $upload['file'] ) && '' !== $upload['file'] ) {
+					$this->written_files[] = $upload['file'];
+				}
+				return $upload;
+			},
+			PHP_INT_MAX
+		);
 	}
 
 	public function tear_down(): void {
+		foreach ( $this->written_files as $file ) {
+			if ( '' !== $file && file_exists( $file ) ) {
+				wp_delete_file( $file );
+			}
+		}
+		$this->written_files = array();
 		remove_filter( 'aafm_integration_active_tec', '__return_true' );
 		remove_filter( 'aafm_integration_active_event_tickets', '__return_true' );
 		remove_filter( 'aafm_integration_active_slim_seo', '__return_true' );

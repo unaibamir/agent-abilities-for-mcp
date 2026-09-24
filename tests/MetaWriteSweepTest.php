@@ -149,9 +149,11 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	/**
-	 * Index of the closing bracket matching the opener at $open_index, tracking nesting depth. For
-	 * braces, an interpolation opener inside a string, `{$` or `${`, opens a level like `{` does,
-	 * because its closer is a plain `}`.
+	 * Index of the closing bracket matching the opener at $open_index, tracking nesting depth.
+	 * Brackets come only from punctuation tokens, which token_get_all() returns as plain strings,
+	 * never from string content: the literal `}` at the end of `"{$m}}"` is part of a string token
+	 * and closes nothing. For braces, an interpolation opener inside a string, `{$` or `${`, opens a
+	 * level like `{` does, because its closer is a plain `}`.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens     token_get_all() output.
 	 * @param int                                           $open_index Index of the opening bracket.
@@ -163,10 +165,9 @@ final class MetaWriteSweepTest extends TestCase {
 		$total = count( $tokens );
 		for ( $j = $open_index; $j < $total; $j++ ) {
 			$token = $tokens[ $j ];
-			$text  = is_array( $token ) ? $token[1] : $token;
-			if ( $open_char === $text || ( '{' === $open_char && is_array( $token ) && in_array( $token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+			if ( $open_char === $token || ( '{' === $open_char && is_array( $token ) && in_array( $token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
 				++$depth;
-			} elseif ( $close_char === $text ) {
+			} elseif ( $close_char === $token ) {
 				--$depth;
 				if ( 0 === $depth ) {
 					return $j;
@@ -213,13 +214,23 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	/**
-	 * Decode a T_CONSTANT_ENCAPSED_STRING token's literal value (single or double quoted, simple
-	 * escapes only - fixtures and real source never need more).
+	 * A quoted literal's raw text without PHP's optional binary prefix: `b'x'` and `B"x"` are the
+	 * same literals as `'x'` and `"x"`.
+	 *
+	 * @param string $raw The raw token text, quotes included.
+	 */
+	private function strip_binary_prefix( string $raw ): string {
+		return ( '' !== $raw && ( 'b' === $raw[0] || 'B' === $raw[0] ) ) ? substr( $raw, 1 ) : $raw;
+	}
+
+	/**
+	 * Decode a T_CONSTANT_ENCAPSED_STRING token's literal value (single or double quoted, binary
+	 * prefix included, simple escapes only - fixtures and real source never need more).
 	 *
 	 * @param string $raw The raw token text, quotes included.
 	 */
 	private function decode_string_literal( string $raw ): string {
-		$inner = substr( $raw, 1, -1 );
+		$inner = substr( $this->strip_binary_prefix( $raw ), 1, -1 );
 		return str_replace( array( "\\'", '\\"', '\\\\' ), array( "'", '"', '\\' ), $inner );
 	}
 
@@ -232,21 +243,21 @@ final class MetaWriteSweepTest extends TestCase {
 	 * plus \" in a double-quoted string only; any other backslash stays as written. A single-quoted
 	 * literal decodes only \\ and \', and a nowdoc decodes nothing.
 	 *
-	 * @param string $text    The text: a whole quoted literal for 'single' and 'double', otherwise
-	 *                        the literal part's raw token text.
+	 * @param string $text    The text: a whole quoted literal for 'single' and 'double', binary
+	 *                        prefix included, otherwise the literal part's raw token text.
 	 * @param string $context 'single', 'double' (a quoted literal), 'interpolated' (a part of a
 	 *                        double-quoted interpolated string), 'heredoc' or 'nowdoc'.
 	 */
 	private function decode_sql_literal( string $text, string $context ): string {
 		if ( 'single' === $context ) {
-			return (string) preg_replace( "/\\\\([\\\\'])/", '$1', substr( $text, 1, -1 ) );
+			return (string) preg_replace( "/\\\\([\\\\'])/", '$1', substr( $this->strip_binary_prefix( $text ), 1, -1 ) );
 		}
 		if ( 'nowdoc' === $context ) {
 			return $text;
 		}
 		$in_double_quotes = in_array( $context, array( 'double', 'interpolated' ), true );
 		if ( 'double' === $context ) {
-			$text = substr( $text, 1, -1 );
+			$text = substr( $this->strip_binary_prefix( $text ), 1, -1 );
 		}
 		$simple = array(
 			'n'  => "\n",
@@ -411,8 +422,8 @@ final class MetaWriteSweepTest extends TestCase {
 		// boundary, each term followed by one space. A boundary is a ';', a block '{' or '}', a close
 		// tag, or a ':' that does not close a pending ternary '?', such as the ':' of a case or
 		// default label, of an alternative-syntax block or of a return type. An interpolation brace
-		// (`{$` or `${` and the '}' that closes it) and a member-selector brace (`->{` or `?->{`) are
-		// not boundaries. At every boundary record_sql_statement() checks the joined text for a
+		// (`{$` or `${` and the '}' that closes it) and a selector brace (`->{`, `?->{`, `::{`, or the
+		// `{` of an out-of-string `${`) are not boundaries. At every boundary record_sql_statement() checks the joined text for a
 		// mutation verb plus a banned table fragment and the buffer resets, so a literal in an if,
 		// switch or foreach header, or in a case label, never joins the statement after it. Terms
 		// joined by any means inside one statement (concatenation, an argument list, an array
@@ -448,15 +459,18 @@ final class MetaWriteSweepTest extends TestCase {
 				array_pop( $nesting );
 			} elseif ( T_CLOSE_TAG === $ttype ) {
 				$boundary = true;
-			} elseif ( '"' === $token ) {
-				if ( 'double' === end( $nesting ) ) {
-					array_pop( $nesting );
-				} else {
-					$nesting[] = 'double';
-				}
+			} elseif ( '"' === $token && 'double' === end( $nesting ) ) {
+				array_pop( $nesting );
+			} elseif ( '"' === $token || 'b"' === $token || 'B"' === $token ) {
+				// An interpolated string opens on `"` or, with the binary prefix, on `b"` or `B"`,
+				// and always closes on a plain `"`.
+				$nesting[] = 'double';
 			} elseif ( '{' === $token ) {
+				// A selector brace follows `->`, `?->` or `::`, or is the `{` of an out-of-string
+				// `${` variable-variable. Any other `{` opens a block.
 				$prev_idx    = $this->previous_significant_index( $tokens, $i - 1 );
-				$is_selector = null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $operator_tokens, true );
+				$prev_token  = null !== $prev_idx ? $tokens[ $prev_idx ] : null;
+				$is_selector = '$' === $prev_token || ( is_array( $prev_token ) && ( T_DOUBLE_COLON === $prev_token[0] || in_array( $prev_token[0], $operator_tokens, true ) ) );
 				$nesting[]   = $is_selector ? 'selector' : 'block';
 				$boundary    = ! $is_selector;
 			} elseif ( '}' === $token ) {
@@ -484,7 +498,7 @@ final class MetaWriteSweepTest extends TestCase {
 			}
 			if ( T_CONSTANT_ENCAPSED_STRING === $ttype || T_ENCAPSED_AND_WHITESPACE === $ttype ) {
 				if ( T_CONSTANT_ENCAPSED_STRING === $ttype ) {
-					$context = '"' === $text[0] ? 'double' : 'single';
+					$context = '"' === $this->strip_binary_prefix( $text )[0] ? 'double' : 'single';
 				} else {
 					$innermost = end( $nesting );
 					$context   = 'double' === $innermost ? 'interpolated' : ( 'nowdoc' === $innermost ? 'nowdoc' : 'heredoc' );
@@ -500,7 +514,7 @@ final class MetaWriteSweepTest extends TestCase {
 			// pre-write existence check in the NEXT function is never mistaken for a post-write read
 			// carried over from an earlier one.
 			if ( $is_comments_file ) {
-				if ( '{' === $token || ( is_array( $token ) && T_CURLY_OPEN === $token[0] ) ) {
+				if ( '{' === $token || ( is_array( $token ) && in_array( $token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
 					++$brace_depth;
 				} elseif ( '}' === $token ) {
 					--$brace_depth;
@@ -1016,6 +1030,41 @@ final class MetaWriteSweepTest extends TestCase {
 	public function test_flags_a_get_comment_after_wp_trash_comment_in_the_comments_file(): void {
 		$source = "<?php\nfunction f( \$id ) {\n\twp_trash_comment( \$id );\n\t\$c = get_comment( \$id );\n}\n";
 		$this->assertSame( array( 'includes/abilities/comments.php|f|get_comment|1' ), $this->violation_keys( $source, 'includes/abilities/comments.php' ) );
+	}
+
+	public function test_a_dollar_brace_interpolation_keeps_the_comments_file_write_scope_open(): void {
+		$source = "<?php\n" . 'function f( $id, $m ) { wp_update_comment( array( \'comment_ID\' => $id ) ); $s = "${m}"; $c = get_comment( $id ); }';
+		$this->assertSame( array( 'includes/abilities/comments.php|f|get_comment|1' ), $this->violation_keys( $source, 'includes/abilities/comments.php' ) );
+	}
+
+	public function test_flags_a_verb_after_an_escaped_newline_in_a_binary_double_quoted_string(): void {
+		$source = "<?php\n" . 'function f( $wpdb ) { $wpdb->query( b"\nDELETE FROM wp_postmeta WHERE meta_id = 1" ); }';
+		$this->assertSame( array( 'includes/fixture.php|f|sql|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_a_binary_interpolated_string_keeps_the_string_nesting_in_step(): void {
+		$source = "<?php\n" . 'function f( $wpdb, $a, $y ) { $wpdb->query( "DELETE FROM {$a[b"x$y"]} {$wpdb->postmeta}" ); }';
+		$this->assertSame( array( 'includes/fixture.php|f|sql|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_binary_string_literal_holding_a_banned_name(): void {
+		$source = "<?php\n" . 'function f() {' . "\n" . 'call_user_func( b\'update_post_meta\', 1, \'k\', \'v\' );' . "\n" . 'call_user_func( B"delete_post_meta", 1, \'k\' ); }';
+		$this->assertSame( array( 'includes/fixture.php|f|update_post_meta|1', 'includes/fixture.php|f|delete_post_meta|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_sql_string_joined_across_an_out_of_string_variable_variable(): void {
+		$source = "<?php\n" . 'function f( $wpdb ) { $wpdb->query( \'DELETE FROM \' . ${\'t\'} . $wpdb->postmeta ); }';
+		$this->assertSame( array( 'includes/fixture.php|f|sql|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_sql_string_joined_across_a_static_member_selector(): void {
+		$source = "<?php\n" . 'function f( $wpdb ) { $wpdb->query( \'DELETE FROM \' . Foo::{\'t\'}() . $wpdb->postmeta ); }';
+		$this->assertSame( array( 'includes/fixture.php|f|sql|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_a_brace_inside_string_content_never_closes_a_wpdb_method_selector(): void {
+		$source = "<?php\n" . 'function f( $wpdb, $m ) { $wpdb->{substr("{$m}}",0,-1)}( $wpdb->postmeta, array( \'meta_value\' => \'x\' ), array( \'meta_id\' => 1 ) ); }';
+		$this->assertSame( array( 'includes/fixture.php|f|$wpdb->{substr("{$m}}",0,-1)}|1' ), $this->violation_keys( $source, 'includes/fixture.php' ) );
 	}
 
 	/**

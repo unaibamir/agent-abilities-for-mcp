@@ -907,84 +907,74 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 	// From here the attachment exists, so every way out that is not a success deletes it: a
 	// returned error, and a throw, which is rethrown unchanged once the attachment is gone. Only
 	// the attachment this call created is ever deleted.
+	//
+	// The sideload can fill post_content from the image's own IPTC/EXIF caption, so that column is
+	// run through wp_kses_post(), the policy update-media applies to a description, and the
+	// sanitized value must be confirmed as stored. The caller's alt text then wins over any alt the
+	// sideload set from the image metadata. The response is built inside a checked-read scope, so a
+	// failed metadata read is an error, never an empty or null field.
+	$attachment_id = (int) $attachment_id;
 	try {
-		$response = aafm_complete_media_upload( (int) $attachment_id, $alt );
+		$response = ( static function () use ( $attachment_id, $alt ) {
+			// get_post_field() with the 'raw' context reads storage directly, unaffected by any display
+			// filter, so the comparison and the rewrite act on the stored value.
+			$sideloaded_field   = get_post_field( 'post_content', $attachment_id, 'raw' );
+			$sideloaded_content = is_string( $sideloaded_field ) ? $sideloaded_field : '';
+			$sanitized_content  = wp_kses_post( $sideloaded_content );
+			if ( $sanitized_content !== $sideloaded_content ) {
+				$updated = wp_update_post(
+					wp_slash(
+						array(
+							'ID'           => $attachment_id,
+							'post_content' => $sanitized_content,
+						)
+					),
+					true
+				);
+				if ( is_wp_error( $updated ) || ! aafm_post_field_confirm_logged( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
+					return aafm_generic_error();
+				}
+			}
+
+			$alt_status = null;
+			if ( null !== $alt ) {
+				$alt_result = aafm_meta_set( 'post', $attachment_id, '_wp_attachment_image_alt', aafm_sanitize_plain_text( $alt ), (string) get_object_subtype( 'post', $attachment_id ) );
+				if ( is_wp_error( $alt_result ) ) {
+					// The same code this upload returned for an alt it could not store before.
+					return aafm_generic_error();
+				}
+				if ( ! in_array( $alt_result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+					return aafm_meta_write_error( $alt_result['status'], 'write', 'post', $attachment_id, '_wp_attachment_image_alt' );
+				}
+				$alt_status = $alt_result['status'];
+			}
+
+			$attachment = get_post( $attachment_id );
+			if ( ! $attachment instanceof WP_Post ) {
+				return aafm_generic_error();
+			}
+
+			// The redacted media shape: public URL only, never an absolute path.
+			$response = aafm_with_checked_reads(
+				static function () use ( $attachment_id, $attachment ): array {
+					return array(
+						'attachment_id' => $attachment_id,
+						'media'         => aafm_redact_media( $attachment ),
+					);
+				},
+				aafm_media_write_unconfirmed_error()
+			);
+			if ( ! is_wp_error( $response ) && null !== $alt_status ) {
+				$response['alt_status'] = $alt_status;
+			}
+			return $response;
+		} )();
 	} catch ( \Throwable $e ) {
-		wp_delete_attachment( (int) $attachment_id, true );
+		wp_delete_attachment( $attachment_id, true );
 		throw $e;
 	}
 	if ( is_wp_error( $response ) ) {
-		wp_delete_attachment( (int) $attachment_id, true );
-	}
-	return $response;
-}
-
-/**
- * The part of an upload that runs once media_handle_sideload() has created the attachment: the
- * caption policy, the caller's alt text and the response. It never deletes the attachment itself;
- * aafm_finish_media_upload() does that for every error this returns and every throw.
- *
- * The sideload can fill post_content from the image's own IPTC/EXIF caption, so that
- * column is run through wp_kses_post(), the policy update-media applies to a description, and the
- * sanitized value must be confirmed as stored. The caller's alt text then wins over any alt the
- * sideload set from the image metadata. The response is built inside a checked-read scope, so a
- * failed metadata read is an error, never an empty or null field.
- *
- * @param int         $attachment_id The attachment the sideload created.
- * @param string|null $alt           Alt text the caller sent, or null.
- * @return array<string,mixed>|WP_Error
- */
-function aafm_complete_media_upload( int $attachment_id, ?string $alt ) {
-	// get_post_field() with the 'raw' context reads storage directly, unaffected by any display
-	// filter, so the comparison and the rewrite act on the stored value.
-	$sideloaded_field   = get_post_field( 'post_content', $attachment_id, 'raw' );
-	$sideloaded_content = is_string( $sideloaded_field ) ? $sideloaded_field : '';
-	$sanitized_content  = wp_kses_post( $sideloaded_content );
-	if ( $sanitized_content !== $sideloaded_content ) {
-		$updated = wp_update_post(
-			wp_slash(
-				array(
-					'ID'           => $attachment_id,
-					'post_content' => $sanitized_content,
-				)
-			),
-			true
-		);
-		if ( is_wp_error( $updated ) || ! aafm_post_field_confirm_logged( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
-			return aafm_generic_error();
-		}
-	}
-
-	$alt_status = null;
-	if ( null !== $alt ) {
-		$alt_result = aafm_meta_set( 'post', $attachment_id, '_wp_attachment_image_alt', aafm_sanitize_plain_text( $alt ), (string) get_object_subtype( 'post', $attachment_id ) );
-		if ( is_wp_error( $alt_result ) ) {
-			// The same code this upload returned for an alt it could not store before.
-			return aafm_generic_error();
-		}
-		if ( ! in_array( $alt_result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
-			return aafm_meta_write_error( $alt_result['status'], 'write', 'post', $attachment_id, '_wp_attachment_image_alt' );
-		}
-		$alt_status = $alt_result['status'];
-	}
-
-	$attachment = get_post( $attachment_id );
-	if ( ! $attachment instanceof WP_Post ) {
-		return aafm_generic_error();
-	}
-
-	// The redacted media shape: public URL only, never an absolute path.
-	$response = aafm_with_checked_reads(
-		static function () use ( $attachment_id, $attachment ): array {
-			return array(
-				'attachment_id' => $attachment_id,
-				'media'         => aafm_redact_media( $attachment ),
-			);
-		},
-		aafm_media_write_unconfirmed_error()
-	);
-	if ( ! is_wp_error( $response ) && null !== $alt_status ) {
-		$response['alt_status'] = $alt_status;
+		wp_delete_attachment( $attachment_id, true );
 	}
 	return $response;
 }

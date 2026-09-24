@@ -331,4 +331,108 @@ final class MetaWriteWireTest extends TestCase {
 		$this->assertArrayHasKey( 'enrichment', $result->getStructuredContent() );
 		$this->assertSame( '{"meta":{"aafm_note":"written"}}', wp_json_encode( $result->getStructuredContent()['enrichment'] ) );
 	}
+
+	public function test_term_meta_bodies_on_the_wire(): void {
+		update_option( 'aafm_exposed_term_meta_keys', array( 'aafm_note' ) );
+		$this->acting_as( 'editor' );
+		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		update_term_meta( $term_id, 'aafm_note', 'old' );
+		$handler = $this->handler( array( 'aafm/update-term-meta', 'aafm/delete-term-meta' ) );
+		$args    = array(
+			'taxonomy' => 'category',
+			'term_id'  => $term_id,
+			'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- tool argument.
+		);
+
+		$written = $this->call( $handler, 'aafm/update-term-meta', $args + array( 'value' => 'new' ) );
+		$this->assertSame(
+			array(
+				'term_id'      => $term_id,
+				'meta_key'     => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response key.
+				'value'        => 'new',
+				'status'       => 'written',
+				'previous'     => 'old',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => true,
+					'count'  => 1,
+				),
+			),
+			$written->getStructuredContent()
+		);
+
+		$deleted = $this->call( $handler, 'aafm/delete-term-meta', $args );
+		$this->assertSame(
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => 'new',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
+			$deleted->getStructuredContent()
+		);
+
+		add_filter( 'update_term_metadata', '__return_false' );
+		$refused = $this->call( $handler, 'aafm/update-term-meta', $args + array( 'value' => 'again' ) );
+		remove_filter( 'update_term_metadata', '__return_false' );
+		$this->assertTrue( $refused->getIsError() );
+		$this->assertSame( 'The site refused or failed the write; read the key to see its current state.', $refused->getContent()[0]->getText() );
+	}
+
+	public function test_user_meta_bodies_on_the_wire(): void {
+		update_option( 'aafm_exposed_user_meta_keys', array( 'aafm_note' ) );
+		$this->acting_as( 'administrator' );
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, 'aafm_note', 'old' );
+		$handler = $this->handler( array( 'aafm/update-user-meta', 'aafm/delete-user-meta' ) );
+		$args    = array(
+			'user_id' => $user_id,
+			'key'     => 'aafm_note',
+		);
+
+		$written = $this->call( $handler, 'aafm/update-user-meta', $args + array( 'value' => 'new' ) );
+		$this->assertSame(
+			array(
+				'user_id'      => $user_id,
+				'key'          => 'aafm_note',
+				'value'        => 'new',
+				'status'       => 'written',
+				'previous'     => 'old',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => true,
+					'count'  => 1,
+				),
+			),
+			$written->getStructuredContent()
+		);
+
+		$deleted = $this->call( $handler, 'aafm/delete-user-meta', $args );
+		$this->assertSame(
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => 'new',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
+			$deleted->getStructuredContent()
+		);
+
+		$absent = $this->call( $handler, 'aafm/delete-user-meta', $args );
+		$this->assertSame(
+			array(
+				'deleted' => true,
+				'status'  => 'absent',
+			),
+			$absent->getStructuredContent()
+		);
+	}
 }

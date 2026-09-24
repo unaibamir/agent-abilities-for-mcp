@@ -193,7 +193,16 @@ final class TermMetaTest extends TestCase {
 		update_term_meta( $term_id, 'seo_title', 'Bye' );
 
 		$this->assertSame(
-			array( 'deleted' => true ),
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => 'Bye',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
 			aafm_exec_delete_term_meta(
 				array(
 					'taxonomy' => 'category',
@@ -311,5 +320,202 @@ final class TermMetaTest extends TestCase {
 			$out,
 			'A vetoed term meta write must return an error, not a success reporting the old value.'
 		);
+	}
+
+	/**
+	 * A term with `aafm_note` allowlisted, acting as a user who may edit its meta.
+	 *
+	 * @return int Object id.
+	 */
+	private function note_term(): int {
+		update_option( 'aafm_exposed_term_meta_keys', array( 'aafm_note' ) );
+		$this->acting_as( 'editor' );
+		return (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+	}
+
+	/**
+	 * Run update-term-meta for `aafm_note`.
+	 *
+	 * @param int   $id    Object id.
+	 * @param mixed $value Value.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function update_note( int $id, $value ) {
+		return aafm_exec_update_term_meta(
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => $value,
+			)
+		);
+	}
+
+	/**
+	 * Run delete-term-meta for `aafm_note`.
+	 *
+	 * @param int $id Object id.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function delete_note( int $id ) {
+		return aafm_exec_delete_term_meta(
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $id,
+				'meta_key' => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+			)
+		);
+	}
+
+	/**
+	 * Assert an error with the ability's code, the status's message and identifier-only data.
+	 *
+	 * @param mixed  $out     The ability result.
+	 * @param string $status  Expected status.
+	 * @param string $message Expected message.
+	 * @param int    $id      Object id.
+	 */
+	private function assert_meta_error( $out, string $status, string $message, int $id ): void {
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( $message, $out->get_error_message() );
+		$this->assertSame(
+			array(
+				'status'    => $status,
+				'kind'      => 'term_meta',
+				'object_id' => $id,
+				'key'       => 'aafm_note',
+			),
+			$out->get_error_data()
+		);
+	}
+
+	public function test_update_term_meta_reports_written_with_the_previous_value(): void {
+		$id = $this->note_term();
+		update_term_meta( $id, 'aafm_note', 'old' );
+
+		$this->assertSame(
+			array(
+				'term_id'      => $id,
+				'meta_key'     => 'aafm_note', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'        => 'new',
+				'status'       => 'written',
+				'previous'     => 'old',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => true,
+					'count'  => 1,
+				),
+			),
+			$this->update_note( $id, 'new' )
+		);
+	}
+
+	public function test_update_term_meta_under_a_veto_false_filter_returns_the_refused_error(): void {
+		$id = $this->note_term();
+		update_term_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'update_term_metadata', '__return_false' );
+		$out = $this->update_note( $id, 'new' );
+		remove_filter( 'update_term_metadata', '__return_false' );
+
+		$this->assert_meta_error( $out, 'refused', 'The site refused or failed the write; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_term_meta( $id, 'aafm_note', true ) );
+	}
+
+	public function test_update_term_meta_under_a_veto_true_filter_returns_the_unconfirmed_error(): void {
+		$id = $this->note_term();
+		update_term_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'update_term_metadata', '__return_true' );
+		$out = $this->update_note( $id, 'new' );
+		remove_filter( 'update_term_metadata', '__return_true' );
+
+		$this->assert_meta_error( $out, 'unconfirmed', 'The write could not be confirmed; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_term_meta( $id, 'aafm_note', true ) );
+	}
+
+	public function test_update_term_meta_with_a_failed_read_back_returns_the_unconfirmed_error(): void {
+		global $wpdb;
+		$id = $this->note_term();
+		update_term_meta( $id, 'aafm_note', 'old' );
+
+		$table      = $wpdb->termmeta;
+		$suppressed = $wpdb->suppress_errors( true );
+		$armed      = false;
+		$arm        = static function () use ( &$armed ): void {
+			$armed = true;
+		};
+		add_action( 'updated_term_meta', $arm );
+		$fail = static function ( string $query ) use ( &$armed, $table ): string {
+			return ( $armed && false !== strpos( $query, $table ) && 0 === stripos( ltrim( $query ), 'SELECT' ) ) ? '' : $query;
+		};
+		add_filter( 'query', $fail );
+		ob_start();
+		$out = $this->update_note( $id, 'new' );
+		ob_end_clean();
+		remove_filter( 'query', $fail );
+		remove_action( 'updated_term_meta', $arm );
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assert_meta_error( $out, 'unconfirmed', 'The write could not be confirmed; read the key to see its current state.', $id );
+		wp_cache_delete( $id, 'term_meta' );
+		$this->assertSame( 'new', get_term_meta( $id, 'aafm_note', true ), 'the write itself landed' );
+	}
+
+	public function test_delete_term_meta_reports_deleted_and_then_absent(): void {
+		$id = $this->note_term();
+		update_term_meta( $id, 'aafm_note', 'old' );
+
+		$this->assertSame(
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => 'old',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
+			$this->delete_note( $id )
+		);
+		$this->assertSame(
+			array(
+				'deleted' => true,
+				'status'  => 'absent',
+			),
+			$this->delete_note( $id )
+		);
+	}
+
+	public function test_delete_term_meta_with_a_surviving_row_returns_the_refused_error(): void {
+		$id = $this->note_term();
+		update_term_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'delete_term_metadata', '__return_true' );
+		$out = $this->delete_note( $id );
+		remove_filter( 'delete_term_metadata', '__return_true' );
+
+		$this->assert_meta_error( $out, 'refused', 'The site refused or failed the delete; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_term_meta( $id, 'aafm_note', true ) );
+	}
+
+	public function test_delete_term_meta_with_a_failed_baseline_read_returns_the_read_failed_error(): void {
+		global $wpdb;
+		$id = $this->note_term();
+		update_term_meta( $id, 'aafm_note', 'old' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$out = \AAFM\Tests\Support\QueryFaultInjector::fail_query(
+			$wpdb->termmeta,
+			function () use ( $id ) {
+				return $this->delete_note( $id );
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assert_meta_error( $out, 'read_failed', 'The current value could not be read, so nothing was deleted. Try again.', $id );
+		wp_cache_delete( $id, 'term_meta' );
+		$this->assertSame( 'old', get_term_meta( $id, 'aafm_note', true ) );
 	}
 }

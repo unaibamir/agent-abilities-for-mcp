@@ -155,12 +155,15 @@ function aafm_args_update_user_meta(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'user_id' => array( 'type' => 'integer' ),
-				'key'     => array( 'type' => 'string' ),
-				'value'   => array(
-					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+			'properties' => array_merge(
+				array(
+					'user_id' => array( 'type' => 'integer' ),
+					'key'     => array( 'type' => 'string' ),
+					'value'   => array(
+						'type' => array( 'string', 'number', 'boolean', 'integer' ),
+					),
 				),
+				aafm_meta_write_output_properties()
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_user_meta',
@@ -203,8 +206,11 @@ function aafm_args_delete_user_meta(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
+			'properties' => array_merge(
+				array(
+					'deleted' => array( 'type' => 'boolean' ),
+				),
+				aafm_meta_delete_output_properties()
 			),
 		),
 		'execute_callback'    => 'aafm_exec_delete_user_meta',
@@ -244,7 +250,7 @@ function aafm_exec_get_user_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
-	$value = get_user_meta( $id, $key, true );
+	$value = aafm_meta_get( 'user', $id, $key, true );
 	if ( '' !== $value && ! is_scalar( $value ) ) {
 		return aafm_generic_error(); // never dump arrays/serialized blobs.
 	}
@@ -284,22 +290,20 @@ function aafm_exec_update_user_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	$old = get_user_meta( $id, $key, true );
-	update_user_meta( $id, $key, wp_slash( $value ) );
-	$stored = get_user_meta( $id, $key, true );
-	// Codex round 5 R5-2: update_user_meta()'s return value only catches an outright failure. A
-	// metadata filter that short-circuits update_user_metadata to a truthy value bypasses the
-	// write while reporting success, so checking only `false === update_user_meta(...)` never
-	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
-	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
-	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'user', $subtype ) ) {
-		return aafm_generic_error();
+	$result = aafm_meta_set( 'user', $id, $key, $value, $subtype );
+	if ( is_wp_error( $result ) ) {
+		return $result;
 	}
-	return array(
-		'user_id' => $id,
-		'key'     => $key,
-		'value'   => $stored,
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+		return aafm_meta_write_error( $result['status'], 'write', 'user', $id, $key );
+	}
+	return array_merge(
+		array(
+			'user_id' => $id,
+			'key'     => $key,
+			'value'   => $result['value'],
+		),
+		aafm_meta_write_response_fields( $result )
 	);
 }
 
@@ -319,11 +323,10 @@ function aafm_exec_delete_user_meta( array $input ) {
 	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
-	delete_user_meta( $id, $key );
-	// Report the real end state, not a hardcoded true: if the key is still present the delete did
-	// not take. Deleting an already-absent key is an idempotent success.
-	if ( metadata_exists( 'user', $id, $key ) ) {
-		return aafm_generic_error();
+	$result = aafm_meta_delete( 'user', $id, $key );
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
+		return aafm_meta_write_error( $result['status'], 'delete', 'user', $id, $key );
 	}
-	return array( 'deleted' => true );
+	// Deleting an already-absent key is an idempotent success: the key is gone either way.
+	return array_merge( array( 'deleted' => true ), aafm_meta_write_response_fields( $result ) );
 }

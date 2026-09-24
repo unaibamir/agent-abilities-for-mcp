@@ -1249,4 +1249,40 @@ final class MediaWriteTest extends TestCase {
 		$this->assertNull( get_post( $created ) );
 		$this->assertSame( $before, $this->attachment_count() );
 	}
+
+	/**
+	 * An upload whose alt write the site refuses returns exactly the generic error, with no
+	 * status in its data, and deletes the attachment it created.
+	 */
+	public function test_an_upload_whose_alt_write_is_refused_returns_the_generic_error(): void {
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$before    = $this->attachment_count();
+		$created   = 0;
+		$capture   = $this->capture_created_attachment( $created );
+		$veto      = static function ( $check, $object_id, $meta_key ) {
+			return '_wp_attachment_image_alt' === $meta_key ? false : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$result = aafm_exec_upload_media(
+			array(
+				'filename'    => 'pixel.png',
+				'data_base64' => self::PNG_B64,
+				'alt'         => 'a pixel',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+		remove_action( 'add_attachment', $capture );
+
+		$generic = aafm_generic_error();
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $generic->get_error_code(), $result->get_error_code() );
+		$this->assertSame( $generic->get_error_message(), $result->get_error_message() );
+		$this->assertSame( $generic->get_error_data(), $result->get_error_data() );
+		$this->assertGreaterThan( 0, $created );
+		$this->assertNull( get_post( $created ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+		$this->assertSame( $before, $this->attachment_count() );
+	}
+
 }

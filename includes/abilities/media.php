@@ -939,12 +939,10 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 			$alt_status = null;
 			if ( null !== $alt ) {
 				$alt_result = aafm_meta_set( 'post', $attachment_id, '_wp_attachment_image_alt', aafm_sanitize_plain_text( $alt ), (string) get_object_subtype( 'post', $attachment_id ) );
-				if ( is_wp_error( $alt_result ) ) {
-					// The same code this upload returned for an alt it could not store before.
+				if ( is_wp_error( $alt_result ) || ! in_array( $alt_result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+					// An alt that did not land gets the generic error upload-media has always
+					// returned for it.
 					return aafm_generic_error();
-				}
-				if ( ! in_array( $alt_result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
-					return aafm_meta_write_error( $alt_result['status'], 'write', 'post', $attachment_id, '_wp_attachment_image_alt' );
 				}
 				$alt_status = $alt_result['status'];
 			}

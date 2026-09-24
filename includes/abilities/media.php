@@ -968,7 +968,12 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 			return $response;
 		} )();
 	} catch ( \Throwable $e ) {
-		wp_delete_attachment( $attachment_id, true );
+		// A throw from the cleanup is dropped, so the caller gets the original.
+		try {
+			wp_delete_attachment( $attachment_id, true );
+		} catch ( \Throwable $cleanup_error ) {
+			unset( $cleanup_error );
+		}
 		throw $e;
 	}
 	if ( is_wp_error( $response ) ) {

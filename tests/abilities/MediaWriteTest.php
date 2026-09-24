@@ -1285,4 +1285,45 @@ final class MediaWriteTest extends TestCase {
 		$this->assertSame( $before, $this->attachment_count() );
 	}
 
+	/**
+	 * When the cleanup itself throws, the caller still gets the original throw, the same instance.
+	 */
+	public function test_a_throw_from_the_cleanup_does_not_replace_the_original_throw(): void {
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$created   = 0;
+		$capture   = $this->capture_created_attachment( $created );
+		$original  = new \RuntimeException( 'sanitizer exploded' );
+		$throw     = static function () use ( $original ) {
+			throw $original;
+		};
+		$cleanup   = static function ( int $post_id ) use ( &$created ): void {
+			if ( $post_id === $created ) {
+				throw new \LogicException( 'cleanup exploded' );
+			}
+		};
+		add_filter( 'sanitize_post_meta__wp_attachment_image_alt', $throw );
+		add_action( 'delete_attachment', $cleanup );
+
+		$thrown = null;
+		try {
+			aafm_exec_upload_media(
+				array(
+					'filename'    => 'pixel.png',
+					'data_base64' => self::PNG_B64,
+					'alt'         => 'a pixel',
+				)
+			);
+		} catch ( \Throwable $e ) {
+			$thrown = $e;
+		} finally {
+			remove_filter( 'sanitize_post_meta__wp_attachment_image_alt', $throw );
+			remove_action( 'delete_attachment', $cleanup );
+			remove_action( 'add_attachment', $capture );
+		}
+
+		$this->assertGreaterThan( 0, $created );
+		$this->assertSame( $original, $thrown );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+	}
 }

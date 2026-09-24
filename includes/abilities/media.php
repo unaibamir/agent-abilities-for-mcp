@@ -826,6 +826,7 @@ function aafm_exec_upload_media( array $input ) {
  * @param string      $requested_filename Caller-supplied filename hint; only the sanitized basename is kept.
  * @param string|null $alt                Alt text to set on the attachment, or null to leave it untouched.
  * @return array<string,mixed>|WP_Error
+ * @throws \Throwable Anything thrown after the attachment exists, rethrown once it is deleted.
  */
 function aafm_finish_media_upload( string $decoded, string $requested_filename, ?string $alt ) {
 	// Size cap from WordPress, enforced before anything is written. wp_handle_sideload() re-checks
@@ -923,7 +924,7 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
  * caption policy, the caller's alt text and the response. It never deletes the attachment itself;
  * aafm_finish_media_upload() does that for every error this returns and every throw.
  *
- * media_handle_sideload() can fill post_content from the image's own IPTC/EXIF caption, so that
+ * The sideload can fill post_content from the image's own IPTC/EXIF caption, so that
  * column is run through wp_kses_post(), the policy update-media applies to a description, and the
  * sanitized value must be confirmed as stored. The caller's alt text then wins over any alt the
  * sideload set from the image metadata. The response is built inside a checked-read scope, so a

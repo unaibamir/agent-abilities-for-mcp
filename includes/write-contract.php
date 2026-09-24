@@ -143,6 +143,12 @@ function aafm_meta_row( string $type, int $id, string $key ): array {
 /**
  * Read every row of several meta keys in one query: the multi-key preflight for a group write.
  *
+ * Each requested key gets exactly the rows aafm_meta_row() would return for it alone. The meta_key
+ * column compares under its own collation, which is case-insensitive on a stock install, so a row
+ * stored as `Foo` belongs to a request for `foo`. PHP cannot repeat that comparison, so the query
+ * reports it: one flag column per requested key says whether the row matched that key, and a row
+ * that matches two requested keys counts for both, as it would in two single-key reads.
+ *
  * @param string   $type Object type.
  * @param int      $id   Object id.
  * @param string[] $keys Meta keys to read.
@@ -151,6 +157,7 @@ function aafm_meta_row( string $type, int $id, string $key ): array {
 function aafm_meta_rows( string $type, int $id, array $keys ): array {
 	global $wpdb;
 
+	$keys   = array_values( array_map( 'strval', $keys ) );
 	$by_key = array();
 	foreach ( $keys as $key ) {
 		$by_key[ $key ] = array(
@@ -173,10 +180,15 @@ function aafm_meta_rows( string $type, int $id, array $keys ): array {
 	$id_column        = $cols['id_column'];
 	$object_id_column = $cols['object_id_column'];
 
+	$flags = array();
+	foreach ( array_keys( $keys ) as $index ) {
+		$flags[] = "meta_key = %s AS aafm_match_{$index}";
+	}
+	$flag_columns = implode( ', ', $flags );
 	$placeholders = implode( ', ', array_fill( 0, count( $keys ), '%s' ) );
-	$sql          = "SELECT {$id_column}, {$object_id_column}, meta_key, meta_value FROM %i WHERE {$object_id_column} = %d AND meta_key IN ({$placeholders}) ORDER BY {$id_column}";
-	$args         = array_merge( array( $table, $id ), array_values( $keys ) );
-	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- see aafm_meta_row().
+	$sql          = "SELECT {$id_column}, {$object_id_column}, meta_key, meta_value, {$flag_columns} FROM %i WHERE {$object_id_column} = %d AND meta_key IN ({$placeholders}) ORDER BY {$id_column}";
+	$args         = array_merge( $keys, array( $table, $id ), $keys );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- see aafm_meta_row(); $flag_columns holds only placeholders and aliases built from list indexes.
 	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $args ) );
 
 	if ( ! $view['ok'] ) {
@@ -186,18 +198,21 @@ function aafm_meta_rows( string $type, int $id, array $keys ): array {
 		);
 	}
 
+	$values = array_fill_keys( $keys, array() );
 	foreach ( (array) $view['value'] as $row ) {
-		$key = (string) $row['meta_key'];
-		if ( ! isset( $by_key[ $key ] ) ) {
-			continue;
+		foreach ( $keys as $index => $key ) {
+			if ( ! empty( $row[ "aafm_match_{$index}" ] ) ) {
+				$values[ $key ][] = maybe_unserialize( $row['meta_value'] );
+			}
 		}
-		$by_key[ $key ]['values'][] = maybe_unserialize( $row['meta_value'] );
 	}
-	foreach ( $by_key as $key => $entry ) {
-		$count                    = count( $entry['values'] );
-		$by_key[ $key ]['count']  = $count;
-		$by_key[ $key ]['exists'] = $count > 0;
-		$by_key[ $key ]['value']  = $entry['values'][0] ?? null;
+	foreach ( $keys as $key ) {
+		$by_key[ $key ] = array(
+			'exists' => array() !== $values[ $key ],
+			'count'  => count( $values[ $key ] ),
+			'value'  => $values[ $key ][0] ?? null,
+			'values' => $values[ $key ],
+		);
 	}
 
 	return array(
@@ -590,6 +605,9 @@ function aafm_meta_delete( string $type, int $id, string $key ): array {
  * reports read_failed for every key with nothing written. Members are then written in order,
  * continuing past a failed key so every key gets a status.
  *
+ * PHP stores a numeric-string array key such as '123' as an int, so each key is cast back to a
+ * string before any check or call uses it.
+ *
  * @param string              $type            'post', 'term' or 'user'.
  * @param int                 $id              Object id.
  * @param array<string,mixed> $intended_by_key Meta key => intended value.
@@ -598,25 +616,30 @@ function aafm_meta_delete( string $type, int $id, string $key ): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_meta_set_group( string $type, int $id, array $intended_by_key, string $subtype = '', array $array_keys = array() ) {
-	$canonical_by_key = array();
+	$members = array();
 	foreach ( $intended_by_key as $key => $intended ) {
+		$key         = (string) $key;
 		$scalar_only = ! in_array( $key, $array_keys, true );
 		$canonical   = sanitize_meta( $key, $intended, $type, $subtype );
 		if ( $scalar_only && ( ! is_scalar( $intended ) || ! is_scalar( $canonical ) ) ) {
 			return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
 		}
-		$canonical_by_key[ $key ] = $canonical;
+		$members[] = array(
+			'key'         => $key,
+			'intended'    => $intended,
+			'canonical'   => $canonical,
+			'scalar_only' => $scalar_only,
+		);
 	}
 
 	wp_cache_delete( $id, $type . '_meta' );
-	$preflight = aafm_meta_rows( $type, $id, array_keys( $intended_by_key ) );
+	$preflight = aafm_meta_rows( $type, $id, array_column( $members, 'key' ) );
 	if ( ! $preflight['ok'] ) {
 		$keys = array();
-		foreach ( $intended_by_key as $key => $intended ) {
-			unset( $intended );
-			$entry        = array( 'status' => AAFM_WRITE_READ_FAILED );
-			$keys[ $key ] = $entry;
-			aafm_emit_write_outcome( $entry, aafm_meta_write_target( $type, $id, $key ) );
+		foreach ( $members as $member ) {
+			$entry                  = array( 'status' => AAFM_WRITE_READ_FAILED );
+			$keys[ $member['key'] ] = $entry;
+			aafm_emit_write_outcome( $entry, aafm_meta_write_target( $type, $id, $member['key'] ) );
 		}
 		return array(
 			'status' => AAFM_WRITE_READ_FAILED,
@@ -629,13 +652,12 @@ function aafm_meta_set_group( string $type, int $id, array $intended_by_key, str
 	$any_ok      = false;
 	$first_bad   = null;
 
-	foreach ( $intended_by_key as $key => $intended ) {
-		$baseline    = $preflight['by_key'][ $key ];
-		$canonical   = $canonical_by_key[ $key ];
-		$rows        = $baseline['count'] > 1 ? $baseline['count'] : null;
-		$scalar_only = ! in_array( $key, $array_keys, true );
+	foreach ( $members as $member ) {
+		$key      = $member['key'];
+		$baseline = $preflight['by_key'][ $key ];
+		$rows     = $baseline['count'] > 1 ? $baseline['count'] : null;
 
-		$entry = aafm_meta_set_group_member( $type, $id, $key, $intended, $canonical, $baseline, $rows, $scalar_only );
+		$entry = aafm_meta_set_group_member( $type, $id, $key, $member['intended'], $member['canonical'], $baseline, $rows, $member['scalar_only'] );
 
 		$keys[ $key ] = $entry;
 		aafm_emit_write_outcome( $entry, aafm_meta_write_target( $type, $id, $key ) );

@@ -705,6 +705,153 @@ final class MetaWriteContractTest extends TestCase {
 	}
 
 	/**
+	 * PHP turns a numeric-string array key into an int, so a group keyed '123' hands the helper an
+	 * int key. It has to behave like any other key, not throw after the first member was written.
+	 */
+	public function test_group_numeric_string_key_as_the_second_member_returns_the_aggregate(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array(), 'precondition: 123', '123' );
+
+		try {
+			$result = aafm_meta_set_group(
+				'post',
+				$post_id,
+				array(
+					'aafm_g_one' => 'new',
+					'123'        => 'new',
+				),
+				'post'
+			);
+		} catch ( \TypeError $e ) {
+			$this->fail( 'a numeric-string key must not throw: ' . $e->getMessage() );
+		}
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertSame( 'written', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'written', $result['keys']['123']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: 123', '123' );
+	}
+
+	public function test_group_numeric_string_key_as_the_second_member_on_a_failed_preflight_returns_the_aggregate(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		$thrown     = null;
+		ob_start();
+		try {
+			$result = QueryFaultInjector::fail_query(
+				$wpdb->postmeta,
+				static function () use ( $post_id ) {
+					return aafm_meta_set_group(
+						'post',
+						$post_id,
+						array(
+							'aafm_g_one' => 'new',
+							'123'        => 'new',
+						),
+						'post'
+					);
+				}
+			);
+		} catch ( \TypeError $e ) {
+			$thrown = $e;
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertNull( $thrown, 'a numeric-string key must not throw on a failed preflight.' );
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'read_failed', $result['status'] );
+		$this->assertSame( array( 'status' => 'read_failed' ), $result['keys']['aafm_g_one'] );
+		$this->assertSame( array( 'status' => 'read_failed' ), $result['keys']['123'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array(), 'end state: 123', '123' );
+	}
+
+	public function test_group_numeric_string_key_named_as_an_array_member_takes_an_array_value(): void {
+		$post_id = $this->make_object( 'post' );
+		$this->assert_raw_rows( 'post', $post_id, array(), 'precondition: 123', '123' );
+
+		try {
+			$result = aafm_meta_set_group(
+				'post',
+				$post_id,
+				array(
+					'aafm_g_one' => 'new',
+					'123'        => array( 'k' => 'b' ),
+				),
+				'post',
+				array( '123' )
+			);
+		} catch ( \TypeError $e ) {
+			$this->fail( 'a numeric-string key must not throw: ' . $e->getMessage() );
+		}
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertSame( 'written', $result['keys']['123']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( array( 'k' => 'b' ) ), 'end state: 123', '123' );
+	}
+
+	/**
+	 * The meta_key column compares case-insensitively on a stock install, so a row stored as `Foo`
+	 * is the baseline of a request for `foo`. A group member has to see the same baseline the
+	 * single-key writer sees for that key.
+	 */
+	public function test_group_member_case_variant_key_under_veto_false_matches_the_single_writer(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		add_post_meta( $post_id, 'Foo', 'old' );
+		$this->assert_raw_columns( 'post', $post_id, array( 'old' ), 'precondition: Foo', 'Foo' );
+
+		$veto_calls = 0;
+		add_filter(
+			'update_post_metadata',
+			static function ( $check, $object_id, $meta_key ) use ( &$veto_calls ) {
+				if ( 'foo' !== $meta_key ) {
+					return $check;
+				}
+				++$veto_calls;
+				return false;
+			},
+			10,
+			3
+		);
+
+		$single = aafm_meta_set( 'post', $post_id, 'foo', 'new', 'post' );
+		$group  = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array(
+				'aafm_g_one' => 'new',
+				'foo'        => 'new',
+			),
+			'post'
+		);
+
+		remove_all_filters( 'update_post_metadata' );
+
+		$expected = array(
+			'status'       => 'refused',
+			'acknowledged' => false,
+			'previous'     => 'old',
+		);
+		$this->assertSame( $expected, $single );
+		$this->assertSame( $expected, $group['keys']['foo'] );
+		$this->assertSame( 'partial', $group['status'] );
+		$this->assertSame( 2, $veto_calls );
+		$this->assert_raw_columns( 'post', $post_id, array( 'old' ), 'end state: Foo', 'Foo' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_one', 'aafm_g_one' );
+	}
+
+	/**
 	 * The literal key set of every producer/status combination, the acknowledged value where one
 	 * is shown, and the durable end state a direct query must see.
 	 *

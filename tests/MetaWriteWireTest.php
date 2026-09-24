@@ -610,8 +610,8 @@ final class MetaWriteWireTest extends TestCase {
 	}
 
 	/**
-	 * An array, object or null baseline leaves `previous` off the update and the delete body
-	 * (254 4B.19), the same rule the get-meta read applies to such values.
+	 * An array, object or null baseline leaves `previous` off the update and the delete body,
+	 * the same rule the get-meta read applies to such values.
 	 *
 	 * @dataProvider data_non_scalar_baselines
 	 * @param string $type Family.

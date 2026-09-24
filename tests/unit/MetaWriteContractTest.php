@@ -800,6 +800,22 @@ final class MetaWriteContractTest extends TestCase {
 		$this->assert_raw_rows( 'post', $post_id, array( array( 'k' => 'b' ) ), 'end state: 123', '123' );
 	}
 
+	public function test_group_int_array_key_lets_its_numeric_string_member_take_an_array_value(): void {
+		$post_id = $this->make_object( 'post' );
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array( '123' => array( 'k' => 'b' ) ),
+			'post',
+			array( 123 )
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'written', $result['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( array( 'k' => 'b' ) ), 'end state: 123', '123' );
+	}
+
 	/**
 	 * S16: the meta_key column compares under its collation, which ignores case, accents and
 	 * trailing spaces, so core's write and delete would act on a row stored under another spelling.

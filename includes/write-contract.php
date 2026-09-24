@@ -684,17 +684,21 @@ function aafm_meta_delete( string $type, int $id, string $key ): array {
  * past a failed key so every key gets a status, and a member whose key matched a row stored under
  * another spelling is refused as aafm_meta_set() refuses it.
  *
- * PHP stores a numeric-string array key such as '123' as an int, so each key is cast back to a
- * string before any check or call uses it.
+ * PHP stores a numeric-string array key such as '123' as an int, so each key, in $intended_by_key
+ * and in $array_keys, is cast back to a string before any check or call uses it. For the same
+ * reason the returned `keys` map can hold int keys: a caller that passes one on casts it with
+ * (string), and a caller that puts the map on the wire encodes it as a JSON object, never a list.
  *
- * @param string              $type            'post', 'term' or 'user'.
- * @param int                 $id              Object id.
- * @param array<string,mixed> $intended_by_key Meta key => intended value.
- * @param string              $subtype         Object subtype.
- * @param string[]            $array_keys      Members that may hold a non-scalar (array) value.
- * @return array<string,mixed>|WP_Error
+ * @param string                $type            'post', 'term' or 'user'.
+ * @param int                   $id              Object id.
+ * @param array<string,mixed>   $intended_by_key Meta key => intended value.
+ * @param string                $subtype         Object subtype.
+ * @param array<int,string|int> $array_keys      Members that may hold a non-scalar (array) value.
+ * @return array{status: string, keys: array<array-key, array<string,mixed>>}|WP_Error
  */
 function aafm_meta_set_group( string $type, int $id, array $intended_by_key, string $subtype = '', array $array_keys = array() ) {
+	$array_keys = array_map( 'strval', $array_keys );
+
 	$members = array();
 	foreach ( $intended_by_key as $key => $intended ) {
 		$key         = (string) $key;

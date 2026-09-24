@@ -789,4 +789,41 @@ final class PostsWriteTest extends TestCase {
 
 		$this->assertSame( $me, (int) get_post_field( 'post_author', $out['post']['id'] ) );
 	}
+
+	/**
+	 * A sanitizer that is scalar for the validator's probe and an array inside the meta group
+	 * makes the group refuse the value before any write. The post still saves, the key reports
+	 * refused, and no write outcome is emitted for it, because nothing was written.
+	 */
+	public function test_enrichment_reports_refused_when_the_meta_group_rejects_the_value(): void {
+		$this->acting_as( 'editor' );
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_shifty' ) );
+		$calls     = 0;
+		$sanitizer = static function ( $value ) use ( &$calls ) {
+			++$calls;
+			return 1 === $calls ? $value : array( $value );
+		};
+		add_filter( 'sanitize_post_meta_aafm_shifty', $sanitizer );
+		$outcomes = array();
+		$observer = static function ( $result, $target ) use ( &$outcomes ) {
+			$outcomes[] = $target['key'] ?? null;
+		};
+		add_action( 'aafm_write_completed', $observer, 10, 2 );
+
+		$out = aafm_exec_create_post(
+			array(
+				'title' => 'Shifty sanitizer',
+				'meta'  => array( 'aafm_shifty' => 'v' ),
+			)
+		);
+
+		remove_action( 'aafm_write_completed', $observer, 10 );
+		remove_filter( 'sanitize_post_meta_aafm_shifty', $sanitizer );
+
+		$this->assertIsArray( $out );
+		$this->assertInstanceOf( \WP_Post::class, get_post( (int) $out['post']['id'] ) );
+		$this->assertSame( '{"meta":{"aafm_shifty":"refused"}}', wp_json_encode( $out['enrichment'] ) );
+		$this->assertNotContains( 'aafm_shifty', $outcomes );
+		$this->assertSame( '', get_post_meta( (int) $out['post']['id'], 'aafm_shifty', true ) );
+	}
 }

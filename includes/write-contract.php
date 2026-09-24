@@ -84,6 +84,13 @@ function aafm_meta_columns( string $type ): array {
 /**
  * Read every row of one meta key with a failure-aware query.
  *
+ * The meta_key column compares under its collation, which on a stock install ignores case,
+ * accents and trailing spaces, so the query also returns rows stored under another spelling of the
+ * key. Core's update_metadata() and delete_metadata() would act on those rows too, while PHP and
+ * core's meta cache compare bytes. exists, count, value and values therefore cover only the rows
+ * whose stored meta_key is byte-identical to $key, and aliased counts the others. A writer refuses
+ * the request when aliased is above zero.
+ *
  * Selects the meta id column first, then the object id column, meta_key and meta_value, ordered by
  * meta id, so that under the no-flush fault shape a query left over in $wpdb->last_result by an
  * earlier statement is read as real rows of the key rather than producing an undefined-index
@@ -92,20 +99,23 @@ function aafm_meta_columns( string $type ): array {
  * @param string $type 'post', 'term' or 'user'.
  * @param int    $id   Object id.
  * @param string $key  Meta key.
- * @return array{ok: bool, exists: bool, count: int, value: mixed, values: array<int, mixed>}
+ * @return array{ok: bool, exists: bool, count: int, value: mixed, values: array<int, mixed>, aliased: int}
  */
 function aafm_meta_row( string $type, int $id, string $key ): array {
 	global $wpdb;
 
+	$failed = array(
+		'ok'      => false,
+		'exists'  => false,
+		'count'   => 0,
+		'value'   => null,
+		'values'  => array(),
+		'aliased' => 0,
+	);
+
 	$table = _get_meta_table( $type );
 	if ( ! $table ) {
-		return array(
-			'ok'     => false,
-			'exists' => false,
-			'count'  => 0,
-			'value'  => null,
-			'values' => array(),
-		);
+		return $failed;
 	}
 
 	$cols             = aafm_meta_columns( $type );
@@ -115,56 +125,56 @@ function aafm_meta_row( string $type, int $id, string $key ): array {
 	$sql = "SELECT {$id_column}, {$object_id_column}, meta_key, meta_value FROM %i WHERE {$object_id_column} = %d AND meta_key = %s ORDER BY {$id_column}";
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $id_column/$object_id_column are internal, computed from the fixed {post,term,user} set, never from caller input.
 	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $table, $id, $key ) );
-
 	if ( ! $view['ok'] ) {
-		return array(
-			'ok'     => false,
-			'exists' => false,
-			'count'  => 0,
-			'value'  => null,
-			'values' => array(),
-		);
+		return $failed;
 	}
 
-	$values = array();
+	$values  = array();
+	$aliased = 0;
 	foreach ( (array) $view['value'] as $row ) {
-		$values[] = maybe_unserialize( $row['meta_value'] );
+		if ( (string) $row['meta_key'] === $key ) {
+			$values[] = maybe_unserialize( $row['meta_value'] );
+		} else {
+			++$aliased;
+		}
 	}
 
 	return array(
-		'ok'     => true,
-		'exists' => count( $values ) > 0,
-		'count'  => count( $values ),
-		'value'  => $values[0] ?? null,
-		'values' => $values,
+		'ok'      => true,
+		'exists'  => array() !== $values,
+		'count'   => count( $values ),
+		'value'   => $values[0] ?? null,
+		'values'  => $values,
+		'aliased' => $aliased,
 	);
 }
 
 /**
  * Read every row of several meta keys in one query: the multi-key preflight for a group write.
  *
- * Each requested key gets exactly the rows aafm_meta_row() would return for it alone. The meta_key
- * column compares under its own collation, which is case-insensitive on a stock install, so a row
- * stored as `Foo` belongs to a request for `foo`. PHP cannot repeat that comparison, so the query
- * reports it: one flag column per requested key says whether the row matched that key, and a row
- * that matches two requested keys counts for both, as it would in two single-key reads.
+ * Each key's entry follows aafm_meta_row(): exists, count, value and values cover only the rows
+ * stored under exactly that spelling, and aliased counts the rows the column's collation matched
+ * under another spelling. PHP cannot repeat that comparison, so one flag column per requested key
+ * has the database say which requested keys each row matched. A key requested twice with the same
+ * spelling is read once, and no row counts twice for one key.
  *
  * @param string   $type Object type.
  * @param int      $id   Object id.
  * @param string[] $keys Meta keys to read.
- * @return array{ok: bool, by_key: array<string, array{exists: bool, count: int, value: mixed, values: array<int, mixed>}>}
+ * @return array{ok: bool, by_key: array<string, array{exists: bool, count: int, value: mixed, values: array<int, mixed>, aliased: int}>}
  */
 function aafm_meta_rows( string $type, int $id, array $keys ): array {
 	global $wpdb;
 
-	$keys   = array_values( array_map( 'strval', $keys ) );
+	$keys   = array_values( array_unique( array_map( 'strval', $keys ), SORT_STRING ) );
 	$by_key = array();
 	foreach ( $keys as $key ) {
 		$by_key[ $key ] = array(
-			'exists' => false,
-			'count'  => 0,
-			'value'  => null,
-			'values' => array(),
+			'exists'  => false,
+			'count'   => 0,
+			'value'   => null,
+			'values'  => array(),
+			'aliased' => 0,
 		);
 	}
 
@@ -198,20 +208,27 @@ function aafm_meta_rows( string $type, int $id, array $keys ): array {
 		);
 	}
 
-	$values = array_fill_keys( $keys, array() );
+	$values  = array_fill_keys( $keys, array() );
+	$aliased = array_fill_keys( $keys, 0 );
 	foreach ( (array) $view['value'] as $row ) {
 		foreach ( $keys as $index => $key ) {
-			if ( ! empty( $row[ "aafm_match_{$index}" ] ) ) {
+			if ( empty( $row[ "aafm_match_{$index}" ] ) ) {
+				continue;
+			}
+			if ( (string) $row['meta_key'] === $key ) {
 				$values[ $key ][] = maybe_unserialize( $row['meta_value'] );
+			} else {
+				++$aliased[ $key ];
 			}
 		}
 	}
 	foreach ( $keys as $key ) {
 		$by_key[ $key ] = array(
-			'exists' => array() !== $values[ $key ],
-			'count'  => count( $values[ $key ] ),
-			'value'  => $values[ $key ][0] ?? null,
-			'values' => $values[ $key ],
+			'exists'  => array() !== $values[ $key ],
+			'count'   => count( $values[ $key ] ),
+			'value'   => $values[ $key ][0] ?? null,
+			'values'  => $values[ $key ],
+			'aliased' => $aliased[ $key ],
 		);
 	}
 
@@ -220,6 +237,49 @@ function aafm_meta_rows( string $type, int $id, array $keys ): array {
 		'by_key' => $by_key,
 	);
 }
+
+/**
+ * Whether two of the requested keys are one key to the database, compared under the meta_key
+ * column's own collation.
+ *
+ * The first branch of the union carries its key through CONCAT() with a meta_key value from an
+ * empty read of the meta table, so the whole union column takes that column's collation, not the
+ * connection's. COUNT( DISTINCT ) then counts the keys the way the column would, and fewer
+ * distinct values than keys means two of them collide. The LEFT JOIN on a one-row derived table
+ * keeps the result to one row when the meta table has no rows at all.
+ *
+ * @param string   $type 'post', 'term' or 'user'.
+ * @param string[] $keys Meta keys, each spelled differently.
+ * @return bool|null True when two keys collide, false when none do, null when the query failed.
+ */
+function aafm_meta_keys_collide( string $type, array $keys ): ?bool {
+	global $wpdb;
+
+	$keys = array_values( array_unique( array_map( 'strval', $keys ), SORT_STRING ) );
+	if ( count( $keys ) < 2 ) {
+		return false;
+	}
+	$table = _get_meta_table( $type );
+	if ( ! $table ) {
+		return null;
+	}
+
+	$union = "SELECT CONCAT( IFNULL( m.meta_key, '' ), %s ) AS k FROM ( SELECT 1 AS one ) AS d LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS m ON 1 = 1";
+	$args  = array( $keys[0], $table );
+	foreach ( array_slice( $keys, 1 ) as $key ) {
+		$union .= ' UNION ALL SELECT %s';
+		$args[] = $key;
+	}
+	$sql = "SELECT COUNT( DISTINCT u.k ) AS distinct_keys FROM ( {$union} ) AS u";
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $union holds only placeholders and fixed SQL.
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $args ) );
+	if ( ! $view['ok'] || ! isset( $view['value'][0]['distinct_keys'] ) ) {
+		return null;
+	}
+
+	return (int) $view['value'][0]['distinct_keys'] < count( $keys );
+}
+
 
 /**
  * Read a key's state back through core after a write or delete. Through core, a failed query and
@@ -417,6 +477,14 @@ function aafm_meta_set( string $type, int $id, string $key, $intended, string $s
 		return $result;
 	}
 
+	if ( $baseline['aliased'] > 0 ) {
+		// The collation matched a row stored under another spelling: refuse before core can act on
+		// it, and return nothing read from it.
+		$result = array( 'status' => AAFM_WRITE_REFUSED );
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
 	$rows = $baseline['count'] > 1 ? $baseline['count'] : null;
 
 	if ( $baseline['exists'] ) {
@@ -554,6 +622,14 @@ function aafm_meta_delete( string $type, int $id, string $key ): array {
 		return $result;
 	}
 
+	if ( $baseline['aliased'] > 0 ) {
+		// The collation matched a row stored under another spelling: refuse before core can act on
+		// it, and return nothing read from it.
+		$result = array( 'status' => AAFM_WRITE_REFUSED );
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
 	$rows = $baseline['count'] > 1 ? $baseline['count'] : null;
 
 	if ( ! $baseline['exists'] ) {
@@ -600,10 +676,13 @@ function aafm_meta_delete( string $type, int $id, string $key ): array {
  * Write several metadata keys on one object, reusing a single preflight baseline.
  *
  * Every member's value is canonicalised and validated first; a validation failure on any member
- * returns that member's WP_Error for the whole group before anything is read or written. The
- * object's meta cache is cleared once and every baseline is read in one query; a failed preflight
- * reports read_failed for every key with nothing written. Members are then written in order,
- * continuing past a failed key so every key gets a status.
+ * returns that member's WP_Error for the whole group before anything is read or written. When two
+ * requested keys are one key under the meta_key column's collation, every member is refused with
+ * nothing written, and when that comparison fails every member is read_failed. The object's meta
+ * cache is then cleared once and every baseline is read in one query; a failed preflight reports
+ * read_failed for every key with nothing written. Members are then written in order, continuing
+ * past a failed key so every key gets a status, and a member whose key matched a row stored under
+ * another spelling is refused as aafm_meta_set() refuses it.
  *
  * PHP stores a numeric-string array key such as '123' as an int, so each key is cast back to a
  * string before any check or call uses it.
@@ -632,9 +711,25 @@ function aafm_meta_set_group( string $type, int $id, array $intended_by_key, str
 		);
 	}
 
+	// Two keys the column's collation treats as one would have core act on the same rows twice
+	// from one stale baseline, so the whole group refuses before any read of the rows.
+	$collide = aafm_meta_keys_collide( $type, array_column( $members, 'key' ) );
+	if ( true === $collide ) {
+		$keys = array();
+		foreach ( $members as $member ) {
+			$entry                  = array( 'status' => AAFM_WRITE_REFUSED );
+			$keys[ $member['key'] ] = $entry;
+			aafm_emit_write_outcome( $entry, aafm_meta_write_target( $type, $id, $member['key'] ) );
+		}
+		return array(
+			'status' => AAFM_WRITE_REFUSED,
+			'keys'   => $keys,
+		);
+	}
+
 	wp_cache_delete( $id, $type . '_meta' );
-	$preflight = aafm_meta_rows( $type, $id, array_column( $members, 'key' ) );
-	if ( ! $preflight['ok'] ) {
+	$preflight = null === $collide ? null : aafm_meta_rows( $type, $id, array_column( $members, 'key' ) );
+	if ( null === $preflight || ! $preflight['ok'] ) {
 		$keys = array();
 		foreach ( $members as $member ) {
 			$entry                  = array( 'status' => AAFM_WRITE_READ_FAILED );
@@ -701,6 +796,10 @@ function aafm_meta_set_group( string $type, int $id, array $intended_by_key, str
  */
 function aafm_meta_set_group_member( string $type, int $id, string $key, $intended, $canonical, array $baseline, ?int $rows, bool $scalar_only ): array {
 	unset( $scalar_only );
+
+	if ( $baseline['aliased'] > 0 ) {
+		return array( 'status' => AAFM_WRITE_REFUSED );
+	}
 
 	if ( $baseline['exists'] ) {
 		$all_match = true;

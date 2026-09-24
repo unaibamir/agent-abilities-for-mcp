@@ -98,6 +98,30 @@ final class WriteOutcomeLogTest extends TestCase {
 		);
 	}
 
+	public function test_a_refusal_for_a_differently_spelled_row_emits_the_status_alone(): void {
+		$post_id = self::factory()->post->create();
+		add_post_meta( $post_id, 'Aafm_Wol_Key', 'stored-row-value' );
+		$seen     = array();
+		$observer = static function ( $result ) use ( &$seen ) {
+			$seen[] = $result;
+		};
+		add_action( 'aafm_write_completed', $observer );
+
+		$result = aafm_meta_set( 'post', $post_id, 'aafm_wol_key', 'new', 'post', true );
+
+		remove_action( 'aafm_write_completed', $observer );
+
+		$this->assertSame( array( 'status' => 'refused' ), $result );
+		$this->assertSame( array( array( 'status' => 'refused' ) ), $seen );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$detail = json_decode( (string) $rows[0]['detail'], true );
+		$this->assertSame( 'refused', $detail['status'] );
+		foreach ( $rows[0] as $column => $value ) {
+			$this->assertStringNotContainsString( 'stored-row-value', (string) $value, "column $column must not carry the row's value" );
+		}
+	}
+
 	public function test_the_row_carries_the_current_principal_and_client_id(): void {
 		$user_id = $this->acting_as( 'administrator' );
 		if ( function_exists( 'aafm_oauth_current_client_id' ) ) {

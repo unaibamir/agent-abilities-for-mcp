@@ -801,54 +801,301 @@ final class MetaWriteContractTest extends TestCase {
 	}
 
 	/**
-	 * The meta_key column compares case-insensitively on a stock install, so a row stored as `Foo`
-	 * is the baseline of a request for `foo`. A group member has to see the same baseline the
-	 * single-key writer sees for that key.
+	 * S16: the meta_key column compares under its collation, which ignores case, accents and
+	 * trailing spaces, so core's write and delete would act on a row stored under another spelling.
+	 * A request that the database matches to such a row is refused with nothing written and nothing
+	 * from that row returned.
+	 *
+	 * @return iterable<string,array{0:string,1:string}>
 	 */
-	public function test_group_member_case_variant_key_under_veto_false_matches_the_single_writer(): void {
-		$post_id = $this->make_object( 'post' );
-		update_post_meta( $post_id, 'aafm_g_one', 'old' );
-		add_post_meta( $post_id, 'Foo', 'old' );
-		$this->assert_raw_columns( 'post', $post_id, array( 'old' ), 'precondition: Foo', 'Foo' );
+	public function data_s16_cases(): iterable {
+		foreach ( array( 'post', 'term', 'user' ) as $type ) {
+			foreach ( array( 'a', 'b', 'c', 'd', 'e', 'f' ) as $case ) {
+				yield "$type/S16$case" => array( $type, $case );
+			}
+		}
+	}
 
-		$veto_calls = 0;
-		add_filter(
-			'update_post_metadata',
-			static function ( $check, $object_id, $meta_key ) use ( &$veto_calls ) {
-				if ( 'foo' !== $meta_key ) {
-					return $check;
-				}
-				++$veto_calls;
-				return false;
-			},
-			10,
-			3
+	/**
+	 * One S16 case for one meta type.
+	 *
+	 * @dataProvider data_s16_cases
+	 * @param string $type   'post', 'term' or 'user'.
+	 * @param string $letter S16 case letter.
+	 */
+	public function test_s16_a_differently_spelled_row_refuses_with_status_only( string $type, string $letter ): void {
+		$id    = $this->make_object( $type );
+		$seed  = array(
+			'a' => array( array( 'Foo', 'old' ) ),
+			'b' => array( array( 'Foo', 'old' ) ),
+			'c' => array( array( 'Foo', 'old' ) ),
+			'd' => array( array( 'et_key', 'old' ) ),
+			'e' => array( array( 'Foo', 'old' ) ),
+			'f' => array( array( 'foo', 'a' ), array( 'Foo', 'b' ) ),
 		);
+		$label = "type=$type case=$letter";
+		foreach ( $seed[ $letter ] as $row ) {
+			add_metadata( $type, $id, $row[0], $row[1] );
+		}
+		$names = array( 'foo', 'Foo', 'et_key', 'ét_key', 'bar' );
+		$this->assertSame( $seed[ $letter ], $this->exact_rows( $type, $id, $names ), "precondition: $label" );
 
-		$single = aafm_meta_set( 'post', $post_id, 'foo', 'new', 'post' );
-		$group  = aafm_meta_set_group(
-			'post',
-			$post_id,
+		// Every write or delete call core would make for the refused key is counted here and let
+		// through; a refusal must make none. Under (e) the same filter is also the veto-false.
+		$calls   = 0;
+		$refused = 'd' === $letter ? 'ét_key' : 'foo';
+		$counter = static function ( $check, $object_id, $meta_key ) use ( &$calls, $refused, $letter ) {
+			if ( $refused !== $meta_key ) {
+				return $check;
+			}
+			++$calls;
+			return 'e' === $letter ? false : $check;
+		};
+		foreach ( array( 'update', 'add', 'delete' ) as $verb ) {
+			add_filter( "{$verb}_{$type}_metadata", $counter, 10, 3 );
+		}
+
+		$status_only = array( 'status' => 'refused' );
+		switch ( $letter ) {
+			case 'a':
+				$this->assertSame( $status_only, aafm_meta_set( $type, $id, 'foo', 'new', '', false ), $label );
+				$expected_rows = $seed['a'];
+				break;
+			case 'b':
+				$this->assertSame( $status_only, aafm_meta_delete( $type, $id, 'foo' ), $label );
+				$expected_rows = $seed['b'];
+				break;
+			case 'c':
+				$group = aafm_meta_set_group(
+					$type,
+					$id,
+					array(
+						'foo' => 'new',
+						'bar' => 'x',
+					)
+				);
+				$this->assertSame( 'partial', $group['status'], $label );
+				$this->assertSame( $status_only, $group['keys']['foo'], $label );
+				$this->assertSame( 'written', $group['keys']['bar']['status'], $label );
+				$expected_rows = array( array( 'Foo', 'old' ), array( 'bar', 'x' ) );
+				break;
+			case 'd':
+				$this->assertSame( $status_only, aafm_meta_set( $type, $id, 'ét_key', 'new', '', false ), $label );
+				$expected_rows = $seed['d'];
+				break;
+			case 'e':
+				$single = aafm_meta_set( $type, $id, 'foo', 'new' );
+				$group  = aafm_meta_set_group(
+					$type,
+					$id,
+					array(
+						'aafm_g_one' => 'new',
+						'foo'        => 'new',
+					)
+				);
+				$this->assertSame( $status_only, $single, $label );
+				$this->assertSame( $status_only, $group['keys']['foo'], $label );
+				$expected_rows = $seed['e'];
+				break;
+			default: // f.
+				$this->assertSame( $status_only, aafm_meta_set( $type, $id, 'foo', 'new', '', false ), $label );
+				$expected_rows = $seed['f'];
+		}
+
+		foreach ( array( 'update', 'add', 'delete' ) as $verb ) {
+			remove_filter( "{$verb}_{$type}_metadata", $counter, 10 );
+		}
+
+		$this->assertSame( 0, $calls, "no write or delete call for the refused key: $label" );
+		$this->assertSame( $expected_rows, $this->exact_rows( $type, $id, $names ), "end state: $label" );
+	}
+
+	/**
+	 * S17: two requested keys the database treats as one key refuse the whole group, whether or
+	 * not a row exists.
+	 *
+	 * @return iterable<string,array{0:array<string,string>,1:array}>
+	 */
+	public function data_s17_cases(): iterable {
+		yield 'S17a stored foo' => array(
 			array(
-				'aafm_g_one' => 'new',
-				'foo'        => 'new',
+				'foo' => 'new',
+				'Foo' => 'old',
 			),
-			'post'
+			array( array( 'foo', 'old' ) ),
 		);
-
-		remove_all_filters( 'update_post_metadata' );
-
-		$expected = array(
-			'status'       => 'refused',
-			'acknowledged' => false,
-			'previous'     => 'old',
+		yield 'S17b nothing stored' => array(
+			array(
+				'Foo' => 'a',
+				'foo' => 'b',
+			),
+			array(),
 		);
-		$this->assertSame( $expected, $single );
-		$this->assertSame( $expected, $group['keys']['foo'] );
-		$this->assertSame( 'partial', $group['status'] );
-		$this->assertSame( 2, $veto_calls );
-		$this->assert_raw_columns( 'post', $post_id, array( 'old' ), 'end state: Foo', 'Foo' );
-		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		yield 'S17c accent variants' => array(
+			array(
+				'ét' => 'a',
+				'et' => 'a',
+			),
+			array(),
+		);
+	}
+
+	/**
+	 * One S17 group.
+	 *
+	 * @dataProvider data_s17_cases
+	 * @param array<string,string> $group Requested keys and values.
+	 * @param array                $seed  Rows stored first, as [key, value] pairs.
+	 */
+	public function test_s17_colliding_group_keys_refuse_every_member( array $group, array $seed ): void {
+		$post_id = $this->make_object( 'post' );
+		foreach ( $seed as $row ) {
+			add_metadata( 'post', $post_id, $row[0], $row[1] );
+		}
+		$names = array( 'foo', 'Foo', 'ét', 'et' );
+		$this->assertSame( $seed, $this->exact_rows( 'post', $post_id, $names ), 'precondition' );
+
+		$calls   = 0;
+		$counter = static function ( $check ) use ( &$calls ) {
+			++$calls;
+			return $check;
+		};
+		foreach ( array( 'update', 'add', 'delete' ) as $verb ) {
+			add_filter( "{$verb}_post_metadata", $counter );
+		}
+		$result = aafm_meta_set_group( 'post', $post_id, $group, 'post' );
+		foreach ( array( 'update', 'add', 'delete' ) as $verb ) {
+			remove_filter( "{$verb}_post_metadata", $counter );
+		}
+
+		$keys = array();
+		foreach ( array_keys( $group ) as $key ) {
+			$keys[ $key ] = array( 'status' => 'refused' );
+		}
+		$this->assertSame(
+			array(
+				'status' => 'refused',
+				'keys'   => $keys,
+			),
+			$result
+		);
+		$this->assertSame( 0, $calls, 'no write call' );
+		$this->assertSame( $seed, $this->exact_rows( 'post', $post_id, $names ), 'end state: rows unchanged, none created' );
+	}
+
+	/**
+	 * S17d: the collision comparison itself fails, once per fault shape; every member is
+	 * read_failed and nothing is written.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_fault_shapes(): iterable {
+		yield 'no-flush' => array( 'no-flush' );
+		yield 'real-error' => array( 'real-error' );
+	}
+
+	/**
+	 * S17d under one fault shape.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_s17d_a_failed_collision_comparison_reports_read_failed_for_every_member( string $shape ): void {
+		global $wpdb;
+		$post_id = $this->make_object( 'post' );
+		$run     = static function () use ( $post_id ) {
+			return aafm_meta_set_group(
+				'post',
+				$post_id,
+				array(
+					'Foo' => 'a',
+					'foo' => 'b',
+				),
+				'post'
+			);
+		};
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			$result = 'no-flush' === $shape
+				? QueryFaultInjector::fail_query( 'COUNT( DISTINCT', $run )
+				: QueryFaultInjector::break_query_with_real_error( 'COUNT( DISTINCT', $run );
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame(
+			array(
+				'status' => 'read_failed',
+				'keys'   => array(
+					'Foo' => array( 'status' => 'read_failed' ),
+					'foo' => array( 'status' => 'read_failed' ),
+				),
+			),
+			$result
+		);
+		$this->assertSame( array(), $this->exact_rows( 'post', $post_id, array( 'foo', 'Foo' ) ), 'end state: nothing written' );
+	}
+
+	/**
+	 * The collision comparison names the meta table too, so this faults only the preflight read
+	 * that follows it.
+	 */
+	public function test_a_failed_preflight_after_a_clean_collision_comparison_reports_read_failed_for_every_member(): void {
+		global $wpdb;
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'kept' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			$result = QueryFaultInjector::fail_query(
+				'aafm_match_',
+				static function () use ( $post_id ) {
+					return aafm_meta_set_group(
+						'post',
+						$post_id,
+						array(
+							'aafm_g_one' => 'new',
+							'aafm_g_two' => 'new',
+						),
+						'post'
+					);
+				}
+			);
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame(
+			array(
+				'status' => 'read_failed',
+				'keys'   => array(
+					'aafm_g_one' => array( 'status' => 'read_failed' ),
+					'aafm_g_two' => array( 'status' => 'read_failed' ),
+				),
+			),
+			$result
+		);
+		$this->assert_raw_rows( 'post', $post_id, array( 'kept' ), 'end state: aafm_g_one', 'aafm_g_one' );
+	}
+
+	public function test_the_multi_key_reader_reads_a_key_requested_twice_once(): void {
+		$post_id = $this->make_object( 'post' );
+		add_metadata( 'post', $post_id, 'foo', 'old' );
+
+		$rows = aafm_meta_rows( 'post', $post_id, array( 'foo', 'foo' ) );
+
+		$this->assertTrue( $rows['ok'] );
+		$this->assertCount( 1, $rows['by_key'] );
+		$this->assertSame( 1, $rows['by_key']['foo']['count'] );
+		$this->assertSame( array( 'old' ), $rows['by_key']['foo']['values'] );
+		$this->assertSame( 0, $rows['by_key']['foo']['aliased'] );
 	}
 
 	/**
@@ -1445,6 +1692,31 @@ final class MetaWriteContractTest extends TestCase {
 			return $wpdb->termmeta;
 		}
 		return $wpdb->usermeta;
+	}
+
+	/**
+	 * Every row of an object whose stored key is one of $names, as [stored key, decoded value]
+	 * pairs in meta id order. The IN list compares under the column collation, so it returns every
+	 * spelling; the stored key is then compared byte for byte by assertSame().
+	 *
+	 * @param string   $type  Object type.
+	 * @param int      $id    Object id.
+	 * @param string[] $names Key spellings to read.
+	 * @return array<int,array{0:string,1:mixed}>
+	 */
+	private function exact_rows( string $type, int $id, array $names ): array {
+		global $wpdb;
+		$table        = $this->meta_table( $type );
+		$column       = $type . '_id';
+		$id_column    = 'user' === $type ? 'umeta_id' : 'meta_id';
+		$placeholders = implode( ', ', array_fill( 0, count( $names ), '%s' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT meta_key, meta_value FROM {$table} WHERE {$column} = %d AND meta_key IN ({$placeholders}) ORDER BY {$id_column}", array_merge( array( $id ), $names ) ), ARRAY_A );
+		$out  = array();
+		foreach ( $rows as $row ) {
+			$out[] = array( (string) $row['meta_key'], maybe_unserialize( $row['meta_value'] ) );
+		}
+		return $out;
 	}
 
 	private function read_raw_rows( string $type, int $id, string $key = self::KEY ): array {

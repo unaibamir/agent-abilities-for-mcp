@@ -12,8 +12,6 @@ includes/abilities/media.php|aafm_exec_update_media|update_post_meta|1
 includes/abilities/media.php|aafm_finish_media_upload|get_post_meta|1
 includes/abilities/media.php|aafm_finish_media_upload|get_post_meta|2
 includes/abilities/media.php|aafm_finish_media_upload|update_post_meta|1
-includes/abilities/menus.php|aafm_menu_item_target_is_gone|get_post_meta|1
-includes/abilities/menus.php|aafm_menu_item_target_is_gone|get_post_meta|2
 includes/abilities/rankmath.php|aafm_exec_rankmath_get_schema|get_post_meta|1
 includes/abilities/rankmath.php|aafm_exec_rankmath_update_post|get_post_meta|1
 includes/abilities/rankmath.php|aafm_exec_rankmath_update_post|get_post_meta|2
@@ -119,10 +117,7 @@ includes/admin/connection.php|aafm_create_agent_user|update_user_meta|4
 includes/admin/onboarding-pointer.php|aafm_quickconnect_mark_pointer_dismissed_for_user|get_user_meta|1
 includes/admin/onboarding-pointer.php|aafm_quickconnect_mark_pointer_dismissed_for_user|update_user_meta|1
 includes/admin/onboarding-pointer.php|aafm_quickconnect_pointer_dismissed_for_user|get_user_meta|1
-includes/helpers.php|aafm_apply_write_enrichment|update_post_meta|1
 includes/helpers.php|aafm_redact_media|get_post_meta|1
-includes/helpers.php|aafm_rich_post|get_post_meta|1
-includes/helpers.php|aafm_rich_post|get_post_meta|2
 includes/helpers.php|aafm_rich_user|get_user_meta|1
 includes/oauth/clients.php|aafm_principal_is_agent_identity|get_user_meta|1
 includes/page-builder-guard.php|aafm_post_has_foreign_builder_ownership|get_post_meta|1

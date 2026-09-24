@@ -516,7 +516,10 @@ final class PostsWriteTest extends TestCase {
 			'featured_media' => $att,
 			'meta'           => array( 'subtitle' => 'Applied' ),
 		);
-		$this->assertNull( aafm_apply_write_enrichment( $post, $bundle ) );
+		$this->assertSame(
+			'{"terms":{"category":"written"},"featured_media":"written","meta":{"subtitle":"written"}}',
+			wp_json_encode( aafm_apply_write_enrichment( $post, $bundle ) )
+		);
 
 		$this->assertContains( $term, wp_get_post_terms( $post, 'category', array( 'fields' => 'ids' ) ) );
 		$this->assertSame( $att, get_post_thumbnail_id( $post ) );

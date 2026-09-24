@@ -1436,33 +1436,52 @@ function aafm_validate_write_enrichment( array $input, string $post_type = 'post
  * deletes a just-validated term), and when it does the post row stays written: the create/
  * update has already committed the core fields before this runs.
  *
- * DELIBERATE CHOICE - term-assignment WP_Errors are accepted, not surfaced. wp_set_post_terms()
- * can return a WP_Error (e.g. a concurrent term-insert race). The lean-write contract treats
- * the post as already saved and the enrichment as recoverable by simply re-calling the write,
- * so this function ignores that return value rather than failing the whole call after the row
- * is committed. set_post_thumbnail()/update_post_meta() likewise are not re-checked here.
+ * A failed enrichment write does not fail the call: the post is already saved, so each field
+ * reports its own outcome instead, and re-calling the write retries it. Terms report the
+ * wp_set_post_terms() result per taxonomy, the featured image the set_post_thumbnail() result,
+ * and meta goes through aafm_meta_set_group(), one status per key.
  *
  * @param int                                                                              $post_id Target post id.
  * @param array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>} $bundle  Validated bundle.
- * @return null Always null - enrichment outcomes are not surfaced (see DELIBERATE CHOICE above).
+ * @return array<string,mixed> {terms?: {taxonomy: status}, featured_media?: status, meta?: {key: status}},
+ *                             holding only the parts the bundle carried; empty when it carried none.
  */
-function aafm_apply_write_enrichment( int $post_id, array $bundle ) {
-	foreach ( $bundle['terms'] as $taxonomy => $ids ) {
-		// Replace, not append ($append=false): the documented contract is that `terms`
-		// REPLACES existing terms for that taxonomy. A WP_Error return (term-insert race)
-		// is intentionally not surfaced - see the DELIBERATE CHOICE note above.
-		wp_set_post_terms( $post_id, $ids, $taxonomy );
+function aafm_apply_write_enrichment( int $post_id, array $bundle ): array {
+	$outcome = array();
+
+	if ( array() !== $bundle['terms'] ) {
+		$terms = array();
+		foreach ( $bundle['terms'] as $taxonomy => $ids ) {
+			// Replace, not append ($append=false): the documented contract is that `terms`
+			// REPLACES existing terms for that taxonomy.
+			$set                         = wp_set_post_terms( $post_id, $ids, $taxonomy );
+			$terms[ (string) $taxonomy ] = ( is_wp_error( $set ) || false === $set ) ? AAFM_WRITE_REFUSED : AAFM_WRITE_WRITTEN;
+		}
+		$outcome['terms'] = (object) $terms;
 	}
 
 	if ( $bundle['featured_media'] > 0 ) {
-		set_post_thumbnail( $post_id, $bundle['featured_media'] );
+		// set_post_thumbnail() returns false both when the write failed and when the image was
+		// already the thumbnail, so a false result is told apart by reading the thumbnail back.
+		if ( false !== set_post_thumbnail( $post_id, $bundle['featured_media'] ) ) {
+			$outcome['featured_media'] = AAFM_WRITE_WRITTEN;
+		} else {
+			$outcome['featured_media'] = (int) get_post_thumbnail_id( $post_id ) === $bundle['featured_media'] ? AAFM_WRITE_UNCHANGED : AAFM_WRITE_REFUSED;
+		}
 	}
 
-	foreach ( $bundle['meta'] as $key => $value ) {
-		update_post_meta( $post_id, $key, wp_slash( $value ) );
+	if ( array() !== $bundle['meta'] ) {
+		$group = aafm_meta_set_group( 'post', $post_id, $bundle['meta'], (string) get_object_subtype( 'post', $post_id ) );
+		$meta  = array();
+		foreach ( array_keys( $bundle['meta'] ) as $key ) {
+			$key          = (string) $key;
+			$meta[ $key ] = is_wp_error( $group ) ? AAFM_WRITE_REFUSED : $group['keys'][ $key ]['status'];
+		}
+		// An object, so a map keyed '0' or '1' encodes as a JSON object, never a list.
+		$outcome['meta'] = (object) $meta;
 	}
 
-	return null;
+	return $outcome;
 }
 
 /**
@@ -1761,7 +1780,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 		? array(
 			'id'  => (int) $thumb_id,
 			'url' => (string) wp_get_attachment_url( $thumb_id ),
-			'alt' => (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true ),
+			'alt' => (string) aafm_meta_get( 'post', $thumb_id, '_wp_attachment_image_alt', true ),
 		)
 		: null;
 
@@ -1786,7 +1805,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 			if ( ! is_string( aafm_validate_meta_key( (string) $meta_key ) ) ) {
 				continue; // hard-blocked, denied, or deny-`*`: never surfaced here either.
 			}
-			$value = get_post_meta( $post->ID, $meta_key, true );
+			$value = aafm_meta_get( 'post', $post->ID, (string) $meta_key, true );
 			// Skip empty strings (absent keys) and never expose non-scalar blobs.
 			if ( is_scalar( $value ) && '' !== $value ) {
 				$meta[ $meta_key ] = $value;

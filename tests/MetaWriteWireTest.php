@@ -210,4 +210,125 @@ final class MetaWriteWireTest extends TestCase {
 		$this->assertSame( array( 'status', 'kind', 'object_id', 'key' ), array_keys( $data ) );
 		$this->assertStringNotContainsString( 'secret', (string) wp_json_encode( $error->get_error_data() ) );
 	}
+
+	/**
+	 * Call create-post over the wire as an editor with the given extra arguments.
+	 *
+	 * @param array<string,mixed> $extra Extra arguments.
+	 * @return \WP\McpSchema\Server\Tools\DTO\CallToolResult
+	 */
+	private function create_post( array $extra ) {
+		$this->acting_as( 'editor' );
+		$handler = $this->handler( array( 'aafm/create-post' ) );
+		return $this->call( $handler, 'aafm/create-post', array( 'title' => 'Enrichment wire test' ) + $extra );
+	}
+
+	public function test_a_create_with_no_enrichment_input_has_no_enrichment_key(): void {
+		$result = $this->create_post( array() );
+
+		$this->assertFalse( $result->getIsError() );
+		$this->assertArrayNotHasKey( 'enrichment', $result->getStructuredContent() );
+	}
+
+	public function test_a_vetoed_enrichment_meta_key_reports_refused_while_the_post_saves(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note', 'aafm_other' ) );
+		$veto = static function ( $check, $object_id, $meta_key ) {
+			return 'aafm_other' === $meta_key ? false : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$result = $this->create_post(
+			array(
+				'meta' => array(
+					'aafm_note'  => 'kept',
+					'aafm_other' => 'vetoed',
+				),
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertFalse( $result->getIsError() );
+		$body = $result->getStructuredContent();
+		$this->assertArrayHasKey( 'enrichment', $body );
+		$this->assertSame(
+			'{"meta":{"aafm_note":"written","aafm_other":"refused"}}',
+			wp_json_encode( $body['enrichment'] )
+		);
+		$post_id = (int) $body['post']['id'];
+		$this->assertSame( 'Enrichment wire test', get_post( $post_id )->post_title );
+		$this->assertSame( 'kept', get_post_meta( $post_id, 'aafm_note', true ) );
+		$this->assertSame( '', get_post_meta( $post_id, 'aafm_other', true ) );
+	}
+
+	public function test_a_meta_value_coerced_to_an_array_refuses_the_whole_create_before_the_post_exists(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$coerce = static function () {
+			return array( 'evil' => 1 );
+		};
+		add_filter( 'sanitize_post_meta_aafm_note', $coerce );
+		$before = (int) wp_count_posts( 'post' )->publish + (int) wp_count_posts( 'post' )->draft;
+		$result = $this->create_post( array( 'meta' => array( 'aafm_note' => 'x' ) ) );
+		remove_filter( 'sanitize_post_meta_aafm_note', $coerce );
+		wp_cache_flush_group( 'counts' );
+		$after = (int) wp_count_posts( 'post' )->publish + (int) wp_count_posts( 'post' )->draft;
+
+		$this->assertTrue( $result->getIsError() );
+		$this->assertSame( $before, $after );
+	}
+
+	/**
+	 * Core's update_metadata() refuses a meta key of '0' outright (it tests `! $meta_key`), so
+	 * the key reports refused. What this pins is the shape: a map keyed '0' encodes as a JSON
+	 * object, never a list.
+	 */
+	public function test_an_enrichment_meta_key_of_zero_comes_back_as_a_json_object(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '0' ) );
+		$result = $this->create_post( array( 'meta' => array( '0' => 'v' ) ) );
+
+		$this->assertFalse( $result->getIsError() );
+		$this->assertArrayHasKey( 'enrichment', $result->getStructuredContent() );
+		$this->assertSame( '{"meta":{"0":"refused"}}', wp_json_encode( $result->getStructuredContent()['enrichment'] ) );
+	}
+
+	public function test_enrichment_reports_terms_and_featured_image(): void {
+		$category = self::factory()->category->create();
+		$image    = self::factory()->attachment->create_object(
+			'image.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		$result   = $this->create_post(
+			array(
+				'terms'          => array( 'category' => array( $category ) ),
+				'featured_media' => $image,
+			)
+		);
+
+		$this->assertFalse( $result->getIsError(), $result->getContent()[0]->getText() );
+		$this->assertArrayHasKey( 'enrichment', $result->getStructuredContent() );
+		$this->assertSame(
+			'{"terms":{"category":"written"},"featured_media":"written"}',
+			wp_json_encode( $result->getStructuredContent()['enrichment'] )
+		);
+	}
+
+	public function test_a_create_page_with_enrichment_input_returns_enrichment(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'aafm_note' ) );
+		$this->acting_as( 'editor' );
+		$handler = $this->handler( array( 'aafm/create-page' ) );
+		$result  = $this->call(
+			$handler,
+			'aafm/create-page',
+			array(
+				'title' => 'Enriched page',
+				'meta'  => array( 'aafm_note' => 'v' ),
+			)
+		);
+
+		$this->assertFalse( $result->getIsError(), $result->getContent()[0]->getText() );
+		$this->assertArrayHasKey( 'enrichment', $result->getStructuredContent() );
+		$this->assertSame( '{"meta":{"aafm_note":"written"}}', wp_json_encode( $result->getStructuredContent()['enrichment'] ) );
+	}
 }

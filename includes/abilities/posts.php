@@ -702,7 +702,10 @@ function aafm_args_create_draft(): array {
 		'input_schema'        => aafm_write_content_schema( true ),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_create_draft',
 		'permission_callback' => 'aafm_perm_create_draft',
@@ -845,6 +848,23 @@ function aafm_resolve_create_status( array $input, string $fallback_status, stri
 }
 
 /**
+ * Output schema of the `enrichment` field a create or update adds beside the post: per-field
+ * outcomes for the terms, featured image and meta the request carried.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_write_enrichment_output_schema(): array {
+	return array(
+		'type'       => 'object',
+		'properties' => array(
+			'terms'          => array( 'type' => 'object' ),
+			'featured_media' => array( 'type' => 'string' ),
+			'meta'           => array( 'type' => 'object' ),
+		),
+	);
+}
+
+/**
  * Insert a post with a forced/default status and type, returning the redacted post.
  *
  * Anti-escalation: post_author is never threaded from input - wp_insert_post
@@ -972,11 +992,14 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	}
 
 	// Apply the pre-validated enrichment now that the id exists.
-	aafm_apply_write_enrichment( (int) $id, $enrichment );
+	$enriched = aafm_apply_write_enrichment( (int) $id, $enrichment );
 
 	$response = array( 'post' => aafm_redact_post( $created ) );
 	if ( ! empty( $guard['warnings'] ) ) {
 		$response['content_warnings'] = $guard['warnings'];
+	}
+	if ( array() !== $enriched ) {
+		$response['enrichment'] = $enriched;
 	}
 	return $response;
 }
@@ -1005,7 +1028,10 @@ function aafm_args_create_post(): array {
 		'input_schema'        => aafm_write_content_schema( true ),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_create_post',
 		'permission_callback' => 'aafm_perm_publish_posts',
@@ -1042,7 +1068,10 @@ function aafm_args_create_cpt_item(): array {
 		'input_schema'        => aafm_write_cpt_content_schema( true ),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_create_cpt_item',
 		'permission_callback' => 'aafm_perm_create_cpt_item',
@@ -1148,7 +1177,10 @@ function aafm_args_update_post(): array {
 		'input_schema'        => $schema,
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_update_post',
 		'permission_callback' => 'aafm_perm_update_post',
@@ -1277,7 +1309,7 @@ function aafm_exec_update_post( array $input ) {
 	}
 
 	// Apply the pre-validated enrichment after the core fields land.
-	aafm_apply_write_enrichment( (int) $result, $enrichment );
+	$enriched = aafm_apply_write_enrichment( (int) $result, $enrichment );
 
 	// Re-fetch by the id wp_update_post() returned. A destructive save_post/post_updated
 	// hook (or a TOCTOU race) can delete the post during the update, so this can be null;
@@ -1314,6 +1346,9 @@ function aafm_exec_update_post( array $input ) {
 	$response = array( 'post' => aafm_redact_post( $updated ) );
 	if ( ! empty( $guard['warnings'] ) ) {
 		$response['content_warnings'] = $guard['warnings'];
+	}
+	if ( array() !== $enriched ) {
+		$response['enrichment'] = $enriched;
 	}
 	return $response;
 }
@@ -2046,7 +2081,10 @@ function aafm_args_update_cpt_item(): array {
 		'input_schema'        => $schema,
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_update_cpt_item',
 		'permission_callback' => 'aafm_perm_update_cpt_item',

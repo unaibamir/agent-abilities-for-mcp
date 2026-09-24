@@ -311,7 +311,10 @@ function aafm_args_create_page(): array {
 		'input_schema'        => aafm_write_content_schema( true ),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_create_page',
 		'permission_callback' => 'aafm_perm_publish_pages',
@@ -369,7 +372,10 @@ function aafm_args_update_page(): array {
 		'input_schema'        => $schema,
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_update_page',
 		'permission_callback' => 'aafm_perm_update_page',

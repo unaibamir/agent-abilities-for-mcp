@@ -1035,7 +1035,7 @@ function aafm_exec_delete_menu_item( array $input ) {
  * @return bool True when this is a post_type item whose target post is gone.
  */
 function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
-	if ( 'post_type' !== get_post_meta( $item_post->ID, '_menu_item_type', true ) ) {
+	if ( 'post_type' !== aafm_meta_get( 'post', $item_post->ID, '_menu_item_type', true ) ) {
 		return false;
 	}
 	// A missing or zero object id is deliberately NOT treated as "fine". An item can carry
@@ -1043,7 +1043,7 @@ function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
 	// exactly like a deleted target - so excusing it here would hand core the very input that
 	// breaks it. Calling it gone is also the verdict core reaches by another route: an item
 	// pointing at nothing renders nothing.
-	$object_id = (int) get_post_meta( $item_post->ID, '_menu_item_object_id', true );
+	$object_id = (int) aafm_meta_get( 'post', $item_post->ID, '_menu_item_object_id', true );
 	return ! ( get_post( $object_id ) instanceof WP_Post );
 }
 

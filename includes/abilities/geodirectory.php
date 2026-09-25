@@ -196,9 +196,9 @@ function aafm_geodirectory_shape_row( $info ): array {
 }
 
 /**
- * Write the documented address/lat/lng subset through geodir_save_post_meta(), escaping every
- * value first - that function concatenates $meta_value directly into raw SQL rather than
- * preparing it (see this file's own docblock), so this plugin must never hand it a raw string.
+ * Write the documented address/lat/lng subset through aafm_geodir_write(), which escapes every
+ * value before geodir_save_post_meta() concatenates it into raw SQL (see this file's own
+ * docblock), so this plugin never hands that function a raw string.
  *
  * Codex final round MEDIUM: geodir_save_post_meta() returns false only when the detail table or
  * column is missing; on the actual write path it runs $wpdb->query() and returns nothing at all,
@@ -212,21 +212,17 @@ function aafm_geodirectory_shape_row( $info ): array {
  * @return bool True when every field the caller supplied reads back with the value written.
  */
 function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
-	$supplied_any_field = false;
-	foreach ( aafm_geodirectory_address_fields() as $field ) {
-		if ( ! array_key_exists( $field, $input ) ) {
-			continue;
+	// The supplied fields in write order: the address fields, then latitude, then longitude. The
+	// writer sanitizes, escapes and casts each one.
+	$fields = array();
+	foreach ( array_merge( aafm_geodirectory_address_fields(), array( 'latitude', 'longitude' ) ) as $field ) {
+		if ( array_key_exists( $field, $input ) ) {
+			$fields[ $field ] = $input[ $field ];
 		}
-		$supplied_any_field = true;
-		geodir_save_post_meta( $post_id, $field, esc_sql( aafm_sanitize_plain_text( (string) $input[ $field ] ) ) );
 	}
-	if ( array_key_exists( 'latitude', $input ) ) {
-		$supplied_any_field = true;
-		geodir_save_post_meta( $post_id, 'latitude', (float) $input['latitude'] );
-	}
-	if ( array_key_exists( 'longitude', $input ) ) {
-		$supplied_any_field = true;
-		geodir_save_post_meta( $post_id, 'longitude', (float) $input['longitude'] );
+	$supplied_any_field = array() !== $fields;
+	if ( $supplied_any_field ) {
+		aafm_geodir_write( $post_id, $fields );
 	}
 
 	// Nothing to confirm - skip the read rather than run it needlessly, and (R6-6) so a read

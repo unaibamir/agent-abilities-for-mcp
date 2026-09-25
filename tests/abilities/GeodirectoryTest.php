@@ -1237,4 +1237,113 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $out );
 		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
 	}
+
+	/**
+	 * The geodirectory write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function geodir_outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows    = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		$details = array();
+		foreach ( $rows as $detail ) {
+			$decoded = (array) json_decode( (string) $detail, true );
+			if ( 'geodirectory' === ( $decoded['kind'] ?? '' ) ) {
+				$details[] = $decoded;
+			}
+		}
+		return $details;
+	}
+
+	public function test_the_geodirectory_writer_exists(): void {
+		$this->assertTrue( function_exists( 'aafm_geodir_write' ) );
+	}
+
+	public function test_three_supplied_fields_log_three_accepted_rows(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$created = aafm_exec_geodirectory_create_listing(
+			array(
+				'title'     => 'Logged listing',
+				'city'      => 'Lahore',
+				'latitude'  => 31.5,
+				'longitude' => 74.3,
+			)
+		);
+
+		$this->assertIsArray( $created );
+		$details = $this->geodir_outcome_details();
+		$this->assertSame( array( 'city', 'latitude', 'longitude' ), array_column( $details, 'key' ) );
+		$this->assertSame( array( 'accepted', 'accepted', 'accepted' ), array_column( $details, 'status' ) );
+		$this->assertSame( array_fill( 0, 3, (string) $created['listing_id'] ), array_column( $details, 'object_id' ) );
+	}
+
+	public function test_a_missing_column_logs_a_refused_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$created = aafm_exec_geodirectory_create_listing( array( 'title' => 'Existing listing' ) );
+		$this->assertIsArray( $created );
+
+		$missing = static fn( $simulate, $field ) => 'city' === $field;
+		add_filter( 'aafm_geodir_stub_simulate_missing_column', $missing, 10, 2 );
+		$out     = aafm_exec_geodirectory_update_listing(
+			array(
+				'listing_id' => $created['listing_id'],
+				'city'       => 'Karachi',
+			)
+		);
+		remove_filter( 'aafm_geodir_stub_simulate_missing_column', $missing, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$details = $this->geodir_outcome_details();
+		$this->assertCount( 1, $details );
+		$this->assertSame( 'refused', $details[0]['status'] );
+	}
+
+	public function test_a_silently_failed_write_logs_accepted_while_the_ability_still_errors(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$created = aafm_exec_geodirectory_create_listing( array( 'title' => 'Existing listing' ) );
+		$this->assertIsArray( $created );
+
+		$silent = static fn( $simulate, $field ) => 'street' === $field;
+		add_filter( 'aafm_geodir_stub_simulate_write_failure', $silent, 10, 2 );
+		$out    = aafm_exec_geodirectory_update_listing(
+			array(
+				'listing_id' => $created['listing_id'],
+				'street'     => 'Updated address',
+			)
+		);
+		remove_filter( 'aafm_geodir_stub_simulate_write_failure', $silent, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_geodirectory_write_unconfirmed', $out->get_error_code() );
+		$details = $this->geodir_outcome_details();
+		$this->assertCount( 1, $details );
+		$this->assertSame( 'accepted', $details[0]['status'] );
+	}
+
+	public function test_the_geodirectory_writer_refuses_a_field_outside_the_list_and_calls_nothing(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = (int) self::factory()->post->create( array( 'post_type' => 'gd_place' ) );
+		aafm_geodir_stub_last_call( 0, '', null );
+		$before = aafm_geodir_stub_last_call();
+
+		$result = aafm_geodir_write(
+			$post_id,
+			array(
+				'city'    => 'Lahore',
+				'post_id' => 999,
+			)
+		);
+
+		$this->assertSame( 'refused', $result['status'] );
+		$this->assertSame( $before, aafm_geodir_stub_last_call() );
+		$details = $this->geodir_outcome_details();
+		$this->assertSame( array( 'refused', 'refused' ), array_column( $details, 'status' ) );
+		$this->assertSame( array( 'kind', 'entity', 'object_id', 'key', 'status', 'rows', 'modified_by_site', 'key_omitted' ), array_keys( $details[0] ) );
+	}
 }

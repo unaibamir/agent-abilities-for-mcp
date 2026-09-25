@@ -1098,6 +1098,79 @@ function aafm_aioseo_write( int $post_id, array $data ): array {
 }
 
 /**
+ * Save GeoDirectory detail-table fields through geodir_save_post_meta(), one call and one logged
+ * outcome per field.
+ *
+ * A field outside the address fields, latitude and longitude refuses the whole call before any
+ * save. geodir_save_post_meta() concatenates its value into raw SQL, so every address value is
+ * sanitized and escaped here, and latitude and longitude are cast to floats. The function returns
+ * nothing on the write path whether its query succeeded or not, and false only for a missing
+ * column or table, so a field is accepted unless the call returned false. The ability's own
+ * read-back still decides its response.
+ *
+ * @param int                 $post_id Listing post id.
+ * @param array<string,mixed> $fields  Field => raw value, in write order.
+ * @return array<string,mixed> {status, keys}, keys holding each field's own result.
+ */
+function aafm_geodir_write( int $post_id, array $fields ): array {
+	$address = aafm_geodirectory_address_fields();
+	$allowed = array_merge( $address, array( 'latitude', 'longitude' ) );
+	$target  = array(
+		'kind'      => 'geodirectory',
+		'entity'    => null,
+		'object_id' => $post_id,
+		'key'       => null,
+	);
+
+	$keys = array();
+	if ( array() !== array_diff( array_map( 'strval', array_keys( $fields ) ), $allowed ) ) {
+		foreach ( array_keys( $fields ) as $field ) {
+			$entry                   = array( 'status' => AAFM_WRITE_REFUSED );
+			$keys[ (string) $field ] = $entry;
+			aafm_emit_write_outcome( $entry, array( 'key' => (string) $field ) + $target );
+		}
+		return array(
+			'status' => AAFM_WRITE_REFUSED,
+			'keys'   => $keys,
+		);
+	}
+
+	$any_accepted = false;
+	$first_bad    = null;
+	foreach ( $fields as $field => $value ) {
+		$field    = (string) $field;
+		$prepared = in_array( $field, $address, true ) ? esc_sql( aafm_sanitize_plain_text( (string) $value ) ) : (float) $value;
+		$returned = geodir_save_post_meta( $post_id, $field, $prepared );
+		$entry    = array(
+			'status'   => false === $returned ? AAFM_WRITE_REFUSED : AAFM_WRITE_ACCEPTED,
+			'returned' => $returned,
+		);
+
+		$keys[ $field ] = $entry;
+		aafm_emit_write_outcome( $entry, array( 'key' => $field ) + $target );
+
+		if ( AAFM_WRITE_ACCEPTED === $entry['status'] ) {
+			$any_accepted = true;
+		} elseif ( null === $first_bad ) {
+			$first_bad = $entry['status'];
+		}
+	}
+
+	if ( null === $first_bad ) {
+		$status = AAFM_WRITE_ACCEPTED;
+	} elseif ( $any_accepted ) {
+		$status = AAFM_WRITE_PARTIAL;
+	} else {
+		$status = $first_bad;
+	}
+
+	return array(
+		'status' => $status,
+		'keys'   => $keys,
+	);
+}
+
+/**
  * The one emission point every writer calls once its status is decided.
  *
  * Writes the WP_DEBUG diagnostic line and fires aafm_write_completed for every status, so the log

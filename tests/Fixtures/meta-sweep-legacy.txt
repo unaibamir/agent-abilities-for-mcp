@@ -1,9 +1,6 @@
 includes/abilities/comments.php|aafm_exec_create_comment|get_comment|1
 includes/abilities/comments.php|aafm_exec_moderate_comment|get_comment|1
 includes/abilities/comments.php|aafm_exec_update_comment|get_comment|1
-includes/abilities/geodirectory.php|aafm_geodirectory_write_fields|geodir_save_post_meta|1
-includes/abilities/geodirectory.php|aafm_geodirectory_write_fields|geodir_save_post_meta|2
-includes/abilities/geodirectory.php|aafm_geodirectory_write_fields|geodir_save_post_meta|3
 includes/abilities/tec/events.php|aafm_exec_tec_create_event|create|1
 includes/abilities/tec/events.php|aafm_exec_tec_update_event|delete_post_meta|1
 includes/abilities/tec/events.php|aafm_exec_tec_update_event|metadata_exists|1

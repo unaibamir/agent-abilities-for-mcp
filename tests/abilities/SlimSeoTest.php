@@ -526,4 +526,23 @@ final class SlimSeoTest extends TestCase {
 
 		$this->assert_merge_read_failed( $out, $post->ID, $before );
 	}
+
+	public function test_a_refused_sub_field_logs_one_refused_row_for_the_slim_seo_key(): void {
+		global $wpdb;
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = self::factory()->post->create();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$before = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE( MAX( id ), 0 ) FROM %i', aafm_activity_log_table() ) );
+
+		$out = aafm_slim_seo_write_meta( $post_id, array( 'unknown_field' => 'x' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$details = $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s AND id > %d ORDER BY id', aafm_activity_log_table(), 'write_outcome', $before ) );
+		$this->assertSame( array( 'status' => 'refused' ), $out );
+		$this->assertSame( '', get_post_meta( $post_id, 'slim_seo', true ) );
+		$this->assertCount( 1, $details );
+		$row = (array) json_decode( (string) $details[0], true );
+		$this->assertSame( array( 'kind', 'entity', 'object_id', 'key', 'status', 'rows', 'modified_by_site', 'key_omitted' ), array_keys( $row ) );
+		$this->assertSame( array( 'refused', 'slim_seo', (string) $post_id ), array( $row['status'], $row['key'], (string) $row['object_id'] ) );
+	}
 }

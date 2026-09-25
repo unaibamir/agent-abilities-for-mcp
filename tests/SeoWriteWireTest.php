@@ -600,4 +600,162 @@ final class SeoWriteWireTest extends TestCase {
 			);
 		}
 	}
+
+	/**
+	 * The Rank Math read shape for a post, with the given fields set.
+	 *
+	 * @param int                  $post_id Post id.
+	 * @param array<string,string> $fields  Field => value.
+	 * @return array<string,mixed>
+	 */
+	private function rankmath_shape( int $post_id, array $fields ): array {
+		$shape = array(
+			'plugin'  => 'rankmath',
+			'post_id' => $post_id,
+		);
+		foreach ( array( 'title', 'description', 'focus_keyword', 'canonical', 'og_title', 'og_description', 'og_image', 'twitter_title', 'twitter_description', 'twitter_image', 'robots' ) as $field ) {
+			$shape[ $field ] = $fields[ $field ] ?? '';
+		}
+		return $shape;
+	}
+
+	public function test_rankmath_written_and_unchanged_bodies_on_the_wire(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, 'rank_math_title', 'Old' );
+		$args = array(
+			'post_id'     => $post_id,
+			'title'       => 'New',
+			'description' => 'D',
+		);
+
+		$written   = $this->body( $this->call( 'aafm/rankmath-update-post', $args ) );
+		$unchanged = $this->body( $this->call( 'aafm/rankmath-update-post', $args ) );
+
+		$fields = array(
+			'title'       => 'New',
+			'description' => 'D',
+		);
+		$this->assertSame(
+			$this->rankmath_shape( $post_id, $fields ) + array(
+				'status' => 'written',
+				'keys'   => array(
+					'rank_math_title'       => array(
+						'status'   => 'written',
+						'previous' => 'Old',
+					),
+					'rank_math_description' => array( 'status' => 'written' ),
+				),
+			),
+			$written
+		);
+		$this->assertSame(
+			$this->rankmath_shape( $post_id, $fields ) + array(
+				'status' => 'unchanged',
+				'keys'   => array(
+					'rank_math_title'       => array(
+						'status'   => 'unchanged',
+						'previous' => 'New',
+					),
+					'rank_math_description' => array(
+						'status'   => 'unchanged',
+						'previous' => 'D',
+					),
+				),
+			),
+			$unchanged
+		);
+	}
+
+	public function test_yoast_unchanged_and_clear_bodies_on_the_wire(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, '_yoast_wpseo_title', 'Kept' );
+		update_post_meta( $post_id, '_yoast_wpseo_metadesc', 'Gone' );
+
+		$unchanged = $this->body(
+			$this->call(
+				'aafm/yoast-update-post',
+				array(
+					'post_id' => $post_id,
+					'title'   => 'Kept',
+				)
+			)
+		);
+		$cleared   = $this->body(
+			$this->call(
+				'aafm/yoast-update-post',
+				array(
+					'post_id'     => $post_id,
+					'description' => '',
+				)
+			)
+		);
+
+		$this->assertSame(
+			$this->yoast_shape(
+				$post_id,
+				array(
+					'title'       => 'Kept',
+					'description' => 'Gone',
+				)
+			) + array(
+				'status' => 'unchanged',
+				'keys'   => array(
+					'_yoast_wpseo_title' => array(
+						'status'   => 'unchanged',
+						'previous' => 'Kept',
+					),
+				),
+			),
+			$unchanged
+		);
+		$this->assertSame(
+			$this->yoast_shape( $post_id, array( 'title' => 'Kept' ) ) + array(
+				'status' => 'written',
+				'keys'   => array(
+					'_yoast_wpseo_metadesc' => array(
+						'status'   => 'written',
+						'previous' => 'Gone',
+					),
+				),
+			),
+			$cleared
+		);
+	}
+
+	public function test_a_yoast_value_the_site_rewrites_is_reported_as_modified_by_site(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, '_yoast_wpseo_title', 'Old' );
+		$rewrite = static function ( $check, $object_id, $meta_key ) use ( &$rewrite ) {
+			if ( '_yoast_wpseo_title' !== $meta_key ) {
+				return $check;
+			}
+			remove_filter( 'update_post_metadata', $rewrite, 10 );
+			update_metadata( 'post', $object_id, $meta_key, 'Site' );
+			return true;
+		};
+		add_filter( 'update_post_metadata', $rewrite, 10, 3 );
+
+		$body = $this->body(
+			$this->call(
+				'aafm/yoast-update-post',
+				array(
+					'post_id' => $post_id,
+					'title'   => 'X',
+				)
+			)
+		);
+		remove_filter( 'update_post_metadata', $rewrite, 10 );
+
+		$this->assertSame(
+			array(
+				'_yoast_wpseo_title' => array(
+					'status'           => 'written',
+					'previous'         => 'Old',
+					'modified_by_site' => true,
+				),
+			),
+			$body['keys']
+		);
+		$this->assertSame( 'Site', get_post_meta( $post_id, '_yoast_wpseo_title', true ) );
+	}
 }

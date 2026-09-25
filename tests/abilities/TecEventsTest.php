@@ -697,4 +697,30 @@ final class TecEventsTest extends TestCase {
 		$this->assertSame( $this->all_day_error_data( 'read_failed', $event_id ), $out->get_error_data() );
 		$this->assertSame( 'yes', get_post_meta( $event_id, '_EventAllDay', true ) );
 	}
+
+	public function test_an_unknown_tec_entity_is_refused_without_a_repository_call_and_logs_one_row(): void {
+		$seen    = array();
+		$observe = static function ( $result, $target ) use ( &$seen ): void {
+			$seen[] = array( $result, $target );
+		};
+		add_action( 'aafm_write_completed', $observe, 10, 2 );
+		$out = aafm_tec_write( 'bogus', array( 'title' => 'Never created' ) );
+		remove_action( 'aafm_write_completed', $observe, 10 );
+
+		$this->assertSame( array( 'status' => 'refused' ), $out, 'no repository call, so nothing returned' );
+		$this->assertSame(
+			array(
+				array(
+					array( 'status' => 'refused' ),
+					array(
+						'kind'      => 'tec',
+						'entity'    => null,
+						'object_id' => null,
+						'key'       => null,
+					),
+				),
+			),
+			$seen
+		);
+	}
 }

@@ -131,7 +131,7 @@ function aafm_slim_seo_subfields(): array {
  *
  * @param int                 $id      Post id.
  * @param array<string,mixed> $changes Sub-field => new value.
- * @return array<string,mixed>|WP_Error The writer's result, or the validation error.
+ * @return array<string,mixed> The writer's result.
  */
 function aafm_slim_seo_write_meta( int $id, array $changes ) {
 	$target = aafm_meta_write_target( 'post', $id, 'slim_seo' );
@@ -159,7 +159,13 @@ function aafm_slim_seo_write_meta( int $id, array $changes ) {
 		$merged[ $field ] = $value;
 	}
 
-	return aafm_meta_set( 'post', $id, 'slim_seo', $merged, (string) get_object_subtype( 'post', $id ), false );
+	/**
+	 * Narrow the type: aafm_meta_set() returns an error only from its scalar check, which this call turns off.
+	 *
+	 * @var array<string,mixed> $result
+	 */
+	$result = aafm_meta_set( 'post', $id, 'slim_seo', $merged, (string) get_object_subtype( 'post', $id ), false );
+	return $result;
 }
 
 /**
@@ -314,9 +320,6 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 	}
 
 	$result = aafm_slim_seo_write_meta( $id, $changes );
-	if ( is_wp_error( $result ) ) {
-		return aafm_seo_write_error( 'aafm_slim_seo_write_unconfirmed', AAFM_WRITE_REFUSED, $id, null );
-	}
 	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
 		return aafm_seo_write_error( 'aafm_slim_seo_write_unconfirmed', $result['status'], $id, 'slim_seo' );
 	}

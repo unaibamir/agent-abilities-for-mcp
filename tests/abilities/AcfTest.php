@@ -1992,4 +1992,16 @@ final class AcfTest extends TestCase {
 		$this->assertSame( array( 'option', null ), array( $details[0]['entity'], $details[0]['object_id'] ) );
 		$this->assertSame( array( null, null ), array( $details[1]['entity'], $details[1]['object_id'] ) );
 	}
+
+	public function test_the_acf_writer_maps_the_plural_options_selector_and_a_numeric_string(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		aafm_acf_write_field( 'field_1', 'x', 'options' );
+		aafm_acf_write_field( 'field_1', 'y', '12' );
+
+		$details = $this->outcome_details();
+		$this->assertCount( 2, $details );
+		$this->assertSame( array( 'option', null ), array( $details[0]['entity'], $details[0]['object_id'] ) );
+		$this->assertSame( array( 'post', '12' ), array( $details[1]['entity'], (string) $details[1]['object_id'] ) );
+	}
 }

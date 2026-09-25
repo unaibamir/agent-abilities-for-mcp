@@ -490,4 +490,205 @@ final class RelatedObjectLoadTest extends TestCase {
 		$this->assertFalse( $term_query );
 		$this->assertSame( 2, QueryFaultInjector::fired_count() );
 	}
+
+	/**
+	 * An attachment inheriting its status from $parent_id.
+	 *
+	 * @param int $parent_id Parent post id.
+	 */
+	private function attachment( int $parent_id ): int {
+		return $this->post(
+			array(
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit',
+				'post_mime_type' => 'image/jpeg',
+				'post_parent'    => $parent_id,
+			)
+		);
+	}
+
+	/**
+	 * A user who moderates comments and edits only their own posts.
+	 */
+	private function own_posts_moderator(): int {
+		$id   = $this->acting_as( 'subscriber' );
+		$user = wp_get_current_user();
+		foreach ( array( 'moderate_comments', 'edit_posts', 'edit_published_posts' ) as $cap ) {
+			$user->add_cap( $cap );
+		}
+		return $id;
+	}
+
+	/**
+	 * Fault the next postmeta load of $post_id with no rows, in core's SQL and in the checked-read
+	 * scope's copy of it.
+	 *
+	 * @param int $post_id Post id.
+	 * @return callable
+	 */
+	private function fault_post_meta( int $post_id ): callable {
+		global $wpdb;
+		wp_cache_delete( $post_id, 'post_meta' );
+		return $this->recording_leak(
+			array( 'SELECT post_id, meta_key, meta_value FROM', $wpdb->postmeta, "WHERE post_id IN ({$post_id})" ),
+			sprintf( 'SELECT * FROM %s WHERE 1 = 0', $wpdb->postmeta )
+		);
+	}
+
+	/**
+	 * T1: an attachment's comment read follows the attachment's parent.
+	 */
+	public function test_a_comment_on_an_attachment_of_a_private_post_is_refused_when_the_parent_load_fails(): void {
+		$parent     = $this->post( array( 'post_status' => 'private' ) );
+		$attachment = $this->attachment( $parent );
+		$comment    = $this->comment( $attachment );
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_comment_post_is_readable( $attachment ), 'healthy: the private parent decides' );
+		get_post( $attachment );
+		get_comment( $comment );
+
+		$readable = $this->armed(
+			$this->fault_load( 'post', $parent ),
+			static function () use ( $attachment ) {
+				return aafm_comment_post_is_readable( $attachment );
+			}
+		);
+		$this->assertFalse( $readable );
+		$this->assert_fired_in( 'aafm_exact_object_chain', 'attachment parent' );
+
+		QueryFaultInjector::reset_fired_count();
+		$this->stages = array();
+		$permitted    = $this->armed(
+			$this->fault_load( 'post', $parent ),
+			static function () use ( $comment ) {
+				return aafm_perm_get_comment( array( 'comment_id' => $comment ) );
+			}
+		);
+		$this->assertFalse( $permitted, 'get-comment refused' );
+		$this->assert_fired_in( 'aafm_exact_object_chain', 'get-comment' );
+	}
+
+	/**
+	 * T1: a revision as the comment's post.
+	 */
+	public function test_a_comment_on_a_revision_is_refused_when_the_revisions_parent_reads_another_row(): void {
+		$parent   = $this->post( array( 'post_status' => 'private' ) );
+		$revision = $this->post(
+			array(
+				'post_type'   => 'revision',
+				'post_status' => 'inherit',
+				'post_parent' => $parent,
+			)
+		);
+		$public   = $this->post();
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_comment_post_is_readable( $revision ), 'healthy: the private parent decides' );
+		get_post( $revision );
+		get_post( $public );
+
+		$readable = $this->armed(
+			$this->fault_load( 'post', $parent, $public ),
+			static function () use ( $revision ) {
+				return aafm_comment_post_is_readable( $revision );
+			}
+		);
+
+		$this->assertFalse( $readable );
+		$this->assert_fired_in( 'aafm_exact_object_chain', 'revision parent' );
+	}
+
+	/**
+	 * T1: a parent certified absent reads as core reads it.
+	 */
+	public function test_a_comment_on_an_attachment_whose_parent_is_gone_stays_readable(): void {
+		$attachment = $this->attachment( $this->post() );
+		$this->set_parent( $attachment, self::MISSING );
+		$this->acting_as( 'subscriber' );
+
+		$this->assertTrue( aafm_comment_post_is_readable( $attachment ) );
+	}
+
+	/**
+	 * T1 (trashed parent): core reads the parent's status from its `_wp_trash_meta_status` meta.
+	 */
+	public function test_an_attachment_of_a_trashed_private_post_reads_the_trash_meta_and_refuses_when_that_load_fails(): void {
+		$private    = $this->post( array( 'post_status' => 'private' ) );
+		$published  = $this->post();
+		$attachment = $this->attachment( $private );
+		$open       = $this->attachment( $published );
+		wp_trash_post( $private );
+		wp_trash_post( $published );
+		$comment = $this->comment( $attachment );
+		$this->acting_as( 'subscriber' );
+
+		$this->assertFalse( aafm_comment_post_is_readable( $attachment ), 'healthy: meta private' );
+		$this->assertTrue( aafm_comment_post_is_readable( $open ), 'healthy: meta publish' );
+
+		get_post( $attachment );
+		get_post( $private );
+		get_comment( $comment );
+		$readable = $this->armed(
+			$this->fault_post_meta( $private ),
+			static function () use ( $attachment ) {
+				return aafm_comment_post_is_readable( $attachment );
+			}
+		);
+		$this->assertFalse( $readable );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the trash meta load was faulted' );
+
+		QueryFaultInjector::reset_fired_count();
+		$permitted = $this->armed(
+			$this->fault_post_meta( $private ),
+			static function () use ( $comment ) {
+				return aafm_perm_get_comment( array( 'comment_id' => $comment ) );
+			}
+		);
+		$this->assertFalse( $permitted, 'get-comment refused' );
+		$this->assertGreaterThanOrEqual( 1, QueryFaultInjector::fired_count(), 'the trash meta load was faulted' );
+	}
+
+	/**
+	 * T2: edit_comment maps through the comment's post, so every edit_comment gate chain-loads it.
+	 *
+	 * @return iterable<string,array{0:string,1:string}>
+	 */
+	public function data_edit_comment_gates(): iterable {
+		yield 'get-comment, held comment' => array( 'aafm_perm_get_comment', '0' );
+		yield 'moderate-comment' => array( 'aafm_perm_moderate_comment_obj', '1' );
+		yield 'update-comment' => array( 'aafm_perm_edit_comment_obj', '1' );
+	}
+
+	/**
+	 * T2.
+	 *
+	 * @dataProvider data_edit_comment_gates
+	 *
+	 * @param string $gate     Permission callback.
+	 * @param string $approved Comment status.
+	 */
+	public function test_an_edit_comment_gate_refuses_when_the_comments_post_reads_another_row( string $gate, string $approved ): void {
+		$other   = self::factory()->user->create( array( 'role' => 'author' ) );
+		$theirs  = $this->post( array( 'post_author' => $other ) );
+		$comment = (int) self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $theirs,
+				'comment_approved' => $approved,
+			)
+		);
+		$me      = $this->own_posts_moderator();
+		$mine    = $this->post( array( 'post_author' => $me ) );
+		$this->assertFalse( $gate( array( 'comment_id' => $comment ) ), 'healthy: not my post' );
+		get_comment( $comment );
+		get_post( $mine );
+
+		$permitted = $this->armed(
+			$this->fault_load( 'post', $theirs, $mine ),
+			static function () use ( $gate, $comment ) {
+				return $gate( array( 'comment_id' => $comment ) );
+			}
+		);
+
+		$this->assertFalse( $permitted );
+		$this->assert_fired_in( 'aafm_exact_object_chain', $gate );
+	}
 }

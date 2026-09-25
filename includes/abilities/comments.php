@@ -342,32 +342,39 @@ function aafm_comment_post_is_readable( int $post_id ): bool {
 		return false;
 	}
 
-	$post = aafm_exact_object( 'post', $post_id );
+	$post = aafm_exact_object_chain( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return false;
 	}
 
-	// R3-5 (1.7.5 deferred, round 3): a password-protected public post fell straight through to
-	// the read_post branch below, which maps to the ordinary 'read' capability - the password
-	// itself was never checked, so a Subscriber could read approved comments on a password-
-	// protected published post. Matches core's own REST comments controller
-	// (WP_REST_Comments_Controller::get_items_permissions_check()): a still-password-required
-	// post is gated on edit_post, not on merely being able to read the post record.
-	// post_password_required() itself already accounts for the caller having supplied the
-	// password (the post-password cookie), so this only tightens the case that cookie does not
-	// cover.
-	if ( post_password_required( $post ) ) {
-		return current_user_can( 'edit_post', $post_id );
-	}
+	$read = aafm_with_checked_reads(
+		static function () use ( $post, $post_id ): array {
+			// R3-5 (1.7.5 deferred, round 3): a password-protected public post fell straight through to
+			// the read_post branch below, which maps to the ordinary 'read' capability - the password
+			// itself was never checked, so a Subscriber could read approved comments on a password-
+			// protected published post. Matches core's own REST comments controller
+			// (WP_REST_Comments_Controller::get_items_permissions_check()): a still-password-required
+			// post is gated on edit_post, not on merely being able to read the post record.
+			// post_password_required() itself already accounts for the caller having supplied the
+			// password (the post-password cookie), so this only tightens the case that cookie does not
+			// cover.
+			if ( post_password_required( $post ) ) {
+				return array( 'readable' => current_user_can( 'edit_post', $post_id ) );
+			}
 
-	$status_object = get_post_status_object( (string) get_post_status( $post ) );
-	$is_public     = null !== $status_object && ! empty( $status_object->public );
+			$status_object = get_post_status_object( (string) get_post_status( $post ) );
+			$is_public     = null !== $status_object && ! empty( $status_object->public );
 
-	if ( $is_public ) {
-		return current_user_can( 'read' );
-	}
+			if ( $is_public ) {
+				return array( 'readable' => current_user_can( 'read' ) );
+			}
 
-	return current_user_can( 'read_post', $post_id );
+			return array( 'readable' => current_user_can( 'read_post', $post_id ) );
+		},
+		aafm_generic_error()
+	);
+
+	return ! is_wp_error( $read ) && true === $read['readable'];
 }
 
 /**
@@ -451,7 +458,7 @@ function aafm_perm_get_comment( array $input ): bool {
 		return current_user_can( 'read' );
 	}
 
-	$comment = aafm_exact_object( 'comment', $id );
+	$comment = aafm_exact_object_chain( 'comment', $id );
 	if ( ! $comment instanceof WP_Comment ) {
 		// Default-deny on a missing comment so the ability can't probe for ids -
 		// the same posture as aafm_perm_get_comments() for a missing target post.
@@ -809,7 +816,7 @@ function aafm_perm_moderate_comment_obj( array $input ): bool {
 		return false;
 	}
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
-	return $id > 0 && current_user_can( 'edit_comment', $id );
+	return $id > 0 && aafm_exact_object_chain( 'comment', $id ) instanceof WP_Comment && current_user_can( 'edit_comment', $id );
 }
 
 /**
@@ -962,7 +969,7 @@ function aafm_perm_edit_comment_obj( array $input ): bool {
 		return false;
 	}
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
-	return $id > 0 && current_user_can( 'edit_comment', $id );
+	return $id > 0 && aafm_exact_object_chain( 'comment', $id ) instanceof WP_Comment && current_user_can( 'edit_comment', $id );
 }
 
 /**

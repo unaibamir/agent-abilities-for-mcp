@@ -1,0 +1,10 @@
+includes/abilities/blocks.php|aafm_perm_block_object|current_user_can|1
+includes/abilities/blocks.php|aafm_exec_list_blocks|current_user_can|1
+includes/abilities/menus.php|aafm_exec_create_menu_item|wp_delete_post|1
+includes/abilities/menus.php|aafm_exec_delete_menu_item|wp_delete_post|1
+includes/abilities/geodirectory.php|aafm_perm_geodirectory_get|current_user_can|1
+includes/abilities/geodirectory.php|aafm_perm_geodirectory_get|current_user_can|2
+includes/abilities/geodirectory.php|aafm_perm_geodirectory_update|current_user_can|1
+includes/abilities/geodirectory.php|aafm_geodirectory_listing_is_visible|current_user_can|1
+includes/abilities/media.php|aafm_finish_media_upload|wp_update_post|1
+includes/abilities/media.php|aafm_perm_update_media|current_user_can|1

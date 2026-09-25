@@ -1285,7 +1285,75 @@ final class MetaWriteSweepTest extends TestCase {
 	/**
 	 * The helpers whose own loads are the checked ones.
 	 */
-	private const EXACT_LOAD_HELPERS = array( 'aafm_exact_object', 'aafm_comment_readback' );
+	private const EXACT_LOAD_HELPERS = array( 'aafm_exact_object', 'aafm_exact_object_chain', 'aafm_comment_readback' );
+
+	/**
+	 * `use function` imports in $tokens, lower-cased alias => lower-cased real bare name.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @return array<string,string>
+	 */
+	private function function_aliases( array $tokens ): array {
+		$aliases = \AAFM\Tests\Support\UseImportScanner::parse_aliases( \AAFM\Tests\Support\UseImportScanner::collapse_qualified_names( $tokens ) );
+		return array_map( 'strtolower', \AAFM\Tests\Support\UseImportScanner::reduce_to_trailing( $aliases['function'] ) );
+	}
+
+	/**
+	 * The function a name token calls, lower-cased, as PHP resolves it: names are case-insensitive,
+	 * and an unqualified name goes through a `use function` alias first.
+	 *
+	 * @param string               $raw     The name token's text.
+	 * @param array<string,string> $aliases From function_aliases().
+	 */
+	private function resolved_function_name( string $raw, array $aliases ): string {
+		$lower = strtolower( $raw );
+		if ( false === strpos( $lower, '\\' ) && isset( $aliases[ $lower ] ) ) {
+			return $aliases[ $lower ];
+		}
+		return $this->last_name_segment( $lower );
+	}
+
+	/**
+	 * A string literal naming one of $names as a callable (call_user_func, array_map, a variable
+	 * function), lower-cased, or null. PHP reads such a name case-insensitively and without a
+	 * leading namespace separator.
+	 *
+	 * @param array{0:int,1:string,2:int}|string $token A token.
+	 * @param string[]                           $names Lower-cased function names.
+	 */
+	private function literal_callable( $token, array $names ): ?string {
+		if ( ! is_array( $token ) || T_CONSTANT_ENCAPSED_STRING !== $token[0] ) {
+			return null;
+		}
+		$value = strtolower( ltrim( $this->decode_string_literal( $token[1] ), '\\' ) );
+		return in_array( $value, $names, true ) ? $value : null;
+	}
+
+	/**
+	 * An exact load's record: its arguments, and the argument texts that name its object. A load
+	 * assigned to a variable also names its object as that variable and its ID or comment_ID.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param int                                           $index  Index of the helper's name token.
+	 * @param string[]                                      $args   The call's arguments.
+	 * @param bool                                          $chain  Whether it is a chain load.
+	 * @return array{args:string[],ids:string[],chain:bool,used:bool}
+	 */
+	private function exact_load_record( array $tokens, int $index, array $args, bool $chain ): array {
+		$ids      = isset( $args[1] ) ? array( $args[1] ) : array();
+		$assign   = $this->previous_significant_index( $tokens, $index - 1 );
+		$variable = null === $assign ? null : $this->previous_significant_index( $tokens, $assign - 1 );
+		if ( $chain && null !== $variable && '=' === $tokens[ $assign ] && is_array( $tokens[ $variable ] ) && T_VARIABLE === $tokens[ $variable ][0] ) {
+			$name = $tokens[ $variable ][1];
+			$ids  = array_merge( $ids, array( $name, $name . '->ID', $name . '->comment_ID' ) );
+		}
+		return array(
+			'args'  => $args,
+			'ids'   => $ids,
+			'chain' => $chain,
+			'used'  => false,
+		);
+	}
 
 	/**
 	 * A call's top-level arguments, each as its token text with whitespace and comments removed, so
@@ -1344,16 +1412,16 @@ final class MetaWriteSweepTest extends TestCase {
 	 * only when the load's type is the wrapper's, and its taxonomy is 'nav_menu' for a menu, the
 	 * wrapper's own third argument for term_is_ancestor_of(), and absent for get_edit_term_link().
 	 *
-	 * @param array<int,array{args:string[],used:bool}> $loads   The function's exact loads so far.
-	 * @param string                                    $wrapper The wrapper's name.
-	 * @param string[]                                  $args    The wrapper's arguments.
+	 * @param array<int,array{args:string[],ids:string[],chain:bool,used:bool}> $loads   The function's exact loads so far.
+	 * @param string                                                            $wrapper The wrapper's name.
+	 * @param string[]                                                          $args    The wrapper's arguments.
 	 */
 	private function consume_exact_load( array &$loads, string $wrapper, array $args ): bool {
 		if ( ! isset( $args[0] ) ) {
 			return false;
 		}
 		for ( $n = count( $loads ) - 1; $n >= 0; $n-- ) {
-			if ( $loads[ $n ]['used'] || ( $loads[ $n ]['args'][1] ?? null ) !== $args[0] ) {
+			if ( $loads[ $n ]['used'] || ! in_array( $args[0], $loads[ $n ]['ids'], true ) ) {
 				continue;
 			}
 			$loads[ $n ]['used'] = true;
@@ -1377,7 +1445,8 @@ final class MetaWriteSweepTest extends TestCase {
 
 	/**
 	 * Every raw object load's identity key (path|function|loader|ordinal). A load inside the exact
-	 * helpers and a precede wrapper paired with its own exact load have no key.
+	 * helpers and a precede wrapper paired with its own exact load have no key. A loader is matched
+	 * in any case, through a `use function` alias, and as a string literal callable.
 	 *
 	 * @param string $source       Full file contents.
 	 * @param string $virtual_path Path the fixture pretends to live at.
@@ -1390,12 +1459,23 @@ final class MetaWriteSweepTest extends TestCase {
 		$exact_loads = array();
 		$ordinals    = array();
 		$keys        = array();
+		$aliases     = $this->function_aliases( $tokens );
 		foreach ( $tokens as $i => $token ) {
+			$literal = $this->literal_callable( $token, self::OBJECT_LOADERS );
+			if ( null !== $literal ) {
+				$function = $this->enclosing_function( $tokens, $i );
+				if ( ! in_array( $function, self::EXACT_LOAD_HELPERS, true ) ) {
+					$ordinal_key              = $virtual_path . '|' . $function . '|' . $literal;
+					$ordinals[ $ordinal_key ] = ( $ordinals[ $ordinal_key ] ?? 0 ) + 1;
+					$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
+				}
+				continue;
+			}
 			if ( ! is_array( $token ) || ! in_array( $token[0], $name_types, true ) ) {
 				continue;
 			}
-			$name     = $this->last_name_segment( $token[1] );
-			$is_exact = 'aafm_exact_object' === $name;
+			$name     = $this->resolved_function_name( $token[1], $aliases );
+			$is_exact = in_array( $name, array( 'aafm_exact_object', 'aafm_exact_object_chain' ), true );
 			if ( ! $is_exact && ! in_array( $name, self::OBJECT_LOADERS, true ) ) {
 				continue;
 			}
@@ -1410,10 +1490,7 @@ final class MetaWriteSweepTest extends TestCase {
 			$function = $this->enclosing_function( $tokens, $i );
 			$args     = $this->call_arguments( $tokens, $open_idx );
 			if ( $is_exact ) {
-				$exact_loads[ $function ][] = array(
-					'args' => $args,
-					'used' => false,
-				);
+				$exact_loads[ $function ][] = $this->exact_load_record( $tokens, $i, $args, 'aafm_exact_object_chain' === $name );
 				continue;
 			}
 			if ( in_array( $function, self::EXACT_LOAD_HELPERS, true ) ) {
@@ -1567,6 +1644,329 @@ final class MetaWriteSweepTest extends TestCase {
 			array(),
 			$stale,
 			"A list entry no longer matches any object load; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale )
+		);
+	}
+
+	// --- Related objects loaded by chain ----------------------------------------
+
+	/**
+	 * Core functions that load another object by id and decide from it, each mapped to the chain
+	 * load type its argument 0 needs earlier in the same function.
+	 */
+	private const RELATED_WRAPPERS = array( 'get_post_status' => 'post' );
+
+	/**
+	 * Capabilities map_meta_cap() resolves through a related object (a revision's parent, an
+	 * attachment's parent, a comment's post), each mapped to the chain load type its object needs.
+	 */
+	private const RELATED_CAPS = array(
+		'edit_post'           => 'post',
+		'edit_page'           => 'post',
+		'read_post'           => 'post',
+		'read_page'           => 'post',
+		'edit_post_meta'      => 'post',
+		'add_post_meta'       => 'post',
+		'delete_post_meta'    => 'post',
+		'edit_comment'        => 'comment',
+		'edit_comment_meta'   => 'comment',
+		'add_comment_meta'    => 'comment',
+		'delete_comment_meta' => 'comment',
+	);
+
+	/**
+	 * Functions the plugin no longer calls at all.
+	 */
+	private const RELATED_BANNED = array( 'is_object_in_term' );
+
+	/**
+	 * Core writers that walk the parents of what they write, each mapped to the chain load type it
+	 * needs earlier in the same function, or to the menu target check.
+	 */
+	private const RELATED_WRITERS = array(
+		'wp_update_post'           => 'post',
+		'wp_trash_post'            => 'post',
+		'wp_untrash_post'          => 'post',
+		'wp_restore_post_revision' => 'post',
+		'wp_delete_post'           => 'post',
+		'wp_delete_attachment'     => 'post',
+		'wp_update_term'           => 'term',
+		'wp_update_nav_menu_item'  => 'aafm_menu_item_target_checked',
+	);
+
+	/**
+	 * Writers that walk only when their second argument is not the literal true.
+	 */
+	private const FORCE_ARGUMENT_WRITERS = array( 'wp_delete_post', 'wp_delete_attachment' );
+
+	/**
+	 * Every related-object call that no earlier chain load in its function covers, keyed
+	 * path|function|name|ordinal (the ordinal counts the flagged calls of that name). Names match
+	 * in any case, through a `use function` alias, and as a string literal callable; a string
+	 * callable is always flagged, since its arguments cannot be read.
+	 *
+	 * @param string $source       Full file contents.
+	 * @param string $virtual_path Path the fixture pretends to live at.
+	 * @return string[]
+	 */
+	private function related_load_keys( string $source, string $virtual_path ): array {
+		$tokens     = token_get_all( $source );
+		$name_types = $this->name_token_types();
+		$not_a_call = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION ) );
+		$aliases    = $this->function_aliases( $tokens );
+		$names      = array_merge( array_keys( self::RELATED_WRAPPERS ), array( 'current_user_can', 'user_can' ), self::RELATED_BANNED, array_keys( self::RELATED_WRITERS ) );
+		$chains     = array();
+		$checked    = array();
+		$ordinals   = array();
+		$keys       = array();
+		foreach ( $tokens as $i => $token ) {
+			$flagged = $this->literal_callable( $token, $names );
+			if ( null === $flagged ) {
+				if ( ! is_array( $token ) || ! in_array( $token[0], $name_types, true ) ) {
+					continue;
+				}
+				$name = $this->resolved_function_name( $token[1], $aliases );
+				if ( 'aafm_exact_object_chain' !== $name && 'aafm_menu_item_target_checked' !== $name && ! in_array( $name, $names, true ) ) {
+					continue;
+				}
+				list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
+				$prev_idx                = $this->previous_significant_index( $tokens, $i - 1 );
+				if ( '(' !== $open || ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) ) {
+					continue;
+				}
+				$function = $this->enclosing_function( $tokens, $i );
+				$args     = $this->call_arguments( $tokens, $open_idx );
+				if ( 'aafm_exact_object_chain' === $name ) {
+					$chains[ $function ][] = $this->exact_load_record( $tokens, $i, $args, true );
+					continue;
+				}
+				if ( 'aafm_menu_item_target_checked' === $name ) {
+					$checked[ $function ] = true;
+					continue;
+				}
+				if ( $this->related_call_is_covered( $name, $args, $chains[ $function ] ?? array(), ! empty( $checked[ $function ] ) ) ) {
+					continue;
+				}
+				$flagged = $name;
+			} else {
+				$function = $this->enclosing_function( $tokens, $i );
+			}
+			$ordinal_key              = $virtual_path . '|' . $function . '|' . $flagged;
+			$ordinals[ $ordinal_key ] = ( $ordinals[ $ordinal_key ] ?? 0 ) + 1;
+			$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
+		}
+		return $keys;
+	}
+
+	/**
+	 * Whether an earlier chain load in the same function covers one related call.
+	 *
+	 * @param string                                                            $name    The call's resolved name.
+	 * @param string[]                                                          $args    The call's arguments.
+	 * @param array<int,array{args:string[],ids:string[],chain:bool,used:bool}> $chains  The function's chain loads so far.
+	 * @param bool                                                              $checked Whether the menu target check ran earlier.
+	 */
+	private function related_call_is_covered( string $name, array $args, array $chains, bool $checked ): bool {
+		$has_chain = function ( string $type, ?string $id ) use ( $chains ): bool {
+			foreach ( $chains as $load ) {
+				if ( $type === $this->literal_argument( $load['args'][0] ?? null ) && ( null === $id || in_array( $id, $load['ids'], true ) ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
+		if ( isset( self::RELATED_WRAPPERS[ $name ] ) ) {
+			return isset( $args[0] ) && $has_chain( self::RELATED_WRAPPERS[ $name ], $args[0] );
+		}
+		if ( 'current_user_can' === $name || 'user_can' === $name ) {
+			$offset = 'user_can' === $name ? 1 : 0;
+			$cap    = $this->literal_argument( $args[ $offset ] ?? null );
+			$cap    = null === $cap ? null : strtolower( $cap );
+			if ( null === $cap || ! isset( self::RELATED_CAPS[ $cap ] ) || ! isset( $args[ $offset + 1 ] ) ) {
+				return true;
+			}
+			return $has_chain( self::RELATED_CAPS[ $cap ], $args[ $offset + 1 ] );
+		}
+		if ( in_array( $name, self::RELATED_BANNED, true ) ) {
+			return false;
+		}
+		if ( in_array( $name, self::FORCE_ARGUMENT_WRITERS, true ) && 'true' === strtolower( $args[1] ?? '' ) ) {
+			return true;
+		}
+		$needs = self::RELATED_WRITERS[ $name ];
+		return 'aafm_menu_item_target_checked' === $needs ? $checked : $has_chain( $needs, null );
+	}
+
+	/**
+	 * The related-load keys of one function body.
+	 *
+	 * @param string $body Function body source (no opening tag).
+	 * @return string[]
+	 */
+	private function related_keys_of( string $body ): array {
+		return $this->related_load_keys( "<?php\nfunction f( \$id, \$user, \$force ) {\n\t" . $body . "\n}\n", 'includes/fixture.php' );
+	}
+
+	public function test_a_chain_load_counts_as_an_exact_load_for_a_precede_wrapper(): void {
+		$source = "<?php\nfunction f( \$id, \$parent, \$tax ) {\n\taafm_exact_object_chain( 'term', \$id, \$tax );\n\tterm_is_ancestor_of( \$id, \$parent, \$tax );\n\t\$post = aafm_exact_object_chain( 'post', \$parent );\n\tget_post_thumbnail_id( \$post->ID );\n}\n";
+		$this->assertSame( array(), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_loader_spelled_in_another_case(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$post = GET_POST( \$id );\n\t\$term = \\Get_Term( \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_post|1', 'includes/fixture.php|f|get_term|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_loader_called_through_a_use_function_alias(): void {
+		$single  = "<?php\nuse function get_post as load;\nfunction f( \$id ) {\n\tLOAD( \$id );\n}\n";
+		$grouped = "<?php\nnamespace N;\nuse function N\\{get_comment as fetch, get_userdata};\nfunction f( \$id ) {\n\tfetch( \$id );\n\tget_userdata( \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_post|1' ), $this->object_load_keys( $single, 'includes/fixture.php' ) );
+		$this->assertSame( array( 'includes/fixture.php|f|get_comment|1', 'includes/fixture.php|f|get_userdata|1' ), $this->object_load_keys( $grouped, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_loader_named_by_a_string_literal_callable(): void {
+		$source = "<?php\nfunction f( \$id, \$ids ) {\n\t\$f = 'get_post';\n\t\$f( \$id );\n\tcall_user_func( '\\\\Get_Term', \$id );\n\tarray_map( \"get_userdata\", \$ids );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_post|1', 'includes/fixture.php|f|get_term|1', 'includes/fixture.php|f|get_userdata|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_get_post_status_needs_a_chain_load_of_its_argument(): void {
+		$this->assertSame( array(), $this->related_keys_of( "aafm_exact_object_chain( 'post', \$id );\n\tget_post_status( \$id );" ) );
+		$this->assertSame( array(), $this->related_keys_of( "\$post = aafm_exact_object_chain( 'post', \$id );\n\tget_post_status( \$post );" ) );
+		$this->assertSame( array( 'includes/fixture.php|f|get_post_status|1' ), $this->related_keys_of( "aafm_exact_object( 'post', \$id );\n\tget_post_status( \$id );" ) );
+		$this->assertSame( array( 'includes/fixture.php|f|get_post_status|1' ), $this->related_keys_of( "get_post_status( \$id );\n\taafm_exact_object_chain( 'post', \$id );" ) );
+		$this->assertSame( array( 'includes/fixture.php|f|get_post_status|1' ), $this->related_keys_of( "aafm_exact_object_chain( 'term', \$id );\n\tget_post_status( \$id );" ) );
+	}
+
+	/**
+	 * Each related capability, with the chain load type its object needs.
+	 *
+	 * @return iterable<string,array{0:string,1:string}>
+	 */
+	public function data_related_caps(): iterable {
+		foreach ( self::RELATED_CAPS as $cap => $type ) {
+			yield $cap => array( $cap, $type );
+		}
+	}
+
+	/**
+	 * A related capability check with an object needs an earlier chain load of that object.
+	 *
+	 * @dataProvider data_related_caps
+	 *
+	 * @param string $cap  Capability.
+	 * @param string $type Chain load type it needs.
+	 */
+	public function test_a_related_capability_check_needs_a_chain_load_of_its_object( string $cap, string $type ): void {
+		$other = 'post' === $type ? 'comment' : 'post';
+		$this->assertSame( array(), $this->related_keys_of( "aafm_exact_object_chain( '$type', \$id );\n\tcurrent_user_can( '$cap', \$id );\n\tuser_can( \$user, '$cap', \$id );" ) );
+		$this->assertSame( array(), $this->related_keys_of( "\$o = aafm_exact_object_chain( '$type', \$id );\n\tcurrent_user_can( '$cap', \$o->ID );\n\tcurrent_user_can( '$cap', \$o->comment_ID );" ) );
+		$this->assertSame(
+			array( 'includes/fixture.php|f|current_user_can|1', 'includes/fixture.php|f|user_can|1' ),
+			$this->related_keys_of( "current_user_can( '$cap', \$id );\n\tuser_can( \$user, '$cap', \$id );" )
+		);
+		$this->assertSame(
+			array( 'includes/fixture.php|f|current_user_can|1', 'includes/fixture.php|f|current_user_can|2' ),
+			$this->related_keys_of( "aafm_exact_object_chain( '$other', \$id );\n\taafm_exact_object( '$type', \$id );\n\tcurrent_user_can( '$cap', \$id );\n\tCURRENT_USER_CAN( '$cap', \$id );" )
+		);
+	}
+
+	public function test_ignores_a_capability_check_with_no_object_or_an_unrelated_cap(): void {
+		$this->assertSame( array(), $this->related_keys_of( "current_user_can( 'edit_posts' );\n\tcurrent_user_can( 'delete_post', \$id );\n\tcurrent_user_can( \$cap, \$id );\n\tuser_can( \$user, 'read' );" ) );
+	}
+
+	public function test_flags_every_is_object_in_term_call(): void {
+		$this->assertSame( array( 'includes/fixture.php|f|is_object_in_term|1' ), $this->related_keys_of( "aafm_exact_object_chain( 'post', \$id );\n\tis_object_in_term( \$id, 'nav_menu', 3 );" ) );
+	}
+
+	/**
+	 * Each walking writer, the load that covers it, and a load that does not.
+	 *
+	 * @return iterable<string,array{0:string,1:string,2:string}>
+	 */
+	public function data_related_writers(): iterable {
+		$post_chain = "aafm_exact_object_chain( 'post', \$id );";
+		$term_chain = "aafm_exact_object_chain( 'term', \$id, 'category' );";
+		foreach ( array( 'wp_update_post', 'wp_trash_post', 'wp_untrash_post', 'wp_restore_post_revision', 'wp_delete_post', 'wp_delete_attachment' ) as $writer ) {
+			yield $writer => array( $writer, $post_chain, $term_chain );
+		}
+		yield 'wp_update_term' => array( 'wp_update_term', $term_chain, $post_chain );
+		yield 'wp_update_nav_menu_item' => array( 'wp_update_nav_menu_item', "aafm_menu_item_target_checked( 'post_type', 'page', \$id );", "aafm_exact_object_chain( 'post', \$id );" );
+	}
+
+	/**
+	 * A walking writer needs its load earlier in the same function, in every spelling.
+	 *
+	 * @dataProvider data_related_writers
+	 *
+	 * @param string $writer  Writer name.
+	 * @param string $covered The load that covers it.
+	 * @param string $other   A load that does not.
+	 */
+	public function test_a_walking_writer_needs_its_earlier_load( string $writer, string $covered, string $other ): void {
+		$key = "includes/fixture.php|f|$writer|1";
+		$this->assertSame( array(), $this->related_keys_of( "$covered\n\t$writer( \$id );" ) );
+		$this->assertSame( array( $key ), $this->related_keys_of( "$writer( \$id );" ) );
+		$this->assertSame( array( $key ), $this->related_keys_of( "$other\n\t$writer( \$id );" ) );
+		$this->assertSame( array( $key ), $this->related_keys_of( "$writer( \$id );\n\t$covered" ) );
+		$this->assertSame( array( $key ), $this->related_keys_of( "call_user_func( '" . strtoupper( $writer ) . "', \$id );" ) );
+		$aliased = $this->related_load_keys( "<?php\nuse function $writer as w;\nfunction f( \$id ) {\n\tw( \$id );\n}\n", 'includes/fixture.php' );
+		$this->assertSame( array( $key ), $aliased );
+	}
+
+	public function test_a_delete_writer_walks_unless_its_second_argument_is_the_literal_true(): void {
+		foreach ( array( 'wp_delete_post', 'wp_delete_attachment' ) as $writer ) {
+			$key = "includes/fixture.php|f|$writer|1";
+			$this->assertSame( array(), $this->related_keys_of( "$writer( \$id, true );\n\t$writer( \$id, TRUE );\n\t\\$writer( \$id, True );" ), $writer );
+			$this->assertSame( array( $key ), $this->related_keys_of( "$writer( \$id );" ), $writer );
+			$this->assertSame( array( $key ), $this->related_keys_of( "$writer( \$id, \$force );" ), $writer );
+			$this->assertSame( array( $key ), $this->related_keys_of( "$writer( \$id, 'true' );" ), $writer );
+		}
+	}
+
+	public function test_flags_a_related_name_in_any_spelling(): void {
+		$this->assertSame( array( 'includes/fixture.php|f|get_post_status|1' ), $this->related_keys_of( 'GET_POST_STATUS( $id );' ) );
+		$this->assertSame( array( 'includes/fixture.php|f|is_object_in_term|1' ), $this->related_keys_of( "\$g = 'Is_Object_In_Term';\n\t\$g( \$id, 'nav_menu', 3 );" ) );
+		$this->assertSame( array( 'includes/fixture.php|f|current_user_can|1' ), $this->related_keys_of( "array_map( 'current_user_can', array( 'edit_post' ) );" ) );
+		$aliased = "<?php\nnamespace N;\nuse function N\\{current_user_can as can};\nfunction f( \$id ) {\n\tcan( 'edit_post', \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|current_user_can|1' ), $this->related_load_keys( $aliased, 'includes/fixture.php' ) );
+	}
+
+	/**
+	 * The production sweep for related loads: every related call under the scanned set that no
+	 * earlier chain load covers must be listed in tests/Fixtures/related-loader-exempt.txt
+	 * (path|function|name|ordinal). The list may only shrink: an unlisted call fails, and so does a
+	 * listed line the scan no longer sees.
+	 */
+	public function test_no_unlisted_related_load_survives_under_the_scanned_set(): void {
+		$exempt_path = AAFM_PLUGIN_DIR . 'tests/Fixtures/related-loader-exempt.txt';
+		$this->assertFileExists( $exempt_path, 'the related-loader list must exist.' );
+		$exempt = array_filter( array_map( 'trim', file( $exempt_path ) ) );
+
+		$files = $this->scanned_files();
+		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
+
+		$unlisted = array();
+		$seen     = array_fill_keys( $exempt, false );
+		foreach ( $files as $path => $source ) {
+			foreach ( $this->related_load_keys( $source, $path ) as $line_key ) {
+				if ( array_key_exists( $line_key, $seen ) ) {
+					$seen[ $line_key ] = true;
+				} else {
+					$unlisted[] = $line_key;
+				}
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$unlisted,
+			"A related-object call was found that no chain load covers and the list does not name:\n" . implode( "\n", $unlisted )
+		);
+
+		$stale = array_keys( array_filter( $seen, static fn( bool $was_seen ): bool => ! $was_seen ) );
+		$this->assertSame(
+			array(),
+			$stale,
+			"A list entry no longer matches any related call; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale )
 		);
 	}
 

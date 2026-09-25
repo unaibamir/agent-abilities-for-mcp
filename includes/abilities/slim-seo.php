@@ -218,7 +218,7 @@ function aafm_args_slim_seo_get_post(): array {
  */
 function aafm_exec_slim_seo_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	return aafm_slim_seo_read_fields( $id );
@@ -289,7 +289,7 @@ function aafm_args_slim_seo_update_post(): array {
  */
 function aafm_exec_slim_seo_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 

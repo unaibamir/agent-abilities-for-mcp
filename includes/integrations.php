@@ -360,7 +360,7 @@ function aafm_geodirectory_active(): bool {
  */
 function aafm_perm_seo_post_object( array $input ): bool {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = $id > 0 ? get_post( $id ) : null;
+	$post = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
 	// Delegate to the shared content-edit gate (not a bare edit_post): it enforces the operator's
 	// post-type exposure allowlist AND the map_meta_cap===true fail-open guard, so SEO meta on a
 	// non-exposed or non-mapped type is refused exactly as the core content writes are.

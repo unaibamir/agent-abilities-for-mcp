@@ -80,7 +80,7 @@ function aafm_rankmath_rendered_head( string $head, int $post_id, string $source
 		return $head; // Rank Math present but no head renderer (e.g. unregistered, or a differently-shaped build): best-effort.
 	}
 
-	$post = get_post( $post_id );
+	$post = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return $head;
 	}
@@ -444,7 +444,7 @@ function aafm_args_rankmath_get_post(): array {
  */
 function aafm_exec_rankmath_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	return aafm_rankmath_read_fields( $id );
@@ -524,7 +524,7 @@ function aafm_args_rankmath_update_post(): array {
  */
 function aafm_exec_rankmath_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
@@ -687,7 +687,7 @@ function aafm_args_rankmath_get_schema(): array {
  */
 function aafm_exec_rankmath_get_schema( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$type = aafm_rankmath_validate_schema_type( (string) ( $input['type'] ?? '' ) );
@@ -766,7 +766,7 @@ function aafm_args_rankmath_update_schema(): array {
  */
 function aafm_exec_rankmath_update_schema( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$type = aafm_rankmath_validate_schema_type( (string) ( $input['type'] ?? '' ) );
@@ -857,7 +857,7 @@ function aafm_args_rankmath_get_head(): array {
  */
 function aafm_exec_rankmath_get_head( array $input ) {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = $id > 0 ? get_post( $id ) : null;
+	$post = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
 	// Use the shared content-edit gate, not a bare edit_post: it enforces the operator's post-type
 	// exposure allowlist, so a get-head read is refused on a non-exposed post type exactly as the
 	// -get-meta sibling is. A bare edit_post would leak a non-allowlisted CPT's rendered SEO head.

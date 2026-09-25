@@ -472,7 +472,7 @@ function aafm_args_yoast_get_post(): array {
  */
 function aafm_exec_yoast_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	return aafm_yoast_read_fields( $id );
@@ -575,7 +575,7 @@ function aafm_args_yoast_update_post(): array {
  */
 function aafm_exec_yoast_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
@@ -676,7 +676,7 @@ function aafm_args_yoast_get_head(): array {
  */
 function aafm_exec_yoast_get_head( array $input ) {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = $id > 0 ? get_post( $id ) : null;
+	$post = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
 	// Use the shared content-edit gate, not a bare edit_post: it enforces the operator's post-type
 	// exposure allowlist, so a get-head read is refused on a non-exposed post type exactly as the
 	// -get-meta sibling is. A bare edit_post would leak a non-allowlisted CPT's rendered SEO head.

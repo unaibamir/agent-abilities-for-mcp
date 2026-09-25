@@ -299,7 +299,7 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 		return false;
 	}
 	$id   = isset( $input['listing_id'] ) ? absint( $input['listing_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return false;
 	}
@@ -346,7 +346,7 @@ function aafm_perm_geodirectory_create( array $input ): bool {
  */
 function aafm_perm_geodirectory_update( array $input ): bool {
 	$id   = isset( $input['listing_id'] ) ? absint( $input['listing_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && 'gd_place' === $post->post_type && current_user_can( 'edit_post', $post->ID );
 }
 
@@ -712,7 +712,7 @@ function aafm_args_geodirectory_get_listing(): array {
  */
 function aafm_exec_geodirectory_get_listing( array $input ) {
 	$id   = absint( $input['listing_id'] ?? 0 );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -866,7 +866,7 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 	// create path for why status/slug confirmation was dropped batch-wide rather than
 	// replicated a fourth time: title/content have no such core-side transition and stay
 	// confirmed below.
-	$after = get_post( $post_id );
+	$after = aafm_exact_object( 'post', $post_id );
 	if ( ! $after instanceof WP_Post
 		|| ! aafm_post_field_confirm_logged( (int) $post_id, 'post_title', $title, '', 0 )
 		|| ! aafm_post_field_confirm_logged( (int) $post_id, 'post_content', $content, '', 0 )
@@ -881,7 +881,7 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its address or location fields did not save', 'agent-abilities-for-mcp' ) );
 	}
 
-	$post = get_post( $post_id );
+	$post = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -950,7 +950,7 @@ function aafm_args_geodirectory_update_listing(): array {
  */
 function aafm_exec_geodirectory_update_listing( array $input ) {
 	$id   = absint( $input['listing_id'] ?? 0 );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -997,7 +997,7 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		// pre-write intent, so a legitimate normalization is not mistaken for a veto.
 		// $post was read before wp_update_post() ran, so its fields are each field's genuine
 		// pre-write value.
-		$after = get_post( $id );
+		$after = aafm_exact_object( 'post', $id );
 		if ( ! $after instanceof WP_Post
 			|| ( array_key_exists( 'post_title', $update ) && ! aafm_post_field_confirm_logged( $id, 'post_title', $update['post_title'], (string) $post->post_title ) )
 			|| ( array_key_exists( 'post_content', $update ) && ! aafm_post_field_confirm_logged( $id, 'post_content', $update['post_content'], (string) $post->post_content ) )
@@ -1016,7 +1016,7 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		);
 	}
 
-	$fresh = get_post( $id );
+	$fresh = aafm_exact_object( 'post', $id );
 	if ( ! $fresh instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

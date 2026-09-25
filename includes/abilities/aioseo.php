@@ -69,7 +69,7 @@ function aafm_aioseo_rendered_head( string $head, int $post_id, string $source )
 		return $head; // AIOSEO present but no head renderer (e.g. older/newer shape): best-effort.
 	}
 
-	$post = get_post( $post_id );
+	$post = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return $head;
 	}
@@ -459,7 +459,7 @@ function aafm_args_aioseo_get_post(): array {
  */
 function aafm_exec_aioseo_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
 		return aafm_generic_error();
 	}
 	return aafm_aioseo_read_fields( $id );
@@ -563,7 +563,7 @@ function aafm_args_aioseo_update_post(): array {
  */
 function aafm_exec_aioseo_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
 		return aafm_generic_error();
 	}
 
@@ -753,7 +753,7 @@ function aafm_args_aioseo_get_head(): array {
  */
 function aafm_exec_aioseo_get_head( array $input ) {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = $id > 0 ? get_post( $id ) : null;
+	$post = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
 	// Use the shared content-edit gate, not a bare edit_post: it enforces the operator's post-type
 	// exposure allowlist, so a get-head read is refused on a non-exposed post type exactly as the
 	// -get-meta sibling is. A bare edit_post would leak a non-allowlisted CPT's rendered SEO head.

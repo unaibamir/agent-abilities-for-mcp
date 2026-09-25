@@ -93,7 +93,7 @@ function aafm_tec_organizers_registry_definitions(): array {
  * @return array<string,mixed>
  */
 function aafm_tec_organizer_shape( int $id ): array {
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	return array(
 		'id'      => $id,
 		'title'   => $post instanceof WP_Post ? get_the_title( $post ) : '',
@@ -249,7 +249,7 @@ function aafm_args_tec_get_organizer(): array {
  */
 function aafm_exec_tec_get_organizer( array $input ) {
 	$id   = absint( $input['organizer_id'] ?? 0 );
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || Tribe__Events__Organizer::POSTTYPE !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -337,7 +337,7 @@ function aafm_exec_tec_create_organizer( array $input ) {
 		return aafm_generic_error();
 	}
 	$created_id = (int) $created->ID;
-	if ( ! get_post( $created_id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $created_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$response = aafm_with_checked_reads(
@@ -427,7 +427,7 @@ function aafm_exec_tec_update_organizer( array $input ) {
 		$args['post_status'] = $status;
 	}
 	if ( array() === $args ) {
-		if ( ! get_post( $id ) instanceof WP_Post ) {
+		if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 			return aafm_generic_error();
 		}
 		$response = aafm_with_checked_reads(
@@ -444,7 +444,7 @@ function aafm_exec_tec_update_organizer( array $input ) {
 	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$response = aafm_with_checked_reads(

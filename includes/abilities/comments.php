@@ -153,7 +153,7 @@ function aafm_perm_get_comments( array $input ): bool {
 		return current_user_can( 'read' );
 	}
 
-	if ( ! get_post( $post_id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $post_id ) instanceof WP_Post ) {
 		// Default-deny on a missing post so the ability can't probe for ids.
 		return false;
 	}
@@ -342,7 +342,7 @@ function aafm_comment_post_is_readable( int $post_id ): bool {
 		return false;
 	}
 
-	$post = get_post( $post_id );
+	$post = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return false;
 	}
@@ -451,7 +451,7 @@ function aafm_perm_get_comment( array $input ): bool {
 		return current_user_can( 'read' );
 	}
 
-	$comment = get_comment( $id );
+	$comment = aafm_exact_object( 'comment', $id );
 	if ( ! $comment instanceof WP_Comment ) {
 		// Default-deny on a missing comment so the ability can't probe for ids -
 		// the same posture as aafm_perm_get_comments() for a missing target post.
@@ -479,7 +479,7 @@ function aafm_perm_get_comment( array $input ): bool {
  */
 function aafm_exec_get_comment( array $input ) {
 	$id      = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
-	$comment = get_comment( $id );
+	$comment = aafm_exact_object( 'comment', $id );
 	if ( ! $comment instanceof WP_Comment ) {
 		return aafm_generic_error();
 	}
@@ -596,14 +596,14 @@ function aafm_exec_create_comment( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$post = get_post( $post_id );
+	$post = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
 	// An optional parent must be a real comment on the SAME post - no cross-post threading.
 	if ( $parent > 0 ) {
-		$parent_comment = get_comment( $parent );
+		$parent_comment = aafm_exact_object( 'comment', $parent );
 		if ( ! $parent_comment instanceof WP_Comment || (int) $parent_comment->comment_post_ID !== $post_id ) {
 			return aafm_generic_error();
 		}
@@ -827,7 +827,7 @@ function aafm_exec_moderate_comment( array $input ) {
 	$id     = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 	$action = isset( $input['action'] ) ? sanitize_key( (string) $input['action'] ) : '';
 
-	if ( ! get_comment( $id ) instanceof WP_Comment ) {
+	if ( ! aafm_exact_object( 'comment', $id ) instanceof WP_Comment ) {
 		return aafm_generic_error();
 	}
 
@@ -975,7 +975,7 @@ function aafm_exec_update_comment( array $input ) {
 	$id      = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
 
-	if ( ! get_comment( $id ) instanceof WP_Comment ) {
+	if ( ! aafm_exact_object( 'comment', $id ) instanceof WP_Comment ) {
 		return aafm_generic_error();
 	}
 	if ( '' === trim( $content ) ) {
@@ -1080,7 +1080,7 @@ function aafm_args_delete_comment(): array {
 function aafm_exec_delete_comment( array $input ) {
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 
-	if ( ! get_comment( $id ) instanceof WP_Comment ) {
+	if ( ! aafm_exact_object( 'comment', $id ) instanceof WP_Comment ) {
 		return aafm_generic_error();
 	}
 

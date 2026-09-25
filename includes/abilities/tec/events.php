@@ -112,7 +112,7 @@ function aafm_tec_events_registry_definitions(): array {
  * @return array<string,mixed>
  */
 function aafm_tec_event_shape( int $id ): array {
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	return array(
 		'id'            => $id,
 		'title'         => $post instanceof WP_Post ? get_the_title( $post ) : '',
@@ -277,7 +277,7 @@ function aafm_args_tec_get_event(): array {
  */
 function aafm_exec_tec_get_event( array $input ) {
 	$id   = absint( $input['event_id'] ?? 0 );
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || Tribe__Events__Main::POSTTYPE !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -353,7 +353,8 @@ function aafm_tec_event_orm_args( array $input ): array {
 function aafm_tec_validate_venue_organizer_ids( array $input ) {
 	if ( ! empty( $input['venue_id'] ) ) {
 		$venue_id = absint( $input['venue_id'] );
-		if ( 'tribe_venue' !== get_post_type( $venue_id ) ) {
+		$venue    = aafm_exact_object( 'post', $venue_id );
+		if ( 'tribe_venue' !== ( $venue instanceof WP_Post ? $venue->post_type : false ) ) {
 			return new WP_Error(
 				'aafm_tec_invalid_venue',
 				sprintf(
@@ -367,7 +368,8 @@ function aafm_tec_validate_venue_organizer_ids( array $input ) {
 	if ( array_key_exists( 'organizer_ids', $input ) && is_array( $input['organizer_ids'] ) ) {
 		foreach ( $input['organizer_ids'] as $organizer_id ) {
 			$organizer_id = absint( $organizer_id );
-			if ( 'tribe_organizer' !== get_post_type( $organizer_id ) ) {
+			$organizer    = aafm_exact_object( 'post', $organizer_id );
+			if ( 'tribe_organizer' !== ( $organizer instanceof WP_Post ? $organizer->post_type : false ) ) {
 				return new WP_Error(
 					'aafm_tec_invalid_organizer',
 					sprintf(
@@ -482,7 +484,7 @@ function aafm_exec_tec_create_event( array $input ) {
 		return aafm_generic_error();
 	}
 	$created_id = (int) $created->ID;
-	if ( ! get_post( $created_id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $created_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$response = aafm_with_checked_reads(
@@ -573,7 +575,7 @@ function aafm_exec_tec_update_event( array $input ) {
 	}
 	if ( array() === $args ) {
 		// Nothing to change; no-op success.
-		if ( ! get_post( $id ) instanceof WP_Post ) {
+		if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 			return aafm_generic_error();
 		}
 		$response = aafm_with_checked_reads(
@@ -612,7 +614,7 @@ function aafm_exec_tec_update_event( array $input ) {
 			);
 		}
 	}
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$response = aafm_with_checked_reads(

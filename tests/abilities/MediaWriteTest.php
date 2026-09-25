@@ -15,6 +15,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 use WP_Post;
@@ -1339,5 +1340,94 @@ final class MediaWriteTest extends TestCase {
 		$this->assertGreaterThan( 0, $created );
 		$this->assertSame( $original, $thrown );
 		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+	}
+
+	/**
+	 * When the upload's first load of its own attachment reads another row, the upload returns
+	 * the generic error, writes nothing to the attachment, and deletes the attachment row and
+	 * its file.
+	 */
+	public function test_an_upload_whose_attachment_load_reads_another_row_deletes_the_attachment(): void {
+		global $wpdb;
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$before    = $this->attachment_count();
+		$created   = 0;
+		$file      = '';
+		$updates   = 0;
+		$stage     = array();
+		$armed     = null;
+		$suspended = null;
+		QueryFaultInjector::reset_fired_count();
+		// Arm once core writes the new attachment's metadata. Cache additions are suspended from
+		// there, so every load is a query, and the first load of the attachment after the sideload
+		// has returned (the upload's own) reads the bystander's row.
+		$arm = static function ( $data, $attachment_id ) use ( $wpdb, $bystander, &$created, &$file, &$updates, &$stage, &$armed, &$suspended ) {
+			if ( null !== $armed || (int) $attachment_id === $bystander ) {
+				return $data;
+			}
+			$created   = (int) $attachment_id;
+			$file      = (string) get_attached_file( $created );
+			$updates   = did_action( 'pre_post_update' );
+			$suspended = wp_suspend_cache_addition();
+			wp_suspend_cache_addition( true );
+			wp_cache_delete( $created, 'posts' );
+			$needle = sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $created );
+			$inner  = QueryFaultInjector::leak_row_filter(
+				$needle,
+				sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $bystander ),
+				1,
+				true
+			);
+			$armed  = static function ( string $query ) use ( $needle, $inner, &$stage ): string {
+				if ( $needle !== $query ) {
+					return $query;
+				}
+				$trace = array_column( ( new \Exception() )->getTrace(), 'function' );
+				if ( in_array( 'media_handle_sideload', $trace, true ) ) {
+					return $query;
+				}
+				$fired = QueryFaultInjector::fired_count();
+				$out   = $inner( $query );
+				if ( QueryFaultInjector::fired_count() > $fired ) {
+					$stage = $trace;
+				}
+				return $out;
+			};
+			add_filter( 'query', $armed );
+			return $data;
+		};
+		add_filter( 'wp_update_attachment_metadata', $arm, 10, 2 );
+		ob_start();
+		try {
+			$result = aafm_exec_upload_media(
+				array(
+					'filename'    => 'pixel.png',
+					'data_base64' => self::PNG_B64,
+				)
+			);
+		} finally {
+			ob_end_clean();
+			remove_filter( 'wp_update_attachment_metadata', $arm, 10 );
+			if ( null !== $armed ) {
+				remove_filter( 'query', $armed );
+			}
+			if ( null !== $suspended ) {
+				wp_suspend_cache_addition( $suspended );
+			}
+		}
+
+		$this->assertGreaterThan( 0, $created, 'the upload created an attachment' );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the first load of the attachment was faulted once' );
+		$this->assertContains( 'aafm_exact_object', $stage, 'the faulted load ran inside aafm_exact_object()' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_error', $result->get_error_code() );
+		$this->assertSame( $updates, did_action( 'pre_post_update' ), 'no sanitize write reached the attachment' );
+		wp_cache_delete( $created, 'posts' );
+		$this->assertNull( get_post( $created ), 'the attachment row is gone' );
+		$this->assertNotSame( '', $file );
+		$this->assertFalse( file_exists( $file ), 'the attachment file is gone' );
+		$this->assertSame( $before, $this->attachment_count() );
+		$this->assertInstanceOf( WP_Post::class, get_post( $bystander ) );
 	}
 }

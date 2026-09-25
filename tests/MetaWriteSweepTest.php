@@ -2158,6 +2158,77 @@ final class MetaWriteSweepTest extends TestCase {
 		);
 	}
 
+	/**
+	 * User capabilities whose checked call must name its object type as 'user'. The helper loads
+	 * the user row exactly only when told the object is a user, so a call without that argument
+	 * lets a foreign row that a failed users query left behind decide the capability.
+	 */
+	private const USER_OBJECT_CAPS = array( 'edit_user', 'promote_user', 'delete_user', 'remove_user' );
+
+	/**
+	 * Every aafm_user_can_checked() or aafm_user_can_checked_state() call whose literal capability is
+	 * one of USER_OBJECT_CAPS and whose third argument is not the literal 'user', keyed
+	 * path|function|name|ordinal.
+	 *
+	 * @param string $source       Full file contents.
+	 * @param string $virtual_path Path the fixture pretends to live at.
+	 * @return string[]
+	 */
+	private function untyped_user_capability_keys( string $source, string $virtual_path ): array {
+		$tokens     = token_get_all( $source );
+		$name_types = $this->name_token_types();
+		$not_a_call = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION ) );
+		$aliases    = $this->function_aliases( $tokens );
+		$ordinals   = array();
+		$keys       = array();
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || ! in_array( $token[0], $name_types, true ) ) {
+				continue;
+			}
+			$name = $this->resolved_function_name( $token[1], $aliases );
+			if ( 'aafm_user_can_checked' !== $name && 'aafm_user_can_checked_state' !== $name ) {
+				continue;
+			}
+			list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
+			$prev_idx                = $this->previous_significant_index( $tokens, $i - 1 );
+			if ( '(' !== $open || ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) ) {
+				continue;
+			}
+			$args = $this->call_arguments( $tokens, $open_idx );
+			$cap  = $this->literal_argument( $args[0] ?? null );
+			if ( null === $cap || ! in_array( strtolower( $cap ), self::USER_OBJECT_CAPS, true ) || 'user' === $this->literal_argument( $args[2] ?? null ) ) {
+				continue;
+			}
+			$ordinal_key              = $virtual_path . '|' . $this->enclosing_function( $tokens, $i ) . '|' . $name;
+			$ordinals[ $ordinal_key ] = ( $ordinals[ $ordinal_key ] ?? 0 ) + 1;
+			$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
+		}
+		return $keys;
+	}
+
+	public function test_flags_a_user_capability_check_that_does_not_name_the_user_type(): void {
+		$source = "<?php\nfunction f( \$id, \$type ) {\n\taafm_user_can_checked( 'edit_user', \$id );\n\taafm_user_can_checked_state( 'Promote_User', \$id, 'post' );\n\taafm_user_can_checked( 'delete_user', \$id, \$type );\n\taafm_user_can_checked( 'remove_user', \$id, 'user' );\n\taafm_user_can_checked_state( 'edit_user', \$id, \"user\" );\n\taafm_user_can_checked( 'edit_post', \$id );\n}\n";
+		$this->assertSame(
+			array( 'includes/fixture.php|f|aafm_user_can_checked|1', 'includes/fixture.php|f|aafm_user_can_checked_state|1', 'includes/fixture.php|f|aafm_user_can_checked|2' ),
+			$this->untyped_user_capability_keys( $source, 'includes/fixture.php' )
+		);
+	}
+
+	/**
+	 * Every checked capability call on a user names the object type 'user', so the helper loads
+	 * the user row exactly before map_meta_cap() can read another user's roles.
+	 */
+	public function test_every_checked_user_capability_call_names_the_user_type(): void {
+		$files = $this->scanned_files();
+		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
+
+		$found = array();
+		foreach ( $files as $path => $source ) {
+			$found = array_merge( $found, $this->untyped_user_capability_keys( $source, $path ) );
+		}
+		$this->assertSame( array(), $found, 'A checked capability call on a user does not pass \'user\' as its object type.' );
+	}
+
 	// --- Checked capability calls never nest in a checked-read scope --------------
 
 	/**

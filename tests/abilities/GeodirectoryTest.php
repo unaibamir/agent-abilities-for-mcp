@@ -1425,10 +1425,11 @@ final class GeodirectoryTest extends TestCase {
 	}
 
 	/**
-	 * The truncation probe primes its batch the same way, so a trailing draft whose priming load
-	 * hands back another post's rows does not flip `truncated` once the visible set is complete.
+	 * A trailing draft whose priming load hands back another post's rows reads as unknown, so the
+	 * probe reports `truncated` rather than claim the set is complete. The leak still grants
+	 * nothing: the total stays 4.
 	 */
-	public function test_get_listings_probe_is_not_truncated_by_a_leaked_priming_load(): void {
+	public function test_get_listings_probe_reports_truncated_on_a_leaked_priming_load(): void {
 		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
 		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => 2 );
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
@@ -1459,7 +1460,7 @@ final class GeodirectoryTest extends TestCase {
 		);
 
 		$this->assertSame( 4, $out['total'] );
-		$this->assertFalse( $out['truncated'] );
+		$this->assertTrue( $out['truncated'] );
 		$this->assertGreaterThanOrEqual( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
 	}
 
@@ -1519,5 +1520,78 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertSame( array( $public, $own ), array_column( $out['listings'], 'listing_id' ) );
 		$this->assertSame( array( 'publish', 'draft' ), array_column( $out['listings'], 'status' ) );
 		$this->assertSame( 2, $loads, 'one metadata load for each of the two batches' );
+	}
+
+	/**
+	 * Four published listings fill the batch cap, and one trailing draft by another author
+	 * follows. The caller can edit the draft only when its metadata carries the probe flag.
+	 *
+	 * @param bool $flagged Whether the trailing draft carries the probe flag.
+	 * @return int The trailing draft's id.
+	 */
+	private function trailing_draft_past_a_full_scan( bool $flagged ): int {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => 2 );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$other  = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create_many(
+			4,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+				'post_author' => $author,
+			)
+		);
+		$draft = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $other,
+			)
+		);
+		if ( $flagged ) {
+			add_post_meta( $draft, 'geo_probe_flag', '1' );
+		}
+		$this->grant_edit_from_flag_with_donor();
+		wp_set_current_user( $author );
+		return $draft;
+	}
+
+	/**
+	 * When the capability check on a trailing draft cannot load the draft's metadata, the probe
+	 * counts the row as visible, so `truncated` does not claim there is nothing more.
+	 */
+	public function test_get_listings_probe_reports_truncated_when_a_trailing_rows_check_fails(): void {
+		global $wpdb;
+		$draft = $this->trailing_draft_past_a_full_scan( true );
+		$this->assertTrue( aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) )['truncated'], 'healthy: the caller can edit the draft' );
+
+		wp_cache_delete( $draft, 'post_meta' );
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		ob_start();
+		try {
+			$out = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+				array( 'SELECT post_id, meta_key, meta_value FROM', $wpdb->postmeta, "WHERE post_id IN ({$draft})" ),
+				static fn(): array => aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) )
+			);
+		} finally {
+			ob_end_clean();
+		}
+
+		$this->assertSame( 4, $out['total'] );
+		$this->assertTrue( $out['truncated'] );
+		$this->assertGreaterThanOrEqual( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+	}
+
+	/**
+	 * On a healthy database a trailing draft the caller cannot edit still leaves `truncated` false.
+	 */
+	public function test_get_listings_probe_is_not_truncated_by_an_uneditable_trailing_draft_on_a_healthy_database(): void {
+		$this->trailing_draft_past_a_full_scan( false );
+
+		$out = aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) );
+
+		$this->assertSame( 4, $out['total'] );
+		$this->assertFalse( $out['truncated'] );
 	}
 }

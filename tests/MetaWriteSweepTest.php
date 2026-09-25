@@ -1974,7 +1974,8 @@ final class MetaWriteSweepTest extends TestCase {
 
 	/**
 	 * Checked capability calls with no chain load of their object. Moved from
-	 * related-loader-exempt.txt; may only shrink; a key that no longer matches a call fails.
+	 * related-loader-exempt.txt; may only shrink (one ruled exception: the GeoDirectory probe's
+	 * tri-state call); a key that no longer matches a call fails.
 	 */
 	private const UNCHAINED_CHECKED_CAPABILITY_CALLS = array(
 		'includes/abilities/blocks.php|aafm_perm_block_object|aafm_user_can_checked|1',
@@ -1983,6 +1984,7 @@ final class MetaWriteSweepTest extends TestCase {
 		'includes/abilities/geodirectory.php|aafm_perm_geodirectory_get|aafm_user_can_checked|2',
 		'includes/abilities/geodirectory.php|aafm_perm_geodirectory_update|aafm_user_can_checked|1',
 		'includes/abilities/geodirectory.php|aafm_geodirectory_listing_is_visible|aafm_user_can_checked|1',
+		'includes/abilities/geodirectory.php|aafm_exec_geodirectory_get_listings|aafm_user_can_checked_state|1',
 		'includes/abilities/media.php|aafm_perm_update_media|aafm_user_can_checked|1',
 	);
 

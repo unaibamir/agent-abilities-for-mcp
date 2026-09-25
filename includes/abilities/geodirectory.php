@@ -423,8 +423,8 @@ function aafm_geodirectory_listing_batch_cap(): int {
 
 /**
  * Whether a candidate listing is visible under this ability's own rule: public status, or the
- * current user can edit it. Shared by the enumeration loop and the truncation lookahead probe
- * below so the two can never disagree about what counts as visible.
+ * current user can edit it. The enumeration loop below uses it; the truncation probe applies the
+ * same rule on a healthy database and reads a failed capability check as visible.
  *
  * Codex round 5, R5-7: the probe used to rely only on WP_Query's 'perm' => 'readable', which (per
  * this file's own note above) does not exclude 'draft'/'pending' rows the caller cannot edit -
@@ -528,9 +528,11 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 				// question than the enumeration asks - it could see a trailing draft/pending row
 				// the caller cannot edit and report `truncated` even though the visible set was
 				// already complete. Fetch a full extra batch of real posts (not just ids) and
-				// run each one through the SAME aafm_geodirectory_listing_is_visible() predicate
-				// the enumeration uses below, so a probe never disagrees with what the loop itself
-				// would have kept.
+				// run each one through the rule aafm_geodirectory_listing_is_visible() applies in
+				// the enumeration below. The two agree on a healthy database. When a row's
+				// capability check fails, the probe counts that row as visible, so `truncated`
+				// never claims "nothing more" that the scan did not confirm; the loop below still
+				// leaves the row out.
 				//
 				// Codex round 6, B6-5: a single probe batch answered a different question again - if
 				// EVERY row in that one batch is invisible, a later visible row past it was still
@@ -604,7 +606,7 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 						if ( $probe_post->ID > $last_id ) {
 							$last_id = $probe_post->ID;
 						}
-						if ( aafm_geodirectory_listing_is_visible( $probe_post, $public_stati ) ) {
+						if ( in_array( $probe_post->post_status, $public_stati, true ) || false !== aafm_user_can_checked_state( 'edit_post', $probe_post->ID ) ) {
 							$truncated = true;
 							break 2;
 						}
@@ -635,7 +637,8 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 			// all (only 'private'), so an Author could still see another user's draft listing
 			// through the SQL layer alone. Filter every result through the SAME
 			// public-status-or-per-object-edit rule aafm_perm_geodirectory_get() already uses (now
-			// aafm_geodirectory_listing_is_visible(), shared with the cap-lookahead probe above),
+			// aafm_geodirectory_listing_is_visible(); the probe above agrees with it on a healthy
+			// database and reads a failed check as visible),
 			// so no non-public listing the caller cannot edit ever reaches the response regardless
 			// of which status 'perm' missed.
 			foreach ( $query->posts as $post ) {

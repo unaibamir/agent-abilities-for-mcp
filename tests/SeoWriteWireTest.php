@@ -447,4 +447,157 @@ final class SeoWriteWireTest extends TestCase {
 
 		$this->assertSame( array( 'headline' => 'Filtered' ), $unchanged['schema'] );
 	}
+
+	/**
+	 * Run $run with the checked scope's post meta load failed once. For a write, the fault is armed
+	 * after the last metadata write completes, so the failed load is the response's own read.
+	 *
+	 * @param string   $shape       Fault shape.
+	 * @param bool     $after_write Arm after each completed write instead of at once.
+	 * @param callable $run         The call.
+	 * @return mixed
+	 */
+	private function with_response_load_fault( string $shape, bool $after_write, callable $run ) {
+		global $wpdb;
+		$needle = array( 'meta_key, meta_value FROM `' . $wpdb->postmeta . '`', ' IN (' );
+		$fault  = null;
+		$arm    = static function () use ( &$fault, $shape, $needle ): void {
+			if ( null !== $fault ) {
+				remove_filter( 'query', $fault );
+			}
+			$fault = 'no-flush' === $shape ? QueryFaultInjector::no_flush_filter( $needle, 1 ) : QueryFaultInjector::real_error_filter( $needle, 1 );
+			add_filter( 'query', $fault );
+		};
+		if ( $after_write ) {
+			add_action( 'aafm_write_completed', $arm, PHP_INT_MAX, 0 );
+		} else {
+			$arm();
+		}
+		QueryFaultInjector::reset_fired_count();
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+			remove_action( 'aafm_write_completed', $arm, PHP_INT_MAX );
+			if ( null !== $fault ) {
+				remove_filter( 'query', $fault );
+			}
+		}
+	}
+
+	/**
+	 * The call failed its response read: the vendor code with exactly the four error_data keys.
+	 *
+	 * @param mixed               $out   The return.
+	 * @param string              $code  Vendor error code.
+	 * @param array<string,mixed> $data  Expected error_data.
+	 * @param string              $label Case label.
+	 */
+	private function assert_response_read_failed( $out, string $code, array $data, string $label ): void {
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), "$label: the response load was faulted" );
+		$this->assertInstanceOf( \WP_Error::class, $out, $label );
+		$this->assertSame( $code, $out->get_error_code(), $label );
+		$this->assertSame( $data, $out->get_error_data(), $label );
+	}
+
+	/**
+	 * Each SEO update builds its response inside a checked read. When that read fails after a
+	 * write, the call returns the vendor code and says the write could not be confirmed.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_seo_updates_whose_response_read_fails_after_the_write_are_unconfirmed( string $shape ): void {
+		add_filter( 'aafm_integration_active_slim_seo', '__return_true' );
+		$post_id  = self::factory()->post->create();
+		$expected = static fn( ?string $key ): array => array(
+			'status'    => 'unconfirmed',
+			'kind'      => 'post_meta',
+			'object_id' => $post_id,
+			'key'       => $key,
+		);
+
+		$out = $this->with_response_load_fault(
+			$shape,
+			true,
+			static fn() => aafm_exec_yoast_update_post(
+				array(
+					'post_id' => $post_id,
+					'title'   => 'Yoast title',
+				)
+			)
+		);
+		$this->assert_response_read_failed( $out, 'aafm_yoast_write_unconfirmed', $expected( null ), 'yoast' );
+
+		$out = $this->with_response_load_fault(
+			$shape,
+			true,
+			static fn() => aafm_exec_rankmath_update_post(
+				array(
+					'post_id' => $post_id,
+					'title'   => 'Rank Math title',
+				)
+			)
+		);
+		$this->assert_response_read_failed( $out, 'aafm_rankmath_write_unconfirmed', $expected( null ), 'rankmath' );
+
+		$out = $this->with_response_load_fault(
+			$shape,
+			true,
+			static fn() => aafm_exec_rankmath_update_schema(
+				array(
+					'post_id' => $post_id,
+					'type'    => 'Article',
+					'schema'  => array( 'headline' => 'H' ),
+				)
+			)
+		);
+		$this->assert_response_read_failed( $out, 'aafm_rankmath_schema_write_failed', $expected( 'rank_math_schema_Article' ), 'rankmath schema' );
+
+		$out = $this->with_response_load_fault(
+			$shape,
+			true,
+			static fn() => aafm_exec_slim_seo_update_post(
+				array(
+					'post_id' => $post_id,
+					'title'   => 'Slim title',
+				)
+			)
+		);
+		remove_filter( 'aafm_integration_active_slim_seo', '__return_true' );
+		$this->assert_response_read_failed( $out, 'aafm_slim_seo_write_unconfirmed', $expected( 'slim_seo' ), 'slim seo' );
+	}
+
+	/**
+	 * An empty patch writes nothing and answers from a checked read. When that read fails, the
+	 * call returns the vendor code with read_failed: nothing was written, so nothing is claimed.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_an_empty_patch_whose_read_fails_returns_read_failed( string $shape ): void {
+		$post_id = self::factory()->post->create();
+		$cases   = array(
+			'aafm_yoast_write_unconfirmed'    => 'aafm_exec_yoast_update_post',
+			'aafm_rankmath_write_unconfirmed' => 'aafm_exec_rankmath_update_post',
+		);
+		foreach ( $cases as $code => $exec ) {
+			wp_cache_delete( $post_id, 'post_meta' );
+			$out = $this->with_response_load_fault( $shape, false, static fn() => $exec( array( 'post_id' => $post_id ) ) );
+			$this->assert_response_read_failed(
+				$out,
+				$code,
+				array(
+					'status'    => 'read_failed',
+					'kind'      => 'post_meta',
+					'object_id' => $post_id,
+					'key'       => null,
+				),
+				$exec
+			);
+		}
+	}
 }

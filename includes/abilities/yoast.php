@@ -380,7 +380,8 @@ function aafm_seo_group_write_response( string $code, int $id, $result, callable
 			$out['keys']   = (object) $keys;
 			return $out;
 		},
-		aafm_seo_write_error( $code, AAFM_WRITE_UNCONFIRMED, $id, null )
+		// With no key in the result nothing was written, so a failed read claims no write.
+		aafm_seo_write_error( $code, array() === $result['keys'] ? AAFM_WRITE_READ_FAILED : AAFM_WRITE_UNCONFIRMED, $id, null )
 	);
 }
 
@@ -614,10 +615,15 @@ function aafm_exec_yoast_update_post( array $input ) {
 	}
 
 	if ( array() === $intended ) {
-		$out           = aafm_yoast_read_fields( $id );
-		$out['status'] = AAFM_WRITE_UNCHANGED;
-		$out['keys']   = (object) array();
-		return $out;
+		return aafm_seo_group_write_response(
+			'aafm_yoast_write_unconfirmed',
+			$id,
+			array(
+				'status' => AAFM_WRITE_UNCHANGED,
+				'keys'   => array(),
+			),
+			'aafm_yoast_read_fields'
+		);
 	}
 
 	return aafm_seo_group_write_response( 'aafm_yoast_write_unconfirmed', $id, aafm_yoast_write_meta( $id, $intended ), 'aafm_yoast_read_fields' );

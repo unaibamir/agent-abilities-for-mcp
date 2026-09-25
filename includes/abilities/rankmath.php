@@ -598,10 +598,15 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	}
 
 	if ( array() === $intended ) {
-		$out           = aafm_rankmath_read_fields( $id );
-		$out['status'] = AAFM_WRITE_UNCHANGED;
-		$out['keys']   = (object) array();
-		return $out;
+		return aafm_seo_group_write_response(
+			'aafm_rankmath_write_unconfirmed',
+			$id,
+			array(
+				'status' => AAFM_WRITE_UNCHANGED,
+				'keys'   => array(),
+			),
+			'aafm_rankmath_read_fields'
+		);
 	}
 
 	$result = aafm_rankmath_write_meta( $id, $intended );

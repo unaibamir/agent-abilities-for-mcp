@@ -758,4 +758,75 @@ final class SeoWriteWireTest extends TestCase {
 		);
 		$this->assertSame( 'Site', get_post_meta( $post_id, '_yoast_wpseo_title', true ) );
 	}
+
+	/**
+	 * A Yoast patch whose every key is unchanged writes nothing. When its response read fails,
+	 * the call returns read_failed, not unconfirmed.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_an_all_unchanged_yoast_patch_whose_read_fails_returns_read_failed( string $shape ): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, '_yoast_wpseo_title', 'Kept' );
+
+		$out = $this->with_response_load_fault(
+			$shape,
+			true,
+			static fn() => aafm_exec_yoast_update_post(
+				array(
+					'post_id' => $post_id,
+					'title'   => 'Kept',
+				)
+			)
+		);
+
+		$this->assert_response_read_failed(
+			$out,
+			'aafm_yoast_write_unconfirmed',
+			array(
+				'status'    => 'read_failed',
+				'kind'      => 'post_meta',
+				'object_id' => $post_id,
+				'key'       => null,
+			),
+			'yoast'
+		);
+		$this->assertSame( 'Kept', get_post_meta( $post_id, '_yoast_wpseo_title', true ) );
+	}
+
+	/**
+	 * The same for a Rank Math patch whose every key is unchanged.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_an_all_unchanged_rankmath_patch_whose_read_fails_returns_read_failed( string $shape ): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, 'rank_math_title', 'Kept' );
+
+		$out = $this->with_response_load_fault(
+			$shape,
+			true,
+			static fn() => aafm_exec_rankmath_update_post(
+				array(
+					'post_id' => $post_id,
+					'title'   => 'Kept',
+				)
+			)
+		);
+
+		$this->assert_response_read_failed(
+			$out,
+			'aafm_rankmath_write_unconfirmed',
+			array(
+				'status'    => 'read_failed',
+				'kind'      => 'post_meta',
+				'object_id' => $post_id,
+				'key'       => null,
+			),
+			'rankmath'
+		);
+		$this->assertSame( 'Kept', get_post_meta( $post_id, 'rank_math_title', true ) );
+	}
 }

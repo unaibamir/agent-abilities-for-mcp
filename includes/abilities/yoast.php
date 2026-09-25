@@ -380,8 +380,9 @@ function aafm_seo_group_write_response( string $code, int $id, $result, callable
 			$out['keys']   = (object) $keys;
 			return $out;
 		},
-		// With no key in the result nothing was written, so a failed read claims no write.
-		aafm_seo_write_error( $code, array() === $result['keys'] ? AAFM_WRITE_READ_FAILED : AAFM_WRITE_UNCONFIRMED, $id, null )
+		// Nothing was written when the aggregate is unchanged (every key unchanged, or no key), so a
+		// failed read claims no write.
+		aafm_seo_write_error( $code, AAFM_WRITE_UNCHANGED === $result['status'] ? AAFM_WRITE_READ_FAILED : AAFM_WRITE_UNCONFIRMED, $id, null )
 	);
 }
 

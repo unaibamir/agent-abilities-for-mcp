@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use RuntimeException;
 
@@ -27,6 +28,13 @@ final class WpmlLanguageTest extends TestCase {
 	 * @var string[]
 	 */
 	private array $switches = array();
+
+	/**
+	 * For each faulted query, the functions on the stack when it fired.
+	 *
+	 * @var array<int,string[]>
+	 */
+	private array $stages = array();
 
 	public function tear_down(): void {
 		remove_all_filters( 'wpml_active_languages' );
@@ -306,5 +314,253 @@ final class WpmlLanguageTest extends TestCase {
 			$out['post']['excerpt'],
 			'The excerpt must be shaped under the REQUESTED language ("en"), not ambient ("is").'
 		);
+	}
+
+	/**
+	 * Core's own SELECT for one object.
+	 *
+	 * @param string $type 'post', 'term' or 'comment'.
+	 * @param int    $id   Object id.
+	 * @return string
+	 */
+	private function load_sql( string $type, int $id ): string {
+		global $wpdb;
+		switch ( $type ) {
+			case 'term':
+				return sprintf( 'SELECT t.*, tt.* FROM %1$s AS t INNER JOIN %2$s AS tt ON t.term_id = tt.term_id WHERE t.term_id = %3$d', $wpdb->terms, $wpdb->term_taxonomy, $id );
+			case 'comment':
+				return sprintf( 'SELECT * FROM %1$s WHERE comment_ID = %2$d LIMIT 1', $wpdb->comments, $id );
+		}
+		return sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $id );
+	}
+
+	/**
+	 * A `query` filter that answers the $occurrence-th query matching $needle with the rows of
+	 * $leak_sql (none when $leak_sql selects nothing) and records the call stack it fired in.
+	 *
+	 * @param string|string[] $needle     Exact query, or substrings that must all be present.
+	 * @param string          $leak_sql   The query whose rows are left behind.
+	 * @param int             $occurrence Which match to answer; 0 for every one.
+	 * @return callable
+	 */
+	private function recording_leak( $needle, string $leak_sql, int $occurrence = 1 ): callable {
+		$inner = QueryFaultInjector::leak_row_filter( $needle, $leak_sql, $occurrence, ! is_array( $needle ) );
+		return function ( string $query ) use ( $inner ): string {
+			$before = QueryFaultInjector::fired_count();
+			$out    = $inner( $query );
+			if ( QueryFaultInjector::fired_count() > $before ) {
+				$this->stages[] = array_map(
+					static function ( array $frame ): string {
+						return (string) ( $frame['function'] ?? '' );
+					},
+					( new \Exception() )->getTrace()
+				);
+			}
+			return $out;
+		};
+	}
+
+	/**
+	 * Fault the next load of object $a: its cache entry is dropped and its SELECT reads object
+	 * $b's row, or no row when $b is null.
+	 *
+	 * @param string   $type       Object type.
+	 * @param int      $a          The object asked for.
+	 * @param int|null $b          The object whose row is left behind, or null for none.
+	 * @param int      $occurrence Which matching load to answer.
+	 * @return callable
+	 */
+	private function fault_load( string $type, int $a, ?int $b = null, int $occurrence = 1 ): callable {
+		global $wpdb;
+		wp_cache_delete(
+			$a,
+			array(
+				'post'    => 'posts',
+				'term'    => 'terms',
+				'comment' => 'comment',
+			)[ $type ]
+		);
+		$leak = null === $b ? sprintf( 'SELECT * FROM %s WHERE 1 = 0', $wpdb->posts ) : $this->load_sql( $type, $b );
+		return $this->recording_leak( $this->load_sql( $type, $a ), $leak, $occurrence );
+	}
+
+	/**
+	 * Run $run with $filter on `query`, database errors suppressed and output discarded.
+	 *
+	 * @param callable|null $filter The `query` filter, or null for none.
+	 * @param callable      $run    The call.
+	 * @return mixed
+	 */
+	private function armed( ?callable $filter, callable $run ) {
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		if ( null !== $filter ) {
+			add_filter( 'query', $filter );
+		}
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			if ( null !== $filter ) {
+				remove_filter( 'query', $filter );
+			}
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * The fault fired once, inside $name.
+	 *
+	 * @param string $name  Function name expected on the stack.
+	 * @param string $label Case label.
+	 */
+	private function assert_fired_in( string $name, string $label ): void {
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), "$label: the load was faulted" );
+		$this->assertContains( $name, $this->stages[0] ?? array(), "$label: the faulted SELECT fired inside $name" );
+	}
+
+	/**
+	 * A post.
+	 *
+	 * @param array<string,mixed> $args Post fields.
+	 */
+	private function post( array $args = array() ): int {
+		return (int) self::factory()->post->create( $args + array( 'post_status' => 'publish' ) );
+	}
+
+	/**
+	 * T7 (F2): the resolver loads the original exactly. When that load reads another post's row,
+	 * the resolver gives 0, so the permission and the executor both refuse instead of guessing
+	 * the element type from the wrong row.
+	 */
+	public function test_get_post_refuses_when_the_translation_resolvers_load_reads_another_row(): void {
+		QueryFaultInjector::reset_fired_count();
+		$this->stages = array();
+		$this->acting_as( 'subscriber' );
+		$original = $this->post();
+		$other    = $this->post( array( 'post_type' => 'page' ) );
+		$this->fake_wpml();
+		add_filter(
+			'wpml_object_id',
+			static function ( $id, $type ) use ( $original ) {
+				return (int) $id === $original && 'post' === $type ? $original + 100000 : $id;
+			},
+			10,
+			4
+		);
+		get_post( $other );
+		$input = array(
+			'post_id' => $original,
+			'lang'    => 'en',
+		);
+
+		$allowed = $this->armed(
+			$this->fault_load( 'post', $original, $other ),
+			static function () use ( $input ) {
+				return aafm_perm_get_post( $input );
+			}
+		);
+		$this->assertFalse( $allowed, 'permission refused' );
+		$this->assert_fired_in( 'aafm_get_post_lang_resolved_id', 'resolver load (permission)' );
+
+		QueryFaultInjector::reset_fired_count();
+		$this->stages = array();
+		$out          = $this->armed(
+			$this->fault_load( 'post', $original, $other ),
+			static function () use ( $input ) {
+				return aafm_exec_get_post( $input );
+			}
+		);
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assert_fired_in( 'aafm_get_post_lang_resolved_id', 'resolver load (executor)' );
+	}
+
+	/**
+	 * T7 (executor re-check): the permission and the executor each resolve the translation, so a
+	 * resolver that answers differently the second time hands the executor an object the
+	 * permission never checked. The executor re-runs the read check on the object it serves.
+	 *
+	 * @dataProvider data_getters
+	 *
+	 * @param string $getter 'post' or 'page'.
+	 */
+	public function test_a_getter_refuses_an_object_its_permission_did_not_check( string $getter ): void {
+		$this->acting_as( 'subscriber' );
+		$type    = 'page' === $getter ? 'page' : 'post';
+		$public  = $this->post( array( 'post_type' => $type ) );
+		$private = $this->post(
+			array(
+				'post_type'   => $type,
+				'post_status' => 'private',
+			)
+		);
+		$calls   = 0;
+		$this->fake_wpml();
+		add_filter(
+			'wpml_object_id',
+			static function ( $id ) use ( $public, $private, &$calls ) {
+				if ( (int) $id !== $public ) {
+					return $id;
+				}
+				++$calls;
+				return 1 === $calls ? $public : $private;
+			},
+			10,
+			4
+		);
+		$key   = 'page' === $getter ? 'page_id' : 'post_id';
+		$input = array(
+			$key   => $public,
+			'lang' => 'en',
+		);
+		$perm  = 'page' === $getter ? 'aafm_perm_get_page' : 'aafm_perm_get_post';
+		$exec  = 'page' === $getter ? 'aafm_exec_get_page' : 'aafm_exec_get_post';
+
+		$this->assertTrue( $perm( $input ), 'the permission checked the public post' );
+		$out = $exec( $input );
+
+		$this->assertInstanceOf( \WP_Error::class, $out, 'the private translation was not served' );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( 2, $calls, 'each call resolved once' );
+	}
+
+	/**
+	 * The two getters that serve a resolved translation.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_getters(): iterable {
+		yield 'get-post' => array( 'post' );
+		yield 'get-page' => array( 'page' );
+	}
+
+	/**
+	 * T7 healthy: a translated read serves the translation, as before.
+	 */
+	public function test_get_post_serves_the_translation_when_healthy(): void {
+		$this->acting_as( 'subscriber' );
+		$original    = $this->post();
+		$translation = $this->post();
+		$this->fake_wpml();
+		add_filter(
+			'wpml_object_id',
+			static function ( $id, $type ) use ( $original, $translation ) {
+				return (int) $id === $original && 'post' === $type ? $translation : $id;
+			},
+			10,
+			4
+		);
+		$input = array(
+			'post_id' => $original,
+			'lang'    => 'en',
+		);
+
+		$this->assertTrue( aafm_perm_get_post( $input ) );
+		$out = aafm_exec_get_post( $input );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $translation, $out['post']['id'] );
 	}
 }

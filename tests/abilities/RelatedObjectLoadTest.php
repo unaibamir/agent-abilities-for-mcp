@@ -491,6 +491,30 @@ final class RelatedObjectLoadTest extends TestCase {
 		$this->assertSame( 2, QueryFaultInjector::fired_count() );
 	}
 
+	public function test_an_orphaned_term_taxonomy_row_reads_absent(): void {
+		global $wpdb;
+		$wpdb->insert(
+			$wpdb->term_taxonomy,
+			array(
+				'term_id'     => self::MISSING,
+				'taxonomy'    => 'category',
+				'description' => '',
+				'parent'      => 0,
+				'count'       => 0,
+			)
+		);
+
+		$this->assertNull( get_term( self::MISSING, 'category' ), 'core finds no term without its terms row' );
+		$this->assertTrue( aafm_object_absent( 'term', self::MISSING, 'category' ) );
+	}
+
+	public function test_term_absence_with_no_taxonomy_matches_any_taxonomy(): void {
+		$term = $this->category();
+
+		$this->assertFalse( aafm_object_absent( 'term', $term, '' ) );
+		$this->assertTrue( aafm_object_absent( 'term', self::MISSING, '' ) );
+	}
+
 	/**
 	 * An attachment inheriting its status from $parent_id.
 	 *

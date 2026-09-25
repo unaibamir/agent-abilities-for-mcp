@@ -1077,7 +1077,8 @@ function aafm_exact_object( string $type, int $id, string $taxonomy = '' ) {
  * Whether a post or term row is certainly not in the database: true only when a query that ran
  * without error found no row.
  *
- * A term row counts only in $taxonomy. Any other type, a failed query or a row found gives false.
+ * A term counts only when both its terms row and its term_taxonomy row exist, in $taxonomy, or in
+ * any taxonomy when $taxonomy is ''. Any other type, a failed query or a row found gives false.
  *
  * @phpstan-impure
  * @param string $type     'post' or 'term'.
@@ -1091,7 +1092,11 @@ function aafm_object_absent( string $type, int $id, string $taxonomy = '' ): boo
 	if ( 'post' === $type ) {
 		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT ID FROM %i WHERE ID = %d', $wpdb->posts, $id ) );
 	} elseif ( 'term' === $type ) {
-		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT term_id FROM %i WHERE term_id = %d AND taxonomy = %s', $wpdb->term_taxonomy, $id, $taxonomy ) );
+		// Core loads a term through the same join (class-wp-term.php), so a term_taxonomy row
+		// without a terms row is missing to core too.
+		$view = '' === $taxonomy
+			? aafm_wpdb_scalar( $wpdb->prepare( 'SELECT term_id FROM %i AS tt INNER JOIN %i AS t USING ( term_id ) WHERE term_id = %d', $wpdb->term_taxonomy, $wpdb->terms, $id ) )
+			: aafm_wpdb_scalar( $wpdb->prepare( 'SELECT term_id FROM %i AS tt INNER JOIN %i AS t USING ( term_id ) WHERE term_id = %d AND taxonomy = %s', $wpdb->term_taxonomy, $wpdb->terms, $id, $taxonomy ) );
 	} else {
 		return false;
 	}
@@ -1105,7 +1110,7 @@ function aafm_object_absent( string $type, int $id, string $taxonomy = '' ): boo
  *
  * For a post that is the post, then each post_parent; for a term, the term, then each parent in
  * its taxonomy; for a comment, the comment, then its post (none when comment_post_ID is 0), then
- * that post's parents. Core then reads every one of them from the cache instead of running a query of its own.
+ * that post's parents. Core then reads every one of them from the cache, when cache additions are allowed, instead of running a query of its own.
  *
  * A parent that does not load ends the walk when aafm_object_absent() says its row is not there,
  * which is how core reads a missing parent; otherwise the result is null. The first post of the

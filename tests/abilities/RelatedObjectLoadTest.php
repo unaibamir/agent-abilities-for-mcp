@@ -1115,4 +1115,341 @@ final class RelatedObjectLoadTest extends TestCase {
 			$this->assertSame( $expected, (int) get_post( $id )->post_parent, "post_parent of $id unchanged" );
 		}
 	}
+
+	/**
+	 * T6 writer walks: one row per writer site outside the menus.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_writer_walks(): iterable {
+		$shapes = array( 'update-post', 'replace-in-post', 'replace-sitewide', 'avada', 'update-block', 'geodirectory', 'update-media', 'update-template', 'restore-revision', 'trash-post', 'trash-page', 'delete-block', 'tec-delete-event' );
+		foreach ( $shapes as $shape ) {
+			yield $shape => array( $shape );
+		}
+	}
+
+	/**
+	 * The object a writer acts on, and the call that writes it.
+	 *
+	 * @param string $shape Writer shape.
+	 * @return array{0:int,1:callable}
+	 */
+	private function writer_case( string $shape ): array {
+		switch ( $shape ) {
+			case 'update-post':
+				$id = $this->post();
+				return array(
+					$id,
+					static function () use ( $id ) {
+						return aafm_exec_update_post(
+							array(
+								'post_id' => $id,
+								'title'   => 'Renamed',
+							)
+						);
+					},
+				);
+			case 'replace-in-post':
+				$id = $this->post( array( 'post_content' => 'Hello world' ) );
+				return array(
+					$id,
+					static function () use ( $id ) {
+						return aafm_exec_replace_in_post(
+							array(
+								'post_id' => $id,
+								'search'  => 'Hello',
+								'replace' => 'Howdy',
+							)
+						);
+					},
+				);
+			case 'replace-sitewide':
+				$id = $this->post(
+					array(
+						'post_type'    => 'page',
+						'post_content' => 'Hello aafmwalktoken',
+					)
+				);
+				return array(
+					$id,
+					static function () {
+						return aafm_exec_replace_sitewide(
+							array(
+								'post_type' => 'page',
+								'search'    => 'aafmwalktoken',
+								'replace'   => 'swapped',
+								'dry_run'   => false,
+							)
+						);
+					},
+				);
+			case 'avada':
+				$id = $this->post( array( 'post_content' => '[fusion_builder_container][fusion_text]Hello world[/fusion_text][/fusion_builder_container]' ) );
+				update_post_meta( $id, 'fusion_builder_status', 'active' );
+				return array(
+					$id,
+					static function () use ( $id ) {
+						return aafm_exec_avada_replace_text(
+							array(
+								'post_id' => $id,
+								'search'  => 'Hello world',
+								'replace' => 'Howdy world',
+							)
+						);
+					},
+				);
+			case 'update-block':
+			case 'delete-block':
+				$id = $this->post( array( 'post_type' => 'wp_block' ) );
+				if ( 'delete-block' === $shape ) {
+					return array(
+						$id,
+						static function () use ( $id ) {
+							return aafm_exec_delete_block( array( 'block_id' => $id ) );
+						},
+					);
+				}
+				return array(
+					$id,
+					static function () use ( $id ) {
+						return aafm_exec_update_block(
+							array(
+								'block_id' => $id,
+								'title'    => 'Renamed',
+							)
+						);
+					},
+				);
+			case 'geodirectory':
+				aafm_geodir_stub_activate();
+				$made = aafm_exec_geodirectory_create_listing( array( 'title' => 'Listing' ) );
+				$this->assertIsArray( $made );
+				$id = (int) $made['listing_id'];
+				return array(
+					$id,
+					static function () use ( $id ) {
+						return aafm_exec_geodirectory_update_listing(
+							array(
+								'listing_id' => $id,
+								'title'      => 'Renamed',
+							)
+						);
+					},
+				);
+			case 'update-media':
+				$id = $this->attachment( 0 );
+				return array(
+					$id,
+					static function () use ( $id ) {
+						return aafm_exec_update_media(
+							array(
+								'attachment_id' => $id,
+								'title'         => 'Renamed',
+							)
+						);
+					},
+				);
+			case 'update-template':
+				$id = $this->post(
+					array(
+						'post_type'    => 'wp_template',
+						'post_name'    => 'aafm-walk',
+						'post_content' => 'old',
+					)
+				);
+				wp_set_object_terms( $id, get_stylesheet(), 'wp_theme' );
+				return array(
+					$id,
+					static function () {
+						return aafm_exec_update_template(
+							array(
+								'template_id' => get_stylesheet() . '//aafm-walk',
+								'content'     => '<!-- wp:paragraph --><p>new</p><!-- /wp:paragraph -->',
+							)
+						);
+					},
+				);
+			case 'restore-revision':
+				$id = $this->post( array( 'post_content' => 'v1' ) );
+				wp_update_post(
+					array(
+						'ID'           => $id,
+						'post_content' => 'v2',
+					)
+				);
+				wp_update_post(
+					array(
+						'ID'           => $id,
+						'post_content' => 'v3',
+					)
+				);
+				$revisions = wp_get_post_revisions( $id );
+				$oldest    = end( $revisions );
+				$this->assertInstanceOf( WP_Post::class, $oldest );
+				$revision_id = (int) $oldest->ID;
+				return array(
+					$id,
+					static function () use ( $id, $revision_id ) {
+						return aafm_exec_restore_revision(
+							array(
+								'post_id'     => $id,
+								'revision_id' => $revision_id,
+							)
+						);
+					},
+				);
+			case 'trash-post':
+				$id = $this->post();
+				return array(
+					$id,
+					static function () use ( $id ) {
+						return aafm_exec_trash_post( array( 'post_id' => $id ) );
+					},
+				);
+			case 'trash-page':
+				$id = $this->post( array( 'post_type' => 'page' ) );
+				return array(
+					$id,
+					static function () use ( $id ) {
+						return aafm_exec_trash_page( array( 'page_id' => $id ) );
+					},
+				);
+		}
+		aafm_tec_stub_define_globals();
+		aafm_tec_stub_register_post_types();
+		$id = $this->post( array( 'post_type' => \Tribe__Events__Main::POSTTYPE ) );
+		return array(
+			$id,
+			static function () use ( $id ) {
+				return aafm_exec_tec_delete_event( array( 'event_id' => $id ) );
+			},
+		);
+	}
+
+	/**
+	 * How many times a writer reached core: an update (which a revision restore runs too) or a trash.
+	 */
+	private function writer_calls(): int {
+		return did_action( 'pre_post_update' ) + did_action( 'wp_trash_post' );
+	}
+
+	/**
+	 * T6: each writer chain-loads its post before core's parent walk, and refuses when an ancestor
+	 * reads another row. replace-sitewide skips the post instead of refusing the call.
+	 *
+	 * @dataProvider data_writer_walks
+	 *
+	 * @param string $shape Writer shape.
+	 */
+	public function test_a_writer_refuses_before_its_walk_when_an_ancestor_reads_another_row( string $shape ): void {
+		$this->acting_as( 'administrator' );
+		list( $child, $run ) = $this->writer_case( $shape );
+
+		$grand   = $this->post( array( 'post_type' => 'page' ) );
+		$parent  = $this->post( array( 'post_type' => 'page' ) );
+		$foreign = $this->post();
+		$this->set_parent( $child, $parent );
+		$this->set_parent( $parent, $grand );
+		get_post( $foreign );
+		$status = get_post( $child )->post_status;
+		$writes = $this->writer_calls();
+
+		$out = $this->armed( $this->fault_load( 'post', $grand, $foreign ), $run );
+
+		if ( 'replace-sitewide' === $shape ) {
+			$this->assertIsArray( $out );
+			$this->assertSame( 0, $out['matched_posts'], 'the post was skipped' );
+			$this->assertSame( 0, $out['updated_posts'] );
+		} else {
+			// restore-revision's missing-post path is its existing irreversible refusal.
+			$this->assertInstanceOf( \WP_Error::class, $out, $shape );
+			$this->assertSame( 'restore-revision' === $shape ? 'aafm_restore_irreversible' : 'aafm_error', $out->get_error_code(), $shape );
+		}
+		$this->assert_fired_in( 'aafm_exact_object_chain', $shape );
+		$this->assertSame( $writes, $this->writer_calls(), "$shape: the writer was not reached" );
+		$parents = array(
+			$child  => $parent,
+			$parent => $grand,
+		);
+		foreach ( $parents as $id => $expected ) {
+			clean_post_cache( $id );
+			$this->assertSame( $expected, (int) get_post( $id )->post_parent, "$shape: post_parent of $id unchanged" );
+		}
+		$this->assertSame( $status, get_post( $child )->post_status, "$shape: status unchanged" );
+	}
+
+	/**
+	 * T6 (replace-sitewide pair): an earlier write in the loop clears its post from the cache, and
+	 * that post can be a later candidate's parent, so each post is chain-loaded again right before
+	 * its own write. Fault the parent's load inside that second chain, after the parent was written.
+	 */
+	public function test_replace_sitewide_loads_each_post_again_before_its_write(): void {
+		$this->acting_as( 'administrator' );
+		$token   = 'aafmpairtoken';
+		$page_a  = $this->post(
+			array(
+				'post_type'    => 'page',
+				'post_content' => "A $token",
+			)
+		);
+		$page_b  = $this->post(
+			array(
+				'post_type'    => 'page',
+				'post_content' => "B $token",
+				'post_parent'  => $page_a,
+			)
+		);
+		$foreign = $this->post();
+		get_post( $foreign );
+		$written = false;
+		$mark    = static function ( int $id ) use ( &$written, $page_a ): void {
+			if ( $id === $page_a ) {
+				$written = true;
+			}
+		};
+		$leak    = $this->recording_leak( $this->load_sql( 'post', $page_a ), $this->load_sql( 'post', $foreign ) );
+		$filter  = static function ( string $query ) use ( &$written, $leak ): string {
+			if ( ! $written ) {
+				return $query;
+			}
+			$in_chain = in_array( 'aafm_exact_object_chain', array_column( ( new \Exception() )->getTrace(), 'function' ), true );
+			return $in_chain ? $leak( $query ) : $query;
+		};
+		add_action( 'post_updated', $mark );
+
+		try {
+			$out = $this->armed(
+				$filter,
+				static function () use ( $token ) {
+					return aafm_exec_replace_sitewide(
+						array(
+							'post_type' => 'page',
+							'search'    => $token,
+							'replace'   => 'swapped',
+							'dry_run'   => false,
+						)
+					);
+				}
+			);
+		} finally {
+			remove_action( 'post_updated', $mark );
+		}
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 2, $out['matched_posts'] );
+		$this->assertSame( 1, $out['updated_posts'], 'A was written' );
+		$this->assertSame( 1, $out['failed_updates'], 'B was counted as failed' );
+		$this->assert_fired_in( 'aafm_exact_object_chain', 'A reloaded for B' );
+		clean_post_cache( $page_b );
+		$this->assertSame( "B $token", get_post( $page_b )->post_content, 'B was not written' );
+		$parents = array(
+			$page_a  => 0,
+			$page_b  => $page_a,
+			$foreign => 0,
+		);
+		foreach ( $parents as $id => $expected ) {
+			clean_post_cache( $id );
+			$this->assertSame( $expected, (int) get_post( $id )->post_parent, "post_parent of $id unchanged" );
+		}
+	}
 }

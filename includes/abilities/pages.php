@@ -499,7 +499,7 @@ function aafm_exec_trash_page( array $input ) {
 		return aafm_trash_disabled_error();
 	}
 	$id   = absint( $input['page_id'] );
-	$post = aafm_exact_object( 'post', $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return aafm_generic_error();
 	}

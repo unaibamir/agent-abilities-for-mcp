@@ -950,7 +950,7 @@ function aafm_args_geodirectory_update_listing(): array {
  */
 function aafm_exec_geodirectory_update_listing( array $input ) {
 	$id   = absint( $input['listing_id'] ?? 0 );
-	$post = aafm_exact_object( 'post', $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return aafm_generic_error();
 	}

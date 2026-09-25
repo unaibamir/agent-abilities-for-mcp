@@ -438,6 +438,9 @@ function aafm_exec_update_block( array $input ) {
 	if ( null === $block ) {
 		return aafm_generic_error();
 	}
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 	$guard  = array(
 		'warnings' => array(),
 		'error'    => null,
@@ -539,6 +542,9 @@ function aafm_exec_delete_block( array $input ) {
 		// The same actionable refusal trash-post/trash-page return, so the agent learns WHY
 		// the delete was refused instead of getting the generic error (B43).
 		return aafm_trash_disabled_error();
+	}
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
 	}
 	$result = wp_trash_post( $id );
 	if ( ! $result instanceof WP_Post ) {

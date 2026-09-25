@@ -693,6 +693,9 @@ function aafm_exec_tec_delete_event( array $input ) {
 		return aafm_trash_disabled_error();
 	}
 	$id = absint( $input['event_id'] ?? 0 );
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 	if ( ! wp_trash_post( $id ) ) {
 		return aafm_generic_error();
 	}

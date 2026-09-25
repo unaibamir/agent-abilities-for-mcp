@@ -398,7 +398,7 @@ function aafm_fusion_shortcode_structure_preserved( string $before, string $afte
  */
 function aafm_exec_avada_replace_text( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = aafm_exact_object( 'post', $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

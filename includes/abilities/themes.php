@@ -454,8 +454,11 @@ function aafm_exec_update_template( array $input ) {
 	$content = wp_kses_post( (string) ( $input['content'] ?? '' ) );
 	// Read before the write: the raw post_content confirmation below reads back, matching the
 	// context aafm_post_field_write_confirmed()'s own read-back uses.
-	$stored      = aafm_exact_object( 'post', $wp_id );
-	$content_was = $stored instanceof WP_Post ? $stored->post_content : '';
+	$stored = aafm_exact_object_chain( 'post', $wp_id );
+	if ( ! $stored instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$content_was = $stored->post_content;
 	$content_was = is_scalar( $content_was ) ? (string) $content_was : '';
 
 	// Template content is pure Gutenberg block markup edited in the Site Editor, which runs the

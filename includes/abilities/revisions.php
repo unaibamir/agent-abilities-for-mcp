@@ -349,7 +349,7 @@ function aafm_exec_restore_revision( array $input ) {
 	// (WP_POST_REVISIONS false / the wp_revisions_to_keep filter returning 0) or the type
 	// dropped 'revisions' support. Restoring in that state would silently destroy the
 	// current state under a "reversible" promise, so refuse with an actionable error.
-	$parent = aafm_exact_object( 'post', $post_id );
+	$parent = aafm_exact_object_chain( 'post', $post_id );
 	if ( ! $parent instanceof WP_Post
 		|| ! post_type_supports( $parent->post_type, 'revisions' )
 		|| ! wp_revisions_enabled( $parent ) ) {

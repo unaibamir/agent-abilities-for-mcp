@@ -1225,7 +1225,7 @@ function aafm_perm_update_post( array $input ): bool {
  */
 function aafm_exec_update_post( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = aafm_exact_object( 'post', $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1680,7 +1680,7 @@ function aafm_replacement_preserves_structure( string $before, string $after ): 
  */
 function aafm_exec_replace_in_post( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = aafm_exact_object( 'post', $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1970,11 +1970,17 @@ function aafm_exec_replace_sitewide( array $input ) {
 	$candidates    = array();
 	$no_perm       = 0;
 	$builder_owned = 0;
-	foreach ( $scan_query->posts as $post_id ) {
+	/**
+	 * With 'fields' => 'ids' the query returns ids; the WP_Query stub types ->posts as WP_Post[].
+	 *
+	 * @var int[] $post_ids
+	 */
+	$post_ids = $scan_query->posts;
+	foreach ( $post_ids as $post_id ) {
 		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS ) {
 			break;
 		}
-		$post = aafm_exact_object( 'post', (int) $post_id ); // @phpstan-ignore-line cast.int (fields=>ids means $post_id is really an int; the WP_Query stub types ->posts as WP_Post[] unconditionally).
+		$post = aafm_exact_object_chain( 'post', $post_id );
 		if ( ! $post instanceof WP_Post ) {
 			continue;
 		}
@@ -2018,6 +2024,12 @@ function aafm_exec_replace_sitewide( array $input ) {
 
 		if ( $dry_run ) {
 			continue; // Counted in matched_posts below; nothing written.
+		}
+		// An earlier write in this loop drops its post from the cache, and that post can be this
+		// one's parent, so load the chain again right before core walks it.
+		if ( ! aafm_exact_object_chain( 'post', (int) $post->ID ) instanceof WP_Post ) {
+			++$failed;
+			continue;
 		}
 
 		$result = wp_update_post(
@@ -2202,6 +2214,9 @@ function aafm_exec_trash_post( array $input ) {
 		return aafm_trash_disabled_error();
 	}
 	$id = absint( $input['post_id'] );
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 	$ok = wp_trash_post( $id );
 	if ( ! $ok ) {
 		return aafm_generic_error();

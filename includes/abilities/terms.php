@@ -846,7 +846,7 @@ function aafm_validate_term_parent( int $parent_id, string $taxonomy ) {
 	if ( ! is_taxonomy_hierarchical( $taxonomy ) ) {
 		return new WP_Error( 'aafm_invalid_term_parent', __( 'This taxonomy does not support a parent term.', 'agent-abilities-for-mcp' ) );
 	}
-	if ( ! aafm_exact_object( 'term', $parent_id, $taxonomy ) instanceof WP_Term ) {
+	if ( ! aafm_exact_object_chain( 'term', $parent_id, $taxonomy ) instanceof WP_Term ) {
 		return new WP_Error( 'aafm_invalid_term_parent', __( 'The parent term does not belong to this taxonomy.', 'agent-abilities-for-mcp' ) );
 	}
 	return $parent_id;
@@ -972,7 +972,7 @@ function aafm_exec_update_term( array $input ) {
 	}
 
 	$term_id = absint( $input['term_id'] );
-	$term    = aafm_exact_object( 'term', $term_id, $taxonomy );
+	$term    = aafm_exact_object_chain( 'term', $term_id, $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
 		return aafm_generic_error();
 	}

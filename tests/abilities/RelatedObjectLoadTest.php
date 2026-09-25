@@ -691,4 +691,88 @@ final class RelatedObjectLoadTest extends TestCase {
 		$this->assertFalse( $permitted );
 		$this->assert_fired_in( 'aafm_exact_object_chain', $gate );
 	}
+
+	/**
+	 * T3: update-term walks the parents the way wp_update_term() and term_is_ancestor_of() do.
+	 *
+	 * @return iterable<string,array{0:bool,1:string}>
+	 */
+	public function data_update_term_parent_faults(): iterable {
+		yield 'no parent input, the term\'s own parent' => array( false, 'aafm_error' );
+		yield 'a parent input whose parent fails' => array( true, 'aafm_invalid_term_parent' );
+	}
+
+	/**
+	 * T3.
+	 *
+	 * @dataProvider data_update_term_parent_faults
+	 *
+	 * @param bool   $with_parent Whether the input names a parent.
+	 * @param string $code        Expected error code.
+	 */
+	public function test_update_term_refuses_before_the_write_when_a_parent_in_the_walk_reads_another_row( bool $with_parent, string $code ): void {
+		$a       = $this->category();
+		$b       = $this->category( $a );
+		$c       = $this->category( $b );
+		$x       = $this->category();
+		$foreign = $this->category();
+		$this->acting_as( 'administrator' );
+		$target = $with_parent ? $x : $c;
+		$input  = array(
+			'taxonomy' => 'category',
+			'term_id'  => $target,
+			'name'     => 'Renamed',
+		);
+		if ( $with_parent ) {
+			$input['parent'] = $c;
+		}
+		get_term( $target, 'category' );
+		get_term( $c, 'category' );
+		get_term( $foreign, 'category' );
+		$writes = did_action( 'edit_terms' );
+
+		$out = $this->armed(
+			$this->fault_load( 'term', $b, $foreign ),
+			static function () use ( $input ) {
+				return aafm_exec_update_term( $input );
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( $code, $out->get_error_code() );
+		$this->assert_fired_in( 'aafm_exact_object_chain', 'term parent' );
+		$this->assertSame( $writes, did_action( 'edit_terms' ), 'wp_update_term() was not reached' );
+		$this->assertFalse( wp_cache_get( $b, 'terms' ), "the leaked row is not cached under the parent's id" );
+		$this->assertNotSame( 'Renamed', get_term( $target, 'category' )->name );
+	}
+
+	/**
+	 * T3 healthy: the same calls write when every parent loads.
+	 */
+	public function test_update_term_under_a_parent_chain_writes_when_healthy(): void {
+		$a = $this->category();
+		$b = $this->category( $a );
+		$c = $this->category( $b );
+		$x = $this->category();
+		$this->acting_as( 'administrator' );
+
+		$renamed  = aafm_exec_update_term(
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $c,
+				'name'     => 'Renamed',
+			)
+		);
+		$reparent = aafm_exec_update_term(
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $x,
+				'parent'   => $c,
+			)
+		);
+
+		$this->assertIsArray( $renamed );
+		$this->assertIsArray( $reparent );
+		$this->assertSame( $c, (int) get_term( $x, 'category' )->parent );
+	}
 }

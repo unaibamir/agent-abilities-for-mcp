@@ -1247,4 +1247,326 @@ final class MetaWriteSweepTest extends TestCase {
 			"A legacy list entry no longer matches any violation; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale )
 		);
 	}
+
+	// --- Object loads checked by identity ----------------------------------
+
+	/**
+	 * Core functions that load a post, term, user or comment by id. Under a `query` filter that
+	 * empties the load's SELECT they hand back another object's row, so every call goes through
+	 * aafm_exact_object(), follows its own exact load (the precede wrappers), or is listed in
+	 * tests/Fixtures/object-loader-legacy.txt.
+	 */
+	private const OBJECT_LOADERS = array( 'get_post', 'get_term', 'get_userdata', 'get_comment', 'get_post_type', 'get_post_field', 'get_term_by', 'get_user_by', 'get_post_thumbnail_id', 'wp_get_post_revision', 'wp_attachment_is_image', 'wp_get_nav_menu_object', 'term_is_ancestor_of', 'get_edit_term_link' );
+
+	/**
+	 * Loaders that load by id only when their first argument names an id field.
+	 */
+	private const BY_FIELD_LOADERS = array( 'get_term_by', 'get_user_by' );
+
+	/**
+	 * The field names that make get_term_by() and get_user_by() a load by id.
+	 */
+	private const ID_FIELDS = array( 'id', 'ID', 'term_id' );
+
+	/**
+	 * Wrappers whose call stays as written when an exact load of the same argument comes earlier in
+	 * the same function, each mapped to that load's type. Core then reads the exact object from its
+	 * cache.
+	 */
+	private const PRECEDE_WRAPPERS = array(
+		'get_post_thumbnail_id'  => 'post',
+		'wp_get_post_revision'   => 'post',
+		'wp_attachment_is_image' => 'post',
+		'wp_get_nav_menu_object' => 'term',
+		'term_is_ancestor_of'    => 'term',
+		'get_edit_term_link'     => 'term',
+	);
+
+	/**
+	 * The helpers whose own loads are the checked ones.
+	 */
+	private const EXACT_LOAD_HELPERS = array( 'aafm_exact_object', 'aafm_comment_readback' );
+
+	/**
+	 * A call's top-level arguments, each as its token text with whitespace and comments removed, so
+	 * two spellings of one argument compare equal.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens         token_get_all() output.
+	 * @param int                                           $open_paren_idx Index of the opening '('.
+	 * @return string[]
+	 */
+	private function call_arguments( array $tokens, int $open_paren_idx ): array {
+		$close = $this->matching_bracket_index( $tokens, $open_paren_idx, '(', ')' );
+		if ( null === $close ) {
+			return array();
+		}
+		$args    = array();
+		$current = '';
+		$depth   = 0;
+		for ( $k = $open_paren_idx + 1; $k < $close; $k++ ) {
+			$token = $tokens[ $k ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			$text = is_array( $token ) ? $token[1] : $token;
+			if ( in_array( $text, array( '(', '[', '{', '${' ), true ) ) {
+				++$depth;
+			} elseif ( in_array( $text, array( ')', ']', '}' ), true ) ) {
+				--$depth;
+			} elseif ( 0 === $depth && ',' === $text ) {
+				$args[]  = $current;
+				$current = '';
+				continue;
+			}
+			$current .= $text;
+		}
+		if ( '' !== $current ) {
+			$args[] = $current;
+		}
+		return $args;
+	}
+
+	/**
+	 * An argument's value when it is one quoted literal and nothing else, or null.
+	 *
+	 * @param string|null $arg Argument text from call_arguments().
+	 */
+	private function literal_argument( ?string $arg ): ?string {
+		if ( null === $arg || ! preg_match( '/^[bB]?(?:\'(?:[^\'\\\\]|\\\\.)*\'|"(?:[^"\\\\$]|\\\\.)*")$/s', $arg ) ) {
+			return null;
+		}
+		return $this->decode_string_literal( $arg );
+	}
+
+	/**
+	 * Pair a precede wrapper's call with the nearest earlier unused exact load in the same function
+	 * whose second argument is the wrapper's first. The load is used up either way; the pair holds
+	 * only when the load's type is the wrapper's, and its taxonomy is 'nav_menu' for a menu, the
+	 * wrapper's own third argument for term_is_ancestor_of(), and absent for get_edit_term_link().
+	 *
+	 * @param array<int,array{args:string[],used:bool}> $loads   The function's exact loads so far.
+	 * @param string                                    $wrapper The wrapper's name.
+	 * @param string[]                                  $args    The wrapper's arguments.
+	 */
+	private function consume_exact_load( array &$loads, string $wrapper, array $args ): bool {
+		if ( ! isset( $args[0] ) ) {
+			return false;
+		}
+		for ( $n = count( $loads ) - 1; $n >= 0; $n-- ) {
+			if ( $loads[ $n ]['used'] || ( $loads[ $n ]['args'][1] ?? null ) !== $args[0] ) {
+				continue;
+			}
+			$loads[ $n ]['used'] = true;
+			$load                = $loads[ $n ]['args'];
+			if ( self::PRECEDE_WRAPPERS[ $wrapper ] !== $this->literal_argument( $load[0] ?? null ) ) {
+				return false;
+			}
+			if ( 'wp_get_nav_menu_object' === $wrapper ) {
+				return 'nav_menu' === $this->literal_argument( $load[2] ?? null );
+			}
+			if ( 'term_is_ancestor_of' === $wrapper ) {
+				return ( $load[2] ?? null ) === ( $args[2] ?? null );
+			}
+			if ( 'get_edit_term_link' === $wrapper ) {
+				return ! isset( $load[2] );
+			}
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Every raw object load's identity key (path|function|loader|ordinal). A load inside the exact
+	 * helpers and a precede wrapper paired with its own exact load have no key.
+	 *
+	 * @param string $source       Full file contents.
+	 * @param string $virtual_path Path the fixture pretends to live at.
+	 * @return string[]
+	 */
+	private function object_load_keys( string $source, string $virtual_path ): array {
+		$tokens      = token_get_all( $source );
+		$name_types  = $this->name_token_types();
+		$not_a_call  = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION ) );
+		$exact_loads = array();
+		$ordinals    = array();
+		$keys        = array();
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || ! in_array( $token[0], $name_types, true ) ) {
+				continue;
+			}
+			$name     = $this->last_name_segment( $token[1] );
+			$is_exact = 'aafm_exact_object' === $name;
+			if ( ! $is_exact && ! in_array( $name, self::OBJECT_LOADERS, true ) ) {
+				continue;
+			}
+			list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
+			if ( '(' !== $open ) {
+				continue;
+			}
+			$prev_idx = $this->previous_significant_index( $tokens, $i - 1 );
+			if ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) {
+				continue;
+			}
+			$function = $this->enclosing_function( $tokens, $i );
+			$args     = $this->call_arguments( $tokens, $open_idx );
+			if ( $is_exact ) {
+				$exact_loads[ $function ][] = array(
+					'args' => $args,
+					'used' => false,
+				);
+				continue;
+			}
+			if ( in_array( $function, self::EXACT_LOAD_HELPERS, true ) ) {
+				continue;
+			}
+			if ( in_array( $name, self::BY_FIELD_LOADERS, true ) ) {
+				list( $field ) = $this->significant_token( $tokens, $open_idx + 1 );
+				if ( ! is_array( $field ) || T_CONSTANT_ENCAPSED_STRING !== $field[0] || ! in_array( $this->decode_string_literal( $field[1] ), self::ID_FIELDS, true ) ) {
+					continue;
+				}
+			}
+			if ( isset( self::PRECEDE_WRAPPERS[ $name ] ) ) {
+				$exact_loads[ $function ] = $exact_loads[ $function ] ?? array();
+				if ( $this->consume_exact_load( $exact_loads[ $function ], $name, $args ) ) {
+					continue;
+				}
+			}
+			$ordinal_key              = $virtual_path . '|' . $function . '|' . $name;
+			$ordinals[ $ordinal_key ] = ( $ordinals[ $ordinal_key ] ?? 0 ) + 1;
+			$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
+		}
+		return $keys;
+	}
+
+	public function test_flags_a_raw_post_load(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$post = get_post( \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_post|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_fully_qualified_raw_load(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$post = \\get_post( \$id );\n\t\$term = \\get_term( \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_post|1', 'includes/fixture.php|f|get_term|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_each_raw_load_of_one_loader_with_its_own_ordinal(): void {
+		$source = "<?php\nfunction f( \$a, \$b ) {\n\tget_userdata( \$a );\n\tget_userdata( \$b );\n\tget_comment( \$a );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_userdata|1', 'includes/fixture.php|f|get_userdata|2', 'includes/fixture.php|f|get_comment|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_the_field_wrappers_that_load_by_id(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\tget_post_type( \$id );\n\tget_post_field( 'post_content', \$id, 'raw' );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_post_type|1', 'includes/fixture.php|f|get_post_field|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_get_term_by_and_get_user_by_only_by_id(): void {
+		$source = "<?php\nfunction f( \$id, \$tax ) {\n\tget_term_by( 'id', \$id, \$tax );\n\tget_term_by( 'term_id', \$id, \$tax );\n\tget_user_by( 'ID', \$id );\n\tget_term_by( 'name', \$id, \$tax );\n\tget_term_by( 'slug', \$id, \$tax );\n\tget_user_by( 'email', \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_term_by|1', 'includes/fixture.php|f|get_term_by|2', 'includes/fixture.php|f|get_user_by|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_ignores_a_method_a_static_call_and_a_declaration_named_like_a_loader(): void {
+		$source = "<?php\nfunction get_comment_x() {}\nfunction f( \$repo, \$id ) {\n\t\$repo->get_post( \$id );\n\t\$repo?->get_term( \$id );\n\tRepo::get_userdata( \$id );\n}\n";
+		$this->assertSame( array(), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_ignores_the_loads_inside_the_exact_helpers(): void {
+		$source = "<?php\nfunction aafm_exact_object( \$type, \$id ) {\n\treturn get_post( \$id );\n}\nfunction aafm_comment_readback( \$id ) {\n\treturn get_comment( \$id );\n}\n";
+		$this->assertSame( array(), $this->object_load_keys( $source, 'includes/write-contract.php' ) );
+	}
+
+	public function test_a_precede_wrapper_after_its_own_exact_load_is_paired(): void {
+		$source = "<?php\nfunction f( \$menu_id, \$post_id, \$id ) {\n\tif ( ! aafm_exact_object( 'term', \$menu_id, 'nav_menu' ) instanceof WP_Term ) {\n\t\treturn;\n\t}\n\twp_get_nav_menu_object( \$menu_id );\n\tif ( aafm_exact_object( 'post', \$post_id ) instanceof WP_Post ) {\n\t\tget_post_thumbnail_id( \$post_id );\n\t}\n\t\$url = aafm_exact_object( 'term', \$id ) instanceof WP_Term ? get_edit_term_link( \$id ) : null;\n}\n";
+		$this->assertSame( array(), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_precede_wrapper_with_no_exact_load(): void {
+		$source = "<?php\nfunction f( \$x ) {\n\twp_get_nav_menu_object( \$x );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|wp_get_nav_menu_object|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_precede_wrapper_whose_exact_load_names_another_argument(): void {
+		$source = "<?php\nfunction f( \$x, \$y ) {\n\taafm_exact_object( 'term', \$y, 'nav_menu' );\n\twp_get_nav_menu_object( \$x );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|wp_get_nav_menu_object|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_second_precede_wrapper_call_after_one_exact_load(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\taafm_exact_object( 'term', \$id );\n\tget_edit_term_link( \$id );\n\tget_edit_term_link( \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_edit_term_link|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_menu_load_preceded_by_a_post_load(): void {
+		$source = "<?php\nfunction f( \$menu_id ) {\n\taafm_exact_object( 'post', \$menu_id );\n\twp_get_nav_menu_object( \$menu_id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|wp_get_nav_menu_object|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_post_wrapper_preceded_by_a_term_load(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\taafm_exact_object( 'term', \$id );\n\tget_post_thumbnail_id( \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_post_thumbnail_id|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_menu_load_preceded_by_an_untyped_term_load(): void {
+		$source = "<?php\nfunction f( \$menu_id ) {\n\taafm_exact_object( 'term', \$menu_id );\n\twp_get_nav_menu_object( \$menu_id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|wp_get_nav_menu_object|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_an_ancestor_check_pairs_only_with_a_load_under_its_own_taxonomy(): void {
+		$paired   = "<?php\nfunction f( \$id, \$parent, \$taxonomy ) {\n\taafm_exact_object( 'term', \$id, \$taxonomy );\n\tterm_is_ancestor_of( \$id, \$parent, \$taxonomy );\n}\n";
+		$unpaired = "<?php\nfunction f( \$id, \$parent, \$taxonomy ) {\n\taafm_exact_object( 'term', \$id );\n\tterm_is_ancestor_of( \$id, \$parent, \$taxonomy );\n}\n";
+		$this->assertSame( array(), $this->object_load_keys( $paired, 'includes/fixture.php' ) );
+		$this->assertSame( array( 'includes/fixture.php|f|term_is_ancestor_of|1' ), $this->object_load_keys( $unpaired, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_an_edit_term_link_preceded_by_a_load_under_a_taxonomy(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\taafm_exact_object( 'term', \$id, 'category' );\n\tget_edit_term_link( \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|get_edit_term_link|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_precede_wrapper_whose_exact_load_comes_after_it(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\twp_get_post_revision( \$id );\n\taafm_exact_object( 'post', \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|wp_get_post_revision|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_precede_wrapper_whose_exact_load_is_in_another_function(): void {
+		$source = "<?php\nfunction g( \$id ) {\n\taafm_exact_object( 'post', \$id );\n}\nfunction f( \$id ) {\n\twp_attachment_is_image( \$id );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|wp_attachment_is_image|1' ), $this->object_load_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	/**
+	 * The production sweep for object loads: every raw load under the scanned set that is neither
+	 * inside the exact helpers nor paired with its own exact load must be listed in
+	 * tests/Fixtures/object-loader-legacy.txt (path|function|loader|ordinal). The list may only
+	 * shrink: an unlisted load fails, and so does a listed line the scan no longer sees.
+	 */
+	public function test_no_unlisted_object_load_survives_under_the_scanned_set(): void {
+		$legacy_path = AAFM_PLUGIN_DIR . 'tests/Fixtures/object-loader-legacy.txt';
+		$this->assertFileExists( $legacy_path, 'the object-loader list must exist, generated from the scanner\'s own first run.' );
+		$legacy = array_filter( array_map( 'trim', file( $legacy_path ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+
+		$files = $this->scanned_files();
+		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
+
+		$unlisted = array();
+		$seen     = array_fill_keys( $legacy, false );
+		foreach ( $files as $path => $source ) {
+			foreach ( $this->object_load_keys( $source, $path ) as $line_key ) {
+				if ( array_key_exists( $line_key, $seen ) ) {
+					$seen[ $line_key ] = true;
+				} else {
+					$unlisted[] = $line_key;
+				}
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$unlisted,
+			"An object load was found that is not checked by id and that the list does not name:\n" . implode( "\n", $unlisted )
+		);
+
+		$stale = array_keys( array_filter( $seen, static fn( bool $was_seen ): bool => ! $was_seen ) );
+		$this->assertSame(
+			array(),
+			$stale,
+			"A list entry no longer matches any object load; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale )
+		);
+	}
 }

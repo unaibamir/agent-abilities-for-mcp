@@ -1501,4 +1501,27 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 		public static function line( $message = '' ) {}
 	}
 }
+if ( ! class_exists( 'WPSEO_Meta' ) ) {
+	/**
+	 * Minimal Yoast SEO WPSEO_Meta signature for static analysis only.
+	 */
+	class WPSEO_Meta {
+		/**
+		 * @var array<string,string>
+		 */
+		public static $defaults = array();
+
+		/**
+		 * @param mixed  $check      Short-circuit value.
+		 * @param int    $object_id  Post id.
+		 * @param string $meta_key   Meta key.
+		 * @param mixed  $meta_value Meta value.
+		 * @param mixed  $prev_value Previous value.
+		 * @return mixed
+		 */
+		public static function remove_meta_if_default( $check, $object_id, $meta_key, $meta_value, $prev_value = '' ) {
+			return $check;
+		}
+	}
+}
 // phpcs:enable

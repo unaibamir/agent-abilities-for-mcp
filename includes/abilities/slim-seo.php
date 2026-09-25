@@ -97,7 +97,7 @@ function aafm_slim_seo_url_fields(): array {
  * @return array<string,mixed>
  */
 function aafm_slim_seo_read_fields( int $id ): array {
-	$stored = get_post_meta( $id, 'slim_seo', true );
+	$stored = aafm_meta_get( 'post', $id, 'slim_seo', true );
 	$stored = is_array( $stored ) ? $stored : array();
 	$out    = array(
 		'plugin'  => 'slim_seo',
@@ -108,6 +108,51 @@ function aafm_slim_seo_read_fields( int $id ): array {
 	}
 	$out['noindex'] = ! empty( $stored['noindex'] );
 	return $out;
+}
+
+/**
+ * The sub-fields of the slim_seo array that Slim SEO declares (slim-seo 4.10.1, src/RestApi.php,
+ * the registered meta's REST schema). Slim SEO defines no constant for them.
+ *
+ * @return string[]
+ */
+function aafm_slim_seo_subfields(): array {
+	return array( 'title', 'description', 'facebook_image', 'twitter_image', 'canonical', 'noindex' );
+}
+
+/**
+ * Write changed sub-fields into a post's slim_seo array.
+ *
+ * A sub-field outside aafm_slim_seo_subfields() refuses the call before anything is read or
+ * written. The stored array is read with a failure-aware query and the changes are merged onto
+ * it, so a sub-field the call does not name keeps its stored value; a failed read writes nothing.
+ * The merged array is written as one array-valued key.
+ *
+ * @param int                 $id      Post id.
+ * @param array<string,mixed> $changes Sub-field => new value.
+ * @return array<string,mixed>|WP_Error The writer's result, or the validation error.
+ */
+function aafm_slim_seo_write_meta( int $id, array $changes ) {
+	$target = aafm_meta_write_target( 'post', $id, 'slim_seo' );
+	if ( array() !== array_diff( array_map( 'strval', array_keys( $changes ) ), aafm_slim_seo_subfields() ) ) {
+		$result = array( 'status' => AAFM_WRITE_REFUSED );
+		aafm_emit_write_outcome( $result, $target );
+		return $result;
+	}
+
+	$baseline = aafm_meta_row( 'post', $id, 'slim_seo' );
+	if ( ! $baseline['ok'] ) {
+		$result = array( 'status' => AAFM_WRITE_READ_FAILED );
+		aafm_emit_write_outcome( $result, $target );
+		return $result;
+	}
+
+	$merged = is_array( $baseline['value'] ) ? $baseline['value'] : array();
+	foreach ( $changes as $field => $value ) {
+		$merged[ $field ] = $value;
+	}
+
+	return aafm_meta_set( 'post', $id, 'slim_seo', $merged, (string) get_object_subtype( 'post', $id ), false );
 }
 
 /**
@@ -216,7 +261,10 @@ function aafm_args_slim_seo_update_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_slim_seo_output_properties(),
+			'properties' => array_merge(
+				aafm_slim_seo_output_properties(),
+				array( 'status' => aafm_seo_group_write_output_properties()['status'] )
+			),
 		),
 		'execute_callback'    => 'aafm_exec_slim_seo_update_post',
 		'permission_callback' => 'aafm_perm_seo_post_object',
@@ -245,124 +293,34 @@ function aafm_exec_slim_seo_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$stored = get_post_meta( $id, 'slim_seo', true );
-	$stored = is_array( $stored ) ? $stored : array();
-	// Snapshot the pre-write array before the mutation loop below rewrites $stored in place -
-	// the confirmation pass needs each field's genuine OLD value, not what $stored becomes.
-	$old = $stored;
-
+	$changes    = array();
 	$url_fields = aafm_slim_seo_url_fields();
 	foreach ( aafm_slim_seo_fields() as $field ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
-		$raw              = (string) $input[ $field ];
-		$stored[ $field ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$raw               = (string) $input[ $field ];
+		$changes[ $field ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
 	}
 	if ( array_key_exists( 'noindex', $input ) ) {
-		$stored['noindex'] = (bool) $input['noindex'];
+		$changes['noindex'] = (bool) $input['noindex'];
 	}
 
-	update_post_meta( $id, 'slim_seo', wp_slash( $stored ) );
-
-	// Codex hunt F4: update_post_meta()'s return value was discarded and the response was a
-	// fresh read with no comparison to what was requested, so a site-installed
-	// update_post_metadata filter vetoing this write would report success while returning the
-	// OLD values. Confirm every field the caller actually touched against what landed.
-	//
-	// Codex round 6 B6-3: the whole slim_seo array is ONE meta value, so sanitize_meta() must
-	// see the entire array the way update_post_meta() actually sanitized it, not a per-field
-	// scalar reapplication of the same hook (which would misfire against a filter that expects
-	// its normal array shape). Sanitize the whole intended array once, then compare each field the
-	// caller touched against that canonical form rather than against the plugin's own pre-write
-	// intent - a legitimate normalization from a registered sanitize_post_meta_slim_seo callback
-	// no longer reads as a false error. This is a deliberate divergence from the scalar
-	// aafm_meta_write_confirmed() helper used by every sibling SEO integration: routing through it
-	// per field here would run the whole-array hook against a lone scalar and misfire.
-	//
-	// Codex round 8 R8-1: update_post_meta() above wp_slash()s $stored so that core's own
-	// internal wp_unslash() inside update_metadata() is a no-op round trip back to $stored -
-	// core's sanitize_meta() call therefore sees $stored unslashed, exactly as passed here. This
-	// used to slash $stored before sanitizing and unslash the sanitizer's OUTPUT, which feeds a
-	// slash-sensitive registered sanitizer a different input than core's own call ever sees.
-	//
-	// 1.7.5 round 4, R4-1: this used to resolve the subtype via get_post_type( $id ), the raw
-	// post type, instead of get_object_subtype( 'post', $id ) - the same filterable call core
-	// itself makes at write time (matches every sibling meta writer's R8-2 fix). A
-	// get_object_subtype_post filter remapping the subtype meant this replay could sanitize
-	// against the wrong hook entirely. It is also no longer the ONLY signal: an exact match
-	// against $canonical is accepted as the strongest evidence, but a state-dependent save
-	// filter (or the emoji/charset normalization documented on aafm_post_field_write_confirmed())
-	// can legitimately disagree with this same-process replay without the write having failed.
-	// When it disagrees, fall back per field to whether the value actually moved away from its
-	// pre-write state in $old: a genuine veto (a filter reverting to the OLD value) still resolves
-	// as unconfirmed; any other landed value is accepted.
-	//
-	// Codex round 7, R7-4: that old/unchanged fallback used to judge "nothing was asked to
-	// change" from the raw $old alone ($intended_field === $old_field), blind to whether $old
-	// itself was already in its canonical (sanitized) form - the same defect
-	// aafm_meta_write_confirmed()'s round 6, R6-4 fix (2781422) closed for a scalar meta value.
-	// When $old was not canonical, resubmitting it is still a real ask: the write is expected to
-	// land on the canonical form a genuinely different value would have to reach, and a
-	// persistence veto that instead keeps storage at the non-canonical $old must not read as a
-	// confirmed no-op purely because the caller's literal input matched it. $canonical_old
-	// replays the WHOLE pre-write array through the same one whole-array sanitize_meta() call
-	// $canonical already uses for $stored, for the same reason documented above: this meta key is
-	// one array-shaped value, and a per-field scalar reapplication of the hook would misfire
-	// against a filter that expects its normal array shape.
-	$subtype       = (string) get_object_subtype( 'post', $id );
-	$canonical     = sanitize_meta( 'slim_seo', $stored, 'post', $subtype );
-	$canonical     = is_array( $canonical ) ? $canonical : array();
-	$canonical_old = sanitize_meta( 'slim_seo', $old, 'post', $subtype );
-	$canonical_old = is_array( $canonical_old ) ? $canonical_old : array();
-	$confirmed     = aafm_slim_seo_read_fields( $id );
-	foreach ( aafm_slim_seo_fields() as $field ) {
-		if ( ! array_key_exists( $field, $input ) ) {
-			continue;
-		}
-		if ( (string) ( $canonical[ $field ] ?? '' ) === $confirmed[ $field ] ) {
-			continue;
-		}
-		$old_field        = (string) ( $old[ $field ] ?? '' );
-		$intended_field   = (string) ( $stored[ $field ] ?? '' );
-		$old_is_canonical = (string) ( $canonical_old[ $field ] ?? '' ) === $old_field;
-		$nothing_asked    = $old_is_canonical && $intended_field === $old_field;
-		$unchanged        = $confirmed[ $field ] === $old_field;
-		// Codex round 5 R5-2: a no-op resubmission ($intended_field === $old_field) used to
-		// confirm on that basis alone, without checking $unchanged - so a filter redirecting an
-		// unchanged resubmission to some third value read as success. Mirrors the same fix in
-		// aafm_meta_write_confirmed(): a genuine no-op still confirms, a redirect does not.
-		if ( $nothing_asked ? $unchanged : ! $unchanged ) {
-			continue;
-		}
-		return new WP_Error(
-			'aafm_slim_seo_write_unconfirmed',
-			__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
-		);
+	$result = aafm_slim_seo_write_meta( $id, $changes );
+	if ( is_wp_error( $result ) ) {
+		return aafm_seo_write_error( 'aafm_slim_seo_write_unconfirmed', AAFM_WRITE_REFUSED, $id, null );
 	}
-	if ( array_key_exists( 'noindex', $input ) ) {
-		$canonical_noindex = ! empty( $canonical['noindex'] );
-		if ( $canonical_noindex !== $confirmed['noindex'] ) {
-			// R5-1: the boolean field had no fallback at all, unlike its string siblings above -
-			// any disagreement with the replayed canonical form failed confirmation outright, even
-			// a legitimate save-time normalization. Give it the same old/unchanged fallback.
-			$old_noindex      = ! empty( $old['noindex'] );
-			$intended_noindex = ! empty( $stored['noindex'] );
-			// R7-4: same canonical-$old requirement as the string fields above - a boolean has
-			// only two values, so "canonical" here just means the sanitizer's own bool coercion
-			// agrees with the stored bool, but the principle (and the veto class it closes) is
-			// identical.
-			$old_noindex_canonical = ! empty( $canonical_old['noindex'] ) === $old_noindex;
-			$nothing_asked         = $old_noindex_canonical && $intended_noindex === $old_noindex;
-			$unchanged             = $confirmed['noindex'] === $old_noindex;
-			if ( ! ( $nothing_asked ? $unchanged : ! $unchanged ) ) {
-				return new WP_Error(
-					'aafm_slim_seo_write_unconfirmed',
-					__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
-				);
-			}
-		}
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+		return aafm_seo_write_error( 'aafm_slim_seo_write_unconfirmed', $result['status'], $id, 'slim_seo' );
 	}
 
-	return $confirmed;
+	$status = $result['status'];
+	return aafm_with_checked_reads(
+		static function () use ( $id, $status ): array {
+			$out           = aafm_slim_seo_read_fields( $id );
+			$out['status'] = $status;
+			return $out;
+		},
+		aafm_seo_write_error( 'aafm_slim_seo_write_unconfirmed', AAFM_WRITE_UNCONFIRMED, $id, 'slim_seo' )
+	);
 }

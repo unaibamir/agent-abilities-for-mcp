@@ -114,4 +114,43 @@ final class SlimSeoWireTest extends TestCase {
 		$stored = get_post_meta( $post->ID, 'slim_seo', true );
 		$this->assertSame( 'New title', $stored['title'] );
 	}
+
+	public function test_slim_seo_update_body_carries_a_single_status(): void {
+		$post = self::factory()->post->create_and_get();
+		update_post_meta( $post->ID, 'slim_seo', array( 'title' => 'Old title' ) );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->register_enabled( array( 'aafm/slim-seo-get-post', 'aafm/slim-seo-update-post' ) );
+		$this->acting_as( 'editor' );
+		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $this->build_slim_seo_server( \WP\MCP\Core\McpAdapter::instance() ) );
+
+		$bodies = array();
+		foreach ( array( 'req-slim-seo-status-1', 'req-slim-seo-status-2' ) as $request_id ) {
+			$result = $handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/slim-seo-update-post' ),
+					'arguments' => array(
+						'post_id' => $post->ID,
+						'title'   => 'New title',
+					),
+				),
+				$request_id
+			);
+			$text   = $result->getContent()[0]->getText();
+			$this->assertFalse( $result->getIsError(), $text );
+			$bodies[] = json_decode( $text, true );
+		}
+
+		$shape = array(
+			'plugin'         => 'slim_seo',
+			'post_id'        => $post->ID,
+			'title'          => 'New title',
+			'description'    => '',
+			'facebook_image' => '',
+			'twitter_image'  => '',
+			'canonical'      => '',
+			'noindex'        => false,
+		);
+		$this->assertSame( $shape + array( 'status' => 'written' ), $bodies[0] );
+		$this->assertSame( $shape + array( 'status' => 'unchanged' ), $bodies[1] );
+	}
 }

@@ -284,4 +284,92 @@ final class SlimSeoTest extends TestCase {
 		$this->assertContains( 'aafm/slim-seo-get-post', aafm_all_server_ability_names() );
 		$this->assertContains( 'aafm/slim-seo-update-post', aafm_all_server_ability_names() );
 	}
+
+	public function test_update_post_a_failed_baseline_read_writes_nothing_and_loses_no_setting(): void {
+		global $wpdb;
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post = self::factory()->post->create_and_get();
+		update_post_meta(
+			$post->ID,
+			'slim_seo',
+			array(
+				'title'       => 'T',
+				'description' => 'D',
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'meta_key, meta_value FROM', $wpdb->postmeta, ' AND meta_key = ' ),
+			static function () use ( $post ) {
+				$suppressed = $GLOBALS['wpdb']->suppress_errors( true );
+				$result     = aafm_exec_slim_seo_update_post(
+					array(
+						'post_id' => $post->ID,
+						'title'   => 'New',
+					)
+				);
+				$GLOBALS['wpdb']->suppress_errors( $suppressed );
+				return $result;
+			},
+			1
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_slim_seo_write_unconfirmed', $out->get_error_code() );
+		$this->assertSame( 'read_failed', $out->get_error_data()['status'] );
+		$this->assertSame(
+			array(
+				'title'       => 'T',
+				'description' => 'D',
+			),
+			get_post_meta( $post->ID, 'slim_seo', true )
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$detail = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id DESC LIMIT 1', aafm_activity_log_table(), 'write_outcome' ) );
+		$this->assertSame( 'read_failed', json_decode( $detail, true )['status'] );
+	}
+
+	public function test_update_post_an_array_valued_title_cleared_under_a_veto_is_an_error(): void {
+		$post = self::factory()->post->create_and_get();
+		update_post_meta( $post->ID, 'slim_seo', array( 'title' => array( 'x' ) ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$veto = static fn() => false;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$out  = aafm_exec_slim_seo_update_post(
+			array(
+				'post_id' => $post->ID,
+				'title'   => '',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_slim_seo_write_unconfirmed', $out->get_error_code() );
+	}
+
+	public function test_slim_seo_write_meta_refuses_a_sub_field_outside_the_vendor_list(): void {
+		$post = self::factory()->post->create_and_get();
+		update_post_meta( $post->ID, 'slim_seo', array( 'title' => 'T' ) );
+
+		$result = aafm_slim_seo_write_meta(
+			$post->ID,
+			array(
+				'title'  => 'New',
+				'robots' => 'noindex',
+			)
+		);
+
+		$this->assertSame( array( 'status' => 'refused' ), $result );
+		$this->assertSame( array( 'title' => 'T' ), get_post_meta( $post->ID, 'slim_seo', true ) );
+	}
+
+	public function test_slim_seo_sub_field_list_equals_the_fields_the_ability_builds(): void {
+		$built  = array_merge( aafm_slim_seo_fields(), array( 'noindex' ) );
+		$listed = aafm_slim_seo_subfields();
+		sort( $built );
+		sort( $listed );
+		$this->assertSame( $built, $listed );
+	}
 }

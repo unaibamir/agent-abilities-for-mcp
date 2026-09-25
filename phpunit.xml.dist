@@ -44,6 +44,7 @@
 			<file>tests/StaleWpdbReaderSweepTest.php</file>
 			<file>tests/MetaWriteSweepTest.php</file>
 			<file>tests/MetaWriteWireTest.php</file>
+			<file>tests/SeoWriteWireTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

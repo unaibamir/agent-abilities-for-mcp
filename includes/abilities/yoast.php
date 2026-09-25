@@ -3,7 +3,7 @@
  * Yoast SEO abilities (Wave 5): yoast-get-post, yoast-update-post, yoast-get-head.
  *
  * Registers ONLY when Yoast is active (aafm_integration_active('yoast')). Yoast stores post SEO in
- * standard _yoast_wpseo_* post meta, so reads/writes use core get_post_meta/update_post_meta. SEO
+ * standard _yoast_wpseo_* post meta, read through core and written through the group writer. SEO
  * meta is post content, so every per-object ability gates on edit_post($id) via the shared
  * aafm_perm_seo_post_object(); the head ability uses the edit_posts floor at discovery, refined
  * per-object at execute. Yoast splits robots across THREE keys (noindex enum 0/1/2, nofollow enum
@@ -217,14 +217,194 @@ function aafm_yoast_read_fields( int $id ): array {
 		'post_id' => $id,
 	);
 	foreach ( aafm_yoast_fields() as $field => $key ) {
-		$val           = get_post_meta( $id, $key, true );
+		$val           = aafm_meta_get( 'post', $id, $key, true );
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
 	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
-		$val           = get_post_meta( $id, $spec['key'], true );
+		$val           = aafm_meta_get( 'post', $id, $spec['key'], true );
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
 	return $out;
+}
+
+/**
+ * Every post meta key Yoast SEO reads that this plugin writes. Yoast prefixes its keys with
+ * WPSEO_Meta::$meta_prefix, a static property rather than a constant, so the keys are listed in
+ * full (wordpress-seo 28.5, inc/class-wpseo-meta.php: title, metadesc and focuskw in the general
+ * fields, the robots keys and canonical in the advanced fields, and the social fields built from
+ * the opengraph and twitter networks).
+ *
+ * @return string[]
+ */
+function aafm_yoast_meta_keys(): array {
+	return array(
+		'_yoast_wpseo_title',
+		'_yoast_wpseo_metadesc',
+		'_yoast_wpseo_focuskw',
+		'_yoast_wpseo_canonical',
+		'_yoast_wpseo_opengraph-title',
+		'_yoast_wpseo_opengraph-description',
+		'_yoast_wpseo_opengraph-image',
+		'_yoast_wpseo_twitter-title',
+		'_yoast_wpseo_twitter-description',
+		'_yoast_wpseo_twitter-image',
+		'_yoast_wpseo_meta-robots-noindex',
+		'_yoast_wpseo_meta-robots-nofollow',
+		'_yoast_wpseo_meta-robots-adv',
+	);
+}
+
+/**
+ * Write Yoast SEO post meta as one group.
+ *
+ * A key outside aafm_yoast_meta_keys() refuses the whole call before anything is read or
+ * written, with one refused outcome per requested key. While Yoast's own filter is attached, a
+ * requested key that Yoast stores as no row when set to its default is passed with that default,
+ * so a clear Yoast turns into a delete counts as written.
+ *
+ * @param int                 $id              Post id.
+ * @param array<string,mixed> $intended_by_key Meta key => unslashed value.
+ * @return array<string,mixed>|WP_Error The group result, or the validation error.
+ */
+function aafm_yoast_write_meta( int $id, array $intended_by_key ) {
+	$refused = aafm_seo_refuse_unlisted_keys( $id, $intended_by_key, aafm_yoast_meta_keys() );
+	if ( null !== $refused ) {
+		return $refused;
+	}
+
+	$absent_defaults = array();
+	if ( class_exists( 'WPSEO_Meta' ) && false !== has_filter( 'update_post_metadata', array( 'WPSEO_Meta', 'remove_meta_if_default' ) ) ) {
+		foreach ( array_keys( $intended_by_key ) as $key ) {
+			if ( isset( WPSEO_Meta::$defaults[ $key ] ) ) {
+				$absent_defaults[ $key ] = WPSEO_Meta::$defaults[ $key ];
+			}
+		}
+	}
+
+	return aafm_meta_set_group( 'post', $id, $intended_by_key, (string) get_object_subtype( 'post', $id ), array(), $absent_defaults );
+}
+
+/**
+ * Refuse a vendor meta write that names a key outside the vendor's list: nothing is read or
+ * written, and each requested key gets one refused outcome.
+ *
+ * @param int                 $id              Post id.
+ * @param array<string,mixed> $intended_by_key Meta key => value.
+ * @param string[]            $listed          The keys the vendor reads.
+ * @return array<string,mixed>|null The refusal, or null when every key is listed.
+ */
+function aafm_seo_refuse_unlisted_keys( int $id, array $intended_by_key, array $listed ): ?array {
+	$unlisted = array_diff( array_map( 'strval', array_keys( $intended_by_key ) ), $listed );
+	if ( array() === $unlisted ) {
+		return null;
+	}
+	$keys = array();
+	foreach ( array_keys( $intended_by_key ) as $key ) {
+		$entry                 = array( 'status' => AAFM_WRITE_REFUSED );
+		$keys[ (string) $key ] = $entry;
+		aafm_emit_write_outcome( $entry, aafm_meta_write_target( 'post', $id, (string) $key ) );
+	}
+	return array(
+		'status' => AAFM_WRITE_REFUSED,
+		'keys'   => $keys,
+	);
+}
+
+/**
+ * The error an SEO meta write returns when it did not land: the ability's own code, the message
+ * naming the status, and identifiers only in the data.
+ *
+ * @param string      $code   The ability's error code.
+ * @param string      $status The status that occurred.
+ * @param int         $id     Post id.
+ * @param string|null $key    The storage key the status belongs to, or null.
+ * @return WP_Error
+ */
+function aafm_seo_write_error( string $code, string $status, int $id, ?string $key ): WP_Error {
+	$base = aafm_meta_write_error( $status, 'write', 'post', $id, (string) $key );
+	$data = $base->get_error_data();
+	if ( AAFM_WRITE_PARTIAL === $status ) {
+		return new WP_Error(
+			$code,
+			__( 'Some of the SEO fields were saved and some were not; read the post to see its current state.', 'agent-abilities-for-mcp' ),
+			$data
+		);
+	}
+	return new WP_Error( $code, $base->get_error_message(), $data );
+}
+
+/**
+ * The response of a group SEO write: the ability's read shape, then `status` and `keys`, each key
+ * carrying its status, a scalar previous value and modified_by_site when true. Any status other
+ * than written or unchanged is the ability's error.
+ *
+ * @param string                       $code   The ability's error code.
+ * @param int                          $id     Post id.
+ * @param array<string,mixed>|WP_Error $result The group result.
+ * @param callable                     $shape  Builds the read shape for the post.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_seo_group_write_response( string $code, int $id, $result, callable $shape ) {
+	if ( is_wp_error( $result ) ) {
+		// A site sanitize callback turned a value into something that is not text. The group names
+		// no member for it.
+		return aafm_seo_write_error( $code, AAFM_WRITE_REFUSED, $id, null );
+	}
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+		$first = null;
+		foreach ( $result['keys'] as $key => $entry ) {
+			if ( ! in_array( $entry['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+				$first = (string) $key;
+				break;
+			}
+		}
+		return aafm_seo_write_error( $code, $result['status'], $id, $first );
+	}
+
+	$keys = array();
+	foreach ( $result['keys'] as $key => $entry ) {
+		$wire = array( 'status' => $entry['status'] );
+		if ( array_key_exists( 'previous', $entry ) && is_scalar( $entry['previous'] ) ) {
+			$wire['previous'] = $entry['previous'];
+		}
+		if ( ! empty( $entry['modified_by_site'] ) ) {
+			$wire['modified_by_site'] = true;
+		}
+		$keys[ (string) $key ] = $wire;
+	}
+
+	return aafm_with_checked_reads(
+		static function () use ( $id, $result, $keys, $shape ): array {
+			$out           = $shape( $id );
+			$out['status'] = $result['status'];
+			$out['keys']   = (object) $keys;
+			return $out;
+		},
+		aafm_seo_write_error( $code, AAFM_WRITE_UNCONFIRMED, $id, null )
+	);
+}
+
+/**
+ * Output-schema properties a group SEO write adds to its update ability's response.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_seo_group_write_output_properties(): array {
+	$meta = aafm_meta_write_output_properties();
+	return array(
+		'status' => $meta['status'],
+		'keys'   => array(
+			'type'                 => 'object',
+			'additionalProperties' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'status'           => $meta['status'],
+					'previous'         => $meta['previous'],
+					'modified_by_site' => $meta['modified_by_site'],
+				),
+			),
+		),
+	);
 }
 
 /**
@@ -368,7 +548,7 @@ function aafm_args_yoast_update_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_yoast_output_properties(),
+			'properties' => array_merge( aafm_yoast_output_properties(), aafm_seo_group_write_output_properties() ),
 		),
 		'execute_callback'    => 'aafm_exec_yoast_update_post',
 		'permission_callback' => 'aafm_perm_seo_post_object',
@@ -399,31 +579,15 @@ function aafm_exec_yoast_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Tracked by real META KEY, not the unified field name, so the confirmation pass below runs
-	// sanitize_meta() against the exact key a registered sanitize callback would fire on.
-	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
-	// call core itself makes at write time, rather than the raw get_post_type() - a
-	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
-	// at write time.
-	$post_type     = (string) get_object_subtype( 'post', $id );
-	$expected_meta = array();
-
-	// Read before each write below, so aafm_meta_write_confirmed() can tell a landed change from
-	// a silent veto rather than only replaying sanitize_meta() against a same-process recompute.
-	$old_meta = array();
-
+	// Keyed by storage meta key, unslashed: the group writer slashes and sanitizes per key.
+	$intended   = array();
 	$url_fields = aafm_yoast_url_fields();
 	foreach ( aafm_yoast_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
 		$raw              = (string) $input[ $field ];
-		$clean            = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
-		$old_meta[ $key ] = get_post_meta( $id, $key, true );
-		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
-		// is stripped unless it is slashed first, exactly like the sibling meta writers.
-		update_post_meta( $id, $key, wp_slash( $clean ) );
-		$expected_meta[ $key ] = $clean;
+		$intended[ $key ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
 	}
 
 	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
@@ -434,9 +598,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( isset( $spec['enum'] ) ) {
 			// An out-of-enum value is dropped (not written), so a bad directive cannot persist.
 			if ( in_array( $raw, $spec['enum'], true ) ) {
-				$old_meta[ $spec['key'] ] = get_post_meta( $id, $spec['key'], true );
-				update_post_meta( $id, $spec['key'], wp_slash( $raw ) );
-				$expected_meta[ $spec['key'] ] = $raw;
+				$intended[ $spec['key'] ] = $raw;
 			}
 			continue;
 		}
@@ -448,27 +610,17 @@ function aafm_exec_yoast_update_post( array $input ) {
 				static fn( string $t ): bool => in_array( $t, $spec['allow'], true )
 			)
 		);
-		$old_meta[ $spec['key'] ] = get_post_meta( $id, $spec['key'], true );
-		update_post_meta( $id, $spec['key'], wp_slash( implode( ',', $kept ) ) );
-		$expected_meta[ $spec['key'] ] = implode( ',', $kept );
+		$intended[ $spec['key'] ] = implode( ',', $kept );
 	}
 
-	// Codex round 5 R5-2: every update_post_meta() call above discarded its return value, so a
-	// site-installed update_post_metadata filter vetoing any of these writes would report success
-	// while the response still carried the requested value rather than what storage actually
-	// holds. Codex round 6 B6-3: compare against the CANONICAL sanitize_meta() form of each write,
-	// not its pre-write intent, so a registered sanitize callback's legitimate normalization is not
-	// mistaken for a veto (matches the sibling meta writers in meta.php, terms.php, user-meta.php).
-	foreach ( $expected_meta as $key => $value ) {
-		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
-			return new WP_Error(
-				'aafm_yoast_write_unconfirmed',
-				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
-			);
-		}
+	if ( array() === $intended ) {
+		$out           = aafm_yoast_read_fields( $id );
+		$out['status'] = AAFM_WRITE_UNCHANGED;
+		$out['keys']   = (object) array();
+		return $out;
 	}
 
-	return aafm_yoast_read_fields( $id );
+	return aafm_seo_group_write_response( 'aafm_yoast_write_unconfirmed', $id, aafm_yoast_write_meta( $id, $intended ), 'aafm_yoast_read_fields' );
 }
 
 /**

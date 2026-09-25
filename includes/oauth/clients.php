@@ -534,8 +534,11 @@ function aafm_oauth_list_clients(): array {
  *
  * Joins the consents table to the clients table for the client display name and
  * resolves each consent's WordPress user for its display name and login. A consent
- * whose user no longer exists is skipped (there is nothing meaningful to show or
- * revoke for a deleted account). Ordered newest first. Read-only, prepared query.
+ * is skipped only when its user is certainly gone, meaning a query that ran found no
+ * row (a deleted account has nothing to show or revoke). A consent whose user fails
+ * to load for any other reason stays in the list with its ids, blank names, no roles
+ * and is_high_privilege true, so a live grant never drops out of the table.
+ * Ordered newest first. Read-only, prepared query.
  *
  * Also reads each user's CURRENT role and privilege level, not a value stored at
  * consent time - the token table keeps no such snapshot, and none is added here. A
@@ -582,7 +585,20 @@ function aafm_oauth_list_grants(): array {
 		$user_id = (int) $row['wp_user_id'];
 		$user    = aafm_exact_object( 'user', $user_id );
 		if ( ! $user instanceof WP_User ) {
-			continue; // The account is gone; nothing to display or revoke.
+			if ( aafm_object_absent( 'user', $user_id ) ) {
+				continue; // The account is certainly gone; nothing to display or revoke.
+			}
+			$out[] = array(
+				'user_id'           => $user_id,
+				'user_display'      => '',
+				'user_login'        => '',
+				'client_id'         => (string) $row['client_id'],
+				'client_name'       => (string) $row['client_name'],
+				'granted_at'        => (string) $row['granted_at'],
+				'user_roles'        => array(),
+				'is_high_privilege' => true,
+			);
+			continue;
 		}
 
 		$out[] = array(

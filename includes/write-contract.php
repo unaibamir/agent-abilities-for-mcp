@@ -465,6 +465,7 @@ function aafm_meta_value_equals( $canonical, $candidate ): bool {
  * @param string $subtype     Object subtype (post type, taxonomy, or '' for user).
  * @param bool   $scalar_only Whether a non-scalar canonical value is a validation error.
  * @return array<string,mixed>|WP_Error
+ * @phpstan-return ($scalar_only is true ? array<string,mixed>|WP_Error : array<string,mixed>)
  */
 function aafm_meta_set( string $type, int $id, string $key, $intended, string $subtype = '', bool $scalar_only = true ) {
 	$canonical = sanitize_meta( $key, $intended, $type, $subtype );

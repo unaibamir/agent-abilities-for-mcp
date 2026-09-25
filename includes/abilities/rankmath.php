@@ -787,11 +787,6 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 
 	// The schema is one array-valued key; the writer owns its baseline, so a stored value of any
 	// shape is compared as it is, never coerced first.
-	/**
-	 * Narrow the type: aafm_meta_set() returns an error only from its scalar check, which this call turns off.
-	 *
-	 * @var array<string,mixed> $result
-	 */
 	$result = aafm_meta_set( 'post', $id, $key, $clean, (string) get_object_subtype( 'post', $id ), false );
 	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
 		return aafm_seo_write_error( 'aafm_rankmath_schema_write_failed', $result['status'], $id, $key );

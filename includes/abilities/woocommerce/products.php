@@ -1359,9 +1359,9 @@ function aafm_wc_can_delete_product_object( WP_Post $product ): bool {
  * Permission for aafm/wc-delete-product: the capability floor (manage_woocommerce) AND
  * the caller's own relationship to the specific product, not the floor alone.
  *
- * A nonexistent id, or a product with no real backing WP_Post to gate on, falls back to
- * the floor already checked: there is nothing more specific to authorize against, and the
- * WC data store (not a missing capability) is what reports "not found" from execute().
+ * A nonexistent id keeps the floor already checked, and execute() reports "not found". When
+ * the product's backing post does not load exactly, the post store (WC_Product_Data_Store_CPT)
+ * refuses; any other store keeps the capability floor, since it has no post to authorize against.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool

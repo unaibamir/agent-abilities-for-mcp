@@ -1091,9 +1091,9 @@ function aafm_wc_can_delete_variation_object( WP_Post $variation ): bool {
  * aafm_wc_can_delete_variation_object() above for why the variation check cannot be the identical
  * per-object guarantee the product check gets.
  *
- * A nonexistent id, or a variation with no real backing WP_Post to gate on, falls back to the
- * floor already checked: there is nothing more specific to authorize against, and the WC data
- * store (not a missing capability) is what reports "not found" from execute().
+ * A nonexistent id keeps the floor already checked, and execute() reports "not found". When the
+ * variation's backing post does not load exactly, the post store (WC_Product_Data_Store_CPT)
+ * refuses; any other store keeps the capability floor, since it has no post to authorize against.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool

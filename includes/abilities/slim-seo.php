@@ -159,11 +159,6 @@ function aafm_slim_seo_write_meta( int $id, array $changes ) {
 		$merged[ $field ] = $value;
 	}
 
-	/**
-	 * Narrow the type: aafm_meta_set() returns an error only from its scalar check, which this call turns off.
-	 *
-	 * @var array<string,mixed> $result
-	 */
 	$result = aafm_meta_set( 'post', $id, 'slim_seo', $merged, (string) get_object_subtype( 'post', $id ), false );
 	return $result;
 }

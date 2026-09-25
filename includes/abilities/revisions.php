@@ -147,10 +147,14 @@ function aafm_exec_list_revisions( array $input ) {
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$slice  = array_slice( array_values( $all ), ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );
 	$rows   = array();
+	/**
+	 * With 'fields' => 'ids' the revisions are ids; the stub types them as WP_Post[].
+	 *
+	 * @var int[] $slice
+	 */
 	foreach ( $slice as $rid ) {
-		// $rid is a revision id ('fields' => 'ids'); get_post() resolves it without the
-		// pass-by-reference constraint of wp_get_post_revision() and stays analyzer-clean.
-		$rev = aafm_exact_object( 'post', $rid ); // @phpstan-ignore-line argument.type (fields=>ids means $rid is really an int; the stub types the revisions as WP_Post too).
+		// $rid is an int under 'fields' => 'ids', and each revision is loaded exactly by that id.
+		$rev = aafm_exact_object( 'post', $rid );
 		if ( $rev instanceof WP_Post && 'revision' === $rev->post_type ) {
 			$rows[] = aafm_redact_revision( $rev );
 		}

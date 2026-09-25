@@ -917,8 +917,8 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 	$attachment_id = (int) $attachment_id;
 	try {
 		$response = ( static function () use ( $attachment_id, $alt ) {
-			// get_post_field() with the 'raw' context reads storage directly, unaffected by any display
-			// filter, so the comparison and the rewrite act on the stored value.
+			// aafm_exact_object() loads the attachment's own row, so the comparison and the rewrite act
+			// on the stored post_content, unaffected by any display filter.
 			$sideloaded_post    = aafm_exact_object( 'post', $attachment_id );
 			$sideloaded_field   = $sideloaded_post instanceof WP_Post ? $sideloaded_post->post_content : '';
 			$sideloaded_content = is_string( $sideloaded_field ) ? $sideloaded_field : '';

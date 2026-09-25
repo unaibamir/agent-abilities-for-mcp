@@ -531,13 +531,13 @@ final class VendorReaderLoadTest extends TestCase {
 	}
 
 	/**
-	 * A store that extends the core store is a core store.
+	 * A store that extends the core store is not a core store, since it may read another table.
 	 */
-	public function test_the_store_check_is_true_for_a_subclass_of_the_core_store(): void {
+	public function test_the_store_check_is_false_for_a_subclass_of_the_core_store(): void {
 		$this->core_stores( array() );
 		\WC_Data_Store::$stores['product'] = 'AAFM_Test_Product_Data_Store_Subclass';
 
-		$this->assertTrue( aafm_wc_store_is_core( 'product' ) );
+		$this->assertFalse( aafm_wc_store_is_core( 'product' ) );
 	}
 
 	/**

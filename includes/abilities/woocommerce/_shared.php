@@ -29,31 +29,51 @@ function aafm_wc_perm(): bool {
 }
 
 /**
- * Whether WooCommerce keeps this object type in its own core data store.
+ * The class name WooCommerce's data store registry reports for a store key, lower-cased and with
+ * any leading backslash removed, or null without WooCommerce or when the registry throws.
  *
- * The core stores read the object's post or user row through core's loaders, so a reader can
- * load that row exactly first and WooCommerce then reads it from core's cache. Other stores,
- * such as the orders table under HPOS, load no post, so the reader skips the exact load.
+ * A `woocommerce_{$store}_data_store` filter can hand the registry any string or object, and the
+ * registry keeps a string exactly as given, so case and a leading backslash vary. Anything thrown
+ * while the registry loads the store, an Error included, gives null.
  *
- * @param string $store Data store key: 'product', 'order', 'coupon' or 'customer'.
- * @return bool False for an unknown key, without WooCommerce, or when the registry throws.
+ * @param string $store Data store key.
+ * @return string|null
  */
-function aafm_wc_store_is_core( string $store ): bool {
-	$core = array(
-		'product'  => 'WC_Product_Data_Store_CPT',
-		'order'    => 'WC_Order_Data_Store_CPT',
-		'coupon'   => 'WC_Coupon_Data_Store_CPT',
-		'customer' => 'WC_Customer_Data_Store',
-	);
-	if ( ! isset( $core[ $store ] ) || ! class_exists( 'WC_Data_Store' ) ) {
-		return false;
+function aafm_wc_store_class( string $store ): ?string {
+	if ( ! class_exists( 'WC_Data_Store' ) ) {
+		return null;
 	}
 	try {
 		$name = \WC_Data_Store::load( $store )->get_current_class_name();
-	} catch ( \Exception $e ) {
-		return false;
+	} catch ( \Throwable $e ) {
+		return null;
 	}
-	return is_a( (string) $name, $core[ $store ], true );
+	return strtolower( ltrim( (string) $name, '\\' ) );
+}
+
+/**
+ * Whether WooCommerce keeps this object type in exactly its own core data store.
+ *
+ * The core stores read the object's post or user row through core's loaders, so a reader can
+ * load that row exactly first and WooCommerce then reads it from core's cache. Other stores,
+ * such as the orders table under HPOS, load no post, so the reader skips the exact load. A store
+ * that extends a core store is not a core store here, since it may read another table.
+ *
+ * @param string $store Data store key: 'product', 'product-variation', 'order', 'order-refund',
+ *                      'coupon' or 'customer'.
+ * @return bool False for an unknown key (without asking the registry), without WooCommerce, or
+ *              when the registry throws.
+ */
+function aafm_wc_store_is_core( string $store ): bool {
+	$core = array(
+		'product'           => 'wc_product_data_store_cpt',
+		'product-variation' => 'wc_product_variation_data_store_cpt',
+		'order'             => 'wc_order_data_store_cpt',
+		'order-refund'      => 'wc_order_refund_data_store_cpt',
+		'coupon'            => 'wc_coupon_data_store_cpt',
+		'customer'          => 'wc_customer_data_store',
+	);
+	return isset( $core[ $store ] ) && aafm_wc_store_class( $store ) === $core[ $store ];
 }
 
 /**

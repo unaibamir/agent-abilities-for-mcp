@@ -1368,7 +1368,9 @@ function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, ar
  *
  * A lookup that throws is reported as "still exists": over-reporting a leftover the caller can go
  * and check is recoverable, while claiming a clean rollback that did not happen is exactly the
- * false promise this code exists to stop making.
+ * false promise this code exists to stop making. For the same reason the order counts as gone only
+ * when a failure-aware query finds its row absent: the posts table while the order store is
+ * exactly WC_Order_Data_Store_CPT, the orders table while it is exactly WooCommerce's HPOS store.
  *
  * @param int $order_id Order id.
  * @return bool
@@ -1380,6 +1382,13 @@ function aafm_wc_order_still_exists( int $order_id ): bool {
 	// A post that does not load exactly is gone only when a failure-aware query says the row is.
 	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
 		return ! aafm_object_absent( 'post', $order_id );
+	}
+	// The class_exists() check only narrows the type for static analysis: WooCommerce's registry
+	// throws for a store class it cannot load (class-wc-data-store.php:99-101).
+	if ( 'automattic\woocommerce\internal\datastores\orders\orderstabledatastore' === aafm_wc_store_class( 'order' ) && class_exists( '\Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore' ) ) {
+		global $wpdb;
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::get_orders_table_name(), $order_id ) );
+		return ! ( $view['ok'] && null === $view['value'] );
 	}
 	try {
 		return wc_get_order( $order_id ) instanceof \WC_Order;
@@ -2204,7 +2213,7 @@ function aafm_wc_get_refund_object( int $refund_id ): ?\WC_Order_Refund {
 	if ( ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
-	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $refund_id ) instanceof WP_Post ) {
+	if ( ( aafm_wc_store_is_core( 'order' ) || aafm_wc_store_is_core( 'order-refund' ) ) && ! aafm_exact_object( 'post', $refund_id ) instanceof WP_Post ) {
 		return null;
 	}
 	$refund = wc_get_order( $refund_id );

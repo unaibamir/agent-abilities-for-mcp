@@ -133,8 +133,9 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	if ( $id < 1 || ! function_exists( 'wc_get_product' ) ) {
 		return null;
 	}
-	// The product store resolves a variation's type too, so its key decides here.
-	if ( aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+	// The product store resolves a variation's type and the variation store loads it, so either
+	// one being WooCommerce's own post store means the variation's post is read.
+	if ( ( aafm_wc_store_is_core( 'product' ) || aafm_wc_store_is_core( 'product-variation' ) ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return null;
 	}
 	$variation = wc_get_product( $id );
@@ -1095,9 +1096,16 @@ function aafm_wc_can_delete_variation_object( WP_Post $variation ): bool {
  * aafm_wc_can_delete_variation_object() above for why the variation check cannot be the identical
  * per-object guarantee the product check gets.
  *
- * A nonexistent id keeps the floor already checked, and execute() reports "not found". When the
- * variation's backing post does not load exactly, the post store (WC_Product_Data_Store_CPT)
- * refuses; any other store keeps the capability floor, since it has no post to authorize against.
+ * A nonexistent id keeps the floor already checked, and execute() reports "not found". While the
+ * product or variation store is exactly WooCommerce's own post store, a variation whose post does
+ * not load exactly keeps the floor only when a failure-aware query finds its row absent, and is
+ * refused otherwise. An id whose post loads but is not a variation keeps the floor, as in 1.7.5.
+ *
+ * Under any store the variation is read through WooCommerce inside a checked-read scope, and a
+ * failed metadata load there refuses, since WooCommerce's read loads the variation's post meta.
+ *
+ * When the variation loads but its backing post does not, the post store refuses; any other
+ * store keeps the capability floor, since it has no post to authorize against.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
@@ -1106,9 +1114,19 @@ function aafm_perm_wc_delete_product_variation( array $input ): bool {
 	if ( ! aafm_wc_perm() ) {
 		return false;
 	}
-	$id        = isset( $input['variation_id'] ) ? absint( $input['variation_id'] ) : 0;
-	$variation = $id ? aafm_wc_get_variation( $id ) : null;
-	if ( null === $variation ) {
+	$id = isset( $input['variation_id'] ) ? absint( $input['variation_id'] ) : 0;
+	if ( $id && ( aafm_wc_store_is_core( 'product' ) || aafm_wc_store_is_core( 'product-variation' ) ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return aafm_object_absent( 'post', $id );
+	}
+	$read = aafm_with_checked_reads(
+		static fn(): array => array( 'variation' => $id ? aafm_wc_get_variation( $id ) : null ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $read ) ) {
+		return false;
+	}
+	$variation = $read['variation'] ?? null;
+	if ( ! $variation instanceof \WC_Product_Variation ) {
 		return true;
 	}
 	$post = aafm_exact_object( 'post', $variation->get_id() );

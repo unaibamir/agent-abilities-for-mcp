@@ -309,7 +309,7 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 	// - a still-password-required post is gated on edit_post before the public-status shortcut
 	// ever runs.
 	if ( post_password_required( $post ) ) {
-		return current_user_can( 'edit_post', $post->ID );
+		return aafm_user_can_checked( 'edit_post', $post->ID );
 	}
 	// Codex round C finding 4: the object-independent edit_posts floor alone let an Author read
 	// another user's draft/private listing (raw content and coordinates included). Mirrors
@@ -317,7 +317,7 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 	if ( in_array( $post->post_status, get_post_stati( array( 'public' => true ) ), true ) ) {
 		return true;
 	}
-	return current_user_can( 'edit_post', $post->ID );
+	return aafm_user_can_checked( 'edit_post', $post->ID );
 }
 
 /**
@@ -347,7 +347,7 @@ function aafm_perm_geodirectory_create( array $input ): bool {
 function aafm_perm_geodirectory_update( array $input ): bool {
 	$id   = isset( $input['listing_id'] ) ? absint( $input['listing_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && 'gd_place' === $post->post_type && current_user_can( 'edit_post', $post->ID );
+	return $post instanceof WP_Post && 'gd_place' === $post->post_type && aafm_user_can_checked( 'edit_post', $post->ID );
 }
 
 /**
@@ -432,7 +432,7 @@ function aafm_geodirectory_listing_batch_cap(): int {
  * @return bool
  */
 function aafm_geodirectory_listing_is_visible( WP_Post $post, array $public_stati ): bool {
-	return in_array( $post->post_status, $public_stati, true ) || current_user_can( 'edit_post', $post->ID );
+	return in_array( $post->post_status, $public_stati, true ) || aafm_user_can_checked( 'edit_post', $post->ID );
 }
 
 /**

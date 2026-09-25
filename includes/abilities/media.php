@@ -1625,7 +1625,7 @@ function aafm_perm_update_media( array $input ): bool {
 	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) ) {
 		return false;
 	}
-	return current_user_can( 'edit_post', $att_id );
+	return aafm_user_can_checked( 'edit_post', $att_id );
 }
 
 /**
@@ -1641,7 +1641,7 @@ function aafm_exec_update_media( array $input ) {
 	$att_id     = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
 	$attachment = $att_id ? aafm_exact_object_chain( 'post', $att_id ) : null;
 	if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type
-		|| ! current_user_can( 'edit_post', $att_id ) ) {
+		|| ! aafm_user_can_checked( 'edit_post', $att_id ) ) {
 		return aafm_generic_error();
 	}
 
@@ -1797,7 +1797,7 @@ function aafm_perm_delete_media( array $input ): bool {
 	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) ) {
 		return false;
 	}
-	return current_user_can( 'delete_post', $att_id );
+	return aafm_user_can_checked( 'delete_post', $att_id );
 }
 
 /**
@@ -1813,7 +1813,7 @@ function aafm_perm_delete_media( array $input ): bool {
 function aafm_exec_delete_media( array $input ) {
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
 	$att    = aafm_exact_object( 'post', $att_id );
-	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) || ! current_user_can( 'delete_post', $att_id ) ) {
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) || ! aafm_user_can_checked( 'delete_post', $att_id ) ) {
 		return aafm_generic_error();
 	}
 

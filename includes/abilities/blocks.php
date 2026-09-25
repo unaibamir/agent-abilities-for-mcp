@@ -103,7 +103,7 @@ function aafm_perm_blocks_create(): bool {
 function aafm_perm_block_object( array $input ): bool {
 	$id    = absint( $input['block_id'] ?? 0 );
 	$block = aafm_get_block_object( $id );
-	return null !== $block && current_user_can( 'edit_post', $id );
+	return null !== $block && aafm_user_can_checked( 'edit_post', $id );
 }
 
 /**
@@ -115,7 +115,7 @@ function aafm_perm_block_object( array $input ): bool {
 function aafm_perm_block_delete_object( array $input ): bool {
 	$id    = absint( $input['block_id'] ?? 0 );
 	$block = aafm_get_block_object( $id );
-	return null !== $block && current_user_can( 'delete_post', $id );
+	return null !== $block && aafm_user_can_checked( 'delete_post', $id );
 }
 
 /**
@@ -194,7 +194,7 @@ function aafm_exec_list_blocks( array $input ): array {
 		// contributor reach this list, but they must not enumerate id/title/slug of OTHER
 		// authors' blocks they lack edit_post on. Filtering here keeps the lean rows aligned
 		// with the per-object get/update gates.
-		if ( $block instanceof WP_Post && current_user_can( 'edit_post', $block->ID ) ) {
+		if ( $block instanceof WP_Post && aafm_user_can_checked( 'edit_post', $block->ID ) ) {
 			$blocks[] = aafm_redact_block( $block );
 		}
 	}

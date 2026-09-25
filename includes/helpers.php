@@ -1210,7 +1210,7 @@ function aafm_can_read_post_object( WP_Post $post ): bool {
 	if ( ! $caps['mapped'] || ! $caps['object'] instanceof WP_Post_Type ) {
 		return false;
 	}
-	return current_user_can( (string) $caps['object']->cap->edit_post, $post->ID );
+	return aafm_user_can_checked( (string) $caps['object']->cap->edit_post, $post->ID );
 }
 
 /**
@@ -1226,7 +1226,7 @@ function aafm_can_read_post_object( WP_Post $post ): bool {
  */
 function aafm_can_edit_post_object( WP_Post $post ): bool {
 	$caps = aafm_writable_type_caps( $post );
-	return null !== $caps && current_user_can( (string) $caps->cap->edit_post, $post->ID );
+	return null !== $caps && aafm_user_can_checked( (string) $caps->cap->edit_post, $post->ID );
 }
 
 /**
@@ -1242,7 +1242,33 @@ function aafm_can_edit_post_object( WP_Post $post ): bool {
  */
 function aafm_can_delete_post_object( WP_Post $post ): bool {
 	$caps = aafm_writable_type_caps( $post );
-	return null !== $caps && current_user_can( (string) $caps->cap->delete_post, $post->ID );
+	return null !== $caps && aafm_user_can_checked( (string) $caps->cap->delete_post, $post->ID );
+}
+
+/**
+ * Whether the current user has a capability on one object, with the metadata map_meta_cap()
+ * reads for it loaded failure-aware.
+ *
+ * Core's map_meta_cap() decides some post capabilities from metadata: a trashed post's own
+ * `_wp_trash_meta_status`, and an attachment parent's through get_post_status(). Core reads an
+ * empty value when that load fails, which can grant more than the stored status allows. This runs
+ * current_user_can() inside aafm_with_checked_reads() and returns false when a load failed.
+ * On a healthy database the answer is the one current_user_can() gives.
+ *
+ * Never call inside an aafm_with_checked_reads() build: scopes do not nest.
+ *
+ * @param string $cap       Capability.
+ * @param int    $object_id Post, comment or other object id the capability is checked on.
+ * @return bool
+ */
+function aafm_user_can_checked( string $cap, int $object_id ): bool {
+	$result = aafm_with_checked_reads(
+		static function () use ( $cap, $object_id ): array {
+			return array( 'can' => current_user_can( $cap, $object_id ) );
+		},
+		aafm_generic_error()
+	);
+	return ! is_wp_error( $result ) && true === $result['can'];
 }
 
 /**

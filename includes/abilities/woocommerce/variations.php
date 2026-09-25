@@ -1081,7 +1081,7 @@ function aafm_wc_can_delete_variation_object( WP_Post $variation ): bool {
 	if ( ! $type instanceof WP_Post_Type ) {
 		return false;
 	}
-	return current_user_can( $type->cap->delete_post, $variation->ID );
+	return aafm_user_can_checked( $type->cap->delete_post, $variation->ID );
 }
 
 /**

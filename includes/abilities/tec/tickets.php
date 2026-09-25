@@ -272,7 +272,7 @@ function aafm_tec_perm_get_ticket( array $input ): bool {
 	$event = $ticket->get_event();
 	return $event instanceof WP_Post
 		&& Tribe__Events__Main::POSTTYPE === $event->post_type
-		&& current_user_can( 'edit_tribe_event', $event->ID );
+		&& aafm_user_can_checked( 'edit_tribe_event', $event->ID );
 }
 
 /**

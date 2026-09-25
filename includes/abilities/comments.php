@@ -475,7 +475,7 @@ function aafm_perm_get_comment( array $input ): bool {
 
 	// Non-approved (hold/spam/trash) or on a hidden post: require moderation rights
 	// on the specific comment.
-	return current_user_can( 'moderate_comments' ) && current_user_can( 'edit_comment', $id );
+	return current_user_can( 'moderate_comments' ) && aafm_user_can_checked( 'edit_comment', $id );
 }
 
 /**
@@ -816,7 +816,7 @@ function aafm_perm_moderate_comment_obj( array $input ): bool {
 		return false;
 	}
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
-	return $id > 0 && aafm_exact_object_chain( 'comment', $id ) instanceof WP_Comment && current_user_can( 'edit_comment', $id );
+	return $id > 0 && aafm_exact_object_chain( 'comment', $id ) instanceof WP_Comment && aafm_user_can_checked( 'edit_comment', $id );
 }
 
 /**
@@ -969,7 +969,7 @@ function aafm_perm_edit_comment_obj( array $input ): bool {
 		return false;
 	}
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
-	return $id > 0 && aafm_exact_object_chain( 'comment', $id ) instanceof WP_Comment && current_user_can( 'edit_comment', $id );
+	return $id > 0 && aafm_exact_object_chain( 'comment', $id ) instanceof WP_Comment && aafm_user_can_checked( 'edit_comment', $id );
 }
 
 /**

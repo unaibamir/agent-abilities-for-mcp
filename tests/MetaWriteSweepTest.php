@@ -1970,6 +1970,209 @@ final class MetaWriteSweepTest extends TestCase {
 		);
 	}
 
+	// --- Capability checks on a post or comment object --------------------------
+
+	/**
+	 * Capabilities map_meta_cap() can decide from a post's metadata (a trashed post's
+	 * `_wp_trash_meta_status`, an attachment parent's through get_post_status()), directly or by
+	 * mapping to edit_post. Checked with an object, each goes through aafm_user_can_checked().
+	 */
+	private const POST_OBJECT_CAPS = array( 'edit_post', 'edit_page', 'delete_post', 'delete_page', 'read_post', 'read_page', 'edit_comment', 'edit_post_meta', 'add_post_meta', 'delete_post_meta', 'edit_tribe_event', 'delete_tribe_event', 'edit_tribe_venue', 'edit_tribe_organizer' );
+
+	/**
+	 * Raw capability calls on a post object that stay raw: inside the function's own
+	 * aafm_with_checked_reads() scope; scopes do not nest.
+	 */
+	private const RAW_POST_CAPABILITY_CALLS_IN_A_SCOPE = array(
+		'includes/abilities/comments.php|aafm_comment_post_is_readable|current_user_can|1',
+		'includes/abilities/comments.php|aafm_comment_post_is_readable|current_user_can|2',
+	);
+
+	/**
+	 * Checked capability calls with no chain load of their object. Moved from
+	 * related-loader-exempt.txt; may only shrink; a key that no longer matches a call fails.
+	 */
+	private const UNCHAINED_CHECKED_CAPABILITY_CALLS = array(
+		'includes/abilities/blocks.php|aafm_perm_block_object|aafm_user_can_checked|1',
+		'includes/abilities/blocks.php|aafm_exec_list_blocks|aafm_user_can_checked|1',
+		'includes/abilities/geodirectory.php|aafm_perm_geodirectory_get|aafm_user_can_checked|1',
+		'includes/abilities/geodirectory.php|aafm_perm_geodirectory_get|aafm_user_can_checked|2',
+		'includes/abilities/geodirectory.php|aafm_perm_geodirectory_update|aafm_user_can_checked|1',
+		'includes/abilities/geodirectory.php|aafm_geodirectory_listing_is_visible|aafm_user_can_checked|1',
+		'includes/abilities/media.php|aafm_perm_update_media|aafm_user_can_checked|1',
+	);
+
+	/**
+	 * Every current_user_can()/user_can() call with an object argument whose capability is one of
+	 * POST_OBJECT_CAPS, or an expression ending in ->cap->edit_post, ->cap->delete_post or
+	 * ->cap->read_post, outside aafm_user_can_checked() itself, keyed path|function|name|ordinal
+	 * (the ordinal counts the flagged calls of that name in that function).
+	 *
+	 * @param string $source       Full file contents.
+	 * @param string $virtual_path Path the fixture pretends to live at.
+	 * @return string[]
+	 */
+	private function raw_post_capability_keys( string $source, string $virtual_path ): array {
+		$tokens     = token_get_all( $source );
+		$name_types = $this->name_token_types();
+		$not_a_call = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION ) );
+		$aliases    = $this->function_aliases( $tokens );
+		$ordinals   = array();
+		$keys       = array();
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || ! in_array( $token[0], $name_types, true ) ) {
+				continue;
+			}
+			$name = $this->resolved_function_name( $token[1], $aliases );
+			if ( 'current_user_can' !== $name && 'user_can' !== $name ) {
+				continue;
+			}
+			list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
+			$prev_idx                = $this->previous_significant_index( $tokens, $i - 1 );
+			if ( '(' !== $open || ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) ) {
+				continue;
+			}
+			$function = $this->enclosing_function( $tokens, $i );
+			if ( 'aafm_user_can_checked' === $function ) {
+				continue;
+			}
+			$args   = $this->call_arguments( $tokens, $open_idx );
+			$offset = 'user_can' === $name ? 1 : 0;
+			if ( ! isset( $args[ $offset ], $args[ $offset + 1 ] ) ) {
+				continue;
+			}
+			$cap = $this->literal_argument( $args[ $offset ] );
+			if ( null === $cap ? ! preg_match( '/->cap->(edit|delete|read)_post$/i', $args[ $offset ] ) : ! in_array( strtolower( $cap ), self::POST_OBJECT_CAPS, true ) ) {
+				continue;
+			}
+			$ordinal_key              = $virtual_path . '|' . $function . '|' . $name;
+			$ordinals[ $ordinal_key ] = ( $ordinals[ $ordinal_key ] ?? 0 ) + 1;
+			$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
+		}
+		return $keys;
+	}
+
+	/**
+	 * Every aafm_user_can_checked() call that no earlier chain load in its function covers, by the
+	 * RELATED_CAPS rule current_user_can() is held to, keyed path|function|name|ordinal.
+	 *
+	 * @param string $source       Full file contents.
+	 * @param string $virtual_path Path the fixture pretends to live at.
+	 * @return string[]
+	 */
+	private function unchained_checked_capability_keys( string $source, string $virtual_path ): array {
+		$tokens     = token_get_all( $source );
+		$name_types = $this->name_token_types();
+		$not_a_call = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION ) );
+		$aliases    = $this->function_aliases( $tokens );
+		$chains     = array();
+		$ordinals   = array();
+		$keys       = array();
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || ! in_array( $token[0], $name_types, true ) ) {
+				continue;
+			}
+			$name = $this->resolved_function_name( $token[1], $aliases );
+			if ( 'aafm_exact_object_chain' !== $name && 'aafm_user_can_checked' !== $name ) {
+				continue;
+			}
+			list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
+			$prev_idx                = $this->previous_significant_index( $tokens, $i - 1 );
+			if ( '(' !== $open || ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) ) {
+				continue;
+			}
+			$function = $this->enclosing_function( $tokens, $i );
+			$args     = $this->call_arguments( $tokens, $open_idx );
+			if ( 'aafm_exact_object_chain' === $name ) {
+				$chains[ $function ][] = $this->exact_load_record( $tokens, $i, $args, true );
+				continue;
+			}
+			if ( $this->related_call_is_covered( 'current_user_can', $args, $chains[ $function ] ?? array(), false ) ) {
+				continue;
+			}
+			$ordinal_key              = $virtual_path . '|' . $function . '|' . $name;
+			$ordinals[ $ordinal_key ] = ( $ordinals[ $ordinal_key ] ?? 0 ) + 1;
+			$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
+		}
+		return $keys;
+	}
+
+	public function test_flags_a_raw_capability_check_on_a_post_object(): void {
+		$source = "<?php\nfunction f( \$id, \$t, \$user ) {\n\tcurrent_user_can( 'edit_post', \$id );\n\tcurrent_user_can( \$t->cap->delete_post, \$id );\n\tuser_can( \$user, 'EDIT_COMMENT', \$id );\n}\n";
+		$this->assertSame(
+			array( 'includes/fixture.php|f|current_user_can|1', 'includes/fixture.php|f|current_user_can|2', 'includes/fixture.php|f|user_can|1' ),
+			$this->raw_post_capability_keys( $source, 'includes/fixture.php' )
+		);
+	}
+
+	public function test_ignores_the_checked_helpers_body_and_a_capability_check_without_an_object(): void {
+		$source = "<?php\nfunction aafm_user_can_checked( \$id ) {\n\tcurrent_user_can( 'edit_post', \$id );\n}\nfunction f( \$id, \$t ) {\n\tcurrent_user_can( 'edit_post' );\n\tcurrent_user_can( 'edit_posts', \$id );\n\tcurrent_user_can( \$t->cap->edit_posts, \$id );\n\taafm_user_can_checked( 'edit_post', \$id );\n}\n";
+		$this->assertSame( array(), $this->raw_post_capability_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_a_checked_capability_call_is_held_to_the_chain_load_rule(): void {
+		$covered   = "<?php\nfunction f( \$id ) {\n\t\$post = aafm_exact_object_chain( 'post', \$id );\n\taafm_user_can_checked( 'edit_post', \$post->ID );\n\taafm_user_can_checked( 'delete_post', \$id );\n}\n";
+		$uncovered = "<?php\nfunction f( \$id ) {\n\taafm_exact_object( 'post', \$id );\n\taafm_user_can_checked( 'edit_post', \$id );\n\taafm_user_can_checked( 'read_post', \$id );\n}\n";
+		$this->assertSame( array(), $this->unchained_checked_capability_keys( $covered, 'includes/fixture.php' ) );
+		$this->assertSame(
+			array( 'includes/fixture.php|f|aafm_user_can_checked|1', 'includes/fixture.php|f|aafm_user_can_checked|2' ),
+			$this->unchained_checked_capability_keys( $uncovered, 'includes/fixture.php' )
+		);
+	}
+
+	/**
+	 * Every plugin capability call on a post or comment object runs through
+	 * aafm_user_can_checked(), so a failed metadata load inside map_meta_cap() refuses. The
+	 * constant names the calls that already run inside their own scope. test 6's ordinal counts
+	 * only the calls it flags, the sweep's convention (MetaWriteSweepTest.php:1753-1755);
+	 * comments.php:369 `current_user_can( 'read' )` has no object argument and is not counted.
+	 */
+	public function test_no_post_object_capability_call_runs_outside_the_checked_helper(): void {
+		$files = $this->scanned_files();
+		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
+
+		$found = array();
+		foreach ( $files as $path => $source ) {
+			$found = array_merge( $found, $this->raw_post_capability_keys( $source, $path ) );
+		}
+
+		$this->assertSame(
+			array(),
+			array_values( array_diff( $found, self::RAW_POST_CAPABILITY_CALLS_IN_A_SCOPE ) ),
+			'A capability call on a post or comment object bypasses aafm_user_can_checked().'
+		);
+		$this->assertSame(
+			array(),
+			array_values( array_diff( self::RAW_POST_CAPABILITY_CALLS_IN_A_SCOPE, $found ) ),
+			'A listed raw call no longer matches any call; its site has moved, so the key must be deleted.'
+		);
+	}
+
+	/**
+	 * A checked capability call needs the same earlier chain load of its object as a raw
+	 * current_user_can() call did, except the listed calls.
+	 */
+	public function test_a_checked_capability_call_needs_a_chain_load_of_its_object(): void {
+		$files = $this->scanned_files();
+		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
+
+		$found = array();
+		foreach ( $files as $path => $source ) {
+			$found = array_merge( $found, $this->unchained_checked_capability_keys( $source, $path ) );
+		}
+
+		$this->assertSame(
+			array(),
+			array_values( array_diff( $found, self::UNCHAINED_CHECKED_CAPABILITY_CALLS ) ),
+			'A checked capability call has no chain load of its object and the list does not name it.'
+		);
+		$this->assertSame(
+			array(),
+			array_values( array_diff( self::UNCHAINED_CHECKED_CAPABILITY_CALLS, $found ) ),
+			'A listed call no longer matches any unchained checked call; its site has moved, so the key must be deleted.'
+		);
+	}
+
 	// --- Metadata writer errors ---------------------------------------------
 
 	/**

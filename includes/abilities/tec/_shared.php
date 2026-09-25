@@ -152,7 +152,7 @@ function aafm_tec_visible_statuses( string $post_type ): array {
 function aafm_tec_perm_edit_event( array $input ): bool {
 	$id   = isset( $input['event_id'] ) ? absint( $input['event_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && Tribe__Events__Main::POSTTYPE === $post->post_type && current_user_can( 'edit_tribe_event', $id );
+	return $post instanceof WP_Post && Tribe__Events__Main::POSTTYPE === $post->post_type && aafm_user_can_checked( 'edit_tribe_event', $id );
 }
 
 /**
@@ -164,7 +164,7 @@ function aafm_tec_perm_edit_event( array $input ): bool {
 function aafm_tec_perm_delete_event( array $input ): bool {
 	$id   = isset( $input['event_id'] ) ? absint( $input['event_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && Tribe__Events__Main::POSTTYPE === $post->post_type && current_user_can( 'delete_tribe_event', $id );
+	return $post instanceof WP_Post && Tribe__Events__Main::POSTTYPE === $post->post_type && aafm_user_can_checked( 'delete_tribe_event', $id );
 }
 
 /**
@@ -270,7 +270,7 @@ function aafm_tec_resolve_list_status( string $requested, string $post_type ) {
 function aafm_tec_perm_edit_venue( array $input ): bool {
 	$id   = isset( $input['venue_id'] ) ? absint( $input['venue_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && Tribe__Events__Venue::POSTTYPE === $post->post_type && current_user_can( 'edit_tribe_venue', $id );
+	return $post instanceof WP_Post && Tribe__Events__Venue::POSTTYPE === $post->post_type && aafm_user_can_checked( 'edit_tribe_venue', $id );
 }
 
 /**
@@ -291,7 +291,7 @@ function aafm_tec_perm_create_venue(): bool {
 function aafm_tec_perm_edit_organizer( array $input ): bool {
 	$id   = isset( $input['organizer_id'] ) ? absint( $input['organizer_id'] ) : 0;
 	$post = $id ? aafm_exact_object( 'post', $id ) : null;
-	return $post instanceof WP_Post && Tribe__Events__Organizer::POSTTYPE === $post->post_type && current_user_can( 'edit_tribe_organizer', $id );
+	return $post instanceof WP_Post && Tribe__Events__Organizer::POSTTYPE === $post->post_type && aafm_user_can_checked( 'edit_tribe_organizer', $id );
 }
 
 /**

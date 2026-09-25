@@ -1352,7 +1352,7 @@ function aafm_wc_can_delete_product_object( WP_Post $product ): bool {
 	if ( ! $type instanceof WP_Post_Type || ! $type->map_meta_cap ) {
 		return false;
 	}
-	return current_user_can( $type->cap->delete_post, $product->ID );
+	return aafm_user_can_checked( $type->cap->delete_post, $product->ID );
 }
 
 /**

@@ -1972,6 +1972,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 	$candidates    = array();
 	$no_perm       = 0;
 	$builder_owned = 0;
+	$failed        = 0;
 	/**
 	 * With 'fields' => 'ids' the query returns ids; the WP_Query stub types ->posts as WP_Post[].
 	 *
@@ -1984,6 +1985,8 @@ function aafm_exec_replace_sitewide( array $input ) {
 		}
 		$post = aafm_exact_object_chain( 'post', $post_id );
 		if ( ! $post instanceof WP_Post ) {
+			// A post that does not load could not be updated, in a dry run as well.
+			++$failed;
 			continue;
 		}
 		if ( ! aafm_can_edit_post_object( $post ) ) {
@@ -2000,7 +2003,6 @@ function aafm_exec_replace_sitewide( array $input ) {
 
 	$updated = 0;
 	$guarded = 0;
-	$failed  = 0;
 
 	foreach ( $candidates as $post ) {
 		// Guards run identically in dry-run and a real apply, so a preview's counters are an

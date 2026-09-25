@@ -1814,6 +1814,7 @@ final class RelatedObjectLoadTest extends TestCase {
 			$this->assertIsArray( $out );
 			$this->assertSame( 0, $out['matched_posts'], 'the post was skipped' );
 			$this->assertSame( 0, $out['updated_posts'] );
+			$this->assertSame( 1, $out['failed_updates'], 'the unloadable post was counted as failed' );
 		} else {
 			// restore-revision's missing-post path is its existing irreversible refusal.
 			$this->assertInstanceOf( \WP_Error::class, $out, $shape );
@@ -1830,6 +1831,44 @@ final class RelatedObjectLoadTest extends TestCase {
 			$this->assertSame( $expected, (int) get_post( $id )->post_parent, "$shape: post_parent of $id unchanged" );
 		}
 		$this->assertSame( $status, get_post( $child )->post_status, "$shape: status unchanged" );
+	}
+
+	/**
+	 * A dry run counts a post it cannot load as failed too: the call could not have updated it.
+	 */
+	public function test_replace_sitewide_dry_run_counts_an_unloadable_candidate_as_failed(): void {
+		$this->acting_as( 'administrator' );
+		$child   = $this->post(
+			array(
+				'post_type'    => 'page',
+				'post_content' => 'Hello aafmdryruntoken',
+			)
+		);
+		$grand   = $this->post( array( 'post_type' => 'page' ) );
+		$parent  = $this->post( array( 'post_type' => 'page' ) );
+		$foreign = $this->post();
+		$this->set_parent( $child, $parent );
+		$this->set_parent( $parent, $grand );
+		get_post( $foreign );
+
+		$out = $this->armed(
+			$this->fault_load( 'post', $grand, $foreign ),
+			static function () {
+				return aafm_exec_replace_sitewide(
+					array(
+						'post_type' => 'page',
+						'search'    => 'aafmdryruntoken',
+						'replace'   => 'swapped',
+						'dry_run'   => true,
+					)
+				);
+			}
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 0, $out['matched_posts'] );
+		$this->assertSame( 1, $out['failed_updates'] );
+		$this->assert_fired_in( 'aafm_exact_object_chain', 'dry run' );
 	}
 
 	/**

@@ -582,18 +582,20 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 						$truncated = true;
 						break;
 					}
-					$probe         = new WP_Query(
+					$probe = new WP_Query(
 						array(
-							'post_type'         => 'gd_place',
-							'post_status'       => 'any',
-							'perm'              => 'readable',
-							'posts_per_page'    => $batch_size,
-							'orderby'           => 'ID',
-							'order'             => 'ASC',
-							'no_found_rows'     => true,
-							'aafm_query_marker' => $query_marker,
+							'post_type'              => 'gd_place',
+							'post_status'            => 'any',
+							'perm'                   => 'readable',
+							'posts_per_page'         => $batch_size,
+							'orderby'                => 'ID',
+							'order'                  => 'ASC',
+							'no_found_rows'          => true,
+							'aafm_query_marker'      => $query_marker,
+							'update_post_meta_cache' => false,
 						)
 					);
+					aafm_prime_post_meta_checked( wp_list_pluck( $probe->posts, 'ID' ) );
 					$probe_fetched = count( $probe->posts );
 					foreach ( $probe->posts as $probe_post ) {
 						if ( ! $probe_post instanceof WP_Post ) {
@@ -612,21 +614,23 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 			}
 			$query = new WP_Query(
 				array(
-					'post_type'         => 'gd_place',
-					'post_status'       => 'any',
+					'post_type'              => 'gd_place',
+					'post_status'            => 'any',
 					// 'readable' narrows the SQL for the 'private' status specifically -
 					// WP_Query's own 'perm' handling (wp-includes/class-wp-query.php) only ever
 					// special-cases 'private', never 'draft'/'pending', so it alone is not
 					// sufficient (see the PHP-level filter below, which covers every non-public
 					// status uniformly).
-					'perm'              => 'readable',
-					'posts_per_page'    => $batch_size,
-					'orderby'           => 'ID',
-					'order'             => 'ASC',
-					'no_found_rows'     => true,
-					'aafm_query_marker' => $query_marker,
+					'perm'                   => 'readable',
+					'posts_per_page'         => $batch_size,
+					'orderby'                => 'ID',
+					'order'                  => 'ASC',
+					'no_found_rows'          => true,
+					'aafm_query_marker'      => $query_marker,
+					'update_post_meta_cache' => false,
 				)
 			);
+			aafm_prime_post_meta_checked( wp_list_pluck( $query->posts, 'ID' ) );
 			// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at
 			// all (only 'private'), so an Author could still see another user's draft listing
 			// through the SQL layer alone. Filter every result through the SAME

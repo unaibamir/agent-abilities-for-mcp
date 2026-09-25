@@ -1310,6 +1310,26 @@ function aafm_user_can_checked( string $cap, int $object_id, string $object_type
 }
 
 /**
+ * Load the metadata of a list of posts into the cache inside a checked-read scope: the one query
+ * WP_Query runs with update_post_meta_cache on, for a list whose rows are then checked one by one.
+ * When the query fails nothing is cached, and each later capability check loads its own post's
+ * metadata in its own scope.
+ *
+ * Never call inside an aafm_with_checked_reads() build: scopes do not nest.
+ *
+ * @param int[] $post_ids Post ids.
+ */
+function aafm_prime_post_meta_checked( array $post_ids ): void {
+	aafm_with_checked_reads(
+		static function () use ( $post_ids ): array {
+			update_postmeta_cache( $post_ids );
+			return array();
+		},
+		aafm_generic_error()
+	);
+}
+
+/**
  * Shared write-eligibility resolver: returns the cap object only when the post's type is
  * exposed (floor + allowlist) AND map_meta_cap===true. Null means "refuse the write".
  *
@@ -1770,7 +1790,10 @@ function aafm_rich_post_output_properties(): array {
  * @return array<string,mixed>
  */
 function aafm_rich_post( WP_Post $post, array $options = array() ): array {
-	$shape = aafm_redact_post( $post );
+	// Checked before anything below reads the post's metadata, so the capability check makes the
+	// first load of it and that load is failure-aware.
+	$can_edit_meta = aafm_can_edit_post_object( $post );
+	$shape         = aafm_redact_post( $post );
 
 	$format          = isset( $options['content_format'] ) && 'raw' === $options['content_format'] ? 'raw' : 'rendered';
 	$include_content = ! array_key_exists( 'include_content', $options ) || (bool) $options['include_content'];
@@ -1868,7 +1891,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// chokepoint the bulk reader (aafm_exec_get_all_post_meta(), meta.php) already uses,
 	// so hard-block/deny/deny-`*` are honoured here exactly as they are everywhere else.
 	$meta = array();
-	if ( aafm_can_edit_post_object( $post ) ) {
+	if ( $can_edit_meta ) {
 		foreach ( aafm_allowed_meta_keys() as $meta_key ) {
 			if ( ! is_string( aafm_validate_meta_key( (string) $meta_key ) ) ) {
 				continue; // hard-blocked, denied, or deny-`*`: never surfaced here either.

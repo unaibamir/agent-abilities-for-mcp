@@ -746,4 +746,259 @@ final class CapabilityMetaReadTest extends TestCase {
 			$this->replace_sitewide_counts()
 		);
 	}
+
+	private const POST_NOTE = 'cap_probe_note';
+
+	private const LEAKED = 'value-of-another-post';
+
+	/**
+	 * Grant edit_post on a post that carries the flag in its metadata and deny it otherwise, with
+	 * the note key allowed in the meta block.
+	 */
+	private function grant_edit_post_from_flag(): void {
+		add_filter( 'aafm_allowed_meta_keys', static fn(): array => array( self::POST_NOTE ) );
+		add_filter(
+			'map_meta_cap',
+			static function ( array $caps, string $cap, int $user_id, array $args ): array {
+				if ( 'edit_post' !== $cap || ! isset( $args[0] ) ) {
+					return $caps;
+				}
+				return '' !== (string) get_post_meta( (int) $args[0], self::POST_FLAG, true ) ? array( 'exist' ) : array_merge( $caps, array( 'do_not_allow' ) );
+			},
+			10,
+			4
+		);
+	}
+
+	/**
+	 * A published post by another author carrying the flag and a note, whose metadata rows a
+	 * faulted load of $target's metadata hands back as $target's.
+	 */
+	private function flagged_donor_post(): int {
+		$donor = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		add_post_meta( $donor, self::POST_FLAG, '1' );
+		add_post_meta( $donor, self::POST_NOTE, self::LEAKED );
+		return $donor;
+	}
+
+	/**
+	 * Run $run with every metadata load of $target answered with $donor's rows under $target's id.
+	 *
+	 * @param int      $target Post whose metadata load is faulted.
+	 * @param int      $donor  Post whose rows the load reads.
+	 * @param callable $run    The call.
+	 * @return mixed
+	 */
+	private function with_post_meta_leaked( int $target, int $donor, callable $run ) {
+		global $wpdb;
+		wp_cache_delete( $target, 'post_meta' );
+		return $this->with_query_faulted(
+			array( 'SELECT post_id, meta_key, meta_value FROM', $wpdb->postmeta, "WHERE post_id IN ({$target})" ),
+			$wpdb->prepare( 'SELECT %d AS post_id, meta_key, meta_value FROM %i WHERE post_id = %d', $target, $wpdb->postmeta, $donor ),
+			$run,
+			'post'
+		);
+	}
+
+	/**
+	 * The post metadata loads $run makes, counted by the load query's shape.
+	 *
+	 * @param callable $run The call.
+	 */
+	private function post_meta_loads( callable $run ): int {
+		global $wpdb;
+		$count  = 0;
+		$filter = static function ( string $query ) use ( &$count, $wpdb ): string {
+			if ( false !== strpos( $query, 'SELECT post_id, meta_key, meta_value FROM' ) && false !== strpos( $query, $wpdb->postmeta ) ) {
+				++$count;
+			}
+			return $query;
+		};
+		add_filter( 'query', $filter );
+		try {
+			$run();
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+		return $count;
+	}
+
+	/**
+	 * A post's meta block is shown only to a caller who can edit it. The rich shape checks that
+	 * before it reads any of the post's metadata, so a first load that hands back another post's
+	 * rows is refused instead of trusted.
+	 */
+	public function test_get_post_meta_block_is_not_granted_from_another_posts_leaked_rows(): void {
+		$this->acting_as( 'editor' );
+		$this->grant_edit_post_from_flag();
+		$post  = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$donor = $this->flagged_donor_post();
+
+		$out = $this->with_post_meta_leaked(
+			$post,
+			$donor,
+			static function () use ( $post ) {
+				return aafm_exec_get_post( array( 'post_id' => $post ) );
+			}
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertEquals( (object) array(), $out['post']['meta'] );
+		$this->assertStringNotContainsString( self::LEAKED, (string) wp_json_encode( $out ) );
+		$this->assertTrue( $this->fired_in_scope[0] ?? false, 'the first load of the post metadata ran inside a checked scope' );
+	}
+
+	/**
+	 * Each list read that checks the meta-block capability per post, as a callable returning the
+	 * rows it shaped.
+	 *
+	 * @return iterable<string,array{0:callable}>
+	 */
+	public function data_rich_post_list_reads(): iterable {
+		yield 'get-posts' => array( static fn(): array => aafm_exec_get_posts( array() )['posts'] );
+		yield 'search-content' => array( static fn(): array => aafm_exec_search_content( array( 'search' => self::SEARCH ) )['results'] );
+	}
+
+	/**
+	 * A list read primes the page's post metadata inside a checked scope, so a priming load that
+	 * hands back another post's rows is not trusted by the meta-block check.
+	 *
+	 * @dataProvider data_rich_post_list_reads
+	 *
+	 * @param callable $read The list read.
+	 */
+	public function test_a_list_reads_meta_block_is_not_granted_from_a_leaked_priming_load( callable $read ): void {
+		$this->acting_as( 'editor' );
+		$this->grant_edit_post_from_flag();
+		$post  = (int) self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => self::SEARCH,
+			)
+		);
+		$donor = $this->flagged_donor_post();
+		wp_update_post(
+			array(
+				'ID'          => $donor,
+				'post_status' => 'draft',
+			)
+		);
+
+		$rows = $this->with_post_meta_leaked( $post, $donor, $read );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( $post, $rows[0]['id'] );
+		$this->assertEquals( (object) array(), $rows[0]['meta'] );
+		$this->assertStringNotContainsString( self::LEAKED, (string) wp_json_encode( $rows ) );
+		$this->assertTrue( $this->fired_in_scope[0] ?? false, 'the priming load ran inside a checked scope' );
+	}
+
+	/**
+	 * On a healthy database a list read shows the meta block exactly where the caller can edit,
+	 * with one metadata load for the page.
+	 *
+	 * @dataProvider data_rich_post_list_reads
+	 *
+	 * @param callable $read The list read.
+	 */
+	public function test_a_list_read_answers_as_before_on_a_healthy_database( callable $read ): void {
+		$this->acting_as( 'editor' );
+		$this->grant_edit_post_from_flag();
+		$open   = (int) self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => self::SEARCH,
+				'post_date'    => '2020-01-01 00:00:00',
+			)
+		);
+		$editor = (int) self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => self::SEARCH,
+				'post_date'    => '2020-01-02 00:00:00',
+			)
+		);
+		add_post_meta( $editor, self::POST_FLAG, '1' );
+		add_post_meta( $editor, self::POST_NOTE, 'editable note' );
+		add_post_meta( $open, self::POST_NOTE, 'hidden note' );
+		wp_cache_delete( $open, 'post_meta' );
+		wp_cache_delete( $editor, 'post_meta' );
+
+		$rows  = array();
+		$loads = $this->post_meta_loads(
+			static function () use ( $read, &$rows ): void {
+				$rows = $read();
+			}
+		);
+
+		$this->assertSame( array( $editor, $open ), array_column( $rows, 'id' ) );
+		$this->assertSame( array( self::POST_NOTE => 'editable note' ), $rows[0]['meta'] );
+		$this->assertEquals( (object) array(), $rows[1]['meta'] );
+		$this->assertSame( 1, $loads, 'one metadata load for the page' );
+	}
+
+	/**
+	 * The list-blocks read shows only blocks the caller can edit. It primes the page's metadata
+	 * inside a checked scope, so a priming load that hands back another post's rows grants nothing.
+	 */
+	public function test_list_blocks_does_not_list_a_block_from_a_leaked_priming_load(): void {
+		$this->acting_as( 'contributor' );
+		$this->grant_edit_post_from_flag();
+		$other = (int) self::factory()->user->create( array( 'role' => 'editor' ) );
+		$block = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'wp_block',
+				'post_status' => 'publish',
+				'post_author' => $other,
+			)
+		);
+		$donor = $this->flagged_donor_post();
+		$this->assertSame( array(), aafm_exec_list_blocks( array() )['blocks'], 'healthy: another author\'s block is not editable' );
+
+		$out = $this->with_post_meta_leaked(
+			$block,
+			$donor,
+			static fn(): array => aafm_exec_list_blocks( array() )
+		);
+
+		$this->assertSame( array(), $out['blocks'] );
+		$this->assertTrue( $this->fired_in_scope[0] ?? false, 'the priming load ran inside a checked scope' );
+	}
+
+	/**
+	 * On a healthy database list-blocks lists the editable block, with one metadata load.
+	 */
+	public function test_list_blocks_answers_as_before_on_a_healthy_database(): void {
+		$this->acting_as( 'contributor' );
+		$this->grant_edit_post_from_flag();
+		$other  = (int) self::factory()->user->create( array( 'role' => 'editor' ) );
+		$locked = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'wp_block',
+				'post_status' => 'publish',
+				'post_author' => $other,
+			)
+		);
+		$open   = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'wp_block',
+				'post_status' => 'publish',
+				'post_author' => $other,
+			)
+		);
+		add_post_meta( $open, self::POST_FLAG, '1' );
+		wp_cache_delete( $locked, 'post_meta' );
+		wp_cache_delete( $open, 'post_meta' );
+
+		$out   = array();
+		$loads = $this->post_meta_loads(
+			static function () use ( &$out ): void {
+				$out = aafm_exec_list_blocks( array() );
+			}
+		);
+
+		$this->assertSame( array( $open ), array_column( $out['blocks'], 'id' ) );
+		$this->assertSame( 2, $out['total'] );
+		$this->assertSame( 1, $loads, 'one metadata load for the page' );
+	}
 }

@@ -172,13 +172,14 @@ function aafm_exec_search_content( array $input ) {
 	$build_query = static function () use ( $types, $status, $search, $paging ): WP_Query {
 		return new WP_Query(
 			array(
-				'post_type'        => $types,
-				'post_status'      => $status,
-				's'                => $search,
-				'posts_per_page'   => $paging['per_page'],
-				'paged'            => $paging['page'],
-				'no_found_rows'    => false,
-				'suppress_filters' => false,
+				'post_type'              => $types,
+				'post_status'            => $status,
+				's'                      => $search,
+				'posts_per_page'         => $paging['per_page'],
+				'paged'                  => $paging['page'],
+				'no_found_rows'          => false,
+				'suppress_filters'       => false,
+				'update_post_meta_cache' => false,
 			)
 		);
 	};
@@ -201,6 +202,7 @@ function aafm_exec_search_content( array $input ) {
 			$code,
 			static function () use ( $build_query, $options ): array {
 				$query = $build_query();
+				aafm_prime_post_meta_checked( wp_list_pluck( $query->posts, 'ID' ) );
 				return array(
 					'rows'  => array_map(
 						static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),

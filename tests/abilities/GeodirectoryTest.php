@@ -1346,4 +1346,178 @@ final class GeodirectoryTest extends TestCase {
 		$this->assertSame( array( 'refused', 'refused' ), array_column( $details, 'status' ) );
 		$this->assertSame( array( 'kind', 'entity', 'object_id', 'key', 'status', 'rows', 'modified_by_site', 'key_omitted' ), array_keys( $details[0] ) );
 	}
+
+	/**
+	 * Grant edit_post on a listing whose metadata carries the probe flag, and return a published
+	 * post carrying that flag, whose rows a faulted load hands back.
+	 */
+	private function grant_edit_from_flag_with_donor(): int {
+		add_filter(
+			'map_meta_cap',
+			static function ( array $caps, string $cap, int $user_id, array $args ): array {
+				return 'edit_post' === $cap && isset( $args[0] ) && '' !== (string) get_post_meta( (int) $args[0], 'geo_probe_flag', true ) ? array( 'exist' ) : $caps;
+			},
+			10,
+			4
+		);
+		$donor = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		add_post_meta( $donor, 'geo_probe_flag', '1' );
+		return $donor;
+	}
+
+	/**
+	 * Run $run with every metadata load of $target answered with $donor's rows under $target's id,
+	 * errors suppressed and output discarded.
+	 *
+	 * @param int      $target Listing whose metadata load is faulted.
+	 * @param int      $donor  Post whose rows the load reads.
+	 * @param callable $run    The call.
+	 * @return mixed
+	 */
+	private function with_listing_meta_leaked( int $target, int $donor, callable $run ) {
+		global $wpdb;
+		wp_cache_delete( $target, 'post_meta' );
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$filter     = \AAFM\Tests\Support\QueryFaultInjector::leak_row_filter(
+			array( 'SELECT post_id, meta_key, meta_value FROM', $wpdb->postmeta, "WHERE post_id IN ({$target})" ),
+			$wpdb->prepare( 'SELECT %d AS post_id, meta_key, meta_value FROM %i WHERE post_id = %d', $target, $wpdb->postmeta, $donor ),
+			0
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * The listing loop primes each batch's metadata inside a checked scope, so a priming load that
+	 * hands back another post's rows does not make a draft the caller cannot edit visible.
+	 */
+	public function test_get_listings_does_not_list_a_draft_from_a_leaked_priming_load(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$other  = self::factory()->user->create( array( 'role' => 'author' ) );
+		$draft  = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $other,
+			)
+		);
+		$donor  = $this->grant_edit_from_flag_with_donor();
+		wp_set_current_user( $author );
+		$this->assertSame( 0, aafm_exec_geodirectory_get_listings( array() )['total'], 'healthy: the draft is not the caller\'s' );
+
+		$out = $this->with_listing_meta_leaked(
+			$draft,
+			$donor,
+			static fn(): array => aafm_exec_geodirectory_get_listings( array() )
+		);
+
+		$this->assertSame( 0, $out['total'] );
+		$this->assertSame( array(), $out['listings'] );
+		$this->assertGreaterThanOrEqual( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+	}
+
+	/**
+	 * The truncation probe primes its batch the same way, so a trailing draft whose priming load
+	 * hands back another post's rows does not flip `truncated` once the visible set is complete.
+	 */
+	public function test_get_listings_probe_is_not_truncated_by_a_leaked_priming_load(): void {
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		add_filter( 'aafm_geodirectory_list_batch_cap', static fn() => 2 );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$other  = self::factory()->user->create( array( 'role' => 'author' ) );
+		self::factory()->post->create_many(
+			4,
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+				'post_author' => $author,
+			)
+		);
+		$draft = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $other,
+			)
+		);
+		$donor = $this->grant_edit_from_flag_with_donor();
+		wp_set_current_user( $author );
+		$this->assertFalse( aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) )['truncated'], 'healthy' );
+
+		$out = $this->with_listing_meta_leaked(
+			$draft,
+			$donor,
+			static fn(): array => aafm_exec_geodirectory_get_listings( array( 'per_page' => 100 ) )
+		);
+
+		$this->assertSame( 4, $out['total'] );
+		$this->assertFalse( $out['truncated'] );
+		$this->assertGreaterThanOrEqual( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+	}
+
+	/**
+	 * On a healthy database the listing body is unchanged, with one metadata load per batch.
+	 */
+	public function test_get_listings_answers_as_before_on_a_healthy_database(): void {
+		global $wpdb;
+		add_filter( 'aafm_geodirectory_list_batch_size', static fn() => 2 );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$other  = self::factory()->user->create( array( 'role' => 'author' ) );
+		$public = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'publish',
+				'post_author' => $other,
+			)
+		);
+		$own    = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $author,
+			)
+		);
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'draft',
+				'post_author' => $other,
+			)
+		);
+		wp_set_current_user( $author );
+		$loads  = 0;
+		$filter = static function ( string $query ) use ( &$loads, $wpdb ): string {
+			if ( false !== strpos( $query, 'SELECT post_id, meta_key, meta_value FROM' ) && false !== strpos( $query, $wpdb->postmeta ) ) {
+				++$loads;
+			}
+			return $query;
+		};
+		foreach ( get_posts(
+			array(
+				'post_type'   => 'gd_place',
+				'post_status' => 'any',
+				'fields'      => 'ids',
+			)
+		) as $id ) {
+			wp_cache_delete( (int) $id, 'post_meta' );
+		}
+
+		add_filter( 'query', $filter );
+		$out = aafm_exec_geodirectory_get_listings( array() );
+		remove_filter( 'query', $filter );
+
+		$this->assertSame( 2, $out['total'] );
+		$this->assertFalse( $out['truncated'] );
+		$this->assertSame( array( $public, $own ), array_column( $out['listings'], 'listing_id' ) );
+		$this->assertSame( array( 'publish', 'draft' ), array_column( $out['listings'], 'status' ) );
+		$this->assertSame( 2, $loads, 'one metadata load for each of the two batches' );
+	}
 }

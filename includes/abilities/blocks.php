@@ -174,11 +174,12 @@ function aafm_exec_list_blocks( array $input ): array {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
 
 	$query_args = array(
-		'post_type'      => 'wp_block',
-		'post_status'    => array( 'publish', 'draft' ),
-		'posts_per_page' => $per_page,
-		'paged'          => isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1,
-		'no_found_rows'  => false,
+		'post_type'              => 'wp_block',
+		'post_status'            => array( 'publish', 'draft' ),
+		'posts_per_page'         => $per_page,
+		'paged'                  => isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1,
+		'no_found_rows'          => false,
+		'update_post_meta_cache' => false,
 	);
 	// Only pass a search term when one was actually given: an empty 's' makes WP_Query run a
 	// pointless LIKE on every row, so omit it entirely when no search is requested (B6).
@@ -187,7 +188,8 @@ function aafm_exec_list_blocks( array $input ): array {
 		$query_args['s'] = $search;
 	}
 
-	$query  = new WP_Query( $query_args );
+	$query = new WP_Query( $query_args );
+	aafm_prime_post_meta_checked( wp_list_pluck( $query->posts, 'ID' ) );
 	$blocks = array();
 	foreach ( $query->posts as $block ) {
 		// Scope to blocks the caller can actually edit: the discovery floor (edit_posts) lets a

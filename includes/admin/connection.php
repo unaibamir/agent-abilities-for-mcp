@@ -167,7 +167,7 @@ function aafm_create_agent_user( string $login ) {
 		// login merely collides is not the dedicated agent, so it must not self-heal; and we NEVER
 		// stamp a privileged account, which would misreport a full-caps login as the low-privilege
 		// agent. When the shape matches, re-clicking "Create agent user" flips the step to done.
-		$existing_user   = get_userdata( $existing_id );
+		$existing_user   = aafm_exact_object( 'user', $existing_id );
 		$is_agent_shaped = $existing_user instanceof WP_User
 			&& array( 'subscriber' ) === array_values( array_map( 'strval', $existing_user->roles ) );
 		if ( $is_agent_shaped
@@ -240,7 +240,7 @@ function aafm_backfill_agent_user_marker(): void {
 
 	$existing_id = (int) username_exists( 'mcp-agent' );
 	if ( $existing_id > 0 && ! get_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), true ) ) {
-		$user = get_userdata( $existing_id );
+		$user = aafm_exact_object( 'user', $existing_id );
 		if ( $user instanceof WP_User
 			&& array( 'subscriber' ) === array_values( array_map( 'strval', $user->roles ) )
 			&& ! empty( WP_Application_Passwords::get_user_application_passwords( $existing_id ) )

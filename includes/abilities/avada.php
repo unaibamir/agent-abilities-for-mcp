@@ -85,7 +85,7 @@ function aafm_avada_registry_definitions(): array {
  */
 function aafm_perm_avada_post_object( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -398,7 +398,7 @@ function aafm_fusion_shortcode_structure_preserved( string $before, string $afte
  */
 function aafm_exec_avada_replace_text( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

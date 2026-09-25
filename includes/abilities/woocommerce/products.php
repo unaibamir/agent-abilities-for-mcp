@@ -1375,9 +1375,9 @@ function aafm_perm_wc_delete_product( array $input ): bool {
 	if ( null === $product ) {
 		return true;
 	}
-	$post = get_post( $product->get_id() );
+	$post = aafm_exact_object( 'post', $product->get_id() );
 	if ( ! $post instanceof WP_Post ) {
-		return true;
+		return ! is_a( (string) $product->get_data_store()->get_current_class_name(), 'WC_Product_Data_Store_CPT', true );
 	}
 	return aafm_wc_can_delete_product_object( $post );
 }

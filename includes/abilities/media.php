@@ -366,7 +366,7 @@ function aafm_exec_get_media_item( array $input ) {
 			? aafm_wpml_translated_id( $att_id, 'attachment', $lang )
 			: $att_id;
 	}
-	$attachment = $att_id ? get_post( $att_id ) : null;
+	$attachment = $att_id ? aafm_exact_object( 'post', $att_id ) : null;
 	if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type ) {
 		return aafm_generic_error();
 	}
@@ -615,7 +615,7 @@ function aafm_args_set_featured_image(): array {
  */
 function aafm_perm_set_featured_image( array $input ): bool {
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post    = $post_id ? get_post( $post_id ) : null;
+	$post    = $post_id ? aafm_exact_object( 'post', $post_id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -636,13 +636,14 @@ function aafm_exec_set_featured_image( array $input ) {
 	// Defense-in-depth: re-confirm the target exists AND its type is writable through the
 	// chokepoint, so a non-allowlisted / non-mapped type is refused even if the permission
 	// callback were ever bypassed.
-	$target = $post_id ? get_post( $post_id ) : null;
+	$target = $post_id ? aafm_exact_object( 'post', $post_id ) : null;
 	if ( ! $target instanceof WP_Post || ! aafm_can_edit_post_object( $target ) ) {
 		return aafm_generic_error();
 	}
 
 	// The id must be a real attachment AND a real image - not a PDF or a plain post.
-	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) || ! wp_attachment_is_image( $att_id ) ) {
+	$att = aafm_exact_object( 'post', $att_id );
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) || ! wp_attachment_is_image( $att_id ) ) {
 		return aafm_generic_error();
 	}
 
@@ -918,7 +919,8 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		$response = ( static function () use ( $attachment_id, $alt ) {
 			// get_post_field() with the 'raw' context reads storage directly, unaffected by any display
 			// filter, so the comparison and the rewrite act on the stored value.
-			$sideloaded_field   = get_post_field( 'post_content', $attachment_id, 'raw' );
+			$sideloaded_post    = aafm_exact_object( 'post', $attachment_id );
+			$sideloaded_field   = $sideloaded_post instanceof WP_Post ? $sideloaded_post->post_content : '';
 			$sideloaded_content = is_string( $sideloaded_field ) ? $sideloaded_field : '';
 			$sanitized_content  = wp_kses_post( $sideloaded_content );
 			if ( $sanitized_content !== $sideloaded_content ) {
@@ -1616,7 +1618,8 @@ function aafm_args_update_media(): array {
  */
 function aafm_perm_update_media( array $input ): bool {
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
-	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) ) {
+	$att    = aafm_exact_object( 'post', $att_id );
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) ) {
 		return false;
 	}
 	return current_user_can( 'edit_post', $att_id );
@@ -1633,7 +1636,7 @@ function aafm_perm_update_media( array $input ): bool {
  */
 function aafm_exec_update_media( array $input ) {
 	$att_id     = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
-	$attachment = $att_id ? get_post( $att_id ) : null;
+	$attachment = $att_id ? aafm_exact_object( 'post', $att_id ) : null;
 	if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type
 		|| ! current_user_can( 'edit_post', $att_id ) ) {
 		return aafm_generic_error();
@@ -1787,7 +1790,8 @@ function aafm_args_delete_media(): array {
  */
 function aafm_perm_delete_media( array $input ): bool {
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
-	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) ) {
+	$att    = aafm_exact_object( 'post', $att_id );
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) ) {
 		return false;
 	}
 	return current_user_can( 'delete_post', $att_id );
@@ -1805,7 +1809,8 @@ function aafm_perm_delete_media( array $input ): bool {
  */
 function aafm_exec_delete_media( array $input ) {
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
-	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) || ! current_user_can( 'delete_post', $att_id ) ) {
+	$att    = aafm_exact_object( 'post', $att_id );
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) || ! current_user_can( 'delete_post', $att_id ) ) {
 		return aafm_generic_error();
 	}
 

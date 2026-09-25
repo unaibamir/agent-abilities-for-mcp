@@ -298,7 +298,7 @@ function aafm_exec_get_term( array $input ) {
 		? aafm_wpml_translated_id( $term_id, $taxonomy, $lang )
 		: $term_id;
 
-	$term = get_term( $term_id, $taxonomy );
+	$term = aafm_exact_object( 'term', $term_id, $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -376,7 +376,7 @@ function aafm_args_add_post_terms(): array {
  */
 function aafm_perm_add_post_terms( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -846,7 +846,7 @@ function aafm_validate_term_parent( int $parent_id, string $taxonomy ) {
 	if ( ! is_taxonomy_hierarchical( $taxonomy ) ) {
 		return new WP_Error( 'aafm_invalid_term_parent', __( 'This taxonomy does not support a parent term.', 'agent-abilities-for-mcp' ) );
 	}
-	if ( ! get_term( $parent_id, $taxonomy ) instanceof WP_Term ) {
+	if ( ! aafm_exact_object( 'term', $parent_id, $taxonomy ) instanceof WP_Term ) {
 		return new WP_Error( 'aafm_invalid_term_parent', __( 'The parent term does not belong to this taxonomy.', 'agent-abilities-for-mcp' ) );
 	}
 	return $parent_id;
@@ -888,7 +888,7 @@ function aafm_exec_create_term( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$term = get_term( (int) $result['term_id'], $taxonomy );
+	$term = aafm_exact_object( 'term', (int) $result['term_id'], $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -972,7 +972,7 @@ function aafm_exec_update_term( array $input ) {
 	}
 
 	$term_id = absint( $input['term_id'] );
-	$term    = get_term( $term_id, $taxonomy );
+	$term    = aafm_exact_object( 'term', $term_id, $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -1005,7 +1005,7 @@ function aafm_exec_update_term( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$updated = get_term( $term_id, $taxonomy );
+	$updated = aafm_exact_object( 'term', $term_id, $taxonomy );
 	if ( ! $updated instanceof WP_Term ) {
 		return aafm_generic_error();
 	}

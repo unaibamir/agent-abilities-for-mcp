@@ -231,7 +231,7 @@ function aafm_perm_get_page( array $input ): bool {
 	if ( $id ) {
 		$id = aafm_get_page_lang_resolved_id( $id, $input );
 	}
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	// Keep the type pin so a non-page id is still rejected, then delegate to the shared gate.
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return false;
@@ -270,7 +270,7 @@ function aafm_exec_get_page( array $input ) {
 		return $lang;
 	}
 	$id   = aafm_get_page_lang_resolved_id( absint( $input['page_id'] ), $input );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -396,7 +396,7 @@ function aafm_args_update_page(): array {
  */
 function aafm_perm_update_page( array $input ): bool {
 	$id   = isset( $input['page_id'] ) ? absint( $input['page_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	// Keep the type pin so a non-page id is rejected, then gate the edit through the
 	// shared chokepoint (floor + allowlist + map_meta_cap; resolves to edit_page for pages).
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type || ! aafm_can_edit_post_object( $post ) ) {
@@ -424,7 +424,7 @@ function aafm_perm_update_page( array $input ): bool {
  */
 function aafm_exec_update_page( array $input ) {
 	$id   = absint( $input['page_id'] );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -477,7 +477,7 @@ function aafm_args_trash_page(): array {
  */
 function aafm_perm_trash_page( array $input ): bool {
 	$id   = isset( $input['page_id'] ) ? absint( $input['page_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	// Keep the type pin so a non-page id is rejected, then delegate to the shared delete gate.
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return false;
@@ -499,7 +499,7 @@ function aafm_exec_trash_page( array $input ) {
 		return aafm_trash_disabled_error();
 	}
 	$id   = absint( $input['page_id'] );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -554,7 +554,7 @@ function aafm_args_delete_page(): array {
  */
 function aafm_perm_delete_page( array $input ): bool {
 	$id   = isset( $input['page_id'] ) ? absint( $input['page_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	// Keep the type pin so a non-page id is rejected, then delegate to the shared delete gate.
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return false;

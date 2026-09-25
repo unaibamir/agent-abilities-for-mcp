@@ -189,10 +189,11 @@ function aafm_ability_allowed_for_principal( string $ability_name, int $user_id,
 
 	$roles = array();
 	if ( $user_id > 0 ) {
-		$user = get_userdata( $user_id );
-		if ( $user instanceof WP_User ) {
-			$roles = (array) $user->roles;
+		$user = aafm_exact_object( 'user', $user_id );
+		if ( ! $user instanceof WP_User ) {
+			return false;
 		}
+		$roles = (array) $user->roles;
 	}
 
 	$role_matched = false;

@@ -230,6 +230,9 @@ function aafm_args_get_menu(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_menu( array $input ) {
+	if ( ! aafm_exact_object( 'term', (int) $input['menu_id'], 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
 	$menu = wp_get_nav_menu_object( (int) $input['menu_id'] );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
@@ -323,7 +326,7 @@ function aafm_exec_list_menu_items( array $input ): array {
 
 	$decorated = array();
 	foreach ( $object_ids as $object_id ) {
-		$post = get_post( (int) $object_id );
+		$post = aafm_exact_object( 'post', (int) $object_id );
 		if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 			continue;
 		}
@@ -432,6 +435,9 @@ function aafm_exec_create_menu( array $input ) {
 	if ( is_wp_error( $id ) || 0 === (int) $id ) {
 		return aafm_generic_error();
 	}
+	if ( ! aafm_exact_object( 'term', (int) $id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
 	$menu = wp_get_nav_menu_object( (int) $id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
@@ -493,13 +499,19 @@ function aafm_args_update_menu(): array {
  */
 function aafm_exec_update_menu( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
-	$menu    = wp_get_nav_menu_object( $menu_id );
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
 	$name   = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$result = wp_update_nav_menu_object( $menu_id, array( 'menu-name' => $name ) );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) { // @phpstan-ignore-line instanceof.alwaysTrue (the rename cleaned the term cache, so this is a new load).
 		return aafm_generic_error();
 	}
 	$updated = wp_get_nav_menu_object( $menu_id );
@@ -564,7 +576,10 @@ function aafm_args_delete_menu(): array {
  */
 function aafm_exec_delete_menu( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
-	$menu    = wp_get_nav_menu_object( $menu_id );
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -654,7 +669,10 @@ function aafm_args_create_menu_item(): array {
  */
 function aafm_exec_create_menu_item( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
-	$menu    = wp_get_nav_menu_object( $menu_id );
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -767,7 +785,8 @@ function aafm_resolve_menu_item_object( string $type, int $object_id, string $re
 	}
 
 	if ( 'post_type' === $type ) {
-		$post_type = get_post_type( $object_id );
+		$post      = aafm_exact_object( 'post', $object_id );
+		$post_type = $post instanceof WP_Post ? $post->post_type : false;
 		if ( ! is_string( $post_type ) || '' === $post_type ) {
 			return new WP_Error(
 				'aafm_menu_item_object_required',
@@ -778,7 +797,7 @@ function aafm_resolve_menu_item_object( string $type, int $object_id, string $re
 		return $post_type;
 	}
 
-	$term = get_term( $object_id );
+	$term = aafm_exact_object( 'term', $object_id );
 	if ( ! $term instanceof WP_Term ) {
 		return new WP_Error(
 			'aafm_menu_item_object_required',
@@ -854,6 +873,9 @@ function aafm_exec_update_menu_item( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
 	$item_id = (int) ( $input['item_id'] ?? 0 );
 
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
 	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
@@ -873,8 +895,11 @@ function aafm_exec_update_menu_item( array $input ) {
 	// Position is read straight from the stored post row so the item keeps its exact saved
 	// menu_order. $existing is now decorated from a directly-loaded post (via aafm_menu_item_by_id())
 	// so its menu_order is the stored value too, but reading the row keeps the source unambiguous.
-	$stored_post    = get_post( $item_id );
-	$original_order = $stored_post instanceof WP_Post ? (int) $stored_post->menu_order : 0;
+	$stored_post = aafm_exact_object( 'post', $item_id );
+	if ( ! $stored_post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$original_order = (int) $stored_post->menu_order;
 	$args           = array(
 		'menu-item-object-id'   => isset( $existing->object_id ) ? (int) $existing->object_id : 0,
 		'menu-item-object'      => isset( $existing->object ) ? (string) $existing->object : '',
@@ -908,8 +933,11 @@ function aafm_exec_update_menu_item( array $input ) {
 	// because core does. So a title-only edit of the first item silently moved it last, which is
 	// the opposite of what this ability promises. Put the saved order back when core changed it.
 	if ( 0 === $original_order ) {
-		$after = get_post( $item_id );
-		if ( $after instanceof WP_Post && $original_order !== (int) $after->menu_order ) {
+		$after = aafm_exact_object( 'post', $item_id );
+		if ( ! $after instanceof WP_Post ) {
+			return aafm_generic_error();
+		}
+		if ( $original_order !== (int) $after->menu_order ) {
 			wp_update_post(
 				array(
 					'ID'         => $item_id,
@@ -984,7 +1012,7 @@ function aafm_args_delete_menu_item(): array {
  */
 function aafm_exec_delete_menu_item( array $input ) {
 	$item_id = (int) ( $input['item_id'] ?? 0 );
-	$post    = get_post( $item_id );
+	$post    = aafm_exact_object( 'post', $item_id );
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -1068,7 +1096,7 @@ function aafm_menu_item_by_id( int $menu_id, int $item_id ) {
 	// Deliberately NOT status-filtered: create/update/delete re-read the item they just wrote, which
 	// can be a draft (e.g. it points at an unpublished object), so a just-saved draft item must stay
 	// resolvable. This is intentionally more capable than the old publish-only reader.
-	$post = get_post( $item_id );
+	$post = aafm_exact_object( 'post', $item_id );
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return null;
 	}

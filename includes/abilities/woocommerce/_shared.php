@@ -240,7 +240,7 @@ function aafm_wc_date_string( $date ): ?string {
  */
 function aafm_wc_find_attribute_term( $option, string $taxonomy ): ?\WP_Term {
 	if ( is_int( $option ) || ( is_string( $option ) && '' !== $option && ctype_digit( $option ) ) ) {
-		$term = get_term_by( 'id', (int) $option, $taxonomy );
+		$term = aafm_exact_object( 'term', (int) $option, $taxonomy );
 		return $term instanceof \WP_Term ? $term : null;
 	}
 

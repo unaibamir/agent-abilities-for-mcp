@@ -520,7 +520,7 @@ function aafm_perm_get_post( array $input ): bool {
 	if ( $id ) {
 		$id = aafm_get_post_lang_resolved_id( $id, $input );
 	}
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post ) {
 		return false;
 	}
@@ -1201,7 +1201,7 @@ function aafm_args_update_post(): array {
  */
 function aafm_perm_update_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
@@ -1225,7 +1225,7 @@ function aafm_perm_update_post( array $input ): bool {
  */
 function aafm_exec_update_post( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1412,7 +1412,7 @@ function aafm_args_replace_in_post(): array {
  */
 function aafm_perm_replace_in_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -1680,7 +1680,7 @@ function aafm_replacement_preserves_structure( string $before, string $after ): 
  */
 function aafm_exec_replace_in_post( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1974,7 +1974,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS ) {
 			break;
 		}
-		$post = get_post( (int) $post_id ); // @phpstan-ignore-line cast.int (fields=>ids means $post_id is really an int; the WP_Query stub types ->posts as WP_Post[] unconditionally).
+		$post = aafm_exact_object( 'post', (int) $post_id ); // @phpstan-ignore-line cast.int (fields=>ids means $post_id is really an int; the WP_Query stub types ->posts as WP_Post[] unconditionally).
 		if ( ! $post instanceof WP_Post ) {
 			continue;
 		}
@@ -2108,7 +2108,7 @@ function aafm_args_update_cpt_item(): array {
  */
 function aafm_perm_update_cpt_item( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
@@ -2133,7 +2133,7 @@ function aafm_perm_update_cpt_item( array $input ): bool {
  */
 function aafm_exec_update_cpt_item( array $input ) {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || is_wp_error( aafm_validate_post_type( $post->post_type ) ) ) {
 		return aafm_generic_error();
 	}
@@ -2187,7 +2187,7 @@ function aafm_args_trash_post(): array {
  */
 function aafm_perm_trash_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_delete_post_object( $post );
 }
 
@@ -2254,7 +2254,7 @@ function aafm_args_delete_post(): array {
  */
 function aafm_perm_delete_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_delete_post_object( $post );
 }
 
@@ -2274,7 +2274,7 @@ function aafm_perm_delete_post( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_force_delete_post( int $id, string $expected_type = '' ) {
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

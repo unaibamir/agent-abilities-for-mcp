@@ -920,6 +920,9 @@ class WC_Product {
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = $this->aafm_stub_merge_attributes( $this->data['attributes'] ?? array(), $v ); }
 	public function save() { $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
+	// The data store names its class the way WC_Data_Store::get_current_class_name() does. A stub product
+	// has no backing post, so it reports a store that is not the post store unless its row sets one.
+	public function get_data_store() { return new class( (string) ( $this->data['data_store'] ?? 'WC_Stub_Data_Store' ) ) { private $name; public function __construct( $name ) { $this->name = $name; } public function get_current_class_name() { return $this->name; } }; }
 	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
@@ -1028,6 +1031,9 @@ class WC_Product_Variation {
 		if ( $force && false !== $result ) { $this->data['id'] = 0; }
 		return $result;
 	}
+	// The data store names its class the way WC_Data_Store::get_current_class_name() does. A stub variation
+	// has no backing post, so it reports a store that is not the post store unless its row sets one.
+	public function get_data_store() { return new class( (string) ( $this->data['data_store'] ?? 'WC_Stub_Data_Store' ) ) { private $name; public function __construct( $name ) { $this->name = $name; } public function get_current_class_name() { return $this->name; } }; }
 }
 PHP;
 	}

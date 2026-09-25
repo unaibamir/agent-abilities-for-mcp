@@ -1107,9 +1107,9 @@ function aafm_perm_wc_delete_product_variation( array $input ): bool {
 	if ( null === $variation ) {
 		return true;
 	}
-	$post = get_post( $variation->get_id() );
+	$post = aafm_exact_object( 'post', $variation->get_id() );
 	if ( ! $post instanceof WP_Post ) {
-		return true;
+		return ! is_a( (string) $variation->get_data_store()->get_current_class_name(), 'WC_Product_Data_Store_CPT', true );
 	}
 	return aafm_wc_can_delete_variation_object( $post );
 }

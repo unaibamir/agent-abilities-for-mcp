@@ -64,7 +64,7 @@ function aafm_register_meta_definitions( array $registry ): array {
  */
 function aafm_can_access_post_meta( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
@@ -212,7 +212,7 @@ function aafm_args_get_all_post_meta(): array {
  */
 function aafm_perm_get_all_post_meta( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 

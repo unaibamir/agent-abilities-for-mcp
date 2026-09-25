@@ -1157,7 +1157,7 @@ function aafm_validate_term_meta_request( array $input ) {
 		return $taxonomy;
 	}
 	$term_id = isset( $input['term_id'] ) ? absint( $input['term_id'] ) : 0;
-	if ( $term_id < 1 || ! get_term( $term_id, $taxonomy ) instanceof WP_Term ) {
+	if ( $term_id < 1 || ! aafm_exact_object( 'term', $term_id, $taxonomy ) instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
 	$key = aafm_validate_term_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
@@ -1309,7 +1309,7 @@ function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids 
 		if ( $id < 1 ) {
 			return aafm_generic_error();
 		}
-		$term = get_term( $id, $tax );
+		$term = aafm_exact_object( 'term', $id, $tax );
 		if ( ! $term instanceof WP_Term ) {
 			return aafm_generic_error();
 		}
@@ -1332,7 +1332,7 @@ function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids 
  */
 function aafm_validate_featured_attachment_id( $attachment_id ) {
 	$id  = absint( $attachment_id );
-	$att = $id ? get_post( $id ) : null;
+	$att = $id ? aafm_exact_object( 'post', $id ) : null;
 	// Must be a real attachment AND an image - the dedicated set-featured-image ability
 	// also requires wp_attachment_is_image(), so this enrichment path agrees with it and
 	// rejects non-image attachments (PDFs, audio, video, etc.).
@@ -1470,7 +1470,7 @@ function aafm_apply_write_enrichment( int $post_id, array $bundle ): array {
 		if ( false !== set_post_thumbnail( $post_id, $bundle['featured_media'] ) ) {
 			$outcome['featured_media'] = AAFM_WRITE_WRITTEN;
 		} else {
-			$outcome['featured_media'] = (int) get_post_thumbnail_id( $post_id ) === $bundle['featured_media'] ? AAFM_WRITE_UNCHANGED : AAFM_WRITE_REFUSED;
+			$outcome['featured_media'] = aafm_exact_object( 'post', $post_id ) instanceof WP_Post && (int) get_post_thumbnail_id( $post_id ) === $bundle['featured_media'] ? AAFM_WRITE_UNCHANGED : AAFM_WRITE_REFUSED;
 		}
 	}
 
@@ -2134,7 +2134,7 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
  * @return WP_Post|WP_Error The revision, or a generic error if it is not a revision of $post_id.
  */
 function aafm_validate_revision( int $revision_id, int $post_id ) {
-	$revision = $revision_id ? wp_get_post_revision( $revision_id ) : null;
+	$revision = $revision_id && aafm_exact_object( 'post', $revision_id ) instanceof WP_Post ? wp_get_post_revision( $revision_id ) : null;
 	if ( ! $revision instanceof WP_Post || (int) $revision->post_parent !== $post_id ) {
 		return aafm_generic_error();
 	}
@@ -2565,7 +2565,7 @@ function aafm_trash_disabled_error(): WP_Error {
  * @return WP_Post|null
  */
 function aafm_get_block_object( int $id ): ?WP_Post {
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	return ( $post instanceof WP_Post && 'wp_block' === $post->post_type ) ? $post : null;
 }
 

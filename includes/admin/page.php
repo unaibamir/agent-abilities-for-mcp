@@ -2701,7 +2701,7 @@ function aafm_activity_detail_link( string $ability, string $detail_raw ): ?arra
 			$url = get_edit_user_link( $id );
 			break;
 		case 'term':
-			$url = get_edit_term_link( $id );
+			$url = aafm_exact_object( 'term', $id ) instanceof WP_Term ? get_edit_term_link( $id ) : null;
 			break;
 		case 'order':
 			// Never hand-build this URL. Under HPOS a WooCommerce order's edit screen is not

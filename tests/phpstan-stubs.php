@@ -15,6 +15,17 @@
 declare( strict_types=1 );
 
 // phpcs:disable
+if ( ! class_exists( 'WC_Data_Store' ) ) {
+	/**
+	 * Minimal WooCommerce data-store signature for static analysis only.
+	 */
+	class WC_Data_Store {
+		public function get_current_class_name(): string {
+			return '';
+		}
+	}
+}
+
 if ( ! class_exists( 'WC_Product' ) ) {
 	/**
 	 * Minimal WooCommerce product signature for static analysis only.
@@ -59,6 +70,9 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		}
 		public function get_manage_stock(): bool {
 			return false;
+		}
+		public function get_data_store(): WC_Data_Store {
+			return new WC_Data_Store();
 		}
 		public function get_featured(): bool {
 			return false;
@@ -210,6 +224,9 @@ if ( ! class_exists( 'WC_Product_Variation' ) ) {
 		/** @return bool|string */
 		public function get_manage_stock() {
 			return false;
+		}
+		public function get_data_store(): WC_Data_Store {
+			return new WC_Data_Store();
 		}
 		public function get_image_id(): int {
 			return 0;

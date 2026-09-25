@@ -612,7 +612,7 @@ function aafm_with_named_lock( string $name, callable $callback ) {
  */
 function aafm_exec_update_user( array $input ) {
 	$id     = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	$target = $id ? get_userdata( $id ) : false;
+	$target = $id ? aafm_exact_object( 'user', $id ) : false;
 	if ( ! $target instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -678,7 +678,7 @@ function aafm_exec_update_user( array $input ) {
 
 		// Defense in depth: if this write somehow left the site admin-less, restore the role.
 		if ( $demotes_admin && aafm_count_administrators() < 1 ) {
-			$restored = get_userdata( $id );
+			$restored = aafm_exact_object( 'user', $id );
 			if ( $restored instanceof WP_User ) {
 				$restored->set_role( 'administrator' );
 			}
@@ -780,7 +780,7 @@ function aafm_perm_delete_user( array $input ): bool {
 function aafm_exec_delete_user( array $input ) {
 	$id       = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	$reassign = isset( $input['reassign_to'] ) ? absint( $input['reassign_to'] ) : 0;
-	$victim   = $id ? get_userdata( $id ) : false;
+	$victim   = $id ? aafm_exact_object( 'user', $id ) : false;
 	if ( ! $victim instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -791,7 +791,7 @@ function aafm_exec_delete_user( array $input ) {
 	}
 
 	// The reassign target is mandatory, must exist, and must not be the victim.
-	if ( ! $reassign || $reassign === $id || ! get_userdata( $reassign ) instanceof WP_User ) {
+	if ( ! $reassign || $reassign === $id || ! aafm_exact_object( 'user', $reassign ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
 

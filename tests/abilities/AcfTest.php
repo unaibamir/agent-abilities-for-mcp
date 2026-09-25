@@ -1902,4 +1902,94 @@ final class AcfTest extends TestCase {
 		$this->assertFalse( aafm_acf_address_reads_back( '', array() ), 'An empty address against an empty definition.' );
 		$this->assertFalse( aafm_acf_address_reads_back( 'anything', array() ), 'And a real-looking one.' );
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	public function test_the_acf_writer_exists(): void {
+		$this->assertTrue( function_exists( 'aafm_acf_write_field' ) );
+	}
+
+	public function test_a_post_field_write_goes_through_the_acf_writer_and_logs_one_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => 'Logged headline' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$details = $this->outcome_details();
+		$this->assertCount( 1, $details );
+		$this->assertSame(
+			array(
+				'kind'             => 'acf',
+				'entity'           => 'post',
+				'object_id'        => (string) $post_id,
+				'key'              => 'field_1',
+				'status'           => 'accepted',
+				'rows'             => null,
+				'modified_by_site' => false,
+				'key_omitted'      => false,
+			),
+			$details[0]
+		);
+	}
+
+	public function test_a_term_and_a_user_field_write_log_their_entity(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$user_id = (int) self::factory()->user->create();
+
+		wp_get_ability( 'aafm/acf-update-term-fields' )->execute(
+			array(
+				'term_id' => $term_id,
+				'fields'  => array( 'field_1' => 'Term value' ),
+			)
+		);
+		wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
+			array(
+				'user_id' => $user_id,
+				'fields'  => array( 'field_1' => 'User value' ),
+			)
+		);
+
+		$details = $this->outcome_details();
+		$this->assertCount( 2, $details );
+		$this->assertSame( array( 'term', (string) $term_id ), array( $details[0]['entity'], $details[0]['object_id'] ) );
+		$this->assertSame( array( 'user', (string) $user_id ), array( $details[1]['entity'], $details[1]['object_id'] ) );
+	}
+
+	public function test_the_acf_writer_maps_an_options_selector_and_an_unknown_one(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$option  = aafm_acf_write_field( 'field_1', 'x', 'option' );
+		$unknown = aafm_acf_write_field( 'field_1', 'y', 'widget_3' );
+
+		$this->assertSame( 'accepted', $option['status'] );
+		$this->assertArrayHasKey( 'returned', $option );
+		$this->assertSame( 'accepted', $unknown['status'] );
+		$details = $this->outcome_details();
+		$this->assertSame( array( 'option', null ), array( $details[0]['entity'], $details[0]['object_id'] ) );
+		$this->assertSame( array( null, null ), array( $details[1]['entity'], $details[1]['object_id'] ) );
+	}
 }

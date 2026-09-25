@@ -1679,7 +1679,7 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// slashes; this ACF writer must too - without it the read-back verify below then reports the
 		// mangled persist as a failed write. The verify keeps comparing against the unslashed $clean,
 		// which is exactly what storage holds after the round trip.
-		update_field( (string) $field_key, wp_slash( $clean ), $selector );
+		aafm_acf_write_field( (string) $field_key, wp_slash( $clean ), $selector );
 
 		// Verify the write persisted. update_field()'s documented int|bool return is not the signal
 		// used here: for a container it reports the write as a whole, so it cannot say what storage

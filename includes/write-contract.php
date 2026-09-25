@@ -1019,6 +1019,49 @@ function aafm_post_field_confirm_logged( int $post_id, string $field, string $in
 }
 
 /**
+ * Write one ACF field through ACF's own update_field() and log its outcome.
+ *
+ * The return of update_field() is false for a same-value write as well as for a failure, so it is
+ * no failure signal: the write is accepted on return and ACF's own read-back, in the calling
+ * ability, decides the response. The log row names the object the selector points at.
+ *
+ * @param string $field_key ACF field key.
+ * @param mixed  $value     The value, already slashed for storage.
+ * @param mixed  $selector  ACF object selector: a post id, 'term_N', 'user_N', or 'option(s)'.
+ * @return array{status: string, returned: mixed}
+ */
+function aafm_acf_write_field( string $field_key, $value, $selector ): array {
+	$returned = update_field( $field_key, $value, $selector );
+
+	$entity    = null;
+	$object_id = null;
+	if ( is_int( $selector ) || ( is_string( $selector ) && ctype_digit( $selector ) ) ) {
+		$entity    = 'post';
+		$object_id = (int) $selector;
+	} elseif ( is_string( $selector ) && 1 === preg_match( '/^(term|user)_(\d+)$/', $selector, $matches ) ) {
+		$entity    = $matches[1];
+		$object_id = (int) $matches[2];
+	} elseif ( 'option' === $selector || 'options' === $selector ) {
+		$entity = 'option';
+	}
+
+	$result = array(
+		'status'   => AAFM_WRITE_ACCEPTED,
+		'returned' => $returned,
+	);
+	aafm_emit_write_outcome(
+		$result,
+		array(
+			'kind'      => 'acf',
+			'entity'    => $entity,
+			'object_id' => $object_id,
+			'key'       => $field_key,
+		)
+	);
+	return $result;
+}
+
+/**
  * The one emission point every writer calls once its status is decided.
  *
  * Writes the WP_DEBUG diagnostic line and fires aafm_write_completed for every status, so the log

@@ -1524,4 +1524,17 @@ if ( ! class_exists( 'WPSEO_Meta' ) ) {
 		}
 	}
 }
+if ( ! function_exists( 'update_field' ) ) {
+	/**
+	 * Minimal ACF update_field() signature for static analysis only.
+	 *
+	 * @param string $selector Field name or key.
+	 * @param mixed  $value    Value to save.
+	 * @param mixed  $post_id  ACF object selector.
+	 * @return int|bool
+	 */
+	function update_field( $selector, $value, $post_id = false ) {
+		return false;
+	}
+}
 // phpcs:enable

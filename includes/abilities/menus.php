@@ -511,7 +511,7 @@ function aafm_exec_update_menu( array $input ) {
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
 		return aafm_generic_error();
 	}
-	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) { // @phpstan-ignore-line instanceof.alwaysTrue (the rename cleaned the term cache, so this is a new load).
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
 	$updated = wp_get_nav_menu_object( $menu_id );
@@ -709,6 +709,9 @@ function aafm_exec_create_menu_item( array $input ) {
 	if ( '' !== $object ) {
 		$args['menu-item-object'] = $object;
 	}
+	if ( ! aafm_menu_item_target_checked( $type, $object, $object_id ) ) {
+		return aafm_generic_error();
+	}
 
 	$item_id = wp_update_nav_menu_item( $menu_id, 0, $args );
 	if ( is_wp_error( $item_id ) || 0 === (int) $item_id ) {
@@ -809,6 +812,44 @@ function aafm_resolve_menu_item_object( string $type, int $object_id, string $re
 }
 
 /**
+ * Whether a menu item's target, and the post id core will write as the item's parent, load by id.
+ *
+ * Core's wp_update_nav_menu_item() writes the target's parent as the item's post_parent: a post
+ * target's post_parent, or a term target's parent term id read as a post id
+ * (wp-includes/nav-menu.php:496, :530). On update, its final wp_update_post() walks the posts
+ * above that id. So a post target is chain-loaded, and a term target is loaded by id and the post
+ * its parent id names is chain-loaded. A load that does not come back exact passes only when
+ * aafm_object_absent() finds no row, which is how core already treats a deleted target. Other
+ * item types have no target to load.
+ *
+ * @param string $type        Menu item type.
+ * @param string $object_name Post type or taxonomy name.
+ * @param int    $object_id   Target id.
+ * @return bool
+ */
+function aafm_menu_item_target_checked( string $type, string $object_name, int $object_id ): bool {
+	if ( $object_id <= 0 ) {
+		return true;
+	}
+	if ( 'post_type' === $type ) {
+		return aafm_exact_object_chain( 'post', $object_id ) instanceof WP_Post || aafm_object_absent( 'post', $object_id );
+	}
+	if ( 'taxonomy' !== $type ) {
+		return true;
+	}
+
+	$term = aafm_exact_object( 'term', $object_id, $object_name );
+	if ( ! $term instanceof WP_Term ) {
+		return aafm_object_absent( 'term', $object_id, $object_name );
+	}
+	$parent_id = (int) $term->parent;
+	if ( $parent_id <= 0 ) {
+		return true;
+	}
+	return aafm_exact_object_chain( 'post', $parent_id ) instanceof WP_Post || aafm_object_absent( 'post', $parent_id );
+}
+
+/**
  * Args for aafm/update-menu-item.
  *
  * Closed schema: the menu id and item id (both required) plus optional title/url to change.
@@ -895,7 +936,7 @@ function aafm_exec_update_menu_item( array $input ) {
 	// Position is read straight from the stored post row so the item keeps its exact saved
 	// menu_order. $existing is now decorated from a directly-loaded post (via aafm_menu_item_by_id())
 	// so its menu_order is the stored value too, but reading the row keeps the source unambiguous.
-	$stored_post = aafm_exact_object( 'post', $item_id );
+	$stored_post = aafm_exact_object_chain( 'post', $item_id );
 	if ( ! $stored_post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -920,6 +961,9 @@ function aafm_exec_update_menu_item( array $input ) {
 	}
 	if ( isset( $input['url'] ) ) {
 		$args['menu-item-url'] = esc_url_raw( (string) $input['url'] );
+	}
+	if ( ! aafm_menu_item_target_checked( $args['menu-item-type'], $args['menu-item-object'], $args['menu-item-object-id'] ) ) {
+		return aafm_generic_error();
 	}
 
 	$result = wp_update_nav_menu_item( $menu_id, $item_id, $args );
@@ -1093,6 +1137,8 @@ function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
  * @return object|null The decorated nav menu item object, or null.
  */
 function aafm_menu_item_by_id( int $menu_id, int $item_id ) {
+	global $wpdb;
+
 	// Deliberately NOT status-filtered: create/update/delete re-read the item they just wrote, which
 	// can be a draft (e.g. it points at an unpublished object), so a just-saved draft item must stay
 	// resolvable. This is intentionally more capable than the old publish-only reader.
@@ -1100,8 +1146,8 @@ function aafm_menu_item_by_id( int $menu_id, int $item_id ) {
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return null;
 	}
-	$belongs = is_object_in_term( $item_id, 'nav_menu', $menu_id );
-	if ( is_wp_error( $belongs ) || ! $belongs ) {
+	$belongs = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT tr.object_id FROM %i AS tr INNER JOIN %i AS tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tr.object_id = %d AND tt.taxonomy = %s AND tt.term_id = %d LIMIT 1', $wpdb->term_relationships, $wpdb->term_taxonomy, $item_id, 'nav_menu', $menu_id ) );
+	if ( ! $belongs['ok'] || null === $belongs['value'] ) {
 		return null;
 	}
 	return wp_setup_nav_menu_item( $post );

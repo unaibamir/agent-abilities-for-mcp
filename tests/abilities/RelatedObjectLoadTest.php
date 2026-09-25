@@ -775,4 +775,344 @@ final class RelatedObjectLoadTest extends TestCase {
 		$this->assertIsArray( $reparent );
 		$this->assertSame( $c, (int) get_term( $x, 'category' )->parent );
 	}
+
+	/**
+	 * A nav menu.
+	 *
+	 * @param string $name Menu name.
+	 */
+	private function menu( string $name ): int {
+		$id = wp_create_nav_menu( $name );
+		$this->assertIsInt( $id );
+		return $id;
+	}
+
+	/**
+	 * A menu item made through create-menu-item.
+	 *
+	 * @param array<string,mixed> $input Create input.
+	 */
+	private function made_item( array $input ): int {
+		$made = aafm_exec_create_menu_item( $input );
+		$this->assertIsArray( $made );
+		return (int) $made['id'];
+	}
+
+	/**
+	 * Remove a post row directly, the way a target disappears without core's menu-item cleanup.
+	 *
+	 * @param int $id Post id.
+	 */
+	private function drop_post_row( int $id ): void {
+		global $wpdb;
+		$wpdb->delete( $wpdb->posts, array( 'ID' => $id ) );
+		clean_post_cache( $id );
+	}
+
+	/**
+	 * T4: a failed membership read refuses.
+	 */
+	public function test_menu_item_membership_refuses_when_its_query_fails(): void {
+		$this->acting_as( 'administrator' );
+		$menu = $this->menu( 'M1' );
+		$item = $this->made_item(
+			array(
+				'menu_id' => $menu,
+				'title'   => 'Link',
+				'url'     => home_url( '/link' ),
+			)
+		);
+		$this->assertNotNull( aafm_menu_item_by_id( $menu, $item ), 'healthy: a member' );
+
+		$lookup = $this->armed(
+			null,
+			static function () use ( $menu, $item ) {
+				return QueryFaultInjector::fail_query(
+					'SELECT tr.object_id FROM',
+					static function () use ( $menu, $item ) {
+						return array(
+							aafm_menu_item_by_id( $menu, $item ),
+							aafm_exec_update_menu_item(
+								array(
+									'menu_id' => $menu,
+									'item_id' => $item,
+									'title'   => 'Renamed',
+								)
+							),
+						);
+					}
+				);
+			}
+		);
+
+		$this->assertNull( $lookup[0] );
+		$this->assertInstanceOf( \WP_Error::class, $lookup[1] );
+		$this->assertSame( 'aafm_error', $lookup[1]->get_error_code() );
+		$this->assertGreaterThanOrEqual( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'Link', get_post( $item )->post_title );
+	}
+
+	/**
+	 * T4: another menu's item is not a member, even when a term load reads the asked menu's row.
+	 */
+	public function test_an_item_of_another_menu_is_refused_when_that_menus_term_reads_the_asked_menu(): void {
+		$this->acting_as( 'administrator' );
+		$m1   = $this->menu( 'M1' );
+		$m2   = $this->menu( 'M2' );
+		$item = $this->made_item(
+			array(
+				'menu_id' => $m2,
+				'title'   => 'Link',
+				'url'     => home_url( '/link' ),
+			)
+		);
+		$this->assertNull( aafm_menu_item_by_id( $m1, $item ), 'healthy: not a member' );
+		wp_get_object_terms( $item, 'nav_menu' );
+		get_object_term_cache( $item, 'nav_menu' );
+
+		$by_id   = $this->fault_load( 'term', $m2, $m1, 0 );
+		$by_list = $this->recording_leak( array( 'SELECT t.*, tt.* FROM', "WHERE t.term_id IN ({$m2})" ), $this->load_sql( 'term', $m1 ), 0 );
+		$got     = $this->armed(
+			static function ( string $query ) use ( $by_id, $by_list ): string {
+				return $by_list( $by_id( $query ) );
+			},
+			static function () use ( $m1, $item ) {
+				return aafm_menu_item_by_id( $m1, $item );
+			}
+		);
+
+		$this->assertNull( $got );
+	}
+
+	/**
+	 * T5: the writers check the item's target and the post id core will write as its parent.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_menu_item_target_faults(): iterable {
+		yield 'create, post target' => array( 'create_post' );
+		yield 'create, post target parent' => array( 'create_post_parent' );
+		yield 'create, taxonomy target' => array( 'create_term' );
+		yield 'create, taxonomy target parent post' => array( 'create_term_parent' );
+		yield 'update, post target parent' => array( 'update_post_parent' );
+		yield 'update, taxonomy target parent post' => array( 'update_term_parent' );
+	}
+
+	/**
+	 * T5.
+	 *
+	 * @dataProvider data_menu_item_target_faults
+	 *
+	 * @param string $shape Which target and which load is faulted.
+	 */
+	public function test_a_menu_item_writer_refuses_before_the_write_when_its_target_reads_another_row( string $shape ): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$menu    = $this->menu( 'Main' );
+		$foreign = $this->post();
+		$grand   = $this->post( array( 'post_type' => 'page' ) );
+		$page    = $this->post( array( 'post_type' => 'page' ) );
+		$term    = $this->category();
+		$is_term = false !== strpos( $shape, 'term' );
+		$create  = 0 === strpos( $shape, 'create' );
+
+		$target = $is_term
+			? array(
+				'type'      => 'taxonomy',
+				'object'    => 'category',
+				'object_id' => $term,
+			)
+			: array(
+				'type'      => 'post_type',
+				'object'    => 'page',
+				'object_id' => $page,
+			);
+		$item   = 0;
+		if ( ! $create ) {
+			$item = $this->made_item( array( 'menu_id' => $menu ) + $target + array( 'title' => 'Item' ) );
+		}
+		// The parent core reads from the target now, after any item was made.
+		if ( $is_term ) {
+			$wpdb->update( $wpdb->term_taxonomy, array( 'parent' => $page ), array( 'term_id' => $term ) );
+			clean_term_cache( $term, 'category' );
+		}
+		$this->set_parent( $page, $grand );
+
+		$faulted = array(
+			'create_post'        => $page,
+			'create_post_parent' => $grand,
+			'create_term'        => $term,
+			'create_term_parent' => $page,
+			'update_post_parent' => $grand,
+			'update_term_parent' => $page,
+		)[ $shape ];
+		if ( $create && ! $is_term && $faulted === $grand ) {
+			get_post( $page );
+		}
+		get_post( $foreign );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$out = $this->armed(
+			$is_term && $faulted === $term ? $this->fault_load( 'term', $term, $this->category() ) : $this->fault_load( 'post', $faulted, $foreign ),
+			static function () use ( $create, $menu, $item, $target ) {
+				if ( $create ) {
+					return aafm_exec_create_menu_item( array( 'menu_id' => $menu ) + $target + array( 'title' => 'New' ) );
+				}
+				return aafm_exec_update_menu_item(
+					array(
+						'menu_id' => $menu,
+						'item_id' => $item,
+						'title'   => 'Renamed',
+					)
+				);
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the target load was faulted' );
+		$this->assertContains( 'aafm_menu_item_target_checked', $this->stages[0] ?? array(), 'the faulted SELECT fired inside the target check' );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ), 'the writer was not reached' );
+	}
+
+	/**
+	 * T5: a target whose row is gone writes as in 1.7.5.
+	 */
+	public function test_a_menu_item_whose_target_row_is_gone_still_writes(): void {
+		$this->acting_as( 'administrator' );
+		$menu   = $this->menu( 'Main' );
+		$page   = $this->post( array( 'post_type' => 'page' ) );
+		$item   = $this->made_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Item',
+				'type'      => 'post_type',
+				'object'    => 'page',
+				'object_id' => $page,
+			)
+		);
+		$writes = did_action( 'save_post_nav_menu_item' );
+		$this->drop_post_row( $page );
+
+		$updated = aafm_exec_update_menu_item(
+			array(
+				'menu_id' => $menu,
+				'item_id' => $item,
+				'title'   => 'Renamed',
+			)
+		);
+		$created = aafm_exec_create_menu_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Gone',
+				'type'      => 'post_type',
+				'object'    => 'page',
+				'object_id' => self::MISSING,
+			)
+		);
+
+		$this->assertIsArray( $updated );
+		$this->assertSame( 'Renamed', get_post( $item )->post_title );
+		$this->assertInstanceOf( \WP_Error::class, $created );
+		$this->assertSame( 'aafm_invalid_menu_item', $created->get_error_code(), 'written, then removed as _invalid, as before' );
+		$this->assertSame( $writes + 2, did_action( 'save_post_nav_menu_item' ) );
+	}
+
+	/**
+	 * T5 (named refusal): a post target that is a revision whose parent is gone.
+	 */
+	public function test_create_menu_item_refuses_a_revision_target_whose_parent_is_gone(): void {
+		$this->acting_as( 'administrator' );
+		$menu   = $this->menu( 'Main' );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$out = aafm_exec_create_menu_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Revision',
+				'type'      => 'post_type',
+				'object_id' => $this->orphan_revision(),
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ) );
+	}
+
+	/**
+	 * T5 (the narrowing): an item whose stored parent is such a revision still updates.
+	 */
+	public function test_update_menu_item_writes_when_the_items_stored_parent_is_a_revision_whose_parent_is_gone(): void {
+		$this->acting_as( 'administrator' );
+		$menu = $this->menu( 'Main' );
+		$item = $this->made_item(
+			array(
+				'menu_id' => $menu,
+				'title'   => 'Link',
+				'url'     => home_url( '/link' ),
+			)
+		);
+		$this->set_parent( $item, $this->orphan_revision() );
+
+		$out = aafm_exec_update_menu_item(
+			array(
+				'menu_id' => $menu,
+				'item_id' => $item,
+				'title'   => 'Renamed',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'Renamed', get_post( $item )->post_title );
+	}
+
+	/**
+	 * T6 (menu order): update-menu-item's own parent walk, which also runs the order restore.
+	 */
+	public function test_update_menu_item_refuses_before_the_write_when_an_ancestor_of_the_item_reads_another_row(): void {
+		$this->acting_as( 'administrator' );
+		$menu    = $this->menu( 'Main' );
+		$grand   = $this->post( array( 'post_type' => 'page' ) );
+		$parent  = $this->post( array( 'post_type' => 'page' ) );
+		$foreign = $this->post();
+		$item    = $this->made_item(
+			array(
+				'menu_id' => $menu,
+				'title'   => 'Link',
+				'url'     => home_url( '/link' ),
+			)
+		);
+		$this->set_parent( $item, $parent );
+		$this->set_parent( $parent, $grand );
+		$this->assertSame( 0, (int) get_post( $item )->menu_order, 'the first item, so the order restore runs' );
+		get_post( $foreign );
+		$writes  = did_action( 'save_post_nav_menu_item' );
+		$parents = array(
+			$item   => $parent,
+			$parent => $grand,
+		);
+
+		$out = $this->armed(
+			$this->fault_load( 'post', $grand, $foreign ),
+			static function () use ( $menu, $item ) {
+				return aafm_exec_update_menu_item(
+					array(
+						'menu_id' => $menu,
+						'item_id' => $item,
+						'title'   => 'Renamed',
+					)
+				);
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assert_fired_in( 'aafm_exact_object_chain', 'item ancestor' );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ), 'the writer was not reached' );
+		foreach ( $parents as $id => $expected ) {
+			clean_post_cache( $id );
+			$this->assertSame( $expected, (int) get_post( $id )->post_parent, "post_parent of $id unchanged" );
+		}
+	}
 }

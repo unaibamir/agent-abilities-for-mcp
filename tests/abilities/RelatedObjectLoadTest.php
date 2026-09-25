@@ -977,6 +977,12 @@ final class RelatedObjectLoadTest extends TestCase {
 
 	/**
 	 * T5: a target whose row is gone writes as in 1.7.5.
+	 *
+	 * The target check's verdict is asserted on every version. The write round trip runs only
+	 * from WordPress 7.0 up. Before 7.0, core's wp_setup_nav_menu_item() hands a missing target
+	 * straight to get_post_states() (6.9 nav-menu.php:879; 7.0 guards it at :876), and
+	 * aafm_menu_item_by_id() decorates the item on purpose (menus.php:1100-1104), as 1.7.5 did.
+	 * This is the same gate as MenuItemVisibilityCorpusTest::core_reader_can_answer().
 	 */
 	public function test_a_menu_item_whose_target_row_is_gone_still_writes(): void {
 		$this->acting_as( 'administrator' );
@@ -993,6 +999,14 @@ final class RelatedObjectLoadTest extends TestCase {
 		);
 		$writes = did_action( 'save_post_nav_menu_item' );
 		$this->drop_post_row( $page );
+
+		$this->assertTrue( aafm_object_absent( 'post', $page ), 'the row is really gone' );
+		$this->assertTrue( aafm_menu_item_target_checked( 'post_type', 'page', $page ), 'update: a gone target does not refuse' );
+		$this->assertTrue( aafm_menu_item_target_checked( 'post_type', 'page', self::MISSING ), 'create: a gone target does not refuse' );
+
+		if ( version_compare( (string) get_bloginfo( 'version' ), '7.0', '<' ) ) {
+			return;
+		}
 
 		$updated = aafm_exec_update_menu_item(
 			array(

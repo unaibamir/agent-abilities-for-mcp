@@ -20,6 +20,8 @@ if ( ! class_exists( 'WC_Data_Store' ) ) {
 	 * Minimal WooCommerce data-store signature for static analysis only.
 	 */
 	class WC_Data_Store {
+		/** @return WC_Data_Store */
+		public static function load( string $object_type ) {}
 		public function get_current_class_name(): string {
 			return '';
 		}

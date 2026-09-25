@@ -1796,8 +1796,15 @@ PHP;
 	 * @return int The stub ticket's id.
 	 */
 	protected function stub_add_ticket( int $event_id, string $name = 'Test ticket', float $price = 10.0, int $capacity = 100 ): int {
-		static $next_id                      = 9000;
-		$id                                  = ++$next_id;
+		// Event Tickets finds no ticket whose post is missing (src/Tribe/Tickets.php:671), so each
+		// stub ticket gets a real RSVP ticket post and is keyed by that post's id.
+		$id                                  = (int) wp_insert_post(
+			array(
+				'post_type'   => 'tribe_rsvp_tickets',
+				'post_title'  => $name,
+				'post_status' => 'publish',
+			)
+		);
 		TecTicketsStubStore::$tickets[ $id ] = new \Tribe__Tickets__Ticket_Object( $id, $event_id, $name, $price, $capacity );
 		return $id;
 	}

@@ -112,6 +112,9 @@ function aafm_wc_get_product( int $id ): ?\WC_Product {
 	if ( $id < 1 || ! function_exists( 'wc_get_product' ) ) {
 		return null;
 	}
+	if ( aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return null;
+	}
 	$product = wc_get_product( $id );
 	return $product instanceof \WC_Product ? $product : null;
 }

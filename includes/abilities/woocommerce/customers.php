@@ -123,6 +123,10 @@ function aafm_wc_get_customer_object( int $id ): ?\WC_Customer {
 	if ( ! class_exists( 'WC_Customer' ) ) {
 		return null;
 	}
+	// The core customer store reads the user by id, so load that user exactly first.
+	if ( aafm_wc_store_is_core( 'customer' ) && ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
+		return null;
+	}
 	// WooCommerce exposes no wc_get_customer() helper; instantiate WC_Customer directly. A
 	// non-existent id leaves the object empty, so get_id() returns 0 - treat that as "not found".
 	// WC_Customer's constructor already catches the data-store "Invalid customer" exception and

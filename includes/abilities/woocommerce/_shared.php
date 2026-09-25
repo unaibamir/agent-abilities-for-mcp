@@ -29,6 +29,34 @@ function aafm_wc_perm(): bool {
 }
 
 /**
+ * Whether WooCommerce keeps this object type in its own core data store.
+ *
+ * The core stores read the object's post or user row through core's loaders, so a reader can
+ * load that row exactly first and WooCommerce then reads it from core's cache. Other stores,
+ * such as the orders table under HPOS, load no post, so the reader skips the exact load.
+ *
+ * @param string $store Data store key: 'product', 'order', 'coupon' or 'customer'.
+ * @return bool False for an unknown key, without WooCommerce, or when the registry throws.
+ */
+function aafm_wc_store_is_core( string $store ): bool {
+	$core = array(
+		'product'  => 'WC_Product_Data_Store_CPT',
+		'order'    => 'WC_Order_Data_Store_CPT',
+		'coupon'   => 'WC_Coupon_Data_Store_CPT',
+		'customer' => 'WC_Customer_Data_Store',
+	);
+	if ( ! isset( $core[ $store ] ) || ! class_exists( 'WC_Data_Store' ) ) {
+		return false;
+	}
+	try {
+		$name = \WC_Data_Store::load( $store )->get_current_class_name();
+	} catch ( \Exception $e ) {
+		return false;
+	}
+	return is_a( (string) $name, $core[ $store ], true );
+}
+
+/**
  * Reject a non-empty billing email that is not a valid address, before any write happens.
  *
  * The sanitize_email() call turns an invalid address ("not-an-email") into '', which silently ERASES the

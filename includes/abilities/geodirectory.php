@@ -122,6 +122,10 @@ function aafm_geodirectory_address_fields(): array {
  * @return array<string,mixed>
  */
 function aafm_geodirectory_read_fields( int $post_id ): array {
+	// GeoDirectory picks its table from the post's type, so load the post exactly first.
+	if ( ! aafm_exact_object( 'post', $post_id ) instanceof WP_Post ) {
+		return aafm_geodirectory_shape_row( null );
+	}
 	return aafm_geodirectory_shape_row( geodir_get_post_info( $post_id, false ) );
 }
 

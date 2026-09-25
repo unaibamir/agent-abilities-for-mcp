@@ -133,6 +133,10 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	if ( $id < 1 || ! function_exists( 'wc_get_product' ) ) {
 		return null;
 	}
+	// The product store resolves a variation's type too, so its key decides here.
+	if ( aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return null;
+	}
 	$variation = wc_get_product( $id );
 	if ( $variation instanceof \WC_Product_Variation ) {
 		return $variation;

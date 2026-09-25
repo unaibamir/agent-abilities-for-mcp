@@ -249,6 +249,10 @@ function aafm_args_tec_get_ticket(): array {
  * @return Tribe__Tickets__Ticket_Object|null
  */
 function aafm_tec_load_ticket( int $ticket_id ): ?Tribe__Tickets__Ticket_Object {
+	// Event Tickets loads the ticket's post by id, so load that post exactly first.
+	if ( ! aafm_exact_object( 'post', $ticket_id ) instanceof WP_Post ) {
+		return null;
+	}
 	$ticket = Tribe__Tickets__Tickets::load_ticket_object( $ticket_id );
 	return $ticket instanceof Tribe__Tickets__Ticket_Object ? $ticket : null;
 }

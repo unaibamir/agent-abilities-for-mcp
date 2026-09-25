@@ -113,11 +113,25 @@ function aafm_tec_events_registry_definitions(): array {
  */
 function aafm_tec_event_shape( int $id ): array {
 	$post = aafm_exact_object( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		// The values The Events Calendar's readers return for a missing event, without calling them.
+		return array(
+			'id'            => $id,
+			'title'         => '',
+			'status'        => '',
+			'link'          => '',
+			'start_date'    => '',
+			'end_date'      => '',
+			'all_day'       => false,
+			'venue_id'      => 0,
+			'organizer_ids' => array(),
+		);
+	}
 	return array(
 		'id'            => $id,
-		'title'         => $post instanceof WP_Post ? get_the_title( $post ) : '',
-		'status'        => $post instanceof WP_Post ? (string) $post->post_status : '',
-		'link'          => $post instanceof WP_Post ? (string) get_permalink( $post ) : '',
+		'title'         => get_the_title( $post ),
+		'status'        => (string) $post->post_status,
+		'link'          => (string) get_permalink( $post ),
 		'start_date'    => (string) tribe_get_start_date( $id, false, 'Y-m-d H:i:s' ),
 		'end_date'      => (string) tribe_get_end_date( $id, false, 'Y-m-d H:i:s' ),
 		'all_day'       => (bool) tribe_event_is_all_day( $id ),

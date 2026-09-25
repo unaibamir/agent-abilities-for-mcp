@@ -2706,7 +2706,8 @@ function aafm_activity_detail_link( string $ability, string $detail_raw ): ?arra
 		case 'order':
 			// Never hand-build this URL. Under HPOS a WooCommerce order's edit screen is not
 			// post.php?post=N, and order rows are exactly where that assumption is likeliest.
-			$order = function_exists( 'wc_get_order' ) ? wc_get_order( $id ) : null;
+			// An order post that does not load exactly gets no link.
+			$order = ( function_exists( 'wc_get_order' ) && ( ! aafm_wc_store_is_core( 'order' ) || aafm_exact_object( 'post', $id ) instanceof WP_Post ) ) ? wc_get_order( $id ) : null;
 			$url   = ( $order && method_exists( $order, 'get_edit_order_url' ) ) ? $order->get_edit_order_url() : null;
 			break;
 		default:

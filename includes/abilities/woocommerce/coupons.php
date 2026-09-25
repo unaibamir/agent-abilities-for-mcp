@@ -110,6 +110,10 @@ function aafm_wc_get_coupon_object( int $id ): ?\WC_Coupon {
 	if ( $id <= 0 || ! class_exists( 'WC_Coupon' ) ) {
 		return null;
 	}
+	// The core coupon store reads the coupon's post by id, so load that post exactly first.
+	if ( aafm_wc_store_is_core( 'coupon' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return null;
+	}
 	$coupon = new \WC_Coupon( $id );
 	return ( $coupon->get_id() > 0 ) ? $coupon : null;
 }

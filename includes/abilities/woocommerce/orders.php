@@ -167,6 +167,9 @@ function aafm_wc_get_order_object( int $id ): ?\WC_Order {
 	if ( $id < 1 || ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
+	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return null;
+	}
 	$order = wc_get_order( $id );
 	return $order instanceof \WC_Order ? $order : null;
 }
@@ -764,9 +767,10 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$adde
 		if ( ! is_array( $item ) ) {
 			continue;
 		}
+		// A product whose post does not load exactly stays unresolved, like an unknown id.
 		$pid     = absint( $item['product_id'] ?? 0 );
 		$qty     = max( 1, absint( $item['quantity'] ?? 1 ) );
-		$product = ( $pid > 0 && function_exists( 'wc_get_product' ) ) ? wc_get_product( $pid ) : false;
+		$product = ( $pid > 0 && function_exists( 'wc_get_product' ) && ( ! aafm_wc_store_is_core( 'product' ) || aafm_exact_object( 'post', $pid ) instanceof WP_Post ) ) ? wc_get_product( $pid ) : false;
 		if ( $product instanceof \WC_Product ) {
 			$resolved[] = array(
 				'product' => $product,
@@ -1269,6 +1273,9 @@ function aafm_wc_load_order_or_null( int $order_id ): ?\WC_Order {
 	if ( $order_id <= 0 || ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
+	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
+		return null;
+	}
 	try {
 		$order = wc_get_order( $order_id );
 	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
@@ -1369,6 +1376,10 @@ function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, ar
 function aafm_wc_order_still_exists( int $order_id ): bool {
 	if ( $order_id < 1 || ! function_exists( 'wc_get_order' ) ) {
 		return false;
+	}
+	// A post that does not load exactly is gone only when a failure-aware query says the row is.
+	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
+		return ! aafm_object_absent( 'post', $order_id );
 	}
 	try {
 		return wc_get_order( $order_id ) instanceof \WC_Order;
@@ -2191,6 +2202,9 @@ function aafm_exec_wc_create_order_note( array $input ) {
  */
 function aafm_wc_get_refund_object( int $refund_id ): ?\WC_Order_Refund {
 	if ( ! function_exists( 'wc_get_order' ) ) {
+		return null;
+	}
+	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $refund_id ) instanceof WP_Post ) {
 		return null;
 	}
 	$refund = wc_get_order( $refund_id );

@@ -1952,14 +1952,16 @@ final class MetaWriteSweepTest extends TestCase {
 		);
 	}
 
-	// --- Capability checks on a post or comment object --------------------------
+	// --- Capability checks on a post, comment, user or term object --------------
 
 	/**
 	 * Capabilities map_meta_cap() can decide from a post's metadata (a trashed post's
 	 * `_wp_trash_meta_status`, an attachment parent's through get_post_status()), directly or by
-	 * mapping to edit_post. Checked with an object, each goes through aafm_user_can_checked().
+	 * mapping to edit_post, and the user and term capabilities an active map_meta_cap filter can
+	 * decide from the object's metadata (WooCommerce reads a target user's roles). Checked with an
+	 * object, each goes through aafm_user_can_checked().
 	 */
-	private const POST_OBJECT_CAPS = array( 'edit_post', 'edit_page', 'delete_post', 'delete_page', 'read_post', 'read_page', 'edit_comment', 'edit_post_meta', 'add_post_meta', 'delete_post_meta', 'edit_tribe_event', 'delete_tribe_event', 'edit_tribe_venue', 'edit_tribe_organizer' );
+	private const OBJECT_CAPS = array( 'edit_post', 'edit_page', 'delete_post', 'delete_page', 'read_post', 'read_page', 'edit_comment', 'edit_post_meta', 'add_post_meta', 'delete_post_meta', 'edit_tribe_event', 'delete_tribe_event', 'edit_tribe_venue', 'edit_tribe_organizer', 'edit_user', 'promote_user', 'delete_user', 'remove_user', 'edit_term', 'delete_term', 'assign_term' );
 
 	/**
 	 * Raw capability calls on a post object that stay raw: inside the function's own
@@ -1986,8 +1988,8 @@ final class MetaWriteSweepTest extends TestCase {
 
 	/**
 	 * Every current_user_can()/user_can() call with an object argument whose capability is one of
-	 * POST_OBJECT_CAPS, or an expression ending in ->cap->edit_post, ->cap->delete_post or
-	 * ->cap->read_post, outside aafm_user_can_checked() itself, keyed path|function|name|ordinal
+	 * OBJECT_CAPS, or an expression ending in ->cap->edit_post, ->cap->delete_post or
+	 * ->cap->read_post, outside aafm_user_can_checked_state() itself, keyed path|function|name|ordinal
 	 * (the ordinal counts the flagged calls of that name in that function).
 	 *
 	 * @param string $source       Full file contents.
@@ -2015,7 +2017,7 @@ final class MetaWriteSweepTest extends TestCase {
 				continue;
 			}
 			$function = $this->enclosing_function( $tokens, $i );
-			if ( 'aafm_user_can_checked' === $function ) {
+			if ( 'aafm_user_can_checked_state' === $function ) {
 				continue;
 			}
 			$args   = $this->call_arguments( $tokens, $open_idx );
@@ -2024,7 +2026,7 @@ final class MetaWriteSweepTest extends TestCase {
 				continue;
 			}
 			$cap = $this->literal_argument( $args[ $offset ] );
-			if ( null === $cap ? ! preg_match( '/->cap->(edit|delete|read)_post$/i', $args[ $offset ] ) : ! in_array( strtolower( $cap ), self::POST_OBJECT_CAPS, true ) ) {
+			if ( null === $cap ? ! preg_match( '/->cap->(edit|delete|read)_post$/i', $args[ $offset ] ) : ! in_array( strtolower( $cap ), self::OBJECT_CAPS, true ) ) {
 				continue;
 			}
 			$ordinal_key              = $virtual_path . '|' . $function . '|' . $name;
@@ -2088,7 +2090,7 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	public function test_ignores_the_checked_helpers_body_and_a_capability_check_without_an_object(): void {
-		$source = "<?php\nfunction aafm_user_can_checked( \$id ) {\n\tcurrent_user_can( 'edit_post', \$id );\n}\nfunction f( \$id, \$t ) {\n\tcurrent_user_can( 'edit_post' );\n\tcurrent_user_can( 'edit_posts', \$id );\n\tcurrent_user_can( \$t->cap->edit_posts, \$id );\n\taafm_user_can_checked( 'edit_post', \$id );\n}\n";
+		$source = "<?php\nfunction aafm_user_can_checked_state( \$id ) {\n\tcurrent_user_can( 'edit_post', \$id );\n}\nfunction f( \$id, \$t ) {\n\tcurrent_user_can( 'edit_post' );\n\tcurrent_user_can( 'edit_posts', \$id );\n\tcurrent_user_can( \$t->cap->edit_posts, \$id );\n\taafm_user_can_checked( 'edit_post', \$id );\n}\n";
 		$this->assertSame( array(), $this->raw_post_capability_keys( $source, 'includes/fixture.php' ) );
 	}
 
@@ -2103,7 +2105,7 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	/**
-	 * Every plugin capability call on a post or comment object runs through
+	 * Every plugin capability call on a post, comment, user or term object runs through
 	 * aafm_user_can_checked(), so a failed metadata load inside map_meta_cap() refuses. The
 	 * constant names the calls that already run inside their own scope. test 6's ordinal counts
 	 * only the calls it flags, the sweep's convention (MetaWriteSweepTest.php:1753-1755);
@@ -2121,7 +2123,7 @@ final class MetaWriteSweepTest extends TestCase {
 		$this->assertSame(
 			array(),
 			array_values( array_diff( $found, self::RAW_POST_CAPABILITY_CALLS_IN_A_SCOPE ) ),
-			'A capability call on a post or comment object bypasses aafm_user_can_checked().'
+			'A capability call on a post, comment, user or term object bypasses aafm_user_can_checked().'
 		);
 		$this->assertSame(
 			array(),

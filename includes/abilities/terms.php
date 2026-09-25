@@ -440,7 +440,7 @@ function aafm_perm_can_edit_term_meta( array $input ): bool {
 		return false;
 	}
 	$term_id = absint( $input['term_id'] );
-	return current_user_can( 'edit_term', $term_id );
+	return aafm_user_can_checked( 'edit_term', $term_id );
 }
 
 /**

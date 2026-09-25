@@ -1955,7 +1955,7 @@ function aafm_perm_acf_term( array $input ): bool {
 	if ( $id < 1 || ! aafm_exact_object( 'term', $id ) instanceof WP_Term ) {
 		return false;
 	}
-	return current_user_can( 'edit_term', $id );
+	return aafm_user_can_checked( 'edit_term', $id );
 }
 
 /**

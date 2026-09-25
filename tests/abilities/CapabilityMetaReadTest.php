@@ -233,6 +233,10 @@ final class CapabilityMetaReadTest extends TestCase {
 
 	private const USER_META_KEY = 'cap_probe_note';
 
+	private const TERM_META_KEY = 'cap_probe_note';
+
+	private const TERM_FLAG = 'cap_probe_locked';
+
 	private const MISSING = 987654;
 
 	/**
@@ -546,5 +550,92 @@ final class CapabilityMetaReadTest extends TestCase {
 		);
 		$this->assertFalse( $failed );
 		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+	}
+
+	/**
+	 * Each permission path that checks edit_term, as a callable that says whether it allowed.
+	 *
+	 * @return iterable<string,array{0:callable}>
+	 */
+	public function data_term_capability_sites(): iterable {
+		yield 'term meta' => array(
+			static fn( int $id ): bool => aafm_perm_can_edit_term_meta(
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $id,
+					'meta_key' => self::TERM_META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- ability input, not a meta query.
+				)
+			),
+		);
+		yield 'acf term fields' => array( static fn( int $id ): bool => aafm_perm_acf_term( array( 'term_id' => $id ) ) );
+	}
+
+	/**
+	 * Act as an editor, with the probe key allowed and edit_term denied on a term that carries the
+	 * lock flag in its metadata.
+	 */
+	private function term_capability_setup(): void {
+		$this->acting_as( 'editor' );
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( self::TERM_META_KEY ) );
+		add_filter(
+			'map_meta_cap',
+			static function ( array $caps, string $cap, int $user_id, array $args ): array {
+				if ( 'edit_term' === $cap && isset( $args[0] ) && '' !== (string) get_term_meta( (int) $args[0], self::TERM_FLAG, true ) ) {
+					$caps[] = 'do_not_allow';
+				}
+				return $caps;
+			},
+			10,
+			4
+		);
+	}
+
+	/**
+	 * A map_meta_cap filter may decide edit_term from the term's metadata, so a term capability
+	 * check refuses when that metadata does not load.
+	 *
+	 * @dataProvider data_term_capability_sites
+	 *
+	 * @param callable $site The permission path.
+	 */
+	public function test_a_term_capability_check_refuses_when_the_terms_metadata_does_not_load( callable $site ): void {
+		global $wpdb;
+		$this->term_capability_setup();
+		$term = (int) self::factory()->category->create();
+		add_term_meta( $term, self::TERM_FLAG, '1' );
+		$this->assertFalse( $site( $term ), 'healthy: the term is locked' );
+		wp_cache_delete( $term, 'term_meta' );
+
+		$faulted = $this->with_query_faulted(
+			array( 'SELECT term_id, meta_key, meta_value FROM', $wpdb->termmeta, "WHERE term_id IN ({$term})" ),
+			sprintf( 'SELECT * FROM %s WHERE 1 = 0', $wpdb->termmeta ),
+			static function () use ( $site, $term ): bool {
+				return $site( $term );
+			},
+			'term'
+		);
+
+		$this->assertFalse( $faulted );
+		$this->assertNotSame( array(), $this->fired_in_scope, 'the fault fired' );
+		$this->assertTrue( $this->fired_in_scope[0], 'the first load of the term metadata ran inside a checked scope' );
+	}
+
+	/**
+	 * On a healthy database: an unlocked term is allowed, a locked one refused, a missing id
+	 * refused.
+	 *
+	 * @dataProvider data_term_capability_sites
+	 *
+	 * @param callable $site The permission path.
+	 */
+	public function test_term_capability_sites_answer_as_before_on_a_healthy_database( callable $site ): void {
+		$this->term_capability_setup();
+		$open   = (int) self::factory()->category->create();
+		$locked = (int) self::factory()->category->create();
+		add_term_meta( $locked, self::TERM_FLAG, '1' );
+
+		$this->assertTrue( $site( $open ) );
+		$this->assertFalse( $site( $locked ) );
+		$this->assertFalse( $site( self::MISSING ) );
 	}
 }

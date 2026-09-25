@@ -25,10 +25,14 @@ if ( ! class_exists( 'WC_Data_Store' ) ) {
 		'class WC_Data_Store {
 			public static $stores = array();
 			public static $throw = false;
+			public static $throw_error = false;
 			private $current_class_name = "";
 			public function __construct( $object_type ) {
 				if ( self::$throw ) {
 					throw new \Exception( "Invalid data store." );
+				}
+				if ( self::$throw_error ) {
+					throw new \Error( "Store class failed to load." );
 				}
 				$this->current_class_name = self::$stores[ $object_type ] ?? "WC_Stub_Data_Store";
 			}
@@ -40,7 +44,8 @@ if ( ! class_exists( 'WC_Data_Store' ) ) {
 			}
 			public static function reset() {
 				self::$stores = array();
-				self::$throw  = false;
+				self::$throw       = false;
+				self::$throw_error = false;
 			}
 		}'
 	);
@@ -55,4 +60,10 @@ unset( $aafm_store_class );
 
 if ( ! class_exists( 'AAFM_Test_Product_Data_Store_Subclass' ) ) {
 	eval( 'class AAFM_Test_Product_Data_Store_Subclass extends WC_Product_Data_Store_CPT {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a store that extends the core product store; tests only.
+}
+
+if ( ! class_exists( 'Automattic\\WooCommerce\\Internal\\DataStores\\Orders\\OrdersTableDataStore' ) ) {
+	// WooCommerce's HPOS order store (OrdersTableDataStore.php:192-196): only its static table-name
+	// getter, which the rollback check reads.
+	eval( 'namespace Automattic\\WooCommerce\\Internal\\DataStores\\Orders; class OrdersTableDataStore { public static function get_orders_table_name() { global $wpdb; return $wpdb->prefix . "wc_orders"; } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 }

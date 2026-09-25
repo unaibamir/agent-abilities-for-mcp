@@ -743,6 +743,53 @@ final class CoreObjectLoadLeakTest extends TestCase {
 	}
 
 	/**
+	 * The same two gates with WooCommerce's registry reporting its own post stores for products
+	 * and variations: a backing post whose load returns another row is refused at the gate's own
+	 * load, and the capability floor is never kept for it.
+	 */
+	public function test_the_wc_delete_gates_refuse_under_the_core_stores_when_the_backing_post_load_returns_another_row(): void {
+		$this->stub_woocommerce();
+		require_once dirname( __DIR__ ) . '/stubs/WcDataStoreStub.php';
+		\WC_Data_Store::reset();
+		\WC_Data_Store::$stores['product']           = 'WC_Product_Data_Store_CPT';
+		\WC_Data_Store::$stores['product-variation'] = 'WC_Product_Variation_Data_Store_CPT';
+		try {
+			$this->acting_as( 'administrator' );
+			$a = $this->post( array( 'post_type' => 'post' ) );
+			$b = $this->post( array( 'post_title' => self::LEAKED ) );
+			\AAFM\Tests\WcStubStore::seed(
+				$a,
+				array(
+					'id'     => $a,
+					'name'   => 'Product A',
+					'type'   => 'simple',
+					'status' => 'publish',
+				)
+			);
+			$out = $this->leaked( 'post', $a, $b, static fn() => aafm_perm_wc_delete_product( array( 'product_id' => $a ) ) );
+			$this->assertSame( 1, QueryFaultInjector::fired_count(), 'product' );
+			$this->assertFalse( $out, 'product' );
+
+			QueryFaultInjector::reset_fired_count();
+			\AAFM\Tests\WcStubStore::seed(
+				$a,
+				array(
+					'id'        => $a,
+					'name'      => 'Variation A',
+					'type'      => 'variation',
+					'parent_id' => $b,
+					'status'    => 'publish',
+				)
+			);
+			$out = $this->leaked( 'post', $a, $b, static fn() => aafm_perm_wc_delete_product_variation( array( 'variation_id' => $a ) ) );
+			$this->assertSame( 1, QueryFaultInjector::fired_count(), 'variation' );
+			$this->assertFalse( $out, 'variation' );
+		} finally {
+			\WC_Data_Store::reset();
+		}
+	}
+
+	/**
 	 * An update-term call with a parent refuses when its load of A returns another term, changes nothing
 	 * on A, and leaves no foreign entry cached under A's id.
 	 */

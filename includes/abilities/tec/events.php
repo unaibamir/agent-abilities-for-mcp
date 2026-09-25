@@ -477,7 +477,7 @@ function aafm_exec_tec_create_event( array $input ) {
 		return $safety;
 	}
 
-	$created = tribe_events()->set_args( $args )->create();
+	$created = aafm_tec_write( 'events', $args )['returned'];
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -549,6 +549,9 @@ function aafm_args_tec_update_event(): array {
  */
 function aafm_exec_tec_update_event( array $input ) {
 	$id = absint( $input['event_id'] ?? 0 );
+	if ( $id < 1 ) {
+		return aafm_generic_error();
+	}
 
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
 	if ( false !== $owning_builder ) {
@@ -588,10 +591,7 @@ function aafm_exec_tec_update_event( array $input ) {
 		return $safety;
 	}
 
-	$result = aafm_tec_force_sync_save(
-		'events',
-		static fn() => tribe_events()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
-	);
+	$result = aafm_tec_write( 'events', $args, $id )['returned'];
 	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}

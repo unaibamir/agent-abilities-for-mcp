@@ -361,7 +361,7 @@ function aafm_exec_tec_create_venue( array $input ) {
 		return $safety;
 	}
 
-	$created = tribe_venues()->set_args( $args )->create();
+	$created = aafm_tec_write( 'venues', $args )['returned'];
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -425,7 +425,10 @@ function aafm_args_tec_update_venue(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_update_venue( array $input ) {
-	$id   = absint( $input['venue_id'] ?? 0 );
+	$id = absint( $input['venue_id'] ?? 0 );
+	if ( $id < 1 ) {
+		return aafm_generic_error();
+	}
 	$args = aafm_tec_venue_orm_args( $input );
 	if ( isset( $input['status'] ) ) {
 		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_venue_publish_cap() );
@@ -448,10 +451,7 @@ function aafm_exec_tec_update_venue( array $input ) {
 	if ( is_wp_error( $safety ) ) {
 		return $safety;
 	}
-	$result = aafm_tec_force_sync_save(
-		'venues',
-		static fn() => tribe_venues()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
-	);
+	$result = aafm_tec_write( 'venues', $args, $id )['returned'];
 	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}

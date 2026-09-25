@@ -1187,6 +1187,83 @@ function aafm_geodir_write( int $post_id, array $fields ): array {
 }
 
 /**
+ * Create or update an event, venue or organizer through The Events Calendar's own repository,
+ * and log its outcome.
+ *
+ * $id 0 creates: the repository's create() returns the new post, or false when it made nothing.
+ * Any other $id updates that post with the same where/set_args/save chain the abilities use,
+ * inside aafm_tec_force_sync_save() so the repository never queues the update for later. save()
+ * returns an array keyed by post id; the update is accepted when that post's entry is not empty
+ * and not a WP_Error. The calling ability applies the same test to `returned` and decides its
+ * response. The arguments come from the abilities' own args builders.
+ *
+ * @param string              $entity 'events', 'venues' or 'organizers'.
+ * @param array<string,mixed> $args   Repository arguments.
+ * @param int                 $id     Post id to update, or 0 to create.
+ * @return array<string,mixed>
+ */
+function aafm_tec_write( string $entity, array $args, int $id = 0 ): array {
+	switch ( $entity ) {
+		case 'events':
+			$logged = 'event';
+			break;
+		case 'venues':
+			$logged = 'venue';
+			break;
+		case 'organizers':
+			$logged = 'organizer';
+			break;
+		default:
+			$result = array( 'status' => AAFM_WRITE_REFUSED );
+			aafm_emit_write_outcome(
+				$result,
+				array(
+					'kind'      => 'tec',
+					'entity'    => null,
+					'object_id' => null,
+					'key'       => null,
+				)
+			);
+			return $result;
+	}
+
+	$repository = static function () use ( $entity ) {
+		if ( 'events' === $entity ) {
+			return tribe_events();
+		}
+		return 'venues' === $entity ? tribe_venues() : tribe_organizers();
+	};
+
+	if ( 0 === $id ) {
+		$returned  = $repository()->set_args( $args )->create();
+		$accepted  = $returned instanceof WP_Post;
+		$object_id = $accepted ? (int) $returned->ID : null;
+	} else {
+		$returned  = aafm_tec_force_sync_save(
+			$entity,
+			static fn() => $repository()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
+		);
+		$accepted  = ! empty( $returned[ $id ] ) && ! is_wp_error( $returned[ $id ] );
+		$object_id = $id;
+	}
+
+	$result = array(
+		'status'   => $accepted ? AAFM_WRITE_ACCEPTED : AAFM_WRITE_REFUSED,
+		'returned' => $returned,
+	);
+	aafm_emit_write_outcome(
+		$result,
+		array(
+			'kind'      => 'tec',
+			'entity'    => $logged,
+			'object_id' => $object_id,
+			'key'       => null,
+		)
+	);
+	return $result;
+}
+
+/**
  * The one emission point every writer calls once its status is decided.
  *
  * Writes the WP_DEBUG diagnostic line and fires aafm_write_completed for every status, so the log

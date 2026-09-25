@@ -1,9 +1,3 @@
-includes/abilities/tec/events.php|aafm_exec_tec_create_event|create|1
-includes/abilities/tec/events.php|aafm_exec_tec_update_event|save|1
-includes/abilities/tec/organizers.php|aafm_exec_tec_create_organizer|create|1
-includes/abilities/tec/organizers.php|aafm_exec_tec_update_organizer|save|1
-includes/abilities/tec/venues.php|aafm_exec_tec_create_venue|create|1
-includes/abilities/tec/venues.php|aafm_exec_tec_update_venue|save|1
 includes/abilities/woocommerce/attributes.php|aafm_exec_wc_create_product_attribute|wc_create_attribute|1
 includes/abilities/woocommerce/attributes.php|aafm_exec_wc_update_product_attribute|wc_update_attribute|1
 includes/abilities/woocommerce/coupons.php|aafm_exec_wc_create_coupon|save|1

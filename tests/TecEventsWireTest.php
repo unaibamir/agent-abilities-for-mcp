@@ -298,4 +298,157 @@ final class TecEventsWireTest extends TestCase {
 		$this->assertSame( '2027-03-01 23:59:59', $out['event']['end_date'] );
 		$this->assertFalse( $out['event']['all_day'] );
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one tec write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function tec_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'tec',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	public function test_the_tec_writer_exists(): void {
+		$this->assertTrue( function_exists( 'aafm_tec_write' ) );
+	}
+
+	public function test_an_event_create_and_update_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$created = aafm_exec_tec_create_event(
+			array(
+				'title'      => 'Launch',
+				'start_date' => '2027-01-01 09:00:00',
+				'end_date'   => '2027-01-01 12:00:00',
+			)
+		);
+		$this->assertIsArray( $created );
+		$id = (int) $created['event']['id'];
+		$this->assertSame( array( 'event' => aafm_tec_event_shape( $id ) ), $created );
+
+		$updated = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $id,
+				'title'    => 'Relaunch',
+			)
+		);
+		$this->assertSame( array( 'event' => aafm_tec_event_shape( $id ) ), $updated );
+		$this->assertSame( 'Relaunch', $updated['event']['title'] );
+
+		$this->assertSame( array( $this->tec_row( 'event', $id, 'accepted' ), $this->tec_row( 'event', $id, 'accepted' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_refused_event_create_and_update_log_refused_and_return_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$event = aafm_exec_tec_create_event( array( 'title' => 'Launch' ) );
+		$id    = (int) $event['event']['id'];
+
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		$create = aafm_exec_tec_create_event( array( 'title' => 'Refused' ) );
+		$update = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $id,
+				'title'    => 'Refused rename',
+			)
+		);
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		$this->assertInstanceOf( \WP_Error::class, $create );
+		$this->assertSame( 'aafm_error', $create->get_error_code() );
+		$this->assertInstanceOf( \WP_Error::class, $update );
+		$this->assertSame( 'aafm_error', $update->get_error_code() );
+		$details = $this->outcome_details();
+		$this->assertSame( array( $this->tec_row( 'event', null, 'refused' ), $this->tec_row( 'event', $id, 'refused' ) ), array_slice( $details, 1 ) );
+	}
+
+	public function test_an_all_day_clear_logs_the_tec_row_then_the_metadata_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$event = aafm_exec_tec_create_event(
+			array(
+				'title'   => 'All day',
+				'all_day' => true,
+			)
+		);
+		$id    = (int) $event['event']['id'];
+		update_post_meta( $id, '_EventAllDay', 'yes' );
+
+		$out = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $id,
+				'all_day'  => false,
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$details = array_slice( $this->outcome_details(), 1 );
+		$this->assertCount( 2, $details );
+		$this->assertSame( $this->tec_row( 'event', $id, 'accepted' ), $details[0] );
+		$this->assertSame( array( 'post_meta', '_EventAllDay', 'deleted' ), array( $details[1]['kind'], $details[1]['key'], $details[1]['status'] ) );
+	}
+
+	public function test_a_no_change_event_update_logs_no_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$event  = aafm_exec_tec_create_event( array( 'title' => 'Launch' ) );
+		$before = count( $this->outcome_details() );
+
+		$out = aafm_exec_tec_update_event( array( 'event_id' => (int) $event['event']['id'] ) );
+
+		$this->assertIsArray( $out );
+		$this->assertCount( $before, $this->outcome_details() );
+	}
+
+	public function test_an_event_update_with_id_zero_creates_nothing_and_logs_nothing(): void {
+		global $wpdb;
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$count  = static function () use ( $wpdb ): int {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE post_type = %s', $wpdb->posts, \Tribe__Events__Main::POSTTYPE ) );
+		};
+		$before = $count();
+
+		$out = aafm_exec_tec_update_event(
+			array(
+				'event_id' => 0,
+				'title'    => 'Should not exist',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( $before, $count() );
+		$this->assertSame( array(), $this->outcome_details() );
+	}
 }

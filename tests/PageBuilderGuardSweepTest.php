@@ -74,6 +74,9 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			// to stop.
 			'aafm_insert_post'                      => 'Creates a brand-new post (shared by create-post and friends) - nothing pre-existing to protect.',
 			'aafm_exec_create_block'                => 'Creates a brand-new wp_block - nothing pre-existing to protect.',
+			'aafm_exec_tec_create_event'            => 'Creates a brand-new event through the TEC writer - nothing pre-existing to protect.',
+			'aafm_exec_tec_create_venue'            => 'Creates a brand-new venue through the TEC writer - nothing pre-existing to protect.',
+			'aafm_exec_tec_create_organizer'        => 'Creates a brand-new organizer through the TEC writer - nothing pre-existing to protect.',
 			'aafm_exec_geodirectory_create_listing' => 'Creates a brand-new gd_place listing - nothing pre-existing to protect.',
 			'aafm_finish_media_upload'              => 'Rewrites post_content on an attachment THIS SAME CALL just sideloaded a moment earlier - nothing pre-existing to protect.',
 			// Post types no classic page builder (Elementor, Divi, Beaver Builder, Avada - the
@@ -214,6 +217,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 
 		$unguarded = array();
 		$seen_any  = false;
+		$matched   = array();
 		foreach ( $files as $file ) {
 			// Signal B (wp_update_post()/repository ->save()) is scoped OUT of woocommerce/:
 			// most ->save() calls there are a WC_Order/WC_Coupon/etc CRUD-object save with no
@@ -255,6 +259,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 						false !== strpos( $body, 'wp_update_post(' )
 						|| false !== strpos( $body, 'wp_insert_post(' )
 						|| false !== strpos( $body, '->save(' )
+						|| false !== strpos( $body, 'aafm_tec_write(' )
 					);
 				// Signal C: writes one of the page builders' OWN rendering-source meta keys
 				// directly (aafm_page_builder_markers(), includes/page-builder-guard.php) rather
@@ -269,6 +274,14 @@ final class PageBuilderGuardSweepTest extends TestCase {
 				foreach ( array_keys( aafm_page_builder_markers() ) as $marker_key ) {
 					if (
 						( false !== strpos( $body, 'update_post_meta(' ) || false !== strpos( $body, 'add_post_meta(' ) )
+						&& false !== strpos( $body, "'" . $marker_key . "'" )
+					) {
+						$writes_a_builder_marker_key = true;
+						break;
+					}
+					// The same marker keys written through the metadata writers.
+					if (
+						( false !== strpos( $body, 'aafm_meta_set(' ) || false !== strpos( $body, 'aafm_meta_set_group(' ) )
 						&& false !== strpos( $body, "'" . $marker_key . "'" )
 					) {
 						$writes_a_builder_marker_key = true;
@@ -309,6 +322,8 @@ final class PageBuilderGuardSweepTest extends TestCase {
 					continue;
 				}
 				$seen_any = true;
+				// Recorded before the exemption check, so an exempted writer still counts as matched.
+				$matched[] = $function_name;
 				if ( isset( $exempt[ $function_name ] ) ) {
 					continue;
 				}
@@ -324,6 +339,10 @@ final class PageBuilderGuardSweepTest extends TestCase {
 			$unguarded,
 			'Every function that writes post_content, commits an existing-post update, writes a page builder\'s own marker meta, or writes the posts/postmeta table directly must call aafm_post_has_foreign_builder_ownership() itself, or be added to exempt_post_content_writers() with a reason: ' . implode( ', ', $unguarded )
 		);
+		// The event update writes content through the TEC writer. It must stay a matched writer and
+		// must never be exempted, so a later move cannot drop its ownership guard unnoticed.
+		$this->assertContains( 'aafm_exec_tec_update_event', $matched, 'aafm_exec_tec_update_event must stay a detected content writer.' );
+		$this->assertArrayNotHasKey( 'aafm_exec_tec_update_event', $exempt, 'aafm_exec_tec_update_event must not be exempted from the ownership guard.' );
 	}
 
 	/**

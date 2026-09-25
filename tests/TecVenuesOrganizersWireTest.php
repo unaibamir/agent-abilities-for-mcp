@@ -301,4 +301,164 @@ final class TecVenuesOrganizersWireTest extends TestCase {
 		$this->assertSame( $venue['venue'], $read['venue'] );
 		$this->assertSame( 'Lahore', $read['venue']['city'] );
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one tec write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function tec_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'tec',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	public function test_venue_and_organizer_creates_and_updates_log_one_accepted_row_each(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$venue = aafm_exec_tec_create_venue(
+			array(
+				'title' => 'Hall',
+				'city'  => 'Lahore',
+			)
+		);
+		$vid   = (int) $venue['venue']['id'];
+		$this->assertSame( array( 'venue' => aafm_tec_venue_shape( $vid ) ), $venue );
+		$venue_updated = aafm_exec_tec_update_venue(
+			array(
+				'venue_id' => $vid,
+				'city'     => 'Karachi',
+			)
+		);
+		$this->assertSame( array( 'venue' => aafm_tec_venue_shape( $vid ) ), $venue_updated );
+		$this->assertSame( 'Karachi', $venue_updated['venue']['city'] );
+
+		$organizer = aafm_exec_tec_create_organizer(
+			array(
+				'title' => 'Org',
+				'phone' => '123',
+			)
+		);
+		$oid       = (int) $organizer['organizer']['id'];
+		$this->assertSame( array( 'organizer' => aafm_tec_organizer_shape( $oid ) ), $organizer );
+		$organizer_updated = aafm_exec_tec_update_organizer(
+			array(
+				'organizer_id' => $oid,
+				'phone'        => '456',
+			)
+		);
+		$this->assertSame( array( 'organizer' => aafm_tec_organizer_shape( $oid ) ), $organizer_updated );
+
+		$this->assertSame(
+			array(
+				$this->tec_row( 'venue', $vid, 'accepted' ),
+				$this->tec_row( 'venue', $vid, 'accepted' ),
+				$this->tec_row( 'organizer', $oid, 'accepted' ),
+				$this->tec_row( 'organizer', $oid, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_refused_venue_and_organizer_writes_log_refused_and_return_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$vid = (int) aafm_exec_tec_create_venue( array( 'title' => 'Hall' ) )['venue']['id'];
+		$oid = (int) aafm_exec_tec_create_organizer( array( 'title' => 'Org' ) )['organizer']['id'];
+
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		$outs = array(
+			aafm_exec_tec_create_venue( array( 'title' => 'Refused' ) ),
+			aafm_exec_tec_update_venue(
+				array(
+					'venue_id' => $vid,
+					'title'    => 'Refused rename',
+				)
+			),
+			aafm_exec_tec_create_organizer( array( 'title' => 'Refused' ) ),
+			aafm_exec_tec_update_organizer(
+				array(
+					'organizer_id' => $oid,
+					'title'        => 'Refused rename',
+				)
+			),
+		);
+		remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		foreach ( $outs as $out ) {
+			$this->assertInstanceOf( \WP_Error::class, $out );
+			$this->assertSame( 'aafm_error', $out->get_error_code() );
+		}
+		$this->assertSame(
+			array(
+				$this->tec_row( 'venue', null, 'refused' ),
+				$this->tec_row( 'venue', $vid, 'refused' ),
+				$this->tec_row( 'organizer', null, 'refused' ),
+				$this->tec_row( 'organizer', $oid, 'refused' ),
+			),
+			array_slice( $this->outcome_details(), 2 )
+		);
+	}
+
+	public function test_no_change_venue_and_organizer_updates_log_no_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$vid    = (int) aafm_exec_tec_create_venue( array( 'title' => 'Hall' ) )['venue']['id'];
+		$oid    = (int) aafm_exec_tec_create_organizer( array( 'title' => 'Org' ) )['organizer']['id'];
+		$before = count( $this->outcome_details() );
+
+		$this->assertIsArray( aafm_exec_tec_update_venue( array( 'venue_id' => $vid ) ) );
+		$this->assertIsArray( aafm_exec_tec_update_organizer( array( 'organizer_id' => $oid ) ) );
+		$this->assertCount( $before, $this->outcome_details() );
+	}
+
+	public function test_venue_and_organizer_updates_with_id_zero_create_nothing(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$venue     = aafm_exec_tec_update_venue(
+			array(
+				'venue_id' => 0,
+				'title'    => 'Should not exist',
+			)
+		);
+		$organizer = aafm_exec_tec_update_organizer(
+			array(
+				'organizer_id' => 0,
+				'title'        => 'Should not exist',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $venue );
+		$this->assertInstanceOf( \WP_Error::class, $organizer );
+		$this->assertSame( array(), $this->outcome_details() );
+	}
 }

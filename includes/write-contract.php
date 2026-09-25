@@ -1035,6 +1035,43 @@ function aafm_comment_readback( int $comment_id ): ?WP_Comment {
 }
 
 /**
+ * Load a post, term, user or comment by id, and return it only when it is the object asked for.
+ *
+ * When a `query` filter empties the load's SELECT, core reads the previous query's row and wraps
+ * it as the requested type, so the class proves nothing. A term load also caches that row under the
+ * requested id, so on a term mismatch this function deletes that entry.
+ *
+ * @param string $type     'post', 'term', 'user' or 'comment'.
+ * @param int    $id       Object id.
+ * @param string $taxonomy Taxonomy for get_term(); unused for the other types.
+ * @return WP_Post|WP_Term|WP_User|WP_Comment|null
+ */
+function aafm_exact_object( string $type, int $id, string $taxonomy = '' ) {
+	switch ( $type ) {
+		case 'post':
+			$post = get_post( $id );
+			return $post instanceof WP_Post && (int) $post->ID === $id ? $post : null;
+		case 'term':
+			$term = get_term( $id, $taxonomy );
+			if ( ! $term instanceof WP_Term ) {
+				return null;
+			}
+			if ( (int) $term->term_id !== $id ) {
+				wp_cache_delete( $id, 'terms' );
+				return null;
+			}
+			return $term;
+		case 'user':
+			$user = get_userdata( $id );
+			return $user instanceof WP_User && (int) $user->ID === $id ? $user : null;
+		case 'comment':
+			$comment = get_comment( $id );
+			return $comment instanceof WP_Comment && (int) $comment->comment_ID === $id ? $comment : null;
+	}
+	return null;
+}
+
+/**
  * Write one ACF field through ACF's own update_field() and log its outcome.
  *
  * The return of update_field() is false for a same-value write as well as for a failure, so it is

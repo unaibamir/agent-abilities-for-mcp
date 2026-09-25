@@ -291,6 +291,25 @@ function aafm_aioseo_robots_save_data_keys(): array {
 }
 
 /**
+ * Every Post::savePost() patch key aioseo-update-post builds: each field's column and image-type
+ * column, the robots patch keys, twitter_use_og and default. Each is a key of AIOSEO's own
+ * savePost() field map (all-in-one-seo-pack 5.0.1.1, app/Common/Models/Post.php
+ * getSanitizeFieldMap(); canonical_url is handled on its own in sanitizeAndSetDefaults()).
+ *
+ * @return string[]
+ */
+function aafm_aioseo_patch_keys(): array {
+	$keys = array( 'twitter_use_og', 'default' );
+	foreach ( aafm_aioseo_fields() as $spec ) {
+		$keys[] = $spec['prop'];
+		if ( isset( $spec['type_prop'] ) ) {
+			$keys[] = $spec['type_prop'];
+		}
+	}
+	return array_merge( $keys, array_values( aafm_aioseo_robots_save_data_keys() ) );
+}
+
+/**
  * Whether the write carries a non-empty Twitter-specific field. AIOSEO's Twitter renderer returns
  * the Facebook/OpenGraph value whenever twitter_use_og is truthy (its default), so a written
  * twitter title/description/image only renders once that fallback is turned off - and only when a
@@ -654,7 +673,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		// test_aioseo_model_save_returns_void_not_bool()). Verify persistence a different way: force
 		// a fresh read of the model and diff it against what we just asked to be written, field by
 		// field. A real write failure still surfaces as a read-back mismatch.
-		$class::savePost( $id, $data );
+		aafm_aioseo_write( $id, $data );
 	}
 
 	$after     = aafm_aioseo_read_fields( $id );

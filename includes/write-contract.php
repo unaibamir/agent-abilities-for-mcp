@@ -1062,6 +1062,42 @@ function aafm_acf_write_field( string $field_key, $value, $selector ): array {
 }
 
 /**
+ * Save a post's AIOSEO fields through AIOSEO's own Post::savePost() and log its outcome.
+ *
+ * A patch key outside the keys the aioseo-update-post ability builds refuses the call before
+ * savePost() runs. savePost() returns nothing on success, false for empty data, and the database
+ * error string when its save failed, so only a null return is accepted. The ability's own
+ * read-back still decides its response.
+ *
+ * @param int                 $post_id Post id.
+ * @param array<string,mixed> $data    savePost() patch data.
+ * @return array<string,mixed>
+ */
+function aafm_aioseo_write( int $post_id, array $data ): array {
+	$target = array(
+		'kind'      => 'aioseo',
+		'entity'    => null,
+		'object_id' => $post_id,
+		'key'       => null,
+	);
+
+	if ( array() !== array_diff( array_map( 'strval', array_keys( $data ) ), aafm_aioseo_patch_keys() ) ) {
+		$result = array( 'status' => AAFM_WRITE_REFUSED );
+		aafm_emit_write_outcome( $result, $target );
+		return $result;
+	}
+
+	$class    = AAFM_AIOSEO_MODEL;
+	$returned = $class::savePost( $post_id, $data );
+	$result   = array(
+		'status'   => null === $returned ? AAFM_WRITE_ACCEPTED : AAFM_WRITE_REFUSED,
+		'returned' => $returned,
+	);
+	aafm_emit_write_outcome( $result, $target );
+	return $result;
+}
+
+/**
  * The one emission point every writer calls once its status is decided.
  *
  * Writes the WP_DEBUG diagnostic line and fires aafm_write_completed for every status, so the log

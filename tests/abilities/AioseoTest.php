@@ -640,4 +640,98 @@ final class AioseoTest extends TestCase {
 			'unversioned one the fail-closed floor correctly excludes.'
 		);
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	public function test_the_aioseo_writer_exists(): void {
+		$this->assertTrue( function_exists( 'aafm_aioseo_write' ) );
+	}
+
+	public function test_an_aioseo_save_goes_through_the_writer_and_logs_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Logged title',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				array(
+					'kind'             => 'aioseo',
+					'entity'           => null,
+					'object_id'        => (string) $post_id,
+					'key'              => null,
+					'status'           => 'accepted',
+					'rows'             => null,
+					'modified_by_site' => false,
+					'key_omitted'      => false,
+				),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_aioseo_save_that_returns_a_database_error_logs_refused_and_returns_the_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		\AAFM\Tests\AioseoStubStore::$save_post_error = 'Table is read only';
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Will not persist',
+			)
+		);
+		\AAFM\Tests\AioseoStubStore::$save_post_error = '';
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$details = $this->outcome_details();
+		$this->assertCount( 1, $details );
+		$this->assertSame( 'refused', $details[0]['status'] );
+	}
+
+	public function test_the_aioseo_writer_refuses_a_patch_key_outside_the_list_and_calls_nothing(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id                                      = (int) self::factory()->post->create();
+		\AAFM\Tests\AioseoStubStore::$save_post_calls = array();
+
+		$result = aafm_aioseo_write(
+			$post_id,
+			array(
+				'title'    => 'T',
+				'keywords' => 'smuggled',
+			)
+		);
+
+		$this->assertSame( array( 'status' => 'refused' ), $result );
+		$this->assertSame( array(), \AAFM\Tests\AioseoStubStore::$save_post_calls );
+		$details = $this->outcome_details();
+		$this->assertCount( 1, $details );
+		$this->assertSame( array( 'kind', 'entity', 'object_id', 'key', 'status', 'rows', 'modified_by_site', 'key_omitted' ), array_keys( $details[0] ) );
+		$this->assertSame( 'refused', $details[0]['status'] );
+		$this->assertNull( $details[0]['key'] );
+	}
 }

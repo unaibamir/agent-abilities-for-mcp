@@ -58,6 +58,15 @@ class AioseoStubStore {
 	public static array $save_post_calls = array();
 
 	/**
+	 * When not empty, the stub Post::savePost() stores nothing and returns this string, as the real
+	 * one returns the database error when its save failed (all-in-one-seo-pack 5.0.1.1,
+	 * app/Common/Models/Post.php:405-410).
+	 *
+	 * @var string
+	 */
+	public static string $save_post_error = '';
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -67,6 +76,7 @@ class AioseoStubStore {
 		self::$save_should_fail = false;
 		self::$normalize_urls   = false;
 		self::$save_post_calls  = array();
+		self::$save_post_error  = '';
 	}
 
 	/**

@@ -1,4 +1,3 @@
-includes/abilities/aioseo.php|aafm_exec_aioseo_update_post|savePost|1
 includes/abilities/comments.php|aafm_exec_create_comment|get_comment|1
 includes/abilities/comments.php|aafm_exec_moderate_comment|get_comment|1
 includes/abilities/comments.php|aafm_exec_update_comment|get_comment|1

@@ -220,6 +220,9 @@ class Post {
 		if ( empty( $data ) ) {
 			return false;
 		}
+		if ( '' !== \AAFM\Tests\AioseoStubStore::$save_post_error ) {
+			return \AAFM\Tests\AioseoStubStore::$save_post_error;
+		}
 		$robots_columns = array(
 			'noindex'  => 'robots_noindex',
 			'nofollow' => 'robots_nofollow',

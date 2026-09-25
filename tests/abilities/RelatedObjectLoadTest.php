@@ -1510,6 +1510,142 @@ final class RelatedObjectLoadTest extends TestCase {
 	}
 
 	/**
+	 * An item stored with no taxonomy name, made on a throwaway taxonomy term that is then left
+	 * unregistered and uncached. It is the menu's second item: on the first, whose stored position
+	 * is 0, core's own wp_update_nav_menu_item() lists the menu and decorates the item, and
+	 * get_term_link() then warns on the unregistered taxonomy (nav-menu.php:464, :938), as in 1.7.5.
+	 *
+	 * @param int $menu Menu id.
+	 * @return int Item id.
+	 */
+	private function unregistered_item_with_no_taxonomy( int $menu ): int {
+		$this->made_item(
+			array(
+				'menu_id' => $menu,
+				'title'   => 'First',
+				'url'     => 'https://example.org/',
+			)
+		);
+		list( $taxonomy, $term ) = $this->throwaway_taxonomy_term();
+		$item                    = $this->made_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Item',
+				'type'      => 'taxonomy',
+				'object'    => $taxonomy,
+				'object_id' => $term,
+			)
+		);
+		update_post_meta( $item, '_menu_item_object', '' );
+		unregister_taxonomy( $taxonomy );
+		wp_cache_delete( $term, 'terms' );
+		$this->assertInstanceOf( \WP_Error::class, get_term( $term, '' ), 'precondition: core reads no term' );
+		$this->assertFalse( wp_cache_get( $term, 'terms' ), 'precondition: the term is not cached' );
+		return $item;
+	}
+
+	/**
+	 * An item stored with no taxonomy name whose term's only taxonomy is not registered: core's
+	 * get_term( $id, '' ) returns an invalid-taxonomy error and reads nothing, so the update writes.
+	 */
+	public function test_update_menu_item_writes_a_term_target_stored_with_no_taxonomy_whose_taxonomy_is_not_registered(): void {
+		$this->acting_as( 'administrator' );
+		$menu   = $this->menu( 'Main' );
+		$item   = $this->unregistered_item_with_no_taxonomy( $menu );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+	}
+
+	/**
+	 * An item stored with no taxonomy name whose term two registered taxonomies share: core's
+	 * get_term( $id, '' ) returns an ambiguous-term error and reads nothing, so the update writes.
+	 */
+	public function test_update_menu_item_writes_a_term_target_stored_with_no_taxonomy_that_two_registered_taxonomies_share(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$menu = $this->menu( 'Main' );
+		$term = $this->category();
+		$item = $this->category_item( $menu, $term );
+		update_post_meta( $item, '_menu_item_object', '' );
+		$wpdb->insert(
+			$wpdb->term_taxonomy,
+			array(
+				'term_id'     => $term,
+				'taxonomy'    => 'post_tag',
+				'description' => '',
+				'parent'      => 0,
+				'count'       => 0,
+			)
+		);
+		wp_cache_delete( $term, 'terms' );
+		$this->assertInstanceOf( \WP_Error::class, get_term( $term, '' ), 'precondition: core reads no term' );
+		$this->assertFalse( wp_cache_get( $term, 'terms' ), 'precondition: the term is not cached' );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+	}
+
+	/**
+	 * The unregistered-taxonomy item refuses when the query that reads its term's taxonomies fails.
+	 */
+	public function test_update_menu_item_refuses_a_term_target_stored_with_no_taxonomy_when_its_taxonomy_query_fails(): void {
+		$this->acting_as( 'administrator' );
+		$menu   = $this->menu( 'Main' );
+		$item   = $this->unregistered_item_with_no_taxonomy( $menu );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$out = $this->armed(
+			null,
+			function () use ( $menu, $item ) {
+				return QueryFaultInjector::fail_query(
+					'SELECT tt.taxonomy FROM',
+					function () use ( $menu, $item ) {
+						return $this->retitle( $menu, $item );
+					}
+				);
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the taxonomy query was failed' );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ) );
+	}
+
+	/**
+	 * A target term that a filter hides on the check still has its parent post chain-loaded from
+	 * the cached row, so a fault in that load refuses.
+	 */
+	public function test_update_menu_item_refuses_when_the_parent_post_of_a_hidden_cached_target_term_reads_another_row(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$menu    = $this->menu( 'Main' );
+		$foreign = $this->post();
+		$page    = $this->post( array( 'post_type' => 'page' ) );
+		$term    = $this->category();
+		$item    = $this->category_item( $menu, $term );
+		$wpdb->update( $wpdb->term_taxonomy, array( 'parent' => $page ), array( 'term_id' => $term ) );
+		clean_term_cache( $term, 'category' );
+		get_term( $term, 'category' );
+		$this->filter_term( $term, null );
+		get_post( $foreign );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$out = $this->armed(
+			$this->fault_load( 'post', $page, $foreign ),
+			function () use ( $menu, $item ) {
+				return $this->retitle( $menu, $item );
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assert_fired_in( 'aafm_menu_item_target_checked', 'parent post of a hidden cached term' );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ) );
+	}
+
+	/**
 	 * Another term's row cached under the target's id is not taken for the target.
 	 */
 	public function test_menu_item_target_check_refuses_a_foreign_row_cached_under_the_target_id(): void {

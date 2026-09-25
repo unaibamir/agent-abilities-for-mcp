@@ -825,8 +825,15 @@ function aafm_resolve_menu_item_object( string $type, int $object_id, string $re
  * A term target also passes, with nothing loaded, when its taxonomy is not registered in this
  * request, or when core's terms cache holds this id's own row but a site filter hid the term.
  * Either way core's get_term() inside the write gets no term, so the write reads nothing from the
- * target (wp-includes/nav-menu.php:492-498). An empty taxonomy name matches any taxonomy, as it
- * does in get_term().
+ * target (wp-includes/nav-menu.php:492-498). The post a cached row's parent id names is still
+ * checked, the same as for a loaded term.
+ *
+ * An item stored with an empty taxonomy name follows core's get_term( $id, '' )
+ * (wp-includes/class-wp-term.php:124-174). If the load does not return the term and the cache
+ * does not hold its row, one query reads the id's taxonomies. The check refuses when that query
+ * fails, or when exactly one of those taxonomies is registered, the only case where core would read
+ * a term. No row, only unregistered taxonomies, or a term shared by several registered taxonomies
+ * gives core no term, so the check passes.
  *
  * @param string $type        Menu item type.
  * @param string $object_name Post type or taxonomy name.
@@ -834,6 +841,8 @@ function aafm_resolve_menu_item_object( string $type, int $object_id, string $re
  * @return bool
  */
 function aafm_menu_item_target_checked( string $type, string $object_name, int $object_id ): bool {
+	global $wpdb;
+
 	if ( $object_id <= 0 ) {
 		return true;
 	}
@@ -848,15 +857,30 @@ function aafm_menu_item_target_checked( string $type, string $object_name, int $
 	}
 
 	$term = aafm_exact_object( 'term', $object_id, $object_name );
-	if ( ! $term instanceof WP_Term ) {
+	if ( $term instanceof WP_Term ) {
+		$parent_id = (int) $term->parent;
+	} else {
 		// Core caches the raw row, whose term_id is a string.
 		$cached = wp_cache_get( $object_id, 'terms' );
 		if ( is_object( $cached ) && isset( $cached->term_id, $cached->taxonomy ) && (int) $cached->term_id === $object_id && ( '' === $object_name || (string) $cached->taxonomy === $object_name ) ) {
-			return true;
+			$parent_id = (int) ( $cached->parent ?? 0 );
+		} elseif ( '' !== $object_name ) {
+			return aafm_object_absent( 'term', $object_id, $object_name );
+		} else {
+			$rows = aafm_wpdb_results( $wpdb->prepare( 'SELECT tt.taxonomy FROM %i AS t INNER JOIN %i AS tt ON t.term_id = tt.term_id WHERE t.term_id = %d', $wpdb->terms, $wpdb->term_taxonomy, $object_id ) );
+			if ( ! $rows['ok'] ) {
+				return false;
+			}
+			$registered = 0;
+			foreach ( (array) $rows['value'] as $row ) {
+				if ( taxonomy_exists( (string) $row['taxonomy'] ) ) {
+					++$registered;
+				}
+			}
+			return 1 !== $registered;
 		}
-		return aafm_object_absent( 'term', $object_id, $object_name );
 	}
-	$parent_id = (int) $term->parent;
+
 	if ( $parent_id <= 0 ) {
 		return true;
 	}

@@ -1247,28 +1247,53 @@ function aafm_can_delete_post_object( WP_Post $post ): bool {
 
 /**
  * Whether the current user has a capability on one object, with the metadata map_meta_cap()
- * reads for it loaded failure-aware.
+ * reads for it loaded failure-aware: true or false, or null when a load failed.
  *
  * Core's map_meta_cap() decides some post capabilities from metadata: a trashed post's own
- * `_wp_trash_meta_status`, and an attachment parent's through get_post_status(). Core reads an
- * empty value when that load fails, which can grant more than the stored status allows. This runs
- * current_user_can() inside aafm_with_checked_reads() and returns false when a load failed.
- * On a healthy database the answer is the one current_user_can() gives.
+ * `_wp_trash_meta_status`, and an attachment parent's through get_post_status(). A map_meta_cap
+ * filter can decide a user or term capability from that object's metadata too; WooCommerce reads
+ * a target user's roles. Core reads an empty value when such a load fails, which can grant more
+ * than the stored data allows. This runs current_user_can() inside aafm_with_checked_reads() and
+ * returns null when a load failed. On a healthy database the answer is the one current_user_can()
+ * gives.
+ *
+ * With $object_type 'user', the user is first loaded exactly inside the same scope, because
+ * building a WP_User loads its metadata. A user that does not load gives null unless a query finds
+ * its row absent; a user whose row is certainly absent is checked as before.
  *
  * Never call inside an aafm_with_checked_reads() build: scopes do not nest.
  *
- * @param string $cap       Capability.
- * @param int    $object_id Post, comment or other object id the capability is checked on.
- * @return bool
+ * @param string $cap         Capability.
+ * @param int    $object_id   Post, comment, user or term id the capability is checked on.
+ * @param string $object_type 'user' when $object_id is a user; '' otherwise.
+ * @return bool|null
  */
-function aafm_user_can_checked( string $cap, int $object_id ): bool {
+function aafm_user_can_checked_state( string $cap, int $object_id, string $object_type = '' ): ?bool {
 	$result = aafm_with_checked_reads(
-		static function () use ( $cap, $object_id ): array {
+		static function () use ( $cap, $object_id, $object_type ): array {
+			if ( 'user' === $object_type && ! aafm_exact_object( 'user', $object_id ) instanceof WP_User && ! aafm_object_absent( 'user', $object_id ) ) {
+				return array( 'can' => null );
+			}
 			return array( 'can' => current_user_can( $cap, $object_id ) );
 		},
 		aafm_generic_error()
 	);
-	return ! is_wp_error( $result ) && true === $result['can'];
+	return is_wp_error( $result ) ? null : $result['can'];
+}
+
+/**
+ * Whether the current user has a capability on one object, false when a metadata load failed.
+ * See aafm_user_can_checked_state().
+ *
+ * Never call inside an aafm_with_checked_reads() build: scopes do not nest.
+ *
+ * @param string $cap         Capability.
+ * @param int    $object_id   Post, comment, user or term id the capability is checked on.
+ * @param string $object_type 'user' when $object_id is a user; '' otherwise.
+ * @return bool
+ */
+function aafm_user_can_checked( string $cap, int $object_id, string $object_type = '' ): bool {
+	return true === aafm_user_can_checked_state( $cap, $object_id, $object_type );
 }
 
 /**

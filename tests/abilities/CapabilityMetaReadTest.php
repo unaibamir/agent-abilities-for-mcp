@@ -228,4 +228,24 @@ final class CapabilityMetaReadTest extends TestCase {
 		$this->assertSame( $unscoped, $scoped );
 		$this->assertSame( 0, QueryFaultInjector::fired_count() );
 	}
+
+	// --- User and term objects ------------------------------------------------
+
+	private const MISSING = 987654;
+
+	public function test_user_absence_is_certain_only_from_a_query_that_ran(): void {
+		global $wpdb;
+		$user = (int) self::factory()->user->create();
+
+		$this->assertFalse( aafm_object_absent( 'user', $user ) );
+		$this->assertTrue( aafm_object_absent( 'user', self::MISSING ) );
+		$failed = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT ID FROM', $wpdb->users ),
+			static function (): bool {
+				return aafm_object_absent( 'user', self::MISSING );
+			}
+		);
+		$this->assertFalse( $failed );
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+	}
 }

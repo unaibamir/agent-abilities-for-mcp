@@ -1074,14 +1074,14 @@ function aafm_exact_object( string $type, int $id, string $taxonomy = '' ) {
 }
 
 /**
- * Whether a post or term row is certainly not in the database: true only when a query that ran
- * without error found no row.
+ * Whether a post, term or user row is certainly not in the database: true only when a query that
+ * ran without error found no row.
  *
  * A term counts only when both its terms row and its term_taxonomy row exist, in $taxonomy, or in
  * any taxonomy when $taxonomy is ''. Any other type, a failed query or a row found gives false.
  *
  * @phpstan-impure
- * @param string $type     'post' or 'term'.
+ * @param string $type     'post', 'term' or 'user'.
  * @param int    $id       Object id.
  * @param string $taxonomy Taxonomy for 'term'; unused for 'post'.
  * @return bool
@@ -1097,6 +1097,8 @@ function aafm_object_absent( string $type, int $id, string $taxonomy = '' ): boo
 		$view = '' === $taxonomy
 			? aafm_wpdb_scalar( $wpdb->prepare( 'SELECT term_id FROM %i AS tt INNER JOIN %i AS t USING ( term_id ) WHERE term_id = %d', $wpdb->term_taxonomy, $wpdb->terms, $id ) )
 			: aafm_wpdb_scalar( $wpdb->prepare( 'SELECT term_id FROM %i AS tt INNER JOIN %i AS t USING ( term_id ) WHERE term_id = %d AND taxonomy = %s', $wpdb->term_taxonomy, $wpdb->terms, $id, $taxonomy ) );
+	} elseif ( 'user' === $type ) {
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT ID FROM %i WHERE ID = %d', $wpdb->users, $id ) );
 	} else {
 		return false;
 	}

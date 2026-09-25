@@ -456,7 +456,7 @@ final class RelatedObjectLoadTest extends TestCase {
 		$this->assertTrue( aafm_object_absent( 'term', self::MISSING, 'category' ) );
 		$this->assertFalse( aafm_object_absent( 'term', $term, 'category' ) );
 		$this->assertTrue( aafm_object_absent( 'term', $term, 'post_tag' ) );
-		$this->assertFalse( aafm_object_absent( 'user', self::MISSING ) );
+		$this->assertTrue( aafm_object_absent( 'user', self::MISSING ) );
 		$this->assertFalse( aafm_object_absent( 'comment', self::MISSING ) );
 	}
 

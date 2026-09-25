@@ -2239,9 +2239,11 @@ final class MetaWriteSweepTest extends TestCase {
 
 	/**
 	 * Every CHECKED_CAPABILITY_CALLS call written inside the first argument of an
-	 * aafm_with_checked_reads() call, or inside the body of a function that such an argument
-	 * calls by name, keyed path|function|name|ordinal (the ordinal counts the flagged calls of
-	 * that name in that function).
+	 * aafm_with_checked_reads() call, or inside the body of any function that argument reaches
+	 * through named calls, however deep. Also every aafm_with_checked_reads() call whose first
+	 * argument is not a closure: the scan cannot follow a string or variable callable, so it
+	 * flags the call itself. Keyed path|function|name|ordinal (the ordinal counts the flagged
+	 * calls of that name in that function).
 	 *
 	 * @param array<string,string> $files path => source.
 	 * @return string[]
@@ -2251,11 +2253,29 @@ final class MetaWriteSweepTest extends TestCase {
 		$checked    = array(); // function name => its checked calls, each array( path, function, name, index ).
 		$scoped     = array(); // checked calls written inside a scope argument.
 		$named      = array(); // function names a scope argument calls.
+		$calls_from = array(); // function name => the function names its body calls.
 		foreach ( $files as $path => $source ) {
 			$tokens  = token_get_all( $source );
 			$aliases = $this->function_aliases( $tokens );
 			$ranges  = array();
 			$calls   = array();
+			$bodies  = array(); // each array( function name, index of '{', index of '}' ), outer first.
+			foreach ( $tokens as $j => $token ) {
+				if ( ! is_array( $token ) || T_FUNCTION !== $token[0] ) {
+					continue;
+				}
+				list( $next ) = $this->significant_token( $tokens, $j + 1 );
+				if ( ! is_array( $next ) || T_STRING !== $next[0] ) {
+					continue;
+				}
+				for ( $k = $j; isset( $tokens[ $k ] ) && '{' !== $tokens[ $k ] && ';' !== $tokens[ $k ]; $k++ ) {
+					continue;
+				}
+				$close = isset( $tokens[ $k ] ) && '{' === $tokens[ $k ] ? $this->matching_bracket_index( $tokens, $k, '{', '}' ) : null;
+				if ( null !== $close ) {
+					$bodies[] = array( strtolower( $next[1] ), $k, $close );
+				}
+			}
 			foreach ( $tokens as $i => $token ) {
 				if ( ! is_array( $token ) || ! in_array( $token[0], $this->name_token_types(), true ) ) {
 					continue;
@@ -2269,6 +2289,13 @@ final class MetaWriteSweepTest extends TestCase {
 				$calls[] = array( $name, $i );
 				if ( 'aafm_with_checked_reads' !== $name ) {
 					continue;
+				}
+				list( $build, $build_idx ) = $this->significant_token( $tokens, $open_idx + 1 );
+				if ( is_array( $build ) && T_STATIC === $build[0] ) {
+					list( $build ) = $this->significant_token( $tokens, $build_idx + 1 );
+				}
+				if ( ! is_array( $build ) || ! in_array( $build[0], array( T_FUNCTION, T_FN ), true ) ) {
+					$scoped[] = array( $path, $this->enclosing_function( $tokens, $i ), $name, $i );
 				}
 				$close = $this->matching_bracket_index( $tokens, $open_idx, '(', ')' );
 				$depth = 0;
@@ -2293,6 +2320,13 @@ final class MetaWriteSweepTest extends TestCase {
 				if ( $inside ) {
 					$named[ $name ] = true;
 				}
+				$caller = null;
+				foreach ( $bodies as $body ) {
+					$caller = $index > $body[1] && $index < $body[2] ? $body[0] : $caller;
+				}
+				if ( null !== $caller ) {
+					$calls_from[ $caller ][ $name ] = true;
+				}
 				if ( ! in_array( $name, self::CHECKED_CAPABILITY_CALLS, true ) ) {
 					continue;
 				}
@@ -2304,8 +2338,17 @@ final class MetaWriteSweepTest extends TestCase {
 				}
 			}
 		}
-		foreach ( array_keys( $named ) as $name ) {
+		// Follow named calls to a fixed point: every function reachable from a scope's build.
+		$queue = array_keys( $named );
+		while ( $queue ) {
+			$name   = array_pop( $queue );
 			$scoped = array_merge( $scoped, $checked[ $name ] ?? array() );
+			foreach ( array_keys( $calls_from[ $name ] ?? array() ) as $callee ) {
+				if ( ! isset( $named[ $callee ] ) ) {
+					$named[ $callee ] = true;
+					$queue[]          = $callee;
+				}
+			}
 		}
 
 		$flagged = array();
@@ -2331,6 +2374,22 @@ final class MetaWriteSweepTest extends TestCase {
 			$this->nested_capability_keys( array( 'includes/fixture.php' => $nested ) )
 		);
 		$this->assertSame( array(), $this->nested_capability_keys( array( 'includes/fixture.php' => $clean ) ) );
+	}
+
+	public function test_flags_a_checked_capability_call_two_named_calls_below_a_checked_read_scope(): void {
+		$source = "<?php\nfunction h( \$id ) {\n\treturn aafm_user_can_checked( 'edit_post', \$id );\n}\nfunction g( \$id ) {\n\treturn H( \$id );\n}\nfunction f( \$id ) {\n\treturn aafm_with_checked_reads( static fn(): array => array( 'a' => g( \$id ) ), aafm_generic_error() );\n}\n";
+		$this->assertSame(
+			array( 'includes/fixture.php|h|aafm_user_can_checked|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $source ) )
+		);
+	}
+
+	public function test_flags_a_checked_read_scope_whose_build_is_not_a_closure(): void {
+		$source = "<?php\nfunction g() {\n\treturn array( 'a' => aafm_user_can_checked( 'edit_post', 1 ) );\n}\nfunction f( \$build ) {\n\t\$a = aafm_with_checked_reads( 'g', aafm_generic_error() );\n\t\$b = aafm_with_checked_reads( \$build, aafm_generic_error() );\n\t\$c = aafm_with_checked_reads( function (): array {\n\t\treturn array();\n\t}, aafm_generic_error() );\n\treturn aafm_with_checked_reads( static fn(): array => array(), aafm_generic_error() );\n}\n";
+		$this->assertSame(
+			array( 'includes/fixture.php|f|aafm_with_checked_reads|1', 'includes/fixture.php|f|aafm_with_checked_reads|2' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $source ) )
+		);
 	}
 
 	/**

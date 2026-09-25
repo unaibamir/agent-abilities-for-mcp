@@ -337,8 +337,10 @@ final class CoreObjectLoadLeakTest extends TestCase {
 	/**
 	 * The update-menu-item ability keeps the stored position it read; a stored row that is another item's
 	 * must not become A's position.
+	 * The leak arms at the item's menu-membership read, the last query before the position read.
 	 */
 	public function test_update_menu_item_whose_position_read_returns_another_item_is_refused(): void {
+		global $wpdb;
 		$this->acting_as( 'administrator' );
 		$menu = $this->menu( 'Leak positions' );
 		$this->menu_item( $menu, 'First' );
@@ -347,8 +349,19 @@ final class CoreObjectLoadLeakTest extends TestCase {
 		$this->assertNotSame( (int) get_post( $a )->menu_order, (int) get_post( $b )->menu_order );
 		$order = (int) get_post( $a )->menu_order;
 
+		// Record where the fault fired, so a reordered call fails with that site named instead of a bare count mismatch.
+		$sites = array();
+		$fired = QueryFaultInjector::fired_count();
+		$trace = static function ( $query ) use ( &$sites, &$fired ) {
+			if ( QueryFaultInjector::fired_count() !== $fired ) {
+				$fired   = QueryFaultInjector::fired_count();
+				$sites[] = ( new \Exception() )->getTraceAsString();
+			}
+			return $query;
+		};
+		add_filter( 'query', $trace, 11 );
 		$out = $this->leaked_after(
-			'wp_setup_nav_menu_item',
+			'query',
 			'post',
 			$a,
 			$b,
@@ -358,8 +371,13 @@ final class CoreObjectLoadLeakTest extends TestCase {
 					'item_id' => $a,
 					'title'   => 'Second renamed',
 				)
-			)
+			),
+			static fn( $q ) => is_string( $q ) && false !== strpos( $q, $wpdb->term_relationships ) && false !== strpos( $q, "'nav_menu'" ) && false !== strpos( $q, 'tr.object_id = ' . $a . ' ' )
 		);
+		remove_filter( 'query', $trace, 11 );
+		$this->assertCount( 1, $sites, 'update-menu-item position: one faulted load' );
+		$this->assertStringContainsString( 'aafm_exact_object_chain(', $sites[0], 'update-menu-item position: faulted inside the chain load' );
+		$this->assertStringContainsString( 'aafm_exec_update_menu_item(', $sites[0], 'update-menu-item position: faulted inside update-menu-item' );
 		$this->assert_refused( $out, 'update-menu-item position' );
 		clean_post_cache( $a );
 		$this->assertSame( $order, (int) get_post( $a )->menu_order );

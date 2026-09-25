@@ -124,9 +124,10 @@ function aafm_slim_seo_subfields(): array {
  * Write changed sub-fields into a post's slim_seo array.
  *
  * A sub-field outside aafm_slim_seo_subfields() refuses the call before anything is read or
- * written. The stored array is read with a failure-aware query and the changes are merged onto
- * it, so a sub-field the call does not name keeps its stored value; a failed read writes nothing.
- * The merged array is written as one array-valued key.
+ * written. The stored array is read through core, so registered defaults and read filters apply,
+ * inside a checked-read scope, and the changes are merged onto it: a sub-field the call does not
+ * name keeps its value, and a failed read writes nothing. The merged array is written as one
+ * array-valued key.
  *
  * @param int                 $id      Post id.
  * @param array<string,mixed> $changes Sub-field => new value.
@@ -140,14 +141,20 @@ function aafm_slim_seo_write_meta( int $id, array $changes ) {
 		return $result;
 	}
 
-	$baseline = aafm_meta_row( 'post', $id, 'slim_seo' );
-	if ( ! $baseline['ok'] ) {
+	// Dropping the post's cached meta makes the scope's load reach the database, so a failed load
+	// is seen instead of a cached set being trusted.
+	wp_cache_delete( $id, 'post_meta' );
+	$stored = aafm_with_checked_reads(
+		static fn(): array => array( 'value' => aafm_meta_get( 'post', $id, 'slim_seo', true ) ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $stored ) ) {
 		$result = array( 'status' => AAFM_WRITE_READ_FAILED );
 		aafm_emit_write_outcome( $result, $target );
 		return $result;
 	}
 
-	$merged = is_array( $baseline['value'] ) ? $baseline['value'] : array();
+	$merged = is_array( $stored['value'] ) ? $stored['value'] : array();
 	foreach ( $changes as $field => $value ) {
 		$merged[ $field ] = $value;
 	}

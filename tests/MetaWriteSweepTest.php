@@ -1687,4 +1687,68 @@ final class MetaWriteSweepTest extends TestCase {
 
 		$this->assertSame( array(), $found, "An error after a metadata write is missing the writer's error_data:\n" . implode( "\n", $found ) );
 	}
+
+	// --- Raw metadata rows ----------------------------------------------------
+
+	/**
+	 * Every call of the raw metadata row readers outside the helper file, keyed path|function|name.
+	 * They skip registered defaults and read filters, so a read-modify-write that merges onto their
+	 * value drops what core's own read would have returned.
+	 *
+	 * @param string $source       Full file contents.
+	 * @param string $virtual_path Path the fixture pretends to live at.
+	 * @return string[]
+	 */
+	private function raw_meta_row_keys( string $source, string $virtual_path ): array {
+		if ( self::EXEMPT_PATH === $virtual_path ) {
+			return array();
+		}
+		$tokens     = token_get_all( $source );
+		$name_types = $this->name_token_types();
+		$not_a_call = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION ) );
+		$keys       = array();
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || ! in_array( $token[0], $name_types, true ) ) {
+				continue;
+			}
+			$name = $this->last_name_segment( $token[1] );
+			if ( 'aafm_meta_row' !== $name && 'aafm_meta_rows' !== $name ) {
+				continue;
+			}
+			list( $open ) = $this->significant_token( $tokens, $i + 1 );
+			$prev_idx     = $this->previous_significant_index( $tokens, $i - 1 );
+			if ( '(' !== $open || ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) ) {
+				continue;
+			}
+			$keys[] = $virtual_path . '|' . $this->enclosing_function( $tokens, $i ) . '|' . $name;
+		}
+		return $keys;
+	}
+
+	public function test_flags_a_raw_meta_row_read_outside_the_helper_file(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$a = aafm_meta_row( 'post', \$id, 'k' );\n\t\$b = \\aafm_meta_rows( 'post', \$id, 'k' );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|aafm_meta_row', 'includes/fixture.php|f|aafm_meta_rows' ), $this->raw_meta_row_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_ignores_a_raw_meta_row_read_inside_the_helper_file(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\treturn aafm_meta_row( 'post', \$id, 'k' );\n}\n";
+		$this->assertSame( array(), $this->raw_meta_row_keys( $source, 'includes/write-contract.php' ) );
+	}
+
+	/**
+	 * No code outside the helper file merges onto a raw metadata row.
+	 */
+	public function test_no_raw_meta_row_read_outside_the_helper_file(): void {
+		$files = $this->scanned_files();
+		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
+
+		$found = array();
+		foreach ( $files as $path => $source ) {
+			foreach ( $this->raw_meta_row_keys( $source, $path ) as $key ) {
+				$found[] = $key;
+			}
+		}
+
+		$this->assertSame( array(), $found, "A raw metadata row is read outside includes/write-contract.php:\n" . implode( "\n", $found ) );
+	}
 }

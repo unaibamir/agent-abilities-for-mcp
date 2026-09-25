@@ -372,4 +372,158 @@ final class SlimSeoTest extends TestCase {
 		sort( $listed );
 		$this->assertSame( $built, $listed );
 	}
+
+	public function test_update_post_merges_onto_the_registered_default_when_no_row_is_stored(): void {
+		register_post_meta(
+			'post',
+			'slim_seo',
+			array(
+				'single'  => true,
+				'type'    => 'object',
+				'default' => array( 'description' => 'Registered default' ),
+			)
+		);
+		$post = self::factory()->post->create_and_get();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$out    = aafm_exec_slim_seo_update_post(
+			array(
+				'post_id' => $post->ID,
+				'title'   => 'New',
+			)
+		);
+		$stored = get_post_meta( $post->ID, 'slim_seo', true );
+		unregister_post_meta( 'post', 'slim_seo' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'Registered default', $out['description'] );
+		$this->assertSame(
+			array(
+				'description' => 'Registered default',
+				'title'       => 'New',
+			),
+			$stored
+		);
+	}
+
+	/**
+	 * Both fault shapes.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_fault_shapes(): iterable {
+		yield 'no-flush' => array( 'no-flush' );
+		yield 'real-error' => array( 'real-error' );
+	}
+
+	/**
+	 * Update title only, with the checked-read scope's own post meta load failed once.
+	 *
+	 * @param int    $post_id Post id.
+	 * @param string $shape   Fault shape.
+	 * @return mixed
+	 */
+	private function update_title_with_the_merge_load_failed( int $post_id, string $shape ) {
+		global $wpdb;
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$needle     = array( 'meta_key, meta_value FROM `' . $wpdb->postmeta . '`', ' IN (' );
+		$run        = static fn() => aafm_exec_slim_seo_update_post(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'New',
+			)
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+		try {
+			return 'no-flush' === $shape
+				? \AAFM\Tests\Support\QueryFaultInjector::fail_nth_query( $needle, 1, $run )
+				: \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error( $needle, $run, 1 );
+		} finally {
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * Assert a read_failed error, the stored array untouched and exactly one read_failed row.
+	 *
+	 * @param mixed $out     The ability's return.
+	 * @param int   $post_id Post id.
+	 * @param int   $before  The newest activity-log id before the call.
+	 */
+	private function assert_merge_read_failed( $out, int $post_id, int $before ): void {
+		global $wpdb;
+		$this->assertSame( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_slim_seo_write_unconfirmed', $out->get_error_code() );
+		$this->assertSame( 'read_failed', $out->get_error_data()['status'] );
+		$this->assertSame(
+			array(
+				'title'       => 'T',
+				'description' => 'D',
+			),
+			get_post_meta( $post_id, 'slim_seo', true )
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$details = $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s AND id > %d ORDER BY id', aafm_activity_log_table(), 'write_outcome', $before ) );
+		$this->assertCount( 1, $details );
+		$this->assertSame( 'read_failed', json_decode( (string) $details[0], true )['status'] );
+	}
+
+	/**
+	 * A failed load of the merge input writes nothing and logs one read_failed row.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_update_post_a_failed_merge_load_writes_nothing_and_logs_read_failed( string $shape ): void {
+		global $wpdb;
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post = self::factory()->post->create_and_get();
+		update_post_meta(
+			$post->ID,
+			'slim_seo',
+			array(
+				'title'       => 'T',
+				'description' => 'D',
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		wp_cache_delete( $post->ID, 'post_meta' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$before = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE( MAX( id ), 0 ) FROM %i', aafm_activity_log_table() ) );
+
+		$out = $this->update_title_with_the_merge_load_failed( $post->ID, $shape );
+
+		$this->assert_merge_read_failed( $out, $post->ID, $before );
+	}
+
+	/**
+	 * With the post's meta already cached, the merge load still reaches the database, so a failed
+	 * load is still read_failed.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_update_post_a_failed_merge_load_is_read_failed_when_the_meta_was_cached( string $shape ): void {
+		global $wpdb;
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post = self::factory()->post->create_and_get();
+		update_post_meta(
+			$post->ID,
+			'slim_seo',
+			array(
+				'title'       => 'T',
+				'description' => 'D',
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		get_post_meta( $post->ID );
+		$this->assertNotFalse( wp_cache_get( $post->ID, 'post_meta' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$before = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE( MAX( id ), 0 ) FROM %i', aafm_activity_log_table() ) );
+
+		$out = $this->update_title_with_the_merge_load_failed( $post->ID, $shape );
+
+		$this->assert_merge_read_failed( $out, $post->ID, $before );
+	}
 }

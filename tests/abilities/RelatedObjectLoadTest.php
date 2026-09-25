@@ -920,6 +920,7 @@ final class RelatedObjectLoadTest extends TestCase {
 		yield 'create, taxonomy target parent post' => array( 'create_term_parent' );
 		yield 'update, post target parent' => array( 'update_post_parent' );
 		yield 'update, taxonomy target parent post' => array( 'update_term_parent' );
+		yield 'update, taxonomy target' => array( 'update_term' );
 	}
 
 	/**
@@ -969,6 +970,7 @@ final class RelatedObjectLoadTest extends TestCase {
 			'create_term_parent' => $page,
 			'update_post_parent' => $grand,
 			'update_term_parent' => $page,
+			'update_term'        => $term,
 		)[ $shape ];
 		if ( $create && ! $is_term && $faulted === $grand ) {
 			get_post( $page );
@@ -1103,6 +1105,420 @@ final class RelatedObjectLoadTest extends TestCase {
 
 		$this->assertIsArray( $out );
 		$this->assertSame( 'Renamed', get_post( $item )->post_title );
+	}
+
+	/**
+	 * A throwaway taxonomy for menu targets, and one term in it.
+	 *
+	 * @return array{0:string,1:int} Taxonomy name and term id.
+	 */
+	private function throwaway_taxonomy_term(): array {
+		$taxonomy = 'aafm_menu_tax';
+		register_taxonomy( $taxonomy, 'post', array( 'public' => true ) );
+		$term = wp_insert_term( 'Target', $taxonomy );
+		$this->assertIsArray( $term );
+		return array( $taxonomy, (int) $term['term_id'] );
+	}
+
+	/**
+	 * Update an item's title.
+	 *
+	 * @param int    $menu  Menu id.
+	 * @param int    $item  Item id.
+	 * @param string $title New title.
+	 * @return array<string,mixed>|\WP_Error
+	 */
+	private function retitle( int $menu, int $item, string $title = 'Renamed' ) {
+		return aafm_exec_update_menu_item(
+			array(
+				'menu_id' => $menu,
+				'item_id' => $item,
+				'title'   => $title,
+			)
+		);
+	}
+
+	/**
+	 * The update wrote and returned the item as a fresh read shapes it.
+	 *
+	 * @param mixed $out    The update's result.
+	 * @param int   $menu   Menu id.
+	 * @param int   $item   Item id.
+	 * @param int   $writes save_post_nav_menu_item count before the update (the order restore of a
+	 *                      first item writes a second time).
+	 */
+	private function assert_retitled( $out, int $menu, int $item, int $writes ): void {
+		$this->assertIsArray( $out );
+		$this->assertSame( aafm_redact_menu_item( aafm_menu_item_by_id( $menu, $item ) ), $out );
+		$this->assertSame( 'Renamed', get_post( $item )->post_title );
+		$this->assertGreaterThan( $writes, did_action( 'save_post_nav_menu_item' ), 'the item was written' );
+	}
+
+	/**
+	 * A term target whose taxonomy is not registered in the request: core reads no term, so the
+	 * update writes as in 1.7.5.
+	 */
+	public function test_update_menu_item_writes_a_taxonomy_item_whose_taxonomy_is_not_registered(): void {
+		$this->acting_as( 'administrator' );
+		$menu                    = $this->menu( 'Main' );
+		list( $taxonomy, $term ) = $this->throwaway_taxonomy_term();
+		$item                    = $this->made_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Item',
+				'type'      => 'taxonomy',
+				'object'    => $taxonomy,
+				'object_id' => $term,
+			)
+		);
+		unregister_taxonomy( $taxonomy );
+		wp_cache_delete( $term, 'terms' );
+		$this->assertFalse( wp_cache_get( $term, 'terms' ), 'precondition: the term is not cached' );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+	}
+
+	/**
+	 * The same with the term still in core's cache.
+	 */
+	public function test_update_menu_item_writes_an_unregistered_taxonomy_item_whose_term_is_still_cached(): void {
+		$this->acting_as( 'administrator' );
+		$menu                    = $this->menu( 'Main' );
+		list( $taxonomy, $term ) = $this->throwaway_taxonomy_term();
+		$item                    = $this->made_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Item',
+				'type'      => 'taxonomy',
+				'object'    => $taxonomy,
+				'object_id' => $term,
+			)
+		);
+		get_term( $term, $taxonomy );
+		unregister_taxonomy( $taxonomy );
+		$this->assertIsObject( wp_cache_get( $term, 'terms' ), 'precondition: the term is cached' );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+	}
+
+	public function test_create_menu_item_returns_invalid_menu_item_for_a_taxonomy_that_is_not_registered(): void {
+		$this->acting_as( 'administrator' );
+		$menu                    = $this->menu( 'Main' );
+		list( $taxonomy, $term ) = $this->throwaway_taxonomy_term();
+		unregister_taxonomy( $taxonomy );
+		wp_cache_delete( $term, 'terms' );
+		$this->assertFalse( wp_cache_get( $term, 'terms' ), 'precondition: the term is not cached' );
+		$count  = static function (): int {
+			return count(
+				get_posts(
+					array(
+						'post_type'   => 'nav_menu_item',
+						'post_status' => 'any',
+						'numberposts' => -1,
+						'fields'      => 'ids',
+					)
+				)
+			);
+		};
+		$before = $count();
+
+		$named   = aafm_exec_create_menu_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'New',
+				'type'      => 'taxonomy',
+				'object'    => $taxonomy,
+				'object_id' => $term,
+			)
+		);
+		$unnamed = aafm_exec_create_menu_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'New',
+				'type'      => 'taxonomy',
+				'object_id' => $term,
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $named );
+		$this->assertSame( 'aafm_invalid_menu_item', $named->get_error_code() );
+		$this->assertSame( array( 'status' => 400 ), $named->get_error_data() );
+		$this->assertInstanceOf( \WP_Error::class, $unnamed );
+		$this->assertSame( 'aafm_menu_item_object_required', $unnamed->get_error_code(), 'without object, unchanged' );
+		$this->assertSame( $before, $count(), 'no menu item is left behind' );
+	}
+
+	/**
+	 * AC-4: the target is checked before anything decorates the item.
+	 */
+	public function test_a_title_only_update_refuses_when_the_target_select_reads_another_row(): void {
+		$this->acting_as( 'administrator' );
+		$menu    = $this->menu( 'Main' );
+		$page    = $this->post( array( 'post_type' => 'page' ) );
+		$foreign = $this->post();
+		$item    = $this->made_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Item',
+				'type'      => 'post_type',
+				'object'    => 'page',
+				'object_id' => $page,
+			)
+		);
+		$url     = get_post_meta( $item, '_menu_item_url', true );
+		$writes  = did_action( 'save_post_nav_menu_item' );
+		get_post( $foreign );
+
+		$out = $this->armed(
+			$this->fault_load( 'post', $page, $foreign ),
+			function () use ( $menu, $item ) {
+				return $this->retitle( $menu, $item );
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assert_fired_in( 'aafm_menu_item_target_checked', 'post target' );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ), 'the writer was not reached' );
+		$this->assertSame( $url, get_post_meta( $item, '_menu_item_url', true ) );
+		$this->assertSame( 'Item', get_post( $item )->post_title );
+	}
+
+	/**
+	 * A url a display filter rewrites is not stored on update.
+	 */
+	public function test_update_menu_item_keeps_the_stored_url_a_display_filter_rewrites(): void {
+		$this->acting_as( 'administrator' );
+		$menu   = $this->menu( 'Main' );
+		$stored = home_url( '/stored' );
+		$item   = $this->made_item(
+			array(
+				'menu_id' => $menu,
+				'title'   => 'Item',
+				'url'     => $stored,
+			)
+		);
+		add_filter(
+			'wp_setup_nav_menu_item',
+			static function ( $menu_item ) use ( $item ) {
+				if ( (int) $menu_item->ID === $item ) {
+					$menu_item->url = home_url( '/for-this-request' );
+				}
+				return $menu_item;
+			}
+		);
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+		$this->assertSame( $stored, get_post_meta( $item, '_menu_item_url', true ) );
+	}
+
+	/**
+	 * The stored fields are read failure-aware: a failed load refuses instead of writing blanks.
+	 */
+	public function test_update_menu_item_refuses_when_the_items_stored_fields_do_not_load(): void {
+		$this->acting_as( 'administrator' );
+		$menu   = $this->menu( 'Main' );
+		$stored = home_url( '/stored' );
+		$item   = $this->made_item(
+			array(
+				'menu_id' => $menu,
+				'title'   => 'Item',
+				'url'     => $stored,
+			)
+		);
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$out = $this->armed(
+			$this->fault_post_meta( $item ),
+			function () use ( $menu, $item ) {
+				return $this->retitle( $menu, $item );
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertGreaterThanOrEqual( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ), 'the writer was not reached' );
+		wp_cache_delete( $item, 'post_meta' );
+		$this->assertSame( 'custom', get_post_meta( $item, '_menu_item_type', true ) );
+		$this->assertSame( $stored, get_post_meta( $item, '_menu_item_url', true ) );
+	}
+
+	/**
+	 * A category menu item.
+	 *
+	 * @param int $menu Menu id.
+	 * @param int $term Category id.
+	 */
+	private function category_item( int $menu, int $term ): int {
+		return $this->made_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Item',
+				'type'      => 'taxonomy',
+				'object'    => 'category',
+				'object_id' => $term,
+			)
+		);
+	}
+
+	/**
+	 * A `get_term` filter that answers $answer for term $term_id.
+	 *
+	 * @param int   $term_id Term id.
+	 * @param mixed $answer  What the filter returns for it.
+	 */
+	private function filter_term( int $term_id, $answer ): void {
+		add_filter(
+			'get_term',
+			static function ( $term ) use ( $term_id, $answer ) {
+				return $term instanceof WP_Term && (int) $term->term_id === $term_id ? $answer : $term;
+			}
+		);
+	}
+
+	/**
+	 * A term a site filter hides after it loaded exactly: core's own get_term() reads nothing.
+	 */
+	public function test_update_menu_item_writes_when_a_filter_hides_its_target_term(): void {
+		$this->acting_as( 'administrator' );
+		$menu = $this->menu( 'Main' );
+		$term = $this->category();
+		$item = $this->category_item( $menu, $term );
+		get_term( $term, 'category' );
+		$this->filter_term( $term, null );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+	}
+
+	/**
+	 * The same for an item stored with no taxonomy name.
+	 */
+	public function test_update_menu_item_writes_when_a_filter_hides_a_term_target_stored_with_no_taxonomy(): void {
+		$this->acting_as( 'administrator' );
+		$menu = $this->menu( 'Main' );
+		$term = $this->category();
+		$item = $this->category_item( $menu, $term );
+		update_post_meta( $item, '_menu_item_object', '' );
+		get_term( $term, '' );
+		$this->filter_term( $term, null );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+	}
+
+	/**
+	 * A filter that swaps the target for another term refuses both writers, a named refusal.
+	 */
+	public function test_menu_item_writers_refuse_when_a_filter_swaps_the_target_term(): void {
+		$this->acting_as( 'administrator' );
+		$menu  = $this->menu( 'Main' );
+		$term  = $this->category();
+		$other = get_term( $this->category(), 'category' );
+		$item  = $this->category_item( $menu, $term );
+		$this->filter_term( $term, $other );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$updated = $this->retitle( $menu, $item );
+		$created = aafm_exec_create_menu_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'New',
+				'type'      => 'taxonomy',
+				'object'    => 'category',
+				'object_id' => $term,
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $updated );
+		$this->assertSame( 'aafm_error', $updated->get_error_code() );
+		$this->assertInstanceOf( \WP_Error::class, $created );
+		$this->assertSame( 'aafm_error', $created->get_error_code() );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ) );
+	}
+
+	/**
+	 * A target term served from core's cache after its rows are gone writes, as in 1.7.5.
+	 */
+	public function test_update_menu_item_writes_when_its_target_term_is_served_from_the_cache(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$menu = $this->menu( 'Main' );
+		$term = $this->category();
+		$item = $this->category_item( $menu, $term );
+		get_term( $term, 'category' );
+		$wpdb->delete( $wpdb->terms, array( 'term_id' => $term ) );
+		$wpdb->delete( $wpdb->term_taxonomy, array( 'term_id' => $term ) );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+	}
+
+	/**
+	 * A post target whose post type is not registered in the request behaves as in 1.7.5.
+	 */
+	public function test_menu_item_writers_on_an_unregistered_post_type_behave_as_before(): void {
+		$this->acting_as( 'administrator' );
+		register_post_type( 'aafm_menu_type', array( 'public' => true ) );
+		$menu   = $this->menu( 'Main' );
+		$target = $this->post( array( 'post_type' => 'aafm_menu_type' ) );
+		$input  = array(
+			'menu_id'   => $menu,
+			'title'     => 'Item',
+			'type'      => 'post_type',
+			'object'    => 'aafm_menu_type',
+			'object_id' => $target,
+		);
+		$item   = $this->made_item( $input );
+		unregister_post_type( 'aafm_menu_type' );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$this->assert_retitled( $this->retitle( $menu, $item ), $menu, $item, $writes );
+		$created = aafm_exec_create_menu_item( $input );
+		$this->assertInstanceOf( \WP_Error::class, $created );
+		$this->assertSame( 'aafm_invalid_menu_item', $created->get_error_code() );
+		$this->assertSame( array( 'status' => 400 ), $created->get_error_data() );
+	}
+
+	/**
+	 * An item stored with no taxonomy name still refuses a target load that reads another row.
+	 */
+	public function test_update_menu_item_refuses_a_term_target_stored_with_no_taxonomy_when_its_load_reads_another_row(): void {
+		$this->acting_as( 'administrator' );
+		$menu  = $this->menu( 'Main' );
+		$term  = $this->category();
+		$other = $this->category();
+		$item  = $this->category_item( $menu, $term );
+		update_post_meta( $item, '_menu_item_object', '' );
+		$writes = did_action( 'save_post_nav_menu_item' );
+
+		$out = $this->armed(
+			$this->fault_load( 'term', $term, $other ),
+			function () use ( $menu, $item ) {
+				return $this->retitle( $menu, $item );
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assert_fired_in( 'aafm_menu_item_target_checked', 'term target stored with no taxonomy' );
+		$this->assertSame( $writes, did_action( 'save_post_nav_menu_item' ) );
+	}
+
+	/**
+	 * Another term's row cached under the target's id is not taken for the target.
+	 */
+	public function test_menu_item_target_check_refuses_a_foreign_row_cached_under_the_target_id(): void {
+		$term    = $this->category();
+		$foreign = $this->category();
+		wp_cache_set( $term, get_term( $foreign, 'category' )->data, 'terms' );
+		$this->filter_term( $foreign, null );
+
+		$this->assertFalse( aafm_menu_item_target_checked( 'taxonomy', 'category', $term ) );
 	}
 
 	/**

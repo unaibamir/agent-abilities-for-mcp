@@ -1790,8 +1790,9 @@ function aafm_rich_post_output_properties(): array {
  * @return array<string,mixed>
  */
 function aafm_rich_post( WP_Post $post, array $options = array() ): array {
-	// Checked before anything below reads the post's metadata, so the capability check makes the
-	// first load of it and that load is failure-aware.
+	// Checked before anything below reads the post's metadata, so any metadata the capability
+	// decision reads is loaded failure-aware. The meta values shaped below are read as in 1.7.5,
+	// as pure reads.
 	$can_edit_meta = aafm_can_edit_post_object( $post );
 	$shape         = aafm_redact_post( $post );
 

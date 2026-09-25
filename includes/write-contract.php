@@ -1041,6 +1041,7 @@ function aafm_comment_readback( int $comment_id ): ?WP_Comment {
  * it as the requested type, so the class proves nothing. A term load also caches that row under the
  * requested id, so on a term mismatch this function deletes that entry.
  *
+ * @phpstan-impure
  * @param string $type     'post', 'term', 'user' or 'comment'.
  * @param int    $id       Object id.
  * @param string $taxonomy Taxonomy for get_term(); unused for the other types.
@@ -1069,6 +1070,112 @@ function aafm_exact_object( string $type, int $id, string $taxonomy = '' ) {
 			return $comment instanceof WP_Comment && (int) $comment->comment_ID === $id ? $comment : null;
 	}
 	return null;
+}
+
+/**
+ * Whether a post or term row is certainly not in the database: true only when a query that ran
+ * without error found no row.
+ *
+ * A term row counts only in $taxonomy. Any other type, a failed query or a row found gives false.
+ *
+ * @phpstan-impure
+ * @param string $type     'post' or 'term'.
+ * @param int    $id       Object id.
+ * @param string $taxonomy Taxonomy for 'term'; unused for 'post'.
+ * @return bool
+ */
+function aafm_object_absent( string $type, int $id, string $taxonomy = '' ): bool {
+	global $wpdb;
+
+	if ( 'post' === $type ) {
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT ID FROM %i WHERE ID = %d', $wpdb->posts, $id ) );
+	} elseif ( 'term' === $type ) {
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT term_id FROM %i WHERE term_id = %d AND taxonomy = %s', $wpdb->term_taxonomy, $id, $taxonomy ) );
+	} else {
+		return false;
+	}
+
+	return $view['ok'] && null === $view['value'];
+}
+
+/**
+ * Load a post, term or comment by id together with the objects core follows from it, each one
+ * through aafm_exact_object(), and return the object asked for only when the whole chain loaded.
+ *
+ * For a post that is the post, then each post_parent; for a term, the term, then each parent in
+ * its taxonomy; for a comment, the comment, then its post (none when comment_post_ID is 0), then
+ * that post's parents. Core then reads every one of them from the cache instead of running a query of its own.
+ *
+ * A parent that does not load ends the walk when aafm_object_absent() says its row is not there,
+ * which is how core reads a missing parent; otherwise the result is null. The first post of the
+ * walk (the post itself, or the comment's post) is the node map_meta_cap() checks: when it is a
+ * revision whose parent does not load, the result is null, since core denies that case
+ * (wp-includes/capabilities.php:216-219, :315-318). A parent id already seen ends the walk.
+ *
+ * @phpstan-impure
+ * @param string $type     'post', 'term' or 'comment'.
+ * @param int    $id       Object id.
+ * @param string $taxonomy Taxonomy for 'term'; unused otherwise.
+ * @return WP_Post|WP_Term|WP_Comment|null
+ */
+function aafm_exact_object_chain( string $type, int $id, string $taxonomy = '' ) {
+	$root = aafm_exact_object( $type, $id, $taxonomy );
+	if ( ! $root instanceof WP_Post && ! $root instanceof WP_Term && ! $root instanceof WP_Comment ) {
+		return null;
+	}
+
+	if ( $root instanceof WP_Term ) {
+		$seen = array( $id => true );
+		$node = $root;
+		while ( (int) $node->parent > 0 ) {
+			$parent_id = (int) $node->parent;
+			if ( isset( $seen[ $parent_id ] ) ) {
+				return $root;
+			}
+			$seen[ $parent_id ] = true;
+			$parent             = aafm_exact_object( 'term', $parent_id, $root->taxonomy );
+			if ( ! $parent instanceof WP_Term ) {
+				return aafm_object_absent( 'term', $parent_id, $root->taxonomy ) ? $root : null;
+			}
+			$node = $parent;
+		}
+		return $root;
+	}
+
+	$node = $root;
+	if ( $root instanceof WP_Comment ) {
+		$post_id = (int) $root->comment_post_ID;
+		if ( $post_id <= 0 ) {
+			return $root;
+		}
+		$node = aafm_exact_object( 'post', $post_id );
+		if ( ! $node instanceof WP_Post ) {
+			return aafm_object_absent( 'post', $post_id ) ? $root : null;
+		}
+	}
+	if ( ! $node instanceof WP_Post ) {
+		return null;
+	}
+
+	$seen  = array( (int) $node->ID => true );
+	$first = true;
+	while ( (int) $node->post_parent > 0 ) {
+		$parent_id = (int) $node->post_parent;
+		if ( isset( $seen[ $parent_id ] ) ) {
+			return $root;
+		}
+		$seen[ $parent_id ] = true;
+		$parent             = aafm_exact_object( 'post', $parent_id );
+		if ( ! $parent instanceof WP_Post ) {
+			if ( $first && 'revision' === $node->post_type ) {
+				return null;
+			}
+			return aafm_object_absent( 'post', $parent_id ) ? $root : null;
+		}
+		$node  = $parent;
+		$first = false;
+	}
+	return $root;
 }
 
 /**

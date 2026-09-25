@@ -652,8 +652,8 @@ function aafm_exec_create_comment( array $input ) {
 	// contradicting the pending-queue guarantee this function exists to enforce. Read the actual
 	// stored status back and require it to be pending ('0', the literal value wp_set_comment_status()
 	// itself writes for 'hold' - wp-includes/comment.php) rather than trusting the call succeeded.
-	$created = get_comment( $comment_id );
-	if ( ! $created instanceof WP_Comment || '0' !== $created->comment_approved ) {
+	$created = aafm_comment_readback( (int) $comment_id );
+	if ( null === $created || '0' !== $created->comment_approved ) {
 		return aafm_generic_error();
 	}
 
@@ -869,8 +869,8 @@ function aafm_exec_moderate_comment( array $input ) {
 	// return value true while the actual stored status is something else entirely. The only signal
 	// this function can trust is a fresh read taken after every hook has already run, compared
 	// against what was actually requested - never a return value from mid-pipeline.
-	$comment = get_comment( $id );
-	if ( ! $comment instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue (a wp_set_comment_status hook can delete the row after the guard above)
+	$comment = aafm_comment_readback( $id );
+	if ( null === $comment ) {
 		return aafm_generic_error();
 	}
 
@@ -887,7 +887,7 @@ function aafm_exec_moderate_comment( array $input ) {
 	// 'status' => type:string, but wp_get_comment_status() falls through to boolean false whenever
 	// get_comment() can't resolve the id at read time - the 'post-trashed' value is one such case
 	// and is mapped by the helper.
-	return array( 'status' => aafm_comment_status_string( $id ) );
+	return array( 'status' => aafm_comment_status_string( $comment ) );
 }
 
 /**
@@ -1002,13 +1002,8 @@ function aafm_exec_update_comment( array $input ) {
 	// deleted the comment, or a cache race), aafm_redact_comment() falls back to array(), which
 	// encodes as [] against the declared object schema, not the {} an empty object needs -
 	// surface a generic error instead of redacting null into a schema-violating empty shape.
-	$saved = get_comment( $id );
-	// The wordpress-stubs conditional return type for get_comment() treats this call as
-	// referentially transparent with the WP_Comment check at the top of this function, for the
-	// same $id, so PHPStan reports the instanceof below as always true. That is a static-analysis
-	// artifact, not a runtime guarantee: wp_update_comment() ran in between, and a hook or cache
-	// race can still make this specific re-fetch return null - the guard stays.
-	if ( ! $saved instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue
+	$saved = aafm_comment_readback( $id );
+	if ( null === $saved ) {
 		return aafm_generic_error();
 	}
 

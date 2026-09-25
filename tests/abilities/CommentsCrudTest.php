@@ -484,4 +484,66 @@ final class CommentsCrudTest extends TestCase {
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-comment' ) );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-comment' ) );
 	}
+
+	/**
+	 * When the confirming read of comment A fails without a flush, wpdb hands back the last row it
+	 * read, here comment B's, whose content equals the requested one. The read-back refuses a row
+	 * whose id is not A's, so the update is not reported as confirmed.
+	 */
+	public function test_update_comment_does_not_confirm_from_another_comments_row(): void {
+		global $wpdb;
+
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID' => $post,
+				'comment_content' => 'Old body',
+			)
+		);
+		$other   = self::factory()->comment->create(
+			array(
+				'comment_post_ID' => $post,
+				'comment_content' => 'Requested body',
+			)
+		);
+		clean_comment_cache( $other );
+
+		// Arm once core's own read of comment A inside wp_update_comment() has run, so the next read
+		// of A is the ability's confirming read.
+		$edited = false;
+		$fault  = null;
+		$mark   = static function () use ( &$edited ) {
+			$edited = true;
+		};
+		$arm    = static function ( $read ) use ( &$edited, &$fault, $other, $comment, $wpdb ) {
+			if ( ! $edited || null !== $fault || ! $read instanceof WP_Comment || (int) $read->comment_ID !== $comment ) {
+				return $read;
+			}
+			// Leave comment B's row as the last result, then fail the next read of comment A.
+			$fault = \AAFM\Tests\Support\QueryFaultInjector::no_flush_filter( array( 'FROM ' . $wpdb->comments, 'comment_ID = ' . $comment ), 1 );
+			clean_comment_cache( $other );
+			get_comment( $other );
+			add_filter( 'query', $fault );
+			return $read;
+		};
+		add_action( 'edit_comment', $mark );
+		add_filter( 'get_comment', $arm );
+
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$out = wp_get_ability( 'aafm/update-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'content'    => 'Requested body',
+			)
+		);
+		remove_action( 'edit_comment', $mark );
+		remove_filter( 'get_comment', $arm );
+		if ( null !== $fault ) {
+			remove_filter( 'query', $fault );
+		}
+
+		$this->assertSame( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
 }

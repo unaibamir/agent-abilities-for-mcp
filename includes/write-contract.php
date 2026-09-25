@@ -1019,6 +1019,22 @@ function aafm_post_field_confirm_logged( int $post_id, string $field, string $in
 }
 
 /**
+ * Read a comment back after a write: its cache entry is cleared first, so the read comes from the
+ * database, and the comment is returned only when the row read is the one asked for.
+ *
+ * @param int $comment_id Comment id.
+ * @return WP_Comment|null
+ */
+function aafm_comment_readback( int $comment_id ): ?WP_Comment {
+	clean_comment_cache( $comment_id );
+	$comment = get_comment( $comment_id );
+	if ( ! $comment instanceof WP_Comment || (int) $comment->comment_ID !== $comment_id ) {
+		return null;
+	}
+	return $comment;
+}
+
+/**
  * Write one ACF field through ACF's own update_field() and log its outcome.
  *
  * The return of update_field() is false for a same-value write as well as for a failure, so it is

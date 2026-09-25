@@ -610,7 +610,8 @@ function aafm_exec_tec_update_event( array $input ) {
 		if ( ! in_array( $cleared['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
 			return new WP_Error(
 				'aafm_tec_write_unconfirmed',
-				__( 'The event was updated, but its all-day flag could not be confirmed as cleared.', 'agent-abilities-for-mcp' )
+				__( 'The event was updated, but its all-day flag could not be confirmed as cleared.', 'agent-abilities-for-mcp' ),
+				aafm_meta_write_error( $cleared['status'], 'delete', 'post', $id, '_EventAllDay' )->get_error_data()
 			);
 		}
 	}

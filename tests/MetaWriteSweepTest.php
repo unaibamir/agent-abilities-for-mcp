@@ -1569,4 +1569,122 @@ final class MetaWriteSweepTest extends TestCase {
 			"A list entry no longer matches any object load; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale )
 		);
 	}
+
+	// --- Metadata writer errors ---------------------------------------------
+
+	/**
+	 * The metadata writers whose statuses a caller's error reports.
+	 */
+	private const META_WRITERS = array( 'aafm_meta_set', 'aafm_meta_delete', 'aafm_meta_set_group' );
+
+	/**
+	 * Every `new WP_Error(` that follows a metadata writer call in the same named function and
+	 * does not carry aafm_meta_write_error()'s error_data in its own arguments, either by calling it
+	 * there or through `$v->get_error_data()` on a variable assigned from it earlier in the
+	 * function, keyed path|function|ordinal. Such an error reports a writer status without the four
+	 * error_data keys that writer's errors carry.
+	 *
+	 * @param string $source       Full file contents.
+	 * @param string $virtual_path Path the fixture pretends to live at.
+	 * @return string[]
+	 */
+	private function meta_writer_error_keys( string $source, string $virtual_path ): array {
+		$tokens     = token_get_all( $source );
+		$name_types = $this->name_token_types();
+		$not_a_call = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION ) );
+		$writer_at  = array();
+		$error_vars = array();
+		$ordinals   = array();
+		$keys       = array();
+		foreach ( $tokens as $i => $token ) {
+			if ( ! is_array( $token ) || ! in_array( $token[0], $name_types, true ) ) {
+				continue;
+			}
+			$name = $this->last_name_segment( $token[1] );
+			if ( in_array( $name, self::META_WRITERS, true ) ) {
+				list( $open ) = $this->significant_token( $tokens, $i + 1 );
+				$prev_idx     = $this->previous_significant_index( $tokens, $i - 1 );
+				if ( '(' === $open && ! ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) ) {
+					$writer_at[ $this->enclosing_function( $tokens, $i ) ] = true;
+				}
+				continue;
+			}
+			if ( 'aafm_meta_write_error' === $name ) {
+				$assign_idx = $this->previous_significant_index( $tokens, $i - 1 );
+				$var_idx    = null === $assign_idx ? null : $this->previous_significant_index( $tokens, $assign_idx - 1 );
+				if ( '=' === ( $tokens[ $assign_idx ] ?? null ) && null !== $var_idx && is_array( $tokens[ $var_idx ] ) && T_VARIABLE === $tokens[ $var_idx ][0] ) {
+					$error_vars[ $this->enclosing_function( $tokens, $i ) ][] = $tokens[ $var_idx ][1];
+				}
+				continue;
+			}
+			if ( 'WP_Error' !== $name ) {
+				continue;
+			}
+			$prev_idx = $this->previous_significant_index( $tokens, $i - 1 );
+			if ( null === $prev_idx || ! is_array( $tokens[ $prev_idx ] ) || T_NEW !== $tokens[ $prev_idx ][0] ) {
+				continue;
+			}
+			$function = $this->enclosing_function( $tokens, $i );
+			if ( '{main}' === $function || empty( $writer_at[ $function ] ) ) {
+				continue;
+			}
+			list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
+			$args                    = '(' === $open ? $this->call_args_text( $tokens, $open_idx ) : '';
+			if ( preg_match( '/(^|[^a-zA-Z0-9_>:])aafm_meta_write_error\s*\(/', $args ) ) {
+				continue;
+			}
+			foreach ( $error_vars[ $function ] ?? array() as $var ) {
+				if ( preg_match( '/' . preg_quote( $var, '/' ) . '\s*->\s*get_error_data\s*\(/', $args ) ) {
+					continue 2;
+				}
+			}
+			$ordinal_key              = $virtual_path . '|' . $function;
+			$ordinals[ $ordinal_key ] = ( $ordinals[ $ordinal_key ] ?? 0 ) + 1;
+			$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
+		}
+		return $keys;
+	}
+
+	public function test_flags_an_error_after_a_metadata_write_without_the_writer_error_data(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$r = aafm_meta_delete( 'post', \$id, 'k' );\n\treturn new WP_Error( 'x', 'y' );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|1' ), $this->meta_writer_error_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_passes_an_error_after_a_metadata_write_that_carries_the_writer_error_data(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$r = aafm_meta_set( 'post', \$id, 'k', 'v' );\n\treturn new WP_Error( 'x', 'y', aafm_meta_write_error( \$r['status'], 'write', 'post', \$id, 'k' )->get_error_data() );\n}\n";
+		$this->assertSame( array(), $this->meta_writer_error_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_passes_an_error_carrying_the_error_data_of_a_writer_error_built_first(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$r = aafm_meta_set( 'post', \$id, 'k', 'v' );\n\t\$error = aafm_meta_write_error( \$r['status'], 'write', 'post', \$id, 'k' );\n\treturn new WP_Error( 'x', \$error->get_error_message(), \$error->get_error_data() );\n}\n";
+		$this->assertSame( array(), $this->meta_writer_error_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_an_error_carrying_the_error_data_of_some_other_error(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$r = aafm_meta_set( 'post', \$id, 'k', 'v' );\n\t\$error = aafm_meta_write_error( \$r['status'], 'write', 'post', \$id, 'k' );\n\t\$other = new WP_Error( 'a', 'b' );\n\treturn new WP_Error( 'x', 'y', \$other->get_error_data() );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|1', 'includes/fixture.php|f|2' ), $this->meta_writer_error_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_passes_an_error_before_the_first_metadata_write(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\tif ( ! \$id ) {\n\t\treturn new WP_Error( 'x', 'y' );\n\t}\n\treturn aafm_meta_set_group( 'post', \$id, array() );\n}\n";
+		$this->assertSame( array(), $this->meta_writer_error_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	/**
+	 * Under the scanned set, an error returned after a metadata write carries the writer's own
+	 * error_data (status, kind, object_id, key) through aafm_meta_write_error().
+	 */
+	public function test_every_error_after_a_metadata_write_carries_the_writer_error_data(): void {
+		$files = $this->scanned_files();
+		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
+
+		$found = array();
+		foreach ( $files as $path => $source ) {
+			foreach ( $this->meta_writer_error_keys( $source, $path ) as $key ) {
+				$found[] = $key;
+			}
+		}
+
+		$this->assertSame( array(), $found, "An error after a metadata write is missing the writer's error_data:\n" . implode( "\n", $found ) );
+	}
 }

@@ -2096,8 +2096,8 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
 	// password-protected post must not expose its body/excerpt (rendered or raw) or a
 	// body-revealing diff. The edit_post gate does not inspect post_password, so this is
 	// the chokepoint.
-	$parent       = get_post( (int) $revision->post_parent );
-	$is_protected = $parent instanceof WP_Post && '' !== (string) $parent->post_password;
+	$parent       = aafm_exact_object( 'post', (int) $revision->post_parent );
+	$is_protected = ! $parent instanceof WP_Post || '' !== (string) $parent->post_password;
 
 	if ( $is_protected ) {
 		$content = '';
@@ -2116,8 +2116,7 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
 		if ( ! function_exists( 'wp_text_diff' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/revision.php';
 		}
-		$current         = get_post( (int) $revision->post_parent );
-		$current_content = $current instanceof WP_Post ? (string) $current->post_content : '';
+		$current_content = $parent instanceof WP_Post ? (string) $parent->post_content : '';
 		// wp_text_diff returns '' when there is no difference; we surface that empty string
 		// (a string, not null) so the agent can tell "no change" from "not requested".
 		$payload['diff'] = (string) wp_text_diff( $raw, $current_content );

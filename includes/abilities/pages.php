@@ -271,7 +271,7 @@ function aafm_exec_get_page( array $input ) {
 	}
 	$id   = aafm_get_page_lang_resolved_id( absint( $input['page_id'] ), $input );
 	$post = aafm_exact_object( 'post', $id );
-	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
+	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type || ! aafm_can_read_post_object( $post ) ) {
 		return aafm_generic_error();
 	}
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';

@@ -1452,4 +1452,233 @@ final class RelatedObjectLoadTest extends TestCase {
 			$this->assertSame( $expected, (int) get_post( $id )->post_parent, "post_parent of $id unchanged" );
 		}
 	}
+
+	/**
+	 * WPML as the translation resolver sees it: two languages, loaded, and $translate as the
+	 * wpml_object_id filter.
+	 *
+	 * @param callable $translate The wpml_object_id filter.
+	 */
+	private function fake_wpml( callable $translate ): void {
+		add_filter(
+			'wpml_active_languages',
+			static function () {
+				return array(
+					'is' => array( 'code' => 'is' ),
+					'en' => array( 'code' => 'en' ),
+				);
+			}
+		);
+		add_filter( 'wpml_object_id', $translate, 10, 4 );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- third-party WPML hook fired to simulate WPML being loaded.
+		do_action( 'wpml_loaded' );
+	}
+
+	/**
+	 * T7 (F2): the resolver loads the original exactly. When that load reads another post's row,
+	 * the resolver gives 0, so the permission and the executor both refuse instead of guessing
+	 * the element type from the wrong row.
+	 */
+	public function test_get_post_refuses_when_the_translation_resolvers_load_reads_another_row(): void {
+		$this->acting_as( 'subscriber' );
+		$original = $this->post();
+		$other    = $this->post( array( 'post_type' => 'page' ) );
+		$this->fake_wpml(
+			static function ( $id, $type ) use ( $original ) {
+				return (int) $id === $original && 'post' === $type ? $original + 100000 : $id;
+			}
+		);
+		get_post( $other );
+		$input = array(
+			'post_id' => $original,
+			'lang'    => 'en',
+		);
+
+		$allowed = $this->armed(
+			$this->fault_load( 'post', $original, $other ),
+			static function () use ( $input ) {
+				return aafm_perm_get_post( $input );
+			}
+		);
+		$this->assertFalse( $allowed, 'permission refused' );
+		$this->assert_fired_in( 'aafm_get_post_lang_resolved_id', 'resolver load (permission)' );
+
+		QueryFaultInjector::reset_fired_count();
+		$this->stages = array();
+		$out          = $this->armed(
+			$this->fault_load( 'post', $original, $other ),
+			static function () use ( $input ) {
+				return aafm_exec_get_post( $input );
+			}
+		);
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assert_fired_in( 'aafm_get_post_lang_resolved_id', 'resolver load (executor)' );
+	}
+
+	/**
+	 * T7 (executor re-check): the permission and the executor each resolve the translation, so a
+	 * resolver that answers differently the second time hands the executor an object the
+	 * permission never checked. The executor re-runs the read check on the object it serves.
+	 *
+	 * @dataProvider data_getters
+	 *
+	 * @param string $getter 'post' or 'page'.
+	 */
+	public function test_a_getter_refuses_an_object_its_permission_did_not_check( string $getter ): void {
+		$this->acting_as( 'subscriber' );
+		$type    = 'page' === $getter ? 'page' : 'post';
+		$public  = $this->post( array( 'post_type' => $type ) );
+		$private = $this->post(
+			array(
+				'post_type'   => $type,
+				'post_status' => 'private',
+			)
+		);
+		$calls   = 0;
+		$this->fake_wpml(
+			static function ( $id ) use ( $public, $private, &$calls ) {
+				if ( (int) $id !== $public ) {
+					return $id;
+				}
+				++$calls;
+				return 1 === $calls ? $public : $private;
+			}
+		);
+		$key   = 'page' === $getter ? 'page_id' : 'post_id';
+		$input = array(
+			$key   => $public,
+			'lang' => 'en',
+		);
+		$perm  = 'page' === $getter ? 'aafm_perm_get_page' : 'aafm_perm_get_post';
+		$exec  = 'page' === $getter ? 'aafm_exec_get_page' : 'aafm_exec_get_post';
+
+		$this->assertTrue( $perm( $input ), 'the permission checked the public post' );
+		$out = $exec( $input );
+
+		$this->assertInstanceOf( \WP_Error::class, $out, 'the private translation was not served' );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( 2, $calls, 'each call resolved once' );
+	}
+
+	/**
+	 * The two getters that serve a resolved translation.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_getters(): iterable {
+		yield 'get-post' => array( 'post' );
+		yield 'get-page' => array( 'page' );
+	}
+
+	/**
+	 * T7 healthy: a translated read serves the translation, as before.
+	 */
+	public function test_get_post_serves_the_translation_when_healthy(): void {
+		$this->acting_as( 'subscriber' );
+		$original    = $this->post();
+		$translation = $this->post();
+		$this->fake_wpml(
+			static function ( $id, $type ) use ( $original, $translation ) {
+				return (int) $id === $original && 'post' === $type ? $translation : $id;
+			}
+		);
+		$input = array(
+			'post_id' => $original,
+			'lang'    => 'en',
+		);
+
+		$this->assertTrue( aafm_perm_get_post( $input ) );
+		$out = aafm_exec_get_post( $input );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $translation, $out['post']['id'] );
+	}
+
+	/**
+	 * A revision of $parent_id.
+	 *
+	 * @param int $parent_id Parent post id.
+	 */
+	private function revision_of( int $parent_id ): WP_Post {
+		$id = $this->post(
+			array(
+				'post_type'    => 'revision',
+				'post_status'  => 'inherit',
+				'post_parent'  => $parent_id,
+				'post_content' => 'secret body',
+				'post_excerpt' => 'secret excerpt',
+			)
+		);
+		return get_post( $id );
+	}
+
+	/**
+	 * T8: the revision payload reads its parent's password from an exact load. A parent load that
+	 * reads another row redacts, the same as a protected parent.
+	 *
+	 * @dataProvider data_revision_parent_leaks
+	 *
+	 * @param bool $foreign_row Leak another post's row (true) or no row (false).
+	 */
+	public function test_the_revision_payload_redacts_when_its_parent_load_reads_another_row( bool $foreign_row ): void {
+		$parent   = $this->post(
+			array(
+				'post_password' => 'hunter2',
+				'post_content'  => 'current body',
+			)
+		);
+		$other    = $this->post();
+		$revision = $this->revision_of( $parent );
+		get_post( $other );
+
+		$out = $this->armed(
+			$this->fault_load( 'post', $parent, $foreign_row ? $other : null ),
+			static function () use ( $revision ) {
+				return aafm_get_revision_payload(
+					$revision,
+					array(
+						'content_format' => 'raw',
+						'with_diff'      => true,
+					)
+				);
+			}
+		);
+
+		$this->assertSame( '', $out['content'] );
+		$this->assertSame( '', $out['excerpt'] );
+		$this->assertNull( $out['diff'] );
+		$this->assert_fired_in( 'aafm_get_revision_payload', 'parent load' );
+	}
+
+	/**
+	 * The two shapes of a faulted parent load.
+	 *
+	 * @return iterable<string,array{0:bool}>
+	 */
+	public function data_revision_parent_leaks(): iterable {
+		yield 'another row' => array( true );
+		yield 'no row' => array( false );
+	}
+
+	/**
+	 * T8 healthy: an unprotected parent serves the body, the excerpt and the diff against the
+	 * parent's content.
+	 */
+	public function test_the_revision_payload_serves_the_body_when_its_parent_is_not_protected(): void {
+		$parent   = $this->post( array( 'post_content' => 'current body' ) );
+		$revision = $this->revision_of( $parent );
+
+		$out = aafm_get_revision_payload(
+			$revision,
+			array(
+				'content_format' => 'raw',
+				'with_diff'      => true,
+			)
+		);
+
+		$this->assertSame( 'secret body', $out['content'] );
+		$this->assertSame( 'secret excerpt', $out['excerpt'] );
+		$this->assertSame( (string) wp_text_diff( 'secret body', 'current body' ), $out['diff'] );
+	}
 }

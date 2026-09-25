@@ -196,6 +196,7 @@ final class WpmlLanguageTest extends TestCase {
 				'map_meta_cap' => true,
 			)
 		);
+		update_option( 'aafm_allowed_post_types', array( 'aafm_book' ) ); // Exposed, as an operator would, so the read gate passes.
 		$original   = (int) self::factory()->post->create(
 			array(
 				'post_type'  => 'aafm_book',

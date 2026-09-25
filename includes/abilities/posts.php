@@ -550,9 +550,11 @@ function aafm_get_post_lang_resolved_id( int $id, array $input ): int {
 	// type, so WPML fell back to the original id and the untranslated item was served
 	// silently (B47). pages.php pins 'page' because its ids are type-pinned to pages; this
 	// getter serves every allowlisted type, so the type comes from the post itself.
-	$post = get_post( $id );
-	$type = $post instanceof WP_Post ? (string) $post->post_type : 'post';
-	return aafm_wpml_translated_id( $id, $type, $lang );
+	$post = aafm_exact_object( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return 0;
+	}
+	return aafm_wpml_translated_id( $id, (string) $post->post_type, $lang );
 }
 
 /**
@@ -567,8 +569,8 @@ function aafm_exec_get_post( array $input ) {
 		return $lang;
 	}
 	$id   = aafm_get_post_lang_resolved_id( absint( $input['post_id'] ), $input );
-	$post = get_post( $id );
-	if ( ! $post instanceof WP_Post ) {
+	$post = aafm_exact_object( 'post', $id );
+	if ( ! $post instanceof WP_Post || ! aafm_can_read_post_object( $post ) ) {
 		return aafm_generic_error();
 	}
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';

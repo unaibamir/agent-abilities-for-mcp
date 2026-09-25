@@ -1253,8 +1253,8 @@ final class MetaWriteSweepTest extends TestCase {
 	/**
 	 * Core functions that load a post, term, user or comment by id. Under a `query` filter that
 	 * empties the load's SELECT they hand back another object's row, so every call goes through
-	 * aafm_exact_object(), follows its own exact load (the precede wrappers), or is listed in
-	 * tests/Fixtures/object-loader-legacy.txt.
+	 * aafm_exact_object() or follows its own exact load (the precede wrappers); there is no
+	 * exemption list.
 	 */
 	private const OBJECT_LOADERS = array( 'get_post', 'get_term', 'get_userdata', 'get_comment', 'get_post_type', 'get_post_field', 'get_term_by', 'get_user_by', 'get_post_thumbnail_id', 'wp_get_post_revision', 'wp_attachment_is_image', 'wp_get_nav_menu_object', 'term_is_ancestor_of', 'get_edit_term_link' );
 
@@ -1625,7 +1625,7 @@ final class MetaWriteSweepTest extends TestCase {
 		$this->assertSame(
 			array(),
 			$unlisted,
-			"An object load was found that is not checked by id and that the list does not name:\n" . implode( "\n", $unlisted )
+			"An object load was found that is not checked by id:\n" . implode( "\n", $unlisted )
 		);
 	}
 
@@ -2037,7 +2037,8 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	/**
-	 * Every aafm_user_can_checked() call that no earlier chain load in its function covers, by the
+	 * Every aafm_user_can_checked() or aafm_user_can_checked_state() call that no earlier chain load in
+	 * its function covers, by the
 	 * RELATED_CAPS rule current_user_can() is held to, keyed path|function|name|ordinal.
 	 *
 	 * @param string $source       Full file contents.
@@ -2057,7 +2058,7 @@ final class MetaWriteSweepTest extends TestCase {
 				continue;
 			}
 			$name = $this->resolved_function_name( $token[1], $aliases );
-			if ( 'aafm_exact_object_chain' !== $name && 'aafm_user_can_checked' !== $name ) {
+			if ( 'aafm_exact_object_chain' !== $name && 'aafm_user_can_checked' !== $name && 'aafm_user_can_checked_state' !== $name ) {
 				continue;
 			}
 			list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
@@ -2155,6 +2156,120 @@ final class MetaWriteSweepTest extends TestCase {
 			array_values( array_diff( self::UNCHAINED_CHECKED_CAPABILITY_CALLS, $found ) ),
 			'A listed call no longer matches any unchained checked call; its site has moved, so the key must be deleted.'
 		);
+	}
+
+	// --- Checked capability calls never nest in a checked-read scope --------------
+
+	/**
+	 * Calls that open their own aafm_with_checked_reads() scope for a capability check. Scopes do
+	 * not nest: inside another scope the inner one would trust metadata the outer one loaded.
+	 */
+	private const CHECKED_CAPABILITY_CALLS = array( 'aafm_user_can_checked', 'aafm_user_can_checked_state', 'aafm_can_read_post_object', 'aafm_can_edit_post_object', 'aafm_can_delete_post_object', 'aafm_can_edit_post_object_state' );
+
+	/**
+	 * Every CHECKED_CAPABILITY_CALLS call written inside the first argument of an
+	 * aafm_with_checked_reads() call, or inside the body of a function that such an argument
+	 * calls by name, keyed path|function|name|ordinal (the ordinal counts the flagged calls of
+	 * that name in that function).
+	 *
+	 * @param array<string,string> $files path => source.
+	 * @return string[]
+	 */
+	private function nested_capability_keys( array $files ): array {
+		$not_a_call = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION, T_NEW ) );
+		$checked    = array(); // function name => its checked calls, each array( path, function, name, index ).
+		$scoped     = array(); // checked calls written inside a scope argument.
+		$named      = array(); // function names a scope argument calls.
+		foreach ( $files as $path => $source ) {
+			$tokens  = token_get_all( $source );
+			$aliases = $this->function_aliases( $tokens );
+			$ranges  = array();
+			$calls   = array();
+			foreach ( $tokens as $i => $token ) {
+				if ( ! is_array( $token ) || ! in_array( $token[0], $this->name_token_types(), true ) ) {
+					continue;
+				}
+				list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
+				$prev_idx                = $this->previous_significant_index( $tokens, $i - 1 );
+				if ( '(' !== $open || ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) ) {
+					continue;
+				}
+				$name    = $this->resolved_function_name( $token[1], $aliases );
+				$calls[] = array( $name, $i );
+				if ( 'aafm_with_checked_reads' !== $name ) {
+					continue;
+				}
+				$close = $this->matching_bracket_index( $tokens, $open_idx, '(', ')' );
+				$depth = 0;
+				for ( $k = $open_idx + 1; null !== $close && $k < $close; $k++ ) {
+					$text = is_array( $tokens[ $k ] ) ? $tokens[ $k ][1] : $tokens[ $k ];
+					if ( in_array( $text, array( '(', '[', '{', '${' ), true ) || ( is_array( $tokens[ $k ] ) && T_CURLY_OPEN === $tokens[ $k ][0] ) ) {
+						++$depth;
+					} elseif ( in_array( $text, array( ')', ']', '}' ), true ) ) {
+						--$depth;
+					} elseif ( 0 === $depth && ',' === $text ) {
+						break;
+					}
+				}
+				$ranges[] = array( $open_idx, $k );
+			}
+			foreach ( $calls as $call ) {
+				list( $name, $index ) = $call;
+				$inside               = false;
+				foreach ( $ranges as $range ) {
+					$inside = $inside || ( $index > $range[0] && $index < $range[1] );
+				}
+				if ( $inside ) {
+					$named[ $name ] = true;
+				}
+				if ( ! in_array( $name, self::CHECKED_CAPABILITY_CALLS, true ) ) {
+					continue;
+				}
+				$function                             = $this->enclosing_function( $tokens, $index );
+				$record                               = array( $path, $function, $name, $index );
+				$checked[ strtolower( $function ) ][] = $record;
+				if ( $inside ) {
+					$scoped[] = $record;
+				}
+			}
+		}
+		foreach ( array_keys( $named ) as $name ) {
+			$scoped = array_merge( $scoped, $checked[ $name ] ?? array() );
+		}
+
+		$flagged = array();
+		foreach ( $scoped as $record ) {
+			$flagged[ $record[0] . '|' . str_pad( (string) $record[3], 10, '0', STR_PAD_LEFT ) ] = $record;
+		}
+		ksort( $flagged );
+		$ordinals = array();
+		$keys     = array();
+		foreach ( $flagged as $record ) {
+			$ordinal_key              = $record[0] . '|' . $record[1] . '|' . $record[2];
+			$ordinals[ $ordinal_key ] = ( $ordinals[ $ordinal_key ] ?? 0 ) + 1;
+			$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
+		}
+		return $keys;
+	}
+
+	public function test_flags_a_checked_capability_call_nested_in_a_checked_read_scope(): void {
+		$nested = "<?php\nfunction g( \$id ) {\n\treturn aafm_can_edit_post_object( get_post( \$id ) );\n}\nfunction f( \$id ) {\n\treturn aafm_with_checked_reads(\n\t\tstatic function () use ( \$id ): array {\n\t\t\treturn array( 'a' => aafm_user_can_checked( 'edit_post', \$id ), 'b' => g( \$id ) );\n\t\t},\n\t\taafm_generic_error()\n\t);\n}\nfunction h( \$id ) {\n\treturn aafm_with_checked_reads( static fn(): array => array( 'c' => aafm_user_can_checked_state( 'edit_post', \$id ) ), aafm_generic_error() );\n}\n";
+		$clean  = "<?php\nfunction g( \$id ) {\n\treturn aafm_can_edit_post_object( get_post( \$id ) );\n}\nfunction f( \$id ) {\n\t\$read = aafm_with_checked_reads( static fn(): array => array( 'meta' => aafm_meta_get( 'post', \$id ) ), aafm_generic_error() );\n\treturn aafm_user_can_checked( 'edit_post', \$id ) && g( \$id );\n}\n";
+		$this->assertSame(
+			array( 'includes/fixture.php|g|aafm_can_edit_post_object|1', 'includes/fixture.php|f|aafm_user_can_checked|1', 'includes/fixture.php|h|aafm_user_can_checked_state|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $nested ) )
+		);
+		$this->assertSame( array(), $this->nested_capability_keys( array( 'includes/fixture.php' => $clean ) ) );
+	}
+
+	/**
+	 * No checked capability call runs inside another checked-read scope, directly or through a
+	 * function the scope's build calls.
+	 */
+	public function test_no_checked_capability_call_nests_in_a_checked_read_scope(): void {
+		$files = $this->scanned_files();
+		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
+		$this->assertSame( array(), $this->nested_capability_keys( $files ), 'A capability check runs inside a checked-read scope; scopes do not nest.' );
 	}
 
 	// --- Metadata writer errors ---------------------------------------------

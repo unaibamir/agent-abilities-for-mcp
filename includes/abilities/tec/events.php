@@ -481,7 +481,17 @@ function aafm_exec_tec_create_event( array $input ) {
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$response = array( 'event' => aafm_tec_event_shape( (int) $created->ID ) );
+	$created_id = (int) $created->ID;
+	if ( ! get_post( $created_id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_with_checked_reads(
+		static fn(): array => array( 'event' => aafm_tec_event_shape( $created_id ) ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
 	if ( ! empty( $safety['warnings'] ) ) {
 		$response['content_warnings'] = $safety['warnings'];
 	}
@@ -559,7 +569,15 @@ function aafm_exec_tec_update_event( array $input ) {
 		$args['post_status'] = $status;
 	}
 	if ( array() === $args ) {
-		return array( 'event' => aafm_tec_event_shape( $id ) ); // Nothing to change; no-op success.
+		// Nothing to change; no-op success.
+		if ( ! get_post( $id ) instanceof WP_Post ) {
+			return aafm_generic_error();
+		}
+		$response = aafm_with_checked_reads(
+			static fn(): array => array( 'event' => aafm_tec_event_shape( $id ) ),
+			aafm_generic_error()
+		);
+		return $response;
 	}
 
 	// Codex final round 10 MEDIUM: round 9's content-safety fix wired this call into event
@@ -577,32 +595,33 @@ function aafm_exec_tec_update_event( array $input ) {
 	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}
-	// Documented contract exception to "every event write goes through the ORM" (Codex final
-	// round MEDIUM, re-verified against the installed plugin): TEC's own repository save step
-	// (Repositories/Event.php) unsets the all-day meta input rather than writing a falsy value
-	// whenever the requested all_day is falsy, so the ORM's own update never touches the existing
-	// meta row - a real event that was already all-day stays all-day, silently, under a
-	// successful save() response. TEC's repository offers no supported way to clear this key
-	// (confirmed by reading the actual save path, not assumed), so this direct delete_post_meta()
-	// call - core's own meta API, not a raw query, so cache invalidation is unaffected - is the
-	// only mechanism that exists, runs strictly AFTER the ORM save above (never interleaved with
-	// or in place of it), and is the confirmed inverse of the boolean cast this file's own read
-	// applies when shaping an event for the wire. Proven against a stub that reproduces this exact
-	// TEC quirk (see TecStubStore.php's write_meta()), not one that would pass regardless.
+	// The one event write outside the ORM: TEC's repository save (Repositories/Event.php) unsets
+	// a falsy all_day input rather than writing it, so an event that was already all-day stays
+	// all-day under a successful save(), and the repository offers no supported way to clear the
+	// key. The key is deleted through the metadata writer, after the ORM save and never in place of
+	// it; the delete is the inverse of the boolean cast this file's own read applies. The stub
+	// reproduces this TEC behaviour (TecStubStore.php's write_meta()).
 	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
-		delete_post_meta( $id, '_EventAllDay' );
-		// Codex hunt F4: delete_post_meta()'s bool return was discarded here, so a
-		// delete_post_metadata filter vetoing the delete would leave the event still marked
-		// all-day while this ability reported an ordinary success. Confirm the key is
-		// actually gone rather than trusting the call didn't error.
-		if ( metadata_exists( 'post', $id, '_EventAllDay' ) ) {
+		// The delete reports what happened: the key gone, or never there, is success; a refused
+		// or unreadable delete leaves the event marked all-day and is this ability's error.
+		$cleared = aafm_meta_delete( 'post', $id, '_EventAllDay' );
+		if ( ! in_array( $cleared['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
 			return new WP_Error(
 				'aafm_tec_write_unconfirmed',
 				__( 'The event was updated, but its all-day flag could not be confirmed as cleared.', 'agent-abilities-for-mcp' )
 			);
 		}
 	}
-	$response = array( 'event' => aafm_tec_event_shape( $id ) );
+	if ( ! get_post( $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_with_checked_reads(
+		static fn(): array => array( 'event' => aafm_tec_event_shape( $id ) ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
 	if ( ! empty( $safety['warnings'] ) ) {
 		$response['content_warnings'] = $safety['warnings'];
 	}

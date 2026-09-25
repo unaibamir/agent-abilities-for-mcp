@@ -97,13 +97,13 @@ function aafm_tec_venue_shape( int $id ): array {
 		'id'      => $id,
 		'title'   => $post instanceof WP_Post ? get_the_title( $post ) : '',
 		'status'  => $post instanceof WP_Post ? (string) $post->post_status : '',
-		'address' => (string) get_post_meta( $id, '_VenueAddress', true ),
-		'city'    => (string) get_post_meta( $id, '_VenueCity', true ),
-		'state'   => (string) get_post_meta( $id, '_VenueStateProvince', true ),
-		'zip'     => (string) get_post_meta( $id, '_VenueZip', true ),
-		'country' => (string) get_post_meta( $id, '_VenueCountry', true ),
-		'phone'   => (string) get_post_meta( $id, '_VenuePhone', true ),
-		'website' => (string) get_post_meta( $id, '_VenueURL', true ),
+		'address' => (string) aafm_meta_get( 'post', $id, '_VenueAddress', true ),
+		'city'    => (string) aafm_meta_get( 'post', $id, '_VenueCity', true ),
+		'state'   => (string) aafm_meta_get( 'post', $id, '_VenueStateProvince', true ),
+		'zip'     => (string) aafm_meta_get( 'post', $id, '_VenueZip', true ),
+		'country' => (string) aafm_meta_get( 'post', $id, '_VenueCountry', true ),
+		'phone'   => (string) aafm_meta_get( 'post', $id, '_VenuePhone', true ),
+		'website' => (string) aafm_meta_get( 'post', $id, '_VenueURL', true ),
 	);
 }
 
@@ -365,7 +365,15 @@ function aafm_exec_tec_create_venue( array $input ) {
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return array( 'venue' => aafm_tec_venue_shape( (int) $created->ID ) );
+	$created_id = (int) $created->ID;
+	if ( ! get_post( $created_id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_with_checked_reads(
+		static fn(): array => array( 'venue' => aafm_tec_venue_shape( $created_id ) ),
+		aafm_generic_error()
+	);
+	return $response;
 }
 
 /**
@@ -427,7 +435,14 @@ function aafm_exec_tec_update_venue( array $input ) {
 		$args['post_status'] = $status;
 	}
 	if ( array() === $args ) {
-		return array( 'venue' => aafm_tec_venue_shape( $id ) );
+		if ( ! get_post( $id ) instanceof WP_Post ) {
+			return aafm_generic_error();
+		}
+		$response = aafm_with_checked_reads(
+			static fn(): array => array( 'venue' => aafm_tec_venue_shape( $id ) ),
+			aafm_generic_error()
+		);
+		return $response;
 	}
 	$safety = aafm_tec_enforce_content_safety( $args, 'venue' );
 	if ( is_wp_error( $safety ) ) {
@@ -440,5 +455,12 @@ function aafm_exec_tec_update_venue( array $input ) {
 	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}
-	return array( 'venue' => aafm_tec_venue_shape( $id ) );
+	if ( ! get_post( $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_with_checked_reads(
+		static fn(): array => array( 'venue' => aafm_tec_venue_shape( $id ) ),
+		aafm_generic_error()
+	);
+	return $response;
 }

@@ -98,9 +98,9 @@ function aafm_tec_organizer_shape( int $id ): array {
 		'id'      => $id,
 		'title'   => $post instanceof WP_Post ? get_the_title( $post ) : '',
 		'status'  => $post instanceof WP_Post ? (string) $post->post_status : '',
-		'email'   => (string) get_post_meta( $id, '_OrganizerEmail', true ),
-		'phone'   => (string) get_post_meta( $id, '_OrganizerPhone', true ),
-		'website' => (string) get_post_meta( $id, '_OrganizerWebsite', true ),
+		'email'   => (string) aafm_meta_get( 'post', $id, '_OrganizerEmail', true ),
+		'phone'   => (string) aafm_meta_get( 'post', $id, '_OrganizerPhone', true ),
+		'website' => (string) aafm_meta_get( 'post', $id, '_OrganizerWebsite', true ),
 	);
 }
 
@@ -336,7 +336,15 @@ function aafm_exec_tec_create_organizer( array $input ) {
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return array( 'organizer' => aafm_tec_organizer_shape( (int) $created->ID ) );
+	$created_id = (int) $created->ID;
+	if ( ! get_post( $created_id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_with_checked_reads(
+		static fn(): array => array( 'organizer' => aafm_tec_organizer_shape( $created_id ) ),
+		aafm_generic_error()
+	);
+	return $response;
 }
 
 /**
@@ -416,7 +424,14 @@ function aafm_exec_tec_update_organizer( array $input ) {
 		$args['post_status'] = $status;
 	}
 	if ( array() === $args ) {
-		return array( 'organizer' => aafm_tec_organizer_shape( $id ) );
+		if ( ! get_post( $id ) instanceof WP_Post ) {
+			return aafm_generic_error();
+		}
+		$response = aafm_with_checked_reads(
+			static fn(): array => array( 'organizer' => aafm_tec_organizer_shape( $id ) ),
+			aafm_generic_error()
+		);
+		return $response;
 	}
 	$safety = aafm_tec_enforce_content_safety( $args, 'organizer' );
 	if ( is_wp_error( $safety ) ) {
@@ -429,5 +444,12 @@ function aafm_exec_tec_update_organizer( array $input ) {
 	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 		return aafm_generic_error();
 	}
-	return array( 'organizer' => aafm_tec_organizer_shape( $id ) );
+	if ( ! get_post( $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_with_checked_reads(
+		static fn(): array => array( 'organizer' => aafm_tec_organizer_shape( $id ) ),
+		aafm_generic_error()
+	);
+	return $response;
 }

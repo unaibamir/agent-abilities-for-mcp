@@ -877,4 +877,57 @@ final class CoreObjectLoadLeakTest extends TestCase {
 		$this->assertNull( $out );
 		$this->assertFalse( wp_cache_get( $a, 'terms' ) );
 	}
+
+	/**
+	 * When a demote leaves the site with no administrator, update-user restores the role on the
+	 * user it loads exactly. If that load reads another user's row, the other user is not made an
+	 * administrator and the call returns the generic error.
+	 */
+	public function test_the_last_admin_restore_whose_load_returns_another_user_promotes_nobody(): void {
+		$this->acting_as( 'administrator' );
+		$a      = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$b      = self::factory()->user->create(
+			array(
+				'role'         => 'subscriber',
+				'display_name' => self::LEAKED,
+			)
+		);
+		$counts = 0;
+		// Once the write has run, the administrator count reads empty, so the restore branch runs.
+		$empty = static function ( $results, $query ) use ( &$counts ) {
+			if ( 'administrator' === ( $query->query_vars['role'] ?? '' ) ) {
+				++$counts;
+				return array();
+			}
+			return $results;
+		};
+		$arm   = static function () use ( $empty ): void {
+			add_filter( 'users_pre_query', $empty, 10, 2 );
+		};
+		add_action( 'profile_update', $arm, PHP_INT_MAX, 0 );
+		try {
+			$out = $this->leaked_after(
+				'profile_update',
+				'user',
+				$a,
+				$b,
+				static fn() => aafm_exec_update_user(
+					array(
+						'user_id' => $a,
+						'role'    => 'editor',
+					)
+				)
+			);
+		} finally {
+			remove_action( 'profile_update', $arm, PHP_INT_MAX );
+			remove_filter( 'users_pre_query', $empty, 10 );
+		}
+
+		$this->assertGreaterThan( 0, $counts, 'the restore branch ran' );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the restore load was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		clean_user_cache( $b );
+		$this->assertSame( array( 'subscriber' ), get_userdata( $b )->roles, 'B was not made an administrator' );
+	}
 }

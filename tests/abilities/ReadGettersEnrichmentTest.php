@@ -263,4 +263,89 @@ final class ReadGettersEnrichmentTest extends TestCase {
 		$this->assertStringNotContainsString( 'SECRETMARKER', $json );
 		$this->assertStringNotContainsString( 'Body holding', $json );
 	}
+
+	/**
+	 * The featured image in the rich post shape is the post's own thumbnail when it has one, and
+	 * null when it has none.
+	 */
+	public function test_rich_post_featured_image_is_the_posts_own_thumbnail_or_null(): void {
+		$with       = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$without    = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$attachment = (int) self::factory()->attachment->create(
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_parent'    => $with,
+			)
+		);
+		update_post_meta( $attachment, '_wp_attachment_image_alt', 'Thumb alt' );
+		// set_post_thumbnail() needs a real image file; the stored meta is what get_post_thumbnail_id() reads.
+		update_post_meta( $with, '_thumbnail_id', $attachment );
+
+		$this->assertSame(
+			array(
+				'id'  => $attachment,
+				'url' => (string) wp_get_attachment_url( $attachment ),
+				'alt' => 'Thumb alt',
+			),
+			aafm_rich_post( get_post( $with ) )['featured_image']
+		);
+		$this->assertNull( aafm_rich_post( get_post( $without ) )['featured_image'] );
+	}
+
+	/**
+	 * A get_comment filter that hands back another comment does not decide the status: the load
+	 * is not exact, so a status core does not recognize reads as unknown.
+	 */
+	public function test_comment_status_is_unknown_when_a_filter_swaps_in_another_comment(): void {
+		$post    = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$asked   = (int) self::factory()->comment->create( array( 'comment_post_ID' => $post ) );
+		$swapped = (int) self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => 'custom-x',
+			)
+		);
+		$swap = static function ( $comment ) use ( $asked, $swapped ) {
+			return ( $comment instanceof \WP_Comment && $asked === (int) $comment->comment_ID ) ? \WP_Comment::get_instance( $swapped ) : $comment;
+		};
+		add_filter( 'get_comment', $swap );
+		try {
+			$status = aafm_comment_status_string( $asked );
+		} finally {
+			remove_filter( 'get_comment', $swap );
+		}
+
+		$this->assertSame( 'unknown', $status );
+	}
+
+	/**
+	 * Post id 0 is no post, even when a global post is set: list-revisions refuses it instead of
+	 * listing the global post's revisions.
+	 */
+	public function test_list_revisions_refuses_post_id_zero_with_a_global_post_set(): void {
+		$global = (int) self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => 'first',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $global,
+				'post_content' => 'second',
+			)
+		);
+		$this->assertNotEmpty( wp_get_post_revisions( $global ), 'the global post has a revision' );
+
+		$saved           = $GLOBALS['post'] ?? null;
+		$GLOBALS['post'] = get_post( $global ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the global post is the case under test; restored below.
+		try {
+			$out = aafm_exec_list_revisions( array( 'post_id' => 0 ) );
+		} finally {
+			$GLOBALS['post'] = $saved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restores the value saved above.
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+	}
 }

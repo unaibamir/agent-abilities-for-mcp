@@ -187,7 +187,7 @@ function aafm_args_tec_get_tickets(): array {
  */
 function aafm_exec_tec_get_tickets( array $input ) {
 	$event_id = absint( $input['event_id'] ?? 0 );
-	if ( ! get_post( $event_id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $event_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$tickets = Tribe__Tickets__Tickets::get_all_event_tickets( $event_id );
@@ -344,7 +344,7 @@ function aafm_args_tec_get_attendees(): array {
  */
 function aafm_exec_tec_get_attendees( array $input ) {
 	$event_id = absint( $input['event_id'] ?? 0 );
-	if ( ! get_post( $event_id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $event_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$attendees = Tribe__Tickets__Tickets::get_event_attendees( $event_id );

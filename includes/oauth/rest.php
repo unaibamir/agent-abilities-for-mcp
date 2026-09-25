@@ -754,14 +754,14 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// Audit the mint: an access token now exists for this user + client. The raw token is never
 	// logged - only the actor and client, so the token's life is traceable from here.
 	if ( function_exists( 'aafm_oauth_log_event' ) ) {
-		$actor = get_userdata( (int) $row['wp_user_id'] );
+		$actor = aafm_exact_object( 'user', (int) $row['wp_user_id'] );
 		aafm_oauth_log_event(
 			'token',
 			'success',
 			array(
 				'client_id'  => (string) $row['client_id'],
 				'user_id'    => (int) $row['wp_user_id'],
-				'user_login' => $actor ? (string) $actor->user_login : '',
+				'user_login' => $actor instanceof WP_User ? (string) $actor->user_login : '',
 			)
 		);
 	}

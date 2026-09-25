@@ -1318,7 +1318,7 @@ function aafm_render_connection_tab(): void {
 	$existing_agent_id    = $agent_exists ? $created_agent_ids[0] : 0;
 	$existing_agent_login = $default_agent_login;
 	if ( $agent_exists ) {
-		$existing_agent_user = get_userdata( $existing_agent_id );
+		$existing_agent_user = aafm_exact_object( 'user', (int) $existing_agent_id );
 		if ( $existing_agent_user instanceof WP_User ) {
 			$existing_agent_login = (string) $existing_agent_user->user_login;
 		}

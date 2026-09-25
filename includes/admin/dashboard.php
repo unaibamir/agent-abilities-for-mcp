@@ -44,7 +44,7 @@ function aafm_agent_user_candidates(): array {
 			continue;
 		}
 
-		$wp_user = get_userdata( $user_id );
+		$wp_user = aafm_exact_object( 'user', $user_id );
 		$roles   = ( $wp_user instanceof WP_User ) ? array_values( $wp_user->roles ) : array();
 
 		$candidates[] = array(

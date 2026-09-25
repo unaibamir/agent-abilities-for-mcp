@@ -1608,28 +1608,17 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	/**
-	 * The production sweep for object loads: every raw load under the scanned set that is neither
-	 * inside the exact helpers nor paired with its own exact load must be listed in
-	 * tests/Fixtures/object-loader-legacy.txt (path|function|loader|ordinal). The list may only
-	 * shrink: an unlisted load fails, and so does a listed line the scan no longer sees.
+	 * The production sweep for object loads. Every raw load under the scanned set must be exact or
+	 * paired; there is no exemption list.
 	 */
 	public function test_no_unlisted_object_load_survives_under_the_scanned_set(): void {
-		$legacy_path = AAFM_PLUGIN_DIR . 'tests/Fixtures/object-loader-legacy.txt';
-		$this->assertFileExists( $legacy_path, 'the object-loader list must exist, generated from the scanner\'s own first run.' );
-		$legacy = array_filter( array_map( 'trim', file( $legacy_path ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-
 		$files = $this->scanned_files();
 		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
 
 		$unlisted = array();
-		$seen     = array_fill_keys( $legacy, false );
 		foreach ( $files as $path => $source ) {
 			foreach ( $this->object_load_keys( $source, $path ) as $line_key ) {
-				if ( array_key_exists( $line_key, $seen ) ) {
-					$seen[ $line_key ] = true;
-				} else {
-					$unlisted[] = $line_key;
-				}
+				$unlisted[] = $line_key;
 			}
 		}
 
@@ -1637,13 +1626,6 @@ final class MetaWriteSweepTest extends TestCase {
 			array(),
 			$unlisted,
 			"An object load was found that is not checked by id and that the list does not name:\n" . implode( "\n", $unlisted )
-		);
-
-		$stale = array_keys( array_filter( $seen, static fn( bool $was_seen ): bool => ! $was_seen ) );
-		$this->assertSame(
-			array(),
-			$stale,
-			"A list entry no longer matches any object load; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale )
 		);
 	}
 

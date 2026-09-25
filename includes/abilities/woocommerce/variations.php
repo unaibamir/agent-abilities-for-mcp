@@ -1204,7 +1204,9 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	// product's own id once it has run ($product->set_id( 0 )), and the backing post row is what it
 	// deleted through (wp_delete_post()), re-read here with the post cache busted first.
 	clean_post_cache( $id );
-	if ( $variation->get_id() > 0 || get_post( $id ) instanceof WP_Post ) {
+	// A re-read that does not load exactly proves nothing, so the row counts as deleted only when
+	// a failure-aware query finds it absent.
+	if ( $variation->get_id() > 0 || aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_object_absent( 'post', $id ) ) {
 		return aafm_generic_error();
 	}
 

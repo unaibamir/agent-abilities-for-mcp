@@ -1721,4 +1721,46 @@ final class WooVariationsTest extends TestCase {
 			'a term that exists but was never assigned to this product must not be treated as a resolvable option.'
 		);
 	}
+
+	/**
+	 * A variation delete that left its backing post in place reports an error even when the
+	 * post's re-read loads another row: the post counts as deleted only when a failure-aware
+	 * query finds it absent.
+	 */
+	public function test_delete_variation_reports_an_error_when_a_vetoed_delete_is_reread_under_a_fault(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$id    = (int) self::factory()->post->create( array( 'post_type' => 'product_variation' ) );
+		$other = (int) self::factory()->post->create();
+		WcStubStore::seed(
+			$id,
+			array(
+				'id'        => $id,
+				'name'      => 'Kept variation',
+				'type'      => 'variation',
+				'parent_id' => 500,
+				'status'    => 'publish',
+			)
+		);
+		// The stub delete removes the store row and zeroes the id but leaves the post, as a
+		// delete whose wp_delete_post() was vetoed would. The re-read then reads another row.
+		$needle = sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $id );
+		$leak   = sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $other );
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$filter     = \AAFM\Tests\Support\QueryFaultInjector::leak_row_filter( $needle, $leak, 1, true );
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+		ob_start();
+		try {
+			$out = aafm_exec_wc_delete_product_variation( array( 'variation_id' => $id ) );
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertSame( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count(), 'the re-read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+	}
 }

@@ -1797,7 +1797,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	$grouped        = aafm_post_terms_grouped( $post );
 	$shape['terms'] = array() === $grouped ? (object) array() : $grouped;
 
-	$author          = get_userdata( (int) $post->post_author );
+	$author          = aafm_exact_object( 'user', (int) $post->post_author );
 	$shape['author'] = $author instanceof WP_User
 		? array(
 			'id'           => (int) $author->ID,
@@ -1805,7 +1805,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 		)
 		: null;
 
-	$thumb_id                = get_post_thumbnail_id( $post );
+	$thumb_id                = aafm_exact_object( 'post', $post->ID ) instanceof WP_Post ? get_post_thumbnail_id( $post->ID ) : false;
 	$shape['featured_image'] = $thumb_id
 		? array(
 			'id'  => (int) $thumb_id,
@@ -1966,7 +1966,7 @@ function aafm_comment_status_string( $comment ): string {
 		return (string) $status;
 	}
 
-	$comment_object = $comment instanceof WP_Comment ? $comment : get_comment( $comment );
+	$comment_object = $comment instanceof WP_Comment ? $comment : aafm_exact_object( 'comment', (int) $comment );
 	if ( $comment_object instanceof WP_Comment && 'post-trashed' === $comment_object->comment_approved ) {
 		return 'post-trashed';
 	}

@@ -580,8 +580,8 @@ function aafm_oauth_list_grants(): array {
 	$out = array();
 	foreach ( $view['value'] as $row ) {
 		$user_id = (int) $row['wp_user_id'];
-		$user    = get_userdata( $user_id );
-		if ( ! $user ) {
+		$user    = aafm_exact_object( 'user', $user_id );
+		if ( ! $user instanceof WP_User ) {
 			continue; // The account is gone; nothing to display or revoke.
 		}
 

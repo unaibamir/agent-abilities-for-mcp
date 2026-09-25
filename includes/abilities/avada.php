@@ -141,7 +141,7 @@ function aafm_args_avada_get_page_content(): array {
  */
 function aafm_exec_avada_get_page_content( array $input ) {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -453,7 +453,7 @@ function aafm_exec_avada_replace_text( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$fresh = get_post( $id );
+	$fresh = aafm_exact_object( 'post', $id );
 	// Codex hunt F4: $replacements was computed from the ORIGINAL content before
 	// wp_update_post() ever ran, and never re-validated against what actually landed in
 	// storage - a wp_insert_post_data (or similar) filter revising the content on save would

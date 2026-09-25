@@ -345,7 +345,7 @@ function aafm_exec_create_block( array $input ) {
 	// which encodes as [] against the seven-property object the output schema declares - so
 	// surface a generic error instead of redacting null into a schema-violating empty shape
 	// (same guard as the menu-item writes, menus.php:669).
-	$saved = get_post( (int) $id );
+	$saved = aafm_exact_object( 'post', (int) $id );
 	if ( ! $saved instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -462,7 +462,7 @@ function aafm_exec_update_block( array $input ) {
 	}
 	// Same null-reread guard as create-block above: aafm_rich_block() falls back to array()
 	// for a non-WP_Post, which would violate the object output schema.
-	$saved = get_post( (int) $result );
+	$saved = aafm_exact_object( 'post', (int) $result );
 	if ( ! $saved instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

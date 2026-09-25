@@ -950,7 +950,7 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	if ( is_wp_error( $id ) ) {
 		return aafm_generic_error();
 	}
-	$created = get_post( $id );
+	$created = aafm_exact_object( 'post', $id );
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1316,7 +1316,7 @@ function aafm_exec_update_post( array $input ) {
 	// Re-fetch by the id wp_update_post() returned. A destructive save_post/post_updated
 	// hook (or a TOCTOU race) can delete the post during the update, so this can be null;
 	// guard it so the typed aafm_redact_post() degrades to a generic error, never a fatal.
-	$updated = get_post( (int) $result );
+	$updated = aafm_exact_object( 'post', (int) $result );
 	if ( ! $updated instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1740,7 +1740,7 @@ function aafm_exec_replace_in_post( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$updated = get_post( (int) $result );
+	$updated = aafm_exact_object( 'post', (int) $result );
 	// Codex round 5 R5-2: only is_wp_error() was checked here, so a wp_insert_post_data filter
 	// that vetoed or reverted the content would report the pre-computed replacement count as
 	// though it had landed. Confirm the exact intended content actually made it to storage,
@@ -2055,7 +2055,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// replace-text fix above. Codex round 6 B6-3: compare against the CANONICAL
 		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
 		// mistaken for a veto.
-		$after = get_post( (int) $result );
+		$after = aafm_exact_object( 'post', (int) $result );
 		if ( ! $after instanceof WP_Post || ! aafm_post_field_confirm_logged( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
 			++$failed;
 			continue;

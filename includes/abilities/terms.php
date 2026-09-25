@@ -394,7 +394,7 @@ function aafm_perm_add_post_terms( array $input ): bool {
  */
 function aafm_exec_add_post_terms( array $input ) {
 	$post_id = absint( $input['post_id'] );
-	$post    = get_post( $post_id );
+	$post    = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

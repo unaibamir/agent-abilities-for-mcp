@@ -140,7 +140,7 @@ function aafm_perm_list_revisions( array $input ): bool {
  */
 function aafm_exec_list_revisions( array $input ) {
 	$id = absint( $input['post_id'] );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$all    = wp_get_post_revisions( $id, array( 'fields' => 'ids' ) );

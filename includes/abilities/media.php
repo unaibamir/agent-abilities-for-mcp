@@ -952,7 +952,7 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 				$alt_status = $alt_result['status'];
 			}
 
-			$attachment = get_post( $attachment_id );
+			$attachment = aafm_exact_object( 'post', $attachment_id );
 			if ( ! $attachment instanceof WP_Post ) {
 				return aafm_generic_error();
 			}
@@ -1683,7 +1683,7 @@ function aafm_exec_update_media( array $input ) {
 		}
 	}
 
-	$fresh = get_post( $att_id );
+	$fresh = aafm_exact_object( 'post', $att_id );
 	if ( ! $fresh instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

@@ -2032,4 +2032,71 @@ final class RelatedObjectLoadTest extends TestCase {
 		$this->assertSame( 'secret excerpt', $out['excerpt'] );
 		$this->assertSame( (string) wp_text_diff( 'secret body', 'current body' ), $out['diff'] );
 	}
+
+	/**
+	 * delete-menu-item reports an error when a hook vetoed the delete and the re-read of the
+	 * still-present item loads another row: the item is gone only when its row is certainly
+	 * absent.
+	 */
+	public function test_delete_menu_item_reports_an_error_when_a_vetoed_delete_is_reread_under_a_fault(): void {
+		$this->acting_as( 'administrator' );
+		$menu  = $this->menu( 'Vetoed delete' );
+		$item  = $this->made_item(
+			array(
+				'menu_id' => $menu,
+				'title'   => 'Kept',
+				'url'     => home_url( '/kept' ),
+			)
+		);
+		$other = $this->post();
+		// The first SELECT for the item is the function's own exact load; the second, after the
+		// veto drops the cached entry, is the re-read.
+		$filter = $this->fault_load( 'post', $item, $other, 2 );
+		$veto   = static function ( $check, $post ) use ( $item ) {
+			if ( $post instanceof WP_Post && $item === (int) $post->ID ) {
+				wp_cache_delete( $item, 'posts' );
+				return false;
+			}
+			return $check;
+		};
+		add_filter( 'pre_delete_post', $veto, 10, 2 );
+		try {
+			$out = $this->armed( $filter, static fn() => aafm_exec_delete_menu_item( array( 'item_id' => $item ) ) );
+		} finally {
+			remove_filter( 'pre_delete_post', $veto, 10 );
+		}
+
+		$this->assert_fired_in( 'aafm_exact_object', 'vetoed delete re-read' );
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		clean_post_cache( $item );
+		$this->assertInstanceOf( WP_Post::class, get_post( $item ), 'the vetoed item is still there' );
+	}
+
+	/**
+	 * list-menu-items keeps an item whose live target's gone check loads another row: the target
+	 * is gone only when its row is certainly absent.
+	 */
+	public function test_list_menu_items_keeps_a_live_target_whose_gone_check_is_faulted(): void {
+		$this->acting_as( 'administrator' );
+		$menu   = $this->menu( 'Gone check' );
+		$page   = $this->post( array( 'post_type' => 'page' ) );
+		$item   = $this->made_item(
+			array(
+				'menu_id'   => $menu,
+				'title'     => 'Live target',
+				'type'      => 'post_type',
+				'object'    => 'page',
+				'object_id' => $page,
+			)
+		);
+		$other  = $this->post();
+		$listed = static fn( array $out ): array => array_map( static fn( array $row ): int => $row['id'], $out['items'] );
+		$this->assertSame( array( $item ), $listed( aafm_exec_list_menu_items( array( 'menu_id' => $menu ) ) ), 'healthy' );
+
+		$out = $this->armed( $this->fault_load( 'post', $page, $other ), static fn() => aafm_exec_list_menu_items( array( 'menu_id' => $menu ) ) );
+
+		$this->assert_fired_in( 'aafm_menu_item_target_is_gone', 'gone check' );
+		$this->assertSame( array( $item ), $listed( $out ) );
+	}
 }

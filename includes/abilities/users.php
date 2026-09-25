@@ -190,7 +190,7 @@ function aafm_args_get_user(): array {
  */
 function aafm_exec_get_user( array $input ) {
 	$id   = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	$user = $id ? get_userdata( $id ) : false;
+	$user = $id ? aafm_exact_object( 'user', $id ) : null;
 	if ( ! $user instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -436,7 +436,7 @@ function aafm_user_write_response( int $user_id ) {
 	$missing  = false;
 	$response = aafm_with_checked_reads(
 		static function () use ( $user_id, &$missing ): array {
-			$user = get_userdata( $user_id );
+			$user = aafm_exact_object( 'user', $user_id );
 			if ( ! $user instanceof WP_User ) {
 				$missing = true;
 				return array();

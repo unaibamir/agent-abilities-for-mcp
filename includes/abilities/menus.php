@@ -1084,7 +1084,9 @@ function aafm_exec_delete_menu_item( array $input ) {
 		return aafm_generic_error();
 	}
 	wp_delete_post( $item_id );
-	if ( null !== get_post( $item_id ) ) {
+	// A re-read that does not load exactly proves nothing: the item is gone only when a
+	// failure-aware query finds no row, so a delete that a hook vetoed still reports an error.
+	if ( aafm_exact_object( 'post', $item_id ) instanceof WP_Post || ! aafm_object_absent( 'post', $item_id ) ) {
 		return aafm_generic_error();
 	}
 	return array(
@@ -1120,6 +1122,10 @@ function aafm_exec_delete_menu_item( array $input ) {
  * Reads post meta rather than a decorated item on purpose, since the entire point is to answer
  * before wp_setup_nav_menu_item() has run.
  *
+ * The target counts as gone only when a failure-aware query finds no row for it. A target load
+ * that fails or comes back as another row keeps the item. On 6.9 that item can then hit the
+ * get_post_states() warnings above, but only when the target's load itself failed.
+ *
  * Not used by aafm_menu_item_by_id() below, and that is deliberate rather than an oversight.
  * Skipping there would make a dangling item unreadable, and update-menu-item would then refuse
  * to touch it on BOTH 6.9 and 7.0 - which removes the only way to repoint a broken item at a
@@ -1139,7 +1145,7 @@ function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
 	// breaks it. Calling it gone is also the verdict core reaches by another route: an item
 	// pointing at nothing renders nothing.
 	$object_id = (int) aafm_meta_get( 'post', $item_post->ID, '_menu_item_object_id', true );
-	return ! ( get_post( $object_id ) instanceof WP_Post );
+	return ! ( aafm_exact_object( 'post', $object_id ) instanceof WP_Post || ! aafm_object_absent( 'post', $object_id ) );
 }
 
 /**

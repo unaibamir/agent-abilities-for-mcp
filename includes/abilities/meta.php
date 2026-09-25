@@ -145,7 +145,7 @@ function aafm_perm_get_post_meta( array $input ): bool {
 function aafm_exec_get_post_meta( array $input ) {
 	$id  = absint( $input['post_id'] );
 	$key = aafm_validate_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
-	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$value = aafm_meta_get( 'post', $id, $key, true );
@@ -233,7 +233,7 @@ function aafm_perm_get_all_post_meta( array $input ): bool {
  */
 function aafm_exec_get_all_post_meta( array $input ) {
 	$id = absint( $input['post_id'] );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
@@ -344,7 +344,7 @@ function aafm_perm_update_post_meta( array $input ): bool {
 function aafm_exec_update_post_meta( array $input ) {
 	$id  = absint( $input['post_id'] );
 	$key = aafm_validate_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
-	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	// Codex round 7 R7-3: pass the post's real type, not the default 'post', so a
@@ -443,7 +443,7 @@ function aafm_perm_delete_post_meta( array $input ): bool {
 function aafm_exec_delete_post_meta( array $input ) {
 	$id  = absint( $input['post_id'] );
 	$key = aafm_validate_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
-	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	return aafm_meta_delete_response( 'post', $id, $key, aafm_meta_delete( 'post', $id, $key ) );

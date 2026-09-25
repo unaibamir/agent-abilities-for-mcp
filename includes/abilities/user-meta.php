@@ -247,7 +247,7 @@ function aafm_perm_user_meta_access( array $input ): bool {
 function aafm_exec_get_user_meta( array $input ) {
 	$id  = absint( $input['user_id'] );
 	$key = aafm_validate_user_meta_key( isset( $input['key'] ) ? (string) $input['key'] : '' );
-	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
 	$value = aafm_meta_get( 'user', $id, $key, true );
@@ -319,7 +319,7 @@ function aafm_exec_update_user_meta( array $input ) {
 function aafm_exec_delete_user_meta( array $input ) {
 	$id  = absint( $input['user_id'] );
 	$key = aafm_validate_user_meta_key( isset( $input['key'] ) ? (string) $input['key'] : '' );
-	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
 	return aafm_meta_delete_response( 'user', $id, $key, aafm_meta_delete( 'user', $id, $key ) );

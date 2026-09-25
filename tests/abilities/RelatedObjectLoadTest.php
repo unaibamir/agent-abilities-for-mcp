@@ -2170,7 +2170,7 @@ final class RelatedObjectLoadTest extends TestCase {
 	}
 
 	/**
-	 * delete-menu-item reports an error when a hook vetoed the delete and the re-read of the
+	 * Delete-menu-item reports an error when a hook vetoed the delete and the re-read of the
 	 * still-present item loads another row: the item is gone only when its row is certainly
 	 * absent.
 	 */
@@ -2210,7 +2210,7 @@ final class RelatedObjectLoadTest extends TestCase {
 	}
 
 	/**
-	 * list-menu-items keeps an item whose live target's gone check loads another row: the target
+	 * List-menu-items keeps an item whose live target's gone check loads another row: the target
 	 * is gone only when its row is certainly absent.
 	 */
 	public function test_list_menu_items_keeps_a_live_target_whose_gone_check_is_faulted(): void {

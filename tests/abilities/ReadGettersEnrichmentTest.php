@@ -305,7 +305,7 @@ final class ReadGettersEnrichmentTest extends TestCase {
 				'comment_approved' => 'custom-x',
 			)
 		);
-		$swap = static function ( $comment ) use ( $asked, $swapped ) {
+		$swap    = static function ( $comment ) use ( $asked, $swapped ) {
 			return ( $comment instanceof \WP_Comment && $asked === (int) $comment->comment_ID ) ? \WP_Comment::get_instance( $swapped ) : $comment;
 		};
 		add_filter( 'get_comment', $swap );

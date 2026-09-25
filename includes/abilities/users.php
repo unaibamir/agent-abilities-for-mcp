@@ -529,7 +529,7 @@ function aafm_args_update_user(): array {
  */
 function aafm_perm_update_user( array $input ): bool {
 	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	return $id > 0 && current_user_can( 'edit_users' ) && current_user_can( 'edit_user', $id );
+	return $id > 0 && current_user_can( 'edit_users' ) && aafm_user_can_checked( 'edit_user', $id, 'user' );
 }
 
 /**
@@ -611,7 +611,37 @@ function aafm_with_named_lock( string $name, callable $callback ) {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_update_user( array $input ) {
-	$id     = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
+	$id   = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
+	$role = null;
+	if ( isset( $input['role'] ) ) {
+		// A role assignment must clear every gate WP core enforces in wp-admin and the REST
+		// users controller - not just the global promote_users cap. Core additionally requires
+		// the per-target promote_user meta cap (so a delegated manager can only promote users
+		// they may edit) AND membership in get_editable_roles() (so the editable_roles filter
+		// can forbid a role - e.g. block a user-manager from handing out administrator). Without
+		// both, promote_users alone would let an agent assign any existing role, including one
+		// the site has deliberately put out of reach.
+		// The gate runs before the target is loaded. promote_user loads the target inside its own
+		// checked scope, so no earlier unchecked load can leave it with an empty set of roles.
+		$role = sanitize_key( (string) $input['role'] );
+		if ( null === get_role( $role )
+			|| ! current_user_can( 'promote_users' )
+			|| ! aafm_user_can_checked( 'promote_user', $id, 'user' )
+		) {
+			return aafm_generic_error();
+		}
+		// get_editable_roles() lives in wp-admin/includes/user.php, which is not loaded in a
+		// REST/MCP request - pull it in (mirrors the delete path's require below and core's own
+		// guard in WP_REST_Users_Controller::check_role_update()).
+		if ( ! function_exists( 'get_editable_roles' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+		$editable_roles = get_editable_roles();
+		if ( empty( $editable_roles[ $role ] ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	$target = $id ? aafm_exact_object( 'user', $id ) : false;
 	if ( ! $target instanceof WP_User ) {
 		return aafm_generic_error();
@@ -632,31 +662,7 @@ function aafm_exec_update_user( array $input ) {
 	}
 
 	$demotes_admin = false;
-	if ( isset( $input['role'] ) ) {
-		// A role assignment must clear every gate WP core enforces in wp-admin and the REST
-		// users controller - not just the global promote_users cap. Core additionally requires
-		// the per-target promote_user meta cap (so a delegated manager can only promote users
-		// they may edit) AND membership in get_editable_roles() (so the editable_roles filter
-		// can forbid a role - e.g. block a user-manager from handing out administrator). Without
-		// both, promote_users alone would let an agent assign any existing role, including one
-		// the site has deliberately put out of reach.
-		$role = sanitize_key( (string) $input['role'] );
-		if ( null === get_role( $role )
-			|| ! current_user_can( 'promote_users' )
-			|| ! current_user_can( 'promote_user', $id )
-		) {
-			return aafm_generic_error();
-		}
-		// get_editable_roles() lives in wp-admin/includes/user.php, which is not loaded in a
-		// REST/MCP request - pull it in (mirrors the delete path's require below and core's own
-		// guard in WP_REST_Users_Controller::check_role_update()).
-		if ( ! function_exists( 'get_editable_roles' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-		}
-		$editable_roles = get_editable_roles();
-		if ( empty( $editable_roles[ $role ] ) ) {
-			return aafm_generic_error();
-		}
+	if ( null !== $role ) {
 		$data['role']  = $role;
 		$demotes_admin = 'administrator' !== $role && in_array( 'administrator', (array) $target->roles, true );
 	}
@@ -760,7 +766,7 @@ function aafm_args_delete_user(): array {
  */
 function aafm_perm_delete_user( array $input ): bool {
 	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	return $id > 0 && current_user_can( 'delete_users' ) && current_user_can( 'delete_user', $id );
+	return $id > 0 && current_user_can( 'delete_users' ) && aafm_user_can_checked( 'delete_user', $id, 'user' );
 }
 
 /**

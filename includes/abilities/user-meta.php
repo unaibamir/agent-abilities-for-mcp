@@ -65,7 +65,7 @@ function aafm_can_access_user_meta( array $input ): bool {
 	// user against their own id (map_meta_cap self short-circuit), so without the floor a subscriber
 	// could read or write its own user meta. Mirrors aafm_perm_update_user(); matches the edit_users
 	// discovery floor these abilities already use in server.php.
-	if ( $id < 1 || ! current_user_can( 'edit_users' ) || ! current_user_can( 'edit_user', $id ) ) {
+	if ( $id < 1 || ! current_user_can( 'edit_users' ) || ! aafm_user_can_checked( 'edit_user', $id, 'user' ) ) {
 		return false;
 	}
 	$key = isset( $input['key'] ) ? (string) $input['key'] : '';

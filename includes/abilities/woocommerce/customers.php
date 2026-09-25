@@ -404,7 +404,7 @@ function aafm_perm_wc_update_customer( array $input ): bool {
 	return $id > 0
 		&& aafm_wc_perm()
 		&& current_user_can( 'edit_users' )
-		&& current_user_can( 'edit_user', $id );
+		&& aafm_user_can_checked( 'edit_user', $id, 'user' );
 }
 
 // aafm/wc-list-customers (R).

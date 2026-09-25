@@ -231,7 +231,306 @@ final class CapabilityMetaReadTest extends TestCase {
 
 	// --- User and term objects ------------------------------------------------
 
+	private const USER_META_KEY = 'cap_probe_note';
+
 	private const MISSING = 987654;
+
+	/**
+	 * For each faulted query, in order: whether the plugin's checked-read scope was open on the
+	 * metadata type it loads.
+	 *
+	 * @var bool[]
+	 */
+	private array $fired_in_scope = array();
+
+	/**
+	 * Run $run with every query matching $needle replaced by $leak_query's rows, errors suppressed
+	 * and output discarded. Records in $fired_in_scope, at each match, whether a callback sits on
+	 * `update_{$meta_type}_metadata_cache` at PHP_INT_MAX, where aafm_with_checked_reads() hooks.
+	 *
+	 * @param string[] $needle     Substrings the query must hold.
+	 * @param string   $leak_query The query whose rows the faulted one reads.
+	 * @param callable $run        The call.
+	 * @param string   $meta_type  Metadata type whose scope hook is recorded.
+	 * @return mixed
+	 */
+	private function with_query_faulted( array $needle, string $leak_query, callable $run, string $meta_type = 'user' ) {
+		global $wpdb, $wp_filter;
+		$this->fired_in_scope = array();
+		$hook                 = "update_{$meta_type}_metadata_cache";
+		$recorder             = function ( string $query ) use ( $needle, $hook, &$wp_filter ): string {
+			foreach ( $needle as $part ) {
+				if ( false === strpos( $query, $part ) ) {
+					return $query;
+				}
+			}
+			$this->fired_in_scope[] = isset( $wp_filter[ $hook ] ) && isset( $wp_filter[ $hook ]->callbacks[ PHP_INT_MAX ] );
+			return $query;
+		};
+		$filter               = QueryFaultInjector::leak_row_filter( $needle, $leak_query, 0 );
+		$suppressed           = $wpdb->suppress_errors( true );
+		add_filter( 'query', $recorder, 1 );
+		add_filter( 'query', $filter );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $filter );
+			remove_filter( 'query', $recorder, 1 );
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * Run $run with $user_id's usermeta load answered with no rows, from the start of the call.
+	 *
+	 * @param int      $user_id User whose meta load is faulted.
+	 * @param callable $run     The call.
+	 * @return mixed
+	 */
+	private function with_user_meta_load_faulted( int $user_id, callable $run ) {
+		global $wpdb;
+		wp_cache_delete( $user_id, 'user_meta' );
+		return $this->with_query_faulted(
+			array( 'SELECT user_id, meta_key, meta_value FROM', $wpdb->usermeta, "WHERE user_id IN ({$user_id})" ),
+			sprintf( 'SELECT * FROM %s WHERE 1 = 0', $wpdb->usermeta ),
+			$run
+		);
+	}
+
+	/**
+	 * Act as a user who manages users and the store but is not an administrator, like
+	 * WooCommerce's shop manager.
+	 */
+	private function acting_as_user_manager(): int {
+		$user_id = $this->acting_as( 'editor' );
+		foreach ( array( 'list_users', 'edit_users', 'promote_users', 'delete_users', 'manage_woocommerce' ) as $cap ) {
+			wp_get_current_user()->add_cap( $cap );
+		}
+		return $user_id;
+	}
+
+	/**
+	 * Deny edit_user, remove_user, promote_user and delete_user on an administrator, deciding from
+	 * the target's roles the way WooCommerce's wc_modify_map_meta_cap() does.
+	 */
+	private function deny_user_edits_on_administrators(): void {
+		add_filter(
+			'map_meta_cap',
+			static function ( array $caps, string $cap, int $user_id, array $args ): array {
+				if ( ! in_array( $cap, array( 'edit_user', 'remove_user', 'promote_user', 'delete_user' ), true ) || ! isset( $args[0] ) || (int) $args[0] === $user_id ) {
+					return $caps;
+				}
+				$target = get_userdata( (int) $args[0] );
+				if ( $target instanceof \WP_User && in_array( 'administrator', (array) $target->roles, true ) ) {
+					$caps[] = 'do_not_allow';
+				}
+				return $caps;
+			},
+			10,
+			4
+		);
+	}
+
+	private function allow_user_meta_key(): void {
+		add_filter( 'aafm_allowed_user_meta_keys', static fn(): array => array( self::USER_META_KEY ) );
+	}
+
+	/**
+	 * The stored roles of $user_id, read from the database.
+	 *
+	 * @param int $user_id User id.
+	 * @return string[]
+	 */
+	private function stored_roles( int $user_id ): array {
+		clean_user_cache( $user_id );
+		$user = get_userdata( $user_id );
+		$this->assertInstanceOf( \WP_User::class, $user );
+		return array_values( (array) $user->roles );
+	}
+
+	/**
+	 * Each permission path that checks a capability on a target user, as a callable that says
+	 * whether the call was allowed. The role change asks for 'editor'.
+	 *
+	 * @return iterable<string,array{0:callable}>
+	 */
+	public function data_user_capability_sites(): iterable {
+		yield 'update-user' => array( static fn( int $id ): bool => aafm_perm_update_user( array( 'user_id' => $id ) ) );
+		yield 'update-user role change' => array(
+			static fn( int $id ): bool => ! is_wp_error(
+				aafm_exec_update_user(
+					array(
+						'user_id' => $id,
+						'role'    => 'editor',
+					)
+				)
+			),
+		);
+		yield 'delete-user' => array( static fn( int $id ): bool => aafm_perm_delete_user( array( 'user_id' => $id ) ) );
+		yield 'user meta' => array(
+			static fn( int $id ): bool => aafm_can_access_user_meta(
+				array(
+					'user_id' => $id,
+					'key'     => self::USER_META_KEY,
+				)
+			),
+		);
+		yield 'wc-update-customer' => array( static fn( int $id ): bool => aafm_perm_wc_update_customer( array( 'customer_id' => $id ) ) );
+		yield 'acf user fields' => array( static fn( int $id ): bool => aafm_perm_acf_user( array( 'user_id' => $id ) ) );
+	}
+
+	/**
+	 * The answer each permission path gave before its capability call was checked: the same
+	 * expression with raw current_user_can() calls.
+	 *
+	 * @return array<string,callable>
+	 */
+	private function unchecked_user_answers(): array {
+		$floor = static fn( string $cap, int $id ): bool => $id > 0 && current_user_can( $cap . 's' ) && current_user_can( $cap, $id );
+		return array(
+			'update-user'        => static fn( int $id ): bool => $floor( 'edit_user', $id ),
+			'delete-user'        => static fn( int $id ): bool => $floor( 'delete_user', $id ),
+			'user meta'          => static fn( int $id ): bool => $floor( 'edit_user', $id ) && ! is_wp_error( aafm_validate_user_meta_key( self::USER_META_KEY ) ),
+			'wc-update-customer' => static fn( int $id ): bool => aafm_wc_perm() && $floor( 'edit_user', $id ),
+			'acf user fields'    => static fn( int $id ): bool => aafm_exact_object( 'user', $id ) instanceof \WP_User && $floor( 'edit_user', $id ),
+		);
+	}
+
+	/**
+	 * A stock shop manager holds edit_users, and WooCommerce refuses edits on an administrator
+	 * only after reading the target's roles. When that read fails, the roles read as empty, so
+	 * every user capability check loads the target inside its checked scope and refuses.
+	 *
+	 * @dataProvider data_user_capability_sites
+	 *
+	 * @param callable $site The permission path.
+	 */
+	public function test_a_user_capability_check_refuses_when_the_targets_metadata_does_not_load( callable $site ): void {
+		$admin = (int) self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$this->acting_as_user_manager();
+		$this->deny_user_edits_on_administrators();
+		$this->allow_user_meta_key();
+		$this->assertFalse( $site( $admin ), 'healthy: the target is an administrator' );
+
+		$faulted = $this->with_user_meta_load_faulted(
+			$admin,
+			static function () use ( $site, $admin ): bool {
+				return $site( $admin );
+			}
+		);
+
+		$this->assertFalse( $faulted );
+		$this->assertNotSame( array(), $this->fired_in_scope, 'the fault fired' );
+		$this->assertTrue( $this->fired_in_scope[0], 'the first load of the target ran inside a checked scope' );
+		$this->assertSame( array( 'administrator' ), $this->stored_roles( $admin ) );
+	}
+
+	/**
+	 * The whole update-user ability stops at its permission check when the target's metadata
+	 * does not load, and nothing is written.
+	 */
+	public function test_update_user_is_refused_when_the_targets_metadata_does_not_load(): void {
+		$this->register_enabled( array( 'aafm/update-user' ) );
+
+		$admin = (int) self::factory()->user->create(
+			array(
+				'role'       => 'administrator',
+				'user_email' => 'owner@example.com',
+			)
+		);
+		$this->acting_as_user_manager();
+		$this->deny_user_edits_on_administrators();
+		$ability = wp_get_ability( 'aafm/update-user' );
+		$this->assertInstanceOf( \WP_Ability::class, $ability );
+		$input = array(
+			'user_id' => $admin,
+			'email'   => 'taken@example.com',
+		);
+
+		$result = $this->with_user_meta_load_faulted(
+			$admin,
+			static function () use ( $ability, $input ) {
+				return $ability->execute( $input );
+			}
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		clean_user_cache( $admin );
+		$this->assertSame( 'owner@example.com', get_userdata( $admin )->user_email );
+	}
+
+	/**
+	 * A target whose users row reads as another user's row is refused, not checked as that user.
+	 *
+	 * @dataProvider data_user_capability_sites
+	 *
+	 * @param callable $site The permission path.
+	 */
+	public function test_a_user_capability_check_refuses_when_the_target_loads_as_another_user( callable $site ): void {
+		global $wpdb;
+		$admin = (int) self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$other = (int) self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->acting_as_user_manager();
+		$this->deny_user_edits_on_administrators();
+		$this->allow_user_meta_key();
+		wp_cache_delete( $admin, 'users' );
+		wp_cache_delete( $admin, 'user_meta' );
+
+		$faulted = $this->with_query_faulted(
+			array( 'SELECT * FROM', $wpdb->users, "WHERE ID = '{$admin}' LIMIT" ),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE ID = %d', $wpdb->users, $other ),
+			static function () use ( $site, $admin ): bool {
+				return $site( $admin );
+			}
+		);
+
+		$this->assertFalse( $faulted );
+		$this->assertNotSame( array(), $this->fired_in_scope, 'the fault fired' );
+		$this->assertSame( array( 'administrator' ), $this->stored_roles( $admin ) );
+	}
+
+	/**
+	 * On a healthy database every user permission path answers as it did with raw capability
+	 * calls: a missing id, id 0, the caller's own id, a target the filter denies or allows, and a
+	 * user held only in the cache.
+	 */
+	public function test_user_capability_sites_answer_as_before_on_a_healthy_database(): void {
+		global $wpdb;
+		$this->allow_user_meta_key();
+		$sites     = array_map( 'current', iterator_to_array( $this->data_user_capability_sites() ) );
+		$unchecked = $this->unchecked_user_answers();
+
+		$caller = $this->acting_as( 'administrator' );
+		foreach ( array( self::MISSING, 0, $caller ) as $id ) {
+			foreach ( $unchecked as $name => $before ) {
+				$this->assertSame( $before( $id ), $sites[ $name ]( $id ), "$name, administrator caller, id $id" );
+			}
+		}
+		$this->assertTrue( $sites['update-user']( self::MISSING ), 'a missing id keeps the capability floor' );
+		$this->assertFalse( $sites['acf user fields']( self::MISSING ) );
+		$this->assertFalse( $sites['update-user role change']( self::MISSING ) );
+		$this->assertFalse( $sites['update-user role change']( 0 ) );
+
+		$admin  = (int) self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$author = (int) self::factory()->user->create( array( 'role' => 'author' ) );
+		$cached = (int) self::factory()->user->create( array( 'role' => 'author' ) );
+		$caller = $this->acting_as_user_manager();
+		$this->deny_user_edits_on_administrators();
+		get_userdata( $cached );
+		$wpdb->delete( $wpdb->users, array( 'ID' => $cached ) );
+		foreach ( array( $admin, $author, $cached, $caller, self::MISSING, 0 ) as $id ) {
+			foreach ( $unchecked as $name => $before ) {
+				$this->assertSame( $before( $id ), $sites[ $name ]( $id ), "$name, user manager caller, id $id" );
+			}
+		}
+		foreach ( $sites as $name => $site ) {
+			$this->assertFalse( $site( $admin ), "$name: the filter denies an administrator target" );
+		}
+		$this->assertSame( array( 'administrator' ), $this->stored_roles( $admin ) );
+		$this->assertTrue( $sites['update-user']( $author ) );
+	}
 
 	public function test_user_absence_is_certain_only_from_a_query_that_ran(): void {
 		global $wpdb;

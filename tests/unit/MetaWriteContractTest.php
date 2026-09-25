@@ -2038,4 +2038,624 @@ final class MetaWriteContractTest extends TestCase {
 			),
 		),
 	);
+
+	/**
+	 * Attach a filter that does what Yoast SEO does with a value it stores as no row: when the
+	 * value is the mapped default, delete the row and report the write as done.
+	 *
+	 * @param string        $type     Object type.
+	 * @param array         $defaults Meta key => the value stored as no row.
+	 * @param callable|null $after    Run after the delete, before the filter returns.
+	 */
+	private function attach_absent_default_filter( string $type, array $defaults, ?callable $after = null ): void {
+		add_filter(
+			'update_' . $type . '_metadata',
+			static function ( $check, $object_id, $meta_key, $meta_value ) use ( $type, $defaults, $after ) {
+				if ( array_key_exists( $meta_key, $defaults ) && $meta_value === $defaults[ $meta_key ] ) {
+					delete_metadata( $type, (int) $object_id, $meta_key );
+					if ( null !== $after ) {
+						$after();
+					}
+					return true;
+				}
+				return $check;
+			},
+			10,
+			4
+		);
+	}
+
+	/**
+	 * Attach a filter that deletes the row whatever value is written, and reports the write done.
+	 *
+	 * @param string $type Object type.
+	 */
+	private function attach_deleting_filter( string $type ): void {
+		add_filter(
+			'update_' . $type . '_metadata',
+			static function ( $check, $object_id, $meta_key ) use ( $type ) {
+				if ( self::KEY !== $meta_key ) {
+					return $check;
+				}
+				delete_metadata( $type, (int) $object_id, $meta_key );
+				return true;
+			},
+			10,
+			3
+		);
+	}
+
+	/**
+	 * The query needle for core's own metadata load: the read-back's load after a write, and the
+	 * checked scope's load.
+	 *
+	 * @param string $type Object type.
+	 * @return string[]
+	 */
+	private function core_load_needle( string $type ): array {
+		return array( 'meta_key, meta_value FROM', $this->meta_table( $type ), ' IN (' );
+	}
+
+	/**
+	 * The query needle for the failure-aware single-key reader, aafm_meta_row().
+	 *
+	 * @param string $type Object type.
+	 * @return string[]
+	 */
+	private function confirm_read_needle( string $type ): array {
+		return array( 'meta_key, meta_value FROM', $this->meta_table( $type ), ' AND meta_key = ' );
+	}
+
+	/**
+	 * Count the queries matching a needle while $run runs.
+	 *
+	 * @param string[] $needle AND-matched substrings.
+	 * @param callable $run    The work to run.
+	 * @param mixed    $result By reference: $run's return value.
+	 * @return int
+	 */
+	private function count_matching_queries( array $needle, callable $run, &$result ): int {
+		$count   = 0;
+		$counter = static function ( string $query ) use ( $needle, &$count ): string {
+			foreach ( $needle as $part ) {
+				if ( false === strpos( $query, $part ) ) {
+					return $query;
+				}
+			}
+			++$count;
+			return $query;
+		};
+		add_filter( 'query', $counter );
+		$result = $run();
+		remove_filter( 'query', $counter );
+		return $count;
+	}
+
+	/**
+	 * Add a query fault, in the given shape, for the $occurrence-th query matching $needle.
+	 *
+	 * @param string   $shape      'no-flush' or 'real-error'.
+	 * @param string[] $needle     AND-matched substrings.
+	 * @param int      $occurrence 1-based match to fail; 0 fails every match.
+	 * @return callable The filter, to remove afterwards.
+	 */
+	private function add_fault( string $shape, array $needle, int $occurrence ): callable {
+		$filter = 'no-flush' === $shape
+			? QueryFaultInjector::no_flush_filter( $needle, $occurrence )
+			: QueryFaultInjector::real_error_filter( $needle, $occurrence );
+		add_filter( 'query', $filter );
+		return $filter;
+	}
+
+	/**
+	 * Run $run with wpdb's error output suppressed and any output buffered.
+	 *
+	 * @param callable $run The work to run.
+	 * @return mixed
+	 */
+	private function run_quietly( callable $run ) {
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * Every write_outcome row's detail status, in insert order.
+	 *
+	 * @return string[]
+	 */
+	private function outcome_row_statuses(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		$out  = array();
+		foreach ( $rows as $detail ) {
+			$decoded = json_decode( (string) $detail, true );
+			$out[]   = is_array( $decoded ) ? (string) $decoded['status'] : '';
+		}
+		return $out;
+	}
+
+	/**
+	 * The one-member group call the S18 and S19 cases make.
+	 *
+	 * @param int                 $post_id         Post id.
+	 * @param mixed               $intended        Intended value.
+	 * @param array<string,mixed> $absent_defaults The absent-default map.
+	 * @return array<string,mixed>
+	 */
+	private function group_of_one( int $post_id, $intended, array $absent_defaults ): array {
+		$result = aafm_meta_set_group( 'post', $post_id, array( self::KEY => $intended ), 'post', array(), $absent_defaults );
+		$this->assertIsArray( $result );
+		return $result;
+	}
+
+	/**
+	 * S18(a): a clear to the mapped default, which the site stores as no row, is written.
+	 */
+	public function test_s18a_a_clear_the_site_stores_as_no_row_is_written(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_absent_default_filter( 'post', array( self::KEY => '' ) );
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+
+		$this->assertSame( 'written', $result['status'] );
+		$member = $result['keys'][ self::KEY ];
+		$this->assertSame( 'written', $member['status'] );
+		$this->assertSame( '', $member['value'] );
+		$this->assertSame( 'old', $member['previous'] );
+		$this->assertTrue( $member['acknowledged'] );
+		$this->assertSame(
+			array(
+				'exists' => false,
+				'count'  => 0,
+			),
+			$member['observed']
+		);
+		$this->assertSame( array( 'written' ), $this->outcome_row_statuses() );
+		$this->assertSame( array(), $this->read_raw_rows( 'post', $post_id ) );
+	}
+
+	/**
+	 * S18(b): the mapped default with no row stored is unchanged, and no write call is made.
+	 */
+	public function test_s18b_the_mapped_default_with_no_row_is_unchanged_with_no_write_call(): void {
+		$post_id = self::factory()->post->create();
+		$calls   = 0;
+		add_filter(
+			'update_post_metadata',
+			static function ( $check ) use ( &$calls ) {
+				++$calls;
+				return $check;
+			}
+		);
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+
+		$this->assertSame( 'unchanged', $result['status'] );
+		$this->assertSame(
+			array(
+				'status' => 'unchanged',
+				'value'  => '',
+			),
+			$result['keys'][ self::KEY ]
+		);
+		$this->assertSame( 0, $calls );
+	}
+
+	/**
+	 * S18(c): a veto-true that deletes nothing keeps the row and stays unconfirmed.
+	 */
+	public function test_s18c_a_veto_true_that_keeps_the_row_is_unconfirmed(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		add_filter( 'update_post_metadata', '__return_true' );
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+	}
+
+	/**
+	 * S18(d): a value other than the mapped one whose row goes missing stays unconfirmed.
+	 */
+	public function test_s18d_a_value_other_than_the_mapped_one_whose_row_goes_missing_is_unconfirmed(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_deleting_filter( 'post' );
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => 'new' ) );
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+	}
+
+	/**
+	 * S18(e): with no map, a clear whose row the site removes stays unconfirmed.
+	 */
+	public function test_s18e_with_no_map_a_clear_whose_row_goes_missing_is_unconfirmed(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_absent_default_filter( 'post', array( self::KEY => '' ) );
+
+		$result = $this->group_of_one( $post_id, '', array() );
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+	}
+
+	/**
+	 * S18(f1): when both the read-back and the failure-aware confirm read fail, the clear is not
+	 * certified.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_s18f1_a_failed_confirm_read_leaves_the_clear_unconfirmed( string $shape ): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$fault = null;
+		$this->attach_absent_default_filter(
+			'post',
+			array( self::KEY => '' ),
+			function () use ( &$fault, $shape ) {
+				$fault = $this->add_fault( $shape, array( 'meta_key, meta_value FROM', $this->meta_table( 'post' ) ), 0 );
+			}
+		);
+
+		$result = $this->run_quietly(
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+			}
+		);
+		remove_filter( 'query', $fault );
+
+		$this->assertSame( 2, QueryFaultInjector::fired_count(), 'both the read-back and the confirm read were faulted' );
+		$this->assertSame(
+			array(
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+				'previous'     => 'old',
+				'status'       => 'unconfirmed',
+			),
+			$result['keys'][ self::KEY ]
+		);
+		$this->assertSame( array( 'unconfirmed' ), $this->outcome_row_statuses() );
+	}
+
+	/**
+	 * S18(f2): a veto-true that keeps the row, with only the read-back failing, stays unconfirmed:
+	 * the confirm read finds the surviving row.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_s18f2_a_surviving_row_behind_a_failed_read_back_is_unconfirmed( string $shape ): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$fault = null;
+		add_filter(
+			'update_post_metadata',
+			function () use ( &$fault, $shape ) {
+				$fault = $this->add_fault( $shape, $this->core_load_needle( 'post' ), 1 );
+				return true;
+			}
+		);
+
+		$result = $this->run_quietly(
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+			}
+		);
+		remove_filter( 'query', $fault );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+		$this->assertArrayNotHasKey( 'value', $result['keys'][ self::KEY ] );
+		$this->assertSame( array( 'old' ), array_column( $this->read_raw_rows( 'post', $post_id ), 'meta_value' ) );
+	}
+
+	/**
+	 * S18(f3): when only the read-back fails and the confirm read finds no row, the clear is
+	 * written, and the failed load leaves nothing cached.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_s18f3_a_confirmed_clear_behind_a_failed_read_back_is_written_and_leaves_nothing_cached( string $shape ): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$fault = null;
+		$this->attach_absent_default_filter(
+			'post',
+			array( self::KEY => '' ),
+			function () use ( &$fault, $shape ) {
+				$fault = $this->add_fault( $shape, $this->core_load_needle( 'post' ), 1 );
+			}
+		);
+
+		$result = $this->run_quietly(
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+			}
+		);
+		remove_filter( 'query', $fault );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'written', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( '', $result['keys'][ self::KEY ]['value'] );
+		$this->assertFalse( wp_cache_get( $post_id, 'post_meta' ) );
+	}
+
+	/**
+	 * The absent-default map is consulted only for members of the group: a mapped key that is not
+	 * requested changes nothing, and no confirm read is made.
+	 */
+	public function test_an_absent_default_for_a_key_outside_the_group_changes_nothing(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_deleting_filter( 'post' );
+
+		$result  = null;
+		$confirm = $this->count_matching_queries(
+			$this->confirm_read_needle( 'post' ),
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( 'aafm_contract_other' => '' ) );
+			},
+			$result
+		);
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 0, $confirm );
+	}
+
+	/**
+	 * A mapped value that is not equal to the written value under the comparison rule is not a
+	 * declared default: null and an empty array against a cleared string stay unconfirmed, with no
+	 * confirm read.
+	 *
+	 * @return iterable<string,array{0:mixed}>
+	 */
+	public function data_unequal_mapped_values(): iterable {
+		yield 'null' => array( null );
+		yield 'empty array' => array( array() );
+	}
+
+	/**
+	 * One unequal mapped value.
+	 *
+	 * @dataProvider data_unequal_mapped_values
+	 * @param mixed $mapped The mapped value.
+	 */
+	public function test_an_unequal_mapped_value_is_not_a_declared_default( $mapped ): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_deleting_filter( 'post' );
+
+		$result  = null;
+		$confirm = $this->count_matching_queries(
+			$this->confirm_read_needle( 'post' ),
+			function () use ( $post_id, $mapped ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => $mapped ) );
+			},
+			$result
+		);
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 0, $confirm );
+	}
+
+	/**
+	 * A mapped int 0 equals a written '0' under the comparison rule, and the result carries the
+	 * mapped value.
+	 */
+	public function test_a_mapped_int_zero_matches_a_written_string_zero(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, '1' );
+		$this->attach_deleting_filter( 'post' );
+
+		$result = $this->group_of_one( $post_id, '0', array( self::KEY => 0 ) );
+
+		$this->assertSame( 'written', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 0, $result['keys'][ self::KEY ]['value'] );
+	}
+
+	/**
+	 * A member whose key matches a row stored under another spelling is refused, status only, even
+	 * when it has a declared default.
+	 */
+	public function test_an_aliased_member_with_a_declared_default_is_refused_status_only(): void {
+		$post_id = self::factory()->post->create();
+		add_metadata( 'post', $post_id, 'Foo', 'old' );
+
+		$result = aafm_meta_set_group( 'post', $post_id, array( 'foo' => '' ), 'post', array(), array( 'foo' => '' ) );
+
+		$this->assertSame( array( 'status' => 'refused' ), $result['keys']['foo'] );
+	}
+
+	/**
+	 * A declared clear over two rows that the site removes reports the baseline row count.
+	 */
+	public function test_a_declared_clear_over_two_rows_reports_the_row_count(): void {
+		$post_id = self::factory()->post->create();
+		add_post_meta( $post_id, self::KEY, 'old' );
+		add_post_meta( $post_id, self::KEY, 'old2' );
+		$this->attach_absent_default_filter( 'post', array( self::KEY => '' ) );
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+
+		$this->assertSame( 'written', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 2, $result['keys'][ self::KEY ]['rows'] );
+		$this->assertSame( 'old', $result['keys'][ self::KEY ]['previous'] );
+	}
+
+	/**
+	 * The confirm read runs once for a declared clear and never for a write with no map.
+	 */
+	public function test_the_confirm_read_runs_only_for_a_declared_clear(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_absent_default_filter( 'post', array( self::KEY => '' ) );
+
+		$declared = null;
+		$once     = $this->count_matching_queries(
+			$this->confirm_read_needle( 'post' ),
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+			},
+			$declared
+		);
+
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$plain = null;
+		$none  = $this->count_matching_queries(
+			$this->confirm_read_needle( 'post' ),
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, 'new', array() );
+			},
+			$plain
+		);
+
+		$this->assertSame( 'written', $declared['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 1, $once );
+		$this->assertSame( 'written', $plain['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 0, $none );
+	}
+
+	/**
+	 * S19 (a) to (c): every write, delete and group write leaves nothing cached for the object,
+	 * whether its read-back load failed or not.
+	 *
+	 * @return iterable<string,array{0:string,1:string,2:?string}>
+	 */
+	public function data_s19_cases(): iterable {
+		foreach ( array( 'a', 'b', 'c' ) as $case ) {
+			$types = 'c' === $case ? array( 'post' ) : array( 'post', 'term', 'user' );
+			foreach ( $types as $type ) {
+				foreach ( array( 'no-flush', 'real-error', null ) as $shape ) {
+					yield 'S19' . $case . '/' . $type . '/' . ( $shape ?? 'healthy' ) => array( $case, $type, $shape );
+				}
+			}
+		}
+	}
+
+	/**
+	 * One S19 case.
+	 *
+	 * @dataProvider data_s19_cases
+	 * @param string      $letter Case letter.
+	 * @param string      $type   Object type.
+	 * @param string|null $shape  Fault shape, or null for a healthy run.
+	 */
+	public function test_s19_a_read_back_leaves_nothing_cached( string $letter, string $type, ?string $shape ): void {
+		$id = $this->make_object( $type );
+		$this->write_raw( $type, $id, 'old' );
+		$subtype = 'user' === $type ? '' : ( 'post' === $type ? 'post' : 'category' );
+
+		$fault   = null;
+		$actions = 'b' === $letter ? array( "deleted_{$type}_meta" ) : array( "added_{$type}_meta", "updated_{$type}_meta", "deleted_{$type}_meta" );
+		$arm     = function () use ( &$fault, $shape, $type ) {
+			if ( null === $shape || null !== $fault ) {
+				return;
+			}
+			$fault = $this->add_fault( $shape, $this->core_load_needle( $type ), 1 );
+		};
+		foreach ( $actions as $action ) {
+			add_action( $action, $arm, 10, 0 );
+		}
+
+		$result = $this->run_quietly(
+			function () use ( $letter, $type, $id, $subtype ) {
+				if ( 'a' === $letter ) {
+					return aafm_meta_set( $type, $id, self::KEY, 'new', $subtype, false );
+				}
+				if ( 'b' === $letter ) {
+					return aafm_meta_delete( $type, $id, self::KEY );
+				}
+				return aafm_meta_set_group( $type, $id, array( self::KEY => 'new' ), $subtype );
+			}
+		);
+		foreach ( $actions as $action ) {
+			remove_action( $action, $arm, 10 );
+		}
+		if ( null !== $fault ) {
+			remove_filter( 'query', $fault );
+		}
+
+		$status = 'c' === $letter ? $result['keys'][ self::KEY ] : $result;
+		if ( 'b' === $letter ) {
+			$expected = 'deleted';
+			$exists   = false;
+		} elseif ( null === $shape ) {
+			$expected = 'written';
+			$exists   = true;
+		} else {
+			$expected = 'unconfirmed';
+			$exists   = false;
+		}
+		$label = "case=$letter type=$type shape=" . ( $shape ?? 'healthy' );
+		$this->assertSame( null === $shape ? 0 : 1, QueryFaultInjector::fired_count(), $label );
+		$this->assertSame( $expected, $status['status'], $label );
+		$this->assertSame( $exists, $status['observed']['exists'], $label );
+		$this->assertFalse( wp_cache_get( $id, $type . '_meta' ), $label );
+	}
+
+	/**
+	 * S19(d) is S18(f3); S19(e): a write refused because its UPDATE failed leaves nothing cached
+	 * either, although it made no read-back.
+	 *
+	 * @return iterable<string,array{0:string,1:string,2:string}>
+	 */
+	public function data_s19e_cases(): iterable {
+		foreach ( array( 'no-flush', 'real-error' ) as $shape ) {
+			foreach ( array( 'post', 'term', 'user' ) as $type ) {
+				yield "S19e1/$type/$shape" => array( 'e1', $type, $shape );
+			}
+			yield "S19e2/post/$shape" => array( 'e2', 'post', $shape );
+		}
+	}
+
+	/**
+	 * One S19(e) case.
+	 *
+	 * @dataProvider data_s19e_cases
+	 * @param string $letter 'e1' (single writer) or 'e2' (one-member group).
+	 * @param string $type   Object type.
+	 * @param string $shape  Fault shape.
+	 */
+	public function test_s19e_a_refused_write_leaves_nothing_cached( string $letter, string $type, string $shape ): void {
+		$id = $this->make_object( $type );
+		$this->write_raw( $type, $id, 'old' );
+		$subtype = 'user' === $type ? '' : ( 'post' === $type ? 'post' : 'category' );
+
+		$fault  = $this->add_fault( $shape, array( 'UPDATE ', $this->meta_table( $type ) ), 1 );
+		$result = $this->run_quietly(
+			static function () use ( $letter, $type, $id, $subtype ) {
+				if ( 'e1' === $letter ) {
+					return aafm_meta_set( $type, $id, self::KEY, 'new', $subtype, false );
+				}
+				return aafm_meta_set_group( $type, $id, array( self::KEY => 'new' ), $subtype );
+			}
+		);
+		remove_filter( 'query', $fault );
+
+		$label = "case=$letter type=$type shape=$shape";
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), $label );
+		if ( 'e2' === $letter ) {
+			$this->assertSame( 'refused', $result['status'], $label );
+			$result = $result['keys'][ self::KEY ];
+		}
+		$this->assertSame( 'refused', $result['status'], $label );
+		$this->assertFalse( wp_cache_get( $id, $type . '_meta' ), $label );
+	}
 }

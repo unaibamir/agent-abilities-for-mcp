@@ -293,6 +293,10 @@ function aafm_meta_keys_collide( string $type, array $keys ): ?bool {
 function aafm_meta_readback( string $type, int $id, string $key ): array {
 	wp_cache_delete( $id, $type . '_meta' );
 	$raw = get_metadata_raw( $type, $id, $key, false );
+	// Drop the set core just loaded, on both return paths: when its query failed, core cached an
+	// empty set, and a later read in this call or a persistent cache in a later request would trust
+	// it.
+	wp_cache_delete( $id, $type . '_meta' );
 	if ( ! is_array( $raw ) ) {
 		return array(
 			'exists' => false,
@@ -512,6 +516,9 @@ function aafm_meta_set( string $type, int $id, string $key, $intended, string $s
 	$acknowledged = (bool) update_metadata( $type, $id, wp_slash( $key ), wp_slash( $intended ) );
 
 	if ( ! $acknowledged ) {
+		// Core loaded the object's meta for its old-value check and returns before its own cache
+		// delete when the write fails, so that set is dropped here.
+		wp_cache_delete( $id, $type . '_meta' );
 		$result = array(
 			'status'       => AAFM_WRITE_REFUSED,
 			'acknowledged' => false,
@@ -689,14 +696,19 @@ function aafm_meta_delete( string $type, int $id, string $key ): array {
  * reason the returned `keys` map can hold int keys: a caller that passes one on casts it with
  * (string), and a caller that puts the map on the wire encodes it as a JSON object, never a list.
  *
- * @param string                $type            'post', 'term' or 'user'.
- * @param int                   $id              Object id.
- * @param array<string,mixed>   $intended_by_key Meta key => intended value.
- * @param string                $subtype         Object subtype.
- * @param array<int,string|int> $array_keys      Members that may hold a non-scalar (array) value.
+ * @param string                 $type            'post', 'term' or 'user'.
+ * @param int                    $id              Object id.
+ * @param array<string,mixed>    $intended_by_key Meta key => intended value.
+ * @param string                 $subtype         Object subtype.
+ * @param array<int,string|int>  $array_keys      Members that may hold a non-scalar (array) value.
+ * @param array<array-key,mixed> $absent_defaults Meta key => the value the site stores as no row.
+ *                                               A member whose value equals its mapped value is
+ *                                               unchanged when no row exists, and written when
+ *                                               the row is gone after the write and a
+ *                                               failure-aware read confirms it.
  * @return array{status: string, keys: array<array-key, array<string,mixed>>}|WP_Error
  */
-function aafm_meta_set_group( string $type, int $id, array $intended_by_key, string $subtype = '', array $array_keys = array() ) {
+function aafm_meta_set_group( string $type, int $id, array $intended_by_key, string $subtype = '', array $array_keys = array(), array $absent_defaults = array() ) {
 	$array_keys = array_map( 'strval', $array_keys );
 
 	$members = array();
@@ -756,7 +768,7 @@ function aafm_meta_set_group( string $type, int $id, array $intended_by_key, str
 		$baseline = $preflight['by_key'][ $key ];
 		$rows     = $baseline['count'] > 1 ? $baseline['count'] : null;
 
-		$entry = aafm_meta_set_group_member( $type, $id, $key, $member['intended'], $member['canonical'], $baseline, $rows, $member['scalar_only'] );
+		$entry = aafm_meta_set_group_member( $type, $id, $key, $member['intended'], $member['canonical'], $baseline, $rows, $member['scalar_only'], $absent_defaults );
 
 		$keys[ $key ] = $entry;
 		aafm_emit_write_outcome( $entry, aafm_meta_write_target( $type, $id, $key ) );
@@ -788,21 +800,33 @@ function aafm_meta_set_group( string $type, int $id, array $intended_by_key, str
 /**
  * One group member's write, reusing a baseline the preflight already read.
  *
- * @param string              $type      Object type.
- * @param int                 $id        Object id.
- * @param string              $key       Meta key.
- * @param mixed               $intended  Intended value.
- * @param mixed               $canonical Canonical form of the intended value.
- * @param array<string,mixed> $baseline  This key's preflight baseline.
- * @param int|null            $rows      Baseline row count above 1, or null.
- * @param bool                $scalar_only Whether this member is scalar-only.
+ * @param string                 $type      Object type.
+ * @param int                    $id        Object id.
+ * @param string                 $key       Meta key.
+ * @param mixed                  $intended  Intended value.
+ * @param mixed                  $canonical Canonical form of the intended value.
+ * @param array<string,mixed>    $baseline  This key's preflight baseline.
+ * @param int|null               $rows      Baseline row count above 1, or null.
+ * @param bool                   $scalar_only Whether this member is scalar-only.
+ * @param array<array-key,mixed> $absent_defaults Meta key => the value the site stores as no row.
  * @return array<string,mixed>
  */
-function aafm_meta_set_group_member( string $type, int $id, string $key, $intended, $canonical, array $baseline, ?int $rows, bool $scalar_only ): array {
+function aafm_meta_set_group_member( string $type, int $id, string $key, $intended, $canonical, array $baseline, ?int $rows, bool $scalar_only, array $absent_defaults = array() ): array {
 	unset( $scalar_only );
 
 	if ( $baseline['aliased'] > 0 ) {
 		return array( 'status' => AAFM_WRITE_REFUSED );
+	}
+
+	// A site can store one value of a key as no row at all (Yoast SEO deletes a field set to its
+	// default). For such a value, no row is the answer the write asked for.
+	$declared = array_key_exists( $key, $absent_defaults ) && aafm_meta_value_equals( $absent_defaults[ $key ], $canonical );
+
+	if ( $declared && ! $baseline['exists'] ) {
+		return array(
+			'status' => AAFM_WRITE_UNCHANGED,
+			'value'  => $absent_defaults[ $key ],
+		);
 	}
 
 	if ( $baseline['exists'] ) {
@@ -829,6 +853,9 @@ function aafm_meta_set_group_member( string $type, int $id, string $key, $intend
 	$acknowledged = (bool) update_metadata( $type, $id, wp_slash( $key ), wp_slash( $intended ) );
 
 	if ( ! $acknowledged ) {
+		// Core loaded the object's meta for its old-value check and returns before its own cache
+		// delete when the write fails, so that set is dropped here.
+		wp_cache_delete( $id, $type . '_meta' );
 		$result = array(
 			'status'       => AAFM_WRITE_REFUSED,
 			'acknowledged' => false,
@@ -859,6 +886,16 @@ function aafm_meta_set_group_member( string $type, int $id, string $key, $intend
 	}
 
 	if ( ! $readback['exists'] ) {
+		// Core cannot tell a failed read-back from no row, so a declared value is certified only
+		// when a failure-aware read also finds no row. A failed read never certifies it.
+		if ( $declared ) {
+			$confirm = aafm_meta_row( $type, $id, $key );
+			if ( $confirm['ok'] && ! $confirm['exists'] ) {
+				$result['status'] = AAFM_WRITE_WRITTEN;
+				$result['value']  = $absent_defaults[ $key ];
+				return $result;
+			}
+		}
 		$result['status'] = AAFM_WRITE_UNCONFIRMED;
 		return $result;
 	}

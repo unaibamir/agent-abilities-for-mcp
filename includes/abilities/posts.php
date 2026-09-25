@@ -1989,7 +1989,13 @@ function aafm_exec_replace_sitewide( array $input ) {
 			++$failed;
 			continue;
 		}
-		if ( ! aafm_can_edit_post_object( $post ) ) {
+		$can_edit = aafm_can_edit_post_object_state( $post );
+		if ( null === $can_edit ) {
+			// The capability check could not load the post's metadata, so nothing was decided.
+			++$failed;
+			continue;
+		}
+		if ( ! $can_edit ) {
 			++$no_perm;
 			continue;
 		}

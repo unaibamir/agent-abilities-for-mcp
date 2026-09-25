@@ -1214,19 +1214,32 @@ function aafm_can_read_post_object( WP_Post $post ): bool {
 }
 
 /**
+ * Whether the current user may EDIT a single object through the content abilities: true or
+ * false, or null when a metadata load in the capability check failed. The same rule as
+ * aafm_can_edit_post_object(), for a caller that counts a failed check apart from a denial.
+ *
+ * @param WP_Post $post Target object.
+ * @return bool|null
+ */
+function aafm_can_edit_post_object_state( WP_Post $post ): ?bool {
+	$caps = aafm_writable_type_caps( $post );
+	return null === $caps ? false : aafm_user_can_checked_state( (string) $caps->cap->edit_post, $post->ID );
+}
+
+/**
  * Whether the current user may EDIT a single object through the content abilities.
  *
  * Type must clear the floor AND the allowlist AND be map_meta_cap===true (Q5 write-safety).
  * For a non-mapped type the write is refused outright rather than trusting a degraded
  * per-object cap that can fail OPEN. For post/page (mapped) this resolves to today's
- * current_user_can( 'edit_post'/'edit_page', $id ) - zero behaviour change.
+ * current_user_can( 'edit_post'/'edit_page', $id ) - zero behaviour change. False when a
+ * metadata load in the check failed; see aafm_can_edit_post_object_state().
  *
  * @param WP_Post $post Target object.
  * @return bool
  */
 function aafm_can_edit_post_object( WP_Post $post ): bool {
-	$caps = aafm_writable_type_caps( $post );
-	return null !== $caps && aafm_user_can_checked( (string) $caps->cap->edit_post, $post->ID );
+	return true === aafm_can_edit_post_object_state( $post );
 }
 
 /**

@@ -638,4 +638,112 @@ final class CapabilityMetaReadTest extends TestCase {
 		$this->assertFalse( $site( $locked ) );
 		$this->assertFalse( $site( self::MISSING ) );
 	}
+
+	private const POST_FLAG = 'cap_probe_locked';
+
+	private const SEARCH = 'cap-probe-needle';
+
+	/**
+	 * Act as an editor, with edit_post denied on a post that carries the lock flag in its
+	 * metadata.
+	 */
+	private function post_lock_setup(): void {
+		$this->acting_as( 'editor' );
+		add_filter(
+			'map_meta_cap',
+			static function ( array $caps, string $cap, int $user_id, array $args ): array {
+				if ( 'edit_post' === $cap && isset( $args[0] ) && '' !== (string) get_post_meta( (int) $args[0], self::POST_FLAG, true ) ) {
+					$caps[] = 'do_not_allow';
+				}
+				return $caps;
+			},
+			10,
+			4
+		);
+	}
+
+	/**
+	 * A replace-sitewide dry run over published posts: its matched, failed and permission counts.
+	 *
+	 * @return array{matched:int,failed:int,no_permission:int}
+	 */
+	private function replace_sitewide_counts(): array {
+		$out = aafm_exec_replace_sitewide(
+			array(
+				'search'  => self::SEARCH,
+				'replace' => 'replaced',
+				'dry_run' => true,
+			)
+		);
+		$this->assertIsArray( $out );
+		return array(
+			'matched'       => $out['matched_posts'],
+			'failed'        => $out['failed_updates'],
+			'no_permission' => $out['skipped_no_permission'],
+		);
+	}
+
+	/**
+	 * The capability check on this candidate could not load the post's metadata, so it decided
+	 * nothing. The candidate counts as a failed update rather than a permission skip.
+	 */
+	public function test_replace_sitewide_counts_a_candidate_whose_capability_check_did_not_load_as_failed(): void {
+		$this->post_lock_setup();
+		$post = (int) self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => 'before ' . self::SEARCH . ' after',
+			)
+		);
+		add_post_meta( $post, self::POST_FLAG, '1' );
+
+		$faulted = $this->with_meta_load_faulted(
+			$post,
+			function (): array {
+				return $this->replace_sitewide_counts();
+			}
+		);
+
+		$this->assertSame(
+			array(
+				'matched'       => 0,
+				'failed'        => 1,
+				'no_permission' => 0,
+			),
+			$faulted
+		);
+		$this->assertGreaterThanOrEqual( 1, QueryFaultInjector::fired_count() );
+	}
+
+	/**
+	 * On a healthy database a denied candidate is a permission skip and an allowed one matches.
+	 */
+	public function test_replace_sitewide_counts_a_healthy_denial_as_a_permission_skip(): void {
+		$this->post_lock_setup();
+		$locked = (int) self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => 'before ' . self::SEARCH . ' after',
+			)
+		);
+		add_post_meta( $locked, self::POST_FLAG, '1' );
+		$this->assertSame(
+			array(
+				'matched'       => 0,
+				'failed'        => 0,
+				'no_permission' => 1,
+			),
+			$this->replace_sitewide_counts()
+		);
+
+		delete_post_meta( $locked, self::POST_FLAG );
+		$this->assertSame(
+			array(
+				'matched'       => 1,
+				'failed'        => 0,
+				'no_permission' => 0,
+			),
+			$this->replace_sitewide_counts()
+		);
+	}
 }

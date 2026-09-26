@@ -51,6 +51,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 	public function tear_down(): void {
 		remove_filter( 'aafm_integration_active_tec', '__return_true' );
 		remove_filter( 'aafm_integration_active_geodirectory', '__return_true' );
+		$this->reset_integration_stubs();
 		parent::tear_down();
 	}
 
@@ -431,7 +432,7 @@ final class PageBuilderGuardSweepTest extends TestCase {
 	}
 
 	/**
-	 * Every wired write execute callback refuses a post whose owning builder cannot be told.
+	 * Every write execute callback in the provider below refuses a post whose owning builder cannot be told.
 	 *
 	 * Avada plus Visual Composer markers on a healthy post answer unknown ownership, which each
 	 * consumer must treat as owned rather than match against a list of builder names.
@@ -455,6 +456,78 @@ final class PageBuilderGuardSweepTest extends TestCase {
 		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
 		$this->assertSame( 'This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again.', $result->get_error_message() );
 		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
+	}
+
+	public function test_restore_revision_refuses_a_post_of_unknown_ownership_and_keeps_its_content(): void {
+		$author = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $author );
+		$post = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'v1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $post,
+				'post_content' => 'v2',
+			)
+		);
+		$revisions = wp_get_post_revisions( $post );
+		$oldest    = end( $revisions );
+		update_post_meta( $post, 'fusion_builder_status', 'active' );
+		update_post_meta( $post, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
+
+		$result = aafm_exec_restore_revision(
+			array(
+				'post_id'     => $post,
+				'revision_id' => (int) $oldest->ID,
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
+		$this->assertSame( 'This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again.', $result->get_error_message() );
+		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
+		$this->assertSame( 'v2', get_post( $post )->post_content );
+	}
+
+	public function test_wc_update_product_refuses_a_description_on_a_product_of_unknown_ownership_and_keeps_it(): void {
+		$this->stub_woocommerce();
+		$product = self::factory()->post->create(
+			array(
+				'post_type'    => 'product',
+				'post_status'  => 'publish',
+				'post_content' => 'Stored description',
+			)
+		);
+		WcStubStore::seed(
+			$product,
+			array(
+				'id'          => $product,
+				'name'        => 'Product of unknown ownership',
+				'status'      => 'publish',
+				'description' => 'Stored description',
+			)
+		);
+		update_post_meta( $product, 'fusion_builder_status', 'active' );
+		update_post_meta( $product, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = aafm_exec_wc_update_product(
+			array(
+				'product_id'  => $product,
+				'description' => 'Replaced description',
+			)
+		);
+		$stored = WcStubStore::get( $product )['description'] ?? null;
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
+		$this->assertSame( 'This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again.', $result->get_error_message() );
+		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
+		$this->assertSame( 'Stored description', $stored );
+		$this->assertSame( 'Stored description', get_post( $product )->post_content );
 	}
 
 	public function test_replace_sitewide_counts_a_failed_marker_read_as_builder_owned_and_writes_nothing(): void {

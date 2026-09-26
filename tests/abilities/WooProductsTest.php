@@ -1263,4 +1263,102 @@ final class WooProductsTest extends TestCase {
 			'the bare WC_Product base class must not be instantiated directly anywhere in this file.'
 		);
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	public function test_the_woocommerce_writer_exists(): void {
+		$this->assertTrue( function_exists( 'aafm_wc_write' ) );
+	}
+
+	public function test_product_create_update_and_delete_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'name' => 'Logged Gadget' ) );
+		$this->assertIsArray( $created );
+		$id = (int) $created['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => $id,
+				'name'       => 'Logged Gadget 2',
+			)
+		);
+		$this->assertSame( 'Logged Gadget 2', $updated['name'] );
+
+		$deleted = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => $id ) );
+		$this->assertTrue( $deleted['deleted'] );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'product', $id, 'accepted' ),
+				$this->wc_row( 'product', $id, 'accepted' ),
+				$this->wc_row( 'product', $id, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_product_create_that_does_not_persist_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		\AAFM\Tests\WcStubStore::$create_should_fail = true;
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'name' => 'Never Saved' ) );
+		\AAFM\Tests\WcStubStore::$create_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'product', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_product_delete_a_pre_delete_filter_refuses_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		add_filter( 'woocommerce_pre_delete_product', '__return_false' );
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
+		remove_filter( 'woocommerce_pre_delete_product', '__return_false' );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( 101 ) );
+		$this->assertSame( array( $this->wc_row( 'product', 101, 'refused' ) ), $this->outcome_details() );
+	}
 }

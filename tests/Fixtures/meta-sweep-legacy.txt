@@ -1,7 +1,3 @@
-includes/abilities/woocommerce/attributes.php|aafm_exec_wc_create_product_attribute|wc_create_attribute|1
-includes/abilities/woocommerce/attributes.php|aafm_exec_wc_update_product_attribute|wc_update_attribute|1
-includes/abilities/woocommerce/coupons.php|aafm_exec_wc_create_coupon|save|1
-includes/abilities/woocommerce/coupons.php|aafm_exec_wc_update_coupon|save|1
 includes/abilities/woocommerce/customers.php|aafm_exec_wc_create_customer|save|1
 includes/abilities/woocommerce/customers.php|aafm_exec_wc_create_customer|wc_create_new_customer|1
 includes/abilities/woocommerce/customers.php|aafm_exec_wc_update_customer|save|1
@@ -21,9 +17,6 @@ includes/abilities/woocommerce/orders.php|aafm_wc_restore_order_money|save|1
 includes/abilities/woocommerce/orders.php|aafm_wc_restore_order_money|save|2
 includes/abilities/woocommerce/orders.php|aafm_wc_restore_order_money|save|3
 includes/abilities/woocommerce/orders.php|aafm_wc_rollback_created_order|delete|1
-includes/abilities/woocommerce/products.php|aafm_exec_wc_create_product|save|1
-includes/abilities/woocommerce/products.php|aafm_exec_wc_delete_product|delete|1
-includes/abilities/woocommerce/products.php|aafm_exec_wc_update_product|save|1
 includes/abilities/woocommerce/shipping.php|aafm_exec_wc_create_shipping_method|add_shipping_method|1
 includes/abilities/woocommerce/shipping.php|aafm_exec_wc_create_shipping_zone|save|1
 includes/abilities/woocommerce/shipping.php|aafm_exec_wc_update_shipping_method|update_option|1
@@ -32,6 +25,3 @@ includes/abilities/woocommerce/shipping.php|aafm_exec_wc_update_shipping_method|
 includes/abilities/woocommerce/tax.php|aafm_exec_wc_create_tax_class|create_tax_class|1
 includes/abilities/woocommerce/tax.php|aafm_exec_wc_create_tax_rate|_insert_tax_rate|1
 includes/abilities/woocommerce/tax.php|aafm_exec_wc_update_tax_rate|_update_tax_rate|1
-includes/abilities/woocommerce/variations.php|aafm_exec_wc_create_product_variation|save|1
-includes/abilities/woocommerce/variations.php|aafm_exec_wc_delete_product_variation|delete|1
-includes/abilities/woocommerce/variations.php|aafm_exec_wc_update_product_variation|save|1

@@ -769,6 +769,27 @@ if ( ! function_exists( 'wc_create_refund' ) ) {
 		return new \WP_Error();
 	}
 }
+if ( ! function_exists( 'wc_delete_order_item' ) ) {
+	/**
+	 * @param int $item_id
+	 * @return bool
+	 */
+	function wc_delete_order_item( $item_id ) {
+		return false;
+	}
+}
+if ( ! function_exists( 'wc_create_new_customer' ) ) {
+	/**
+	 * @param string              $email
+	 * @param string              $username
+	 * @param string              $password
+	 * @param array<string,mixed> $args
+	 * @return int|\WP_Error
+	 */
+	function wc_create_new_customer( $email, $username = '', $password = '', $args = array() ) {
+		return new \WP_Error();
+	}
+}
 if ( ! function_exists( 'wc_format_decimal' ) ) {
 	/**
 	 * @param string|float|int $number

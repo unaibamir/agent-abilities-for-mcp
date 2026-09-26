@@ -746,7 +746,13 @@ function aafm_exec_wc_create_coupon( array $input ) {
 		return $race_error;
 	}
 
-	$id = $coupon->save();
+	$id = aafm_wc_write(
+		'save',
+		array(
+			'object' => $coupon,
+			'entity' => 'coupon',
+		)
+	)['returned'];
 	if ( ! $id ) {
 		return aafm_generic_error();
 	}
@@ -835,7 +841,13 @@ function aafm_exec_wc_update_coupon( array $input ) {
 		}
 	}
 
-	$saved_id = (int) $coupon->save();
+	$saved_id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $coupon,
+			'entity' => 'coupon',
+		)
+	)['returned'];
 	if ( $saved_id < 1 ) {
 		return aafm_generic_error();
 	}

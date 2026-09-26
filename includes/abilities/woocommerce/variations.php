@@ -942,7 +942,13 @@ function aafm_exec_wc_create_product_variation( array $input ) {
 	if ( null !== $error ) {
 		return $error;
 	}
-	$id = (int) $variation->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $variation,
+			'entity' => 'variation',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_variation( $id );
 	if ( null === $saved ) {
@@ -1046,7 +1052,13 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 	if ( null !== $error ) {
 		return $error;
 	}
-	$id = (int) $variation->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $variation,
+			'entity' => 'variation',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_variation( $id );
 	if ( null === $saved ) {
@@ -1206,7 +1218,14 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	// this block exists to fix.
 	$parent_id = (int) $variation->get_parent_id( 'edit' );
 
-	$variation->delete( true );
+	aafm_wc_write(
+		'delete',
+		array(
+			'object'       => $variation,
+			'force_delete' => true,
+			'entity'       => 'variation',
+		)
+	);
 
 	// WC_Data::delete() returns true whenever a data store exists, and a loaded variation always has
 	// one, so its return never signals a store-level failure. Calling wc_get_product() again is not a

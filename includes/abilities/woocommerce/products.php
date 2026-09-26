@@ -1161,7 +1161,13 @@ function aafm_exec_wc_create_product( array $input ) {
 	if ( aafm_force_draft() && ! array_key_exists( 'status', $input ) ) {
 		$product->set_status( 'draft' );
 	}
-	$id = (int) $product->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $product,
+			'entity' => 'product',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_product( $id );
 	if ( null === $saved ) {
@@ -1265,7 +1271,13 @@ function aafm_exec_wc_update_product( array $input ) {
 	if ( null !== $error ) {
 		return $error;
 	}
-	$id = (int) $product->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $product,
+			'entity' => 'product',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_product( $id );
 	if ( null === $saved ) {
@@ -1420,7 +1432,14 @@ function aafm_exec_wc_delete_product( array $input ) {
 	if ( null === $product ) {
 		return aafm_generic_error();
 	}
-	$product->delete( true );
+	aafm_wc_write(
+		'delete',
+		array(
+			'object'       => $product,
+			'force_delete' => true,
+			'entity'       => 'product',
+		)
+	);
 	// WC_Data::delete() returns true whenever a data store exists, and a loaded product always has
 	// one, so its return never signals a store-level failure. Check that the row is really gone.
 	//

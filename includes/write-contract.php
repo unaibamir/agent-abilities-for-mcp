@@ -1416,6 +1416,198 @@ function aafm_tec_write( string $entity, array $args, int $id = 0 ): array {
 }
 
 /**
+ * Make one WooCommerce write through WooCommerce's own call and log its outcome.
+ *
+ * Each operation makes exactly the call the ability made before, with the same receiver and
+ * arguments, and hands that call's return back in `returned` so the ability keeps deciding its
+ * response the way it did. The status comes from the call's own return: a call that can report
+ * failure is refused when it does, and a call that cannot report failure is accepted on return.
+ * `save` tells a new object from an existing one by its id before the call, as WC_Data::save()
+ * does: a new object is refused when it still has no id afterwards, and an existing one always
+ * returns its id. The two option operations report by the option rule instead: written when core
+ * saved, otherwise unchanged, refused or unconfirmed from the option's own database row. An
+ * exception from WooCommerce passes through untouched and logs nothing.
+ *
+ * $args holds the receiver under `object` for a method call, the call's own arguments under their
+ * parameter names, and `entity` for `save` and `delete`. The objects and arguments come from the
+ * abilities' own input functions, which remain the only key surface.
+ *
+ * @param string              $op   save, add_product, delete_item, delete, update_status, add_note,
+ *                                  refund, calculate_totals, add_shipping_method,
+ *                                  shipping_method_enabled, option, gateway_setting,
+ *                                  insert_tax_rate, update_tax_rate, create_tax_class,
+ *                                  create_attribute, update_attribute or create_customer.
+ * @param array<string,mixed> $args The call's receiver and arguments.
+ * @return array<string,mixed>
+ */
+function aafm_wc_write( string $op, array $args ): array {
+	global $wpdb;
+
+	$object    = $args['object'] ?? null;
+	$entity    = null;
+	$object_id = null;
+	$key       = null;
+	$status    = null;
+
+	switch ( $op ) {
+		case 'save':
+			$is_new    = (int) $object->get_id() < 1;
+			$returned  = $object->save();
+			$accepted  = ! $is_new || (int) $returned > 0;
+			$entity    = (string) ( $args['entity'] ?? '' );
+			$object_id = (int) $returned;
+			break;
+		case 'add_product':
+			$returned  = $object->add_product( $args['product'] ?? null, $args['qty'] ?? 1, $args['args'] ?? array() );
+			$accepted  = (int) $returned > 0;
+			$entity    = 'order_item';
+			$object_id = (int) $returned;
+			break;
+		case 'delete_item':
+			$object_id = (int) ( $args['item_id'] ?? 0 );
+			$returned  = wc_delete_order_item( $object_id );
+			$accepted  = true === $returned;
+			$entity    = 'order_item';
+			break;
+		case 'delete':
+			$object_id = (int) $object->get_id();
+			$returned  = $object->delete( $args['force_delete'] ?? false );
+			$accepted  = true === $returned;
+			$entity    = (string) ( $args['entity'] ?? '' );
+			break;
+		case 'update_status':
+			$returned  = $object->update_status( $args['new_status'] ?? '', $args['note'] ?? '', $args['manual'] ?? false );
+			$accepted  = true === $returned;
+			$entity    = 'order';
+			$object_id = (int) $object->get_id();
+			break;
+		case 'add_note':
+			$returned  = $object->add_order_note( $args['note'] ?? '', $args['is_customer_note'] ?? 0, $args['added_by_user'] ?? false );
+			$accepted  = (int) $returned > 0;
+			$entity    = 'order_note';
+			$object_id = (int) $returned;
+			break;
+		case 'refund':
+			$returned  = wc_create_refund( $args['args'] ?? array() );
+			$accepted  = $returned instanceof \WC_Order_Refund;
+			$entity    = 'order_refund';
+			$object_id = $accepted ? (int) $returned->get_id() : null;
+			break;
+		case 'calculate_totals':
+			$returned  = $object->calculate_totals( $args['and_taxes'] ?? true );
+			$accepted  = true;
+			$entity    = 'order';
+			$object_id = (int) $object->get_id();
+			break;
+		case 'add_shipping_method':
+			$returned  = $object->add_shipping_method( $args['type'] ?? '' );
+			$accepted  = (int) $returned > 0;
+			$entity    = 'shipping_method';
+			$object_id = (int) $returned;
+			break;
+		case 'shipping_method_enabled':
+			$where = (array) ( $args['where'] ?? array() );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- WooCommerce has no API for the is_enabled column; this is the same update WooCommerce's own REST controller runs.
+			$returned  = $wpdb->update( $wpdb->prefix . 'woocommerce_shipping_zone_methods', (array) ( $args['data'] ?? array() ), $where, $args['format'] ?? null, $args['where_format'] ?? null );
+			$accepted  = false !== $returned;
+			$entity    = 'shipping_method';
+			$object_id = (int) ( $where['instance_id'] ?? 0 );
+			break;
+		case 'option':
+			return aafm_option_write(
+				(string) ( $args['option'] ?? '' ),
+				$args['value'] ?? null,
+				array(
+					'kind'      => 'woocommerce',
+					'entity'    => $args['entity'] ?? null,
+					'object_id' => $args['object_id'] ?? null,
+				)
+			);
+		case 'gateway_setting':
+			// The gateway saves its whole settings array under its option key and returns core
+			// update_option()'s bool, so the option rule is applied to this setting's entry: the
+			// entry in the option's database row against the entry in sanitize_option() of the
+			// settings the gateway holds after the call.
+			$setting  = (string) ( $args['key'] ?? '' );
+			$returned = $object->update_option( $setting, $args['value'] ?? '' );
+			$entity   = 'payment_gateway';
+			$key      = (string) $object->get_option_key();
+			$status   = AAFM_WRITE_WRITTEN;
+			$accepted = true;
+			if ( ! $returned ) {
+				$views = aafm_read_option_views( $key );
+				if ( $views['db_error'] ) {
+					$status = AAFM_WRITE_UNCONFIRMED;
+				} else {
+					$row       = $views['db_found'] && is_array( $views['db_value'] ) ? $views['db_value'] : array();
+					$canonical = sanitize_option( $key, is_array( $object->settings ) ? $object->settings : array() );
+					$expected  = is_array( $canonical ) && array_key_exists( $setting, $canonical ) ? $canonical[ $setting ] : null;
+					$stored    = array_key_exists( $setting, $row ) ? $row[ $setting ] : null;
+					$status    = aafm_option_value_matches( $stored, $expected ) ? AAFM_WRITE_UNCHANGED : AAFM_WRITE_REFUSED;
+				}
+			}
+			break;
+		case 'insert_tax_rate':
+			$returned  = \WC_Tax::_insert_tax_rate( (array) ( $args['tax_rate'] ?? array() ) );
+			$accepted  = (int) $returned > 0;
+			$entity    = 'tax_rate';
+			$object_id = (int) $returned;
+			break;
+		case 'update_tax_rate':
+			$object_id = (int) ( $args['tax_rate_id'] ?? 0 );
+			\WC_Tax::_update_tax_rate( $object_id, (array) ( $args['tax_rate'] ?? array() ) );
+			$returned = null;
+			$accepted = true;
+			$entity   = 'tax_rate';
+			break;
+		case 'create_tax_class':
+			$returned = \WC_Tax::create_tax_class( (string) ( $args['name'] ?? '' ), (string) ( $args['slug'] ?? '' ) );
+			$accepted = is_array( $returned );
+			$entity   = 'tax_class';
+			break;
+		case 'create_attribute':
+			$returned  = wc_create_attribute( (array) ( $args['args'] ?? array() ) );
+			$accepted  = ! is_wp_error( $returned ) && (int) $returned > 0;
+			$entity    = 'attribute';
+			$object_id = $accepted ? (int) $returned : null;
+			break;
+		case 'update_attribute':
+			$object_id = (int) ( $args['id'] ?? 0 );
+			$returned  = wc_update_attribute( $object_id, (array) ( $args['args'] ?? array() ) );
+			$accepted  = ! is_wp_error( $returned ) && (bool) $returned;
+			$entity    = 'attribute';
+			break;
+		case 'create_customer':
+			$returned  = wc_create_new_customer( (string) ( $args['email'] ?? '' ), (string) ( $args['username'] ?? '' ), (string) ( $args['password'] ?? '' ), (array) ( $args['args'] ?? array() ) );
+			$accepted  = ! is_wp_error( $returned ) && (int) $returned > 0;
+			$entity    = 'customer';
+			$object_id = $accepted ? (int) $returned : null;
+			break;
+		default:
+			$returned = null;
+			$accepted = false;
+	}
+
+	if ( null === $status ) {
+		$status = $accepted ? AAFM_WRITE_ACCEPTED : AAFM_WRITE_REFUSED;
+	}
+	$result = array(
+		'status'   => $status,
+		'returned' => $returned,
+	);
+	aafm_emit_write_outcome(
+		$result,
+		array(
+			'kind'      => 'woocommerce',
+			'entity'    => '' === $entity ? null : $entity,
+			'object_id' => $object_id,
+			'key'       => $key,
+		)
+	);
+	return $result;
+}
+
+/**
  * The one emission point every writer calls once its status is decided.
  *
  * Writes the WP_DEBUG diagnostic line and fires aafm_write_completed for every status, so the log

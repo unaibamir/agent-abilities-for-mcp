@@ -923,7 +923,8 @@ class WC_Product {
 	// The data store names its class the way WC_Data_Store::get_current_class_name() does. A stub product
 	// has no backing post, so it reports a store that is not the post store unless its row sets one.
 	public function get_data_store() { return new class( (string) ( $this->data['data_store'] ?? 'WC_Stub_Data_Store' ) ) { private $name; public function __construct( $name ) { $this->name = $name; } public function get_current_class_name() { return $this->name; } }; }
-	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
+	// WC_Data::delete() asks woocommerce_pre_delete_product first and returns any non-null answer.
+	public function delete( $force = false ) { $check = apply_filters( 'woocommerce_pre_delete_product', null, $this, $force ); if ( null !== $check ) { return $check; } return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
 	}
@@ -1027,6 +1028,10 @@ class WC_Product_Variation {
 	// still hand back an object for a row that is gone, so the zeroed id is the signal that survives.
 	// When the store reports outright failure the vendor never reached set_id( 0 ) either.
 	public function delete( $force = false ) {
+		// WC_Data::delete() asks woocommerce_pre_delete_product first (a variation's object type is
+		// product too) and returns any non-null answer before the store runs.
+		$check = apply_filters( 'woocommerce_pre_delete_product', null, $this, $force );
+		if ( null !== $check ) { return $check; }
 		$result = \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) );
 		if ( $force && false !== $result ) { $this->data['id'] = 0; }
 		return $result;

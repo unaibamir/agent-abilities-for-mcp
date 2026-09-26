@@ -2620,5 +2620,41 @@ final class MetaWriteSweepTest extends TestCase {
 		$this->assertSame( array(), $found, "A raw metadata row is read outside includes/write-contract.php:\n" . implode( "\n", $found ) );
 		$stale = array_values( array_diff( self::SANCTIONED_RAW_META_ROW_READS, $listed ) );
 		$this->assertSame( array(), $stale, "A sanctioned raw read no longer matches any call; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale ) );
+		$repeated = $this->raw_meta_row_reads_listed_more_than_once( $listed );
+		$this->assertSame( array(), $repeated, "A sanctioned function reads a raw metadata row more than once; each listed key covers exactly one call:\n" . implode( "\n", $repeated ) );
+	}
+
+	/**
+	 * The listed keys that matched more than one call. A key names a function, not a call, so a
+	 * second read added to a sanctioned function would otherwise pass under the first one's line.
+	 *
+	 * @param string[] $listed Every sanctioned key the scan matched, once per call.
+	 * @return string[]
+	 */
+	private function raw_meta_row_reads_listed_more_than_once( array $listed ): array {
+		$counts = array_count_values( $listed );
+		return array_keys(
+			array_filter(
+				$counts,
+				static function ( int $count ): bool {
+					return $count > 1;
+				}
+			)
+		);
+	}
+
+	public function test_flags_a_second_raw_meta_row_read_in_a_sanctioned_function(): void {
+		$path   = 'includes/admin/onboarding-pointer.php';
+		$once   = "<?php\nfunction aafm_quickconnect_mark_pointer_dismissed_for_user() {\n\t\$a = aafm_meta_row( 'user', 1, 'k' );\n}\n";
+		$twice  = "<?php\nfunction aafm_quickconnect_mark_pointer_dismissed_for_user() {\n\t\$a = aafm_meta_row( 'user', 1, 'k' );\n\t\$b = aafm_meta_row( 'user', 1, 'k' );\n}\n";
+		$listed = static function ( array $keys ): array {
+			return array_values( array_intersect( $keys, self::SANCTIONED_RAW_META_ROW_READS ) );
+		};
+
+		$this->assertSame( array(), $this->raw_meta_row_reads_listed_more_than_once( $listed( $this->raw_meta_row_keys( $once, $path ) ) ) );
+		$this->assertSame(
+			array( $path . '|aafm_quickconnect_mark_pointer_dismissed_for_user|aafm_meta_row' ),
+			$this->raw_meta_row_reads_listed_more_than_once( $listed( $this->raw_meta_row_keys( $twice, $path ) ) )
+		);
 	}
 }

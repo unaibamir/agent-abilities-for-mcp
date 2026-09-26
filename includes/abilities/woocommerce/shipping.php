@@ -470,7 +470,13 @@ function aafm_exec_wc_create_shipping_zone( array $input ) {
 	$zone = new \WC_Shipping_Zone();
 	aafm_wc_apply_shipping_zone_input( $zone, $input );
 
-	$id = (int) $zone->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $zone,
+			'entity' => 'shipping_zone',
+		)
+	)['returned'];
 	if ( $id < 1 ) {
 		return aafm_generic_error();
 	}
@@ -558,7 +564,13 @@ function aafm_exec_wc_update_shipping_zone( array $input ) {
 	$fields = $input;
 	unset( $fields['zone_id'] );
 	aafm_wc_apply_shipping_zone_input( $zone, $fields );
-	$saved_id = (int) $zone->save();
+	$saved_id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $zone,
+			'entity' => 'shipping_zone',
+		)
+	)['returned'];
 	if ( $saved_id < 1 ) {
 		return aafm_generic_error();
 	}
@@ -875,7 +887,13 @@ function aafm_exec_wc_create_shipping_method( array $input ) {
 		return aafm_wc_shipping_zone_not_found();
 	}
 
-	$instance_id = (int) $zone->add_shipping_method( $method_type );
+	$instance_id = (int) aafm_wc_write(
+		'add_shipping_method',
+		array(
+			'object' => $zone,
+			'type'   => $method_type,
+		)
+	)['returned'];
 	if ( $instance_id < 1 ) {
 		return aafm_generic_error();
 	}
@@ -974,18 +992,19 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 	// returns while nothing has been changed yet - the old sequence persisted the title first and
 	// then reported a bare error after part of the request had already landed.
 	if ( array_key_exists( 'enabled', $input ) ) {
-		global $wpdb;
-
 		$is_enabled = ( 'no' === $input['enabled'] ) ? 0 : 1;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- No core API exists for the is_enabled column; this mirrors WC_REST_Shipping_Zone_Methods_V2_Controller::update_fields().
-		$updated_rows = $wpdb->update(
-			$wpdb->prefix . 'woocommerce_shipping_zone_methods',
-			array( 'is_enabled' => $is_enabled ),
-			array( 'instance_id' => $instance_id ),
-			array( '%d' ),
-			array( '%d' )
-		);
+		// No core API exists for the is_enabled column; this mirrors
+		// WC_REST_Shipping_Zone_Methods_V2_Controller::update_fields().
+		$updated_rows = aafm_wc_write(
+			'shipping_method_enabled',
+			array(
+				'data'         => array( 'is_enabled' => $is_enabled ),
+				'where'        => array( 'instance_id' => $instance_id ),
+				'format'       => array( '%d' ),
+				'where_format' => array( '%d' ),
+			)
+		)['returned'];
 
 		if ( false === $updated_rows ) {
 			return new \WP_Error(
@@ -1026,7 +1045,15 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce-core filter; we mirror WC's own write so extending plugins still fire.
 		$instance_settings = apply_filters( 'woocommerce_shipping_' . $method->id . '_instance_settings_values', $instance_settings, $method );
 
-		update_option( $method->get_instance_option_key(), $instance_settings );
+		aafm_wc_write(
+			'option',
+			array(
+				'option'    => $method->get_instance_option_key(),
+				'value'     => $instance_settings,
+				'entity'    => 'shipping_method',
+				'object_id' => $instance_id,
+			)
+		);
 
 		// Verify the write actually persisted. update_option() returns false both on genuine
 		// failure and when the new value equals the old one, so its return value alone cannot

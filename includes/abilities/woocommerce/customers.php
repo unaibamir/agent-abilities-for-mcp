@@ -680,7 +680,14 @@ function aafm_exec_wc_create_customer( array $input ) {
 	// WC_Customer object. Treat any non-positive / WP_Error result as a failure so a real
 	// create error can't be misread as success (and a real success can't be misread as a
 	// failure after the account is already persisted).
-	$created = wc_create_new_customer( $email, $username, wp_generate_password() );
+	$created = aafm_wc_write(
+		'create_customer',
+		array(
+			'email'    => $email,
+			'username' => $username,
+			'password' => wp_generate_password(),
+		)
+	)['returned'];
 	if ( $created instanceof \WP_Error ) {
 		return aafm_generic_error();
 	}
@@ -695,7 +702,14 @@ function aafm_exec_wc_create_customer( array $input ) {
 		return aafm_generic_error();
 	}
 	aafm_wc_apply_customer_input( $customer, $input );
-	if ( (int) $customer->save() < 1 ) {
+	$saved_id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $customer,
+			'entity' => 'customer',
+		)
+	)['returned'];
+	if ( $saved_id < 1 ) {
 		return aafm_generic_error();
 	}
 
@@ -768,7 +782,13 @@ function aafm_exec_wc_update_customer( array $input ) {
 	}
 
 	aafm_wc_apply_customer_input( $customer, $input );
-	$saved_id = (int) $customer->save();
+	$saved_id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $customer,
+			'entity' => 'customer',
+		)
+	)['returned'];
 	if ( $saved_id < 1 ) {
 		return aafm_generic_error();
 	}

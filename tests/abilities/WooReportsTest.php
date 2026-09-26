@@ -1369,4 +1369,125 @@ final class WooReportsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( array(), $captured, 'an order-only update must not fire the settings-save hook.' );
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce option-operation row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $option Option name.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_option_row( string $entity, ?int $id, string $option, string $status ): array {
+		$row        = $this->wc_row( $entity, $id, $status );
+		$row['key'] = $option;
+		return $row;
+	}
+
+	/**
+	 * Keep an option's stored value whatever a write asks for.
+	 *
+	 * @param mixed $value     The new value.
+	 * @param mixed $old_value The stored value.
+	 * @return mixed
+	 */
+	public static function keep_old_value( $value, $old_value ) {
+		unset( $value );
+		return $old_value;
+	}
+
+	public function test_a_gateway_setting_logs_written_then_unchanged_then_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$input = array(
+			'gateway_id' => 'paypal',
+			'title'      => 'PayPal Logged',
+		);
+
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		$input['title'] = 'PayPal Kept Out';
+		$refused        = aafm_exec_wc_update_payment_gateway( $input );
+		remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame(
+			array(
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'written' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'unchanged' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_the_gateway_order_option_logs_written_then_unchanged_then_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$input = array(
+			'gateway_id' => 'paypal',
+			'order'      => 7,
+		);
+
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
+		$input['order'] = 8;
+		$refused        = aafm_exec_wc_update_payment_gateway( $input );
+		remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame(
+			array(
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_gateway_order', 'written' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_gateway_order', 'unchanged' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_gateway_order', 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
 }

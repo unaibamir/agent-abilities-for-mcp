@@ -1995,6 +1995,9 @@ class WC_Tax {
 	 */
 	public static function _insert_tax_rate( array $tax_rate ): int {
 		global $wpdb;
+		if ( \AAFM\Tests\WcTaxStubStore::$insert_rate_returns_zero ) {
+			return 0;
+		}
 		$tax_rate = self::aafm_stub_format_rate_class( $tax_rate );
 		$table = $wpdb->prefix . 'woocommerce_tax_rates';
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery

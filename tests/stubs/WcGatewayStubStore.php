@@ -169,10 +169,10 @@ class WcGatewayStubStore {
 		// exposes, so production can verify the write against the DB-persisted value rather than the
 		// gateway's in-memory copy. Idempotent, so the unchanged-value case (nothing changed, but the
 		// option must still reflect the current settings) reads back as a match rather than a false miss.
-		update_option( 'woocommerce_' . $gateway_id . '_settings', self::$gateways[ $gateway_id ]['settings'] );
-		// WordPress update_option() returns false when the value was unchanged (no write needed) - NOT
-		// only on failure. Mirror that: the return signals whether THIS setting changed.
-		return $changed;
+		$saved = update_option( 'woocommerce_' . $gateway_id . '_settings', self::$gateways[ $gateway_id ]['settings'] );
+		// WC_Settings_API::update_option() returns core update_option()'s bool for the whole settings
+		// row, which is false both when nothing changed and when the write was refused.
+		return $saved;
 	}
 
 	/**

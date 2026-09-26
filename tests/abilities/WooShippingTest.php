@@ -1008,4 +1008,207 @@ final class WooShippingTest extends TestCase {
 			'the zone resolver\'s own function body must not hand-instantiate WC_Shipping_Zone directly any more (a different function, wc-create-shipping-zone, legitimately still does).'
 		);
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce option-operation row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $option Option name.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_option_row( string $entity, ?int $id, string $option, string $status ): array {
+		$row        = $this->wc_row( $entity, $id, $status );
+		$row['key'] = $option;
+		return $row;
+	}
+
+	/**
+	 * Keep an option's stored value whatever a write asks for.
+	 *
+	 * @param mixed $value     The new value.
+	 * @param mixed $old_value The stored value.
+	 * @return mixed
+	 */
+	public static function keep_old_value( $value, $old_value ) {
+		unset( $value );
+		return $old_value;
+	}
+
+	public function test_zone_create_and_update_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute( array( 'zone_name' => 'Logged' ) );
+		$this->assertIsArray( $created );
+		$id = (int) $created['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-shipping-zone' )->execute(
+			array(
+				'zone_id'   => 1,
+				'zone_name' => 'Europe (Logged)',
+			)
+		);
+		$this->assertIsArray( $updated );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'shipping_zone', $id, 'accepted' ),
+				$this->wc_row( 'shipping_zone', 1, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_zone_create_that_does_not_persist_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcShippingStubStore::$force_save_failure = true;
+		$res                                     = wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute( array( 'zone_name' => 'Never' ) );
+		WcShippingStubStore::$force_save_failure = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'shipping_zone', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_method_add_logs_accepted_and_one_wc_refuses_logs_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$added = wp_get_ability( 'aafm/wc-create-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'method_type' => 'free_shipping',
+			)
+		);
+		$this->assertIsArray( $added );
+		$instance_id = (int) $added['instance_id'];
+
+		WcShippingStubStore::$force_save_failure = true;
+		$refused                                 = wp_get_ability( 'aafm/wc-create-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'method_type' => 'free_shipping',
+			)
+		);
+		WcShippingStubStore::$force_save_failure = false;
+
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_error', $refused->get_error_code() );
+		$this->assertSame(
+			array(
+				$this->wc_row( 'shipping_method', $instance_id, 'accepted' ),
+				$this->wc_row( 'shipping_method', null, 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_enabled_toggle_logs_accepted_and_a_failed_update_logs_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$toggled = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+				'enabled'     => 'no',
+			)
+		);
+		$this->assertIsArray( $toggled );
+
+		$refused = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'UPDATE', 'woocommerce_shipping_zone_methods' ),
+			static function () {
+				return aafm_exec_wc_update_shipping_method(
+					array(
+						'zone_id'     => 1,
+						'instance_id' => 1,
+						'enabled'     => 'yes',
+					)
+				);
+			}
+		);
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_wc_enabled_write_failed', $refused->get_error_code() );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'shipping_method', 1, 'accepted' ),
+				$this->wc_row( 'shipping_method', 1, 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_the_method_title_option_logs_written_then_unchanged_then_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$input = array(
+			'zone_id'      => 1,
+			'instance_id'  => 1,
+			'method_title' => 'Logged rate',
+		);
+
+		$this->assertIsArray( wp_get_ability( 'aafm/wc-update-shipping-method' )->execute( $input ) );
+		$this->assertIsArray( wp_get_ability( 'aafm/wc-update-shipping-method' )->execute( $input ) );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_flat_rate_1_settings', $filter, 10, 2 );
+		$input['method_title'] = 'Kept out';
+		$refused               = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute( $input );
+		remove_filter( 'pre_update_option_woocommerce_flat_rate_1_settings', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $refused->get_error_code() );
+		$this->assertSame(
+			array(
+				$this->wc_option_row( 'shipping_method', 1, 'woocommerce_flat_rate_1_settings', 'written' ),
+				$this->wc_option_row( 'shipping_method', 1, 'woocommerce_flat_rate_1_settings', 'unchanged' ),
+				$this->wc_option_row( 'shipping_method', 1, 'woocommerce_flat_rate_1_settings', 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
 }

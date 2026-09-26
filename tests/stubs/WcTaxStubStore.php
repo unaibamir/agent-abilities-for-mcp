@@ -64,6 +64,14 @@ class WcTaxStubStore {
 	public static bool $simulate_masked_insert_failure = false;
 
 	/**
+	 * When true, WC_Tax::_insert_tax_rate() inserts nothing and returns 0, the id WooCommerce
+	 * hands back when its insert produced none.
+	 *
+	 * @var bool
+	 */
+	public static bool $insert_rate_returns_zero = false;
+
+	/**
 	 * Clear all class state. Does NOT touch the temp DB table - call drop/create for that.
 	 *
 	 * @return void
@@ -73,6 +81,8 @@ class WcTaxStubStore {
 		self::$force_save_failure             = false;
 		self::$force_delete_failure           = false;
 		self::$simulate_masked_insert_failure = false;
+
+		self::$insert_rate_returns_zero = false;
 	}
 
 	/**

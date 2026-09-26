@@ -765,7 +765,14 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		} else {
 			$gateway->description = $value;
 		}
-		$gateway->update_option( $key, $value );
+		aafm_wc_write(
+			'gateway_setting',
+			array(
+				'object' => $gateway,
+				'key'    => $key,
+				'value'  => $value,
+			)
+		);
 	}
 
 	// FIX-3 item 4 (sweep finding, B4 batch, the one live gap in this dispatch): WC_Settings_API::
@@ -794,7 +801,14 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$ordering                = get_option( 'woocommerce_gateway_order', array() );
 		$ordering                = is_array( $ordering ) ? $ordering : array();
 		$ordering[ $gateway_id ] = $order_val;
-		update_option( 'woocommerce_gateway_order', $ordering );
+		aafm_wc_write(
+			'option',
+			array(
+				'option' => 'woocommerce_gateway_order',
+				'value'  => $ordering,
+				'entity' => 'payment_gateway',
+			)
+		);
 	}
 
 	// Verify the persisted state matches what we asked for, reading the values WooCommerce actually

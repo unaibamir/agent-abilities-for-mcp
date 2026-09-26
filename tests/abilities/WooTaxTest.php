@@ -657,4 +657,109 @@ final class WooTaxTest extends TestCase {
 			'aafm_wc_get_tax_rate_by_id() must delegate to WC_Tax::_get_tax_rate(), the same by-id read WooCommerce\'s own REST controller uses.'
 		);
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	public function test_rate_create_rate_update_and_class_create_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$rate = wp_get_ability( 'aafm/wc-create-tax-rate' )->execute(
+			array(
+				'rate'    => '5.0000',
+				'name'    => 'Logged Rate',
+				'country' => 'US',
+			)
+		);
+		$this->assertIsArray( $rate );
+		$id = (int) $rate['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-tax-rate' )->execute(
+			array(
+				'rate_id' => $id,
+				'name'    => 'Logged Rate 2',
+			)
+		);
+		$this->assertSame( 'Logged Rate 2', $updated['name'] );
+
+		$class = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Logged Class' ) );
+		$this->assertIsArray( $class );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'tax_rate', $id, 'accepted' ),
+				$this->wc_row( 'tax_rate', $id, 'accepted' ),
+				$this->wc_row( 'tax_class', null, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_rate_insert_that_returns_no_id_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcTaxStubStore::$insert_rate_returns_zero = true;
+		$res                                      = wp_get_ability( 'aafm/wc-create-tax-rate' )->execute(
+			array(
+				'rate'    => '5.0000',
+				'name'    => 'Never',
+				'country' => 'US',
+			)
+		);
+		WcTaxStubStore::$insert_rate_returns_zero = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'tax_rate', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_class_create_wc_refuses_logs_refused_and_returns_its_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcTaxStubStore::$force_save_failure = true;
+		$res                                = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Refused Class' ) );
+		WcTaxStubStore::$force_save_failure = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'wc_tax', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'tax_class', null, 'refused' ) ), $this->outcome_details() );
+	}
 }

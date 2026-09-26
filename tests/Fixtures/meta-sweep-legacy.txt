@@ -35,11 +35,3 @@ includes/abilities/woocommerce/tax.php|aafm_exec_wc_update_tax_rate|_update_tax_
 includes/abilities/woocommerce/variations.php|aafm_exec_wc_create_product_variation|save|1
 includes/abilities/woocommerce/variations.php|aafm_exec_wc_delete_product_variation|delete|1
 includes/abilities/woocommerce/variations.php|aafm_exec_wc_update_product_variation|save|1
-includes/admin/connection.php|aafm_backfill_agent_user_marker|get_user_meta|1
-includes/admin/connection.php|aafm_backfill_agent_user_marker|update_user_meta|1
-includes/admin/connection.php|aafm_backfill_agent_user_marker|update_user_meta|2
-includes/admin/connection.php|aafm_create_agent_user|get_user_meta|1
-includes/admin/connection.php|aafm_create_agent_user|update_user_meta|1
-includes/admin/connection.php|aafm_create_agent_user|update_user_meta|2
-includes/admin/connection.php|aafm_create_agent_user|update_user_meta|3
-includes/admin/connection.php|aafm_create_agent_user|update_user_meta|4

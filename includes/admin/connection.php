@@ -172,10 +172,10 @@ function aafm_create_agent_user( string $login ) {
 			&& array( 'subscriber' ) === array_values( array_map( 'strval', $existing_user->roles ) );
 		if ( $is_agent_shaped
 			&& ! user_can( $existing_id, 'manage_options' )
-			&& ! get_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), true )
+			&& ! aafm_meta_get( 'user', $existing_id, aafm_agent_user_marker_meta_key(), true )
 		) {
-			update_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), 1 );
-			update_user_meta( $existing_id, 'aafm_agent_user_created', time() );
+			aafm_meta_set( 'user', $existing_id, aafm_agent_user_marker_meta_key(), 1 );
+			aafm_meta_set( 'user', $existing_id, 'aafm_agent_user_created', time() );
 		}
 
 		// The user is already there - hand back a friendly message plus the existing user's
@@ -207,8 +207,16 @@ function aafm_create_agent_user( string $login ) {
 	// Stamp the plugin-created marker so the onboarding "Connect your agent" signal can tell this
 	// dedicated agent user apart from any unrelated application-password holder. Whatever login the
 	// admin typed, the marker travels with the account - the signal keys off the marker, not a name.
-	update_user_meta( $user_id, aafm_agent_user_marker_meta_key(), 1 );
-	update_user_meta( $user_id, 'aafm_agent_user_created', time() );
+	$stamps = array(
+		aafm_meta_set( 'user', $user_id, aafm_agent_user_marker_meta_key(), 1 ),
+		aafm_meta_set( 'user', $user_id, 'aafm_agent_user_created', time() ),
+	);
+	foreach ( $stamps as $stamp ) {
+		// A stamp that did not land leaves the account unmarked, so the create has not succeeded.
+		if ( is_wp_error( $stamp ) || ! in_array( $stamp['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+			return aafm_generic_error();
+		}
+	}
 
 	// Hand back the sanitized login too, not just the id: on the same-session create the JS rewrites
 	// the App-Password config snippets to name this account, and it must use the login the server
@@ -239,14 +247,14 @@ function aafm_backfill_agent_user_marker(): void {
 	}
 
 	$existing_id = (int) username_exists( 'mcp-agent' );
-	if ( $existing_id > 0 && ! get_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), true ) ) {
+	if ( $existing_id > 0 && ! aafm_meta_get( 'user', $existing_id, aafm_agent_user_marker_meta_key(), true ) ) {
 		$user = aafm_exact_object( 'user', $existing_id );
 		if ( $user instanceof WP_User
 			&& array( 'subscriber' ) === array_values( array_map( 'strval', $user->roles ) )
 			&& ! empty( WP_Application_Passwords::get_user_application_passwords( $existing_id ) )
 		) {
-			update_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), 1 );
-			update_user_meta( $existing_id, 'aafm_agent_user_created', time() );
+			aafm_meta_set( 'user', $existing_id, aafm_agent_user_marker_meta_key(), 1 );
+			aafm_meta_set( 'user', $existing_id, 'aafm_agent_user_created', time() );
 		}
 	}
 

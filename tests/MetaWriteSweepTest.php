@@ -2412,6 +2412,15 @@ final class MetaWriteSweepTest extends TestCase {
 	private const META_WRITERS = array( 'aafm_meta_set', 'aafm_meta_delete', 'aafm_meta_set_group' );
 
 	/**
+	 * Errors after a metadata write that do not report that write: the create-agent-user self-heal
+	 * returns its existing "already exists" error whatever the marker stamp did. May only shrink; a
+	 * key that no longer matches a flagged error fails.
+	 */
+	private const ERRORS_NOT_REPORTING_A_WRITE = array(
+		'includes/admin/connection.php|aafm_create_agent_user|1',
+	);
+
+	/**
 	 * Every `new WP_Error(` that follows a metadata writer call in the same named function and
 	 * does not carry aafm_meta_write_error()'s error_data in its own arguments, either by calling it
 	 * there or through `$v->get_error_data()` on a variable assigned from it earlier in the
@@ -2513,13 +2522,21 @@ final class MetaWriteSweepTest extends TestCase {
 		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
 
 		$found = array();
+
+		$listed = array();
 		foreach ( $files as $path => $source ) {
 			foreach ( $this->meta_writer_error_keys( $source, $path ) as $key ) {
+				if ( in_array( $key, self::ERRORS_NOT_REPORTING_A_WRITE, true ) ) {
+					$listed[] = $key;
+					continue;
+				}
 				$found[] = $key;
 			}
 		}
 
 		$this->assertSame( array(), $found, "An error after a metadata write is missing the writer's error_data:\n" . implode( "\n", $found ) );
+		$stale = array_values( array_diff( self::ERRORS_NOT_REPORTING_A_WRITE, $listed ) );
+		$this->assertSame( array(), $stale, "A listed error no longer matches any flagged error; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale ) );
 	}
 
 	// --- Raw metadata rows ----------------------------------------------------

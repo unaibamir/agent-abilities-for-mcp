@@ -18,6 +18,7 @@ namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\WcGatewayStubStore;
 use WP_Error;
 
@@ -1487,6 +1488,61 @@ final class WooReportsTest extends TestCase {
 				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_gateway_order', 'unchanged' ),
 				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_gateway_order', 'refused' ),
 			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_gateway_setting_whose_row_cannot_be_read_back_logs_unconfirmed(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$input = array(
+			'gateway_id' => 'paypal',
+			'title'      => 'PayPal Logged',
+		);
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		$input['title'] = 'PayPal Kept Out';
+		QueryFaultInjector::reset_fired_count();
+		$result = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT option_value FROM', "option_name = 'woocommerce_paypal_settings'" ),
+			static function () use ( $input ) {
+				return aafm_exec_wc_update_payment_gateway( $input );
+			}
+		);
+		remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame(
+			array(
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'written' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'unconfirmed' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_gateway_setting_with_no_stored_row_logs_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_paypal_settings' );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		$result = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'title'      => 'PayPal Kept Out',
+			)
+		);
+		remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertFalse( get_option( 'woocommerce_paypal_settings' ) );
+		$this->assertSame(
+			array( $this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'refused' ) ),
 			$this->outcome_details()
 		);
 	}

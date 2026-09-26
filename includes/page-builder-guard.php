@@ -29,6 +29,10 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
+if ( ! defined( 'AAFM_BUILDER_OWNERSHIP_UNKNOWN' ) ) {
+	define( 'AAFM_BUILDER_OWNERSHIP_UNKNOWN', 'unknown' );
+}
+
 /**
  * Whether a post's content is owned by a detected foreign page builder.
  *
@@ -38,19 +42,63 @@ defined( 'ABSPATH' ) || exit;
  * confidence that the guard covers a builder it does not. The map is filterable via
  * aafm_page_builder_markers, so an operator can add a marker without a code change.
  *
- * @param int $post_id Post id.
- * @return string|false The detected builder's short name, or false when none is detected.
+ * By default this is the guard every write consults. It reads every marker's stored rows in one
+ * query and also reads each marker through core, so a marker counts when either view holds it,
+ * including one only a read filter or a registered default supplies, and a stored row a read
+ * filter hides. A failed read, a marker row stored under another spelling that the column's
+ * collation matches, or markers of two different builders answer
+ * AAFM_BUILDER_OWNERSHIP_UNKNOWN, which every write treats as owned. With $pure_read true it reads
+ * through core only and the first marker in map order wins, for a flag a read reports and no write
+ * decides from.
+ *
+ * @param int  $post_id   Post id.
+ * @param bool $pure_read Read through core only, never answering unknown.
+ * @return string|false The detected builder's short name, AAFM_BUILDER_OWNERSHIP_UNKNOWN, or false
+ *                      when none is detected.
  */
-function aafm_post_has_foreign_builder_ownership( int $post_id ) {
-	foreach ( aafm_page_builder_markers() as $meta_key => $builder ) {
-		$value = get_post_meta( $post_id, (string) $meta_key, true );
-		if ( '' === $value || false === $value || null === $value || '0' === $value || 'off' === $value ) {
-			continue; // Present-but-falsy (e.g. Divi toggled off) is not current ownership.
+function aafm_post_has_foreign_builder_ownership( int $post_id, bool $pure_read = false ) {
+	$markers = aafm_page_builder_markers();
+
+	if ( $pure_read ) {
+		foreach ( $markers as $meta_key => $builder ) {
+			$value = aafm_meta_get( 'post', $post_id, (string) $meta_key, true );
+			if ( '' === $value || false === $value || null === $value || '0' === $value || 'off' === $value ) {
+				continue; // Present-but-falsy (e.g. Divi toggled off) is not current ownership.
+			}
+			return (string) $builder;
 		}
-		return (string) $builder;
+		return false;
 	}
 
-	return false;
+	$stored = aafm_meta_rows( 'post', $post_id, array_map( 'strval', array_keys( $markers ) ) );
+	if ( ! $stored['ok'] ) {
+		return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
+	}
+	foreach ( $stored['by_key'] as $rows ) {
+		if ( $rows['aliased'] > 0 ) {
+			return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
+		}
+	}
+
+	$owner = false;
+	foreach ( $markers as $meta_key => $builder ) {
+		$meta_key = (string) $meta_key;
+		$on       = false;
+		foreach ( array( $stored['by_key'][ $meta_key ]['value'] ?? null, aafm_meta_get( 'post', $post_id, $meta_key, true ) ) as $value ) {
+			if ( ! ( '' === $value || false === $value || null === $value || '0' === $value || 'off' === $value ) ) {
+				$on = true; // Either view holding a value that is not off counts.
+			}
+		}
+		if ( ! $on ) {
+			continue;
+		}
+		if ( false !== $owner && (string) $builder !== $owner ) {
+			return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
+		}
+		$owner = (string) $builder;
+	}
+
+	return $owner;
 }
 
 /**
@@ -101,10 +149,19 @@ function aafm_page_builder_markers(): array {
  * shortcodes), so an unguarded generic write there would alter or corrupt the shortcode tree
  * rather than silently do nothing - Codex final round 7 LOW.
  *
- * @param string $builder The detected builder's short name (from aafm_post_has_foreign_builder_ownership()).
+ * @param string $builder The detected builder's short name, or AAFM_BUILDER_OWNERSHIP_UNKNOWN (from
+ *                        aafm_post_has_foreign_builder_ownership()).
  * @return WP_Error
  */
 function aafm_page_builder_owned_error( string $builder ): WP_Error {
+	if ( AAFM_BUILDER_OWNERSHIP_UNKNOWN === $builder ) {
+		return new WP_Error(
+			'aafm_page_builder_owned',
+			__( 'This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	$label = ucwords( str_replace( '-', ' ', $builder ) );
 	return new WP_Error(
 		'aafm_page_builder_owned',

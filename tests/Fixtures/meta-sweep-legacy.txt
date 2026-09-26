@@ -43,7 +43,3 @@ includes/admin/connection.php|aafm_create_agent_user|update_user_meta|1
 includes/admin/connection.php|aafm_create_agent_user|update_user_meta|2
 includes/admin/connection.php|aafm_create_agent_user|update_user_meta|3
 includes/admin/connection.php|aafm_create_agent_user|update_user_meta|4
-includes/admin/onboarding-pointer.php|aafm_quickconnect_mark_pointer_dismissed_for_user|get_user_meta|1
-includes/admin/onboarding-pointer.php|aafm_quickconnect_mark_pointer_dismissed_for_user|update_user_meta|1
-includes/admin/onboarding-pointer.php|aafm_quickconnect_pointer_dismissed_for_user|get_user_meta|1
-includes/page-builder-guard.php|aafm_post_has_foreign_builder_ownership|get_post_meta|1

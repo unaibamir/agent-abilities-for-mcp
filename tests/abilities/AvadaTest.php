@@ -12,6 +12,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -59,6 +60,44 @@ final class AvadaTest extends TestCase {
 
 		$out = aafm_exec_avada_get_page_content( array( 'post_id' => $id ) );
 
+		$this->assertFalse( $out['is_avada_owned'] );
+	}
+
+	public function test_get_page_content_reports_an_avada_marker_supplied_only_by_a_read_filter(): void {
+		$id     = self::factory()->post->create( array( 'post_content' => 'ordinary text' ) );
+		$supply = static function ( $value, $object_id, $meta_key ) use ( $id ) {
+			return ( $id === (int) $object_id && 'fusion_builder_status' === $meta_key ) ? 'active' : $value;
+		};
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		add_filter( 'get_post_metadata', $supply, 10, 3 );
+		try {
+			$out = aafm_exec_avada_get_page_content( array( 'post_id' => $id ) );
+		} finally {
+			remove_filter( 'get_post_metadata', $supply, 10 );
+		}
+
+		$this->assertTrue( $out['is_avada_owned'] );
+	}
+
+	public function test_get_page_content_reports_not_avada_owned_when_the_marker_read_fails(): void {
+		$id = $this->make_avada_post( self::NESTED_COLUMNS );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		aafm_exact_object( 'post', $id );
+		wp_cache_delete( $id, 'post_meta' );
+		QueryFaultInjector::reset_fired_count();
+
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT post_id, meta_key, meta_value FROM', 'postmeta' ),
+			static function () use ( $id ) {
+				return aafm_exec_avada_get_page_content( array( 'post_id' => $id ) );
+			},
+			1
+		);
+		wp_cache_delete( $id, 'post_meta' );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertIsArray( $out );
+		$this->assertSame( self::NESTED_COLUMNS, $out['content'] );
 		$this->assertFalse( $out['is_avada_owned'] );
 	}
 

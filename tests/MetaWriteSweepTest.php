@@ -2525,6 +2525,17 @@ final class MetaWriteSweepTest extends TestCase {
 	// --- Raw metadata rows ----------------------------------------------------
 
 	/**
+	 * The two direct reads the write contract keeps outside the helper file: the page-builder
+	 * guard's marker read, which a failed query must turn into unknown ownership, and the pointer
+	 * dismissal's read-modify-write baseline, which a failed query must abort. May only shrink; a
+	 * key that no longer matches a call fails.
+	 */
+	private const SANCTIONED_RAW_META_ROW_READS = array(
+		'includes/admin/onboarding-pointer.php|aafm_quickconnect_mark_pointer_dismissed_for_user|aafm_meta_row',
+		'includes/page-builder-guard.php|aafm_post_has_foreign_builder_ownership|aafm_meta_rows',
+	);
+
+	/**
 	 * Every call of the raw metadata row readers outside the helper file, keyed path|function|name.
 	 * They skip registered defaults and read filters, so a read-modify-write that merges onto their
 	 * value drops what core's own read would have returned.
@@ -2577,12 +2588,20 @@ final class MetaWriteSweepTest extends TestCase {
 		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
 
 		$found = array();
+
+		$listed = array();
 		foreach ( $files as $path => $source ) {
 			foreach ( $this->raw_meta_row_keys( $source, $path ) as $key ) {
+				if ( in_array( $key, self::SANCTIONED_RAW_META_ROW_READS, true ) ) {
+					$listed[] = $key;
+					continue;
+				}
 				$found[] = $key;
 			}
 		}
 
 		$this->assertSame( array(), $found, "A raw metadata row is read outside includes/write-contract.php:\n" . implode( "\n", $found ) );
+		$stale = array_values( array_diff( self::SANCTIONED_RAW_META_ROW_READS, $listed ) );
+		$this->assertSame( array(), $stale, "A sanctioned raw read no longer matches any call; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale ) );
 	}
 }

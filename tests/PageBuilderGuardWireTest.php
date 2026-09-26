@@ -116,6 +116,40 @@ final class PageBuilderGuardWireTest extends TestCase {
 		$this->assertSame( $original_title, get_post( $post_id )->post_title, 'The builder-owned post must be left untouched.' );
 	}
 
+	public function test_a_real_tools_call_refuses_a_post_whose_builder_cannot_be_told_apart(): void {
+		$this->register_enabled( array( 'aafm/update-post' ) );
+		$post_id        = self::factory()->post->create();
+		$original_title = get_post( $post_id )->post_title;
+		update_post_meta( $post_id, 'fusion_builder_status', 'active' );
+		update_post_meta( $post_id, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
+		$this->acting_as( 'administrator' );
+
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$server  = $this->build_single_ability_server( $adapter );
+		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+
+		$result = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/update-post' ),
+				'arguments' => array(
+					'post_id' => $post_id,
+					'title'   => 'Should be refused',
+				),
+			),
+			'req-page-builder-wire-unknown'
+		);
+
+		$this->assertInstanceOf( \WP\McpSchema\Server\Tools\DTO\CallToolResult::class, $result );
+		$this->assertTrue( $result->getIsError() );
+		$content = $result->getContent();
+		$this->assertNotEmpty( $content );
+		$this->assertSame(
+			'This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again.',
+			$content[0]->getText()
+		);
+		$this->assertSame( $original_title, get_post( $post_id )->post_title );
+	}
+
 	/**
 	 * Codex final round 7 HIGH: a real two-tool sequence proving the marker can no longer be
 	 * cleared through update-post-meta, so the ownership guard on the SEPARATE update-post call

@@ -149,7 +149,7 @@ function aafm_exec_avada_get_page_content( array $input ) {
 	return array(
 		'post_id'        => $id,
 		'content'        => (string) $post->post_content,
-		'is_avada_owned' => 'avada' === aafm_post_has_foreign_builder_ownership( $id ),
+		'is_avada_owned' => 'avada' === aafm_post_has_foreign_builder_ownership( $id, true ),
 	);
 }
 

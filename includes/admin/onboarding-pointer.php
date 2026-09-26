@@ -113,7 +113,7 @@ function aafm_quickconnect_activate_menu_pointer( bool $network_wide = false ): 
  * @return bool
  */
 function aafm_quickconnect_pointer_dismissed_for_user(): bool {
-	$dismissed = (string) get_user_meta( get_current_user_id(), 'dismissed_wp_pointers', true );
+	$dismissed = (string) aafm_meta_get( 'user', get_current_user_id(), 'dismissed_wp_pointers', true );
 	$list      = array_filter( array_map( 'trim', explode( ',', $dismissed ) ) );
 	return in_array( aafm_quickconnect_pointer_id(), $list, true );
 }
@@ -132,13 +132,19 @@ function aafm_quickconnect_mark_pointer_dismissed_for_user(): void {
 	if ( $user_id <= 0 ) {
 		return;
 	}
-	$dismissed = (string) get_user_meta( $user_id, 'dismissed_wp_pointers', true );
+	// The stored list is read failure-aware: rewriting it after a failed read would drop every
+	// pointer this user dismissed before.
+	$baseline = aafm_meta_row( 'user', $user_id, 'dismissed_wp_pointers' );
+	if ( ! $baseline['ok'] ) {
+		return;
+	}
+	$dismissed = (string) $baseline['value'];
 	$list      = array_filter( array_map( 'trim', explode( ',', $dismissed ) ) );
 	if ( in_array( aafm_quickconnect_pointer_id(), $list, true ) ) {
 		return;
 	}
 	$list[] = aafm_quickconnect_pointer_id();
-	update_user_meta( $user_id, 'dismissed_wp_pointers', implode( ',', $list ) );
+	aafm_meta_set( 'user', $user_id, 'dismissed_wp_pointers', implode( ',', $list ) );
 }
 
 /**

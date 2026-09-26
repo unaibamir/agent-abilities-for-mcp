@@ -429,4 +429,104 @@ final class PageBuilderGuardSweepTest extends TestCase {
 		$plain_post = get_post( $plain );
 		$this->assertSame( 'found here', $plain_post->post_content );
 	}
+
+	/**
+	 * Every wired write execute callback refuses a post whose owning builder cannot be told.
+	 *
+	 * Avada plus Visual Composer markers on a healthy post answer unknown ownership, which each
+	 * consumer must treat as owned rather than match against a list of builder names.
+	 *
+	 * @dataProvider provide_write_execute_callbacks
+	 *
+	 * @param string              $exec_function Function name under test.
+	 * @param array<string,mixed> $extra_input   Extra input merged with the post's id.
+	 * @param string              $id_key        The input key the callback expects the post id under.
+	 * @param string              $post_type     Post type the fixture must be created as.
+	 */
+	public function test_every_content_write_refuses_a_post_of_unknown_ownership( string $exec_function, array $extra_input, string $id_key, string $post_type ): void {
+		$post = self::factory()->post->create( array( 'post_type' => $post_type ) );
+		update_post_meta( $post, 'fusion_builder_status', 'active' );
+		update_post_meta( $post, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$result = $exec_function( array_merge( array( $id_key => $post ), $extra_input ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
+		$this->assertSame( 'This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again.', $result->get_error_message() );
+		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
+	}
+
+	public function test_replace_sitewide_counts_a_failed_marker_read_as_builder_owned_and_writes_nothing(): void {
+		$post = self::factory()->post->create(
+			array(
+				'post_content' => 'find me here',
+				'post_status'  => 'publish',
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		Support\QueryFaultInjector::reset_fired_count();
+
+		$result = Support\QueryFaultInjector::break_query_with_real_error(
+			'aafm_match_',
+			static function () {
+				return aafm_exec_replace_sitewide(
+					array(
+						'search'    => 'find me',
+						'replace'   => 'found',
+						'post_type' => 'post',
+						'status'    => 'publish',
+						'dry_run'   => false,
+					)
+				);
+			}
+		);
+
+		$this->assertSame( 1, Support\QueryFaultInjector::fired_count() );
+		$this->assertIsArray( $result );
+		$this->assertSame( 1, $result['skipped_builder_owned'] );
+		$this->assertSame( 0, $result['failed_updates'] );
+		$this->assertSame( 0, $result['updated_posts'] );
+		$this->assertSame( 'find me here', get_post( $post )->post_content, 'Nothing may be written when the marker read fails.' );
+	}
+
+	public function test_avada_replace_refuses_an_elementor_and_avada_post_as_not_avada_owned(): void {
+		$id = self::factory()->post->create( array( 'post_content' => '[fusion_text]body[/fusion_text]' ) );
+		update_post_meta( $id, '_elementor_data', '[]' );
+		update_post_meta( $id, 'fusion_builder_status', 'active' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'body',
+				'replace' => 'BODY',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_not_avada_owned', $out->get_error_code() );
+		$this->assertSame( 'This post is not owned by Avada/Fusion Builder.', $out->get_error_message() );
+		$this->assertSame( array( 'status' => 409 ), $out->get_error_data() );
+		$this->assertSame( '[fusion_text]body[/fusion_text]', get_post( $id )->post_content );
+	}
+
+	public function test_avada_replace_refuses_an_avada_and_visual_composer_post_as_not_avada_owned(): void {
+		$id = self::factory()->post->create( array( 'post_content' => '[fusion_text]body[/fusion_text]' ) );
+		update_post_meta( $id, 'fusion_builder_status', 'active' );
+		update_post_meta( $id, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$out = aafm_exec_avada_replace_text(
+			array(
+				'post_id' => $id,
+				'search'  => 'body',
+				'replace' => 'BODY',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_not_avada_owned', $out->get_error_code() );
+		$this->assertSame( '[fusion_text]body[/fusion_text]', get_post( $id )->post_content );
+	}
 }

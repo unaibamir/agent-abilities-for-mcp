@@ -2002,7 +2002,7 @@ final class WooOrdersTest extends TestCase {
 		);
 	}
 
-	public function test_an_add_product_that_saves_no_item_logs_refused_and_answers_as_before(): void {
+	public function test_an_add_product_that_saves_no_item_logs_refused(): void {
 		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );

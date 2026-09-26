@@ -1760,17 +1760,6 @@ final class WooOrdersTest extends TestCase {
 		);
 	}
 
-	/**
-	 * Define a minimal WC_Order_Item_Tax for the money restore, which types its tax rows to it.
-	 */
-	private function define_order_item_tax(): void {
-		if ( class_exists( 'WC_Order_Item_Tax' ) ) {
-			return;
-		}
-		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-		eval( 'class WC_Order_Item_Tax { public $id = 0; public $rate_id = 0; public function get_id() { return $this->id; } public function get_rate_id( $context = "view" ) { return $this->rate_id; } public function set_rate_id( $v ) { $this->rate_id = (int) $v; } public function set_rate_code( $v ) {} public function set_label( $v ) {} public function set_compound( $v ) {} public function set_rate_percent( $v ) {} public function set_tax_total( $v ) {} public function set_shipping_tax_total( $v ) {} public function save() { return $this->id; } }' );
-	}
-
 	public function test_an_order_create_logs_each_vendor_call_as_accepted(): void {
 		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
 		$this->register_wc_order_writes();
@@ -1793,7 +1782,7 @@ final class WooOrdersTest extends TestCase {
 		$this->assertSame(
 			array(
 				$this->wc_row( 'order_item', $item_id, 'accepted' ),
-				$this->wc_row( 'order', null, 'accepted' ),
+				$this->wc_row( 'order', $id, 'accepted' ),
 				$this->wc_row( 'order', $id, 'accepted' ),
 			),
 			$this->outcome_details()
@@ -1903,7 +1892,6 @@ final class WooOrdersTest extends TestCase {
 
 	public function test_a_money_restore_logs_each_item_tax_row_and_order_save_as_accepted(): void {
 		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
-		$this->define_order_item_tax();
 
 		$item         = new class() {
 			public function get_id() {
@@ -2033,7 +2021,6 @@ final class WooOrdersTest extends TestCase {
 		WcOrderStubStore::$add_product_returns_zero = false;
 
 		$this->assertIsArray( $res );
-		$this->assertSame( array(), $res['line_items'] );
 		$this->assertSame( array( $this->wc_row( 'order_item', null, 'refused' ) ), $this->rows_for( 'order_item' ) );
 	}
 

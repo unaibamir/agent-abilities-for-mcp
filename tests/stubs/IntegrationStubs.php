@@ -20,6 +20,8 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests;
 
+require_once __DIR__ . '/WcOrderItemTaxStub.php';
+
 /**
  * Host-API stub helpers, mixed into an integration slice's test case.
  */
@@ -815,6 +817,9 @@ class WC_Order {
 		}
 		$this->data['subtotal'] = number_format( $subtotal, 2, '.', '' );
 		$this->data['total']    = number_format( $subtotal + (float) ( $this->data['shipping_total'] ?? 0 ) + (float) ( $this->data['total_tax'] ?? 0 ), 2, '.', '' );
+		// WooCommerce saves the order at the end (abstract-wc-order.php:2444 on 11.1.2), so a new
+		// order gets its id here.
+		$this->save();
 		return $this->data['total'];
 	}
 	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $added_by_user = (bool) $added_by_user; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note, $added_by_user ); }

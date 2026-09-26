@@ -796,7 +796,14 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$adde
 	// thing that can fail after these rows exist -- see aafm_exec_wc_update_order()'s recalculation.
 	try {
 		foreach ( $resolved as $to_add ) {
-			$added_item_ids[] = (int) $order->add_product( $to_add['product'], $to_add['qty'] );
+			$added_item_ids[] = (int) aafm_wc_write(
+				'add_product',
+				array(
+					'object'  => $order,
+					'product' => $to_add['product'],
+					'qty'     => $to_add['qty'],
+				)
+			)['returned'];
 		}
 	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 		return aafm_wc_rollback_added_order_items( $added_item_ids );
@@ -899,7 +906,7 @@ function aafm_wc_delete_added_order_items( array $item_ids ): array {
 		// cleanup has had its turn.
 		$deleted = false;
 		try {
-			$deleted = function_exists( 'wc_delete_order_item' ) ? wc_delete_order_item( $item_id ) : false;
+			$deleted = function_exists( 'wc_delete_order_item' ) ? aafm_wc_write( 'delete_item', array( 'item_id' => $item_id ) )['returned'] : false;
 		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 			$deleted = false;
 		}
@@ -1178,7 +1185,13 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 				$item->set_subtotal( $row['subtotal'] );
 			}
 			$item->set_taxes( $row['taxes'] );
-			$item->save();
+			aafm_wc_write(
+				'save',
+				array(
+					'object' => $item,
+					'entity' => 'order_item',
+				)
+			);
 		}
 
 		$seen_rates = array();
@@ -1200,7 +1213,13 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 			// started with. Recreated rows below get the same treatment, for the same reason.
 			$row = $snapshot['taxes'][ $rate_id ];
 			aafm_wc_apply_tax_row_snapshot( $tax_item, $row );
-			$tax_item->save();
+			aafm_wc_write(
+				'save',
+				array(
+					'object' => $tax_item,
+					'entity' => 'order_item',
+				)
+			);
 			$seen_rates[ $rate_id ] = true;
 		}
 
@@ -1222,7 +1241,13 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 		$order->set_cart_tax( $snapshot['order']['cart_tax'] );
 		$order->set_shipping_tax( $snapshot['order']['shipping_tax'] );
 		$order->set_total( $snapshot['order']['total'] );
-		$order->save();
+		aafm_wc_write(
+			'save',
+			array(
+				'object' => $order,
+				'entity' => 'order',
+			)
+		);
 
 		return true;
 	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
@@ -1430,7 +1455,14 @@ function aafm_wc_rollback_created_order( \WC_Order $order, array $item_ids ): \W
 
 	if ( $order_id > 0 ) {
 		try {
-			$order->delete( true );
+			aafm_wc_write(
+				'delete',
+				array(
+					'object'       => $order,
+					'force_delete' => true,
+					'entity'       => 'order',
+				)
+			);
 		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a throw here is answered by the existence check below, which is the authority.
 			unset( $e );
 		}
@@ -1625,11 +1657,17 @@ function aafm_exec_wc_create_order( array $input ) {
 	// signature archetype. The rollback differs from the update path's because a create has no
 	// earlier state to restore -- see aafm_wc_rollback_created_order().
 	try {
-		$order->calculate_totals();
+		aafm_wc_write( 'calculate_totals', array( 'object' => $order ) );
 	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 		return aafm_wc_rollback_created_order( $order, $added_item_ids );
 	}
-	$id = (int) $order->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $order,
+			'entity' => 'order',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_order_object( $id );
 	if ( null === $saved ) {
@@ -1806,12 +1844,24 @@ function aafm_exec_wc_update_order( array $input ) {
 	// and say so honestly when it cannot. See aafm_wc_rollback_recalculated_order().
 	if ( $adds_line_items ) {
 		try {
-			$order->calculate_totals( true );
+			aafm_wc_write(
+				'calculate_totals',
+				array(
+					'object'    => $order,
+					'and_taxes' => true,
+				)
+			);
 		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 			return aafm_wc_rollback_recalculated_order( (int) $order->get_id(), $added_item_ids, $money_snapshot );
 		}
 	}
-	$order->save();
+	aafm_wc_write(
+		'save',
+		array(
+			'object' => $order,
+			'entity' => 'order',
+		)
+	);
 
 	$saved = aafm_wc_get_order_object( $order->get_id() );
 	if ( null === $saved ) {
@@ -1899,7 +1949,14 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	// failed transition (class-wc-order.php:402-426), so ignoring the return turned a failed
 	// transition into a success payload carrying the old status. Check it, and verify the
 	// re-read order actually carries the requested status before reporting success.
-	if ( true !== $order->update_status( $short ) ) {
+	$status_changed = aafm_wc_write(
+		'update_status',
+		array(
+			'object'     => $order,
+			'new_status' => $short,
+		)
+	)['returned'];
+	if ( true !== $status_changed ) {
 		return new \WP_Error(
 			'aafm_wc_status_update_failed',
 			sprintf(
@@ -1911,7 +1968,13 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	}
 	// save() is technically redundant on real WC (update_status() persists internally), but
 	// is required here so the stub's save() flushes the in-memory data back to WcOrderStubStore.
-	$order->save();
+	aafm_wc_write(
+		'save',
+		array(
+			'object' => $order,
+			'entity' => 'order',
+		)
+	);
 
 	$saved = aafm_wc_get_order_object( $order->get_id() );
 	if ( null === $saved ) {
@@ -2173,7 +2236,15 @@ function aafm_exec_wc_create_order_note( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$note_id = $order->add_order_note( $note_text, $customer_note, true );
+	$note_id = aafm_wc_write(
+		'add_note',
+		array(
+			'object'           => $order,
+			'note'             => $note_text,
+			'is_customer_note' => $customer_note,
+			'added_by_user'    => true,
+		)
+	)['returned'];
 	if ( ! $note_id ) {
 		return aafm_generic_error();
 	}
@@ -2622,7 +2693,7 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 	// $order->get_remaining_refund_amount(). Adding that reconciliation here would make this
 	// plugin stricter than WooCommerce's own admin UI and REST API - the exact anti-pattern the
 	// delegation audit exists to stop. KEEP, DOCUMENTED: no reconciliation check is added.
-	$refund = wc_create_refund( $refund_args );
+	$refund = aafm_wc_write( 'refund', array( 'args' => $refund_args ) )['returned'];
 
 	if ( is_wp_error( $refund ) || ! ( $refund instanceof \WC_Order_Refund ) ) {
 		return aafm_generic_error();

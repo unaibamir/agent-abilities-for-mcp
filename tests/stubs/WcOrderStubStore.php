@@ -208,6 +208,39 @@ class WcOrderStubStore {
 	public static $throw_on_get = false;
 
 	/**
+	 * When true, saving an order that has no id yet persists nothing and returns 0. Real
+	 * WC_Abstract_Order::save() catches its data store's exception and still returns the id, which
+	 * is 0 when the create never set one.
+	 *
+	 * @var bool
+	 */
+	public static bool $create_should_fail = false;
+
+	/**
+	 * When true, WC_Order::add_product() persists nothing and returns 0, as the real call does when
+	 * its item's insert leaves the item without an id.
+	 *
+	 * @var bool
+	 */
+	public static bool $add_product_returns_zero = false;
+
+	/**
+	 * When true, wc_create_refund() returns a WP_Error for an existing order, as the real call does
+	 * when WooCommerce refuses the refund.
+	 *
+	 * @var bool
+	 */
+	public static bool $refund_should_fail = false;
+
+	/**
+	 * When true, WC_Order::calculate_totals() throws, as the real call does when a hook inside it
+	 * throws.
+	 *
+	 * @var bool
+	 */
+	public static bool $calculate_totals_should_throw = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -241,6 +274,11 @@ class WcOrderStubStore {
 		self::$add_note_should_fail      = false;
 		self::$last_query_args           = array();
 		self::$last_refund_args          = array();
+
+		self::$create_should_fail            = false;
+		self::$add_product_returns_zero      = false;
+		self::$refund_should_fail            = false;
+		self::$calculate_totals_should_throw = false;
 	}
 
 	/**
@@ -286,6 +324,9 @@ class WcOrderStubStore {
 	 */
 	public static function save( array $data ): int {
 		$id = isset( $data['id'] ) ? (int) $data['id'] : 0;
+		if ( $id < 1 && self::$create_should_fail ) {
+			return 0;
+		}
 		if ( $id < 1 ) {
 			$id         = self::$next_id++;
 			$data['id'] = $id;

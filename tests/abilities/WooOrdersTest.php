@@ -1704,4 +1704,431 @@ final class WooOrdersTest extends TestCase {
 			)
 		);
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	/**
+	 * The detail rows for one entity, in insert order.
+	 *
+	 * @param string $entity Logged entity.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function rows_for( string $entity ): array {
+		return array_values(
+			array_filter(
+				$this->outcome_details(),
+				static function ( array $row ) use ( $entity ): bool {
+					return $entity === $row['entity'];
+				}
+			)
+		);
+	}
+
+	/**
+	 * Define a minimal WC_Order_Item_Tax for the money restore, which types its tax rows to it.
+	 */
+	private function define_order_item_tax(): void {
+		if ( class_exists( 'WC_Order_Item_Tax' ) ) {
+			return;
+		}
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+		eval( 'class WC_Order_Item_Tax { public $id = 0; public $rate_id = 0; public function get_id() { return $this->id; } public function get_rate_id( $context = "view" ) { return $this->rate_id; } public function set_rate_id( $v ) { $this->rate_id = (int) $v; } public function set_rate_code( $v ) {} public function set_label( $v ) {} public function set_compound( $v ) {} public function set_rate_percent( $v ) {} public function set_tax_total( $v ) {} public function set_shipping_tax_total( $v ) {} public function save() { return $this->id; } }' );
+	}
+
+	public function test_an_order_create_logs_each_vendor_call_as_accepted(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		$this->assertIsArray( $res );
+		$id      = (int) $res['id'];
+		$item_id = (int) $res['line_items'][0]['id'];
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'order_item', $item_id, 'accepted' ),
+				$this->wc_row( 'order', null, 'accepted' ),
+				$this->wc_row( 'order', $id, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_order_update_that_adds_an_item_logs_each_vendor_call_as_accepted(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		$this->assertIsArray( $res );
+		$item_id = (int) $res['line_items'][1]['id'];
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'order_item', $item_id, 'accepted' ),
+				$this->wc_row( 'order', 5001, 'accepted' ),
+				$this->wc_row( 'order', 5001, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_order_status_change_logs_the_transition_and_the_save_as_accepted(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'completed',
+			)
+		);
+		$this->assertSame( 'completed', $res['status'] );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'order', 5001, 'accepted' ),
+				$this->wc_row( 'order', 5001, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_order_note_and_a_refund_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$note = aafm_exec_wc_create_order_note(
+			array(
+				'order_id' => 5001,
+				'note'     => 'Logged note.',
+			)
+		);
+		$this->assertIsArray( $note );
+		$refund = aafm_exec_wc_create_order_refund(
+			array(
+				'order_id' => 5001,
+				'amount'   => '5.00',
+			)
+		);
+		$this->assertIsArray( $refund );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'order_note', (int) $note['id'], 'accepted' ),
+				$this->wc_row( 'order_refund', (int) $refund['id'], 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_created_order_rollback_logs_the_item_and_order_deletes_as_accepted(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$order = new \WC_Order();
+		$order->save();
+		$order_id = (int) $order->get_id();
+		$item_id  = (int) $order->add_product( wc_get_product( 101 ), 1 );
+
+		$res = aafm_wc_rollback_created_order( $order, array( $item_id ) );
+
+		$this->assertSame( 'aafm_wc_order_not_created', $res->get_error_code() );
+		$this->assertFalse( WcOrderStubStore::exists( $order_id ) );
+		$this->assertSame(
+			array(
+				$this->wc_row( 'order_item', $item_id, 'accepted' ),
+				$this->wc_row( 'order', $order_id, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_money_restore_logs_each_item_tax_row_and_order_save_as_accepted(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->define_order_item_tax();
+
+		$item         = new class() {
+			public function get_id() {
+				return 71;
+			}
+			public function set_total( $v ) {}
+			public function set_taxes( $v ) {}
+			public function save() {
+				return 71;
+			}
+		};
+		$tax          = new \WC_Order_Item_Tax();
+		$tax->id      = 72;
+		$tax->rate_id = 3;
+		$order        = new class( $item, $tax ) extends \WC_Order {
+			/**
+			 * The one line item.
+			 *
+			 * @var object
+			 */
+			private $item;
+			/**
+			 * The one tax row.
+			 *
+			 * @var \WC_Order_Item_Tax
+			 */
+			private $tax;
+			public function __construct( $item, $tax ) {
+				parent::__construct( 0 );
+				$this->item = $item;
+				$this->tax  = $tax;
+			}
+			public function get_id() {
+				return 5001;
+			}
+			public function get_items( $types = 'line_item' ) {
+				return array( 71 => $this->item );
+			}
+			public function get_taxes() {
+				return array( 72 => $this->tax );
+			}
+			public function set_shipping_total( $v ) {}
+			public function set_discount_total( $v ) {}
+			public function set_discount_tax( $v ) {}
+			public function set_cart_tax( $v ) {}
+			public function set_shipping_tax( $v ) {}
+			public function set_total( $v ) {}
+			public function save() {
+				return 5001;
+			}
+		};
+		$snapshot     = array(
+			'items' => array(
+				71 => array(
+					'total'    => '1.00',
+					'subtotal' => null,
+					'taxes'    => array(),
+				),
+			),
+			'taxes' => array(
+				3 => array(
+					'rate_code'          => 'X',
+					'label'              => 'Tax',
+					'compound'           => false,
+					'rate_percent'       => null,
+					'tax_total'          => '0.10',
+					'shipping_tax_total' => '0.00',
+				),
+			),
+			'order' => array(
+				'shipping_total' => '0.00',
+				'discount_total' => '0.00',
+				'discount_tax'   => '0.00',
+				'cart_tax'       => '0.10',
+				'shipping_tax'   => '0.00',
+				'total'          => '1.10',
+			),
+		);
+
+		$this->assertTrue( aafm_wc_restore_order_money( $order, $snapshot ) );
+		$this->assertSame(
+			array(
+				$this->wc_row( 'order_item', 71, 'accepted' ),
+				$this->wc_row( 'order_item', 72, 'accepted' ),
+				$this->wc_row( 'order', 5001, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_order_create_that_does_not_persist_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$create_should_fail = true;
+		$res                                  = wp_get_ability( 'aafm/wc-create-order' )->execute( array( 'customer_note' => 'Never saved' ) );
+		WcOrderStubStore::$create_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame(
+			array(
+				$this->wc_row( 'order', null, 'accepted' ),
+				$this->wc_row( 'order', null, 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_add_product_that_saves_no_item_logs_refused_and_answers_as_before(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$add_product_returns_zero = true;
+		$res                                        = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		WcOrderStubStore::$add_product_returns_zero = false;
+
+		$this->assertIsArray( $res );
+		$this->assertSame( array(), $res['line_items'] );
+		$this->assertSame( array( $this->wc_row( 'order_item', null, 'refused' ) ), $this->rows_for( 'order_item' ) );
+	}
+
+	public function test_an_order_delete_a_pre_delete_filter_refuses_logs_refused_and_reports_the_partial_create(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$order = new \WC_Order();
+		$order->save();
+		$order_id = (int) $order->get_id();
+
+		add_filter( 'woocommerce_pre_delete_order', '__return_false' );
+		$res = aafm_wc_rollback_created_order( $order, array() );
+		remove_filter( 'woocommerce_pre_delete_order', '__return_false' );
+
+		$this->assertSame( 'aafm_wc_order_partially_created', $res->get_error_code() );
+		$this->assertTrue( WcOrderStubStore::exists( $order_id ) );
+		$this->assertSame( array( $this->wc_row( 'order', $order_id, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_failed_status_transition_logs_refused_and_no_save(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$update_status_should_fail = true;
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'completed',
+			)
+		);
+		WcOrderStubStore::$update_status_should_fail = false;
+
+		$this->assertSame( 'aafm_wc_status_update_failed', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'order', 5001, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_note_that_wc_does_not_add_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$add_note_should_fail = true;
+		$res                                    = aafm_exec_wc_create_order_note(
+			array(
+				'order_id' => 5001,
+				'note'     => 'Refused note.',
+			)
+		);
+		WcOrderStubStore::$add_note_should_fail = false;
+
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'order_note', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_refund_wc_refuses_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		WcOrderStubStore::$refund_should_fail = true;
+		$res                                  = aafm_exec_wc_create_order_refund(
+			array(
+				'order_id' => 5001,
+				'amount'   => '5.00',
+			)
+		);
+		WcOrderStubStore::$refund_should_fail = false;
+
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'order_refund', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_throwing_recalculation_on_create_reaches_the_rollback_and_logs_no_totals_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$calculate_totals_should_throw = true;
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		WcOrderStubStore::$calculate_totals_should_throw = false;
+
+		$this->assertSame( 'aafm_wc_order_not_created', $res->get_error_code() );
+		$this->assertSame( array(), $this->rows_for( 'order' ) );
+		$rows = $this->rows_for( 'order_item' );
+		$this->assertCount( 2, $rows );
+		$this->assertSame( 'accepted', $rows[0]['status'] );
+		$this->assertSame( $rows[0]['object_id'], $rows[1]['object_id'] );
+		$this->assertSame( 'accepted', $rows[1]['status'] );
+	}
 }

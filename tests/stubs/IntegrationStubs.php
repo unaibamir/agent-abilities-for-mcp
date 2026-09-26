@@ -577,7 +577,7 @@ PHP;
 			// WcOrderStubStore::$last_refund_args so a test can assert how a line item's refund_tax was
 			// distributed across its tax rates, then persists the refund exactly as before.
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_create_refund( $args = array() ) { \AAFM\Tests\WcOrderStubStore::$last_refund_args = $args; $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } return \AAFM\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
+			eval( 'function wc_create_refund( $args = array() ) { \AAFM\Tests\WcOrderStubStore::$last_refund_args = $args; $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } if ( \AAFM\Tests\WcOrderStubStore::$refund_should_fail ) { return new \WP_Error( "wc_create_refund_failed", "Refund refused." ); } return \AAFM\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
 		}
 		// The base WC_Order_Item carries no get_taxes() - real WooCommerce only defines it on
 		// WC_Order_Item_Product (and the other taxed subtypes), never the base class (pinned by
@@ -790,6 +790,9 @@ class WC_Order {
 			&& \AAFM\Tests\WcOrderStubStore::$add_product_calls === \AAFM\Tests\WcOrderStubStore::$add_product_throw_on_call ) {
 			throw new \RuntimeException( 'Simulated add_product failure.' );
 		}
+		if ( \AAFM\Tests\WcOrderStubStore::$add_product_returns_zero ) {
+			return 0;
+		}
 		$pid = is_object( $product ) && method_exists( $product, 'get_id' ) ? (int) $product->get_id() : (int) $product;
 		$qty = (int) $qty;
 		$price = is_object( $product ) && method_exists( $product, 'get_price' ) ? (float) $product->get_price() : 0.0;
@@ -803,6 +806,9 @@ class WC_Order {
 	public function calculate_totals( $and_taxes = true ) {
 		// Recorded so a test can assert WHETHER taxes were recomputed, not just that a total moved.
 		\AAFM\Tests\WcOrderStubStore::$last_calculate_totals_and_taxes = (bool) $and_taxes;
+		if ( \AAFM\Tests\WcOrderStubStore::$calculate_totals_should_throw ) {
+			throw new \RuntimeException( 'Simulated calculate_totals failure.' );
+		}
 		$subtotal = 0.0;
 		foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) {
 			$subtotal += (float) ( $item['total'] ?? 0 );
@@ -814,7 +820,8 @@ class WC_Order {
 	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $added_by_user = (bool) $added_by_user; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note, $added_by_user ); }
 	public function get_refunds() { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::get_refunds_for_order( $id ); }
 	public function get_item( $item_id, $load_from_db = true ) { foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) { $item = (array) $item; if ( (int) ( $item['id'] ?? 0 ) === (int) $item_id ) { return array_key_exists( 'product_id', $item ) ? new \WC_Order_Item_Product( $item ) : new \WC_Order_Item( $item ); } } return false; }
-	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_order( $id ); }
+	// WC_Data::delete() asks woocommerce_pre_delete_order first and returns any non-null answer.
+	public function delete( $force = false ) { $check = apply_filters( 'woocommerce_pre_delete_order', null, $this, $force ); if ( null !== $check ) { return $check; } $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_order( $id ); }
 	public function save() { $id = (int) ( $this->data['id'] ?? 0 ); $id = \AAFM\Tests\WcOrderStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 }
 PHP;

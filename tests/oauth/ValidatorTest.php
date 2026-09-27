@@ -854,6 +854,73 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * Rows for the rest_route WordPress dispatches on, in core's order (WP::parse_request(): POST,
+	 * then GET; a GET and POST that differ are refused): the GET value, the POST value, and whether
+	 * the request targets the MCP route. The request path is the MCP path throughout.
+	 *
+	 * @return array<string,array{0:mixed,1:mixed,2:string|false,3:bool}>
+	 */
+	public function rest_route_source_provider(): array {
+		$mcp   = '/agent-abilities-for-mcp/mcp';
+		$other = '/wp/v2/users/me';
+		return array(
+			'POST names another route'    => array( null, $other, $other, false ),
+			'POST names the MCP route'    => array( null, $mcp, $mcp, true ),
+			'GET and POST the same route' => array( $mcp, $mcp, $mcp, true ),
+			'GET MCP, POST another route' => array( $mcp, $other, false, false ),
+			'GET another route, POST MCP' => array( $other, $mcp, false, false ),
+			'POST value is an array'      => array( null, array( $mcp ), false, false ),
+			'GET value is an array'       => array( array( $mcp ), null, false, false ),
+		);
+	}
+
+	/**
+	 * The MCP route check reads rest_route in core's own order, so a bearer resolves only for a
+	 * request WordPress dispatches to the MCP route.
+	 *
+	 * @dataProvider rest_route_source_provider
+	 *
+	 * @param mixed        $get     The GET rest_route, or null for none.
+	 * @param mixed        $post    The POST rest_route, or null for none.
+	 * @param string|false $route   The route aafm_request_rest_route() reads.
+	 * @param bool         $targets Whether the request targets the MCP route.
+	 */
+	public function test_rest_route_is_read_in_cores_order( $get, $post, $route, bool $targets ): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- test fixture for the request.
+		$had_post = array_key_exists( 'rest_route', $_POST );
+		$old_post = $had_post ? $_POST['rest_route'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- snapshot, restored as it was.
+		if ( null !== $get ) {
+			$_GET['rest_route'] = $get;
+		}
+		if ( null !== $post ) {
+			$_POST['rest_route'] = $post;
+		}
+		try {
+			$this->assertSame( $route, aafm_request_rest_route() );
+			$this->assertSame( $targets, aafm_oauth_request_targets_mcp_route() );
+			$this->assertSame( $targets ? $uid : false, aafm_oauth_resolve_current_user( false ) );
+		} finally {
+			unset( $_GET['rest_route'] );
+			if ( $had_post ) {
+				$_POST['rest_route'] = $old_post;
+			} else {
+				unset( $_POST['rest_route'] );
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+	}
+
+	/**
 	 * B40: the route guard must match the MCP route case-insensitively, like core routing does.
 	 *
 	 * Core compiles its REST route regexes with the `i` modifier (class-wp-rest-server.php), so

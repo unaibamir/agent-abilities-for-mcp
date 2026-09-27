@@ -318,12 +318,37 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
 }
 
 /**
+ * The rest_route WordPress dispatches this request on, read in core's own order
+ * (WP::parse_request()): a POST value first, then a GET value, and a GET and POST that differ make
+ * core refuse the request. The extra query vars core also reads are set by code, not by the
+ * request, so they are not read here.
+ *
+ * @return string|false|null The route; null when the request carries none; false when GET and POST
+ *                           differ, or a value is not a string.
+ */
+function aafm_request_rest_route() {
+	// phpcs:disable WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- read-only routing check, no state change; the value is sanitized below once its shape is known.
+	$get  = $_GET['rest_route'] ?? null;
+	$post = $_POST['rest_route'] ?? null;
+	// phpcs:enable WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
+
+	if ( ( null !== $get && ! is_string( $get ) ) || ( null !== $post && ! is_string( $post ) ) ) {
+		return false;
+	}
+	if ( null !== $get && null !== $post && $get !== $post ) {
+		return false;
+	}
+	$route = $post ?? $get;
+	return null === $route ? null : sanitize_text_field( wp_unslash( $route ) );
+}
+
+/**
  * Whether the current request targets the MCP REST route.
  *
  * The determine_current_user filter runs before REST routing resolves $request->get_route(),
  * so the target is derived from the raw request: the URI path (pretty permalinks give
- * /wp-json/agent-abilities-for-mcp/mcp) and the rest_route query var (plain permalinks give
- * ?rest_route=/agent-abilities-for-mcp/mcp). The MCP rest path is taken from the registered
+ * /wp-json/agent-abilities-for-mcp/mcp) and the rest_route request var, POST before GET as core
+ * reads it (plain permalinks give ?rest_route=/agent-abilities-for-mcp/mcp). The MCP rest path is taken from the registered
  * endpoint so it tracks any future rename.
  *
  * @return bool True only when the request is for the MCP endpoint.
@@ -332,16 +357,18 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 	// Single-sourced in bootstrap.php (leading-slash form).
 	$mcp_route = aafm_mcp_rest_route();
 
-	// Plain-permalink form: ?rest_route=/agent-abilities-for-mcp/mcp. When the rest_route query var
-	// is present it is AUTHORITATIVE and we must decide solely from it, never falling through to the
-	// path check below. WordPress's WP::parse_request() gives the $_GET['rest_route'] value
-	// precedence over the URL-path-derived route, so that is the route the request is actually
-	// dispatched to. If we instead fell through and matched the URL path, a request whose path is the
-	// MCP route but whose ?rest_route= points elsewhere (e.g. ?rest_route=/wp/v2/users/me) would be
-	// misclassified as MCP-targeted while WordPress dispatches it to /wp/v2/users/me - turning an
-	// audience-bound aafm_oat_ MCP token into a general credential for that unrelated REST route.
-	if ( isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check, no state change.
-		$rest_route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	// Plain-permalink form: rest_route=/agent-abilities-for-mcp/mcp. When the request carries a
+	// rest_route it is AUTHORITATIVE and we decide solely from it, never falling through to the path
+	// check below: it is the route WordPress dispatches to (aafm_request_rest_route() reads it in
+	// core's own order). If we instead matched the URL path, a request whose path is the MCP route
+	// but whose rest_route points elsewhere (e.g. /wp/v2/users/me) would be misclassified as
+	// MCP-targeted while WordPress dispatches it to /wp/v2/users/me - turning an audience-bound
+	// aafm_oat_ MCP token into a general credential for that unrelated REST route.
+	$rest_route = aafm_request_rest_route();
+	if ( false === $rest_route ) {
+		return false; // WordPress refuses a GET and POST that differ; a non-string never names the MCP route.
+	}
+	if ( null !== $rest_route ) {
 		// Case-insensitive, matching how core itself matches REST routes (the route regex in
 		// class-wp-rest-server.php is built with the `i` modifier) and the same comparison the
 		// swept siblings use (aafm_mcp_filter_governed_error_status(),

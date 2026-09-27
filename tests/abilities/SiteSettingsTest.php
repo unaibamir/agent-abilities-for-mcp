@@ -1032,12 +1032,48 @@ final class SiteSettingsTest extends TestCase {
 			'S1'   => array( 'Row', array(), false, null, $found( 'Row' ) ),
 			'S2'   => array( 'Row', array( 'A' => 'Row' ), false, null, $found( 'Row' ) ),
 			'S3'   => array( 'Row', array( 'A' => 'Stale' ), false, null, null ),
-			'S4'   => array( 'Row', array( 'A' => 'Row', 'P' => 'Stale' ), false, null, null ),
-			'S5'   => array( 'Row', array( 'A' => 'Stale', 'P' => 'Row' ), false, null, null ),
+			'S4'   => array(
+				'Row',
+				array(
+					'A' => 'Row',
+					'P' => 'Stale',
+				),
+				false,
+				null,
+				null,
+			),
+			'S5'   => array(
+				'Row',
+				array(
+					'A' => 'Stale',
+					'P' => 'Row',
+				),
+				false,
+				null,
+				null,
+			),
 			'S6'   => array( 'Row', array( 'P' => 'Stale' ), false, null, null ),
 			'S7'   => array( 'Row', array( 'N' => true ), false, null, null ),
-			'S8'   => array( 'Row', array( 'N' => true, 'P' => 'Row' ), false, null, null ),
-			'S9'   => array( 'Row', array( 'A' => 'Row', 'N' => true ), false, null, null ),
+			'S8'   => array(
+				'Row',
+				array(
+					'N' => true,
+					'P' => 'Row',
+				),
+				false,
+				null,
+				null,
+			),
+			'S9'   => array(
+				'Row',
+				array(
+					'A' => 'Row',
+					'N' => true,
+				),
+				false,
+				null,
+				null,
+			),
 			'S10'  => array( '', array( 'A' => '' ), false, null, $found( '' ) ),
 			'S11'  => array( '', array(), false, null, $found( '' ) ),
 			'S12'  => array( '', array( 'A' => 'Stale' ), false, null, null ),
@@ -1047,7 +1083,16 @@ final class SiteSettingsTest extends TestCase {
 			'S16'  => array( null, array( 'A' => '' ), false, null, null ),
 			'S17'  => array( null, array( 'A' => 'Stale' ), false, null, null ),
 			'S18'  => array( null, array( 'P' => 'Stale' ), false, null, null ),
-			'S19'  => array( null, array( 'N' => true, 'P' => 'Stale' ), false, null, null ),
+			'S19'  => array(
+				null,
+				array(
+					'N' => true,
+					'P' => 'Stale',
+				),
+				false,
+				null,
+				null,
+			),
 			'S20a' => array( 'Row', array(), false, 'real', null ),
 			'S20b' => array( 'Row', array(), false, 'no_flush', null ),
 			'S21'  => array( 'Row', array( 'A' => 'Stale' ), true, null, null ),
@@ -1129,10 +1174,18 @@ final class SiteSettingsTest extends TestCase {
 		// statement, so moving the check above the dry-run lets the request through.
 		QueryFaultInjector::reset_fired_count();
 		$fault      = QueryFaultInjector::real_error_filter( array( $wpdb->options, 'SELECT option_value', "option_name = 'posts_per_page'" ), 1 );
-		$core_read  = static function ( string $query ) use ( $fault ): string {
+		$faulted    = array();
+		$core_read  = static function ( string $query ) use ( $fault, &$faulted ): string {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- scoping a test fault to its caller.
 			$callers = array_column( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ), 'function' );
-			return in_array( 'get_option', $callers, true ) ? $fault( $query ) : $query;
+			if ( ! in_array( 'get_option', $callers, true ) ) {
+				return $query;
+			}
+			$result = $fault( $query );
+			if ( $result !== $query ) {
+				$faulted[] = $callers;
+			}
+			return $result;
 		};
 		$suppressed = $wpdb->suppress_errors( true );
 		add_filter( 'query', $core_read );
@@ -1148,6 +1201,8 @@ final class SiteSettingsTest extends TestCase {
 		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
 
 		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertCount( 1, $faulted );
+		$this->assertSame( array(), array_intersect( array( 'aafm_option_row', 'aafm_wpdb_row' ), $faulted[0] ), 'The fault must never hit the pre-check\'s own read.' );
 		$this->assertInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'aafm_error', $res->get_error_code() );
 		$this->assertSame( '5', $this->option_row( 'posts_per_page' ) );

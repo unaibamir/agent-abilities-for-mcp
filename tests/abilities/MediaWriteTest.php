@@ -1508,21 +1508,21 @@ final class MediaWriteTest extends TestCase {
 	 */
 	public function stored_id_cases(): array {
 		return array(
-			'int 3'           => array( 3, 3, true ),
-			"'3'"             => array( '3', 3, true ),
-			"'03'"            => array( '03', 3, false ),
-			"'3.0'"           => array( '3.0', 3, false ),
-			"' 3'"            => array( ' 3', 3, false ),
-			"'3 '"            => array( '3 ', 3, false ),
-			'trailing "\n"'   => array( "3\n", 3, false ),
-			"'+3'"            => array( '+3', 3, false ),
-			'float 3.0'       => array( 3.0, 3, false ),
-			'NAN'             => array( NAN, 3, false ),
-			'true for 1'      => array( true, 1, false ),
-			"'' for 0"        => array( '', 0, false ),
-			'null for 0'      => array( null, 0, false ),
-			'array( 3 )'      => array( array( 3 ), 3, false ),
-			"'012' for 12"    => array( '012', 12, false ),
+			'int 3'         => array( 3, 3, true ),
+			"'3'"           => array( '3', 3, true ),
+			"'03'"          => array( '03', 3, false ),
+			"'3.0'"         => array( '3.0', 3, false ),
+			"' 3'"          => array( ' 3', 3, false ),
+			"'3 '"          => array( '3 ', 3, false ),
+			'trailing "\n"' => array( "3\n", 3, false ),
+			"'+3'"          => array( '+3', 3, false ),
+			'float 3.0'     => array( 3.0, 3, false ),
+			'NAN'           => array( NAN, 3, false ),
+			'true for 1'    => array( true, 1, false ),
+			"'' for 0"      => array( '', 0, false ),
+			'null for 0'    => array( null, 0, false ),
+			'array( 3 )'    => array( array( 3 ), 3, false ),
+			"'012' for 12"  => array( '012', 12, false ),
 		);
 	}
 
@@ -1607,7 +1607,7 @@ final class MediaWriteTest extends TestCase {
 
 		$veto = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
 		add_filter( 'update_post_metadata', $veto, 10, 3 );
-		$out = wp_get_ability( 'aafm/set-featured-image' )->execute(
+		$out  = wp_get_ability( 'aafm/set-featured-image' )->execute(
 			array(
 				'post_id'       => $post,
 				'attachment_id' => $image,

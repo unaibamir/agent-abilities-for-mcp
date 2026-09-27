@@ -695,4 +695,50 @@ final class CommentsReadTest extends TestCase {
 		$this->assertSame( 1, $out['total'] );
 		$this->assertFalse( $out['truncated'] );
 	}
+
+	/**
+	 * The list half of the undecided-check rule: a comment whose readability check could not decide
+	 * stays out of the list. Comment B sits inside the scanned set on a private post the caller
+	 * cannot read, and its post load fails inside the check, so only the list's own filter keeps
+	 * it out; the probe never runs, because the scan covers every approved comment.
+	 */
+	public function test_get_comments_sitewide_list_omits_a_comment_whose_readability_check_could_not_decide(): void {
+		global $wpdb;
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 2 );
+
+		$post_a = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_b = self::factory()->post->create( array( 'post_status' => 'private' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post_b,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-01-01 00:00:00',
+				'comment_date_gmt' => '2020-01-01 00:00:00',
+			)
+		);
+		$comment_a = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post_a,
+				'comment_approved' => '1',
+				'comment_date'     => '2021-01-01 00:00:00',
+				'comment_date_gmt' => '2021-01-01 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		wp_cache_delete( $post_b, 'posts' );
+		QueryFaultInjector::reset_fired_count();
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->posts, "WHERE ID = {$post_b}" ),
+			static fn() => wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) ),
+			1
+		);
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( array( $comment_a ), array_map( static fn( $comment ): int => (int) $comment['id'], $out['comments'] ) );
+		$this->assertSame( 1, $out['total'] );
+		$this->assertFalse( $out['truncated'] );
+	}
 }

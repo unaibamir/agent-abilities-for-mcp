@@ -448,7 +448,7 @@ function aafm_with_checked_reads( callable $build, WP_Error $error ) {
 				}
 				if ( ! $load( $meta_type, array( $object_id ) ) ) {
 					// An empty answer in core's shape; the scope already returns $error.
-					if ( '' === $meta_key ) {
+					if ( ! $meta_key ) {
 						return $single ? array( array() ) : array();
 					}
 					return array( '' );

@@ -28,6 +28,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Audit;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class PersistentObjectCacheSwitchTest extends TestCase {
@@ -650,5 +651,46 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		);
 		$row = $this->latest_log_row( 'aafm_enabled_abilities' );
 		$this->assertSame( 'error', $row['status'] ?? null, 'The failed write must be logged as a single error row naming the option, not silently dropped.' );
+	}
+
+	/**
+	 * Ledger s14hunta-1: a stored '' is a row, not an absent option. The row read keeps it as found,
+	 * so a DELETE that never runs cannot certify the row as gone while it is still there.
+	 */
+	public function test_an_empty_row_is_found_and_a_failed_delete_does_not_certify_it(): void {
+		global $wpdb;
+		$name = 'aafm_s14_empty_row';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- planting an out-of-band '' row, the state under test.
+		$wpdb->replace(
+			$wpdb->options,
+			array(
+				'option_name'  => $name,
+				'option_value' => '',
+				'autoload'     => 'no',
+			)
+		);
+		foreach ( array( $name, 'alloptions', 'notoptions' ) as $key ) {
+			wp_cache_delete( $key, 'options' );
+		}
+
+		$views = aafm_read_option_views( $name );
+		$this->assertTrue( $views['db_found'], 'A stored empty string is a present row.' );
+		$this->assertSame( '', $views['db_value'] );
+		$this->assertFalse( $views['db_error'] );
+
+		QueryFaultInjector::reset_fired_count();
+		$result = QueryFaultInjector::fail_query(
+			array( 'DELETE FROM', $wpdb->options, $name ),
+			static fn() => aafm_delete_option_cache_safe( $name )
+		);
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'The DELETE fault must fire.' );
+		$this->assertFalse( $result, 'A DELETE that never ran must not certify the row as gone.' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->assertSame(
+			array( 'option_value' => '' ),
+			$wpdb->get_row( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, $name ), ARRAY_A ),
+			'The row is still there.'
+		);
 	}
 }

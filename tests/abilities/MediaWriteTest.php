@@ -1500,4 +1500,42 @@ final class MediaWriteTest extends TestCase {
 		$this->assertSame( $before, $this->attachment_count() );
 		$this->assertInstanceOf( WP_Post::class, get_post( $bystander ) );
 	}
+
+	/**
+	 * Stored values against the id asked for, each with its literal answer (pm-plan item 2).
+	 *
+	 * @return array<string, array{0: mixed, 1: int, 2: bool}>
+	 */
+	public function stored_id_cases(): array {
+		return array(
+			'int 3'           => array( 3, 3, true ),
+			"'3'"             => array( '3', 3, true ),
+			"'03'"            => array( '03', 3, false ),
+			"'3.0'"           => array( '3.0', 3, false ),
+			"' 3'"            => array( ' 3', 3, false ),
+			"'3 '"            => array( '3 ', 3, false ),
+			'trailing "\n"'   => array( "3\n", 3, false ),
+			"'+3'"            => array( '+3', 3, false ),
+			'float 3.0'       => array( 3.0, 3, false ),
+			'NAN'             => array( NAN, 3, false ),
+			'true for 1'      => array( true, 1, false ),
+			"'' for 0"        => array( '', 0, false ),
+			'null for 0'      => array( null, 0, false ),
+			'array( 3 )'      => array( array( 3 ), 3, false ),
+			"'012' for 12"    => array( '012', 12, false ),
+		);
+	}
+
+	/**
+	 * The shared id comparator accepts only the int itself or its decimal string.
+	 *
+	 * @dataProvider stored_id_cases
+	 *
+	 * @param mixed $stored   Stored value.
+	 * @param int   $id       Id asked for.
+	 * @param bool  $expected Literal answer.
+	 */
+	public function test_the_stored_id_comparator_accepts_only_the_exact_id( $stored, int $id, bool $expected ): void {
+		$this->assertSame( $expected, aafm_stored_id_matches( $stored, $id ) );
+	}
 }

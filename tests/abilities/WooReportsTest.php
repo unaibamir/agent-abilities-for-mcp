@@ -1842,4 +1842,125 @@ final class WooReportsTest extends TestCase {
 			$res->get_error_data()
 		);
 	}
+
+	/**
+	 * The settings read-back gives the restrictive answer when it cannot read the row. The settings
+	 * INSERT and every read of that row fail, and the requested value is '', which an unread row
+	 * must not confirm (ledger b5c2r1-fixsurface-1, b5huntb-1).
+	 */
+	public function test_gateway_setting_with_a_failed_write_and_an_unreadable_row_reports_the_key_failed(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_paypal_settings' );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( 'INSERT INTO', $wpdb->options, 'woocommerce_paypal_settings' ),
+			static function () {
+				return QueryFaultInjector::break_query_with_real_error(
+					array( 'SELECT option_value FROM', "option_name = 'woocommerce_paypal_settings'" ),
+					static function () {
+						return aafm_exec_wc_update_payment_gateway(
+							array(
+								'gateway_id'  => 'paypal',
+								'description' => '',
+							)
+						);
+					}
+				);
+			}
+		);
+
+		$this->assertGreaterThanOrEqual( 2, QueryFaultInjector::fired_count(), 'Guard: the mutation and its confirming read both fail.' );
+		$this->assertNull( $this->option_row_md5( 'woocommerce_paypal_settings' ), 'Guard: no row landed.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_gateway_write_failed', $res->get_error_code() );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'description' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * A pre_update_option filter that keeps the old value leaves no settings row, so the requested
+	 * '' title was never stored: the key is reported failed, not matched against a missing entry
+	 * (262 s12, ledger b5c2r1-fixsurface-1, b5hunta-2).
+	 */
+	public function test_gateway_setting_absent_from_a_vetoed_row_reports_the_key_failed(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_paypal_settings' );
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'title'      => '',
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+		}
+
+		$this->assertNull( $this->option_row_md5( 'woocommerce_paypal_settings' ), 'Guard: the veto kept the row absent.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'title' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * The ordering read-back gives the restrictive answer when it cannot read the row. The UPDATE
+	 * of the ordering fails, and every read of its row after the write fails too.
+	 */
+	public function test_gateway_order_with_a_failed_write_and_an_unreadable_row_reports_order_failed(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 1 ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5 = $this->option_row_md5( 'woocommerce_gateway_order' );
+
+		$read_fault = QueryFaultInjector::real_error_filter( array( 'SELECT option_value FROM', "option_name = 'woocommerce_gateway_order'" ) );
+		$arm        = static function () use ( $read_fault ): void {
+			if ( ! has_filter( 'query', $read_fault ) ) {
+				add_filter( 'query', $read_fault );
+			}
+		};
+		add_action( 'aafm_write_completed', $arm );
+		QueryFaultInjector::reset_fired_count();
+		try {
+			$res = QueryFaultInjector::break_query_with_real_error(
+				array( 'UPDATE', "'woocommerce_gateway_order'" ),
+				static function () {
+					return aafm_exec_wc_update_payment_gateway(
+						array(
+							'gateway_id' => 'paypal',
+							'order'      => 4,
+						)
+					);
+				}
+			);
+		} finally {
+			remove_action( 'aafm_write_completed', $arm );
+			remove_filter( 'query', $read_fault );
+		}
+
+		$this->assertGreaterThanOrEqual( 2, QueryFaultInjector::fired_count(), 'Guard: the mutation and its confirming read both fail.' );
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ), 'Guard: the ordering row is unchanged.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+	}
 }

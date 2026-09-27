@@ -832,15 +832,16 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	// get_option() reads that in-memory copy, so a failed write (or a sanitize filter that altered
 	// the value on the way to disk) would still read back as a match through $gateway->get_option()
 	// and report a false success. Re-read the persisted settings row (get_option_key()) so only a
-	// genuinely persisted value counts as success; a row that cannot be read counts as not persisted.
+	// genuinely persisted value counts as success. A row that cannot be read, or a row with no entry
+	// for a requested key (a pre_update_option filter can keep an old row that lacks it), counts as
+	// not persisted: a missing value is never matched against a requested ''.
 	$persisted_keys = array();
 	$failed_keys    = array();
 	if ( ! empty( $desired ) ) {
 		$settings  = aafm_read_option_views( $gateway->get_option_key() );
 		$persisted = ! $settings['db_error'] && is_array( $settings['db_value'] ) ? $settings['db_value'] : array();
 		foreach ( $desired as $key => $value ) {
-			$stored = array_key_exists( $key, $persisted ) ? (string) $persisted[ $key ] : '';
-			if ( $stored === (string) $value ) {
+			if ( array_key_exists( $key, $persisted ) && (string) $persisted[ $key ] === (string) $value ) {
 				$persisted_keys[] = $key;
 			} else {
 				$failed_keys[] = $key;
@@ -848,8 +849,8 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		}
 	}
 	if ( null !== $order_val ) {
-		$saved_order = aafm_read_option_views( 'woocommerce_gateway_order' );
-		if ( ! $saved_order['db_error'] && is_array( $saved_order['db_value'] ) && (int) ( $saved_order['db_value'][ $gateway_id ] ?? -1 ) === $order_val ) {
+		$saved_order = aafm_option_row( 'woocommerce_gateway_order' );
+		if ( $saved_order['found'] && is_array( $saved_order['value'] ) && (int) ( $saved_order['value'][ $gateway_id ] ?? -1 ) === $order_val ) {
 			$persisted_keys[] = 'order';
 		} else {
 			$failed_keys[] = 'order';

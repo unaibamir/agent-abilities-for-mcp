@@ -2349,11 +2349,13 @@ PHP;
 	 * listed function's argument); a method call, `->m(`, `?->m(` or `::m(`, to every body named m
 	 * whatever its class; `new X(` to every body named __construct; and a callable parameter
 	 * called by variable when every reference to its function is a positional call passing a
-	 * string literal at that position and the function never reassigns it. A declaration,
-	 * `function &name(` included, is a body and never a call. Flagged: a scope whose build is not
-	 * a closure, a call whose callee is not a name (`$v(`, `$map['k'](`, `( $cb )(`, `f()(`,
-	 * `$o->$m(`), and a listed callable-taking function handed anything but a string literal or a
-	 * closure. Keyed path|function|name|ordinal, where name is the checked call, the callee text
+	 * string literal at that position and the function never reassigns it. A method call of the
+	 * function's name is a reference whose arguments are not read, so it never proves one. A
+	 * declaration, `function &name(` included, is a body and never a call. Flagged: a scope whose
+	 * build is not a closure, a call whose callee is not a name (`$v(`, `$map['k'](`, `( $cb )(`,
+	 * `f()(`, `$o->$m(`, `$o->{$m}(`), and a listed callable-taking function handed anything but a
+	 * string literal or a closure, where a string naming a static method (`'C::m'`) counts as
+	 * neither. Keyed path|function|name|ordinal, where name is the checked call, the callee text
 	 * with whitespace removed, or the callable-taking function; the ordinal counts the flagged
 	 * records of that name in that function.
 	 *
@@ -2460,6 +2462,11 @@ PHP;
 				$name                    = $this->resolved_function_name( $token[1], $aliases );
 				if ( in_array( $name, $known, true ) && ! $by_method ) {
 					$references[ $name ][] = $plain ? $this->argument_kinds( $tokens, $open_idx, $known ) : null;
+				}
+				if ( $by_method && '(' === $open ) {
+					// A method call passes arguments the scan does not read, so a parameter of any
+					// body of that name is not proven.
+					$references[ strtolower( $this->last_name_segment( $token[1] ) ) ][] = null;
 				}
 				if ( '(' !== $open ) {
 					continue;
@@ -2767,7 +2774,8 @@ PHP;
 	/**
 	 * What one argument is, as a callable: array( 'literal', the known function it names or null ),
 	 * array( 'closure', null ), array( 'null', null ), array( 'variable', its name ),
-	 * array( 'spread', null ), array( 'named', null ) or array( 'other', null ).
+	 * array( 'spread', null ), array( 'named', null ) or array( 'other', null ). A string naming a
+	 * static method, `'C::m'`, is 'other': the scan does not resolve it.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens  token_get_all() output.
 	 * @param int[]                                         $indices The argument's significant tokens.
@@ -2785,6 +2793,9 @@ PHP;
 		}
 		if ( 1 === count( $indices ) && is_array( $first ) ) {
 			if ( T_CONSTANT_ENCAPSED_STRING === $first[0] ) {
+				if ( false !== strpos( $this->decode_string_literal( $first[1] ), '::' ) ) {
+					return array( 'other', null );
+				}
 				return array( 'literal', $this->literal_callable( $first, $known ) );
 			}
 			if ( T_VARIABLE === $first[0] ) {
@@ -2825,6 +2836,8 @@ PHP;
 	 * it by reference, declares it global or static, or rebinds it in a foreach head or a
 	 * destructuring, and every reference to the function is a positional call, with no spread
 	 * and no named argument, passing at that position a string literal naming a known function.
+	 * A method call of the function's name is a reference with unread arguments, so it never
+	 * proves the parameter.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string>            $tokens     token_get_all() output.
 	 * @param array{0:string,1:int,2:int,3:int}                        $body       The enclosing body.
@@ -3159,6 +3172,134 @@ PHP;
 		$this->assertSame(
 			array( 'includes/fixture.php|g|update_post_meta|1' ),
 			$this->violation_keys( "<?php\nfunction &g() {\n\tupdate_post_meta( 1, 'k', 'v' );\n}\n", 'includes/fixture.php' )
+		);
+	}
+
+	/**
+	 * A `'Class::method'` string in a callable position is flagged rather than compared whole
+	 * against function names, both as a listed callable-taking function's argument and as the
+	 * literal a callable parameter's callers pass.
+	 */
+	public function test_flags_a_static_method_string_callable_in_a_checked_read_scope(): void {
+		$listed    = <<<'PHP'
+<?php
+class C {
+	public static function m( $id ) {
+		return aafm_user_can_checked( 'edit_post', $id );
+	}
+}
+function f( $ids ) {
+	return aafm_with_checked_reads( static fn(): array => array_map( 'C::m', $ids ), aafm_generic_error() );
+}
+PHP;
+		$parameter = <<<'PHP'
+<?php
+class C {
+	public static function m( $id ) {
+		return aafm_user_can_checked( 'edit_post', $id );
+	}
+}
+function w( $id, callable $shape ) {
+	return aafm_with_checked_reads(
+		static function () use ( $id, $shape ): array {
+			return array( 'a' => $shape( $id ) );
+		},
+		aafm_generic_error()
+	);
+}
+function c( $id ) {
+	return w( $id, 'C::m' );
+}
+PHP;
+		$this->assertSame(
+			array( 'includes/fixture.php|f|array_map|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $listed ) )
+		);
+		$this->assertSame(
+			array( 'includes/fixture.php|w|$shape|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $parameter ) )
+		);
+	}
+
+	/**
+	 * A callable parameter is not proven while a method call of its function's name passes it
+	 * on: the method call's argument is not a string literal the scan can read, so the variable
+	 * call stays flagged. Without the method call, the plain call's literal still proves it.
+	 */
+	public function test_a_callable_parameter_passed_through_a_method_call_is_not_proven(): void {
+		$proven = <<<'PHP'
+<?php
+function g( $id ) {
+	return aafm_user_can_checked( 'edit_post', $id );
+}
+class K {
+	public function w( $id, $shape ) {
+		return aafm_with_checked_reads(
+			static function () use ( $id, $shape ): array {
+				return array( 'a' => $shape( $id ) );
+			},
+			aafm_generic_error()
+		);
+	}
+}
+function c( $id ) {
+	return w( $id, 'g' );
+}
+PHP;
+		$mixed  = $proven . "\nfunction d( \$k, \$id, \$dynamic ) {\n\treturn \$k->w( \$id, \$dynamic );\n}\n";
+		$this->assertSame(
+			array( 'includes/fixture.php|g|aafm_user_can_checked|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $proven ) )
+		);
+		$this->assertSame(
+			array( 'includes/fixture.php|w|$shape|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $mixed ) )
+		);
+	}
+
+	/**
+	 * `new X(` inside a build is followed to every body named __construct.
+	 */
+	public function test_follows_a_new_expression_to_its_constructor(): void {
+		$source = <<<'PHP'
+<?php
+class C {
+	public function __construct( $id ) {
+		aafm_user_can_checked( 'edit_post', $id );
+	}
+}
+function f( $id ) {
+	return aafm_with_checked_reads( static fn(): array => array( 'a' => new C( $id ) ), aafm_generic_error() );
+}
+PHP;
+		$this->assertSame(
+			array( 'includes/fixture.php|__construct|aafm_user_can_checked|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $source ) )
+		);
+	}
+
+	/**
+	 * A callee that ends in a brace, `$o->{$m}(` or `${'f'}(`, is not a name, so it is flagged
+	 * inside a build.
+	 */
+	public function test_flags_a_brace_callee_in_a_checked_read_scope(): void {
+		$source = <<<'PHP'
+<?php
+function v( $o, $m, $id ) {
+	return aafm_with_checked_reads(
+		static function () use ( $o, $m, $id ): array {
+			return array( $o->{$m}( $id ), ${'f'}( $id ) );
+		},
+		aafm_generic_error()
+	);
+}
+PHP;
+		$this->assertSame(
+			array(
+				'includes/fixture.php|v|$o->{$m}|1',
+				"includes/fixture.php|v|\${'f'}|1",
+			),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $source ) )
 		);
 	}
 

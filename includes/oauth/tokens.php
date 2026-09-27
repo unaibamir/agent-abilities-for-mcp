@@ -102,8 +102,8 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 	$refresh_raw = bin2hex( random_bytes( 32 ) );
 
 	$ttls = array(
-		'aafm_oauth_access_ttl'  => AAFM_OAUTH_ACCESS_TTL,
-		'aafm_oauth_refresh_ttl' => AAFM_OAUTH_REFRESH_TTL,
+		'aafm_oauth_access_ttl'  => (int) AAFM_OAUTH_ACCESS_TTL,
+		'aafm_oauth_refresh_ttl' => (int) AAFM_OAUTH_REFRESH_TTL,
 	);
 	foreach ( $ttls as $option => $default ) {
 		$ttls[ $option ] = (int) get_option( $option, $default );

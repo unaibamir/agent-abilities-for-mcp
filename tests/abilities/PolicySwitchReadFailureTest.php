@@ -509,4 +509,132 @@ final class PolicySwitchReadFailureTest extends TestCase {
 		$this->assertSame( 'server_error', $result->get_error_code() );
 		$this->assertSame( $before, (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) ) );
 	}
+
+	/**
+	 * The term and user deny getters: each scope's list and `*` read, with the same stored,
+	 * restrictive and fail-closed values as the post scope's rows in switches().
+	 *
+	 * @return array<string,array{option:string,get:callable,stored:mixed,restrictive:mixed,closed:mixed}>
+	 */
+	private function scoped_deny_switches(): array {
+		return array(
+			'term deny list' => array(
+				'option'      => 'aafm_denied_term_meta_keys',
+				'get'         => static fn() => aafm_denied_term_meta_keys(),
+				'stored'      => array( 'secret_key' ),
+				'restrictive' => array( 'secret_key' ),
+				'closed'      => array( '*' ),
+			),
+			'term deny star' => array(
+				'option'      => 'aafm_denied_term_meta_keys',
+				'get'         => static fn() => aafm_term_meta_deny_has_star(),
+				'stored'      => array( '*' ),
+				'restrictive' => true,
+				'closed'      => true,
+			),
+			'user deny list' => array(
+				'option'      => 'aafm_denied_user_meta_keys',
+				'get'         => static fn() => aafm_denied_user_meta_keys(),
+				'stored'      => array( 'secret_key' ),
+				'restrictive' => array( 'secret_key' ),
+				'closed'      => array( '*' ),
+			),
+			'user deny star' => array(
+				'option'      => 'aafm_denied_user_meta_keys',
+				'get'         => static fn() => aafm_user_meta_deny_has_star(),
+				'stored'      => array( '*' ),
+				'restrictive' => true,
+				'closed'      => true,
+			),
+		);
+	}
+
+	/**
+	 * Row (ii) for the term and user deny getters: notoptions over a restrictive row, the row
+	 * decides.
+	 */
+	public function test_a_sticky_absent_entry_does_not_hide_a_term_or_user_deny_row(): void {
+		foreach ( $this->scoped_deny_switches() as $label => $switch ) {
+			$this->plant_row( $switch['option'], $switch['stored'] );
+			$this->plant_notoptions( $switch['option'] );
+			$this->assertSame( $switch['restrictive'], ( $switch['get'] )(), $label );
+			$this->remove_row( $switch['option'] );
+		}
+	}
+
+	/**
+	 * Row (iii) for the term and user deny getters: the re-read fails, the fail-closed answer.
+	 */
+	public function test_a_failed_term_or_user_deny_reread_takes_the_fail_closed_answer(): void {
+		foreach ( $this->scoped_deny_switches() as $label => $switch ) {
+			$this->plant_row( $switch['option'], $switch['stored'] );
+			$this->plant_notoptions( $switch['option'] );
+			QueryFaultInjector::reset_fired_count();
+			$answer = $this->faulted( $switch['option'], $switch['get'], 1 );
+			$this->assertSame( 1, QueryFaultInjector::fired_count(), $label );
+			$this->assertSame( $switch['closed'], $answer, $label );
+			$this->remove_row( $switch['option'] );
+		}
+	}
+
+	/**
+	 * Row (v) for the term and user deny getters: core's SELECT and the re-read both fail, the
+	 * fail-closed answer.
+	 */
+	public function test_both_term_or_user_deny_reads_failing_take_the_fail_closed_answer(): void {
+		foreach ( $this->scoped_deny_switches() as $label => $switch ) {
+			$this->plant_row( $switch['option'], $switch['stored'] );
+			QueryFaultInjector::reset_fired_count();
+			$answer = $this->faulted( $switch['option'], $switch['get'], 0 );
+			$this->assertSame( 2, QueryFaultInjector::fired_count(), $label );
+			$this->assertSame( $switch['closed'], $answer, $label );
+			$this->remove_row( $switch['option'] );
+		}
+	}
+
+	/**
+	 * A site may define either lifetime constant as a string in wp-config. The mint still reads
+	 * both lifetime rows when get_option() answers the constant, so a failed read or a shorter
+	 * stored lifetime is never hidden behind it. A constant cannot be redefined once tokens.php has
+	 * loaded, so this runs tokens.php in a child PHP process with string constants and stubs that
+	 * record each row read (every row absent, and a token insert that fails).
+	 */
+	public function test_a_string_lifetime_constant_still_reads_the_lifetime_rows(): void {
+		$tokens = dirname( __DIR__, 2 ) . '/includes/oauth/tokens.php';
+		$code   = "define( 'ABSPATH', '/' );"
+			. "define( 'AAFM_OAUTH_ACCESS_TTL', '3600' );"
+			. "define( 'AAFM_OAUTH_REFRESH_TTL', '2592000' );"
+			. 'function get_option( $option, $fallback = false ) { return $fallback; }'
+			. 'function __( $text, $domain = "default" ) { return $text; }'
+			. 'function aafm_option_row( $option ) { $GLOBALS["aafm_rows"][] = $option; return array( "ok" => true, "found" => false, "value" => false ); }'
+			. 'class WP_Error { public $code; public function __construct( $code = "", $message = "" ) { $this->code = $code; } }'
+			. '$GLOBALS["wpdb"] = new class() { public $prefix = "wp_"; public function insert() { return false; } };'
+			. 'require $argv[1];'
+			. '$result = aafm_oauth_mint_tokens( array() );'
+			. 'echo json_encode( array( "rows" => $GLOBALS["aafm_rows"] ?? array(), "error" => $result instanceof WP_Error ? $result->code : null ) );';
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- test-only: runs tokens.php in a child PHP process so its constants can be strings; never runs on a live site.
+		$proc = proc_open(
+			array( PHP_BINARY, '-r', $code, '--', $tokens ),
+			array(
+				1 => array( 'pipe', 'w' ),
+				2 => array( 'pipe', 'w' ),
+			),
+			$pipes
+		);
+		$this->assertIsResource( $proc );
+		$out = stream_get_contents( $pipes[1] );
+		$err = stream_get_contents( $pipes[2] );
+		fclose( $pipes[1] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- test-only: closes the child process pipe, not a WP file operation.
+		fclose( $pipes[2] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- test-only: closes the child process pipe, not a WP file operation.
+		$this->assertSame( 0, proc_close( $proc ), (string) $err );
+
+		$this->assertSame(
+			array(
+				'rows'  => array( 'aafm_oauth_access_ttl', 'aafm_oauth_refresh_ttl' ),
+				'error' => 'server_error',
+			),
+			json_decode( (string) $out, true )
+		);
+	}
 }

@@ -573,6 +573,24 @@ final class PolicyReadStaleCacheTest extends TestCase {
 	}
 
 	/**
+	 * U2 (ledger s14c1r1-codex-2): P19 asks about the cache copy after get_option() has read, like
+	 * every other site. When get_option()'s own SELECT of an uncached row fails, the notoptions entry
+	 * it leaves disagrees with the row, so the saved selection is carried forward, not dropped.
+	 */
+	public function test_a_failed_first_read_keeps_the_saved_ability_selection(): void {
+		$this->plant( 'aafm_enabled_abilities', array( 'aafm/get-post', 'aafm/zz-inactive-host' ) );
+
+		$raw = QueryFaultInjector::break_query_with_real_error(
+			"option_name = 'aafm_enabled_abilities'",
+			static fn() => aafm_get_stored_enabled_abilities_raw(),
+			1
+		);
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count(), "get_option()'s SELECT must have faulted." );
+		$this->assertSame( array( 'aafm/get-post', 'aafm/zz-inactive-host' ), $raw );
+	}
+
+	/**
 	 * PR-T4 (P18): a found override row that is not a list denies; an absent row allows.
 	 */
 	public function test_an_override_row_that_is_not_a_list_denies(): void {

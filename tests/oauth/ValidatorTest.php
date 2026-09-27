@@ -1662,12 +1662,15 @@ class ValidatorTest extends TestCase {
 		add_action(
 			'parse_request',
 			static function () use ( &$seen ): void {
-				$seen['parse_request'] = get_current_user_id();
+				// Forget the lookup WP::init() cached, so the callback asks the resolver afresh.
+				$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restored in tear_down().
+				$seen['parse_request']   = get_current_user_id();
 			},
 			0
 		);
 		$GLOBALS['wp']->parse_request();
 
+		$this->assertSame( aafm_mcp_rest_route(), $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'WordPress parsed the MCP route.' );
 		$this->assertSame( 0, $seen['init'] ?? null );
 		$this->assertSame( 0, $seen['parse_request'] ?? null );
 	}

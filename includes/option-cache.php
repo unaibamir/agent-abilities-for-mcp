@@ -461,6 +461,21 @@ function aafm_option_value_matches( $stored, $expected ): bool {
 }
 
 /**
+ * Whether a stored value is exactly the object id a write asked for: the int itself, or the string
+ * core stores for it (its ASCII decimal digits).
+ *
+ * A cast is the wrong test. `(int)` reads '12.9', '12abc', ' 12', '012' and true as an id, so an
+ * old row a vetoing filter left behind would confirm a write that never happened.
+ *
+ * @param mixed $stored Value read back from the row.
+ * @param int   $id     The id the write asked for.
+ * @return bool
+ */
+function aafm_stored_id_matches( $stored, int $id ): bool {
+	return $stored === $id || ( is_string( $stored ) && (string) $id === $stored );
+}
+
+/**
  * Certify whether an option write actually took, checking the database row and the object cache's
  * own forced views directly rather than trusting a subsequent, unforced `get_option()` read.
  *

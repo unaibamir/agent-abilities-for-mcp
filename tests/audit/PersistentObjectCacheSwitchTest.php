@@ -550,11 +550,12 @@ final class PersistentObjectCacheSwitchTest extends TestCase {
 		$all                                      = wp_load_alloptions( true );
 		$all['aafm_high_risk_abilities_unlocked'] = '1';
 		wp_cache_set( 'alloptions', $all, 'options' );
-		$this->assertTrue( aafm_high_risk_unlocked(), 'Precondition: the stale unlock is what the floor sees.' );
+		$this->assertSame( '1', get_option( 'aafm_high_risk_abilities_unlocked' ), 'Precondition: the stale unlock is what get_option() sees.' );
 
 		aafm_uninstall_site();
 
 		$this->assertFalse( aafm_high_risk_unlocked(), 'Uninstall must not leave a stale unlock for the next install to inherit.' );
+		$this->assertFalse( get_option( 'aafm_high_risk_abilities_unlocked' ), 'Uninstall must clear the stale cached unlock itself.' );
 	}
 
 	/**

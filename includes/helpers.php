@@ -1682,7 +1682,7 @@ function aafm_apply_write_enrichment( int $post_id, array $bundle ): array {
 		$row = aafm_meta_row( 'post', $post_id, '_thumbnail_id' );
 		if ( ! $row['ok'] ) {
 			$outcome['featured_media'] = AAFM_WRITE_UNCONFIRMED;
-		} elseif ( ! $row['exists'] || ! is_scalar( $row['value'] ) || (int) $row['value'] !== $bundle['featured_media'] ) {
+		} elseif ( ! $row['exists'] || ! aafm_stored_id_matches( $row['value'], $bundle['featured_media'] ) ) {
 			$outcome['featured_media'] = AAFM_WRITE_REFUSED;
 		} else {
 			$outcome['featured_media'] = false !== $set ? AAFM_WRITE_WRITTEN : AAFM_WRITE_UNCHANGED;

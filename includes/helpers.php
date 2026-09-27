@@ -2868,3 +2868,84 @@ function aafm_mixed_write_partial_failure_message( string $saved_label, string $
 		$failed_label
 	);
 }
+
+/**
+ * Render SEO head markup for a post inside a throwaway singular query, then put every global the
+ * render touched back exactly as it was.
+ *
+ * Rank Math and AIOSEO only emit their head by echoing against the queried object, so this points
+ * both main-query globals at a singular query for the post, runs the_post() on it, and buffers
+ * $render. Before that it snapshots, in locals, whether each query and post-data global existed and
+ * what it held, and afterwards it restores exactly that: a global that was absent is unset again,
+ * and the global $post goes back to what it was, never to a state rebuilt from the main query.
+ * wp_reset_postdata() would rebuild it, and so clobber the $post of a secondary loop in progress.
+ *
+ * The buffer unwind closes only buffers opened after entry, and stops at the first one it cannot
+ * close: a hook can open a buffer without the removable flag, and ob_end_clean() then returns false
+ * without lowering the level, so looping on it would never end.
+ *
+ * @param int      $post_id Post to render against.
+ * @param callable $render  Zero-arg callback that echoes the head.
+ * @return string The buffered output, or '' when the post does not exist or the render threw.
+ */
+function aafm_with_seo_render_scope( int $post_id, callable $render ): string {
+	$post = aafm_exact_object( 'post', $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return '';
+	}
+
+	// The two main-query globals, plus every global WP_Query::the_post() and setup_postdata() write.
+	$names = array( 'wp_query', 'wp_the_query', 'post', 'id', 'authordata', 'currentday', 'currentmonth', 'page', 'pages', 'multipage', 'more', 'numpages' );
+	$saved = array();
+	foreach ( $names as $name ) {
+		if ( array_key_exists( $name, $GLOBALS ) ) {
+			$saved[ $name ] = $GLOBALS[ $name ];
+		}
+	}
+
+	// The buffer depth on entry, so the catch below never closes a buffer the caller already had open.
+	$saved_ob_level = ob_get_level();
+
+	$rendered = '';
+	try {
+		$temp_query = new WP_Query(
+			array(
+				'p'                      => $post_id,
+				'post_type'              => $post->post_type,
+				'posts_per_page'         => 1,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => true,
+				'update_post_term_cache' => false,
+			)
+		);
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
+		$GLOBALS['wp_query'] = $temp_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
+		$GLOBALS['wp_the_query'] = $temp_query;
+		if ( $temp_query->have_posts() ) {
+			$temp_query->the_post();
+		}
+
+		ob_start();
+		$render();
+		$rendered = (string) ob_get_clean();
+	} catch ( \Throwable $e ) {
+		while ( ob_get_level() > $saved_ob_level ) {
+			if ( ! ob_end_clean() ) {
+				break;
+			}
+		}
+		$rendered = '';
+	} finally {
+		foreach ( $names as $name ) {
+			if ( array_key_exists( $name, $saved ) ) {
+				// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- restoring a core global's snapshot.
+				$GLOBALS[ $name ] = $saved[ $name ];
+			} else {
+				unset( $GLOBALS[ $name ] );
+			}
+		}
+	}
+
+	return $rendered;
+}

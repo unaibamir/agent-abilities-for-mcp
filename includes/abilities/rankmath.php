@@ -38,11 +38,11 @@ add_filter( 'aafm_seo_rendered_head', 'aafm_rankmath_rendered_head', 10, 3 );
  * robots, OG/Twitter, JSON-LD schema). As a side effect it permanently removes a handful of core
  * wp_head actions it replaces (rel_canonical, index_rel_link, ...) - the same removal that already
  * happens on any real front-end request once Rank Math is active, not a new side effect introduced
- * here. So this renders inside a controlled, fully restored singular query for the post: snapshot
- * the main-query globals, build a throwaway singular WP_Query, buffer head(), then restore the
- * originals exactly (the same shape as aafm_aioseo_rendered_head()). Honors $source (passthrough
- * unless 'rankmath') and guards the real API defensively: a missing head object, a thrown error, or
- * empty output all fall back to the passed head rather than fataling.
+ * here. So this renders through aafm_with_seo_render_scope(), which buffers head() inside a
+ * throwaway singular query for the post and restores every global it touched exactly (shared with
+ * aafm_aioseo_rendered_head()). Honors $source (passthrough unless 'rankmath') and guards the real
+ * API defensively: a missing head object, a thrown error, or empty output all fall back to the
+ * passed head rather than fataling.
  *
  * Rank Math only builds rank_math()->head (and the OG/Twitter/schema generators that feed it) inside
  * Frontend::integrations(), which Rank Math itself hooks to the 'wp' action - an action that never
@@ -80,76 +80,14 @@ function aafm_rankmath_rendered_head( string $head, int $post_id, string $source
 		return $head; // Rank Math present but no head renderer (e.g. unregistered, or a differently-shaped build): best-effort.
 	}
 
-	$post = aafm_exact_object( 'post', $post_id );
-	if ( ! $post instanceof WP_Post ) {
-		return $head;
-	}
-
-	// Snapshot the query globals Rank Math reads, so the throwaway query never leaks out of this call.
-	$saved_wp_query     = $GLOBALS['wp_query'] ?? null;
-	$saved_wp_the_query = $GLOBALS['wp_the_query'] ?? null;
-	$saved_post         = $GLOBALS['post'] ?? null;
-
-	// Snapshot the buffer depth before this call touches anything, so the catch below can never
-	// close a buffer the caller already had open - only ones this call opened itself.
-	$saved_ob_level = ob_get_level();
-
-	$rendered = '';
-	try {
-		$temp_query = new WP_Query(
-			array(
-				'p'                      => $post_id,
-				'post_type'              => $post->post_type,
-				'posts_per_page'         => 1,
-				'no_found_rows'          => true,
-				'update_post_meta_cache' => true,
-				'update_post_term_cache' => false,
-			)
-		);
-		// Point the main-query globals at our singular query so is_singular()/get_queried_object()
-		// resolve to this post while Rank Math builds the head. Both originals are snapshotted above
-		// and restored in the finally block, so this swap never leaks past this call.
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
-		$GLOBALS['wp_query'] = $temp_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
-		$GLOBALS['wp_the_query'] = $temp_query;
-		if ( $temp_query->have_posts() ) {
-			$temp_query->the_post();
-		}
-
-		ob_start();
-		$plugin->head->head();
-		$rendered = (string) ob_get_clean();
-	} catch ( \Throwable $e ) {
-		// Unwind only back down to the level that existed before this call, whether the throw
-		// happened before our own ob_start() (WP_Query, the_post()) or inside head() itself - never
-		// below that, or we close a buffer belonging to whatever caller had one open already.
-		//
-		// Codex round 1 (1.7.6), R1-5: a hook can open a buffer with ob_start( null, 0, 0 ) - the
-		// PHP_OUTPUT_HANDLER_REMOVABLE flag cleared - which ob_end_clean() then refuses to close,
-		// returning false WITHOUT reducing the buffer level. The old loop ignored that return value
-		// and looped on the same unchanged level forever, a hang worse than the stale-buffer bug it
-		// replaced. Stop as soon as a close fails: a non-removable buffer is left in place (still
-		// bounded - never below $saved_ob_level, since this only ever ran up to that point) and the
-		// finally block below still runs to restore the globals.
-		while ( ob_get_level() > $saved_ob_level ) {
-			if ( ! ob_end_clean() ) {
-				break;
+	$rendered = trim(
+		aafm_with_seo_render_scope(
+			$post_id,
+			static function () use ( $plugin ): void {
+				$plugin->head->head();
 			}
-		}
-		$rendered = '';
-	} finally {
-		// Restore the originals exactly (order matters: globals first, then reset postdata).
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['wp_query'] = $saved_wp_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['wp_the_query'] = $saved_wp_the_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['post'] = $saved_post;
-		wp_reset_postdata();
-	}
-
-	$rendered = trim( $rendered );
+		)
+	);
 	return '' !== $rendered ? $rendered : $head;
 }
 

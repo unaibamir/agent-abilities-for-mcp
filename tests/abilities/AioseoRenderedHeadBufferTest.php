@@ -80,4 +80,61 @@ final class AioseoRenderedHeadBufferTest extends TestCase {
 
 		ob_end_clean();
 	}
+
+	/**
+	 * Step 12 (R1-6): the render scope puts back exactly what was there before it, never a state
+	 * rebuilt from the main query. The main query points at post A while the global $post is post B
+	 * (a secondary loop in progress). After the render, $post is still B, both query globals are the
+	 * same objects, and no post-data global the render set is left behind where it was absent.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_rendered_head_restores_the_prior_globals_exactly_instead_of_resetting_to_the_main_query(): void {
+		$post_a  = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_b  = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_id = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		if ( ! function_exists( 'aioseo' ) ) {
+			// A real-shaped stub whose output() prints what the scope resolves, so the test also pins
+			// that the render ran against the requested post.
+			eval( // phpcs:ignore Squiz.PHP.Eval.Discouraged -- process-isolated test stub, never shipped.
+				'class AAFM_Test_Aioseo_Scope_Stub {'
+				. 'public function output() { echo "<title>" . get_queried_object_id() . "|" . get_the_ID() . "</title>"; }'
+				. '}'
+				. 'function aioseo() {'
+				. 'static $plugin;'
+				. 'if ( null === $plugin ) {'
+				. '$plugin = new \stdClass();'
+				. '$plugin->head = new \AAFM_Test_Aioseo_Scope_Stub();'
+				. '}'
+				. 'return $plugin;'
+				. '}'
+			);
+		}
+
+		$main_query = new WP_Query( array( 'p' => $post_a ) );
+		$in_loop    = get_post( $post_b );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test setup, the state under test.
+		$GLOBALS['wp_query'] = $main_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test setup, the state under test.
+		$GLOBALS['wp_the_query'] = $main_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test setup, the state under test.
+		$GLOBALS['post'] = $in_loop;
+
+		$absent = array( 'id', 'authordata', 'currentday', 'currentmonth', 'page', 'pages', 'multipage', 'more', 'numpages' );
+		foreach ( $absent as $name ) {
+			unset( $GLOBALS[ $name ] );
+		}
+
+		$result = aafm_aioseo_rendered_head( 'fallback-head', $post_id, 'aioseo' );
+
+		$this->assertSame( '<title>' . $post_id . '|' . $post_id . '</title>', $result, 'The head must render against the requested post.' );
+		$this->assertSame( $main_query, $GLOBALS['wp_query'], 'The main query global must be the same object as before.' );
+		$this->assertSame( $main_query, $GLOBALS['wp_the_query'], 'The wp_the_query global must be the same object as before.' );
+		$this->assertSame( $in_loop, $GLOBALS['post'], 'The global $post must be post B again, not the main query\'s post A.' );
+		foreach ( $absent as $name ) {
+			$this->assertArrayNotHasKey( $name, $GLOBALS, "The render must not leave the \$$name global behind." );
+		}
+	}
 }

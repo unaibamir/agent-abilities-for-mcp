@@ -88,6 +88,17 @@ final class McpErrorStatusTest extends TestCase {
 	}
 
 	/**
+	 * Core dispatches a route with one trailing newline to the MCP handler, so the rewrite applies
+	 * to that spelling as it does to the plain route.
+	 */
+	public function test_the_newline_route_core_dispatches_to_mcp_is_rewritten_too(): void {
+		$request  = new WP_REST_Request( 'POST', aafm_mcp_rest_route() . "\n" );
+		$response = new WP_REST_Response( $this->jsonrpc_error_body( -32003, 'req-1' ), 404 );
+
+		$this->assertSame( 200, $this->filter( $response, $request )->get_status() );
+	}
+
+	/**
 	 * An unknown JSON-RPC method (METHOD_NOT_FOUND, -32601) is rewritten the same way.
 	 */
 	public function test_method_not_found_is_rewritten_to_200(): void {

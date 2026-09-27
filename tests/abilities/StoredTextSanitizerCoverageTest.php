@@ -261,18 +261,6 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The Authorization header in its two server spellings, parsed for a bearer token that is then hashed and compared against stored tokens. The header text itself is never stored.',
 		),
-		'includes/oauth/validator.php::aafm_oauth_request_targets_mcp_route::sanitize_text_field' => array(
-			'calls'  => array(
-				'sanitize_text_field( wp_unslash( $_SERVER[\'REQUEST_URI\'] ) )',
-			),
-			'reason' => 'REQUEST_URI, used to decide whether this request is aimed at the MCP endpoint. Routing only, never written.',
-		),
-		'includes/oauth/validator.php::aafm_request_rest_route::sanitize_text_field' => array(
-			'calls'  => array(
-				'sanitize_text_field( wp_unslash( $route ) )',
-			),
-			'reason' => 'The rest_route query variable in core\'s POST-then-GET order, compared against the MCP route to decide the bearer token\'s audience. Routing only, never written.',
-		),
 		'includes/text.php::aafm_sanitize_multiline_text::sanitize_textarea_field' => array(
 			'calls'  => array(
 				'sanitize_textarea_field( $value )',

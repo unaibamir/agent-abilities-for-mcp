@@ -16,7 +16,7 @@ defined( 'ABSPATH' ) || exit;
  * is not yet instantiated when the determine_current_user filter fires on the OAuth bearer
  * path (e.g. Query Monitor calls current_user_can() that early), and rest_url() ->
  * get_rest_url() dereferences it, causing a fatal. When $wp_rewrite is absent the URL is
- * reconstructed without it, mirroring the guard in validator.php:aafm_oauth_request_targets_mcp_route().
+ * reconstructed without it.
  *
  * Both branches MUST produce byte-identical output so the RFC 8707 audience
  * hash_equals() check in the validator passes regardless of which branch ran at

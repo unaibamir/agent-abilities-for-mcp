@@ -72,10 +72,11 @@ class FailedAppPasswordAuthLogTest extends TestCase {
 	}
 
 	/**
-	 * Point the request at the MCP REST route (pretty-permalink form).
+	 * Point the request at the MCP REST route: WordPress parsed it there (pretty-permalink form).
 	 */
 	private function on_mcp_route(): void {
 		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
+		$this->route_as_rest_request();
 	}
 
 	/**
@@ -98,7 +99,8 @@ class FailedAppPasswordAuthLogTest extends TestCase {
 	 * for any Basic-Auth REST/XML-RPC request, not only ours.
 	 */
 	public function test_does_not_log_off_the_mcp_route(): void {
-		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/wp/v2/posts';
+		$_SERVER['REQUEST_URI']                  = '/' . trim( rest_get_url_prefix(), '/' ) . '/wp/v2/posts';
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wp/v2/posts';
 
 		aafm_log_failed_application_password_auth( new WP_Error( 'incorrect_password', 'nope' ) );
 

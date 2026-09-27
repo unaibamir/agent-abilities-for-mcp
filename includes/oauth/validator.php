@@ -120,9 +120,8 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		return $user_id;
 	}
 
-	// 3. Re-entrancy guard. Everything below can build site URLs (aafm_oauth_request_targets_mcp_route()
-	// at step 5, aafm_endpoint_url() at step 8), which fire the site-wide home_url/rest_url filter
-	// chains DURING user resolution. WordPress's _wp_get_current_user() has no re-entrancy lock, so a
+	// 3. Re-entrancy guard. Everything below can build site URLs (aafm_endpoint_url() at step 9),
+	// which fires the site-wide home_url/rest_url filter chains DURING user resolution. WordPress's _wp_get_current_user() has no re-entrancy lock, so a
 	// third-party filter on those URLs that calls a current-user function would re-enter this callback
 	// and recurse until memory is exhausted (a white-screen). Once we are already resolving, a nested
 	// call resolves no OAuth user. The bearer read above stays outside the guard so bearer-less
@@ -142,10 +141,11 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 
 		// 5. Bail until the plugin is fully loaded. The MCP-route match (step 6) and the audience
 		// binding (step 9) call functions defined only when aafm_bootstrap() runs on `plugins_loaded`
-		// - aafm_mcp_rest_route() (includes/bootstrap.php) and aafm_endpoint_url() (the connection
-		// module). This filter is registered at plugin-include time, so it can fire BEFORE our
-		// bootstrap when another active plugin resolves the current user during `plugins_loaded` (e.g.
-		// The Events Calendar calls wp_create_nonce() there). A fatal in a determine_current_user
+		// - aafm_is_mcp_route() (includes/bootstrap.php, the file that defines aafm_mcp_rest_route(),
+		// the name checked below) and aafm_endpoint_url() (the connection module). This filter is
+		// registered at plugin-include time, so it can fire BEFORE our bootstrap when another active
+		// plugin resolves the current user during `plugins_loaded` (e.g. The Events Calendar calls
+		// wp_create_nonce() there). A fatal in a determine_current_user
 		// callback white-screens the request, so we fail closed and resolve no OAuth user until the
 		// helpers exist; the genuine MCP auth check runs later, during REST dispatch.
 		if ( ! function_exists( 'aafm_mcp_rest_route' ) || ! function_exists( 'aafm_endpoint_url' ) ) {
@@ -156,8 +156,8 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		// for the MCP endpoint, not a site-wide WP REST bearer. Resolving it on any
 		// other route would turn an MCP token into a general credential for every route
 		// that trusts is_user_logged_in()/current_user_can(). Off the MCP route we leave
-		// current_user untouched, exactly as Application Passwords are. determine_current_user
-		// fires before REST routing, so the target is read from the request URI.
+		// current_user untouched, exactly as Application Passwords are. The answer is the
+		// route core parsed; before the parse it is false and serve_request() asks again.
 		if ( ! aafm_oauth_request_targets_mcp_route() ) {
 			return $user_id;
 		}
@@ -318,117 +318,79 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
 }
 
 /**
- * The rest_route WordPress dispatches this request on, read in core's own order
- * (WP::parse_request()): a POST value first, then a GET value, and a GET and POST that differ make
- * core refuse the request. The extra query vars core also reads are set by code, not by the
- * request, so they are not read here.
+ * Whether WordPress routed this request to the MCP REST route.
  *
- * @return string|false|null The route; null when the request carries none; false when GET and POST
- *                           differ, or a value is not a string.
+ * The answer is core's own: the rest_route WordPress::parse_request() settled on, untrailingslashed
+ * as rest_api_loaded() does, matched by aafm_is_mcp_route() as core's router matches it. Before
+ * the parse_request action has fired in this process nothing is routed yet, so the answer is
+ * false. That is the same wait core's Application Passwords make (they authenticate only once
+ * REST_REQUEST is defined), and it is safe for a healthy MCP call: WP_REST_Server::serve_request()
+ * forgets a cached anonymous user before dispatch, so the bearer resolves then. Entry points that
+ * never parse (wp-admin, admin-ajax, admin-post, wp-comments-post, cron, CLI) never match.
+ *
+ * @return bool True only when core routed the request to the MCP endpoint.
  */
-function aafm_request_rest_route() {
-	// phpcs:disable WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- read-only routing check, no state change; the value is sanitized below once its shape is known.
-	$get  = $_GET['rest_route'] ?? null;
-	$post = $_POST['rest_route'] ?? null;
-	// phpcs:enable WordPress.Security.NonceVerification, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
-
-	if ( ( null !== $get && ! is_string( $get ) ) || ( null !== $post && ! is_string( $post ) ) ) {
+function aafm_oauth_request_targets_mcp_route(): bool {
+	$wp = $GLOBALS['wp'] ?? null;
+	if ( ! did_action( 'parse_request' ) || ! $wp instanceof WP ) {
 		return false;
 	}
-	if ( null !== $get && null !== $post && $get !== $post ) {
-		return false;
-	}
-	$route = $post ?? $get;
-	return null === $route ? null : sanitize_text_field( wp_unslash( $route ) );
+	$route = $wp->query_vars['rest_route'] ?? null;
+	return is_string( $route ) && aafm_is_mcp_route( untrailingslashit( $route ) );
 }
 
 /**
- * Whether the current request targets the MCP REST route.
+ * Forget a cached anonymous user when an MCP-routed request carries our bearer.
  *
- * The determine_current_user filter runs before REST routing resolves $request->get_route(),
- * so the target is derived from the raw request: the URI path (pretty permalinks give
- * /wp-json/agent-abilities-for-mcp/mcp) and the rest_route request var, POST before GET as core
- * reads it (plain permalinks give ?rest_route=/agent-abilities-for-mcp/mcp). The MCP rest path is taken from the registered
- * endpoint so it tracks any future rename.
+ * Runs first on rest_api_init. WP::init() looks the user up before WordPress parses the request,
+ * when the bearer cannot resolve yet, and caches "nobody". This makes the same clear core's
+ * WP_REST_Server::serve_request() makes, one step earlier, so the tool registry built on
+ * rest_api_init sees the approver. It only ever forgets a cached user that does not exist, and
+ * only with an aafm_oat_ bearer on a request core routed to the MCP endpoint.
  *
- * @return bool True only when the request is for the MCP endpoint.
+ * @return void
  */
-function aafm_oauth_request_targets_mcp_route(): bool {
-	// Single-sourced in bootstrap.php (leading-slash form).
-	$mcp_route = aafm_mcp_rest_route();
-
-	// Plain-permalink form: rest_route=/agent-abilities-for-mcp/mcp. When the request carries a
-	// rest_route it is AUTHORITATIVE and we decide solely from it, never falling through to the path
-	// check below: it is the route WordPress dispatches to (aafm_request_rest_route() reads it in
-	// core's own order). If we instead matched the URL path, a request whose path is the MCP route
-	// but whose rest_route points elsewhere (e.g. /wp/v2/users/me) would be misclassified as
-	// MCP-targeted while WordPress dispatches it to /wp/v2/users/me - turning an audience-bound
-	// aafm_oat_ MCP token into a general credential for that unrelated REST route.
-	$rest_route = aafm_request_rest_route();
-	if ( false === $rest_route ) {
-		return false; // WordPress refuses a GET and POST that differ; a non-string never names the MCP route.
+function aafm_oauth_forget_anonymous_user_on_mcp_route(): void {
+	global $current_user;
+	if ( ! $current_user instanceof WP_User || $current_user->exists() || ! function_exists( 'aafm_is_mcp_route' ) ) {
+		return;
 	}
-	if ( null !== $rest_route ) {
-		// Case-insensitive, matching how core itself matches REST routes (the route regex in
-		// class-wp-rest-server.php is built with the `i` modifier) and the same comparison the
-		// swept siblings use (aafm_mcp_filter_governed_error_status(),
-		// aafm_oauth_filter_malformed_json()). A case-sensitive compare fails closed - the bearer
-		// never resolves - but it disagrees with where WordPress actually dispatches the request.
-		return 0 === strcasecmp( rtrim( $rest_route, '/' ), $mcp_route );
+	$credential = aafm_oauth_read_bearer_token();
+	if ( null === $credential || 0 !== strncmp( $credential, AAFM_OAUTH_ACCESS_TOKEN_PREFIX, strlen( AAFM_OAUTH_ACCESS_TOKEN_PREFIX ) ) ) {
+		return;
 	}
-
-	// With no permalink structure WordPress has no rewrite rules and routes no path, so a
-	// /wp-json/... path with no rest_route is a front-end view, never the MCP endpoint. $wp_rewrite
-	// may not exist yet on this filter (see below), so the stored structure answers then.
-	$using_permalinks = isset( $GLOBALS['wp_rewrite'] ) && $GLOBALS['wp_rewrite'] instanceof \WP_Rewrite
-		? $GLOBALS['wp_rewrite']->using_permalinks()
-		: '' !== (string) get_option( 'permalink_structure' );
-	if ( ! $using_permalinks ) {
-		return false;
+	if ( aafm_oauth_request_targets_mcp_route() ) {
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the same clear core makes in WP_REST_Server::serve_request().
 	}
+}
 
-	// Pretty-permalink form: compare the request path against the MCP endpoint's path. Derive the
-	// expected path from rest_url() so a site installed under a path prefix (e.g.
-	// https://example.com/blog) keeps that prefix (/blog/wp-json/...) in the comparison - a
-	// hardcoded /wp-json/... literal never matches there.
-	$request_uri = isset( $_SERVER['REQUEST_URI'] )
-		? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) )
-		: '';
-	$path        = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
-	if ( '' === $path ) {
-		return false;
+/**
+ * Let a user resolved from our bearer reach only the MCP adapter's own handler.
+ *
+ * Core runs the first handler whose route matches, so a route another plugin registers inside our
+ * namespace could run ahead of the adapter's on the MCP path. Runs on rest_request_before_callbacks,
+ * after core matched the handler and before its permission_callback and callback: when the request
+ * is the MCP route and the current user came from an aafm_oat_ bearer, any handler whose callback
+ * is not an HttpTransport method gets the same 401 an unauthenticated MCP call gets.
+ *
+ * @param mixed $response The response so far (WP_Error, a short-circuit value, or null).
+ * @param mixed $handler  The matched route handler.
+ * @param mixed $request  The request.
+ * @return mixed $response unchanged, or a 401 WP_Error.
+ */
+function aafm_oauth_confine_bearer_to_mcp_handler( $response, $handler, $request ) {
+	if ( is_wp_error( $response ) || ! $request instanceof WP_REST_Request || ! function_exists( 'aafm_is_mcp_route' ) || ! aafm_is_mcp_route( $request->get_route() ) ) {
+		return $response;
 	}
-
-	// rest_url() -> get_rest_url() dereferences the global $wp_rewrite. The determine_current_user
-	// filter can fire before WordPress instantiates $wp_rewrite (e.g. Query Monitor calling
-	// current_user_can() that early), so calling rest_url() then fatals on a null $wp_rewrite. Only
-	// use rest_url() once $wp_rewrite exists; otherwise leave the path empty so the home_url() +
-	// rest_get_url_prefix() reconstruction below (neither touches $wp_rewrite) produces the route.
-	$rest_url_path = '';
-	if ( isset( $GLOBALS['wp_rewrite'] ) && $GLOBALS['wp_rewrite'] instanceof \WP_Rewrite ) {
-		$rest_url_path = (string) wp_parse_url( rest_url( ltrim( $mcp_route, '/' ) ), PHP_URL_PATH );
+	get_current_user_id();
+	if ( '' === aafm_oauth_current_client_id() ) {
+		return $response;
 	}
-
-	// Only treat the rest_url() path as the target when it actually ends with the MCP route (a
-	// rest_url filter can reshape it). Otherwise, and when $wp_rewrite does not exist yet,
-	// reconstruct the expected path from the install's home-path prefix so a subdirectory install
-	// still matches.
-	if ( substr( rtrim( $rest_url_path, '/' ), -strlen( $mcp_route ) ) === $mcp_route ) {
-		$mcp_rest_path = $rest_url_path;
-	} else {
-		$home_path     = (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH );
-		$segments      = array_filter(
-			array( trim( $home_path, '/' ), trim( rest_get_url_prefix(), '/' ) ),
-			static function ( string $segment ): bool {
-				return '' !== $segment;
-			}
-		);
-		$mcp_rest_path = '/' . implode( '/', $segments ) . $mcp_route;
+	$callback = is_array( $handler ) ? ( $handler['callback'] ?? null ) : null;
+	if ( is_array( $callback ) && isset( $callback[0] ) && $callback[0] instanceof \WP\MCP\Transport\HttpTransport ) {
+		return $response;
 	}
-
-	// Case-insensitive for the same reason as the rest_route branch above: core dispatches the
-	// odd-cased path to the MCP endpoint anyway.
-	return 0 === strcasecmp( rtrim( $path, '/' ), rtrim( $mcp_rest_path, '/' ) );
+	return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), array( 'status' => 401 ) );
 }
 
 /**

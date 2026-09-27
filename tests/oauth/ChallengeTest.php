@@ -149,6 +149,20 @@ final class ChallengeTest extends TestCase {
 	}
 
 	/**
+	 * Core dispatches a route with one trailing newline to the MCP handler, so its 401 carries the
+	 * challenge as the plain route's does.
+	 */
+	public function test_filter_sets_header_on_a_401_for_the_newline_route(): void {
+		wp_set_current_user( 0 );
+		$response = new \WP_REST_Response( null, 401 );
+		$request  = $this->request_for_route( self::MCP_ROUTE . "\n" );
+
+		$out = aafm_oauth_filter_rest_challenge( $response, rest_get_server(), $request );
+
+		$this->assertSame( aafm_oauth_challenge_header(), $out->get_headers()['WWW-Authenticate'] ?? '' );
+	}
+
+	/**
 	 * Negative: a 401 on an unrelated route never gets the header - the filter must
 	 * not slap the beacon on every 401 across the site.
 	 */

@@ -142,7 +142,7 @@ function aafm_oauth_dcr_enabled(): bool {
 function aafm_oauth_seed_default_options(): void {
 	// Both toggles are read on requests that touch the OAuth surface: aafm_oauth_enabled() gates
 	// the CORS filters at bootstrap and the .well-known handler on parse_request, and
-	// aafm_oauth_request_targets_mcp_route() consults it on determine_current_user;
+	// aafm_oauth_resolve_current_user() consults it on determine_current_user;
 	// aafm_oauth_dcr_enabled() is read by the register route and the discovery metadata. They must
 	// stay autoloaded ('yes', the add_option default) so get_option() answers those hot-path reads
 	// without a query of its own - switching either to autoload 'no' would be a per-request
@@ -466,23 +466,20 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 		return $response;
 	}
 
-	// aafm_mcp_rest_route() is defined in bootstrap.php, which loads inside aafm_bootstrap() on
+	// aafm_is_mcp_route() is defined in bootstrap.php, which loads inside aafm_bootstrap() on
 	// `plugins_loaded`. This filter is registered at plugin-include time, so it can fire earlier:
 	// another active plugin that issues a rest_do_request() during `plugins_loaded` (before our
-	// bootstrap) and gets a 401 would reach the aafm_mcp_rest_route() call below before it exists,
+	// bootstrap) and gets a 401 would reach the aafm_is_mcp_route() call below before it exists,
 	// fataling inside a REST dispatch filter. Bail until the helper is loaded; the genuine MCP 401
 	// challenge is added later, during normal REST dispatch, once the plugin is fully loaded.
-	if ( ! function_exists( 'aafm_mcp_rest_route' ) ) {
+	if ( ! function_exists( 'aafm_is_mcp_route' ) ) {
 		return $response;
 	}
 
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
 
-	// The MCP route the adapter registers (single-sourced in bootstrap.php), matched
-	// case-insensitively like core itself matches REST routes (class-wp-rest-server.php
-	// builds its route regex with the `i` modifier) and like the sibling
-	// aafm_oauth_filter_malformed_json() already matches its own route family.
-	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
+	// The MCP route the adapter registers, matched by aafm_is_mcp_route(), core's matcher.
+	if ( ! aafm_is_mcp_route( $route ) ) {
 		return $response;
 	}
 

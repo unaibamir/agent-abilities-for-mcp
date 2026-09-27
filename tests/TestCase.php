@@ -109,7 +109,49 @@ abstract class TestCase extends WP_UnitTestCase {
 			$GLOBALS['wp']->query_vars = $this->policy_query_vars;
 		}
 		aafm_policy_reset_request_state();
+		if ( $this->rest_server_swapped ) {
+			$GLOBALS['wp_rest_server'] = $this->saved_rest_server;
+			$this->rest_server_swapped = false;
+		}
 		parent::tear_down();
+	}
+
+	/**
+	 * Whether mcp_spy_server() replaced the global REST server, restored in tear_down().
+	 *
+	 * @var bool
+	 */
+	private $rest_server_swapped = false;
+
+	/**
+	 * The global REST server mcp_spy_server() replaced.
+	 *
+	 * @var mixed
+	 */
+	private $saved_rest_server = null;
+
+	/**
+	 * A fresh Spy_REST_Server installed as the global server, with rest_api_init fired on it and the
+	 * adapter's MCP route registered, so serve_request() runs the real HTTP path. The adapter creates
+	 * its servers once per process, so when its own rest_api_init hook is no longer attached the MCP
+	 * route is registered from our server's transport context, the way HttpTransport does it.
+	 *
+	 * @return \Spy_REST_Server
+	 */
+	protected function mcp_spy_server(): \Spy_REST_Server {
+		if ( ! $this->rest_server_swapped ) {
+			$this->saved_rest_server   = $GLOBALS['wp_rest_server'] ?? null;
+			$this->rest_server_swapped = true;
+		}
+		$server                    = new \Spy_REST_Server();
+		$GLOBALS['wp_rest_server'] = $server;
+		do_action( 'rest_api_init', $server ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, fired on the test's own server.
+		if ( ! isset( $server->get_routes()[ aafm_mcp_rest_route() ] ) ) {
+			$mcp = \WP\MCP\Core\McpAdapter::instance()->get_server( 'aafm-server' );
+			$this->assertNotNull( $mcp, 'The plugin registers its MCP server with the adapter.' );
+			( new \WP\MCP\Transport\HttpTransport( $mcp->create_transport_context() ) )->register_routes();
+		}
+		return $server;
 	}
 
 	/**
@@ -128,17 +170,30 @@ abstract class TestCase extends WP_UnitTestCase {
 
 	/**
 	 * Make this request one WordPress has routed as REST (core's parsed rest_route, the test
-	 * rest_api_loaded() applies), so policy reads take the batched path.
+	 * rest_api_loaded() applies), so policy reads take the batched path. Routing implies the parse,
+	 * so the parse_request action is counted too.
 	 *
 	 * @return void
 	 */
 	protected function route_as_rest_request(): void {
 		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$GLOBALS['wp_actions']['parse_request']  = max( 1, (int) did_action( 'parse_request' ) );
 		aafm_policy_reset_request_state();
 	}
 
 	/**
-	 * The MCP endpoint's request path, built as aafm_oauth_request_targets_mcp_route() builds it.
+	 * Take this request off the MCP route under either suite setting: no parsed rest_route, no
+	 * REQUEST_URI, and no parse_request counted yet.
+	 *
+	 * @return void
+	 */
+	protected function route_off_mcp(): void {
+		$this->use_front_end_policy_path();
+		unset( $GLOBALS['wp_actions']['parse_request'] );
+	}
+
+	/**
+	 * The MCP endpoint's pretty REST path.
 	 *
 	 * @return string
 	 */

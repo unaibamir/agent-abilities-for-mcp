@@ -2596,6 +2596,20 @@
 						}
 					} );
 
+					// A save replaced a malformed stored row: drop its notice, and when no scope was
+					// kept show the page as the unrestricted state it now is.
+					const malformedNotice = document.getElementById( 'aafm-allowlist-malformed' );
+					if ( malformedNotice ) {
+						malformedNotice.remove();
+						if ( 0 === keptKeys.size ) {
+							document.getElementById( 'aafm-allowlist-table-wrap' )?.remove();
+							const empty = document.getElementById( 'aafm-allowlist-empty' );
+							if ( empty ) {
+								empty.hidden = false;
+							}
+						}
+					}
+
 					if ( status ) {
 						status.textContent = this.#t( 'allowlistSaved', 'Saved.' );
 					}

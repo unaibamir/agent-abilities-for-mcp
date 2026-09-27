@@ -8,7 +8,7 @@
 # Local (DDEV):  ddev exec tests/bin/install-vendors.sh
 # CI:            tests/bin/install-vendors.sh   (WP_CORE_DIR exported by the workflow)
 #
-# Pins are the declared integration floors / behavioural cliffs. Bump deliberately: the point of
+# Pins are the declared integration floors / behavioural cliffs (WooCommerce tracks the clone). Bump deliberately: the point of
 # pinning is that "green" means "this exact contract", so a version change is a contract change.
 set -euo pipefail
 
@@ -35,7 +35,7 @@ fi
 
 # slug<TAB>version — one line per vendor. Versions are the contract pins (see plan doc 131 §work item 3).
 VENDORS="
-woocommerce	9.1.0
+woocommerce	11.1.2
 advanced-custom-fields	6.3.6
 wordpress-seo	24.0
 all-in-one-seo-pack	4.7.0

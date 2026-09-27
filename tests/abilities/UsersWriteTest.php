@@ -650,4 +650,206 @@ final class UsersWriteTest extends TestCase {
 		$this->assertSame( 'The request could not be completed.', $res->get_error_message() );
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ), 'the last admin must survive.' );
 	}
+
+	/**
+	 * R-T1 (U-R row R6, ledger b5huntb-2): default_role is out of the runtime alloptions and
+	 * per-option copies, and get_option()'s own SELECT fails, so notoptions sits over a found row.
+	 * create-user refuses rather than create a subscriber the stored row does not name.
+	 */
+	public function test_create_user_refuses_when_the_default_role_read_fails(): void {
+		$this->with_restricted_default_role(
+			function () {
+				$this->drop_runtime_default_role();
+				$res = QueryFaultInjector::break_query_with_real_error(
+					"option_name = 'default_role'",
+					fn() => $this->create_default_user( 'rt_one' )
+				);
+				$this->assertGreaterThan( 0, QueryFaultInjector::fired_count(), "get_option()'s SELECT must have faulted." );
+				$this->assert_refused( $res, 'rt_one' );
+			}
+		);
+	}
+
+	/**
+	 * R-T2 (R7): every default_role read fails, get_option()'s and the batched one. The failed
+	 * batch also fails the permission check closed, so this calls the exec body directly to reach
+	 * the role read.
+	 */
+	public function test_create_user_refuses_when_every_default_role_read_fails(): void {
+		$this->with_restricted_default_role(
+			function () {
+				$this->drop_runtime_default_role();
+				$res = QueryFaultInjector::break_query_with_real_error(
+					array( 'SELECT', "'default_role'" ),
+					static fn() => aafm_exec_create_user(
+						array(
+							'username' => 'rt_two',
+							'email'    => 'rt_two@example.com',
+						)
+					)
+				);
+				$this->assertGreaterThan( 0, QueryFaultInjector::fired_count(), 'the default_role reads must have faulted.' );
+				$this->assert_refused( $res, 'rt_two' );
+			}
+		);
+	}
+
+	/**
+	 * R-T3 (R8): a stale runtime alloptions 'subscriber' over the stored restricted role.
+	 */
+	public function test_create_user_refuses_a_stale_cached_default_role(): void {
+		$this->with_restricted_default_role(
+			function () {
+				$this->plant_runtime_default_role( 'subscriber' );
+				$this->assert_refused( $this->create_default_user( 'rt_three' ), 'rt_three' );
+			}
+		);
+	}
+
+	/**
+	 * R-T7 (R9): a stale alloptions 'author', not the default, over the stored restricted role.
+	 */
+	public function test_create_user_refuses_a_stale_non_default_role(): void {
+		$this->with_restricted_default_role(
+			function () {
+				$this->plant_runtime_default_role( 'author' );
+				$this->assert_refused( $this->create_default_user( 'rt_seven' ), 'rt_seven' );
+			}
+		);
+	}
+
+	/**
+	 * R-T4 (R5): an option_default_role filter still decides the role on a healthy database; the
+	 * stored row never supplies it.
+	 */
+	public function test_a_default_role_filter_still_decides_the_role(): void {
+		$this->use_batched_policy_path();
+		$this->acting_as( 'administrator' );
+		update_option( 'default_role', 'editor' );
+		$filter = static fn() => 'subscriber';
+		add_filter( 'option_default_role', $filter );
+		$res    = $this->create_default_user( 'rt_four' );
+		remove_filter( 'option_default_role', $filter );
+
+		$this->assertIsArray( $res );
+		$this->assertSame( array( 'subscriber' ), $this->stored_roles( (int) get_user_by( 'login', 'rt_four' )->ID ) );
+	}
+
+	/**
+	 * R-T5 (R1): a healthy stored default role, with alloptions agreeing, is the role created.
+	 */
+	public function test_create_user_uses_a_healthy_stored_default_role(): void {
+		$this->use_batched_policy_path();
+		$this->acting_as( 'administrator' );
+		update_option( 'default_role', 'author' );
+		$res = $this->create_default_user( 'rt_five' );
+
+		$this->assertIsArray( $res );
+		$this->assertSame( array( 'author' ), $this->stored_roles( (int) get_user_by( 'login', 'rt_five' )->ID ) );
+	}
+
+	/**
+	 * R-T6 (R4): no default_role row and nothing cached creates a subscriber.
+	 */
+	public function test_create_user_with_no_default_role_row_creates_a_subscriber(): void {
+		$this->use_batched_policy_path();
+		$this->acting_as( 'administrator' );
+		delete_option( 'default_role' );
+		$res = $this->create_default_user( 'rt_six' );
+
+		$this->assertIsArray( $res );
+		$this->assertSame( array( 'subscriber' ), $this->stored_roles( (int) get_user_by( 'login', 'rt_six' )->ID ) );
+	}
+
+	/**
+	 * R-T8 (R11): a filter answering 'administrator' still floors to subscriber.
+	 */
+	public function test_a_default_role_filter_answering_administrator_still_floors_to_subscriber(): void {
+		$this->use_batched_policy_path();
+		$this->acting_as( 'administrator' );
+		update_option( 'default_role', 'author' );
+		$filter = static fn() => 'administrator';
+		add_filter( 'option_default_role', $filter );
+		$res    = $this->create_default_user( 'rt_eight' );
+		remove_filter( 'option_default_role', $filter );
+
+		$this->assertIsArray( $res );
+		$this->assertSame( array( 'subscriber' ), $this->stored_roles( (int) get_user_by( 'login', 'rt_eight' )->ID ) );
+	}
+
+	/**
+	 * Run $test as an MCP REST request with default_role stored as an editable role that carries
+	 * no capabilities, removed again after.
+	 *
+	 * @param callable $test The test body.
+	 */
+	private function with_restricted_default_role( callable $test ): void {
+		add_role( 'aafm_s14_restricted', 'Restricted', array() );
+		try {
+			$this->use_batched_policy_path();
+			$this->acting_as( 'administrator' );
+			update_option( 'default_role', 'aafm_s14_restricted' );
+			QueryFaultInjector::reset_fired_count();
+			$test();
+		} finally {
+			remove_role( 'aafm_s14_restricted' );
+		}
+	}
+
+	/**
+	 * Policy reads take the batched path, as on an MCP REST request.
+	 */
+	private function use_batched_policy_path(): void {
+		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+		aafm_policy_reset_request_state();
+	}
+
+	/**
+	 * Remove default_role from the runtime alloptions and per-option copies, so get_option() reads
+	 * the row itself.
+	 */
+	private function drop_runtime_default_role(): void {
+		$all = wp_load_alloptions();
+		unset( $all['default_role'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		wp_cache_delete( 'default_role', 'options' );
+	}
+
+	/**
+	 * Put $role in the runtime alloptions copy of default_role, leaving the row alone.
+	 *
+	 * @param string $role The stale role.
+	 */
+	private function plant_runtime_default_role( string $role ): void {
+		$all                 = wp_load_alloptions();
+		$all['default_role'] = $role;
+		wp_cache_set( 'alloptions', $all, 'options' );
+	}
+
+	/**
+	 * Run create-user with no role in the input.
+	 *
+	 * @param string $login Username.
+	 * @return mixed
+	 */
+	private function create_default_user( string $login ) {
+		return wp_get_ability( 'aafm/create-user' )->execute(
+			array(
+				'username' => $login,
+				'email'    => $login . '@example.com',
+			)
+		);
+	}
+
+	/**
+	 * The call refused with the generic error and created nobody.
+	 *
+	 * @param mixed  $res   The ability result.
+	 * @param string $login The username it would have created.
+	 */
+	private function assert_refused( $res, string $login ): void {
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertFalse( username_exists( $login ), 'no user may be created.' );
+	}
 }

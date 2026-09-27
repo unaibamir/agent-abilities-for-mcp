@@ -374,7 +374,14 @@ function aafm_exec_create_user( array $input ) {
 	// get_editable_roles() (which honors the editable_roles filter). Anything else floors to
 	// subscriber. get_option()'s fallback only fires when the option is ABSENT, and an empty
 	// string would create a roleless user, so the empty-string floor stays too.
-	$default_role = (string) get_option( 'default_role', 'subscriber' );
+	// The role is get_option()'s answer. A cache copy that disagrees with the row, an unreadable
+	// row, or a value that is not a role name refuses: roles have no order, so neither side can be
+	// picked as the safer one.
+	$default_role = get_option( 'default_role', 'subscriber' );
+	if ( is_array( $default_role ) || is_object( $default_role ) || null !== aafm_policy_row_if_stale( 'default_role' ) ) {
+		return aafm_generic_error();
+	}
+	$default_role = (string) $default_role;
 	$default_role = '' !== $default_role ? $default_role : 'subscriber';
 
 	// get_editable_roles() lives in wp-admin/includes/user.php, not loaded in a REST/MCP

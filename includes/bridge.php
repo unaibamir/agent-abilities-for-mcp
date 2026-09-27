@@ -377,22 +377,33 @@ function aafm_discover_foreign_abilities(): array {
  * @return array<int,string>
  */
 function aafm_get_stored_bridged_abilities_raw(): array {
-	$stored = get_option( 'aafm_enabled_bridged_abilities', array() );
-	if ( ! is_array( $stored ) ) {
-		return array();
-	}
-
-	$clean = array();
-	// Keep only non-empty strings. array_map('strval', ...) would FATAL on an object with no
-	// __toString, so filter to strings first rather than coercing arbitrary values.
-	foreach ( array_filter( $stored, 'is_string' ) as $slug ) {
-		if ( '' === $slug || aafm_bridge_is_native_namespace( $slug ) ) {
-			continue; // Never bridge our own aafm/* abilities or aafm-bridge/* wrappers.
+	$normalize = static function ( $stored ): array {
+		if ( ! is_array( $stored ) ) {
+			return array();
 		}
-		$clean[] = $slug;
+
+		$clean = array();
+		// Keep only non-empty strings. array_map('strval', ...) would FATAL on an object with no
+		// __toString, so filter to strings first rather than coercing arbitrary values.
+		foreach ( array_filter( $stored, 'is_string' ) as $slug ) {
+			if ( '' === $slug || aafm_bridge_is_native_namespace( $slug ) ) {
+				continue; // Never bridge our own aafm/* abilities or aafm-bridge/* wrappers.
+			}
+			$clean[] = $slug;
+		}
+
+		return array_values( array_unique( $clean ) );
+	};
+
+	$clean = $normalize( get_option( 'aafm_enabled_bridged_abilities', array() ) );
+	// A cache copy that disagrees with the row bridges only what both hold; an unreadable row
+	// bridges nothing.
+	$row = aafm_policy_row_if_stale( 'aafm_enabled_bridged_abilities' );
+	if ( null !== $row ) {
+		$clean = $row['ok'] ? array_values( array_intersect( $clean, $normalize( $row['value'] ) ) ) : array();
 	}
 
-	return array_values( array_unique( $clean ) );
+	return $clean;
 }
 
 /**

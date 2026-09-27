@@ -222,8 +222,17 @@ function aafm_flush_registry_cache(): void {
  * @return array<int,string>
  */
 function aafm_get_enabled_abilities(): array {
-	$stored = get_option( 'aafm_enabled_abilities', array() );
-	$stored = is_array( $stored ) ? array_values( array_filter( array_map( 'strval', $stored ) ) ) : array();
+	$normalize = static function ( $value ): array {
+		return is_array( $value ) ? array_values( array_filter( array_map( 'strval', $value ) ) ) : array();
+	};
+
+	$stored = $normalize( get_option( 'aafm_enabled_abilities', array() ) );
+	// A cache copy that disagrees with the row enables only what both hold; an unreadable row
+	// enables nothing.
+	$row = aafm_policy_row_if_stale( 'aafm_enabled_abilities' );
+	if ( null !== $row ) {
+		$stored = $row['ok'] ? array_values( array_intersect( $stored, $normalize( $row['value'] ) ) ) : array();
+	}
 
 	// Only honor keys that still exist in the registry (stale keys never enable anything).
 	$registry = aafm_get_abilities_registry();

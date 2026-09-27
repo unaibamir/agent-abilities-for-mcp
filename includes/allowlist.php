@@ -178,11 +178,11 @@ function aafm_allowlist_set_permits( $set, string $ability_name ): bool {
  * @return bool
  */
 function aafm_ability_allowed_for_principal( string $ability_name, int $user_id, ?string $oauth_client_id ): bool {
-	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
-	if ( $views['db_error'] ) {
-		return false; // Cannot certify the restriction state: deny rather than fail open.
+	$row = aafm_policy_row( 'aafm_ability_allowlist_overrides' );
+	if ( ! $row['ok'] || ( $row['found'] && ! is_array( $row['value'] ) ) ) {
+		return false; // Cannot certify the restriction state, or it is not a list of rows: deny rather than fail open.
 	}
-	$rows = is_array( $views['db_value'] ) ? $views['db_value'] : array();
+	$rows = $row['found'] ? $row['value'] : array();
 	if ( array() === $rows ) {
 		return true; // No override rows at all: identical to today's behavior.
 	}

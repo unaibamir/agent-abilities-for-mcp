@@ -135,7 +135,7 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	}
 	// The product store resolves a variation's type and the variation store loads it, so either
 	// one being WooCommerce's own post store means the variation's post is read.
-	if ( ( aafm_wc_store_is_core( 'product' ) || aafm_wc_store_is_core( 'product-variation' ) ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+	if ( ( false !== aafm_wc_store_is_core( 'product' ) || false !== aafm_wc_store_is_core( 'product-variation' ) ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return null;
 	}
 	$variation = wc_get_product( $id );
@@ -1127,7 +1127,7 @@ function aafm_perm_wc_delete_product_variation( array $input ): bool {
 		return false;
 	}
 	$id = isset( $input['variation_id'] ) ? absint( $input['variation_id'] ) : 0;
-	if ( $id && ( aafm_wc_store_is_core( 'product' ) || aafm_wc_store_is_core( 'product-variation' ) ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+	if ( $id && ( false !== aafm_wc_store_is_core( 'product' ) || false !== aafm_wc_store_is_core( 'product-variation' ) ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_object_absent( 'post', $id );
 	}
 	$read = aafm_with_checked_reads(

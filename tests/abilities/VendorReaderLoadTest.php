@@ -521,13 +521,13 @@ final class VendorReaderLoadTest extends TestCase {
 	}
 
 	/**
-	 * A registry that throws for the store is not a core store.
+	 * A registry that throws for the store gives null: a store that cannot be named.
 	 */
-	public function test_the_store_check_is_false_when_the_registry_throws(): void {
+	public function test_the_store_check_is_null_when_the_registry_throws(): void {
 		$this->core_stores( array( 'product' ) );
 		\WC_Data_Store::$throw = true;
 
-		$this->assertFalse( aafm_wc_store_is_core( 'product' ) );
+		$this->assertNull( aafm_wc_store_is_core( 'product' ) );
 	}
 
 	/**
@@ -968,11 +968,181 @@ final class VendorReaderLoadTest extends TestCase {
 
 		\WC_Data_Store::$throw_error = true;
 
-		$this->assertFalse( aafm_wc_store_is_core( 'product' ) );
+		$this->assertNull( aafm_wc_store_is_core( 'product' ) );
 		$this->assertNull( aafm_wc_store_class( 'order' ) );
 		$this->assertTrue( aafm_wc_order_still_exists( $order ) );
 		$loaded = aafm_wc_load_order_or_null( $order );
 		$this->assertSame( $order, null === $loaded ? null : $loaded->get_id() );
+	}
+
+	/**
+	 * The ten store-check guard lines in the WooCommerce ability files, one row each.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function throwing_registry_guard_sites(): array {
+		return array(
+			'products.php aafm_wc_get_product'          => array( 'product' ),
+			'products.php aafm_perm_wc_delete_product'  => array( 'product_gate' ),
+			'variations.php aafm_wc_get_variation'      => array( 'variation' ),
+			'variations.php aafm_perm_wc_delete_product_variation' => array( 'variation_gate' ),
+			'coupons.php aafm_wc_get_coupon_object'     => array( 'coupon' ),
+			'customers.php aafm_wc_get_customer_object' => array( 'customer' ),
+			'orders.php aafm_wc_get_order_object'       => array( 'order' ),
+			'orders.php aafm_wc_apply_order_input'      => array( 'line_item' ),
+			'orders.php aafm_wc_load_order_or_null'     => array( 'rollback' ),
+			'orders.php aafm_wc_get_refund_object'      => array( 'refund' ),
+		);
+	}
+
+	/**
+	 * A registry that throws still gets the exact load a core store gets: each guard site refuses
+	 * an object whose own row load reads another row, and the fault fires inside that load.
+	 *
+	 * @dataProvider throwing_registry_guard_sites
+	 *
+	 * @param string $site Which site.
+	 */
+	public function test_a_throwing_registry_keeps_every_exact_load( string $site ): void {
+		$this->stub_woocommerce();
+		$this->stub_wc_coupons();
+		$this->core_stores( array() );
+		$b    = $this->post();
+		$type = 'post';
+		switch ( $site ) {
+			case 'product':
+			case 'product_gate':
+			case 'line_item':
+				$a = $this->stub_product();
+				break;
+			case 'variation':
+			case 'variation_gate':
+				$a = $this->stub_product( 'variation' );
+				break;
+			case 'coupon':
+				$a = $b + 50;
+				WcCouponStubStore::seed( $a, array( 'code' => 'throwcheck' ) );
+				break;
+			case 'customer':
+				$type = 'user';
+				$a    = (int) self::factory()->user->create( array( 'role' => 'customer' ) );
+				$b    = (int) self::factory()->user->create();
+				WcCustomerStubStore::seed( $a, array( 'email' => 'throw@example.com' ) );
+				break;
+			case 'refund':
+				$order = $this->stub_order();
+				$a     = $this->post( array( 'post_type' => 'shop_order_refund' ) );
+				WcOrderStubStore::seed_refunds(
+					$order,
+					array(
+						array(
+							'id'     => $a,
+							'amount' => '5.00',
+						),
+					)
+				);
+				break;
+			default:
+				$a = $this->stub_order();
+		}
+		if ( in_array( $site, array( 'product_gate', 'variation_gate' ), true ) ) {
+			$this->store_manager_without_delete_rights();
+		}
+		$calls    = array(
+			'product'        => static fn() => aafm_wc_get_product( $a ),
+			'product_gate'   => static fn() => aafm_perm_wc_delete_product( array( 'product_id' => $a ) ),
+			'variation'      => static fn() => aafm_wc_get_variation( $a ),
+			'variation_gate' => static fn() => aafm_perm_wc_delete_product_variation( array( 'variation_id' => $a ) ),
+			'coupon'         => static fn() => aafm_wc_get_coupon_object( $a ),
+			'customer'       => static fn() => aafm_wc_get_customer_object( $a ),
+			'order'          => static fn() => aafm_wc_get_order_object( $a ),
+			'line_item'      => static function () use ( $a ) {
+				$out = aafm_exec_wc_create_order(
+					array(
+						'line_items' => array(
+							array(
+								'product_id' => $a,
+								'quantity'   => 1,
+							),
+						),
+					)
+				);
+				return is_wp_error( $out ) ? $out->get_error_code() : $out;
+			},
+			'rollback'       => static fn() => aafm_wc_load_order_or_null( $a ),
+			'refund'         => static fn() => aafm_wc_get_refund_object( $a ),
+		);
+		$refusals = array(
+			'product_gate'   => false,
+			'variation_gate' => false,
+			'line_item'      => 'aafm_unresolved_line_items',
+		);
+
+		\WC_Data_Store::$throw = true;
+		$out                   = $this->armed( $this->fault_load( $type, $a, $b ), $calls[ $site ] );
+
+		$this->assertSame( $refusals[ $site ] ?? null, $out, $site );
+		$this->assert_fired_in_exact_load( $site );
+	}
+
+	/**
+	 * The activity log's order link keeps its exact load under a throwing registry: no link for
+	 * an order whose post load reads another row.
+	 */
+	public function test_a_throwing_registry_keeps_the_activity_order_link_exact_load(): void {
+		$this->stub_woocommerce();
+		$this->core_stores( array() );
+		$a = $this->stub_order();
+		$b = $this->post();
+
+		\WC_Data_Store::$throw = true;
+		$out                   = $this->armed(
+			$this->fault_load( 'post', $a, $b ),
+			static fn() => aafm_activity_detail_link( 'aafm/wc-update-order-status', 'Set order #' . $a . ' to status `completed`' )
+		);
+
+		$this->assertNull( $out );
+		$this->assert_fired_in_exact_load( 'activity order link' );
+	}
+
+	/**
+	 * The rollback check reports an order as still there when the registry throws, even with its
+	 * post row gone: a store it cannot name certifies nothing.
+	 */
+	public function test_order_still_exists_is_true_when_the_registry_throws(): void {
+		$this->stub_woocommerce();
+		$this->core_stores( array( 'order' ) );
+		$id = $this->post( array( 'post_type' => 'shop_order' ) );
+		wp_delete_post( $id, true );
+		$this->assertFalse( aafm_wc_order_still_exists( $id ), 'precondition: gone under the core store' );
+
+		\WC_Data_Store::$throw = true;
+
+		$this->assertTrue( aafm_wc_order_still_exists( $id ) );
+	}
+
+	/**
+	 * Delete-product does not confirm a delete when the registry starts throwing during it: the
+	 * product's post row is still there and the store cannot be named.
+	 */
+	public function test_delete_product_is_not_confirmed_when_the_registry_throws_after_the_delete(): void {
+		$this->stub_woocommerce();
+		$this->core_stores( array( 'product' ) );
+		$a     = $this->stub_product();
+		$throw = static function ( $check ) {
+			\WC_Data_Store::$throw = true;
+			return $check;
+		};
+		add_filter( 'woocommerce_pre_delete_product', $throw );
+		try {
+			$out = aafm_exec_wc_delete_product( array( 'product_id' => $a ) );
+		} finally {
+			remove_filter( 'woocommerce_pre_delete_product', $throw );
+		}
+
+		$this->assertTrue( \WC_Data_Store::$throw, 'the registry threw after the delete' );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
 	}
 
 	/**

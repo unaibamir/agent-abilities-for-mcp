@@ -2940,12 +2940,16 @@ function aafm_mixed_write_partial_failure_message( string $saved_label, string $
  * The buffer unwind closes only buffers opened after entry, on success and on a throw, and stops
  * at the first one it cannot close: a hook can open a buffer without the removable flag, and
  * ob_end_clean() then returns false without lowering the level, so looping on it would never end.
- * A render that leaves a buffer open still returns all of its output; one that closes the scope's
- * own buffer, or one that cannot be closed, gives ''.
+ * The result is decided by buffer level: every buffer above the entry level is returned, joined in
+ * the order opened, so a render that leaves a buffer open returns all of its output, and one that
+ * closes the scope's own buffer and opens another returns that buffer's output. It is '' only when
+ * the level ends at or below entry, or a buffer above it cannot be closed.
  *
  * @param int      $post_id Post to render against.
  * @param callable $render  Zero-arg callback that echoes the head.
- * @return string The buffered output, or '' when the post does not exist or the render threw.
+ * @return string The output of every buffer left above the entry level; '' when the post does not
+ *                exist, the render threw, the level ends at or below entry, or a buffer cannot be
+ *                closed.
  */
 function aafm_with_seo_render_scope( int $post_id, callable $render ): string {
 	$post = aafm_exact_object( 'post', $post_id );

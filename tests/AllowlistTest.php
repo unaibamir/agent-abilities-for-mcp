@@ -163,12 +163,15 @@ final class AllowlistTest extends TestCase {
 		);
 		$user_id = self::factory()->user->create( array( 'role' => 'author' ) );
 
+		$fired = 0;
 		add_filter(
 			'query',
-			static function ( string $query ): string {
-				return false !== strpos( $query, "option_name = 'aafm_ability_allowlist_overrides'" )
-					? 'SELECT * FROM aafm_missing_table_for_test'
-					: $query;
+			static function ( string $query ) use ( &$fired ): string {
+				if ( false !== strpos( $query, 'SELECT' ) && false !== strpos( $query, "'aafm_ability_allowlist_overrides'" ) ) {
+					++$fired;
+					return 'SELECT * FROM aafm_missing_table_for_test';
+				}
+				return $query;
 			}
 		);
 
@@ -185,6 +188,7 @@ final class AllowlistTest extends TestCase {
 			$result,
 			'A read that itself fails must deny the call, not fall through to "no restriction".'
 		);
+		$this->assertGreaterThan( 0, $fired, 'The overrides read must have faulted.' );
 	}
 
 	public function test_an_unrestricted_all_row_permits_everything_from_that_scope(): void {

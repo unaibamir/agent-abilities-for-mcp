@@ -54,6 +54,8 @@ class HandshakeTest extends TestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		// The site uses pretty permalinks, so WordPress routes the /wp-json/ path at all.
+		$this->set_permalink_structure( '/%postname%/' );
 
 		// The REST dispatch path reports a production environment; relax the HTTPS
 		// requirement the documented agent-dev way so the token handler runs over the
@@ -138,6 +140,7 @@ class HandshakeTest extends TestCase {
 	 * Clean the auth header so a bearer set in one test never leaks into the next.
 	 */
 	public function tear_down(): void {
+		$this->set_permalink_structure( '' );
 		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
 		parent::tear_down();
 	}

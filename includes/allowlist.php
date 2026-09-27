@@ -50,9 +50,9 @@ const AAFM_ALLOWLIST_MAX_ROWS = 200;
  * failed" both collapse to the same empty array, and an empty array here reads as unrestricted.
  * That collapse would fail OPEN on a transient read failure if used for authorization (see
  * aafm_ability_allowed_for_principal()'s own docblock for why it must fail the opposite way).
- * What remains here is a plain raw-read helper for callers that only need the stored rows as-is,
- * such as the test suite and aafm_allowlist_overrides_for_display() below (which adds the failure
- * signal this bare read discards). It still reads through aafm_read_option_views() rather than
+ * What remains here is a plain raw-read helper, kept for the test suite, which only needs the
+ * stored rows as-is. aafm_allowlist_overrides_for_display() below does not use it: it reads the
+ * views itself so it can report a failed or malformed row. It still reads through aafm_read_option_views() rather than
  * get_option(), for the same stale-persistent-object-cache reason the 1.7.3 hotfix fixed for the
  * read-only-mode and high-risk switches.
  *
@@ -82,21 +82,25 @@ function aafm_allowlist_overrides(): array {
  * silently erases every existing restriction. The caller here must be told the read failed, not
  * handed an empty state that looks identical to a genuinely unrestricted site.
  *
- * @return array{ok: bool, rows: array<int,array<string,mixed>>}
+ * @return array{ok: bool, rows: array<int,array<string,mixed>>, malformed: bool}
  */
 function aafm_allowlist_overrides_for_display(): array {
 	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
 	// A found row that is not a list denies every call (aafm_ability_allowed_for_principal()), so it
-	// is shown as unreadable, never as an unrestricted site.
-	if ( $views['db_error'] || ( $views['db_found'] && ! is_array( $views['db_value'] ) ) ) {
+	// is never shown as an unrestricted site. It is flagged apart from a failed read: a reload can
+	// clear a failed read, and only a save replaces a malformed row.
+	$malformed = ! $views['db_error'] && $views['db_found'] && ! is_array( $views['db_value'] );
+	if ( $views['db_error'] || $malformed ) {
 		return array(
-			'ok'   => false,
-			'rows' => array(),
+			'ok'        => false,
+			'rows'      => array(),
+			'malformed' => $malformed,
 		);
 	}
 	return array(
-		'ok'   => true,
-		'rows' => $views['db_found'] ? $views['db_value'] : array(),
+		'ok'        => true,
+		'rows'      => $views['db_found'] ? $views['db_value'] : array(),
+		'malformed' => false,
 	);
 }
 

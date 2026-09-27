@@ -339,6 +339,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => 'refused',
 					'f' => 'refused',
 					'g' => 'editor',
+					'j' => 'refused',
+					'k' => 'refused',
 				),
 			),
 			'P18'   => array(
@@ -432,7 +434,7 @@ final class PolicyReadStaleCacheTest extends TestCase {
 			'P14'   => 'abdefgjk',
 			'P15'   => 'abdefgjk',
 			'P16'   => 'abdefgjk',
-			'P17'   => 'abdefg',
+			'P17'   => 'abdefgjk',
 			'P18'   => 'abdefg',
 			'P19'   => 'abcdefg',
 			'P20'   => 'abdefg',

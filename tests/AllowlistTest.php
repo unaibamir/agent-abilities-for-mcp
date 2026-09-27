@@ -308,11 +308,35 @@ final class AllowlistTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				'ok'   => false,
-				'rows' => array(),
+				'ok'        => false,
+				'rows'      => array(),
+				'malformed' => true,
 			),
 			aafm_allowlist_overrides_for_display()
 		);
 		$this->assertFalse( aafm_ability_allowed_for_principal( 'aafm/get-post', 0, null ) );
+	}
+
+	/**
+	 * A read that fails is not malformed: the display keeps the two apart, because a failed read
+	 * can clear on a reload and a malformed row cannot.
+	 */
+	public function test_the_display_tells_a_failed_read_from_a_malformed_row(): void {
+		update_option( 'aafm_ability_allowlist_overrides', array() );
+
+		$read = QueryFaultInjector::break_query_with_real_error(
+			"option_name = 'aafm_ability_allowlist_overrides'",
+			static fn() => aafm_allowlist_overrides_for_display()
+		);
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
+		$this->assertSame(
+			array(
+				'ok'        => false,
+				'rows'      => array(),
+				'malformed' => false,
+			),
+			$read
+		);
 	}
 }

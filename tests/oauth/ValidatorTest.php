@@ -60,7 +60,9 @@ class ValidatorTest extends TestCase {
 		// Default the request to the MCP route over HTTPS so the route-scope and
 		// HTTPS-policy gates pass; individual tests override these to exercise the
 		// off-route and plain-HTTP branches. The harness reports a production
-		// environment, so HTTPS is genuinely required here.
+		// environment, so HTTPS is genuinely required here. The site uses pretty permalinks, so
+		// WordPress routes the /wp-json/ path at all.
+		$this->set_permalink_structure( '/%postname%/' );
 		$this->on_mcp_route();
 		$_SERVER['HTTPS'] = 'on';
 
@@ -104,6 +106,7 @@ class ValidatorTest extends TestCase {
 	 * Restore the Authorization / request keys to exactly their pre-test state.
 	 */
 	public function tear_down(): void {
+		$this->set_permalink_structure( '' );
 		foreach ( $this->original_auth as $key => $value ) {
 			if ( null === $value ) {
 				unset( $_SERVER[ $key ] );
@@ -918,6 +921,71 @@ class ValidatorTest extends TestCase {
 			}
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
+	}
+
+	/**
+	 * With no permalink structure WordPress has no rewrite rules, so it routes no path: a request to
+	 * /wp-json/<namespace>/mcp with no rest_route is a front-end view, not the MCP endpoint, and a
+	 * bearer does not resolve there. With a structure the same path is the MCP endpoint, and on
+	 * plain permalinks ?rest_route= still reaches it.
+	 *
+	 * @return array<string,array{0:string,1:string|null,2:bool}>
+	 */
+	public function permalink_routing_provider(): array {
+		return array(
+			'plain permalinks, /wp-json/ path'   => array( '', null, false ),
+			'pretty permalinks, /wp-json/ path'  => array( '/%postname%/', null, true ),
+			'plain permalinks, ?rest_route= set' => array( '', '/agent-abilities-for-mcp/mcp', true ),
+		);
+	}
+
+	/**
+	 * The MCP path counts only when WordPress routes paths (a permalink structure is set).
+	 *
+	 * @dataProvider permalink_routing_provider
+	 *
+	 * @param string      $structure  Permalink structure.
+	 * @param string|null $rest_route GET rest_route, or null for none.
+	 * @param bool        $targets    Whether the request targets the MCP route.
+	 */
+	public function test_the_mcp_path_counts_only_when_wordpress_routes_paths( string $structure, ?string $rest_route, bool $targets ): void {
+		$this->set_permalink_structure( $structure );
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+		$_SERVER['REQUEST_URI'] = '/wp-json/agent-abilities-for-mcp/mcp';
+		if ( null !== $rest_route ) {
+			$_GET['rest_route'] = $rest_route; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- test fixture for the request.
+		}
+
+		$this->assertSame( $targets, aafm_oauth_request_targets_mcp_route() );
+		$this->assertSame( $targets ? $uid : false, aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * Before WordPress builds $wp_rewrite, the stored permalink structure decides: plain means the
+	 * /wp-json/ path is not the MCP endpoint, pretty means it is.
+	 */
+	public function test_the_permalink_check_reads_the_stored_structure_before_wp_rewrite_exists(): void {
+		$_SERVER['REQUEST_URI'] = '/wp-json/agent-abilities-for-mcp/mcp';
+		$saved_rewrite          = $GLOBALS['wp_rewrite'];
+		try {
+			update_option( 'permalink_structure', '' );
+			$GLOBALS['wp_rewrite'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the pre-$wp_rewrite window, restored below.
+			$this->assertFalse( aafm_oauth_request_targets_mcp_route() );
+
+			update_option( 'permalink_structure', '/%postname%/' );
+			$this->assertTrue( aafm_oauth_request_targets_mcp_route() );
+		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			$GLOBALS['wp_rewrite'] = $saved_rewrite;
+		}
 	}
 
 	/**

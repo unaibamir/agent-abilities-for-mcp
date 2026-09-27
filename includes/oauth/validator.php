@@ -377,6 +377,16 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 		return 0 === strcasecmp( rtrim( $rest_route, '/' ), $mcp_route );
 	}
 
+	// With no permalink structure WordPress has no rewrite rules and routes no path, so a
+	// /wp-json/... path with no rest_route is a front-end view, never the MCP endpoint. $wp_rewrite
+	// may not exist yet on this filter (see below), so the stored structure answers then.
+	$using_permalinks = isset( $GLOBALS['wp_rewrite'] ) && $GLOBALS['wp_rewrite'] instanceof \WP_Rewrite
+		? $GLOBALS['wp_rewrite']->using_permalinks()
+		: '' !== (string) get_option( 'permalink_structure' );
+	if ( ! $using_permalinks ) {
+		return false;
+	}
+
 	// Pretty-permalink form: compare the request path against the MCP endpoint's path. Derive the
 	// expected path from rest_url() so a site installed under a path prefix (e.g.
 	// https://example.com/blog) keeps that prefix (/blog/wp-json/...) in the comparison - a
@@ -399,11 +409,10 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 		$rest_url_path = (string) wp_parse_url( rest_url( ltrim( $mcp_route, '/' ) ), PHP_URL_PATH );
 	}
 
-	// When pretty permalinks are off, rest_url() returns the plain ?rest_route= form, whose path
-	// component collapses to .../index.php and carries no route - that case is the rest_route branch
-	// above. Only treat the rest_url() path as the pretty target when it actually ends with the MCP
-	// route. Otherwise reconstruct the expected pretty path from the install's home-path prefix so a
-	// subdirectory install still matches even with plain permalinks pretty-routing through.
+	// Only treat the rest_url() path as the target when it actually ends with the MCP route (a
+	// rest_url filter can reshape it). Otherwise, and when $wp_rewrite does not exist yet,
+	// reconstruct the expected path from the install's home-path prefix so a subdirectory install
+	// still matches.
 	if ( substr( rtrim( $rest_url_path, '/' ), -strlen( $mcp_route ) ) === $mcp_route ) {
 		$mcp_rest_path = $rest_url_path;
 	} else {

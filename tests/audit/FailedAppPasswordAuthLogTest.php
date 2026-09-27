@@ -35,6 +35,8 @@ class FailedAppPasswordAuthLogTest extends TestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		// The site uses pretty permalinks, so WordPress routes the /wp-json/ path at all.
+		$this->set_permalink_structure( '/%postname%/' );
 
 		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.NonceVerification.Recommended
 		$this->original_request = array(
@@ -53,6 +55,7 @@ class FailedAppPasswordAuthLogTest extends TestCase {
 	 * Restore the request keys to exactly their pre-test state.
 	 */
 	public function tear_down(): void {
+		$this->set_permalink_structure( '' );
 		foreach ( array( 'REQUEST_URI', 'REMOTE_ADDR' ) as $key ) {
 			if ( null === $this->original_request[ $key ] ) {
 				unset( $_SERVER[ $key ] );

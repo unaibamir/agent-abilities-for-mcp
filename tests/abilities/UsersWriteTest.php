@@ -14,6 +14,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -505,5 +506,148 @@ final class UsersWriteTest extends TestCase {
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-user' ) );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-user' ) );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-user' ) );
+	}
+
+	/**
+	 * Demote every administrator, then make a sole administrator victim, a reassign target and a
+	 * separate editor actor who can delete users, and act as that editor.
+	 *
+	 * @return array{0:int,1:int} The victim and the reassign target.
+	 */
+	private function sole_admin_victim(): array {
+		foreach ( get_users(
+			array(
+				'role'   => 'administrator',
+				'fields' => 'ID',
+			)
+		) as $existing_admin ) {
+			wp_update_user(
+				array(
+					'ID'   => (int) $existing_admin,
+					'role' => 'subscriber',
+				)
+			);
+		}
+		$victim   = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$reassign = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$actor    = get_userdata( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+		$actor->add_cap( 'delete_users' );
+		$actor->add_cap( 'delete_user' );
+		wp_set_current_user( $actor->ID );
+		$this->assertSame( 1, aafm_count_administrators(), 'fixture must leave the victim as the only administrator.' );
+		return array( $victim, $reassign );
+	}
+
+	/**
+	 * The target's roles, read from a fresh load after every fault is gone.
+	 *
+	 * @param int $user_id User id.
+	 * @return string[]
+	 */
+	private function stored_roles( int $user_id ): array {
+		wp_cache_delete( $user_id, 'user_meta' );
+		return (array) get_userdata( $user_id )->roles;
+	}
+
+	/**
+	 * W2-T3 (step 14, row U1): the update-user target load runs inside the checked-read scope. When
+	 * the target's caps load fails after the permission gate, the call refuses instead of reading
+	 * the sole administrator as holding no role and demoting them. The gate's own scoped read is
+	 * served from the cache; the target's meta entry is dropped as the gate finishes, the shape a
+	 * cache that did not keep the gate's rows leaves behind.
+	 */
+	public function test_update_user_refuses_when_the_targets_load_faults_after_the_gate(): void {
+		global $wpdb;
+		$admin = $this->acting_as( 'administrator' );
+		foreach ( get_users(
+			array(
+				'role'   => 'administrator',
+				'fields' => 'ID',
+			)
+		) as $other_admin ) {
+			if ( (int) $other_admin !== $admin ) {
+				wp_update_user(
+					array(
+						'ID'   => (int) $other_admin,
+						'role' => 'subscriber',
+					)
+				);
+			}
+		}
+		$this->assertSame( 1, aafm_count_administrators(), 'fixture must leave exactly one admin.' );
+		get_userdata( $admin );
+
+		$drop = static function ( array $caps, string $cap, int $user_id, array $args ) use ( $admin ): array {
+			if ( 'promote_user' === $cap && isset( $args[0] ) && $admin === (int) $args[0] ) {
+				wp_cache_delete( $admin, 'user_meta' );
+			}
+			return $caps;
+		};
+		add_filter( 'map_meta_cap', $drop, 10, 4 );
+		QueryFaultInjector::reset_fired_count();
+		try {
+			$res = QueryFaultInjector::break_query_with_real_error(
+				array( $wpdb->usermeta, "user_id IN ({$admin})" ),
+				static fn() => aafm_exec_update_user(
+					array(
+						'user_id' => $admin,
+						'role'    => 'editor',
+					)
+				)
+			);
+		} finally {
+			remove_filter( 'map_meta_cap', $drop, 10 );
+		}
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count(), 'the target load must have faulted.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertContains( 'administrator', $this->stored_roles( $admin ), 'the sole admin must stay an admin.' );
+	}
+
+	/**
+	 * W2-T4 (step 14, row U2): the delete-user victim load runs inside the checked-read scope. When
+	 * the victim's caps load fails at exec time, the call refuses instead of reading the sole
+	 * administrator as holding no role and deleting them.
+	 */
+	public function test_delete_user_refuses_when_the_victims_load_faults(): void {
+		global $wpdb;
+		list( $victim, $reassign ) = $this->sole_admin_victim();
+		wp_cache_delete( $victim, 'user_meta' );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->usermeta, "user_id IN ({$victim})" ),
+			static fn() => aafm_exec_delete_user(
+				array(
+					'user_id'     => $victim,
+					'reassign_to' => $reassign,
+				)
+			)
+		);
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count(), 'the victim load must have faulted.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertContains( 'administrator', $this->stored_roles( $victim ), 'the last admin must survive.' );
+	}
+
+	/**
+	 * W2-T8 (step 14, row U5): a healthy delete of the only administrator keeps its exact refusal.
+	 */
+	public function test_delete_user_of_the_only_administrator_keeps_its_exact_refusal(): void {
+		list( $victim, $reassign ) = $this->sole_admin_victim();
+
+		$res = wp_get_ability( 'aafm/delete-user' )->execute(
+			array(
+				'user_id'     => $victim,
+				'reassign_to' => $reassign,
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'The request could not be completed.', $res->get_error_message() );
+		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ), 'the last admin must survive.' );
 	}
 }

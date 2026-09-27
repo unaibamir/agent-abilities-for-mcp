@@ -642,7 +642,13 @@ function aafm_exec_update_user( array $input ) {
 		}
 	}
 
-	$target = $id ? aafm_exact_object( 'user', $id ) : false;
+	// The target's roles decide the last-admin guard below, so it is loaded inside the
+	// checked-read scope: a caps load that fails refuses instead of reading as no role.
+	$loaded = aafm_with_checked_reads(
+		static fn(): array => array( 'user' => $id ? aafm_exact_object( 'user', $id ) : null ),
+		aafm_generic_error()
+	);
+	$target = is_wp_error( $loaded ) ? null : $loaded['user'];
 	if ( ! $target instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -786,7 +792,13 @@ function aafm_perm_delete_user( array $input ): bool {
 function aafm_exec_delete_user( array $input ) {
 	$id       = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	$reassign = isset( $input['reassign_to'] ) ? absint( $input['reassign_to'] ) : 0;
-	$victim   = $id ? aafm_exact_object( 'user', $id ) : false;
+	// The victim's roles decide the last-admin guard below, so it is loaded inside the
+	// checked-read scope: a caps load that fails refuses instead of reading as no role.
+	$loaded = aafm_with_checked_reads(
+		static fn(): array => array( 'user' => $id ? aafm_exact_object( 'user', $id ) : null ),
+		aafm_generic_error()
+	);
+	$victim = is_wp_error( $loaded ) ? null : $loaded['user'];
 	if ( ! $victim instanceof WP_User ) {
 		return aafm_generic_error();
 	}

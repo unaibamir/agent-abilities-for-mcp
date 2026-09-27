@@ -93,7 +93,8 @@ function aafm_oauth_txn( string $sql ): bool {
  *     @type int    $refresh_parent_id The id of the refresh row this pair rotated from (0 for a fresh mint).
  * }
  * @return array{access_token:string,refresh_token:string,expires_in:int}|\WP_Error The token pair,
- *         or a WP_Error when the row could not be persisted (so callers never hand out phantom tokens).
+ *         or a WP_Error when a lifetime row could not be read or the token row could not be persisted
+ *         (so callers never hand out phantom tokens).
  */
 function aafm_oauth_mint_tokens( array $ctx ) {
 	// keep in sync with aafm_oauth_resolve_current_user()'s prefix (AAFM_OAUTH_ACCESS_TOKEN_PREFIX in validator.php, which loads after this file).

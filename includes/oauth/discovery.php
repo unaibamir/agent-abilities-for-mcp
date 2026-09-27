@@ -134,8 +134,10 @@ function aafm_oauth_seed_default_options(): void {
 	// the CORS filters at bootstrap and the .well-known handler on parse_request, and
 	// aafm_oauth_request_targets_mcp_route() consults it on determine_current_user;
 	// aafm_oauth_dcr_enabled() is read by the register route and the discovery metadata. They must
-	// stay autoloaded ('yes', the add_option default) so those hot-path reads never trigger a
-	// separate query - switching either to autoload 'no' would be a per-request regression.
+	// stay autoloaded ('yes', the add_option default) so get_option() answers those hot-path reads
+	// without a query of its own - switching either to autoload 'no' would be a per-request
+	// regression. DCR's seeded '1' is also its permissive default, so while DCR is on each of its
+	// reads also reads the row from the database once (aafm_oauth_option_is_on()).
 	add_option( 'aafm_oauth_enabled', '0', '', true );
 	add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
 }

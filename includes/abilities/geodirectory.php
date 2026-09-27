@@ -239,7 +239,7 @@ function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
 	if ( ! $read['ok'] ) {
 		// R6-6: a failed SELECT or a still-missing detail row cannot certify anything the caller
 		// just wrote - fail the same direction aafm_post_field_write_confirmed() and
-		// aafm_meta_write_confirmed() already fail when their own confirmation read comes back
+		// aafm_meta_set() already fail when their own confirmation read comes back
 		// unusable, rather than falling through to defaults that can coincidentally match.
 		return false;
 	}

@@ -882,7 +882,7 @@ function aafm_delete_guarantee(): array {
  * 'post', $subtype ) on the value again at write time - that write-time call is the only one
  * whose output is ever stored, so a cumulative or non-idempotent callback still runs exactly
  * once against the stored value. Running the probe re-invokes the callback an extra time but
- * cannot double-apply it to what gets written. aafm_meta_write_confirmed() independently
+ * cannot double-apply it to what gets written. aafm_meta_set() (write-contract.php) independently
  * recomputes the same canonical form afterward to confirm the write landed.
  *
  * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
@@ -2413,122 +2413,7 @@ function aafm_generic_error(): WP_Error {
 }
 
 /**
- * Whether a scalar meta write actually landed as requested, judged against the value's CANONICAL
- * stored form rather than the plugin's own pre-write intent.
- *
- * Core's own update_metadata() (the shared engine behind update_post_meta()/update_term_meta()/
- * update_user_meta(), wp-includes/meta.php) unslashes the incoming $meta_value and THEN runs the
- * unslashed result through sanitize_meta( $meta_key, $meta_value, $object_type, $object_subtype )
- * before it ever reaches storage - verified by reading update_metadata() itself, not assumed. A
- * vendor or core filter registered on that meta key's sanitize_{type}_meta_{key} hook
- * (register_meta()'s sanitize_callback lands here) can legitimately trim, cast, or otherwise
- * normalize the value on the way in. Comparing a fresh read against the plugin's pre-write intent
- * instead of that canonical form reports a false error on a write that landed exactly as the
- * site's own registered sanitizer defines "landed" - Codex round 6 B6-3. Running the same
- * sanitize_meta() call here keeps a genuine veto caught: a filter that reverts to the OLD value,
- * or an update_*_metadata short-circuit that never wrote at all, still differs from the sanitized
- * NEW value.
- *
- * Codex round 8 R8-1: every call site passes wp_slash( $value ) to update_post_meta()/
- * update_term_meta()/update_user_meta() so that core's own internal wp_unslash() is a no-op
- * round trip back to $value - core's sanitize_meta() call therefore sees exactly the unslashed
- * $intended this function receives, never a slashed form of it. This function used to run
- * sanitize_meta() against wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, which
- * feeds a slash-sensitive registered sanitizer a different input than core's own call ever sees
- * and can misjudge its output. Passing $intended straight through matches core's pipeline
- * exactly: no slashing in, no unslashing out. A scalar meta value round-trips through a longtext
- * column, so the stored value reads back as a string; comparing stringified forms also avoids a
- * false mismatch on a genuine no-op (re-sending an int or bool unchanged). An array-valued meta
- * key (a serialized token list, for example) is compared by exact array equality instead, since
- * casting an array to string is a PHP warning, not a comparison.
- *
- * 1.7.5 round 4, R4-1: replaying sanitize_meta() in-process cannot always reproduce what the
- * REAL write actually stored, because not every registered sanitizer is a pure function of its
- * input. A sanitizer keyed on invocation count, current time, or existing storage (an
- * incrementing counter, for example) can legitimately return a different value on replay than it
- * did during the real write, and this helper has no way to tell that apart from a genuine veto by
- * comparing replayed output alone. So the canonical-replay comparison above is now the FIRST
- * check, not the only one: when it matches, that is the strongest evidence and this returns true
- * immediately. When it disagrees, this falls back to change detection against $old, the value
- * read back BEFORE the write ran. If the requested $intended is identical to $old, nothing was
- * actually asked to change, so there is nothing to verify a veto against (a no-op resubmission of
- * the current value never has to survive a non-deterministic sanitizer's replay). Otherwise, a
- * real change was requested: if $stored differs from $old, something genuinely landed - accepted
- * even when it does not equal the replayed $expected form, since a non-deterministic or
- * charset-dependent normalization is not distinguishable from any other legitimate landing this
- * way. If $stored still equals $old, nothing moved: that is what a silent veto (a filter reverting
- * to the OLD value, or an update_*_metadata short-circuit that never wrote at all) looks like, and
- * it is still reported as unconfirmed.
- *
- * What this cannot detect: a veto that rewrites the value to some THIRD value (neither $old nor
- * $intended) reads as a landed write, because state genuinely changed. That is an accepted,
- * documented residual - the machinery here exists to catch "nothing happened", not "something
- * unexpected happened instead"; the latter is caller-application-specific and out of scope for a
- * shared, general-purpose confirmation helper. This fallback is safe here specifically because a
- * meta veto has only one real shape: a sanitize_{type}_meta_{key} filter reverting the value, or
- * an update_*_metadata short-circuit, both of which BLOCK the write outright and leave $stored at
- * $old - neither can redirect the write to an attacker/filter-chosen replacement value the way a
- * post field's wp_insert_post_data filter can (aafm_post_field_write_confirmed() does not carry
- * this same fallback for exactly that reason - see its own docblock).
- *
- * Codex round 6, R6-4: the "nothing asked" branch above used to compare $intended against $old
- * directly (their raw forms), which cannot tell "$old is already canonical, so resubmitting it is
- * a genuine no-op" apart from "$old is NOT canonical, so resubmitting it should still trigger the
- * same canonicalization a changed value would" - both look identical as raw values. The second
- * shape let a veto that blocks canonicalization (keeping a non-canonical $old in place) read as a
- * confirmed no-op purely because the caller's literal input matched what was already stored. See
- * $old_is_canonical below.
- *
- * @param mixed  $old            The value read back from storage BEFORE the write ran.
- * @param mixed  $stored         The value read back from storage after the write.
- * @param mixed  $intended       The unslashed value the write attempted to store.
- * @param string $meta_key       Meta key.
- * @param string $object_type    'post', 'term', or 'user'.
- * @param string $object_subtype The post type / taxonomy the meta key is registered under. For
- *                                user meta this is the literal string 'user' (core's own
- *                                get_object_subtype( 'user', $id ), wp-includes/meta.php, resolves
- *                                to 'user' for any user that exists - never ''; verified against
- *                                core, not assumed). '' only matches a generic, non-subtype
- *                                sanitizer.
- * @return bool
- */
-function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
-	$expected = sanitize_meta( $meta_key, $intended, $object_type, $object_subtype );
-	// Any array-valued meta key (a serialized token list, e.g. Slim SEO's schema array) is
-	// compared by exact array equality throughout; casting an array to string is a PHP warning,
-	// not a comparison. A single is_array() check covers all four values consistently, since they
-	// all describe the same meta key and therefore share its shape.
-	$is_arr = is_array( $old ) || is_array( $stored ) || is_array( $intended ) || is_array( $expected );
-	if ( $is_arr ? $stored === $expected : (string) $stored === (string) $expected ) {
-		return true;
-	}
-
-	// Codex round 6, R6-4: "nothing was asked to change" used to be judged purely from the raw
-	// values - $intended === $old - which is blind to the site's OWN sanitizer. When $old was not
-	// already in its canonical form (sanitize_meta() would legitimately transform it if resaved),
-	// resubmitting that same raw value is NOT actually a no-op: the real write is still expected to
-	// land on $expected, the same canonical form a genuinely different intended value would have to
-	// reach. A persistence veto that instead leaves storage at the old, non-canonical value used to
-	// read as a confirmed no-op purely because the raw input matched $old, silently accepting a
-	// blocked canonicalization as success. Recomputing whether $old itself survives a resave
-	// through the same sanitizer closes that: the common case (a value already stored in its
-	// canonical form) is completely unaffected, since re-sanitizing an already-canonical value
-	// through an idempotent sanitizer reproduces it exactly.
-	$expected_old     = sanitize_meta( $meta_key, $old, $object_type, $object_subtype );
-	$old_is_canonical = $is_arr ? $old === $expected_old : (string) $old === (string) $expected_old;
-
-	$nothing_asked = $old_is_canonical && ( $is_arr ? $intended === $old : (string) $intended === (string) $old );
-	$unchanged     = $is_arr ? $stored === $old : (string) $stored === (string) $old;
-	// Codex round 5 R5-2: a no-op resubmission used to short-circuit to true purely because
-	// nothing was asked to change, without checking that storage actually stayed put. That let a
-	// filter that redirects an unchanged resubmission to some THIRD value (never $old, never
-	// $intended) report as confirmed. Requiring $unchanged too closes that: a genuine no-op still
-	// confirms, but a redirect on a no-op is caught the same way a redirect on a real change is.
-	return $nothing_asked ? $unchanged : ! $unchanged;
-}
-
-/**
- * The post-field sibling of aafm_meta_write_confirmed(): whether a post-field write (post_title,
+ * The post-field sibling of aafm_meta_set()'s canonical check: whether a post-field write (post_title,
  * post_content, post_excerpt, post_status, and so on) landed as intended, judged against the
  * field's CANONICAL stored form rather than the plugin's own pre-write intent.
  *
@@ -2577,13 +2462,13 @@ function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, 
  * stateful sanitizer, and exactly the shape of veto this function exists to catch for a post field
  * (unlike a meta write's update_*_metadata short-circuit, which can only block a write outright,
  * never redirect it to an attacker/filter-chosen replacement value - see
- * aafm_meta_write_confirmed()'s own change-detection fallback, which is safe for that reason).
+ * the retired meta confirmer's own change-detection fallback, which was safe for that reason).
  * Accepted, undressed residual: a genuinely non-deterministic save-time sanitizer registered by
  * some other plugin could still misreport here. No concrete instance of one exists in this
  * codebase's own write paths, and weakening detection to accommodate a hypothetical one would
  * reopen the exact veto class this function is relied on to catch.
  *
- * Codex round 7, R7-4: mirrors aafm_meta_write_confirmed()'s own round 6, R6-4 fix - the
+ * Codex round 7, R7-4: mirrors the retired meta confirmer's own round 6, R6-4 fix - the
  * "nothing asked" branch below used to compare $intended against $old directly (their raw forms),
  * which cannot tell "$old is already canonical, so resubmitting it is a genuine no-op" apart from
  * "$old is NOT canonical, so resubmitting it should still trigger the same canonicalization a

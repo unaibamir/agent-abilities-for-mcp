@@ -9,9 +9,8 @@
  * alternate-spelling forms), a raw $wpdb write naming a meta table (as a method call or as SQL text
  * assembled into a string), ACF's update_field(), the vendor "save the object" methods WooCommerce,
  * TEC, AIOSEO and GeoDirectory each expose, and the untouched post-field confirmer called directly
- * instead of through its logged wrapper. Production call sites migrate one family at a time; the
- * legacy list in tests/Fixtures/meta-sweep-legacy.txt is the per-site checklist for that migration
- * and shrinks as each family moves.
+ * instead of through its logged wrapper. Every production call site has migrated, so the sweep
+ * asserts zero violations and reads no list file of tolerated sites.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -1175,7 +1174,7 @@ final class MetaWriteSweepTest extends TestCase {
 		$this->assertSame( array(), $this->find_violations( $source, 'includes/write-contract.php' ) );
 	}
 
-	// --- The production scan and the legacy list ---------------------------
+	// --- The production scan ------------------------------------------------
 
 	/**
 	 * Every scanned file's path relative to the plugin root, plus its source.
@@ -1208,43 +1207,28 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	/**
-	 * The production sweep: every banned call under the scanned set, outside the exempt file, must
-	 * be listed in tests/Fixtures/meta-sweep-legacy.txt (path|function|callable|ordinal) - growth is
-	 * banned, and a listed entry that no longer matches must be removed by the step that moved it.
-	 * Both directions are checked: an unlisted violation fails the test, and so does a listed line
-	 * the scan no longer sees.
+	 * The production sweep: no banned call survives anywhere under the scanned set outside the
+	 * exempt file. There is no list file of tolerated sites any more: every family has migrated, so
+	 * the scan must find zero violations, and the fixture that used to hold the migration checklist
+	 * must be gone so nothing can be quietly re-listed.
 	 */
-	public function test_no_unlisted_violation_survives_under_the_scanned_set(): void {
-		$legacy_path = AAFM_PLUGIN_DIR . 'tests/Fixtures/meta-sweep-legacy.txt';
-		$this->assertFileExists( $legacy_path, 'the legacy list must exist, generated from the scanner\'s own first run.' );
-		$legacy = array_filter( array_map( 'trim', file( $legacy_path ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+	public function test_no_banned_call_survives_under_the_scanned_set(): void {
+		$this->assertFileDoesNotExist( AAFM_PLUGIN_DIR . 'tests/Fixtures/meta-sweep-legacy.txt', 'the sweep reads no list file; every violation fails it.' );
 
 		$files = $this->scanned_files();
 		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
 
-		$unlisted = array();
-		$seen     = array_fill_keys( $legacy, false );
+		$violations = array();
 		foreach ( $files as $path => $source ) {
 			foreach ( $this->violation_keys( $source, $path ) as $line_key ) {
-				if ( array_key_exists( $line_key, $seen ) ) {
-					$seen[ $line_key ] = true;
-				} else {
-					$unlisted[] = $line_key;
-				}
+				$violations[] = $line_key;
 			}
 		}
 
 		$this->assertSame(
 			array(),
-			$unlisted,
-			"A banned call was found that the legacy list does not name (growth is banned):\n" . implode( "\n", $unlisted )
-		);
-
-		$stale = array_keys( array_filter( $seen, static fn( bool $was_seen ): bool => ! $was_seen ) );
-		$this->assertSame(
-			array(),
-			$stale,
-			"A legacy list entry no longer matches any violation; its site has moved, so this line must be deleted:\n" . implode( "\n", $stale )
+			$violations,
+			"A banned call was found under the scanned set:\n" . implode( "\n", $violations )
 		);
 	}
 

@@ -932,11 +932,13 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * An object title from the instance-settings filter is compared by value and never cast to a
-	 * string. The option_ filter stands in for a site that reads its titles back as text, so the
-	 * method object the response is built from holds a string.
+	 * The title comparator compares an object title from the instance-settings filter by value and
+	 * never casts it to a string. This pins the comparator only. The option_ filter reads the stored
+	 * title back as text, so the response is built from a string; without it the response shaper
+	 * (aafm_rich_wc_shipping_method()) still casts an object title and throws after the write, the
+	 * residual 262 s12 names.
 	 */
-	public function test_an_object_title_from_the_instance_settings_filter_does_not_throw(): void {
+	public function test_the_title_comparator_compares_an_object_title_without_throwing(): void {
 		$this->acting_as( 'administrator' );
 		$option_key = 'woocommerce_flat_rate_1_settings';
 		update_option( $option_key, array( 'title' => 'Original Title' ) );

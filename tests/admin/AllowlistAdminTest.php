@@ -406,6 +406,34 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
+	 * A stored overrides row that is not a list denies every call and stays that way on a reload,
+	 * so the card says so and keeps Save enabled: saving is the only way to replace the row.
+	 */
+	public function test_a_malformed_row_names_itself_and_keeps_save_available(): void {
+		global $wpdb;
+		$wpdb->replace(
+			$wpdb->options,
+			array(
+				'option_name'  => 'aafm_ability_allowlist_overrides',
+				'option_value' => serialize( new \stdClass() ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- test fixture: the malformed row shape.
+				'autoload'     => 'off',
+			)
+		);
+		wp_cache_delete( 'aafm_ability_allowlist_overrides', 'options' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		ob_start();
+		aafm_render_allowlist_section();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'No scopes narrowed yet', $html );
+		$this->assertStringNotContainsString( 'could not be read', $html );
+		$this->assertStringContainsString( 'not in the expected format', $html );
+		$this->assertDoesNotMatchRegularExpression( '/id="aafm-allowlist-save"[^>]*\bdisabled\b/', $html, 'Save replaces the malformed row, so it stays available.' );
+		$this->assertDoesNotMatchRegularExpression( '/id="aafm-allowlist-add-row"[^>]*\bdisabled\b/', $html, 'Scopes can be added to the replacement before saving.' );
+	}
+
+	/**
 	 * Makes the ONE query containing $needle fail via wpdb::query()'s OTHER false-without-a-real-
 	 * error path (QueryFaultInjector's no-flush filter): the 'query' filter itself returning an
 	 * empty string. wp-includes/class-wpdb.php's query() checks `if ( ! $query )` and returns

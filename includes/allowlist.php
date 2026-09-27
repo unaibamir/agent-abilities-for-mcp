@@ -82,21 +82,25 @@ function aafm_allowlist_overrides(): array {
  * silently erases every existing restriction. The caller here must be told the read failed, not
  * handed an empty state that looks identical to a genuinely unrestricted site.
  *
- * @return array{ok: bool, rows: array<int,array<string,mixed>>}
+ * @return array{ok: bool, rows: array<int,array<string,mixed>>, malformed: bool}
  */
 function aafm_allowlist_overrides_for_display(): array {
 	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
 	// A found row that is not a list denies every call (aafm_ability_allowed_for_principal()), so it
-	// is shown as unreadable, never as an unrestricted site.
-	if ( $views['db_error'] || ( $views['db_found'] && ! is_array( $views['db_value'] ) ) ) {
+	// is never shown as an unrestricted site. It is flagged apart from a failed read: a reload can
+	// clear a failed read, and only a save replaces a malformed row.
+	$malformed = ! $views['db_error'] && $views['db_found'] && ! is_array( $views['db_value'] );
+	if ( $views['db_error'] || $malformed ) {
 		return array(
-			'ok'   => false,
-			'rows' => array(),
+			'ok'        => false,
+			'rows'      => array(),
+			'malformed' => $malformed,
 		);
 	}
 	return array(
-		'ok'   => true,
-		'rows' => $views['db_found'] ? $views['db_value'] : array(),
+		'ok'        => true,
+		'rows'      => $views['db_found'] ? $views['db_value'] : array(),
+		'malformed' => false,
 	);
 }
 

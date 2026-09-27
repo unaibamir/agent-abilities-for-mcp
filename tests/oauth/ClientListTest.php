@@ -244,4 +244,29 @@ final class ClientListTest extends TestCase {
 		$this->assertTrue( $grants[0]['is_high_privilege'] );
 		$this->assertNotSame( '', $grants[0]['granted_at'] );
 	}
+
+	/**
+	 * W2-T5 (step 14, row D1): a grant whose user's caps load fails shows the fallback row (no
+	 * names, no roles, high privilege), not a real account read as holding no role.
+	 */
+	public function test_list_grants_shows_the_fallback_row_when_the_users_caps_load_fails(): void {
+		global $wpdb;
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
+		$this->seed_consent( $user_id, 'client_abc' );
+		wp_cache_delete( $user_id, 'user_meta' );
+
+		$grants = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->usermeta, "user_id IN ({$user_id})" ),
+			static fn(): array => aafm_oauth_list_grants()
+		);
+
+		$this->assertCount( 1, $grants );
+		$this->assertSame( $user_id, $grants[0]['user_id'] );
+		$this->assertSame( 'client_abc', $grants[0]['client_id'] );
+		$this->assertSame( '', $grants[0]['user_display'] );
+		$this->assertSame( '', $grants[0]['user_login'] );
+		$this->assertSame( array(), $grants[0]['user_roles'] );
+		$this->assertTrue( $grants[0]['is_high_privilege'] );
+	}
 }

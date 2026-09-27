@@ -1069,6 +1069,21 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * A WP object built by go_to() lacks the rest_route var rest_api_register_rewrites() adds on
+	 * init, and parse_request() keeps whatever the query_vars filter returns, so add it and put the
+	 * list back in tear_down().
+	 *
+	 * @return void
+	 */
+	private function make_rest_route_a_query_var(): void {
+		$public_vars = $GLOBALS['wp']->public_query_vars;
+		$GLOBALS['wp']->add_query_var( 'rest_route' );
+		$this->cleanups[] = static function () use ( $public_vars ): void {
+			$GLOBALS['wp']->public_query_vars = $public_vars;
+		};
+	}
+
+	/**
 	 * One row per routing state WordPress can be in: the permalink structure, the request, any
 	 * code-set setup, the rest_route core parses (the literal), and whether that is the MCP route.
 	 *
@@ -1143,13 +1158,7 @@ class ValidatorTest extends TestCase {
 		global $wp_rewrite;
 		$this->route_off_mcp();
 		$this->set_permalink_structure( $structure );
-		// A WP object built by go_to() lacks the rest_route var rest_api_register_rewrites() adds on
-		// init, and parse_request() keeps whatever the query_vars filter returns, so pin and restore it.
-		$public_vars = $GLOBALS['wp']->public_query_vars;
-		$GLOBALS['wp']->add_query_var( 'rest_route' );
-		$this->cleanups[] = static function () use ( $public_vars ): void {
-			$GLOBALS['wp']->public_query_vars = $public_vars;
-		};
+		$this->make_rest_route_a_query_var();
 
 		switch ( $setup ) {
 			case 'home_blog':
@@ -1252,6 +1261,12 @@ class ValidatorTest extends TestCase {
 			}
 		} else {
 			$GLOBALS['wp']->parse_request( $extra );
+		}
+		// rest_api_loaded(), removed above, would go on to fire rest_api_init (via rest_get_server())
+		// for a parsed, non-empty string rest_route.
+		$parsed_route = $GLOBALS['wp']->query_vars['rest_route'] ?? null;
+		if ( did_action( 'parse_request' ) && is_string( $parsed_route ) && '' !== $parsed_route ) {
+			$GLOBALS['wp_actions']['rest_api_init'] = 1;
 		}
 
 		$this->assertSame( $parsed, $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'The rest_route WordPress parsed.' );
@@ -1613,6 +1628,7 @@ class ValidatorTest extends TestCase {
 	 */
 	public function test_a_discovery_url_naming_the_mcp_route_resolves_nobody(): void {
 		$this->route_off_mcp();
+		$this->make_rest_route_a_query_var();
 		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
 		$_SERVER['PHP_SELF']    = '/index.php';
 		$_GET['rest_route']     = aafm_mcp_rest_route();
@@ -1644,6 +1660,39 @@ class ValidatorTest extends TestCase {
 
 		$this->assertSame( 0, $seen['init'] ?? null );
 		$this->assertSame( 0, $seen['parse_request'] ?? null );
+	}
+
+	/**
+	 * On a discovery-document URL with ?rest_route=<MCP route>, WordPress parses the request but never
+	 * begins REST routing (the discovery handler exits at parse_request). A parse_request callback
+	 * that forgets the cached user and asks again still sees nobody.
+	 */
+	public function test_a_parse_request_callback_that_forgets_the_user_still_sees_nobody(): void {
+		$this->route_off_mcp();
+		$this->make_rest_route_a_query_var();
+		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
+		$_SERVER['PHP_SELF']    = '/index.php';
+		$_GET['rest_route']     = aafm_mcp_rest_route();
+		$this->present_valid_bearer();
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+
+		remove_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
+		remove_action( 'parse_request', 'rest_api_loaded' );
+		$seen = array();
+		add_action(
+			'parse_request',
+			static function () use ( &$seen ): void {
+				$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the site code under test forgets the cached user.
+				$seen['user']            = get_current_user_id();
+			},
+			-1
+		);
+		$GLOBALS['wp']->parse_request();
+
+		$this->assertSame( aafm_mcp_rest_route(), $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'WordPress parsed the MCP route.' );
+		$this->assertSame( 0, $seen['user'] ?? null );
 	}
 
 	/**

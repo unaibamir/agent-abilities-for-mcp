@@ -321,18 +321,20 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
  * Whether WordPress routed this request to the MCP REST route.
  *
  * The answer is core's own: the rest_route WordPress::parse_request() settled on, untrailingslashed
- * as rest_api_loaded() does, matched by aafm_is_mcp_route() as core's router matches it. Before
- * the parse_request action has fired in this process nothing is routed yet, so the answer is
- * false. That is the same wait core's Application Passwords make (they authenticate only once
- * REST_REQUEST is defined), and it is safe for a healthy MCP call: WP_REST_Server::serve_request()
- * forgets a cached anonymous user before dispatch, so the bearer resolves then. Entry points that
- * never parse (wp-admin, admin-ajax, admin-post, wp-comments-post, cron, CLI) never match.
+ * as rest_api_loaded() does, matched by aafm_is_mcp_route() as core's router matches it. Until
+ * WordPress has parsed the request and begun REST routing (rest_api_init fires inside
+ * rest_get_server(), right after rest_api_loaded() defines REST_REQUEST) the answer is false. That
+ * is the same wait core's Application Passwords make (they authenticate only once REST_REQUEST is
+ * defined), and it is safe for a healthy MCP call: WP_REST_Server::serve_request() forgets a
+ * cached anonymous user before dispatch, so the bearer resolves then. Entry points that never
+ * parse (wp-admin, admin-ajax, admin-post, wp-comments-post, cron, CLI), and requests served
+ * before REST routing (a parse_request handler that exits), never match.
  *
  * @return bool True only when core routed the request to the MCP endpoint.
  */
 function aafm_oauth_request_targets_mcp_route(): bool {
 	$wp = $GLOBALS['wp'] ?? null;
-	if ( ! did_action( 'parse_request' ) || ! $wp instanceof WP ) {
+	if ( ! did_action( 'parse_request' ) || ! did_action( 'rest_api_init' ) || ! $wp instanceof WP ) {
 		return false;
 	}
 	$route = $wp->query_vars['rest_route'] ?? null;

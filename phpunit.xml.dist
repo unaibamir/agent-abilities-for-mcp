@@ -47,6 +47,7 @@
 			<file>tests/SeoWriteWireTest.php</file>
 			<file>tests/RoleReadSweepTest.php</file>
 			<file>tests/OptionReadSweepTest.php</file>
+			<file>tests/RouteMatchSweepTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

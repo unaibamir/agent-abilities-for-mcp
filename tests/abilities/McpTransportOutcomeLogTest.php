@@ -157,6 +157,21 @@ final class McpTransportOutcomeLogTest extends TestCase {
 	}
 
 	/**
+	 * Core dispatches a route with one trailing newline to the MCP handler, so its JSON-RPC error is
+	 * logged exactly as on the plain route.
+	 */
+	public function test_the_newline_route_core_dispatches_to_mcp_is_logged_too(): void {
+		$request = $this->mcp_request();
+		$request->set_route( aafm_mcp_rest_route() . "\n" );
+
+		$this->handle( new WP_REST_Response( $this->jsonrpc_error_body( -32005 ), 404 ), $request );
+
+		$rows = aafm_query_activity( array( 'per_page' => 50 ) );
+		$this->assertCount( 1, $rows );
+		$this->assertStringContainsString( 'session_not_found', $rows[0]['detail'] );
+	}
+
+	/**
 	 * The handler is pure observability: it returns the response untouched, changing neither the data
 	 * nor the HTTP status.
 	 */

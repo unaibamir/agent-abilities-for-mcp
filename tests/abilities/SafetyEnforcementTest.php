@@ -191,6 +191,64 @@ final class SafetyEnforcementTest extends TestCase {
 	}
 
 	/**
+	 * Core dispatches a route with one trailing newline to the MCP handler (its route regex ends in
+	 * `$`), so the scalar-body guard has to catch that spelling too. A trailing slash is not the MCP
+	 * route to core (no handler matches it), so the guard leaves it to core's 404.
+	 */
+	public function test_the_scalar_body_guard_matches_the_routes_core_dispatches_to_mcp(): void {
+		$newline = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() . "\n" );
+		$newline->set_header( 'Content-Type', 'application/json' );
+		$newline->set_body( '"x"' );
+		$result = aafm_reject_scalar_mcp_body( null, null, $newline );
+		$this->assertInstanceOf( \WP_Error::class, $result, 'A scalar body on the newline route must be refused.' );
+		$this->assertSame( 'aafm_invalid_request_body', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] ?? 0 );
+
+		$slash = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() . '/' );
+		$slash->set_header( 'Content-Type', 'application/json' );
+		$slash->set_body( '"x"' );
+		$this->assertNull( aafm_reject_scalar_mcp_body( null, null, $slash ), 'A route core does not dispatch to MCP is not ours to guard.' );
+	}
+
+	/**
+	 * End to end through WP_REST_Server::serve_request(): an unauthenticated scalar body sent to the
+	 * newline route gets the guard's 400, not the transport's TypeError.
+	 */
+	public function test_a_scalar_body_on_the_newline_route_is_a_400_over_http(): void {
+		$server = $this->mcp_spy_server();
+		if ( false === has_filter( 'rest_pre_dispatch', 'aafm_reject_scalar_mcp_body' ) ) {
+			add_filter( 'rest_pre_dispatch', 'aafm_reject_scalar_mcp_body', 10, 3 );
+		}
+		wp_set_current_user( 0 );
+
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput -- request fixture, restored below.
+		$saved = array(
+			'REQUEST_METHOD' => $_SERVER['REQUEST_METHOD'] ?? null,
+			'CONTENT_TYPE'   => $_SERVER['CONTENT_TYPE'] ?? null,
+		);
+		// phpcs:enable WordPress.Security.ValidatedSanitizedInput
+		$_SERVER['REQUEST_METHOD']     = 'POST';
+		$_SERVER['CONTENT_TYPE']       = 'application/json';
+		$GLOBALS['HTTP_RAW_POST_DATA'] = '"x"'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the body core's get_raw_data() reads.
+		try {
+			$server->serve_request( aafm_mcp_rest_route() . "\n" );
+		} finally {
+			unset( $GLOBALS['HTTP_RAW_POST_DATA'] );
+			foreach ( $saved as $key => $value ) {
+				if ( null === $value ) {
+					unset( $_SERVER[ $key ] );
+				} else {
+					$_SERVER[ $key ] = $value;
+				}
+			}
+		}
+
+		$body = json_decode( $server->sent_body, true );
+		$this->assertSame( 400, $server->status );
+		$this->assertSame( 'aafm_invalid_request_body', $body['code'] ?? null );
+	}
+
+	/**
 	 * B39: a batch with non-object elements must get the JSON-RPC 2.0 answer, not a 500.
 	 *
 	 * The vendor's JsonRpcResponseBuilder treats any array with a 0 key as a batch and feeds each

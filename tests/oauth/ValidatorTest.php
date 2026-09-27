@@ -1021,6 +1021,39 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * Route strings and whether core's router matches them to the MCP route.
+	 *
+	 * @return array<string,array{0:mixed,1:bool}>
+	 */
+	public function mcp_route_match_provider(): array {
+		$mcp = '/agent-abilities-for-mcp/mcp';
+		return array(
+			'the route'             => array( $mcp, true ),
+			'upper case'            => array( strtoupper( $mcp ), true ),
+			'one trailing newline'  => array( $mcp . "\n", true ),
+			'trailing slash'        => array( $mcp . '/', false ),
+			'two trailing newlines' => array( $mcp . "\n\n", false ),
+			'a longer route'        => array( $mcp . 'x', false ),
+			'empty'                 => array( '', false ),
+			'null'                  => array( null, false ),
+			'array'                 => array( array(), false ),
+			'the OAuth token route' => array( '/agent-abilities-for-mcp/oauth/token', false ),
+		);
+	}
+
+	/**
+	 * The shared route predicate answers as core's route regex does (`@^route$@i`).
+	 *
+	 * @dataProvider mcp_route_match_provider
+	 *
+	 * @param mixed $route   Route string as get_route() returns it.
+	 * @param bool  $matches Whether core dispatches it to the MCP route.
+	 */
+	public function test_the_route_predicate_matches_as_cores_router_does( $route, bool $matches ): void {
+		$this->assertSame( $matches, aafm_is_mcp_route( $route ) );
+	}
+
+	/**
 	 * The resolver's re-entrancy guard. Steps 5-9 build site URLs, firing the home_url/rest_url
 	 * filter chain DURING user resolution. A third-party filter there that resolves the current user
 	 * would re-enter this callback; without the guard that recurses until memory is exhausted. Prove

@@ -368,9 +368,8 @@ function aafm_wpdb_col( string $sql ): array {
  *
  * The database view is a direct, uncached `$wpdb` read of the row for the current blog - the one
  * source `aafm_uninstall_should_delete_data()` already trusts over any cache for its own,
- * higher-stakes decision, for the same reason: a cache is not the ground truth. This is the only
- * function outside that one allowed to cost that extra query, because it exists specifically to
- * certify a write the plugin just made.
+ * higher-stakes decision, for the same reason: a cache is not the ground truth. It pays that extra
+ * query because it exists to certify a write the plugin just made.
  *
  * A query that errors (a broken table, a lost DB connection, anything short of a clean empty
  * result) and a query that simply finds no matching row both make `$wpdb->get_var()` return null -
@@ -461,8 +460,8 @@ function aafm_option_value_matches( $stored, $expected ): bool {
 }
 
 /**
- * Whether a stored value is exactly the object id a write asked for: the int itself, or the string
- * core stores for it (its ASCII decimal digits).
+ * Whether a stored value is exactly the object id a write asked for: the int itself, or exactly
+ * (string) $id, the string core stores for it, with no sign, space, leading zero or fraction.
  *
  * A cast is the wrong test. `(int)` reads '12.9', '12abc', ' 12', '012' and true as an id, so an
  * old row a vetoing filter left behind would confirm a write that never happened.

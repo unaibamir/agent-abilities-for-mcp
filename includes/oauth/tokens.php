@@ -113,7 +113,8 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 		$raw             = get_option( $option, $default );
 		$ttls[ $option ] = $lifetime( $raw );
 		// A cache copy that disagrees with the row takes the shorter lifetime; an unreadable row
-		// issues no token. tokens.php loads before helpers.php, so the check waits for it.
+		// issues no token. The mint runs only from REST routes, after plugins_loaded; the
+		// function_exists() checks keep a test that loads tokens.php alone working.
 		$row = function_exists( 'aafm_policy_row_if_stale' ) ? aafm_policy_row_if_stale( $option ) : null;
 		if ( null !== $row ) {
 			if ( ! $row['ok'] ) {

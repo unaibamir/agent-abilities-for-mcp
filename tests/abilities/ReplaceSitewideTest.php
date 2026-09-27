@@ -602,6 +602,45 @@ final class ReplaceSitewideTest extends TestCase {
 	}
 
 	/**
+	 * W4-T7 pre_get_posts row (ledger s14c1r1-code-2, ruling B widened to any filter that widens
+	 * the scan): a pre_get_posts callback that widens a posts-only scan to pages does not write the
+	 * page; it counts in failed_updates and the post is still written.
+	 */
+	public function test_a_pre_get_posts_widened_scan_does_not_write_another_type(): void {
+		$page = $this->needle_post( 'page' );
+		$post = $this->needle_post();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$widen = static function ( \WP_Query $query ): void {
+			if ( 'post' === $query->get( 'post_type' ) ) {
+				$query->set( 'post_type', array( 'post', 'page' ) );
+			}
+		};
+		add_action( 'pre_get_posts', $widen );
+		try {
+			$preview = aafm_exec_replace_sitewide(
+				array(
+					'search'    => 's14-needle',
+					'replace'   => 's14-done',
+					'post_type' => 'post',
+				)
+			);
+			$out     = $this->replace_needle_in_posts();
+		} finally {
+			remove_action( 'pre_get_posts', $widen );
+		}
+
+		$this->assertIsArray( $preview );
+		$this->assertSame( 1, $preview['matched_posts'] );
+		$this->assertSame( 1, $preview['failed_updates'] );
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['updated_posts'] );
+		$this->assertSame( 1, $out['failed_updates'] );
+		$this->assertSame( 's14-needle', get_post( $page->ID )->post_content );
+		$this->assertSame( 's14-done', get_post( $post->ID )->post_content );
+	}
+
+	/**
 	 * W4-T8 pin (row W4-h): an earlier answer with a right-type post that lacks the needle, the
 	 * shape a search plugin's posts_pre_query gives, is not written and counts in
 	 * skipped_structure_guard, not failed_updates.

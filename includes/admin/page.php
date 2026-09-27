@@ -252,13 +252,14 @@ function aafm_get_stored_enabled_abilities_raw(): array {
 	};
 
 	// This list is carried forward into the next save, so when a cache copy disagrees with the row
-	// the row is the truth. A save refuses outright when the row cannot be read
-	// (aafm_set_enabled_abilities()).
-	$row = aafm_policy_row_if_stale( 'aafm_enabled_abilities' );
+	// the row is the truth. get_option() reads first, so a failed read's notoptions entry is seen.
+	// A save refuses outright when the row cannot be read (aafm_set_enabled_abilities()).
+	$stored = get_option( 'aafm_enabled_abilities', array() );
+	$row    = aafm_policy_row_if_stale( 'aafm_enabled_abilities' );
 	if ( null !== $row ) {
 		return $row['ok'] ? $normalize( $row['value'] ) : array();
 	}
-	return $normalize( get_option( 'aafm_enabled_abilities', array() ) );
+	return $normalize( $stored );
 }
 
 /**

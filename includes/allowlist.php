@@ -86,16 +86,17 @@ function aafm_allowlist_overrides(): array {
  */
 function aafm_allowlist_overrides_for_display(): array {
 	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
-	if ( $views['db_error'] ) {
+	// A found row that is not a list denies every call (aafm_ability_allowed_for_principal()), so it
+	// is shown as unreadable, never as an unrestricted site.
+	if ( $views['db_error'] || ( $views['db_found'] && ! is_array( $views['db_value'] ) ) ) {
 		return array(
 			'ok'   => false,
 			'rows' => array(),
 		);
 	}
-	$rows = $views['db_found'] ? $views['db_value'] : array();
 	return array(
 		'ok'   => true,
-		'rows' => is_array( $rows ) ? $rows : array(),
+		'rows' => $views['db_found'] ? $views['db_value'] : array(),
 	);
 }
 

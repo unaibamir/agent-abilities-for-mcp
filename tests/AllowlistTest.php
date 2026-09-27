@@ -289,4 +289,30 @@ final class AllowlistTest extends TestCase {
 		$this->assertFalse( $result, 'A user whose load fails must be denied, not read as holding no role.' );
 		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
 	}
+
+	/**
+	 * U3 (ledger s14c1r1-code-5): a found overrides row that is not a list denies every call, so the
+	 * admin display reports it as unreadable rather than as "no scopes narrowed yet".
+	 */
+	public function test_the_display_reports_a_found_non_list_row_as_unreadable(): void {
+		global $wpdb;
+		$wpdb->replace(
+			$wpdb->options,
+			array(
+				'option_name'  => 'aafm_ability_allowlist_overrides',
+				'option_value' => serialize( new \stdClass() ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- test fixture: the malformed row shape.
+				'autoload'     => 'off',
+			)
+		);
+		wp_cache_delete( 'aafm_ability_allowlist_overrides', 'options' );
+
+		$this->assertSame(
+			array(
+				'ok'   => false,
+				'rows' => array(),
+			),
+			aafm_allowlist_overrides_for_display()
+		);
+		$this->assertFalse( aafm_ability_allowed_for_principal( 'aafm/get-post', 0, null ) );
+	}
 }

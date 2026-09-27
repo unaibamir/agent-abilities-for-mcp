@@ -25,7 +25,7 @@ final class MsPolicyMemoTest extends TestCase {
 		parent::set_up();
 		$this->skipWithoutMultisite();
 		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
-		aafm_policy_reset_request_state();
+		$this->route_as_rest_request();
 	}
 
 	public function test_a_switched_blog_reads_its_own_policy_row(): void {

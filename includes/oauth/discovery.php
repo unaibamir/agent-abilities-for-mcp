@@ -45,7 +45,20 @@ function aafm_oauth_option_is_on( string $key, string $fallback = '0' ): bool {
 
 	$off = array( false, 0, '0', '', 'false', 'no', 'off' );
 
-	return ! in_array( $value, $off, true ) && (bool) $value;
+	$on = ! in_array( $value, $off, true ) && (bool) $value;
+	if ( $on && '1' === $fallback ) {
+		// On may be a failed read's default: the row decides when it is off, and an unreadable row
+		// means off.
+		$row = aafm_option_row( $key );
+		if ( ! $row['ok'] ) {
+			return false;
+		}
+		if ( $row['found'] ) {
+			$on = ! in_array( $row['value'], $off, true ) && (bool) $row['value'];
+		}
+	}
+
+	return $on;
 }
 
 /**

@@ -400,8 +400,12 @@ function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag,
  * @return list<string>
  */
 function aafm_scoped_denied_meta_keys( string $option_name ): array {
-	$stored = get_option( $option_name, array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+	$stored = aafm_scoped_deny_option_raw( $option_name );
+	if ( null === $stored ) {
+		// The deny list could not be read: `*` refuses every key (aafm_validate_scoped_meta_key()).
+		return array( '*' );
+	}
+	$stored = array_map( 'strval', $stored );
 
 	return array_values(
 		array_unique(
@@ -412,6 +416,66 @@ function aafm_scoped_denied_meta_keys( string $option_name ): array {
 				}
 			)
 		)
+	);
+}
+
+/**
+ * A deny option's raw value, read so a failed read can never answer "nothing denied".
+ *
+ * A non-empty array from get_option() is returned as it is. An empty or non-array answer is what a
+ * missing row and a failed read both produce, so the row is read from the database: an unreadable
+ * row gives null, a stored array is returned, anything else is the empty list.
+ *
+ * @param string $option_name The denied-keys option name for a scope.
+ * @return array<mixed>|null Null when the row could not be read.
+ */
+function aafm_scoped_deny_option_raw( string $option_name ): ?array {
+	$stored = get_option( $option_name, array() );
+	if ( is_array( $stored ) && array() !== $stored ) {
+		return $stored;
+	}
+	$row = aafm_option_row( $option_name );
+	if ( ! $row['ok'] ) {
+		return null;
+	}
+	return $row['found'] && is_array( $row['value'] ) ? $row['value'] : array();
+}
+
+/**
+ * Shared engine behind the three *_deny_has_star() functions: whether a deny option's raw value
+ * carries the `*` deny-all sentinel. An unreadable deny option counts as deny-all.
+ *
+ * @param string $option_name The denied-keys option name for a scope.
+ * @return bool
+ */
+function aafm_scoped_deny_has_star( string $option_name ): bool {
+	$raw = aafm_scoped_deny_option_raw( $option_name );
+	return null === $raw || in_array( '*', array_map( 'strval', $raw ), true );
+}
+
+/**
+ * One option's row read straight from the database: no object cache read or write, no option
+ * filter, no memo.
+ *
+ * The policy switches call it when get_option() gave their permissive default, because a failed
+ * per-option SELECT gives that same default and leaves a notoptions entry that a persistent object
+ * cache keeps. `found` is true for any row, a stored empty string included.
+ *
+ * @param string $option Option name.
+ * @return array{ok:bool,found:bool,value:mixed} ok is false when the query failed; value is the
+ *                                               unserialized option_value, or false with no row.
+ */
+function aafm_option_row( string $option ): array {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache: the question is what the row holds.
+	$row   = aafm_wpdb_row( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
+	$found = $row['ok'] && null !== $row['value'];
+
+	return array(
+		'ok'    => $row['ok'],
+		'found' => $found,
+		'value' => $found ? maybe_unserialize( $row['value']['option_value'] ) : false,
 	);
 }
 
@@ -459,6 +523,9 @@ function aafm_validate_scoped_meta_key( string $key, callable $hard_block, calla
 	// a key or entry outside [A-Za-z0-9_-], (b) every entry and stored spelling the database treats
 	// as this key, with a failed query refusing, and (c) the en_US ASCII reduction.
 	$denied = array_values( array_map( 'strval', $denied_keys() ) );
+	if ( in_array( '*', $denied, true ) ) { // The getter strips a stored `*`, so this is a deny list that could not be read.
+		return $error;
+	}
 	$lower  = array_map( 'strtolower', $denied );
 	$denies = static function ( string $candidate ) use ( $lower ): bool {
 		return in_array( strtolower( $candidate ), $lower, true );
@@ -523,7 +590,7 @@ function aafm_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_meta_deny_has_star(): bool {
-	return aafm_scoped_meta_has_star( 'aafm_denied_meta_keys' );
+	return aafm_scoped_deny_has_star( 'aafm_denied_meta_keys' );
 }
 
 /**
@@ -903,7 +970,7 @@ function aafm_term_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_term_meta_deny_has_star(): bool {
-	return aafm_scoped_meta_has_star( 'aafm_denied_term_meta_keys' );
+	return aafm_scoped_deny_has_star( 'aafm_denied_term_meta_keys' );
 }
 
 /**
@@ -1040,7 +1107,7 @@ function aafm_user_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_user_meta_deny_has_star(): bool {
-	return aafm_scoped_meta_has_star( 'aafm_denied_user_meta_keys' );
+	return aafm_scoped_deny_has_star( 'aafm_denied_user_meta_keys' );
 }
 
 /**

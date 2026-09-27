@@ -29,6 +29,11 @@ defined( 'ABSPATH' ) || exit;
  */
 function aafm_read_only_mode(): bool {
 	$on = (bool) get_option( 'aafm_read_only_mode', false );
+	if ( ! $on ) {
+		// Off may be a failed read's default: the row decides, and an unreadable row means on.
+		$row = aafm_option_row( 'aafm_read_only_mode' );
+		$on  = ! $row['ok'] || ( $row['found'] && (bool) $row['value'] );
+	}
 
 	/**
 	 * Force read-only mode on regardless of the settings-screen value.

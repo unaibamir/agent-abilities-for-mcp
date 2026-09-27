@@ -100,8 +100,27 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 	$access_raw  = 'aafm_oat_' . bin2hex( random_bytes( 32 ) );
 	$refresh_raw = bin2hex( random_bytes( 32 ) );
 
-	$access_ttl  = (int) get_option( 'aafm_oauth_access_ttl', AAFM_OAUTH_ACCESS_TTL );
-	$refresh_ttl = (int) get_option( 'aafm_oauth_refresh_ttl', AAFM_OAUTH_REFRESH_TTL );
+	$ttls = array(
+		'aafm_oauth_access_ttl'  => AAFM_OAUTH_ACCESS_TTL,
+		'aafm_oauth_refresh_ttl' => AAFM_OAUTH_REFRESH_TTL,
+	);
+	foreach ( $ttls as $option => $default ) {
+		$ttls[ $option ] = (int) get_option( $option, $default );
+		if ( $ttls[ $option ] !== $default ) {
+			continue;
+		}
+		// The constant may be a failed read's default: a shorter stored lifetime wins, and an
+		// unreadable row issues no token.
+		$row = aafm_option_row( $option );
+		if ( ! $row['ok'] ) {
+			return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'agent-abilities-for-mcp' ) );
+		}
+		if ( $row['found'] && (int) $row['value'] < $ttls[ $option ] ) {
+			$ttls[ $option ] = (int) $row['value'];
+		}
+	}
+	$access_ttl  = $ttls['aafm_oauth_access_ttl'];
+	$refresh_ttl = $ttls['aafm_oauth_refresh_ttl'];
 
 	$now = time();
 

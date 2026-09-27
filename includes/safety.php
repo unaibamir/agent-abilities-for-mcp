@@ -16,6 +16,11 @@ defined( 'ABSPATH' ) || exit;
  */
 function aafm_rate_limit_per_min(): int {
 	$stored = max( 0, (int) get_option( 'aafm_rate_limit_per_min', 0 ) );
+	if ( 0 === $stored ) {
+		// No limit may be a failed read's default: the row decides, and an unreadable row limits to 1.
+		$row    = aafm_option_row( 'aafm_rate_limit_per_min' );
+		$stored = ! $row['ok'] ? 1 : ( $row['found'] ? max( 0, (int) $row['value'] ) : 0 );
+	}
 
 	/**
 	 * Filters the requests-per-minute rate limit. 0 means no limit.
@@ -87,6 +92,12 @@ function aafm_ip_allowlist(): array {
 	);
 
 	$stored = $normalize( get_option( 'aafm_ip_allowlist', array() ) );
+	if ( array() === $stored ) {
+		// An empty list may be a failed read's default: the row decides. An unreadable row gives
+		// one entry that is not an address, so it matches nothing and every IP is refused.
+		$row    = aafm_option_row( 'aafm_ip_allowlist' );
+		$stored = ! $row['ok'] ? array( 'aafm-allowlist-read-failed' ) : ( $row['found'] ? $normalize( $row['value'] ) : array() );
+	}
 
 	/**
 	 * Filters the IP/CIDR allowlist for the MCP endpoint.
@@ -267,7 +278,14 @@ function aafm_force_draft(): bool {
 	 *
 	 * @param bool $force True to force draft status.
 	 */
-	return (bool) apply_filters( 'aafm_force_draft', (bool) get_option( 'aafm_force_draft', false ) );
+	$on = (bool) get_option( 'aafm_force_draft', false );
+	if ( ! $on ) {
+		// Off may be a failed read's default: the row decides, and an unreadable row means on.
+		$row = aafm_option_row( 'aafm_force_draft' );
+		$on  = ! $row['ok'] || ( $row['found'] && (bool) $row['value'] );
+	}
+
+	return (bool) apply_filters( 'aafm_force_draft', $on );
 }
 
 /**
@@ -277,6 +295,11 @@ function aafm_force_draft(): bool {
  */
 function aafm_max_title_len(): int {
 	$stored = max( 0, (int) get_option( 'aafm_max_title_len', 0 ) );
+	if ( 0 === $stored ) {
+		// No cap may be a failed read's default: the row decides, and an unreadable row caps at 1.
+		$row    = aafm_option_row( 'aafm_max_title_len' );
+		$stored = ! $row['ok'] ? 1 : ( $row['found'] ? max( 0, (int) $row['value'] ) : 0 );
+	}
 
 	/**
 	 * Filters the maximum allowed title length. 0 means no cap.
@@ -308,8 +331,20 @@ function aafm_max_title_len(): int {
  * @return int Retention window in days, clamped to [0, 3650]. Default 30.
  */
 function aafm_log_retention_days(): int {
-	$raw = (int) get_option( 'aafm_log_retention_days', 30 );
-	return max( 0, min( 3650, $raw ) );
+	$days = max( 0, min( 3650, (int) get_option( 'aafm_log_retention_days', 30 ) ) );
+	if ( 30 === $days ) {
+		// 30 may be a failed read's default, and the prune deletes rows: the row decides when it
+		// keeps more (0, keep forever, or a longer window), and an unreadable row prunes nothing.
+		$row = aafm_option_row( 'aafm_log_retention_days' );
+		if ( ! $row['ok'] ) {
+			return 0;
+		}
+		$stored = $row['found'] ? max( 0, min( 3650, (int) $row['value'] ) ) : $days;
+		if ( 0 === $stored || $stored > $days ) {
+			$days = $stored;
+		}
+	}
+	return $days;
 }
 
 /**

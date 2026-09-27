@@ -49,7 +49,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 	 * Rows: a healthy row R with an agreeing cache; b a stale runtime alloptions copy P over R;
 	 * c (P19) a stale copy narrower than R; d a notoptions entry over R; e the batched read fails
 	 * over a healthy row P; f a serialized stdClass row; g row b's state on a front-end page;
-	 * h (P9, P11) an option filter answering the exact default over R.
+	 * h (P9, P11) an option filter answering the exact default over R; j and k (switch and number
+	 * sites) a stored array() and array( 'x' ), which are malformed too (PM build-5, s14a3-3).
 	 *
 	 * @return array<string,array<string,mixed>>
 	 */
@@ -96,6 +97,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => false,
 					'f' => false,
 					'g' => true,
+					'j' => false,
+					'k' => false,
 				),
 			),
 			'P4'    => array(
@@ -110,6 +113,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => false,
 					'f' => false,
 					'g' => true,
+					'j' => false,
+					'k' => false,
 				),
 			),
 			'P4dcr' => array(
@@ -124,6 +129,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => false,
 					'f' => false,
 					'g' => false,
+					'j' => false,
+					'k' => false,
 				),
 			),
 			'P5'    => array(
@@ -200,6 +207,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'f' => true,
 					'g' => false,
 					'h' => true,
+					'j' => true,
+					'k' => true,
 				),
 			),
 			'P10'   => array(
@@ -214,6 +223,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => true,
 					'f' => true,
 					'g' => false,
+					'j' => true,
+					'k' => true,
 				),
 			),
 			'P11'   => array(
@@ -230,6 +241,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'f' => 1,
 					'g' => 0,
 					'h' => 5,
+					'j' => 1,
+					'k' => 1,
 				),
 			),
 			'P12'   => array(
@@ -258,6 +271,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => true,
 					'f' => true,
 					'g' => false,
+					'j' => true,
+					'k' => true,
 				),
 			),
 			'P14'   => array(
@@ -272,6 +287,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => 1,
 					'f' => 1,
 					'g' => 0,
+					'j' => 1,
+					'k' => 1,
 				),
 			),
 			'P15'   => array(
@@ -286,6 +303,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => 0,
 					'f' => 0,
 					'g' => 10,
+					'j' => 0,
+					'k' => 0,
 				),
 			),
 			'P16'   => array(
@@ -304,6 +323,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 					'e' => 'error',
 					'f' => 0,
 					'g' => 7200,
+					'j' => 0,
+					'k' => 0,
 				),
 			),
 			'P17'   => array(
@@ -396,21 +417,21 @@ final class PolicyReadStaleCacheTest extends TestCase {
 		$rows  = array(
 			'P1'    => 'abdefg',
 			'P2'    => 'abdefg',
-			'P3'    => 'abdefg',
-			'P4'    => 'abdefg',
-			'P4dcr' => 'abdefg',
+			'P3'    => 'abdefgjk',
+			'P4'    => 'abdefgjk',
+			'P4dcr' => 'abdefgjk',
 			'P5'    => 'abdefg',
 			'P6'    => 'abdefg',
 			'P7'    => 'abdefg',
 			'P8'    => 'abdefg',
-			'P9'    => 'abdefgh',
-			'P10'   => 'abdefg',
-			'P11'   => 'abdefgh',
+			'P9'    => 'abdefghjk',
+			'P10'   => 'abdefgjk',
+			'P11'   => 'abdefghjk',
 			'P12'   => 'abdefg',
-			'P13'   => 'abdefg',
-			'P14'   => 'abdefg',
-			'P15'   => 'abdefg',
-			'P16'   => 'abdefg',
+			'P13'   => 'abdefgjk',
+			'P14'   => 'abdefgjk',
+			'P15'   => 'abdefgjk',
+			'P16'   => 'abdefgjk',
 			'P17'   => 'abdefg',
 			'P18'   => 'abdefg',
 			'P19'   => 'abcdefg',
@@ -460,6 +481,12 @@ final class PolicyReadStaleCacheTest extends TestCase {
 				break;
 			case 'f':
 				$this->plant( $option, self::OBJECT );
+				break;
+			case 'j':
+				$this->plant( $option, array() );
+				break;
+			case 'k':
+				$this->plant( $option, array( 'x' ) );
 				break;
 			case 'h':
 				$this->plant( $option, $spec['R'] );

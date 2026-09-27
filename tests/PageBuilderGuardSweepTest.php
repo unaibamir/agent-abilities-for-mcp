@@ -473,8 +473,15 @@ final class PageBuilderGuardSweepTest extends TestCase {
 				'post_content' => 'v2',
 			)
 		);
+		wp_update_post(
+			array(
+				'ID'           => $post,
+				'post_content' => 'v3',
+			)
+		);
 		$revisions = wp_get_post_revisions( $post );
 		$oldest    = end( $revisions );
+		$this->assertSame( 'v2', $oldest->post_content, 'the restore target differs from the current content' );
 		update_post_meta( $post, 'fusion_builder_status', 'active' );
 		update_post_meta( $post, 'vcv-pageContent', '[{"tag":"vcvpageroot"}]' );
 
@@ -484,12 +491,12 @@ final class PageBuilderGuardSweepTest extends TestCase {
 				'revision_id' => (int) $oldest->ID,
 			)
 		);
+		$this->assertSame( 'v3', get_post( $post )->post_content );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'aafm_page_builder_owned', $result->get_error_code() );
 		$this->assertSame( 'This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again.', $result->get_error_message() );
 		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
-		$this->assertSame( 'v2', get_post( $post )->post_content );
 	}
 
 	public function test_wc_update_product_refuses_a_description_on_a_product_of_unknown_ownership_and_keeps_it(): void {

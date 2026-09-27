@@ -782,9 +782,9 @@ final class MetaWriteSweepTest extends TestCase {
 		for ( $j = 0; $j < $index; $j++ ) {
 			$token = $tokens[ $j ];
 			if ( is_array( $token ) && T_FUNCTION === $token[0] ) {
-				list( $next ) = $this->significant_token( $tokens, $j + 1 );
-				if ( is_array( $next ) && T_STRING === $next[0] ) {
-					$candidate = $next[1];
+				$declared = $this->declared_name( $tokens, $j );
+				if ( null !== $declared ) {
+					$candidate = $declared[0];
 					// Confirm this function's body actually encloses $index by finding its opening
 					// brace and matching close.
 					for ( $k = $j; $k < $index; $k++ ) {
@@ -2241,63 +2241,169 @@ final class MetaWriteSweepTest extends TestCase {
 
 	/**
 	 * Every CHECKED_CAPABILITY_CALLS call written inside the first argument of an
-	 * aafm_with_checked_reads() call, or inside the body of any function that argument reaches
-	 * through named calls, however deep. Also every aafm_with_checked_reads() call whose first
-	 * argument is not a closure: the scan cannot follow a string or variable callable, so it
-	 * flags the call itself. Keyed path|function|name|ordinal (the ordinal counts the flagged
-	 * calls of that name in that function).
+	 * aafm_with_checked_reads() call, or inside the body of any function that argument reaches,
+	 * however deep, plus every call on that path the scan cannot follow. Every call inside a scope
+	 * build or a reached body is followed to a body or flagged, where a call is a named call, a
+	 * string-literal callable passed to one of the listed callable-taking functions, or a variable
+	 * call of the listed shapes; a variable callable passed to a function outside the list is not
+	 * analysed. An absent callable argument (for example `array_filter( $ids )`) and a `null`
+	 * callback are not calls and produce no record. A call to a function with no body in the
+	 * scanned set (a PHP, WordPress core or vendor function, for example `intval`, `get_post()` or
+	 * `apply_filters()`) ends the path there: it is neither followed nor flagged, and any callback
+	 * such a function runs, hook callbacks included, is not analysed.
+	 *
+	 * Followed: a named function call; a string literal naming a function (anywhere, not only as a
+	 * listed function's argument); a method call, `->m(`, `?->m(` or `::m(`, to every body named m
+	 * whatever its class; `new X(` to every body named __construct; and a callable parameter
+	 * called by variable when every reference to its function is a positional call passing a
+	 * string literal at that position and the function never reassigns it. A declaration,
+	 * `function &name(` included, is a body and never a call. Flagged: a scope whose build is not
+	 * a closure, a call whose callee is not a name (`$v(`, `$map['k'](`, `( $cb )(`, `f()(`,
+	 * `$o->$m(`), and a listed callable-taking function handed anything but a string literal or a
+	 * closure. Keyed path|function|name|ordinal, where name is the checked call, the callee text
+	 * with whitespace removed, or the callable-taking function; the ordinal counts the flagged
+	 * records of that name in that function.
 	 *
 	 * @param array<string,string> $files path => source.
 	 * @return string[]
 	 */
 	private function nested_capability_keys( array $files ): array {
-		$not_a_call = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON, T_FUNCTION, T_NEW ) );
-		$checked    = array(); // function name => its checked calls, each array( path, function, name, index ).
-		$scoped     = array(); // checked calls written inside a scope argument.
-		$named      = array(); // function names a scope argument calls.
-		$calls_from = array(); // function name => the function names its body calls.
+		// Callable-taking core functions and the position of their callable argument.
+		$callable_argument = array(
+			'call_user_func'            => 0,
+			'call_user_func_array'      => 0,
+			'array_map'                 => 0,
+			'forward_static_call'       => 0,
+			'forward_static_call_array' => 0,
+			'array_filter'              => 1,
+			'array_walk'                => 1,
+			'array_walk_recursive'      => 1,
+			'array_reduce'              => 1,
+			'usort'                     => 1,
+			'uasort'                    => 1,
+			'uksort'                    => 1,
+			'preg_replace_callback'     => 1,
+			'iterator_apply'            => 1,
+		);
+		// Heads whose parentheses a following `(` does not call.
+		$control = array( T_IF, T_ELSEIF, T_WHILE, T_FOR, T_FOREACH, T_SWITCH, T_CATCH, T_DECLARE, T_ARRAY, T_LIST, T_ISSET, T_EMPTY, T_UNSET, T_EVAL, T_EXIT, T_FUNCTION, T_FN, T_USE );
+		if ( defined( 'T_MATCH' ) ) {
+			$control[] = constant( 'T_MATCH' );
+		}
+		$methods = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON ) );
+
+		// Pass 1: every declared body, so a literal or a method name can be resolved against it.
+		$parsed = array(); // path => array( tokens, bodies, declaration name indices ).
+		$known  = self::CHECKED_CAPABILITY_CALLS;
 		foreach ( $files as $path => $source ) {
-			$tokens  = token_get_all( $source );
-			$aliases = $this->function_aliases( $tokens );
-			$ranges  = array();
-			$calls   = array();
-			$bodies  = array(); // each array( function name, index of '{', index of '}' ), outer first.
+			$tokens   = token_get_all( $source );
+			$bodies   = array(); // each array( function name, index of '{', index of '}', index of the name ), outer first.
+			$declared = array();
 			foreach ( $tokens as $j => $token ) {
 				if ( ! is_array( $token ) || T_FUNCTION !== $token[0] ) {
 					continue;
 				}
-				list( $next ) = $this->significant_token( $tokens, $j + 1 );
-				if ( ! is_array( $next ) || T_STRING !== $next[0] ) {
+				$name = $this->declared_name( $tokens, $j );
+				if ( null === $name ) {
 					continue;
 				}
+				$declared[ $name[1] ] = true;
 				for ( $k = $j; isset( $tokens[ $k ] ) && '{' !== $tokens[ $k ] && ';' !== $tokens[ $k ]; $k++ ) {
 					continue;
 				}
 				$close = isset( $tokens[ $k ] ) && '{' === $tokens[ $k ] ? $this->matching_bracket_index( $tokens, $k, '{', '}' ) : null;
 				if ( null !== $close ) {
-					$bodies[] = array( strtolower( $next[1] ), $k, $close );
+					$bodies[] = array( strtolower( $name[0] ), $k, $close, $name[1] );
+					$known[]  = strtolower( $name[0] );
 				}
 			}
+			$parsed[ $path ] = array( $tokens, $bodies, $declared );
+		}
+		$known = array_values( array_unique( $known ) );
+
+		// Pass 2: calls, scope ranges, unanalysable calls, and every reference to a known function.
+		$per_file   = array(); // path => array( calls, ranges, candidates ).
+		$references = array(); // function name => each reference: null, or a call's argument kinds.
+		foreach ( $parsed as $path => $file ) {
+			list( $tokens, , $declared ) = $file;
+			$aliases                     = $this->function_aliases( $tokens );
+			$ranges                      = array();
+			$calls                       = array(); // each array( name, index, may be a checked call ).
+			$candidates                  = array(); // each array( index, callee text, variable or null, flagged wherever it is ).
+			$build_literals              = array();
 			foreach ( $tokens as $i => $token ) {
-				if ( ! is_array( $token ) || ! in_array( $token[0], $this->name_token_types(), true ) ) {
+				if ( is_array( $token ) && T_CONSTANT_ENCAPSED_STRING === $token[0] ) {
+					$name = $this->literal_callable( $token, $known );
+					if ( null !== $name && ! isset( $build_literals[ $i ] ) ) {
+						$calls[]               = array( $name, $i, true );
+						$references[ $name ][] = null;
+					}
+					continue;
+				}
+				if ( '(' === $token ) {
+					$prev_idx = $this->previous_significant_index( $tokens, $i - 1 );
+					$prev     = null === $prev_idx ? null : $tokens[ $prev_idx ];
+					$dynamic  = ']' === $prev || '}' === $prev || ( is_array( $prev ) && T_VARIABLE === $prev[0] );
+					if ( ')' === $prev ) {
+						$open    = $this->matching_open_index( $tokens, $prev_idx, '(', ')' );
+						$head    = null === $open ? null : $this->previous_significant_index( $tokens, $open - 1 );
+						$dynamic = null === $head || ! is_array( $tokens[ $head ] ) || ! in_array( $tokens[ $head ][0], $control, true );
+					}
+					if ( $dynamic ) {
+						$text         = $this->token_text( $tokens, $this->callee_start( $tokens, $prev_idx ), $prev_idx );
+						$candidates[] = array( $i, $text, preg_match( '/^\$\w+$/', $text ) ? $text : null, false );
+					}
+					continue;
+				}
+				if ( ! is_array( $token ) || ! in_array( $token[0], $this->name_token_types(), true ) || isset( $declared[ $i ] ) ) {
 					continue;
 				}
 				list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
 				$prev_idx                = $this->previous_significant_index( $tokens, $i - 1 );
-				if ( '(' !== $open || ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && in_array( $tokens[ $prev_idx ][0], $not_a_call, true ) ) ) {
+				$prev                    = null === $prev_idx ? null : $tokens[ $prev_idx ];
+				$by_method               = is_array( $prev ) && in_array( $prev[0], $methods, true );
+				$by_new                  = is_array( $prev ) && T_NEW === $prev[0];
+				$plain                   = '(' === $open && ! $by_method && ! $by_new;
+				$name                    = $this->resolved_function_name( $token[1], $aliases );
+				if ( in_array( $name, $known, true ) && ! $by_method ) {
+					$references[ $name ][] = $plain ? $this->argument_kinds( $tokens, $open_idx, $known ) : null;
+				}
+				if ( '(' !== $open ) {
 					continue;
 				}
-				$name    = $this->resolved_function_name( $token[1], $aliases );
-				$calls[] = array( $name, $i );
+				if ( $by_method ) {
+					$calls[] = array( strtolower( $this->last_name_segment( $token[1] ) ), $i, false );
+					continue;
+				}
+				if ( $by_new ) {
+					$calls[] = array( '__construct', $i, false );
+					continue;
+				}
+				$calls[] = array( $name, $i, true );
+				if ( isset( $callable_argument[ $name ] ) ) {
+					$args     = $this->argument_token_indices( $tokens, $open_idx );
+					$position = $callable_argument[ $name ];
+					if ( isset( $args[ $position ] ) ) {
+						list( $kind, $value ) = $this->callable_argument( $tokens, $args[ $position ], $known );
+						if ( 'variable' === $kind ) {
+							$candidates[] = array( $i, $name, $value, false );
+						} elseif ( ! in_array( $kind, array( 'literal', 'closure', 'null' ), true ) ) {
+							$candidates[] = array( $i, $name, null, false );
+						}
+					}
+				}
 				if ( 'aafm_with_checked_reads' !== $name ) {
 					continue;
 				}
 				list( $build, $build_idx ) = $this->significant_token( $tokens, $open_idx + 1 );
+				if ( is_array( $build ) && T_CONSTANT_ENCAPSED_STRING === $build[0] ) {
+					$build_literals[ $build_idx ] = true;
+				}
 				if ( is_array( $build ) && T_STATIC === $build[0] ) {
 					list( $build ) = $this->significant_token( $tokens, $build_idx + 1 );
 				}
 				if ( ! is_array( $build ) || ! in_array( $build[0], array( T_FUNCTION, T_FN ), true ) ) {
-					$scoped[] = array( $path, $this->enclosing_function( $tokens, $i ), $name, $i );
+					$candidates[] = array( $i, $name, null, true );
 				}
 				$close = $this->matching_bracket_index( $tokens, $open_idx, '(', ')' );
 				$depth = 0;
@@ -2313,23 +2419,68 @@ final class MetaWriteSweepTest extends TestCase {
 				}
 				$ranges[] = array( $open_idx, $k );
 			}
-			foreach ( $calls as $call ) {
-				list( $name, $index ) = $call;
-				$inside               = false;
+			$per_file[ $path ] = array( $calls, $ranges, $candidates );
+		}
+
+		// A callable parameter every reference names becomes calls of the named functions.
+		foreach ( $per_file as $path => $file ) {
+			list( $calls, $ranges, $candidates ) = $file;
+			list( $tokens, $bodies )             = $parsed[ $path ];
+			$kept                                = array();
+			foreach ( $candidates as $candidate ) {
+				$body = null;
+				foreach ( $bodies as $each ) {
+					$body = $candidate[0] > $each[1] && $candidate[0] < $each[2] ? $each : $body;
+				}
+				$targets = null === $candidate[2] || null === $body ? null : $this->callable_parameter_targets( $tokens, $body, $candidate[2], $references[ $body[0] ] ?? array() );
+				if ( null === $targets ) {
+					$kept[] = $candidate;
+					continue;
+				}
+				foreach ( $targets as $target ) {
+					$calls[] = array( $target, $candidate[0], true );
+				}
+			}
+			$per_file[ $path ] = array( $calls, $ranges, $kept );
+		}
+
+		// Pass 3: attribute every call and candidate to its scope and its body.
+		$checked    = array(); // function name => its checked calls, each array( path, function, name, index ).
+		$scoped     = array(); // records flagged whatever reaches them: checked calls and candidates inside a scope argument.
+		$named      = array(); // function names a scope argument calls.
+		$calls_from = array(); // function name => the function names its body calls.
+		$unresolved = array(); // body name => candidates inside that body, outside every scope argument.
+		foreach ( $per_file as $path => $file ) {
+			list( $calls, $ranges, $candidates ) = $file;
+			list( $tokens, $bodies )             = $parsed[ $path ];
+			foreach ( array_merge( $calls, $candidates ) as $entry ) {
+				$is_call = 3 === count( $entry );
+				$index   = $is_call ? $entry[1] : $entry[0];
+				$inside  = false;
 				foreach ( $ranges as $range ) {
 					$inside = $inside || ( $index > $range[0] && $index < $range[1] );
-				}
-				if ( $inside ) {
-					$named[ $name ] = true;
 				}
 				$caller = null;
 				foreach ( $bodies as $body ) {
 					$caller = $index > $body[1] && $index < $body[2] ? $body[0] : $caller;
 				}
+				if ( ! $is_call ) {
+					$record = array( $path, $this->enclosing_function( $tokens, $index ), $entry[1], $index );
+					if ( $inside || $entry[3] ) {
+						$scoped[] = $record;
+					} elseif ( null !== $caller ) {
+						$unresolved[ $caller ][] = $record;
+					}
+					continue;
+				}
+				list( $name, , $may_check ) = $entry;
+				if ( $inside ) {
+					$named[ $name ] = true;
+				}
 				if ( null !== $caller ) {
 					$calls_from[ $caller ][ $name ] = true;
 				}
-				if ( ! in_array( $name, self::CHECKED_CAPABILITY_CALLS, true ) ) {
+				if ( ! $may_check || ! in_array( $name, self::CHECKED_CAPABILITY_CALLS, true ) ) {
 					continue;
 				}
 				$function                             = $this->enclosing_function( $tokens, $index );
@@ -2340,11 +2491,11 @@ final class MetaWriteSweepTest extends TestCase {
 				}
 			}
 		}
-		// Follow named calls to a fixed point: every function reachable from a scope's build.
+		// Follow calls to a fixed point: every function reachable from a scope's build.
 		$queue = array_keys( $named );
 		while ( $queue ) {
 			$name   = array_pop( $queue );
-			$scoped = array_merge( $scoped, $checked[ $name ] ?? array() );
+			$scoped = array_merge( $scoped, $checked[ $name ] ?? array(), $unresolved[ $name ] ?? array() );
 			foreach ( array_keys( $calls_from[ $name ] ?? array() ) as $callee ) {
 				if ( ! isset( $named[ $callee ] ) ) {
 					$named[ $callee ] = true;
@@ -2366,6 +2517,304 @@ final class MetaWriteSweepTest extends TestCase {
 			$keys[]                   = $ordinal_key . '|' . $ordinals[ $ordinal_key ];
 		}
 		return $keys;
+	}
+
+	/**
+	 * The name a `function` keyword declares and the name token's index, or null for a closure. A
+	 * by-reference declaration puts `&` between the two: a plain string on PHP 7.4, an array token
+	 * whose text is `&` on PHP 8.1 and later.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens         token_get_all() output.
+	 * @param int                                           $function_index Index of the T_FUNCTION token.
+	 * @return array{0:string,1:int}|null
+	 */
+	private function declared_name( array $tokens, int $function_index ): ?array {
+		list( $next, $next_idx ) = $this->significant_token( $tokens, $function_index + 1 );
+		if ( '&' === $next || ( is_array( $next ) && '&' === $next[1] ) ) {
+			list( $next, $next_idx ) = $this->significant_token( $tokens, $next_idx + 1 );
+		}
+		return is_array( $next ) && T_STRING === $next[0] ? array( $next[1], $next_idx ) : null;
+	}
+
+	/**
+	 * Index of the opening bracket matching the closer at $close_index, walking backward. For
+	 * braces an interpolation opener, `{$` or `${`, counts as an opener, as in
+	 * matching_bracket_index().
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens      token_get_all() output.
+	 * @param int                                           $close_index Index of the closing bracket.
+	 * @param string                                        $open_char   '(', '[' or '{'.
+	 * @param string                                        $close_char  ')', ']' or '}'.
+	 */
+	private function matching_open_index( array $tokens, int $close_index, string $open_char, string $close_char ): ?int {
+		$depth = 0;
+		for ( $j = $close_index; $j >= 0; $j-- ) {
+			$token = $tokens[ $j ];
+			if ( $close_char === $token ) {
+				++$depth;
+			} elseif ( $open_char === $token || ( '{' === $open_char && is_array( $token ) && in_array( $token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+				--$depth;
+				if ( 0 === $depth ) {
+					return $j;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Index of the first token of the callee expression that ends at $end, the token before a
+	 * call's `(`: variables, names, object and static operators, and bracket groups attached to
+	 * them, so `$o->$m`, `$map['k']`, `f()` and `( $cb )` are each read whole.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param int                                           $end    Index of the callee's last token.
+	 */
+	private function callee_start( array $tokens, int $end ): int {
+		$joins = array_merge( $this->operator_tokens(), array( T_DOUBLE_COLON ) );
+		$start = $end;
+		$j     = $end;
+		while ( null !== $j ) {
+			$token = $tokens[ $j ];
+			if ( in_array( $token, array( ']', ')', '}' ), true ) ) {
+				$pairs = array(
+					']' => '[',
+					')' => '(',
+					'}' => '{',
+				);
+				$open  = $this->matching_open_index( $tokens, $j, $pairs[ $token ], $token );
+				if ( null === $open ) {
+					break;
+				}
+				$start = $open;
+				$j     = $this->previous_significant_index( $tokens, $open - 1 );
+				$prev  = null === $j ? null : $tokens[ $j ];
+				if ( in_array( $prev, array( ']', ')', '}', '$' ), true ) || ( is_array( $prev ) && ( T_VARIABLE === $prev[0] || in_array( $prev[0], $this->name_token_types(), true ) || in_array( $prev[0], $joins, true ) ) ) ) {
+					continue;
+				}
+				break;
+			}
+			if ( is_array( $token ) && in_array( $token[0], $joins, true ) ) {
+				$start = $j;
+				$j     = $this->previous_significant_index( $tokens, $j - 1 );
+				continue;
+			}
+			if ( '$' === $token ) {
+				$start = $j;
+				break;
+			}
+			if ( is_array( $token ) && ( T_VARIABLE === $token[0] || in_array( $token[0], $this->name_token_types(), true ) ) ) {
+				$start = $j;
+				$j     = $this->previous_significant_index( $tokens, $j - 1 );
+				if ( null !== $j && is_array( $tokens[ $j ] ) && in_array( $tokens[ $j ][0], $joins, true ) ) {
+					continue;
+				}
+			}
+			break;
+		}
+		return $start;
+	}
+
+	/**
+	 * The source text from $start to $end inclusive, whitespace and comments removed.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens token_get_all() output.
+	 * @param int                                           $start  First index.
+	 * @param int                                           $end    Last index.
+	 */
+	private function token_text( array $tokens, int $start, int $end ): string {
+		$text = '';
+		for ( $k = $start; $k <= $end; $k++ ) {
+			$token = $tokens[ $k ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			$text .= is_array( $token ) ? $token[1] : $token;
+		}
+		return $text;
+	}
+
+	/**
+	 * A call's top-level arguments, each as the indices of its significant tokens.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens         token_get_all() output.
+	 * @param int                                           $open_paren_idx Index of the opening '('.
+	 * @return array<int,int[]>
+	 */
+	private function argument_token_indices( array $tokens, int $open_paren_idx ): array {
+		$close = $this->matching_bracket_index( $tokens, $open_paren_idx, '(', ')' );
+		if ( null === $close ) {
+			return array();
+		}
+		$args    = array();
+		$current = array();
+		$depth   = 0;
+		for ( $k = $open_paren_idx + 1; $k < $close; $k++ ) {
+			$token = $tokens[ $k ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			if ( in_array( $token, array( '(', '[', '{' ), true ) || ( is_array( $token ) && in_array( $token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+				++$depth;
+			} elseif ( in_array( $token, array( ')', ']', '}' ), true ) ) {
+				--$depth;
+			} elseif ( 0 === $depth && ',' === $token ) {
+				$args[]  = $current;
+				$current = array();
+				continue;
+			}
+			$current[] = $k;
+		}
+		if ( array() !== $current ) {
+			$args[] = $current;
+		}
+		return $args;
+	}
+
+	/**
+	 * What one argument is, as a callable: array( 'literal', the known function it names or null ),
+	 * array( 'closure', null ), array( 'null', null ), array( 'variable', its name ),
+	 * array( 'spread', null ), array( 'named', null ) or array( 'other', null ).
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens  token_get_all() output.
+	 * @param int[]                                         $indices The argument's significant tokens.
+	 * @param string[]                                      $known   Lower-cased function names.
+	 * @return array{0:string,1:string|null}
+	 */
+	private function callable_argument( array $tokens, array $indices, array $known ): array {
+		$first  = isset( $indices[0] ) ? $tokens[ $indices[0] ] : null;
+		$second = isset( $indices[1] ) ? $tokens[ $indices[1] ] : null;
+		if ( is_array( $first ) && T_ELLIPSIS === $first[0] ) {
+			return array( 'spread', null );
+		}
+		if ( ':' === $second && is_array( $first ) && in_array( $first[0], $this->name_token_types(), true ) ) {
+			return array( 'named', null );
+		}
+		if ( 1 === count( $indices ) && is_array( $first ) ) {
+			if ( T_CONSTANT_ENCAPSED_STRING === $first[0] ) {
+				return array( 'literal', $this->literal_callable( $first, $known ) );
+			}
+			if ( T_VARIABLE === $first[0] ) {
+				return array( 'variable', $first[1] );
+			}
+			if ( T_STRING === $first[0] && 'null' === strtolower( $first[1] ) ) {
+				return array( 'null', null );
+			}
+		}
+		if ( is_array( $first ) && T_STATIC === $first[0] ) {
+			$first = $second;
+		}
+		if ( is_array( $first ) && in_array( $first[0], array( T_FUNCTION, T_FN ), true ) ) {
+			return array( 'closure', null );
+		}
+		return array( 'other', null );
+	}
+
+	/**
+	 * Each argument of the call opened at $open_paren_idx, as callable_argument() reads it.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens         token_get_all() output.
+	 * @param int                                           $open_paren_idx Index of the opening '('.
+	 * @param string[]                                      $known          Lower-cased function names.
+	 * @return array<int,array{0:string,1:string|null}>
+	 */
+	private function argument_kinds( array $tokens, int $open_paren_idx, array $known ): array {
+		$kinds = array();
+		foreach ( $this->argument_token_indices( $tokens, $open_paren_idx ) as $arg ) {
+			$kinds[] = $this->callable_argument( $tokens, $arg, $known );
+		}
+		return $kinds;
+	}
+
+	/**
+	 * The functions a callable parameter can hold, or null when the scan cannot tell. It can tell
+	 * only when $variable is a parameter of $body's function, the body never assigns it, captures
+	 * it by reference, declares it global or static, or rebinds it in a foreach head or a
+	 * destructuring, and every reference to the function is a positional call, with no spread
+	 * and no named argument, passing at that position a string literal naming a known function.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string>            $tokens     token_get_all() output.
+	 * @param array{0:string,1:int,2:int,3:int}                        $body       The enclosing body.
+	 * @param string                                                   $variable   The variable, with its `$`.
+	 * @param array<int,array<int,array{0:string,1:string|null}>|null> $references Each reference to the function.
+	 * @return string[]|null
+	 */
+	private function callable_parameter_targets( array $tokens, array $body, string $variable, array $references ): ?array {
+		list( $paren, $paren_idx ) = $this->significant_token( $tokens, $body[3] + 1 );
+		if ( '(' !== $paren || array() === $references ) {
+			return null;
+		}
+		$position = null;
+		foreach ( $this->argument_token_indices( $tokens, $paren_idx ) as $p => $param ) {
+			foreach ( $param as $k ) {
+				if ( null === $position && is_array( $tokens[ $k ] ) && T_VARIABLE === $tokens[ $k ][0] && $variable === $tokens[ $k ][1] ) {
+					$position = $p;
+				}
+			}
+		}
+		if ( null === $position ) {
+			return null;
+		}
+		$assignments = array( '=', T_PLUS_EQUAL, T_MINUS_EQUAL, T_MUL_EQUAL, T_DIV_EQUAL, T_CONCAT_EQUAL, T_MOD_EQUAL, T_AND_EQUAL, T_OR_EQUAL, T_XOR_EQUAL, T_SL_EQUAL, T_SR_EQUAL, T_POW_EQUAL, T_COALESCE_EQUAL );
+		for ( $k = $body[1] + 1; $k < $body[2]; $k++ ) {
+			if ( ! is_array( $tokens[ $k ] ) || T_VARIABLE !== $tokens[ $k ][0] || $variable !== $tokens[ $k ][1] ) {
+				continue;
+			}
+			list( $next ) = $this->significant_token( $tokens, $k + 1 );
+			$prev_idx     = $this->previous_significant_index( $tokens, $k - 1 );
+			$prev         = null === $prev_idx ? null : $tokens[ $prev_idx ];
+			if ( in_array( is_array( $next ) ? $next[0] : $next, $assignments, true ) || '&' === $prev || ( is_array( $prev ) && ( '&' === $prev[1] || in_array( $prev[0], array( T_AS, T_GLOBAL, T_STATIC ), true ) ) ) ) {
+				return null;
+			}
+			// The innermost open bracket around this use, up to the start of its statement.
+			$opener = null;
+			$depth  = 0;
+			for ( $j = $k - 1; $j > $body[1] && null === $opener; $j-- ) {
+				$token = $tokens[ $j ];
+				if ( in_array( $token, array( ')', ']', '}' ), true ) ) {
+					++$depth;
+				} elseif ( in_array( $token, array( '(', '[' ), true ) && 0 === $depth ) {
+					$opener = $j;
+				} elseif ( in_array( $token, array( '(', '[', '{' ), true ) || ( is_array( $token ) && in_array( $token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+					if ( 0 === $depth ) {
+						break;
+					}
+					--$depth;
+				} elseif ( ';' === $token && 0 === $depth ) {
+					break;
+				}
+			}
+			if ( null === $opener ) {
+				continue;
+			}
+			$head_idx = $this->previous_significant_index( $tokens, $opener - 1 );
+			$head     = null === $head_idx ? null : $tokens[ $head_idx ];
+			if ( is_array( $prev ) && T_DOUBLE_ARROW === $prev[0] && is_array( $head ) && T_FOREACH === $head[0] ) {
+				return null;
+			}
+			$close = $this->matching_bracket_index( $tokens, $opener, $tokens[ $opener ], '(' === $tokens[ $opener ] ? ')' : ']' );
+			if ( null === $close ) {
+				continue;
+			}
+			list( $after ) = $this->significant_token( $tokens, $close + 1 );
+			$is_list       = '(' === $tokens[ $opener ] ? is_array( $head ) && T_LIST === $head[0] : ! ( in_array( $head, array( ']', ')', '}' ), true ) || ( is_array( $head ) && ( T_VARIABLE === $head[0] || in_array( $head[0], $this->name_token_types(), true ) ) ) );
+			if ( '=' === $after && $is_list ) {
+				return null;
+			}
+		}
+		$targets = array();
+		foreach ( $references as $arguments ) {
+			if ( null === $arguments || ! isset( $arguments[ $position ] ) || 'literal' !== $arguments[ $position ][0] || null === $arguments[ $position ][1] ) {
+				return null;
+			}
+			foreach ( $arguments as $argument ) {
+				if ( in_array( $argument[0], array( 'spread', 'named' ), true ) ) {
+					return null;
+				}
+			}
+			$targets[ $arguments[ $position ][1] ] = true;
+		}
+		return array_keys( $targets );
 	}
 
 	public function test_flags_a_checked_capability_call_nested_in_a_checked_read_scope(): void {
@@ -2402,6 +2851,222 @@ final class MetaWriteSweepTest extends TestCase {
 		$files = $this->scanned_files();
 		$this->assertGreaterThan( 50, count( $files ), 'the sweep must actually walk the scanned set.' );
 		$this->assertSame( array(), $this->nested_capability_keys( $files ), 'A capability check runs inside a checked-read scope; scopes do not nest.' );
+	}
+
+	/**
+	 * A function named by a string literal is a call the scan follows: passed to a callable-taking
+	 * core function inside a build, named in a reached body, and a checked call named that way.
+	 */
+	public function test_follows_a_string_callable_from_a_checked_read_scope(): void {
+		$source = <<<'PHP'
+<?php
+function f( $ids ) {
+	return aafm_with_checked_reads(
+		static function () use ( $ids ): array {
+			return array(
+				'a' => array_map( 'g', $ids ),
+				'b' => call_user_func( 'aafm_user_can_checked_state', 'edit_post', 1 ),
+				'c' => k( $ids ),
+			);
+		},
+		aafm_generic_error()
+	);
+}
+function g( $id ) {
+	return aafm_user_can_checked( 'edit_post', $id );
+}
+function k( $ids ) {
+	return array_filter( $ids, '\G' );
+}
+PHP;
+		$clean  = <<<'PHP'
+<?php
+function f( $ids ) {
+	$read = aafm_with_checked_reads( static fn(): array => array_map( 'intval', $ids ), aafm_generic_error() );
+	return array_map( 'g', $read );
+}
+function g( $id ) {
+	return aafm_user_can_checked( 'edit_post', $id );
+}
+PHP;
+		$this->assertSame(
+			array( 'includes/fixture.php|f|aafm_user_can_checked_state|1', 'includes/fixture.php|g|aafm_user_can_checked|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $source ) )
+		);
+		$this->assertSame( array(), $this->nested_capability_keys( array( 'includes/fixture.php' => $clean ) ) );
+	}
+
+	/**
+	 * A call the scan cannot resolve to a body is flagged inside a build: every variable call shape,
+	 * and a callable-taking core function handed anything but a string literal or a closure. Control
+	 * heads, literal and closure callables, an absent callable and a core call are not records.
+	 */
+	public function test_flags_an_unanalysable_call_in_a_checked_read_scope(): void {
+		$source = <<<'PHP'
+<?php
+function v( $id, $cb, $o, $m, $arr, $ids, $map, $list ) {
+	return aafm_with_checked_reads(
+		static function () use ( $id, $cb, $o, $m, $arr, $ids, $map, $list ): array {
+			$fn = 'g';
+			$a  = $fn( $id );
+			$b  = $map['k']( $id );
+			$c  = $list[0]( $id );
+			$d  = ( $cb )( $id );
+			$e  = f2()( $id );
+			$f  = $o->$m( $id );
+			$g  = call_user_func( $cb, $id );
+			$h  = call_user_func( $o->cb, $id );
+			$i  = array_map( $arr['cb'], $ids );
+			usort( $ids, array( $o, 'm' ) );
+			return array( $a, $b, $c, $d, $e, $f, $g, $h, $i );
+		},
+		aafm_generic_error()
+	);
+}
+PHP;
+		$clean  = <<<'PHP'
+<?php
+function v( $id, $a, $ids ) {
+	return aafm_with_checked_reads(
+		static function () use ( $id, $a, $ids ): array {
+			$x = null;
+			$y = array();
+			if ( $a ) {
+				$x = h( $id );
+			}
+			foreach ( $ids as $i ) {
+				$y[] = $i;
+			}
+			$z = array_map( 'intval', $ids );
+			$w = array_filter( $ids, static fn( $i ) => $i > 0 );
+			$u = array_filter( $ids );
+			$t = array_map( null, $ids, $y );
+			return array( $x, $y, $z, $w, $u, $t, get_post( $id ) );
+		},
+		aafm_generic_error()
+	);
+}
+PHP;
+		$this->assertSame(
+			array(
+				'includes/fixture.php|v|$fn|1',
+				"includes/fixture.php|v|\$map['k']|1",
+				'includes/fixture.php|v|$list[0]|1',
+				'includes/fixture.php|v|($cb)|1',
+				'includes/fixture.php|v|f2()|1',
+				'includes/fixture.php|v|$o->$m|1',
+				'includes/fixture.php|v|call_user_func|1',
+				'includes/fixture.php|v|call_user_func|2',
+				'includes/fixture.php|v|array_map|1',
+				'includes/fixture.php|v|usort|1',
+			),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $source ) )
+		);
+		$this->assertSame( array(), $this->nested_capability_keys( array( 'includes/fixture.php' => $clean ) ) );
+	}
+
+	/**
+	 * A callable parameter called inside a build resolves to the functions its callers name, but
+	 * only while every reference to the function is a positional call passing a string literal at
+	 * that position and the parameter is never reassigned. Anything else is flagged.
+	 */
+	public function test_follows_a_callable_parameter_only_when_every_reference_names_it(): void {
+		$base     = <<<'PHP'
+<?php
+function g( $id ) {
+	return aafm_user_can_checked( 'edit_post', $id );
+}
+function w( $id, callable $shape ) {
+	return aafm_with_checked_reads(
+		static function () use ( $id, $shape ): array {
+			return array( 'a' => $shape( $id ) );
+		},
+		aafm_generic_error()
+	);
+}
+function c( $id ) {
+	return w( $id, 'g' );
+}
+PHP;
+		$variants = array(
+			'a second caller passes a variable' => $base . "\nfunction d( \$id, \$c ) {\n\treturn w( \$id, \$c );\n}\n",
+			'a string reference names w'        => $base . "\nfunction d( \$ids ) {\n\treturn array_map( 'w', \$ids );\n}\n",
+			'a caller uses named arguments'     => $base . "\nfunction d() {\n\treturn w( id: 1, shape: 'g' );\n}\n",
+			'w reassigns the parameter'         => str_replace( "\treturn aafm_with_checked_reads(", "\t\$shape = 'h';\n\treturn aafm_with_checked_reads(", $base ),
+		);
+		$this->assertSame(
+			array( 'includes/fixture.php|g|aafm_user_can_checked|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $base ) )
+		);
+		foreach ( $variants as $label => $source ) {
+			$this->assertSame(
+				array( 'includes/fixture.php|w|$shape|1' ),
+				$this->nested_capability_keys( array( 'includes/fixture.php' => $source ) ),
+				$label
+			);
+		}
+	}
+
+	/**
+	 * A method call inside a build is followed to every body of that name, whatever its class.
+	 */
+	public function test_follows_a_method_call_from_a_checked_read_scope(): void {
+		$source = <<<'PHP'
+<?php
+class C {
+	public function m( $id ) {
+		return aafm_user_can_checked( 'edit_post', $id );
+	}
+}
+function f( $c, $id ) {
+	return aafm_with_checked_reads( static fn(): array => array( 'a' => $c->m( $id ) ), aafm_generic_error() );
+}
+PHP;
+		$this->assertSame(
+			array( 'includes/fixture.php|m|aafm_user_can_checked|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $source ) )
+		);
+	}
+
+	/**
+	 * A by-reference declaration, `function &g(`, is a body the call graph follows, the function
+	 * the violation keys name, and not a call of g from the function it is declared in.
+	 */
+	public function test_finds_a_by_reference_function_body(): void {
+		$reached  = <<<'PHP'
+<?php
+function f( $id ) {
+	return aafm_with_checked_reads( static fn(): array => array( 'a' => g( $id ) ), aafm_generic_error() );
+}
+function &g( $id ) {
+	$ok = aafm_user_can_checked( 'edit_post', $id ) && h( $id );
+	return $ok;
+}
+function h( $id ) {
+	return aafm_user_can_checked( 'read_post', $id );
+}
+PHP;
+		$declared = <<<'PHP'
+<?php
+function f( $id ) {
+	return aafm_with_checked_reads( static fn(): array => array( 'a' => k() ), aafm_generic_error() );
+}
+function k() {
+	function &g( $id ) {
+		return aafm_user_can_checked( 'edit_post', $id );
+	}
+	return 1;
+}
+PHP;
+		$this->assertSame(
+			array( 'includes/fixture.php|g|aafm_user_can_checked|1', 'includes/fixture.php|h|aafm_user_can_checked|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $reached ) )
+		);
+		$this->assertSame( array(), $this->nested_capability_keys( array( 'includes/fixture.php' => $declared ) ) );
+		$this->assertSame(
+			array( 'includes/fixture.php|g|update_post_meta|1' ),
+			$this->violation_keys( "<?php\nfunction &g() {\n\tupdate_post_meta( 1, 'k', 'v' );\n}\n", 'includes/fixture.php' )
+		);
 	}
 
 	// --- Metadata writer errors ---------------------------------------------

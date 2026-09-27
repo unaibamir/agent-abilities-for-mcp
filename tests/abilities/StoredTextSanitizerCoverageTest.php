@@ -1004,4 +1004,24 @@ PHP;
 
 		$this->assertSame( array(), StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
 	}
+
+	/**
+	 * A call inside a by-reference function, `function &b(`, belongs to b. PHP 8.1 tokenizes that
+	 * ampersand as an array token rather than the plain string PHP 7.4 gives, so a check for the
+	 * string alone attributed the call to the function declared before it.
+	 */
+	public function test_a_call_inside_a_by_reference_function_is_attributed_to_it(): void {
+		$source = <<<'PHP'
+<?php
+function a() {}
+function &b( $x ) {
+	return sanitize_text_field( $x );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame( 'b', $records[0]['function'] );
+	}
 }

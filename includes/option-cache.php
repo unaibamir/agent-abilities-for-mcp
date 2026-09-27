@@ -368,9 +368,8 @@ function aafm_wpdb_col( string $sql ): array {
  *
  * The database view is a direct, uncached `$wpdb` read of the row for the current blog - the one
  * source `aafm_uninstall_should_delete_data()` already trusts over any cache for its own,
- * higher-stakes decision, for the same reason: a cache is not the ground truth. This is the only
- * function outside that one allowed to cost that extra query, because it exists specifically to
- * certify a write the plugin just made.
+ * higher-stakes decision, for the same reason: a cache is not the ground truth. It pays that extra
+ * query because it exists to certify a write the plugin just made.
  *
  * A query that errors (a broken table, a lost DB connection, anything short of a clean empty
  * result) and a query that simply finds no matching row both make `$wpdb->get_var()` return null -

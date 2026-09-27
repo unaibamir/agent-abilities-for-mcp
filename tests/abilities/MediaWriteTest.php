@@ -167,6 +167,76 @@ final class MediaWriteTest extends TestCase {
 		$this->assertFalse( has_post_thumbnail( $post ) );
 	}
 
+	/**
+	 * A veto-true update_post_metadata filter makes set_post_thumbnail() return true while nothing
+	 * is written; the row decides, so the ability returns the generic error.
+	 */
+	public function test_set_featured_image_vetoed_true_returns_the_generic_error(): void {
+		$this->acting_as( 'editor' );
+		$post  = self::factory()->post->create();
+		$image = $this->image_attachment( null );
+		$veto  = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$out   = wp_get_ability( 'aafm/set-featured-image' )->execute(
+			array(
+				'post_id'       => $post,
+				'attachment_id' => $image,
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertFalse( has_post_thumbnail( $post ) );
+	}
+
+	/**
+	 * A row read after the call that fails returns the generic error. The counting run uses a twin
+	 * post and image in the same starting state.
+	 */
+	public function test_set_featured_image_with_a_failed_read_after_the_call_returns_the_generic_error(): void {
+		global $wpdb;
+		$this->acting_as( 'editor' );
+		$twin       = self::factory()->post->create();
+		$twin_image = $this->image_attachment( null );
+		$post       = self::factory()->post->create();
+		$image      = $this->image_attachment( null );
+
+		$reads = 0;
+		$count = static function ( $query ) use ( $twin, &$reads ) {
+			if ( false !== strpos( (string) $query, 'SELECT' ) && false !== strpos( (string) $query, "meta_key = '_thumbnail_id'" ) && false !== strpos( (string) $query, "post_id = {$twin}" ) ) {
+				++$reads;
+			}
+			return $query;
+		};
+		add_filter( 'query', $count );
+		$healthy = aafm_exec_set_featured_image(
+			array(
+				'post_id'       => $twin,
+				'attachment_id' => $twin_image,
+			)
+		);
+		remove_filter( 'query', $count );
+		$this->assertSame( array( 'set' => true ), $healthy );
+		$this->assertSame( 2, $reads, 'core existence check, then the row read after the call.' );
+
+		QueryFaultInjector::reset_fired_count();
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, 'SELECT', "meta_key = '_thumbnail_id'", "post_id = {$post}" ),
+			static fn() => aafm_exec_set_featured_image(
+				array(
+					'post_id'       => $post,
+					'attachment_id' => $image,
+				)
+			),
+			$reads
+		);
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+	}
+
 	public function test_set_featured_image_sets_an_image_attachment(): void {
 		$this->acting_as( 'editor' );
 		$post  = self::factory()->post->create();

@@ -10,6 +10,8 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests;
 
+use AAFM\Tests\Support\QueryFaultInjector;
+
 final class MetaWriteWireTest extends TestCase {
 
 	private const ABILITIES = array(
@@ -720,5 +722,148 @@ final class MetaWriteWireTest extends TestCase {
 				$name
 			);
 		}
+	}
+
+	/**
+	 * A post and an image attachment for the enrichment featured-image rows.
+	 *
+	 * @return array{0:int,1:int} Post id and attachment id.
+	 */
+	private function post_and_image(): array {
+		$post  = self::factory()->post->create();
+		$image = self::factory()->attachment->create_object(
+			'image.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		return array( $post, $image );
+	}
+
+	/**
+	 * Apply an enrichment bundle that carries only a featured image and return its status.
+	 *
+	 * @param int $post  Post id.
+	 * @param int $image Attachment id.
+	 */
+	private function featured_status( int $post, int $image ): string {
+		$outcome = aafm_apply_write_enrichment(
+			$post,
+			array(
+				'terms'          => array(),
+				'featured_media' => $image,
+				'meta'           => array(),
+			)
+		);
+		return (string) $outcome['featured_media'];
+	}
+
+	/**
+	 * A veto-true update_post_metadata filter makes set_post_thumbnail() return true while nothing
+	 * is written: the row read after the call does not hold the id, so the status is refused.
+	 */
+	public function test_enrichment_featured_image_vetoed_true_reports_refused(): void {
+		list( $post, $image ) = $this->post_and_image();
+		$veto                 = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$status               = $this->featured_status( $post, $image );
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertSame( 'refused', $status );
+		$this->assertSame( '', get_post_meta( $post, '_thumbnail_id', true ) );
+	}
+
+	/**
+	 * When the image cannot render, set_post_thumbnail() deletes the thumbnail and returns true:
+	 * the row is gone, so the status is refused.
+	 */
+	public function test_enrichment_featured_image_that_cannot_render_reports_refused(): void {
+		list( $post, $image ) = $this->post_and_image();
+		list( , $other )      = $this->post_and_image();
+		set_post_thumbnail( $post, $other );
+		add_filter( 'wp_get_attachment_image', '__return_empty_string' );
+		$status = $this->featured_status( $post, $image );
+		remove_filter( 'wp_get_attachment_image', '__return_empty_string' );
+
+		$this->assertSame( 'refused', $status );
+		$this->assertFalse( aafm_meta_row( 'post', $post, '_thumbnail_id' )['exists'] );
+	}
+
+	/**
+	 * A failed read after the call is unconfirmed, never written. The counting run uses a twin post
+	 * and image in the same starting state, so the faulted run starts from an untouched row.
+	 */
+	public function test_enrichment_featured_image_with_a_failed_read_after_the_call_reports_unconfirmed(): void {
+		global $wpdb;
+		list( $twin, $twin_image ) = $this->post_and_image();
+		list( $post, $image )      = $this->post_and_image();
+		$needle                    = static fn( int $id ): array => array( $wpdb->postmeta, 'SELECT', "meta_key = '_thumbnail_id'", "post_id = {$id}" );
+
+		$reads = 0;
+		$count = static function ( $query ) use ( $twin, &$reads ) {
+			if ( false !== strpos( (string) $query, 'SELECT' ) && false !== strpos( (string) $query, "meta_key = '_thumbnail_id'" ) && false !== strpos( (string) $query, "post_id = {$twin}" ) ) {
+				++$reads;
+			}
+			return $query;
+		};
+		add_filter( 'query', $count );
+		$this->assertSame( 'written', $this->featured_status( $twin, $twin_image ) );
+		remove_filter( 'query', $count );
+		$this->assertSame( 2, $reads, 'core existence check, then the row read after the call.' );
+
+		QueryFaultInjector::reset_fired_count();
+		$status = QueryFaultInjector::break_query_with_real_error(
+			$needle( $post ),
+			fn() => $this->featured_status( $post, $image ),
+			$reads
+		);
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'unconfirmed', $status );
+	}
+
+	/**
+	 * P-8 healthy pin: a same-value resubmission stays unchanged.
+	 */
+	public function test_enrichment_featured_image_same_value_resubmission_reports_unchanged(): void {
+		list( $post, $image ) = $this->post_and_image();
+		set_post_thumbnail( $post, $image );
+
+		$this->assertSame( 'unchanged', $this->featured_status( $post, $image ) );
+	}
+
+	/**
+	 * The stated residual (262 s12, ledger b5d1-10): a veto-true filter on a post whose thumbnail
+	 * already is the requested id writes nothing, yet reads as written, because the status is read
+	 * only after the call. Pinned so a later read before the call shows up as a changed assertion.
+	 */
+	public function test_enrichment_featured_image_veto_true_on_the_same_id_reads_as_written(): void {
+		list( $post, $image ) = $this->post_and_image();
+		set_post_thumbnail( $post, $image );
+		$veto   = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$status = $this->featured_status( $post, $image );
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertSame( 'written', $status );
+	}
+
+	/**
+	 * A row holding a non-scalar never equals the requested id and is never cast to an int (which
+	 * would warn for an object and give 1 for an array).
+	 */
+	public function test_enrichment_featured_image_over_an_object_row_reports_refused_without_a_warning(): void {
+		list( $post, $image ) = $this->post_and_image();
+		$object               = new \stdClass();
+		$object->id           = $image;
+		add_post_meta( $post, '_thumbnail_id', $object );
+		$veto   = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$status = $this->featured_status( $post, $image );
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertSame( 'refused', $status );
 	}
 }

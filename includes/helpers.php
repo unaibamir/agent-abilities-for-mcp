@@ -1593,8 +1593,8 @@ function aafm_validate_write_enrichment( array $input, string $post_type = 'post
  *
  * A failed enrichment write does not fail the call: the post is already saved, so each field
  * reports its own outcome instead, and re-calling the write retries it. Terms report the
- * wp_set_post_terms() result per taxonomy, the featured image the set_post_thumbnail() result,
- * and meta goes through aafm_meta_set_group(), one status per key.
+ * wp_set_post_terms() result per taxonomy, the featured image the _thumbnail_id row read after
+ * set_post_thumbnail(), and meta goes through aafm_meta_set_group(), one status per key.
  *
  * @param int                                                                              $post_id Target post id.
  * @param array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>} $bundle  Validated bundle.
@@ -1616,12 +1616,18 @@ function aafm_apply_write_enrichment( int $post_id, array $bundle ): array {
 	}
 
 	if ( $bundle['featured_media'] > 0 ) {
-		// set_post_thumbnail() returns false both when the write failed and when the image was
-		// already the thumbnail, so a false result is told apart by reading the thumbnail back.
-		if ( false !== set_post_thumbnail( $post_id, $bundle['featured_media'] ) ) {
-			$outcome['featured_media'] = AAFM_WRITE_WRITTEN;
+		// set_post_thumbnail() returns false both for a failure and for the image already being
+		// the thumbnail, and true both for a write a filter vetoed and for the delete it makes when
+		// the image cannot render. So the status comes from the _thumbnail_id row read after the
+		// call: a failed read is unconfirmed, a row that does not hold the id is refused.
+		$set = set_post_thumbnail( $post_id, $bundle['featured_media'] );
+		$row = aafm_meta_row( 'post', $post_id, '_thumbnail_id' );
+		if ( ! $row['ok'] ) {
+			$outcome['featured_media'] = AAFM_WRITE_UNCONFIRMED;
+		} elseif ( ! $row['exists'] || ! is_scalar( $row['value'] ) || (int) $row['value'] !== $bundle['featured_media'] ) {
+			$outcome['featured_media'] = AAFM_WRITE_REFUSED;
 		} else {
-			$outcome['featured_media'] = aafm_exact_object( 'post', $post_id ) instanceof WP_Post && (int) get_post_thumbnail_id( $post_id ) === $bundle['featured_media'] ? AAFM_WRITE_UNCHANGED : AAFM_WRITE_REFUSED;
+			$outcome['featured_media'] = false !== $set ? AAFM_WRITE_WRITTEN : AAFM_WRITE_UNCHANGED;
 		}
 	}
 

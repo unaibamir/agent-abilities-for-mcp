@@ -3300,14 +3300,19 @@ PHP;
 	// --- Raw metadata rows ----------------------------------------------------
 
 	/**
-	 * The two direct reads the write contract keeps outside the helper file: the page-builder
-	 * guard's marker read, which a failed query must turn into unknown ownership, and the pointer
-	 * dismissal's read-modify-write baseline, which a failed query must abort. May only shrink; a
-	 * key that no longer matches a call fails.
+	 * The direct reads the write contract keeps outside the helper file: the page-builder guard's
+	 * marker read, which a failed query must turn into unknown ownership; the pointer dismissal's
+	 * read-modify-write baseline, which a failed query must abort; and the two featured-image
+	 * confirmations (enrichment and set-featured-image), which read _thumbnail_id after
+	 * set_post_thumbnail() only to compare it with the requested id and merge nothing. May only
+	 * shrink, except by a PM ruling that names the read (batch 5 pm-design-1); a key that no longer
+	 * matches a call fails.
 	 */
 	private const SANCTIONED_RAW_META_ROW_READS = array(
 		'includes/admin/onboarding-pointer.php|aafm_quickconnect_mark_pointer_dismissed_for_user|aafm_meta_row',
 		'includes/page-builder-guard.php|aafm_post_has_foreign_builder_ownership|aafm_meta_rows',
+		'includes/helpers.php|aafm_apply_write_enrichment|aafm_meta_row',
+		'includes/abilities/media.php|aafm_exec_set_featured_image|aafm_meta_row',
 	);
 
 	/**

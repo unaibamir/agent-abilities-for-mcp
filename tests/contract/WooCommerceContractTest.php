@@ -295,7 +295,7 @@ final class WooCommerceContractTest extends TestCase {
 		}
 		$this->assertTrue(
 			version_compare( \WC_VERSION, '9.1', '>=' ),
-			'Contract pins WooCommerce at the 9.1 floor; the backfill contract only holds from 9.1.0.'
+			sprintf( 'WooCommerce %s is below the 9.1.0 floor; the backfill contract only holds from 9.1.0.', \WC_VERSION )
 		);
 
 		$attribute_id = wc_create_attribute(

@@ -647,9 +647,12 @@ function aafm_oauth_register_discovery_routes(): void {
 	);
 
 	// The same resource path aafm_oauth_match_well_known() accepts after the well-known segment.
+	// The REST index publishes a route's key as its self link, so the key is escaped only where the
+	// route regex needs it: preg_quote() also turns '-' into '\-', which is literal outside a
+	// character class anyway and would break the advertised link.
 	$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
 	if ( '' !== $resource_path ) {
-		$routes[ '/protected-resource/' . preg_quote( $resource_path, '@' ) ] = 'protected-resource';
+		$routes[ '/protected-resource/' . str_replace( '\\-', '-', preg_quote( $resource_path, '@' ) ) ] = 'protected-resource';
 	}
 
 	foreach ( $routes as $route => $which ) {

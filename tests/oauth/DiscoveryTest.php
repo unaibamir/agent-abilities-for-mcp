@@ -310,4 +310,27 @@ class DiscoveryTest extends TestCase {
 			$this->assertSame( 'no-store', $response->get_headers()['Cache-Control'] ?? null, $suffix );
 		}
 	}
+
+	/**
+	 * The REST index advertises the path-suffixed route by its own key, as a self link. The key is
+	 * the literal path (preg_quote() alone would turn each '-' into '\-'), so the advertised link
+	 * answers with the document instead of a 404 (ledger b5c2r1-security-2, b5c2r1-code-2).
+	 */
+	public function test_discovery_fallback_index_advertises_a_self_link_that_answers(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$_SERVER['HTTPS'] = 'on';
+		$this->set_permalink_structure( '/%postname%/' );
+		$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
+		$this->assertStringContainsString( '-', $resource_path, 'Guard: the resource path carries a hyphen.' );
+
+		$route = '/' . aafm_oauth_rest_namespace() . '/protected-resource/' . $resource_path;
+		$index = $this->get_discovery_route( '' )->get_data();
+		$this->assertArrayHasKey( $route, $index['routes'], 'The index must list the route by its literal path.' );
+
+		$href = $index['routes'][ $route ]['_links']['self'][0]['href'] ?? '';
+		$this->assertStringStartsWith( rest_url(), $href );
+		$response = rest_do_request( new \WP_REST_Request( 'GET', '/' . ltrim( substr( $href, strlen( rest_url() ) ), '/' ) ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( aafm_oauth_protected_resource_metadata(), $response->get_data() );
+	}
 }

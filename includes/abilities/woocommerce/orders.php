@@ -2028,6 +2028,12 @@ function aafm_exec_wc_update_order_status( array $input ) {
  * @return object|null stdClass note object or null.
  */
 function aafm_wc_get_order_note( int $order_id, int $note_id ): ?object {
+	// A note is a core comment on its order, so load it exactly first: a faulted notes query can
+	// hand back another order's notes, and one of those can carry the requested id.
+	$comment = aafm_exact_object( 'comment', $note_id );
+	if ( ! $comment instanceof WP_Comment || (int) $comment->comment_post_ID !== $order_id ) {
+		return null;
+	}
 	$notes = wc_get_order_notes( array( 'order_id' => $order_id ) );
 	foreach ( $notes as $note ) {
 		// wc_get_order_notes() returns normalized objects whose id lives in ->id (not ->comment_ID).

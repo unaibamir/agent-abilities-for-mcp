@@ -1949,20 +1949,46 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// non-builder-owned candidates only; a skipped post costs nothing against the cap) still
 		// applies to this bounded list, it just no longer needs an enormous unbounded one to work
 		// from.
-		$scan_query = new WP_Query(
-			array(
-				'post_type'         => $type,
-				'post_status'       => $status,
-				'fields'            => 'ids',
-				'posts_per_page'    => $max_scan,
-				'orderby'           => 'ID',
-				'order'             => 'ASC',
-				'no_found_rows'     => true,
-				'aafm_query_marker' => $query_marker,
-			)
-		);
+		// The scan's ids feed writes, and WP_Query's own get_col() hands back the previous query's
+		// rows when the SELECT fails without flushing. So the scan runs its built SQL through
+		// aafm_wpdb_col() and a failure refuses the request. Attached at PHP_INT_MAX around the scan
+		// only (never the count probe), and an earlier posts_pre_query answer is passed through
+		// untouched (ledger s14hunta-4).
+		$scan_failed = false;
+		$scan_filter = static function ( $posts, WP_Query $query ) use ( $query_marker, &$scan_failed ) {
+			if ( null !== $posts || $query_marker !== $query->get( 'aafm_query_marker' ) ) {
+				return $posts;
+			}
+			$ids = aafm_wpdb_col( $query->request );
+			if ( ! $ids['ok'] ) {
+				$scan_failed = true;
+				return array();
+			}
+			return array_map( 'intval', (array) $ids['value'] );
+		};
+		add_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX, 2 );
+		try {
+			$scan_query = new WP_Query(
+				array(
+					'post_type'         => $type,
+					'post_status'       => $status,
+					'fields'            => 'ids',
+					'posts_per_page'    => $max_scan,
+					'orderby'           => 'ID',
+					'order'             => 'ASC',
+					'no_found_rows'     => true,
+					'aafm_query_marker' => $query_marker,
+				)
+			);
+		} finally {
+			remove_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX );
+		}
 	} finally {
 		remove_filter( 'posts_where', $like_filter, 10 );
+	}
+
+	if ( $scan_failed ) {
+		return aafm_generic_error();
 	}
 
 	// Codex final round 2 MEDIUM: an SQL-side `LIMIT AAFM_REPLACE_SITEWIDE_MAX_POSTS` applied
@@ -1988,6 +2014,11 @@ function aafm_exec_replace_sitewide( array $input ) {
 		$post = aafm_exact_object_chain( 'post', $post_id );
 		if ( ! $post instanceof WP_Post ) {
 			// A post that does not load could not be updated, in a dry run as well.
+			++$failed;
+			continue;
+		}
+		if ( $type !== $post->post_type || $status !== $post->post_status ) {
+			// Outside the requested scope: a filtered scan answer, or a post changed since the scan.
 			++$failed;
 			continue;
 		}
@@ -2039,7 +2070,8 @@ function aafm_exec_replace_sitewide( array $input ) {
 		}
 		// An earlier write in this loop drops its post from the cache, and that post can be this
 		// one's parent, so load the chain again right before core walks it.
-		if ( ! aafm_exact_object_chain( 'post', (int) $post->ID ) instanceof WP_Post ) {
+		$reloaded = aafm_exact_object_chain( 'post', (int) $post->ID );
+		if ( ! $reloaded instanceof WP_Post || $type !== $reloaded->post_type || $status !== $reloaded->post_status ) {
 			++$failed;
 			continue;
 		}

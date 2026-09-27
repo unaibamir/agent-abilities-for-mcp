@@ -647,12 +647,13 @@ function aafm_oauth_register_discovery_routes(): void {
 	);
 
 	// The same resource path aafm_oauth_match_well_known() accepts after the well-known segment.
-	// The REST index publishes a route's key as its self link, so the key is escaped only where the
-	// route regex needs it: preg_quote() also turns '-' into '\-', which is literal outside a
-	// character class anyway and would break the advertised link.
+	// The REST index publishes a route's key as its self link, so '-' and '.' stay unescaped:
+	// preg_quote() turns them into '\-' and '\.', which breaks the advertised link on plain,
+	// PATHINFO and dotted-subdirectory installs. An unescaped '.' matches any one character, an
+	// accepted over-match for a public document. Every other metacharacter stays escaped.
 	$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
 	if ( '' !== $resource_path ) {
-		$routes[ '/protected-resource/' . str_replace( '\\-', '-', preg_quote( $resource_path, '@' ) ) ] = 'protected-resource';
+		$routes[ '/protected-resource/' . str_replace( array( '\\-', '\\.' ), array( '-', '.' ), preg_quote( $resource_path, '@' ) ) ] = 'protected-resource';
 	}
 
 	foreach ( $routes as $route => $which ) {

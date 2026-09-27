@@ -333,4 +333,27 @@ class DiscoveryTest extends TestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame( aafm_oauth_protected_resource_metadata(), $response->get_data() );
 	}
+
+	/**
+	 * A PATHINFO permalink structure puts 'index.php' in the resource path, so the route key carries
+	 * a '.'. The key leaves it unescaped (preg_quote() would turn it into '\.'), so the advertised
+	 * self link still answers with the document (ledger b5c2r2-security-1).
+	 */
+	public function test_discovery_fallback_self_link_answers_when_the_resource_path_has_a_dot(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$_SERVER['HTTPS'] = 'on';
+		$this->set_permalink_structure( '/index.php/%postname%/' );
+		$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
+		$this->assertStringContainsString( '.', $resource_path, 'Guard: the resource path carries a dot.' );
+
+		$route = '/' . aafm_oauth_rest_namespace() . '/protected-resource/' . $resource_path;
+		$index = $this->get_discovery_route( '' )->get_data();
+		$this->assertArrayHasKey( $route, $index['routes'], 'The index must list the route by its literal path.' );
+
+		$href = $index['routes'][ $route ]['_links']['self'][0]['href'] ?? '';
+		$this->assertStringStartsWith( rest_url(), $href );
+		$response = rest_do_request( new \WP_REST_Request( 'GET', '/' . ltrim( substr( $href, strlen( rest_url() ) ), '/' ) ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( aafm_oauth_protected_resource_metadata(), $response->get_data() );
+	}
 }

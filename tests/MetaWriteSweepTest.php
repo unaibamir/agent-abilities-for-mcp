@@ -1959,9 +1959,12 @@ final class MetaWriteSweepTest extends TestCase {
 	 * `_wp_trash_meta_status`, an attachment parent's through get_post_status()), directly or by
 	 * mapping to edit_post, and the user and term capabilities an active map_meta_cap filter can
 	 * decide from the object's metadata (WooCommerce reads a target user's roles). Checked with an
-	 * object, each goes through aafm_user_can_checked().
+	 * object, each goes through aafm_user_can_checked(). The comment, term and user meta caps,
+	 * publish_post and the application-password caps are here too: core maps each onto the same
+	 * object's record. Every post type this plugin reaches by name that registers with
+	 * `map_meta_cap` true has its edit, read and delete caps listed here.
 	 */
-	private const OBJECT_CAPS = array( 'edit_post', 'edit_page', 'delete_post', 'delete_page', 'read_post', 'read_page', 'edit_comment', 'edit_post_meta', 'add_post_meta', 'delete_post_meta', 'edit_tribe_event', 'delete_tribe_event', 'edit_tribe_venue', 'edit_tribe_organizer', 'edit_user', 'promote_user', 'delete_user', 'remove_user', 'edit_term', 'delete_term', 'assign_term' );
+	private const OBJECT_CAPS = array( 'edit_post', 'edit_page', 'delete_post', 'delete_page', 'read_post', 'read_page', 'edit_comment', 'edit_post_meta', 'add_post_meta', 'delete_post_meta', 'edit_tribe_event', 'delete_tribe_event', 'edit_tribe_venue', 'edit_tribe_organizer', 'edit_user', 'promote_user', 'delete_user', 'remove_user', 'edit_term', 'delete_term', 'assign_term', 'edit_comment_meta', 'add_comment_meta', 'delete_comment_meta', 'edit_term_meta', 'add_term_meta', 'delete_term_meta', 'edit_user_meta', 'add_user_meta', 'delete_user_meta', 'publish_post', 'create_app_password', 'list_app_passwords', 'read_app_password', 'edit_app_password', 'delete_app_passwords', 'delete_app_password', 'read_tribe_event', 'delete_tribe_venue', 'read_tribe_venue', 'delete_tribe_organizer', 'read_tribe_organizer', 'edit_product', 'read_product', 'delete_product', 'edit_shop_order', 'read_shop_order', 'delete_shop_order', 'edit_shop_coupon', 'read_shop_coupon', 'delete_shop_coupon', 'edit_block', 'read_block', 'delete_block', 'edit_template', 'read_template', 'delete_template' );
 
 	/**
 	 * Raw capability calls on a post object that stay raw: inside the function's own
@@ -2136,6 +2139,60 @@ final class MetaWriteSweepTest extends TestCase {
 	}
 
 	/**
+	 * Every capability core decides from one object's own record is an object capability here: the
+	 * comment, term and user meta caps, publish_post, the application-password caps, and the edit,
+	 * read and delete caps of the post types the plugin reaches by name. A plural primitive is not.
+	 */
+	public function test_flags_a_raw_object_capability_check_core_decides_from_the_object(): void {
+		$source   = "<?php\nfunction f( \$id ) {\n" . <<<'PHP'
+	current_user_can( 'edit_comment_meta', $id );
+	current_user_can( 'add_comment_meta', $id );
+	current_user_can( 'delete_comment_meta', $id );
+	current_user_can( 'edit_term_meta', $id );
+	current_user_can( 'add_term_meta', $id );
+	current_user_can( 'delete_term_meta', $id );
+	current_user_can( 'edit_user_meta', $id );
+	current_user_can( 'add_user_meta', $id );
+	current_user_can( 'delete_user_meta', $id );
+	current_user_can( 'publish_post', $id );
+	current_user_can( 'create_app_password', $id );
+	current_user_can( 'list_app_passwords', $id );
+	current_user_can( 'read_app_password', $id );
+	current_user_can( 'edit_app_password', $id );
+	current_user_can( 'delete_app_passwords', $id );
+	current_user_can( 'delete_app_password', $id );
+	current_user_can( 'read_tribe_event', $id );
+	current_user_can( 'delete_tribe_venue', $id );
+	current_user_can( 'read_tribe_venue', $id );
+	current_user_can( 'delete_tribe_organizer', $id );
+	current_user_can( 'read_tribe_organizer', $id );
+	current_user_can( 'edit_product', $id );
+	current_user_can( 'read_product', $id );
+	current_user_can( 'delete_product', $id );
+	current_user_can( 'edit_shop_order', $id );
+	current_user_can( 'read_shop_order', $id );
+	current_user_can( 'delete_shop_order', $id );
+	current_user_can( 'edit_shop_coupon', $id );
+	current_user_can( 'read_shop_coupon', $id );
+	current_user_can( 'delete_shop_coupon', $id );
+	current_user_can( 'edit_block', $id );
+	current_user_can( 'read_block', $id );
+	current_user_can( 'delete_block', $id );
+	current_user_can( 'edit_template', $id );
+	current_user_can( 'read_template', $id );
+	current_user_can( 'delete_template', $id );
+	current_user_can( 'publish_posts' );
+	current_user_can( 'edit_products', $id );
+}
+PHP;
+		$expected = array();
+		for ( $n = 1; $n <= 36; $n++ ) {
+			$expected[] = 'includes/fixture.php|f|current_user_can|' . $n;
+		}
+		$this->assertSame( $expected, $this->raw_post_capability_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	/**
 	 * A checked capability call needs the same earlier chain load of its object as a raw
 	 * current_user_can() call did, except the listed calls.
 	 */
@@ -2163,9 +2220,10 @@ final class MetaWriteSweepTest extends TestCase {
 	/**
 	 * User capabilities whose checked call must name its object type as 'user'. The helper loads
 	 * the user row exactly only when told the object is a user, so a call without that argument
-	 * lets a foreign row that a failed users query left behind decide the capability.
+	 * lets a foreign row that a failed users query left behind decide the capability. The user
+	 * meta caps and the application-password caps map to edit_user on the same user.
 	 */
-	private const USER_OBJECT_CAPS = array( 'edit_user', 'promote_user', 'delete_user', 'remove_user' );
+	private const USER_OBJECT_CAPS = array( 'edit_user', 'promote_user', 'delete_user', 'remove_user', 'edit_user_meta', 'add_user_meta', 'delete_user_meta', 'create_app_password', 'list_app_passwords', 'read_app_password', 'edit_app_password', 'delete_app_passwords', 'delete_app_password' );
 
 	/**
 	 * Every aafm_user_can_checked() or aafm_user_can_checked_state() call whose literal capability is
@@ -2229,6 +2287,41 @@ final class MetaWriteSweepTest extends TestCase {
 			$found = array_merge( $found, $this->untyped_user_capability_keys( $source, $path ) );
 		}
 		$this->assertSame( array(), $found, 'A checked capability call on a user does not pass \'user\' as its object type.' );
+	}
+
+	/**
+	 * The user meta caps and the application-password caps map to edit_user on the same user, so a
+	 * checked call on one names the user type like edit_user does.
+	 */
+	public function test_flags_a_user_object_capability_check_that_does_not_name_the_user_type(): void {
+		$source = "<?php\nfunction f( \$id ) {\n" . <<<'PHP'
+	aafm_user_can_checked( 'edit_user_meta', $id );
+	aafm_user_can_checked( 'add_user_meta', $id );
+	aafm_user_can_checked( 'delete_user_meta', $id );
+	aafm_user_can_checked( 'create_app_password', $id );
+	aafm_user_can_checked( 'list_app_passwords', $id );
+	aafm_user_can_checked_state( 'Read_App_Password', $id, 'post' );
+	aafm_user_can_checked_state( 'Edit_App_Password', $id, 'post' );
+	aafm_user_can_checked_state( 'Delete_App_Passwords', $id, 'post' );
+	aafm_user_can_checked_state( 'Delete_App_Password', $id, 'post' );
+	aafm_user_can_checked( 'delete_user_meta', $id, 'user' );
+	aafm_user_can_checked( 'edit_app_password', $id, 'user' );
+}
+PHP;
+		$this->assertSame(
+			array(
+				'includes/fixture.php|f|aafm_user_can_checked|1',
+				'includes/fixture.php|f|aafm_user_can_checked|2',
+				'includes/fixture.php|f|aafm_user_can_checked|3',
+				'includes/fixture.php|f|aafm_user_can_checked|4',
+				'includes/fixture.php|f|aafm_user_can_checked|5',
+				'includes/fixture.php|f|aafm_user_can_checked_state|1',
+				'includes/fixture.php|f|aafm_user_can_checked_state|2',
+				'includes/fixture.php|f|aafm_user_can_checked_state|3',
+				'includes/fixture.php|f|aafm_user_can_checked_state|4',
+			),
+			$this->untyped_user_capability_keys( $source, 'includes/fixture.php' )
+		);
 	}
 
 	// --- Checked capability calls never nest in a checked-read scope --------------

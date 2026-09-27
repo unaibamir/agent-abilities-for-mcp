@@ -25,6 +25,7 @@ abstract class TestCase extends WP_UnitTestCase {
 		// AAFM_TEST_POLICY_PATH=batched every test runs as an MCP REST request that WordPress has
 		// already routed, so policy reads take the batched path; unset, they take the front-end path.
 		aafm_policy_reset_request_state();
+		aafm_oauth_rest_routing_began( false );
 		$this->policy_request_uri = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- snapshot, restored as it was.
 		$this->policy_query_vars  = isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof \WP ? $GLOBALS['wp']->query_vars : null;
 		if ( 'batched' === getenv( 'AAFM_TEST_POLICY_PATH' ) ) {
@@ -171,26 +172,27 @@ abstract class TestCase extends WP_UnitTestCase {
 	/**
 	 * Make this request one WordPress has routed as REST (core's parsed rest_route, the test
 	 * rest_api_loaded() applies), so policy reads take the batched path. Routing implies the parse
-	 * and the start of REST routing, so parse_request and rest_api_init are counted too.
+	 * and REST routing after it, so parse_request is counted and the REST routing flag is set too.
 	 *
 	 * @return void
 	 */
 	protected function route_as_rest_request(): void {
 		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
 		$GLOBALS['wp_actions']['parse_request']  = max( 1, (int) did_action( 'parse_request' ) );
-		$GLOBALS['wp_actions']['rest_api_init']  = max( 1, (int) did_action( 'rest_api_init' ) );
+		aafm_oauth_rest_routing_began( true );
 		aafm_policy_reset_request_state();
 	}
 
 	/**
 	 * Take this request off the MCP route under either suite setting: no parsed rest_route, no
-	 * REQUEST_URI, and neither parse_request nor rest_api_init counted yet.
+	 * REQUEST_URI, no parse_request counted and no REST routing flag.
 	 *
 	 * @return void
 	 */
 	protected function route_off_mcp(): void {
 		$this->use_front_end_policy_path();
-		unset( $GLOBALS['wp_actions']['parse_request'], $GLOBALS['wp_actions']['rest_api_init'] );
+		unset( $GLOBALS['wp_actions']['parse_request'] );
+		aafm_oauth_rest_routing_began( false );
 	}
 
 	/**

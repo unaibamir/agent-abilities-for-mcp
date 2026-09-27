@@ -320,23 +320,57 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
 }
 
 /**
+ * Remember (or read) whether REST routing began after WordPress parsed this request.
+ *
+ * Set by aafm_oauth_forget_anonymous_user_on_mcp_route() on rest_api_init when the parse has
+ * already happened. rest_api_init fires once per process, on the first rest_get_server() from any
+ * caller, so a count of it alone cannot tell this request's REST routing from a REST server some
+ * plugin built earlier; this flag can. Cleared on `shutdown`, like the client id store, so a
+ * persistent worker starts each request without it.
+ *
+ * @param bool|null $began True to record, false to forget, null to read.
+ * @return bool
+ */
+function aafm_oauth_rest_routing_began( ?bool $began = null ): bool {
+	static $flag = false;
+	if ( null !== $began ) {
+		$flag = $began;
+	}
+	return $flag;
+}
+
+/**
+ * Forget the REST routing flag at the end of the request.
+ *
+ * @return void
+ */
+function aafm_oauth_forget_rest_routing(): void {
+	aafm_oauth_rest_routing_began( false );
+}
+add_action( 'shutdown', 'aafm_oauth_forget_rest_routing' );
+
+/**
  * Whether WordPress routed this request to the MCP REST route.
  *
  * The answer is core's own: the rest_route WordPress::parse_request() settled on, untrailingslashed
- * as rest_api_loaded() does, matched by aafm_is_mcp_route() as core's router matches it. Until
- * WordPress has parsed the request and begun REST routing (rest_api_init fires inside
- * rest_get_server(), right after rest_api_loaded() defines REST_REQUEST) the answer is false. That
- * is the same wait core's Application Passwords make (they authenticate only once REST_REQUEST is
- * defined), and it is safe for a healthy MCP call: WP_REST_Server::serve_request() forgets a
- * cached anonymous user before dispatch, so the bearer resolves then. Entry points that never
- * parse (wp-admin, admin-ajax, admin-post, wp-comments-post, cron, CLI), and requests served
- * before REST routing (a parse_request handler that exits), never match.
+ * as rest_api_loaded() does, matched by aafm_is_mcp_route() as core's router matches it. It is false
+ * until WordPress has parsed the request and is serving it as REST: REST_REQUEST is defined (core
+ * defines it in rest_api_loaded(), the same signal core's Application Passwords wait for), or
+ * rest_api_init fired after the parse (aafm_oauth_rest_routing_began()). That is safe for a healthy
+ * MCP call: WP_REST_Server::serve_request() forgets a cached anonymous user before dispatch, so the
+ * bearer resolves then. Entry points that never parse (wp-admin, admin-ajax, admin-post,
+ * wp-comments-post, cron, CLI) and requests answered during parse_request (the discovery documents)
+ * never match, even on a site where a plugin built the REST server before the parse. What is left is
+ * code that builds the REST server inside an early parse_request callback on a non-REST request.
  *
  * @return bool True only when core routed the request to the MCP endpoint.
  */
 function aafm_oauth_request_targets_mcp_route(): bool {
 	$wp = $GLOBALS['wp'] ?? null;
-	if ( ! did_action( 'parse_request' ) || ! did_action( 'rest_api_init' ) || ! $wp instanceof WP ) {
+	if ( ! did_action( 'parse_request' ) || ! $wp instanceof WP ) {
+		return false;
+	}
+	if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) && ! aafm_oauth_rest_routing_began() ) {
 		return false;
 	}
 	$route = $wp->query_vars['rest_route'] ?? null;
@@ -346,16 +380,22 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 /**
  * Forget a cached anonymous user when an MCP-routed request carries our bearer.
  *
- * Runs first on rest_api_init. WP::init() looks the user up before WordPress parses the request,
- * when the bearer cannot resolve yet, and caches "nobody". This makes the same clear core's
- * WP_REST_Server::serve_request() makes, one step earlier, so the tool registry built on
- * rest_api_init sees the approver. It only ever forgets a cached user that does not exist, and
- * only with an aafm_oat_ bearer on a request core routed to the MCP endpoint.
+ * Runs first on rest_api_init. It records that REST routing began after the parse
+ * (aafm_oauth_rest_routing_began()) when the parse has happened. WP::init() looks the user up before
+ * WordPress parses the request, when the bearer cannot resolve yet, and caches "nobody". This makes
+ * the same clear core's WP_REST_Server::serve_request() makes, one step earlier, so in the normal
+ * routing order the tool registry built on rest_api_init sees the approver. On a site where code
+ * built the REST server before the parse, rest_api_init has already run and registration sees
+ * whoever was resolved then. It only ever forgets a cached user that does not exist, and only with
+ * an aafm_oat_ bearer on a request core routed to the MCP endpoint.
  *
  * @return void
  */
 function aafm_oauth_forget_anonymous_user_on_mcp_route(): void {
 	global $current_user;
+	if ( did_action( 'parse_request' ) ) {
+		aafm_oauth_rest_routing_began( true );
+	}
 	if ( ! $current_user instanceof WP_User || $current_user->exists() || ! function_exists( 'aafm_is_mcp_route' ) ) {
 		return;
 	}

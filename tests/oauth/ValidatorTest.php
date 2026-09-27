@@ -1272,11 +1272,11 @@ class ValidatorTest extends TestCase {
 		} else {
 			$GLOBALS['wp']->parse_request( $extra );
 		}
-		// rest_api_loaded(), removed above, would go on to fire rest_api_init (via rest_get_server())
-		// for a parsed, non-empty string rest_route.
+		// rest_api_loaded(), removed above, would go on to serve a parsed, non-empty string rest_route
+		// as REST, which is when REST routing begins after the parse.
 		$parsed_route = $GLOBALS['wp']->query_vars['rest_route'] ?? null;
 		if ( did_action( 'parse_request' ) && is_string( $parsed_route ) && '' !== $parsed_route ) {
-			$GLOBALS['wp_actions']['rest_api_init'] = 1;
+			aafm_oauth_rest_routing_began( true );
 		}
 
 		$this->assertSame( $parsed, $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'The rest_route WordPress parsed.' );
@@ -1703,6 +1703,83 @@ class ValidatorTest extends TestCase {
 
 		$this->assertSame( aafm_mcp_rest_route(), $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'WordPress parsed the MCP route.' );
 		$this->assertSame( 0, $seen['user'] ?? null );
+	}
+
+	/**
+	 * A plugin built the REST server before WordPress parsed the request (rest_api_init has already
+	 * fired). On a discovery-document URL with ?rest_route=<MCP route>, REST routing never begins after
+	 * the parse, so a parse_request callback that forgets the cached user and asks again sees nobody.
+	 */
+	public function test_a_rest_server_built_before_the_parse_does_not_open_the_discovery_window(): void {
+		$this->route_off_mcp();
+		$this->make_rest_route_a_query_var();
+		$this->mcp_spy_server();
+		$this->assertSame( 1, did_action( 'rest_api_init' ), 'The REST server was built before the parse.' );
+
+		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
+		$_SERVER['PHP_SELF']    = '/index.php';
+		$_GET['rest_route']     = aafm_mcp_rest_route();
+		$this->present_valid_bearer();
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+
+		remove_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
+		remove_action( 'parse_request', 'rest_api_loaded' );
+		$seen = array();
+		add_action(
+			'parse_request',
+			static function () use ( &$seen ): void {
+				$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the site code under test forgets the cached user.
+				$seen['user']            = get_current_user_id();
+			},
+			-1
+		);
+		$GLOBALS['wp']->parse_request();
+
+		$this->assertSame( aafm_mcp_rest_route(), $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'WordPress parsed the MCP route.' );
+		$this->assertSame( 0, $seen['user'] ?? null );
+	}
+
+	/**
+	 * In the normal routing order WordPress parses the request and then builds the REST server; this
+	 * plugin's first rest_api_init callback records that REST routing began after the parse, and the
+	 * bearer resolves.
+	 */
+	public function test_rest_api_init_after_the_parse_lets_the_bearer_resolve(): void {
+		$this->route_off_mcp();
+		$uid                                     = $this->present_valid_bearer();
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$GLOBALS['wp_actions']['parse_request']  = 1;
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'Parsed, but REST routing has not begun.' );
+
+		$this->mcp_spy_server();
+
+		$this->assertTrue( aafm_oauth_rest_routing_began() );
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * On a site that built the REST server before the parse, rest_api_init does not fire again for
+	 * the MCP request. REST_REQUEST, which core's rest_api_loaded() defines, is what lets the bearer
+	 * resolve. Runs in its own process because the constant cannot be undefined.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_rest_request_resolves_the_bearer_when_the_server_was_built_before_the_parse(): void {
+		$this->route_off_mcp();
+		$this->mcp_spy_server();
+		$uid = $this->present_valid_bearer();
+
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$GLOBALS['wp_actions']['parse_request']  = 1;
+		$this->assertFalse( aafm_oauth_rest_routing_began(), 'REST routing did not begin after the parse.' );
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'Before REST_REQUEST nothing resolves.' );
+
+		define( 'REST_REQUEST', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- core's own constant, as rest_api_loaded() defines it.
+
+		$this->assertTrue( aafm_oauth_request_targets_mcp_route() );
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
 	}
 
 	/**

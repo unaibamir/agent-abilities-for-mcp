@@ -789,4 +789,165 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'] );
 	}
+
+	/**
+	 * Run $callback with every forced wp_cache_get() missing while unforced reads still answer from
+	 * the request's copy: the state a Redis drop-in is in after a Redis error, when a forced get
+	 * returns false and the internal copy get_option() reads is still loaded. The real cache object
+	 * is put back afterwards.
+	 *
+	 * @param callable $callback Code to run.
+	 * @return mixed $callback()'s return value.
+	 */
+	private function with_forced_cache_reads_missing( callable $callback ) {
+		global $wp_object_cache;
+		$real = $wp_object_cache;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double, restored in finally.
+		$wp_object_cache = new class( $real ) {
+			/**
+			 * The cache every call but a forced get goes to.
+			 *
+			 * @var object
+			 */
+			private $real;
+
+			/**
+			 * Wrap the real cache object.
+			 *
+			 * @param object $real The real cache object.
+			 */
+			public function __construct( $real ) {
+				$this->real = $real;
+			}
+
+			/**
+			 * A forced get misses; an unforced one answers from the real cache.
+			 *
+			 * @param int|string $key   Key.
+			 * @param string     $group Group.
+			 * @param bool       $force Whether the read is forced.
+			 * @param bool|null  $found Whether the key was found.
+			 * @return mixed
+			 */
+			public function get( $key, $group = 'default', $force = false, &$found = null ) {
+				if ( $force ) {
+					$found = false;
+					return false;
+				}
+				return $this->real->get( $key, $group, false, $found );
+			}
+
+			/**
+			 * Forward every other cache call to the real cache object.
+			 *
+			 * @param string       $name Method.
+			 * @param array<mixed> $args Arguments.
+			 * @return mixed
+			 */
+			public function __call( $name, $args ) {
+				return $this->real->$name( ...$args );
+			}
+		};
+		try {
+			return $callback();
+		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the real cache object.
+			$wp_object_cache = $real;
+		}
+	}
+
+	/**
+	 * Ledger b5c1r3-security-1: the row holds 'New' while the request's own alloptions copy still says 'Old'
+	 * and every forced read misses (a Redis drop-in after a Redis error). update_option() decides from
+	 * that runtime copy and would skip a request for 'Old' as a no-op, so the check reads the runtime
+	 * copies too and refuses before any write.
+	 */
+	public function test_a_stale_runtime_alloptions_copy_refuses_when_the_forced_read_misses(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'New' );
+		$this->plant_stale_alloptions( 'blogname', 'Old' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = $this->with_forced_cache_reads_missing(
+			static function () {
+				return wp_get_ability( 'aafm/update-site-settings' )->execute(
+					array( 'settings' => array( 'blogname' => 'Old' ) )
+				);
+			}
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'New', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * Row 23 (b5c2r2-table-1): the request's own notoptions copy holds posts_per_page over a row of 5
+	 * while every forced read misses. get_option() answers the registered default 10 from that copy,
+	 * so a request for 10 would be skipped with the row still at 5. The runtime notoptions read
+	 * refuses it.
+	 */
+	public function test_a_stale_runtime_notoptions_entry_refuses_when_the_forced_read_misses(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'posts_per_page', 5 );
+		wp_cache_delete( 'posts_per_page', 'options' );
+		$all = wp_load_alloptions();
+		unset( $all['posts_per_page'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$not                   = (array) wp_cache_get( 'notoptions', 'options' );
+		$not['posts_per_page'] = true;
+		wp_cache_set( 'notoptions', $not, 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = $this->with_forced_cache_reads_missing(
+			static function () {
+				return wp_get_ability( 'aafm/update-site-settings' )->execute(
+					array( 'settings' => array( 'posts_per_page' => 10 ) )
+				);
+			}
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( '5', $this->option_row( 'posts_per_page' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * Ledger b5c1r3-codex-1, healthy pin: core's own update_option( $name, false ) stores '' in the row and
+	 * caches false, so a cached false over a stored '' agrees and the write lands (262 s12).
+	 */
+	public function test_a_cached_false_over_a_stored_empty_tagline_still_takes_the_write(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogdescription', '' );
+		wp_cache_delete( 'blogdescription', 'options' );
+		$all                    = wp_load_alloptions();
+		$all['blogdescription'] = false;
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			array(
+				'ok'    => true,
+				'found' => true,
+				'value' => '',
+			),
+			aafm_option_row( 'blogdescription' ),
+			'Guard: the row holds an empty string.'
+		);
+		$this->assertFalse( get_option( 'blogdescription' ), 'Guard: the cache answers false.' );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogdescription' => 'Shop' ) )
+		);
+
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'Shop' ) ), $res );
+		$this->assertSame( 'Shop', $this->option_row( 'blogdescription' ) );
+	}
 }

@@ -759,14 +759,14 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 
 	// R1-4: the display order lives in woocommerce_gateway_order, which a persistent object cache
 	// can hold a stale copy of. Core's update_option() judges "nothing changed" against that copy,
-	// so a stale entry equal to the request skips the write while get_option() shows it done. Read
-	// the row and the cache separately before anything is written, and refuse when the row cannot
-	// be read or the cache disagrees with it, so a refusal leaves every field as it was. No cache
-	// entry of this WooCommerce option is deleted or rewritten here.
-	$order_views = null;
+	// so a stale entry equal to the request skips the write while get_option() shows it done. Before
+	// anything is written, refuse unless the row is readable and every cache copy agrees with it
+	// (aafm_option_row_if_cache_agrees(), the same check site settings use), so a refusal leaves
+	// every field as it was. No cache entry of this WooCommerce option is deleted or rewritten here.
+	$order_row = null;
 	if ( isset( $input['order'] ) ) {
-		$order_views = aafm_read_option_views( 'woocommerce_gateway_order' );
-		if ( $order_views['db_error'] || ( $order_views['cache_found'] && ! aafm_option_value_matches( $order_views['cache_value'], $order_views['db_value'] ) ) ) {
+		$order_row = aafm_option_row_if_cache_agrees( 'woocommerce_gateway_order' );
+		if ( null === $order_row ) {
 			return aafm_wc_gateway_write_failed_error( array(), array( 'order' ) );
 		}
 	}
@@ -807,13 +807,13 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	}
 
 	$order_val = null;
-	if ( null !== $order_views ) {
+	if ( null !== $order_row ) {
 		// Display order is not a per-gateway setting, and WC_Payment_Gateway has no `order` property
 		// to set (M13) - WooCommerce keeps order in the woocommerce_gateway_order option (a
 		// gateway_id => position map). Persist it there so the change survives the next request,
 		// merged into the row read above rather than get_option(), whose filters can add entries.
 		$order_val               = (int) $input['order'];
-		$ordering                = is_array( $order_views['db_value'] ) ? $order_views['db_value'] : array();
+		$ordering                = is_array( $order_row['value'] ) ? $order_row['value'] : array();
 		$ordering[ $gateway_id ] = $order_val;
 		aafm_wc_write(
 			'option',

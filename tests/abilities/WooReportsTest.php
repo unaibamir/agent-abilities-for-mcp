@@ -1963,4 +1963,246 @@ final class WooReportsTest extends TestCase {
 			$res->get_error_data()
 		);
 	}
+
+	/**
+	 * Run $callback with every forced wp_cache_get() missing while unforced reads still answer from
+	 * the request's copy: the state a Redis drop-in is in after a Redis error, when a forced get
+	 * returns false and the internal copy get_option() reads is still loaded. The real cache object
+	 * is put back afterwards.
+	 *
+	 * @param callable $callback Code to run.
+	 * @return mixed $callback()'s return value.
+	 */
+	private function with_forced_cache_reads_missing( callable $callback ) {
+		global $wp_object_cache;
+		$real = $wp_object_cache;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double, restored in finally.
+		$wp_object_cache = new class( $real ) {
+			/**
+			 * The cache every call but a forced get goes to.
+			 *
+			 * @var object
+			 */
+			private $real;
+
+			/**
+			 * Wrap the real cache object.
+			 *
+			 * @param object $real The real cache object.
+			 */
+			public function __construct( $real ) {
+				$this->real = $real;
+			}
+
+			/**
+			 * A forced get misses; an unforced one answers from the real cache.
+			 *
+			 * @param int|string $key   Key.
+			 * @param string     $group Group.
+			 * @param bool       $force Whether the read is forced.
+			 * @param bool|null  $found Whether the key was found.
+			 * @return mixed
+			 */
+			public function get( $key, $group = 'default', $force = false, &$found = null ) {
+				if ( $force ) {
+					$found = false;
+					return false;
+				}
+				return $this->real->get( $key, $group, false, $found );
+			}
+
+			/**
+			 * Forward every other cache call to the real cache object.
+			 *
+			 * @param string       $name Method.
+			 * @param array<mixed> $args Arguments.
+			 * @return mixed
+			 */
+			public function __call( $name, $args ) {
+				return $this->real->$name( ...$args );
+			}
+		};
+		try {
+			return $callback();
+		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the real cache object.
+			$wp_object_cache = $real;
+		}
+	}
+
+	/**
+	 * Ledger b5hunta-1: the row and the per-option entry say paypal is at 1 while the alloptions entry says
+	 * 5. get_option() answers from alloptions first, so a request for 5 would be skipped as a no-op.
+	 * Every cache copy is checked against the row, so the request refuses before the title is written.
+	 */
+	public function test_gateway_order_refuses_when_alloptions_disagrees_beside_an_agreeing_per_option_entry(): void {
+		$this->acting_as( 'administrator' );
+		$this->plant_stale_gateway_order( array( 'paypal' => 1 ), array( 'paypal' => 5 ), true );
+		wp_cache_set( 'woocommerce_gateway_order', maybe_serialize( array( 'paypal' => 1 ) ), 'options' );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+		$views        = $this->option_cache_views( 'woocommerce_gateway_order' );
+		$this->assertNotSame( $views['per_option'], $views['alloptions'], 'Guard: the two cache copies disagree.' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 5,
+				'title'      => 'Never Written',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+		$this->assertSame( $views, $this->option_cache_views( 'woocommerce_gateway_order' ) );
+	}
+
+	/**
+	 * G7 (262 step 11 decision table): a notoptions entry over an existing ordering row refuses,
+	 * with nothing written and no cache entry of the WooCommerce option changed.
+	 */
+	public function test_gateway_order_refuses_when_notoptions_sits_over_the_row(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 1 ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$not                              = (array) wp_cache_get( 'notoptions', 'options' );
+		$not['woocommerce_gateway_order'] = true;
+		wp_cache_set( 'notoptions', $not, 'options' );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 5,
+				'title'      => 'Never Written',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+		$this->assertArrayHasKey( 'woocommerce_gateway_order', (array) wp_cache_get( 'notoptions', 'options' ) );
+	}
+
+	/**
+	 * Ledger b5c2r1-codex-2: a cached '' over a missing ordering row. get_option() answers '', so the
+	 * ordering UPDATE would hit no row after the title was written. The check refuses first.
+	 */
+	public function test_gateway_order_refuses_a_cached_empty_string_over_a_missing_row(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		wp_cache_set( 'woocommerce_gateway_order', '', 'options' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 5,
+				'title'      => 'Never Written',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertNull( $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+	}
+
+	/**
+	 * Ledger b5c2r1-fixsurface-2: the unreadable-row refusal with no cache entry at all, so only the failed
+	 * read itself can refuse (the existing twin also has a per-option entry that disagrees with the
+	 * failed read's false).
+	 */
+	public function test_gateway_order_refuses_an_unreadable_row_with_no_cache_entry(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 1 ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT option_value FROM', "option_name = 'woocommerce_gateway_order'" ),
+			static function () {
+				return aafm_exec_wc_update_payment_gateway(
+					array(
+						'gateway_id' => 'paypal',
+						'order'      => 4,
+						'title'      => 'Never Written',
+					)
+				);
+			}
+		);
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+	}
+
+	/**
+	 * Ledger b5c1r3-security-1 on the gateway caller: the request's own per-option copy says 5 over a row of
+	 * 1 while every forced read misses. update_option() would take 5 as the old value and skip the
+	 * write, so the runtime copy is checked too and the request refuses before the title is written.
+	 */
+	public function test_gateway_order_refuses_a_stale_runtime_per_option_copy_when_the_forced_read_misses(): void {
+		$this->acting_as( 'administrator' );
+		$this->plant_stale_gateway_order( array( 'paypal' => 1 ), array( 'paypal' => 5 ), false );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		$res = $this->with_forced_cache_reads_missing(
+			static function () {
+				return aafm_exec_wc_update_payment_gateway(
+					array(
+						'gateway_id' => 'paypal',
+						'order'      => 5,
+						'title'      => 'Never Written',
+					)
+				);
+			}
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+	}
 }

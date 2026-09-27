@@ -481,6 +481,63 @@ function aafm_option_row( string $option ): array {
 }
 
 /**
+ * One option's row, returned only when every cache copy core could answer the option from agrees
+ * with it. The option pre-checks call it before their first write, because update_option() decides
+ * "nothing changed" from get_option(), which answers from a cache copy before the row.
+ *
+ * Reads the row through aafm_option_row(), then the per-option entry, the alloptions entry and
+ * notoptions, first forced and then unforced. Under a persistent cache a forced read goes to the
+ * backend and an unforced one answers from the request's own copy, which get_option() reads and
+ * which a failed backend leaves in place. The unforced reads come last, because a forced hit
+ * refreshes that copy. Nothing is written to any cache.
+ *
+ * A row that cannot be read refuses. With no row, any cached value refuses and a notoptions entry
+ * agrees. With a row, a notoptions entry refuses, and so does any cached value that
+ * aafm_option_value_matches() says differs from it. A cached false still matches a stored '',
+ * because core's own update_option( $name, false ) leaves exactly that.
+ *
+ * @param string $option Option name.
+ * @return array{ok:bool,found:bool,value:mixed}|null The row, or null to refuse.
+ */
+function aafm_option_row_if_cache_agrees( string $option ): ?array {
+	$row = aafm_option_row( $option );
+	if ( ! $row['ok'] ) {
+		return null;
+	}
+
+	$cached = array();
+	$not    = false;
+	foreach ( array( true, false ) as $force ) {
+		// Reset before every read: the Redis drop-in returns false on an exception without setting
+		// $found, so a flag left over from an earlier read would count a failed read as a cached false.
+		$found  = false;
+		$single = wp_cache_get( $option, 'options', $force, $found );
+		if ( $found ) {
+			$cached[] = maybe_unserialize( $single );
+		}
+		$all = wp_cache_get( 'alloptions', 'options', $force );
+		if ( is_array( $all ) && array_key_exists( $option, $all ) ) {
+			$cached[] = maybe_unserialize( $all[ $option ] );
+		}
+		$notoptions = wp_cache_get( 'notoptions', 'options', $force );
+		$not        = $not || ( is_array( $notoptions ) && isset( $notoptions[ $option ] ) );
+	}
+
+	if ( ! $row['found'] ) {
+		return array() === $cached ? $row : null;
+	}
+	if ( $not ) {
+		return null;
+	}
+	foreach ( $cached as $value ) {
+		if ( ! aafm_option_value_matches( $value, $row['value'] ) ) {
+			return null;
+		}
+	}
+	return $row;
+}
+
+/**
  * Shared engine behind the three *_allow_has_star() functions: whether an option's RAW value
  * (not the filtered getter, which strips the sentinel) carries the `*` wildcard.
  *

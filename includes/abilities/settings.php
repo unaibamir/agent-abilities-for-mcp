@@ -258,42 +258,13 @@ function aafm_exec_update_site_settings( array $input ) {
 	}
 
 	// A stale persistent cache can make update_option() skip or misdirect a write, because it decides
-	// from get_option()'s answer: the alloptions entry first, then notoptions (which answers the
-	// default), then the per-option key, and only then the row. So before anything is written, each
-	// key's cache has to agree with its row, read through aafm_option_row() so a missing row and a
-	// stored '' stay apart. A row that cannot be read refuses. With a row, a notoptions entry or a
-	// cached value that differs refuses; with no row, any cached value refuses, while a notoptions
-	// entry agrees. A refusal on any key refuses the whole request before the first write.
+	// from get_option()'s answer, which comes from a cache copy before the row. So before anything is
+	// written, every cache copy of each key has to agree with its row (see
+	// aafm_option_row_if_cache_agrees() for the rules). A refusal on any key refuses the whole request
+	// before the first write.
 	foreach ( array_keys( $settings ) as $key ) {
-		$key = (string) $key;
-		$row = aafm_option_row( $key );
-		if ( ! $row['ok'] ) {
+		if ( null === aafm_option_row_if_cache_agrees( (string) $key ) ) {
 			return aafm_generic_error();
-		}
-		$cached = array();
-		$found  = false;
-		$single = wp_cache_get( $key, 'options', true, $found );
-		if ( $found ) {
-			$cached[] = maybe_unserialize( $single );
-		}
-		$all = wp_cache_get( 'alloptions', 'options', true );
-		if ( is_array( $all ) && array_key_exists( $key, $all ) ) {
-			$cached[] = maybe_unserialize( $all[ $key ] );
-		}
-		if ( ! $row['found'] ) {
-			if ( array() !== $cached ) {
-				return aafm_generic_error();
-			}
-			continue;
-		}
-		$not = wp_cache_get( 'notoptions', 'options', true );
-		if ( is_array( $not ) && isset( $not[ $key ] ) ) {
-			return aafm_generic_error();
-		}
-		foreach ( $cached as $value ) {
-			if ( ! aafm_option_value_matches( $value, $row['value'] ) ) {
-				return aafm_generic_error();
-			}
 		}
 	}
 

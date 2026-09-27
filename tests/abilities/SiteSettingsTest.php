@@ -950,4 +950,207 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'Shop' ) ), $res );
 		$this->assertSame( 'Shop', $this->option_row( 'blogdescription' ) );
 	}
+
+	/**
+	 * Plant one U-S table state for the probe option: the row (null for none) and the runtime cache
+	 * copies. 'A' is the alloptions entry, 'P' the per-option entry, 'N' a notoptions entry; each
+	 * holds the raw value a cache would hold.
+	 *
+	 * @param string       $option Probe option name.
+	 * @param mixed        $row    Stored value, or null for no row.
+	 * @param array<mixed> $cache  Cache copies to plant.
+	 */
+	private function plant_table_state( string $option, $row, array $cache ): void {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- planting the raw row under test.
+		$wpdb->delete( $wpdb->options, array( 'option_name' => $option ) );
+		if ( null !== $row ) {
+			$wpdb->insert(
+				$wpdb->options,
+				array(
+					'option_name'  => $option,
+					'option_value' => maybe_serialize( $row ),
+					'autoload'     => 'no',
+				)
+			);
+		}
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		wp_cache_delete( $option, 'options' );
+		$all = wp_load_alloptions();
+		unset( $all[ $option ] );
+		if ( array_key_exists( 'A', $cache ) ) {
+			$all[ $option ] = $cache['A'];
+		}
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$not = wp_cache_get( 'notoptions', 'options' );
+		$not = is_array( $not ) ? $not : array();
+		unset( $not[ $option ] );
+		if ( ! empty( $cache['N'] ) ) {
+			$not[ $option ] = true;
+		}
+		wp_cache_set( 'notoptions', $not, 'options' );
+		if ( array_key_exists( 'P', $cache ) ) {
+			wp_cache_set( $option, $cache['P'], 'options' );
+		}
+	}
+
+	/**
+	 * The three runtime cache entries core answers an option from, as bytes.
+	 *
+	 * @param string $option Option name.
+	 */
+	private function option_cache_bytes( string $option ): string {
+		$found  = false;
+		$single = wp_cache_get( $option, 'options', false, $found );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a byte snapshot for comparison, never stored.
+		return serialize( array( $found, $single, wp_cache_get( 'alloptions', 'options' ), wp_cache_get( 'notoptions', 'options' ) ) );
+	}
+
+	/**
+	 * The U-S fault-state table (design part 1, 1.3), one row per state, keyed by its table id.
+	 * 'row' is the stored value (null: no row); 'cache' the planted copies; 'forced_miss' runs the
+	 * check with every forced cache read missing; 'fault' fails the row read.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	public function cache_agreement_table(): array {
+		$found = static fn( $value ): array => array(
+			'ok'    => true,
+			'found' => true,
+			'value' => $value,
+		);
+		$none  = array(
+			'ok'    => true,
+			'found' => false,
+			'value' => false,
+		);
+		$v     = array( 'a' => 'Row' );
+		$x     = array( 'a' => 'Stale' );
+		// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the bytes core caches for an array option.
+		return array(
+			'S1'   => array( 'Row', array(), false, null, $found( 'Row' ) ),
+			'S2'   => array( 'Row', array( 'A' => 'Row' ), false, null, $found( 'Row' ) ),
+			'S3'   => array( 'Row', array( 'A' => 'Stale' ), false, null, null ),
+			'S4'   => array( 'Row', array( 'A' => 'Row', 'P' => 'Stale' ), false, null, null ),
+			'S5'   => array( 'Row', array( 'A' => 'Stale', 'P' => 'Row' ), false, null, null ),
+			'S6'   => array( 'Row', array( 'P' => 'Stale' ), false, null, null ),
+			'S7'   => array( 'Row', array( 'N' => true ), false, null, null ),
+			'S8'   => array( 'Row', array( 'N' => true, 'P' => 'Row' ), false, null, null ),
+			'S9'   => array( 'Row', array( 'A' => 'Row', 'N' => true ), false, null, null ),
+			'S10'  => array( '', array( 'A' => '' ), false, null, $found( '' ) ),
+			'S11'  => array( '', array(), false, null, $found( '' ) ),
+			'S12'  => array( '', array( 'A' => 'Stale' ), false, null, null ),
+			'S13'  => array( '', array( 'N' => true ), false, null, null ),
+			'S14'  => array( null, array(), false, null, $none ),
+			'S15'  => array( null, array( 'N' => true ), false, null, $none ),
+			'S16'  => array( null, array( 'A' => '' ), false, null, null ),
+			'S17'  => array( null, array( 'A' => 'Stale' ), false, null, null ),
+			'S18'  => array( null, array( 'P' => 'Stale' ), false, null, null ),
+			'S19'  => array( null, array( 'N' => true, 'P' => 'Stale' ), false, null, null ),
+			'S20a' => array( 'Row', array(), false, 'real', null ),
+			'S20b' => array( 'Row', array(), false, 'no_flush', null ),
+			'S21'  => array( 'Row', array( 'A' => 'Stale' ), true, null, null ),
+			'S22'  => array( 'Row', array( 'P' => 'Stale' ), true, null, null ),
+			'S23'  => array( 'Row', array( 'N' => true ), true, null, null ),
+			'S24'  => array( '', array( 'A' => false ), false, null, $found( '' ) ),
+			'S25'  => array( '', array( 'P' => false ), false, null, $found( '' ) ),
+			'S26'  => array( 'Row', array( 'P' => false ), false, null, null ),
+			'S27'  => array( '5', array( 'A' => 5 ), false, null, $found( '5' ) ),
+			'S28'  => array( $v, array( 'A' => serialize( $v ) ), false, null, $found( $v ) ),
+			'S29'  => array( $v, array( 'A' => serialize( $x ) ), false, null, null ),
+		);
+		// phpcs:enable WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+	}
+
+	/**
+	 * U-S-T1 (ledger s14-US): the pre-check's predicate gives the literal answer for every state in
+	 * the table and writes nothing to any cache.
+	 *
+	 * @dataProvider cache_agreement_table
+	 *
+	 * @param mixed        $row         Stored value, or null for no row.
+	 * @param array<mixed> $cache       Cache copies to plant.
+	 * @param bool         $forced_miss Whether every forced cache read misses.
+	 * @param string|null  $fault       'real' or 'no_flush' to fail the row read, else null.
+	 * @param array|null   $expected    The literal answer.
+	 */
+	public function test_the_cache_agreement_predicate_answers_every_table_state( $row, array $cache, bool $forced_miss, ?string $fault, ?array $expected ): void {
+		global $wpdb;
+		$option = 'aafm_s14_table_probe';
+		$this->plant_table_state( $option, $row, $cache );
+		$before = $this->option_cache_bytes( $option );
+
+		$check = static fn() => aafm_option_row_if_cache_agrees( $option );
+		if ( $forced_miss ) {
+			$answer = $this->with_forced_cache_reads_missing( $check );
+		} elseif ( null !== $fault ) {
+			$needle = array( $wpdb->options, 'SELECT option_value', "option_name = '{$option}' LIMIT 1" );
+			QueryFaultInjector::reset_fired_count();
+			if ( 'real' === $fault ) {
+				$answer = QueryFaultInjector::break_query_with_real_error( $needle, $check, 1 );
+			} else {
+				// The no-flush shape: the failed read leaves the previous query's row, here the probe's
+				// own row read without LIMIT, in last_result.
+				$answer = QueryFaultInjector::fail_nth_query(
+					$needle,
+					1,
+					static function () use ( $wpdb, $option, $check ) {
+						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+						$wpdb->get_results( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, $option ) );
+						return $check();
+					}
+				);
+			}
+			$this->assertSame( 1, QueryFaultInjector::fired_count(), 'The row read fault must fire.' );
+		} else {
+			$answer = $check();
+		}
+
+		$this->assertSame( $expected, $answer );
+		$this->assertSame( $before, $this->option_cache_bytes( $option ), 'The check writes nothing to any cache.' );
+	}
+
+	/**
+	 * U-S-T2 (ledger s14-US): the pre-check runs after the dry-run's reads, so the notoptions entry a
+	 * failed dry-run read leaves over a real row is refused. Before it, a request for the registered
+	 * default (posts_per_page 10) would be skipped by update_option() and read back as success.
+	 */
+	public function test_a_failed_dry_run_read_is_refused_by_the_pre_check(): void {
+		global $wpdb;
+		update_option( 'posts_per_page', 5 );
+		wp_cache_delete( 'posts_per_page', 'options' );
+		$all = wp_load_alloptions();
+		unset( $all['posts_per_page'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		// The fault targets the first read get_option() makes, not the check's own read of the same
+		// statement, so moving the check above the dry-run lets the request through.
+		QueryFaultInjector::reset_fired_count();
+		$fault      = QueryFaultInjector::real_error_filter( array( $wpdb->options, 'SELECT option_value', "option_name = 'posts_per_page'" ), 1 );
+		$core_read  = static function ( string $query ) use ( $fault ): string {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- scoping a test fault to its caller.
+			$callers = array_column( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ), 'function' );
+			return in_array( 'get_option', $callers, true ) ? $fault( $query ) : $query;
+		};
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $core_read );
+		ob_start();
+		try {
+			$res = aafm_exec_update_site_settings( array( 'settings' => array( 'posts_per_page' => 10 ) ) );
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $core_read );
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( '5', $this->option_row( 'posts_per_page' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
 }

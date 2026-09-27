@@ -454,14 +454,17 @@ final class SiteSettingsTest extends TestCase {
 		global $wpdb;
 		$suppressed = $wpdb->suppress_errors( true );
 		ob_start();
-		QueryFaultInjector::fail_query(
-			$wpdb->options,
+		QueryFaultInjector::reset_fired_count();
+		QueryFaultInjector::fail_nth_query(
+			array( $wpdb->options, "option_name = 'blogname'" ),
+			2,
 			static function () {
 				return aafm_exec_update_site_settings( array( 'settings' => array( 'blogname' => 'New Name' ) ) );
 			}
 		);
 		ob_end_clean();
 		$wpdb->suppress_errors( $suppressed );
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
 
 		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
 		remove_all_filters( 'pre_update_option_blogname' );
@@ -469,5 +472,161 @@ final class SiteSettingsTest extends TestCase {
 		$rows = $this->write_outcome_rows();
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'unconfirmed', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	/**
+	 * Point an autoloaded option's cache view at $value while its row keeps what it holds, the state
+	 * a stale persistent object cache leaves behind.
+	 *
+	 * @param string $option Autoloaded option name.
+	 * @param string $value  The stale cached value.
+	 */
+	private function plant_stale_alloptions( string $option, string $value ): void {
+		wp_cache_delete( $option, 'options' );
+		$all            = wp_load_alloptions();
+		$all[ $option ] = $value;
+		wp_cache_set( 'alloptions', $all, 'options' );
+	}
+
+	/**
+	 * The raw row of an option, read past every cache and filter.
+	 *
+	 * @param string $option Option name.
+	 */
+	private function option_row( string $option ): ?string {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return $wpdb->get_var( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, $option ) );
+	}
+
+	/**
+	 * A filter veto with agreeing cache and row views keeps 1.7.5's success body, the WPML shape:
+	 * the write is refused by the filter, the row keeps the old name, the log says `refused`, and
+	 * the response reports what the option layer answers (here a translation).
+	 */
+	public function test_a_filter_veto_with_agreeing_views_keeps_the_success_body(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		add_filter( 'pre_update_option_blogname', static fn() => 'Old Name' );
+		add_filter( 'option_blogname', static fn() => 'Translated Name' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+		remove_all_filters( 'pre_update_option_blogname' );
+		remove_all_filters( 'option_blogname' );
+
+		$this->assertSame( array( 'settings' => array( 'blogname' => 'Translated Name' ) ), $res );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'refused', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	/**
+	 * A cache view holding the requested value while the row holds another would make
+	 * update_option() skip the write and report success. The request refuses before any write,
+	 * and the planted cache entry is left as it was.
+	 */
+	public function test_a_stale_cached_site_setting_returns_the_generic_error_and_writes_nothing(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		$this->plant_stale_alloptions( 'blogname', 'New Name' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'The request could not be completed.', $res->get_error_message() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+		$this->assertSame( 'New Name', wp_cache_get( 'alloptions', 'options' )['blogname'] );
+	}
+
+	/**
+	 * A stale second key refuses the whole request before the first key is written.
+	 */
+	public function test_a_stale_second_key_refuses_the_whole_request_before_any_write(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		update_option( 'blogdescription', 'Old tagline' );
+		$this->plant_stale_alloptions( 'blogdescription', 'New tagline' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'        => 'New Name',
+					'blogdescription' => 'New tagline',
+				),
+			)
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertSame( 'Old tagline', $this->option_row( 'blogdescription' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * A row that cannot be read before the write refuses the request: nothing is written and
+	 * nothing is logged. The needle names `SELECT option_value`, so core's own `SELECT autoload`
+	 * inside update_option() is not the query it breaks.
+	 */
+	public function test_a_failed_views_read_refuses_the_request_before_any_write(): void {
+		global $wpdb;
+		update_option( 'blogname', 'Old Name' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->options, 'SELECT option_value', "option_name = 'blogname'" ),
+			static fn() => aafm_exec_update_site_settings( array( 'settings' => array( 'blogname' => 'New Name' ) ) ),
+			1
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * P-8 healthy pin: an empty tagline row and its empty cache agree, so the write lands.
+	 */
+	public function test_an_empty_tagline_row_agrees_with_its_cache_and_the_write_lands(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogdescription', '' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogdescription' => 'A tagline' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'A tagline' ) ), $res );
+		$this->assertSame( 'A tagline', $this->option_row( 'blogdescription' ) );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'] );
 	}
 }

@@ -257,6 +257,16 @@ function aafm_exec_update_site_settings( array $input ) {
 		}
 	}
 
+	// A stale persistent cache can make update_option() skip a write, because it compares against
+	// the cached old value. So before anything is written, each key's cache view has to agree with
+	// its row; a disagreement, or a row that cannot be read, refuses the whole request.
+	foreach ( array_keys( $settings ) as $key ) {
+		$views = aafm_read_option_views( (string) $key );
+		if ( $views['db_error'] || ( $views['cache_found'] && ! aafm_option_value_matches( $views['cache_value'], $views['db_value'] ) ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	$updated = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;

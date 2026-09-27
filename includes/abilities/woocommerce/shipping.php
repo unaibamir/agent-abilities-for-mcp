@@ -1058,9 +1058,11 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		// Verify the write actually persisted. update_option() returns false both on genuine
 		// failure and when the new value equals the old one, so its return value alone cannot
 		// distinguish "nothing changed" from "a filter (a caching/compliance layer's
-		// pre_update_option_* veto) silently blocked the write" - read the option back instead,
+		// pre_update_option_* veto) silently blocked the write" - read the database row instead,
 		// mirroring the gateway settings write's own read-back (gateways.php,
-		// aafm_wc_gateway_write_failed_error()).
+		// aafm_wc_gateway_write_failed_error()). The row, not get_option(): a stale cache holding
+		// the requested title makes update_option() skip the write while get_option() shows it.
+		// A failed read and a missing row both take the not-persisted branch.
 		//
 		// Compare against $instance_settings['title'] - the value AFTER the
 		// woocommerce_shipping_{id}_instance_settings_values filter ran and was actually handed
@@ -1069,10 +1071,10 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		// class-wc-rest-shipping-zone-methods-v2-controller.php), not merely a veto mechanism;
 		// comparing against the pre-filter value would misreport a legitimate site-level title
 		// transform as a write failure.
-		$persisted       = get_option( $method->get_instance_option_key(), array() );
-		$persisted_title = is_array( $persisted ) && array_key_exists( 'title', $persisted ) ? (string) $persisted['title'] : null;
-		$expected_title  = array_key_exists( 'title', $instance_settings ) ? (string) $instance_settings['title'] : $title;
-		if ( $persisted_title !== $expected_title ) {
+		$row       = aafm_option_row( $method->get_instance_option_key() );
+		$persisted = ( $row['ok'] && $row['found'] ) ? $row['value'] : array();
+		$expected  = is_array( $instance_settings ) && array_key_exists( 'title', $instance_settings ) ? $instance_settings['title'] : $title;
+		if ( ! is_array( $persisted ) || ! array_key_exists( 'title', $persisted ) || ! aafm_option_value_matches( $persisted['title'], $expected ) ) {
 			// `enabled` (if present in this request) is written strictly before this point and
 			// already returned on its own failure above, so reaching here means any `enabled`
 			// write in THIS request genuinely persisted - the message must not claim otherwise.

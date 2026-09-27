@@ -16,6 +16,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\WcShippingStubStore;
@@ -824,6 +825,150 @@ final class WooShippingTest extends TestCase {
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $read );
 		$this->assertSame( 'no', $read['enabled'], 'the enabled toggle must have persisted despite the vetoed title write.' );
+	}
+
+	/**
+	 * Point an autoloaded option's cache view at $value while its row keeps what it holds, the state
+	 * a stale persistent object cache leaves behind.
+	 *
+	 * @param string $option Autoloaded option name.
+	 * @param mixed  $value  The stale cached value.
+	 */
+	private function plant_stale_alloptions( string $option, $value ): void {
+		wp_cache_delete( $option, 'options' );
+		$all            = wp_load_alloptions();
+		$all[ $option ] = maybe_serialize( $value );
+		wp_cache_set( 'alloptions', $all, 'options' );
+	}
+
+	/**
+	 * The raw row of an option, read past every cache and filter.
+	 *
+	 * @param string $option Option name.
+	 */
+	private function option_row( string $option ): ?string {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return $wpdb->get_var( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, $option ) );
+	}
+
+	/**
+	 * A cache view holding the requested title while the row holds another makes update_option()
+	 * skip the write. The title is confirmed from the row, so the ability reports the title
+	 * failure, and the planted cache entry is left as it was.
+	 */
+	public function test_a_stale_cached_instance_title_reports_the_title_write_failure(): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => 'Title A' ) );
+		$this->assertArrayHasKey( $option_key, wp_load_alloptions(), 'precondition: the instance row is autoloaded.' );
+		$row = $this->option_row( $option_key );
+		$this->plant_stale_alloptions( $option_key, array( 'title' => 'Title B' ) );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'method_title' => 'Title B',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $res->get_error_code() );
+		$this->assertSame( 'The method title could not be saved. Nothing on the shipping method was changed.', $res->get_error_message() );
+		$this->assertSame( $row, $this->option_row( $option_key ) );
+		$this->assertSame( maybe_serialize( array( 'title' => 'Title B' ) ), wp_cache_get( 'alloptions', 'options' )[ $option_key ] );
+		$this->assertFalse( wp_cache_get( $option_key, 'options' ) );
+	}
+
+	/**
+	 * A title confirmation read that fails reports the title failure. The counting run uses a twin
+	 * method (zone 2, instance 3, the same starting settings), so the faulted run starts from an
+	 * untouched row, and asserts how many title reads a healthy request makes before the fault
+	 * targets the last one.
+	 */
+	public function test_a_failed_instance_title_read_reports_the_title_write_failure(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		update_option( 'woocommerce_flat_rate_1_settings', array( 'title' => 'Original Title' ) );
+		update_option( 'woocommerce_flat_rate_3_settings', array( 'title' => 'Original Title' ) );
+
+		$reads  = 0;
+		$needle = static fn( string $key ): array => array( $wpdb->options, 'SELECT option_value', "option_name = '{$key}'" );
+		$count  = static function ( $query ) use ( &$reads ) {
+			if ( false !== strpos( (string) $query, 'SELECT option_value' ) && false !== strpos( (string) $query, "option_name = 'woocommerce_flat_rate_3_settings'" ) ) {
+				++$reads;
+			}
+			return $query;
+		};
+		add_filter( 'query', $count );
+		$twin = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 2,
+				'instance_id'  => 3,
+				'method_title' => 'New Title',
+			)
+		);
+		remove_filter( 'query', $count );
+		$this->assertNotInstanceOf( WP_Error::class, $twin );
+		$this->assertSame( 1, $reads, 'a new title on the autoloaded row is confirmed by one row read.' );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			$needle( 'woocommerce_flat_rate_1_settings' ),
+			static fn() => wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+				array(
+					'zone_id'      => 1,
+					'instance_id'  => 1,
+					'method_title' => 'New Title',
+				)
+			),
+			$reads
+		);
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $res->get_error_code() );
+	}
+
+	/**
+	 * An object title from the instance-settings filter is compared by value and never cast to a
+	 * string. The option_ filter stands in for a site that reads its titles back as text, so the
+	 * method object the response is built from holds a string.
+	 */
+	public function test_an_object_title_from_the_instance_settings_filter_does_not_throw(): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => 'Original Title' ) );
+		$object        = new \stdClass();
+		$object->label = 'Object Title';
+		$to_object     = static function ( $settings ) use ( $object ) {
+			$settings['title'] = $object;
+			return $settings;
+		};
+		$as_text       = static function ( $value ) {
+			if ( is_array( $value ) && isset( $value['title'] ) && $value['title'] instanceof \stdClass ) {
+				$value['title'] = (string) $value['title']->label;
+			}
+			return $value;
+		};
+		add_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_object );
+		add_filter( 'option_' . $option_key, $as_text );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'method_title' => 'Requested Title',
+			)
+		);
+
+		remove_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_object );
+		remove_filter( 'option_' . $option_key, $as_text );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Object Title', $res['method_title'] );
+		$this->assertEquals( $object, maybe_unserialize( $this->option_row( $option_key ) )['title'] );
 	}
 
 	/**

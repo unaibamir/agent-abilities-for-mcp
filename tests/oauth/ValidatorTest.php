@@ -329,12 +329,20 @@ class ValidatorTest extends TestCase {
 	/**
 	 * Where HTTPS is required (production) and the request is plain http, a valid token does
 	 * not resolve - the validator enforces the same HTTPS policy as the other OAuth paths.
+	 *
+	 * Runs in its own process so no AAFM_OAUTH_ALLOW_HTTP defined by an earlier suite (HandshakeTest,
+	 * RestEndpointsTest) relaxes the requirement it tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_token_does_not_resolve_over_plain_http_when_https_required(): void {
-		if ( ! aafm_oauth_https_required() ) {
-			$this->markTestSkipped( 'HTTPS is not required in this environment; the plain-http gate cannot be exercised.' );
-		}
+		$this->assertSame( 'production', wp_get_environment_type(), 'This test runs in its own process, on the production environment type.' );
+		$this->assertTrue( aafm_oauth_https_required(), 'No AAFM_OAUTH_ALLOW_HTTP from another suite reaches this process.' );
 
+		// Plain http from the start, so the token's audience is this endpoint as plain http sees it
+		// and only the HTTPS policy can refuse it.
+		unset( $_SERVER['HTTPS'] );
 		$uid    = self::factory()->user->create();
 		$tokens = aafm_oauth_mint_tokens(
 			array(
@@ -345,8 +353,6 @@ class ValidatorTest extends TestCase {
 		);
 		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
 
-		// Drop TLS: is_ssl() now returns false while HTTPS is still required.
-		unset( $_SERVER['HTTPS'] );
 		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'A bearer over plain http must not resolve when HTTPS is required.' );
 	}
 
@@ -354,11 +360,16 @@ class ValidatorTest extends TestCase {
 	 * Transport visibility: the HTTPS-required plain-http bail used to be silent. A real aafm_oat_
 	 * bearer presented over http now leaves one bounded (transport) denied row so the failure is
 	 * traceable, while the auth decision itself (no user resolved) is unchanged.
+	 *
+	 * Runs in its own process so no AAFM_OAUTH_ALLOW_HTTP defined by an earlier suite (HandshakeTest,
+	 * RestEndpointsTest) relaxes the requirement it tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_plain_http_bail_writes_a_transport_row(): void {
-		if ( ! aafm_oauth_https_required() ) {
-			$this->markTestSkipped( 'HTTPS is not required in this environment; the plain-http gate cannot be exercised.' );
-		}
+		$this->assertSame( 'production', wp_get_environment_type(), 'This test runs in its own process, on the production environment type.' );
+		$this->assertTrue( aafm_oauth_https_required(), 'No AAFM_OAUTH_ALLOW_HTTP from another suite reaches this process.' );
 
 		$uid    = self::factory()->user->create();
 		$tokens = aafm_oauth_mint_tokens(

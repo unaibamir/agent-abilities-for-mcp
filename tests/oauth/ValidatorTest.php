@@ -791,11 +791,10 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * A full bearer-token resolve still works when $wp_rewrite is null at the time the
-	 * determine_current_user filter fires. This is the exact scenario that caused HTTP
-	 * 500 on the claude.ai OAuth connect flow: the audience check in the validator calls
-	 * aafm_endpoint_url(), which previously called rest_url() unconditionally and fataled
-	 * on a null $wp_rewrite. With the fix in place, a valid token must resolve its user.
+	 * A full bearer-token resolve still works when $wp_rewrite is null. The bearer now resolves
+	 * only once REST routing has begun, so its path no longer meets a null $wp_rewrite; this pins
+	 * the defensive branch aafm_endpoint_url() keeps for early callers (it caused HTTP 500 on the
+	 * claude.ai OAuth connect flow when the audience check called rest_url() unconditionally).
 	 */
 	public function test_bearer_resolves_with_null_wp_rewrite(): void {
 		$uid    = self::factory()->user->create();
@@ -895,7 +894,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * The resolver's re-entrancy guard. Steps 5-9 build site URLs, firing the home_url/rest_url
+	 * The resolver's re-entrancy guard. Step 9 builds the endpoint URL, firing the home_url/rest_url
 	 * filter chain DURING user resolution. A third-party filter there that resolves the current user
 	 * would re-enter this callback; without the guard that recurses until memory is exhausted. Prove
 	 * the outer resolve still completes and the nested re-entrant call returns the incoming value

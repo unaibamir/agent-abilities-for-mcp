@@ -604,51 +604,39 @@ function aafm_policy_options(): array {
 }
 
 /**
- * Whether this request reads policy through the batched row: an MCP, REST, admin, cron, CLI,
- * OAuth authorize or well-known request. A front-end page load never does, so it reads policy
- * exactly as 1.7.5 did. Decided once per request.
+ * Whether this request reads policy through the batched row: an admin, CLI or cron request, or a
+ * REST request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own
+ * parsed rest_route (the empty() test rest_api_loaded() applies). The request path is never read.
  *
- * The REST path is rebuilt from the home path and the REST prefix, the way
- * aafm_oauth_request_targets_mcp_route() does, so no $wp_rewrite is needed.
+ * A "no" is never kept: a read before WordPress routes a REST request, a front-end page load, the
+ * OAuth authorize screen and the well-known documents read policy as 1.7.5 did, and a later read in
+ * the same request decides again. A "yes" is kept for the request and registers the memo's hooks.
  *
  * @return bool
  */
 function aafm_policy_batch_allowed(): bool {
 	global $aafm_policy_state;
-	if ( isset( $aafm_policy_state['batch_allowed'] ) ) {
-		return $aafm_policy_state['batch_allowed'];
+	if ( ! empty( $aafm_policy_state['batch_allowed'] ) ) {
+		return true;
 	}
 
-	$allowed = is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) || ( defined( 'REST_REQUEST' ) && REST_REQUEST );
-	// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only routing checks, no state change.
+	$allowed = ( defined( 'REST_REQUEST' ) && REST_REQUEST )
+		|| is_admin()
+		|| ( defined( 'WP_CLI' ) && WP_CLI )
+		|| ( defined( 'DOING_CRON' ) && DOING_CRON ) // @phpstan-ignore-line The constant, not wp_doing_cron(): the decision fires no filter.
+		|| ( isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof WP && ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) );
 	if ( ! $allowed ) {
-		$allowed = isset( $_GET['rest_route'] )
-			|| ( isset( $_GET['aafm_oauth'] ) && 'authorize' === sanitize_text_field( wp_unslash( $_GET['aafm_oauth'] ) ) );
-	}
-	// phpcs:enable WordPress.Security.NonceVerification.Recommended
-	if ( ! $allowed ) {
-		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
-		$path        = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
-		if ( '' !== $path ) {
-			$segments = array_filter(
-				array( trim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' ), trim( rest_get_url_prefix(), '/' ) ),
-				static function ( string $segment ): bool {
-					return '' !== $segment;
-				}
-			);
-			$prefix   = '/' . implode( '/', $segments ) . '/';
-			$allowed  = 0 === stripos( rtrim( $path, '/' ) . '/', $prefix ) || '' !== aafm_oauth_match_well_known( $path );
-		}
+		return false;
 	}
 
-	$aafm_policy_state['batch_allowed'] = $allowed;
-	if ( $allowed && ! has_action( 'shutdown', 'aafm_policy_reset_request_state' ) ) {
+	$aafm_policy_state['batch_allowed'] = true;
+	if ( ! has_action( 'shutdown', 'aafm_policy_reset_request_state' ) ) {
 		add_action( 'added_option', 'aafm_policy_forget_row' );
 		add_action( 'updated_option', 'aafm_policy_forget_row' );
 		add_action( 'deleted_option', 'aafm_policy_forget_row' );
 		add_action( 'shutdown', 'aafm_policy_reset_request_state' );
 	}
-	return $allowed;
+	return true;
 }
 
 /**

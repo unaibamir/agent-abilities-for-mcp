@@ -801,7 +801,7 @@ final class UsersWriteTest extends TestCase {
 	 */
 	private function use_batched_policy_path(): void {
 		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
-		aafm_policy_reset_request_state();
+		$this->route_as_rest_request();
 	}
 
 	/**

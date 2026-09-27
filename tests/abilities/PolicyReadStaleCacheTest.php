@@ -37,7 +37,7 @@ final class PolicyReadStaleCacheTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
-		aafm_policy_reset_request_state();
+		$this->route_as_rest_request();
 		aafm_install_oauth_tables();
 		QueryFaultInjector::reset_fired_count();
 	}
@@ -560,6 +560,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 		remove_action( 'shutdown', 'wp_ob_end_flush_all', 1 );
 		do_action( 'shutdown' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own action, fired as core fires it.
 
+		global $aafm_policy_state;
+		$this->assertArrayNotHasKey( 'batch_allowed', (array) $aafm_policy_state, 'Shutdown forgets the batch decision too.' );
 		$this->assertSame( 1, $this->count_policy_queries( static fn() => aafm_force_draft() )[0], 'After shutdown the rows are read again.' );
 	}
 
@@ -573,8 +575,194 @@ final class PolicyReadStaleCacheTest extends TestCase {
 		aafm_read_only_mode();
 
 		$this->assertArrayNotHasKey( 'rows', (array) $aafm_policy_state );
+		$this->assertArrayNotHasKey( 'batch_allowed', (array) $aafm_policy_state );
 		$this->assertFalse( has_action( 'shutdown', 'aafm_policy_reset_request_state' ) );
 		$this->assertFalse( has_action( 'updated_option', 'aafm_policy_forget_row' ) );
+	}
+
+	/**
+	 * U1-T3 (U1 fallback row F-e): in a persistent worker, a front-end request, shutdown, then an
+	 * MCP request. The front end keeps no "no", so the MCP request batches and a stale cached
+	 * unlock over a locked row is refused.
+	 */
+	public function test_a_front_end_request_does_not_carry_a_no_into_the_next_request(): void {
+		$this->plant( 'aafm_high_risk_abilities_unlocked', '0', array( 'alloptions' => '1' ) );
+		$this->on_a_front_end_page();
+		aafm_force_draft();
+		aafm_read_only_mode();
+
+		remove_action( 'shutdown', 'wp_ob_end_flush_all', 1 );
+		do_action( 'shutdown' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own action, fired as core fires it.
+		$this->assertSame( '1', wp_cache_get( 'alloptions', 'options' )['aafm_high_risk_abilities_unlocked'] ?? null, 'Precondition: the stale copy is still there.' );
+
+		$_SERVER['REQUEST_URI']                  = self::mcp_rest_path();
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$this->assertFalse( aafm_high_risk_unlocked() );
+	}
+
+	/**
+	 * U1-T3b (row F-d): a front-end request keeps no batch decision and registers no hook.
+	 */
+	public function test_a_front_end_request_keeps_no_batch_decision(): void {
+		global $aafm_policy_state;
+		$this->on_a_front_end_page();
+		aafm_force_draft();
+		aafm_read_only_mode();
+
+		$this->assertArrayNotHasKey( 'batch_allowed', (array) $aafm_policy_state );
+		$this->assertFalse( has_action( 'shutdown', 'aafm_policy_reset_request_state' ) );
+	}
+
+	/**
+	 * U1-T1F rows (row F-b): MCP request forms before WordPress routes the request, with
+	 * REST_REQUEST undefined and no parsed rest_route. REQUEST_URI, the GET rest_route and the POST
+	 * rest_route.
+	 *
+	 * @return array<string,array{0:string,1:string|null,2:string|null}>
+	 */
+	public function unrouted_mcp_form_provider(): array {
+		$route = '/agent-abilities-for-mcp/mcp';
+		return array(
+			'pretty path'          => array( '/wp-json' . $route, null, null ),
+			'index.php path'       => array( '/index.php/wp-json' . $route, null, null ),
+			'GET rest_route'       => array( '/?rest_route=' . $route, $route, null ),
+			'POST-body rest_route' => array( '/', null, $route ),
+		);
+	}
+
+	/**
+	 * U1-T1F: a policy read made before WordPress routes an MCP request does not batch on any URL
+	 * form, and answers as 9626307: P3 row b's stale copy wins (NC-F2, pinned).
+	 *
+	 * @dataProvider unrouted_mcp_form_provider
+	 *
+	 * @param string      $uri  REQUEST_URI.
+	 * @param string|null $get  GET rest_route.
+	 * @param string|null $post POST rest_route.
+	 */
+	public function test_a_read_before_routing_does_not_batch( string $uri, ?string $get, ?string $post ): void {
+		$this->plant( 'aafm_high_risk_abilities_unlocked', '0', array( 'alloptions' => '1' ) );
+		$_SERVER['REQUEST_URI'] = $uri;
+		unset( $GLOBALS['wp']->query_vars['rest_route'] );
+		// phpcs:disable WordPress.Security.NonceVerification -- test fixture for the request.
+		if ( null !== $get ) {
+			$_GET['rest_route'] = $get;
+		}
+		if ( null !== $post ) {
+			$_POST['rest_route'] = $post;
+		}
+		aafm_policy_reset_request_state();
+		try {
+			$this->assertFalse( aafm_policy_batch_allowed() );
+			$this->assertTrue( aafm_high_risk_unlocked() );
+		} finally {
+			unset( $_GET['rest_route'], $_POST['rest_route'] );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification
+	}
+
+	/**
+	 * U1-T9 (row F-a) and PM addendum 2 rows: the batch decision follows core's parsed rest_route
+	 * with exactly core's empty() test. The request path plays no part.
+	 *
+	 * @return array<string,array{0:string,1:bool}>
+	 */
+	public function parsed_rest_route_provider(): array {
+		return array(
+			'a route' => array( '/agent-abilities-for-mcp/mcp', true ),
+			"'0'"     => array( '0', false ),
+			'empty'   => array( '', false ),
+		);
+	}
+
+	/**
+	 * U1-T9: with REQUEST_URI "/", a parsed rest_route batches (and P3 row b refuses the stale
+	 * unlock); '0' and '' are empty() to core and do not.
+	 *
+	 * @dataProvider parsed_rest_route_provider
+	 *
+	 * @param string $route   The parsed rest_route.
+	 * @param bool   $batched Whether the request batches.
+	 */
+	public function test_the_parsed_rest_route_decides_the_batch( string $route, bool $batched ): void {
+		$this->plant( 'aafm_high_risk_abilities_unlocked', '0', array( 'alloptions' => '1' ) );
+		$_SERVER['REQUEST_URI']                  = '/';
+		$GLOBALS['wp']->query_vars['rest_route'] = $route;
+		aafm_policy_reset_request_state();
+
+		$this->assertSame( $batched, aafm_policy_batch_allowed() );
+		$this->assertSame( ! $batched, aafm_high_risk_unlocked() );
+	}
+
+	/**
+	 * PM addendum 2, pre-parse row: before parse_request there is no parsed rest_route, so the
+	 * decision is not made and nothing is kept; once core sets the route, the same request batches.
+	 */
+	public function test_a_read_before_parse_request_is_not_kept(): void {
+		global $aafm_policy_state;
+		$_SERVER['REQUEST_URI'] = '/';
+		unset( $GLOBALS['wp']->query_vars['rest_route'] );
+		aafm_policy_reset_request_state();
+
+		$this->assertFalse( aafm_policy_batch_allowed() );
+		$this->assertArrayNotHasKey( 'batch_allowed', (array) $aafm_policy_state );
+
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$this->assertTrue( aafm_policy_batch_allowed() );
+	}
+
+	/**
+	 * U1-T10 (row F-h): the OAuth authorize marker with no parsed route does not batch; the
+	 * authorize screen reads policy as 9626307 (NC-F1).
+	 */
+	public function test_the_authorize_marker_alone_does_not_batch(): void {
+		$_SERVER['REQUEST_URI'] = '/';
+		unset( $GLOBALS['wp']->query_vars['rest_route'] );
+		$_GET['aafm_oauth'] = 'authorize'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- test fixture for the request.
+		aafm_policy_reset_request_state();
+		try {
+			$this->assertFalse( aafm_policy_batch_allowed() );
+		} finally {
+			unset( $_GET['aafm_oauth'] );
+		}
+	}
+
+	/**
+	 * U1-T4 (row F-c): the early OAuth kill-switch read, then REST_REQUEST, in one request. The
+	 * early read answers as 9626307 with no batch and keeps nothing; the read after REST_REQUEST
+	 * batches and refuses the stale copy.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_an_early_read_then_rest_request_batches_the_later_read(): void {
+		global $aafm_policy_state;
+		$this->plant( 'aafm_oauth_enabled', '0', array( 'alloptions' => '1' ) );
+		$_SERVER['REQUEST_URI'] = '/';
+		unset( $GLOBALS['wp']->query_vars['rest_route'] );
+		aafm_policy_reset_request_state();
+
+		$this->assertSame( array( true, 0 ), $this->with_batch_count( static fn() => aafm_oauth_enabled() ) );
+		$this->assertArrayNotHasKey( 'batch_allowed', (array) $aafm_policy_state );
+
+		define( 'REST_REQUEST', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- core's own constant, defined as rest_api_loaded() does.
+		$this->assertSame( array( false, 1 ), $this->with_batch_count( static fn() => aafm_oauth_enabled() ) );
+	}
+
+	/**
+	 * Run $callback and count the batched policy queries it runs.
+	 *
+	 * @param callable $callback Code to run.
+	 * @return array{0:mixed,1:int} Its result and the batch count.
+	 */
+	private function with_batch_count( callable $callback ): array {
+		$result = null;
+		$counts = $this->count_policy_queries(
+			static function () use ( $callback, &$result ) {
+				$result = $callback();
+			}
+		);
+		return array( $result, $counts[0] );
 	}
 
 	/**
@@ -705,6 +893,7 @@ final class PolicyReadStaleCacheTest extends TestCase {
 	 */
 	private function on_a_front_end_page(): void {
 		$_SERVER['REQUEST_URI'] = '/sample-page/';
+		unset( $GLOBALS['wp']->query_vars['rest_route'] );
 		aafm_policy_reset_request_state();
 	}
 

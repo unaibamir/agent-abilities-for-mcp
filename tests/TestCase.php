@@ -22,12 +22,14 @@ abstract class TestCase extends WP_UnitTestCase {
 	public function set_up(): void {
 		parent::set_up();
 		// Policy reads are memoised per request; each test is a fresh request. With
-		// AAFM_TEST_POLICY_PATH=batched every test runs as an MCP REST request, so policy reads
-		// take the batched path; unset, they take the front-end path.
+		// AAFM_TEST_POLICY_PATH=batched every test runs as an MCP REST request that WordPress has
+		// already routed, so policy reads take the batched path; unset, they take the front-end path.
 		aafm_policy_reset_request_state();
 		$this->policy_request_uri = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- snapshot, restored as it was.
+		$this->policy_query_vars  = isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof \WP ? $GLOBALS['wp']->query_vars : null;
 		if ( 'batched' === getenv( 'AAFM_TEST_POLICY_PATH' ) ) {
 			$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+			$this->route_as_rest_request();
 		}
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is invoked.
@@ -103,6 +105,9 @@ abstract class TestCase extends WP_UnitTestCase {
 		} else {
 			$_SERVER['REQUEST_URI'] = $this->policy_request_uri;
 		}
+		if ( null !== $this->policy_query_vars && isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof \WP ) {
+			$GLOBALS['wp']->query_vars = $this->policy_query_vars;
+		}
 		aafm_policy_reset_request_state();
 		parent::tear_down();
 	}
@@ -113,6 +118,24 @@ abstract class TestCase extends WP_UnitTestCase {
 	 * @var string|null
 	 */
 	private $policy_request_uri = null;
+
+	/**
+	 * WordPress's parsed query vars as set_up() found them, restored in tear_down().
+	 *
+	 * @var array<string,mixed>|null
+	 */
+	private $policy_query_vars = null;
+
+	/**
+	 * Make this request one WordPress has routed as REST (core's parsed rest_route, the test
+	 * rest_api_loaded() applies), so policy reads take the batched path.
+	 *
+	 * @return void
+	 */
+	protected function route_as_rest_request(): void {
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		aafm_policy_reset_request_state();
+	}
 
 	/**
 	 * The MCP endpoint's request path, built as aafm_oauth_request_targets_mcp_route() builds it.
@@ -136,7 +159,7 @@ abstract class TestCase extends WP_UnitTestCase {
 	 * @return void
 	 */
 	protected function use_front_end_policy_path(): void {
-		unset( $_SERVER['REQUEST_URI'] );
+		unset( $_SERVER['REQUEST_URI'], $GLOBALS['wp']->query_vars['rest_route'] );
 		aafm_policy_reset_request_state();
 	}
 

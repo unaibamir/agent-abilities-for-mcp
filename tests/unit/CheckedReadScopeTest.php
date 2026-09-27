@@ -226,6 +226,7 @@ final class CheckedReadScopeTest extends TestCase {
 			'W1-C8'  => array( 'c8' ),
 			'W1-C9'  => array( 'c9' ),
 			'W1-C10' => array( 'c10' ),
+			'served id, key 0 -> raw rows (core no-key answer)' => array( 'c10_key_zero' ),
 			'W1-C11' => array( 'c11' ),
 			'W1-C12' => array( 'c12' ),
 			'W1-C13' => array( 'c13' ),
@@ -485,6 +486,37 @@ final class CheckedReadScopeTest extends TestCase {
 			),
 			$result
 		);
+	}
+
+	/**
+	 * A read of key '0' on a served object is core's no-key read (get_metadata_raw() tests
+	 * ! $meta_key), so it gets the raw rows from the scope and core's own SELECT never runs.
+	 */
+	private function row_c10_key_zero(): void {
+		global $wpdb;
+		$post_id  = $this->post_with_meta();
+		$expected = $this->healthy_rows( $post_id );
+
+		$core_select = "FROM {$wpdb->postmeta} WHERE post_id IN";
+
+		$result = $this->with_unkept_post_meta(
+			static function () use ( $post_id, $core_select ) {
+				return QueryFaultInjector::break_query_with_real_error(
+					$core_select,
+					static function () use ( $post_id ) {
+						return aafm_with_checked_reads(
+							static function () use ( $post_id ) {
+								return array( 'zero' => get_metadata( 'post', $post_id, '0', false ) );
+							},
+							new WP_Error( 'aafm_error', 'unused' )
+						);
+					}
+				);
+			}
+		);
+
+		$this->assertSame( array( 'zero' => $expected ), $result );
+		$this->assertSame( 0, QueryFaultInjector::fired_count(), 'core\'s own metadata SELECT must not run for a served object' );
 	}
 
 	/**

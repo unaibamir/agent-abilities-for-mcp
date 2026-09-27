@@ -406,9 +406,10 @@ function aafm_with_checked_reads( callable $build, WP_Error $error ) {
 	};
 
 	// Answers a read of a served object in core's shape (get_metadata_raw(), wp-includes/meta.php):
-	// core takes [0] of an array for a single read, so a no-key single read is wrapped once.
+	// core takes [0] of an array for a single read, so a no-key single read is wrapped once. Core's
+	// no-key test is ! $meta_key, so key '0' is a no-key read too.
 	$serve = static function ( array $rows, string $meta_key, bool $single ) {
-		if ( '' === $meta_key ) {
+		if ( ! $meta_key ) {
 			return $single ? array( $rows ) : $rows;
 		}
 		return isset( $rows[ $meta_key ] ) ? array_map( 'maybe_unserialize', $rows[ $meta_key ] ) : null;

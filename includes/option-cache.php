@@ -376,7 +376,7 @@ function aafm_wpdb_col( string $sql ): array {
  * result) and a query that simply finds no matching row both make `$wpdb->get_var()` return null -
  * `db_found` alone cannot tell "confirmed absent" from "could not check" apart (Codex round 9
  * re-check: this was the gap behind a failed configuration delete still certifying as a clean
- * reset - R9-3). `db_error` names that gap explicitly, from aafm_wpdb_scalar()'s own `ok` flag
+ * reset - R9-3). `db_error` names that gap explicitly, from aafm_wpdb_row()'s own `ok` flag
  * rather than `$wpdb->last_error` alone: last_error is not set on every failure path (Codex round
  * 10, R10-1 - see that function's docblock for the three it misses), so a caller that trusted it
  * alone could still certify an unreadable database as proof the row was gone.
@@ -414,13 +414,15 @@ function aafm_read_option_views( string $option ): array {
 	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache; certification must be checked against the row itself, mirroring aafm_uninstall_should_delete_data()'s reasoning.
-	$scalar   = aafm_wpdb_scalar( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
-	$db_error = ! $scalar['ok'];
-	$db_found = ! $db_error && null !== $scalar['value'];
+	// Read as a row, not a scalar: aafm_wpdb_scalar() turns a stored '' into no row, and a '' row is
+	// still a row (ledger s14hunta-1).
+	$row      = aafm_wpdb_row( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
+	$db_error = ! $row['ok'];
+	$db_found = $row['ok'] && null !== $row['value'];
 
 	return array(
 		'db_found'    => $db_found,
-		'db_value'    => $db_found ? maybe_unserialize( $scalar['value'] ) : false,
+		'db_value'    => $db_found ? maybe_unserialize( $row['value']['option_value'] ) : false,
 		'db_error'    => $db_error,
 		'cache_found' => $cache_found,
 		'cache_value' => $cache_value,
@@ -456,6 +458,21 @@ function aafm_option_value_matches( $stored, $expected ): bool {
 		}
 	}
 	return (string) $stored === (string) $expected;
+}
+
+/**
+ * Whether a stored value is exactly the object id a write asked for: the int itself, or the string
+ * core stores for it (its ASCII decimal digits).
+ *
+ * A cast is the wrong test. `(int)` reads '12.9', '12abc', ' 12', '012' and true as an id, so an
+ * old row a vetoing filter left behind would confirm a write that never happened.
+ *
+ * @param mixed $stored Value read back from the row.
+ * @param int   $id     The id the write asked for.
+ * @return bool
+ */
+function aafm_stored_id_matches( $stored, int $id ): bool {
+	return $stored === $id || ( is_string( $stored ) && (string) $id === $stored );
 }
 
 /**

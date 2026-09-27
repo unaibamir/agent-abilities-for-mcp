@@ -261,7 +261,9 @@ function aafm_exec_update_site_settings( array $input ) {
 	// from get_option()'s answer, which comes from a cache copy before the row. So before anything is
 	// written, every cache copy of each key has to agree with its row (see
 	// aafm_option_row_if_cache_agrees() for the rules). A refusal on any key refuses the whole request
-	// before the first write.
+	// before the first write. The check runs after the dry-run's reads on purpose, so a notoptions
+	// entry that a failed read there leaves is refused; it must stay the last read before the first
+	// write.
 	foreach ( array_keys( $settings ) as $key ) {
 		if ( null === aafm_option_row_if_cache_agrees( (string) $key ) ) {
 			return aafm_generic_error();

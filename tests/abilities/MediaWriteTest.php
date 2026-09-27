@@ -1500,4 +1500,122 @@ final class MediaWriteTest extends TestCase {
 		$this->assertSame( $before, $this->attachment_count() );
 		$this->assertInstanceOf( WP_Post::class, get_post( $bystander ) );
 	}
+
+	/**
+	 * Stored values against the id asked for, each with its literal answer (pm-plan item 2).
+	 *
+	 * @return array<string, array{0: mixed, 1: int, 2: bool}>
+	 */
+	public function stored_id_cases(): array {
+		return array(
+			'int 3'         => array( 3, 3, true ),
+			"'3'"           => array( '3', 3, true ),
+			"'03'"          => array( '03', 3, false ),
+			"'3.0'"         => array( '3.0', 3, false ),
+			"' 3'"          => array( ' 3', 3, false ),
+			"'3 '"          => array( '3 ', 3, false ),
+			'trailing "\n"' => array( "3\n", 3, false ),
+			"'+3'"          => array( '+3', 3, false ),
+			'float 3.0'     => array( 3.0, 3, false ),
+			'NAN'           => array( NAN, 3, false ),
+			'true for 1'    => array( true, 1, false ),
+			"'' for 0"      => array( '', 0, false ),
+			'null for 0'    => array( null, 0, false ),
+			'array( 3 )'    => array( array( 3 ), 3, false ),
+			"'012' for 12"  => array( '012', 12, false ),
+		);
+	}
+
+	/**
+	 * The shared id comparator accepts only the int itself or its decimal string.
+	 *
+	 * @dataProvider stored_id_cases
+	 *
+	 * @param mixed $stored   Stored value.
+	 * @param int   $id       Id asked for.
+	 * @param bool  $expected Literal answer.
+	 */
+	public function test_the_stored_id_comparator_accepts_only_the_exact_id( $stored, int $id, bool $expected ): void {
+		$this->assertSame( $expected, aafm_stored_id_matches( $stored, $id ) );
+	}
+
+	/**
+	 * Old _thumbnail_id rows that only a lossy cast reads as the requested image. '%d' is the
+	 * image's id; 'id_one' asks the image to be created as id 1 for the serialized true row.
+	 *
+	 * @return array<string, array{0: string, 1: bool}>
+	 */
+	public function lossy_thumbnail_rows(): array {
+		return array(
+			"'12.9'"  => array( '%d.9', false ),
+			"'12abc'" => array( '%dabc', false ),
+			"' 12'"   => array( ' %d', false ),
+			"'012'"   => array( '0%d', false ),
+			'true'    => array( 'b:1;', true ),
+		);
+	}
+
+	/**
+	 * UG-T4 (ledger s14w1-code-3): under a filter that vetoes the write, an old row that a lossy
+	 * cast would read as the requested image does not confirm it; the read-back returns the
+	 * generic error.
+	 *
+	 * @dataProvider lossy_thumbnail_rows
+	 *
+	 * @param string $raw    Raw meta_value planted for the old row.
+	 * @param bool   $id_one Whether the image must be attachment 1.
+	 */
+	public function test_a_vetoed_featured_image_over_a_lossy_old_row_returns_the_generic_error( string $raw, bool $id_one ): void {
+		global $wpdb;
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create();
+		if ( $id_one ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$this->assertNull( $wpdb->get_var( "SELECT ID FROM {$wpdb->posts} WHERE ID = 1" ), 'Guard: post id 1 is free.' );
+			$image = self::factory()->attachment->create_object(
+				'fixture.png',
+				0,
+				array(
+					'post_mime_type' => 'image/png',
+					'post_type'      => 'attachment',
+					'post_title'     => 'Fixture',
+					'import_id'      => 1,
+				)
+			);
+			wp_update_attachment_metadata(
+				$image,
+				array(
+					'width'  => 10,
+					'height' => 20,
+					'file'   => 'fixture.png',
+				)
+			);
+			$this->assertSame( 1, $image, 'Guard: the image is attachment 1.' );
+		} else {
+			$image = $this->image_attachment( null );
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- planting the raw old row under test.
+		$wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post,
+				'meta_key'   => '_thumbnail_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value' => sprintf( $raw, $image ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		wp_cache_delete( $post, 'post_meta' );
+
+		$veto = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$out  = wp_get_ability( 'aafm/set-featured-image' )->execute(
+			array(
+				'post_id'       => $post,
+				'attachment_id' => $image,
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+	}
 }

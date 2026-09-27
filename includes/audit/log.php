@@ -400,7 +400,8 @@ function aafm_denial_log_within_cap( string $bucket ): bool {
  * reason: this action can fire during determine_current_user before this plugin's own
  * plugins_loaded callback has required every file it depends on, if another active plugin
  * resolves the current user earlier in the load order. aafm_oauth_request_targets_mcp_route()
- * itself calls aafm_mcp_rest_route() (bootstrap.php) with no internal guard, so that dependency
+ * itself calls aafm_is_mcp_route() (bootstrap.php, which also defines aafm_mcp_rest_route()) with
+ * no internal guard, so that dependency
  * is checked here too, exactly as aafm_oauth_resolve_current_user() checks it before calling the
  * same route helper. When either is missing this simply skips logging rather than fatal on an
  * undefined function.

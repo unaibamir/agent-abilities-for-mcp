@@ -304,6 +304,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/validator.php';
 // surfaced only through this resolver returning no user, never by attaching a
 // filter that could turn "no user resolved" into a hard failure on unrelated routes.
 add_filter( 'determine_current_user', 'aafm_oauth_resolve_current_user', 20 );
+// Registration on an MCP request sees the approver (the same clear serve_request() makes, earlier),
+// and a bearer identity only ever reaches the adapter's own MCP handler. The last priority keeps a
+// normal-priority rest_request_before_callbacks filter from undoing the refusal.
+add_action( 'rest_api_init', 'aafm_oauth_forget_anonymous_user_on_mcp_route', PHP_INT_MIN );
+add_filter( 'rest_request_before_callbacks', 'aafm_oauth_confine_bearer_to_mcp_handler', PHP_INT_MAX, 3 );
 
 // wp_kses allowlist helpers - loaded unconditionally so they are available to the
 // OAuth consent page (rendered on the front end, before aafm_bootstrap()).

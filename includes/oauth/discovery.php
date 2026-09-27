@@ -142,7 +142,7 @@ function aafm_oauth_dcr_enabled(): bool {
 function aafm_oauth_seed_default_options(): void {
 	// Both toggles are read on requests that touch the OAuth surface: aafm_oauth_enabled() gates
 	// the CORS filters at bootstrap and the .well-known handler on parse_request, and
-	// aafm_oauth_request_targets_mcp_route() consults it on determine_current_user;
+	// aafm_oauth_resolve_current_user() consults it on determine_current_user;
 	// aafm_oauth_dcr_enabled() is read by the register route and the discovery metadata. They must
 	// stay autoloaded ('yes', the add_option default) so get_option() answers those hot-path reads
 	// without a query of its own - switching either to autoload 'no' would be a per-request

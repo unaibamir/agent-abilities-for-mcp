@@ -37,11 +37,31 @@ class ValidatorTest extends TestCase {
 	private array $original_request = array();
 
 	/**
+	 * $_GET, $_POST, $_SERVER and the current user as set_up() found them, restored in tear_down().
+	 *
+	 * @var array<string,mixed>
+	 */
+	private array $saved_globals = array();
+
+	/**
+	 * Cleanups a test registered, run last-first in tear_down().
+	 *
+	 * @var array<int,callable>
+	 */
+	private array $cleanups = array();
+
+	/**
 	 * The WP test suite rewrites plugin CREATE TABLE to its TEMPORARY form, so the
 	 * token table must be installed per test before any mint/validate runs.
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		$this->saved_globals = array(
+			'get'          => $_GET, // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- snapshot, restored verbatim.
+			'post'         => $_POST, // phpcs:ignore WordPress.Security.NonceVerification.Missing -- snapshot, restored verbatim.
+			'server'       => $_SERVER,
+			'current_user' => $GLOBALS['current_user'] ?? null,
+		);
 
 		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.NonceVerification.Recommended
 		$this->original_auth    = array(
@@ -64,6 +84,7 @@ class ValidatorTest extends TestCase {
 		// WordPress routes the /wp-json/ path at all.
 		$this->set_permalink_structure( '/%postname%/' );
 		$this->on_mcp_route();
+		$this->route_as_rest_request();
 		$_SERVER['HTTPS'] = 'on';
 
 		aafm_install_oauth_tables();
@@ -106,6 +127,10 @@ class ValidatorTest extends TestCase {
 	 * Restore the Authorization / request keys to exactly their pre-test state.
 	 */
 	public function tear_down(): void {
+		foreach ( array_reverse( $this->cleanups ) as $cleanup ) {
+			$cleanup();
+		}
+		$this->cleanups = array();
 		$this->set_permalink_structure( '' );
 		foreach ( $this->original_auth as $key => $value ) {
 			if ( null === $value ) {
@@ -126,6 +151,10 @@ class ValidatorTest extends TestCase {
 		} else {
 			$_GET['rest_route'] = $this->original_request['rest_route'];
 		}
+		$_GET                    = $this->saved_globals['get'];
+		$_POST                   = $this->saved_globals['post'];
+		$_SERVER                 = $this->saved_globals['server'];
+		$GLOBALS['current_user'] = $this->saved_globals['current_user']; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restored as set_up() found it.
 		parent::tear_down();
 	}
 
@@ -214,7 +243,7 @@ class ValidatorTest extends TestCase {
 		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
 
 		// On an unrelated core REST route the same token resolves no user.
-		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/wp/v2/posts';
+		$this->route_off_mcp();
 		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'An MCP token must not authenticate on a non-MCP REST route.' );
 	}
 
@@ -287,7 +316,7 @@ class ValidatorTest extends TestCase {
 			);
 
 			// A non-MCP route under the same prefix must still be denied.
-			$_SERVER['REQUEST_URI'] = '/blog/' . $rest_prefix . '/wp/v2/posts';
+			$this->route_off_mcp();
 			$this->assertFalse(
 				aafm_oauth_resolve_current_user( false ),
 				'An MCP token must not authenticate on a non-MCP route even under the same path prefix.'
@@ -710,40 +739,6 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * The route guard runs on determine_current_user, which can fire before WordPress
-	 * instantiates the global $wp_rewrite (Query Monitor calls current_user_can() that
-	 * early). rest_url() -> get_rest_url() dereferences $wp_rewrite and would fatal on
-	 * null. With $wp_rewrite nulled, the guard must still (a) not fatal and (b) classify
-	 * the MCP route as true and a non-MCP route as false, falling back to the
-	 * home_url() + rest_get_url_prefix() reconstruction (neither touches $wp_rewrite).
-	 */
-	public function test_route_guard_survives_null_wp_rewrite(): void {
-		$saved_rewrite = $GLOBALS['wp_rewrite'] ?? null;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- deliberately simulate the early-bootstrap state where $wp_rewrite is not yet set.
-		$GLOBALS['wp_rewrite'] = null;
-
-		try {
-			// Pretty-permalink MCP request path, reconstructed without $wp_rewrite.
-			$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
-			unset( $_GET['rest_route'] );
-			$this->assertTrue(
-				aafm_oauth_request_targets_mcp_route(),
-				'The MCP route must be recognised even when $wp_rewrite is null.'
-			);
-
-			// A non-MCP REST route must not match.
-			$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/wp/v2/posts';
-			$this->assertFalse(
-				aafm_oauth_request_targets_mcp_route(),
-				'A non-MCP route must not match when $wp_rewrite is null.'
-			);
-		} finally {
-			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restore the exact prior global so the null state never bleeds into another test.
-			$GLOBALS['wp_rewrite'] = $saved_rewrite;
-		}
-	}
-
-	/**
 	 * Verifies that aafm_endpoint_url() returns the same string whether or not $wp_rewrite
 	 * is instantiated. When the OAuth bearer hits determine_current_user early (before
 	 * $wp_rewrite exists), the validator's audience hash_equals() compares the token's
@@ -822,11 +817,10 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * The rest_route query var is AUTHORITATIVE over the request path. WordPress dispatches on
-	 * $_GET['rest_route'] when present, so a request whose path IS the MCP route but whose
-	 * rest_route points at an unrelated core route (e.g. /wp/v2/users/me) must NOT be classified as
-	 * MCP-targeted - otherwise an audience-bound aafm_oat_ token would resolve a user for a route
-	 * WordPress actually dispatches elsewhere, turning it into a general credential.
+	 * The route WordPress parsed is AUTHORITATIVE over the request path. A request whose path IS the
+	 * MCP route but whose parsed rest_route is an unrelated core route (e.g. /wp/v2/users/me) must NOT
+	 * be classified as MCP-targeted - otherwise an audience-bound aafm_oat_ token would resolve a user
+	 * for a route WordPress actually dispatches elsewhere, turning it into a general credential.
 	 */
 	public function test_rest_route_query_var_overrides_matching_path(): void {
 		$uid    = self::factory()->user->create();
@@ -839,8 +833,8 @@ class ValidatorTest extends TestCase {
 		);
 		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
 
-		// set_up() already pointed REQUEST_URI at the MCP path. Overlay a non-MCP rest_route.
-		$_GET['rest_route'] = '/wp/v2/users/me';
+		// set_up() already pointed REQUEST_URI at the MCP path. WordPress parsed a non-MCP rest_route.
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wp/v2/users/me';
 		$this->assertFalse(
 			aafm_oauth_request_targets_mcp_route(),
 			'A non-MCP rest_route must win over an MCP request path.'
@@ -851,173 +845,9 @@ class ValidatorTest extends TestCase {
 		);
 
 		// Positive control: rest_route pointing at the MCP route resolves normally.
-		$_GET['rest_route'] = '/agent-abilities-for-mcp/mcp';
+		$this->route_as_rest_request();
 		$this->assertTrue( aafm_oauth_request_targets_mcp_route() );
 		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
-	}
-
-	/**
-	 * Rows for the rest_route WordPress dispatches on, in core's order (WP::parse_request(): POST,
-	 * then GET; a GET and POST that differ are refused): the GET value, the POST value, and whether
-	 * the request targets the MCP route. The request path is the MCP path throughout.
-	 *
-	 * @return array<string,array{0:mixed,1:mixed,2:string|false,3:bool}>
-	 */
-	public function rest_route_source_provider(): array {
-		$mcp   = '/agent-abilities-for-mcp/mcp';
-		$other = '/wp/v2/users/me';
-		return array(
-			'POST names another route'    => array( null, $other, $other, false ),
-			'POST names the MCP route'    => array( null, $mcp, $mcp, true ),
-			'GET and POST the same route' => array( $mcp, $mcp, $mcp, true ),
-			'GET MCP, POST another route' => array( $mcp, $other, false, false ),
-			'GET another route, POST MCP' => array( $other, $mcp, false, false ),
-			'POST value is an array'      => array( null, array( $mcp ), false, false ),
-			'GET value is an array'       => array( array( $mcp ), null, false, false ),
-		);
-	}
-
-	/**
-	 * The MCP route check reads rest_route in core's own order, so a bearer resolves only for a
-	 * request WordPress dispatches to the MCP route.
-	 *
-	 * @dataProvider rest_route_source_provider
-	 *
-	 * @param mixed        $get     The GET rest_route, or null for none.
-	 * @param mixed        $post    The POST rest_route, or null for none.
-	 * @param string|false $route   The route aafm_request_rest_route() reads.
-	 * @param bool         $targets Whether the request targets the MCP route.
-	 */
-	public function test_rest_route_is_read_in_cores_order( $get, $post, $route, bool $targets ): void {
-		$uid    = self::factory()->user->create();
-		$tokens = aafm_oauth_mint_tokens(
-			array(
-				'wp_user_id' => $uid,
-				'client_id'  => 'c',
-				'resource'   => aafm_endpoint_url(),
-			)
-		);
-		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
-
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- test fixture for the request.
-		$had_post = array_key_exists( 'rest_route', $_POST );
-		$old_post = $had_post ? $_POST['rest_route'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- snapshot, restored as it was.
-		if ( null !== $get ) {
-			$_GET['rest_route'] = $get;
-		}
-		if ( null !== $post ) {
-			$_POST['rest_route'] = $post;
-		}
-		try {
-			$this->assertSame( $route, aafm_request_rest_route() );
-			$this->assertSame( $targets, aafm_oauth_request_targets_mcp_route() );
-			$this->assertSame( $targets ? $uid : false, aafm_oauth_resolve_current_user( false ) );
-		} finally {
-			unset( $_GET['rest_route'] );
-			if ( $had_post ) {
-				$_POST['rest_route'] = $old_post;
-			} else {
-				unset( $_POST['rest_route'] );
-			}
-		}
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
-	}
-
-	/**
-	 * With no permalink structure WordPress has no rewrite rules, so it routes no path: a request to
-	 * /wp-json/<namespace>/mcp with no rest_route is a front-end view, not the MCP endpoint, and a
-	 * bearer does not resolve there. With a structure the same path is the MCP endpoint, and on
-	 * plain permalinks ?rest_route= still reaches it.
-	 *
-	 * @return array<string,array{0:string,1:string|null,2:bool}>
-	 */
-	public function permalink_routing_provider(): array {
-		return array(
-			'plain permalinks, /wp-json/ path'   => array( '', null, false ),
-			'pretty permalinks, /wp-json/ path'  => array( '/%postname%/', null, true ),
-			'plain permalinks, ?rest_route= set' => array( '', '/agent-abilities-for-mcp/mcp', true ),
-		);
-	}
-
-	/**
-	 * The MCP path counts only when WordPress routes paths (a permalink structure is set).
-	 *
-	 * @dataProvider permalink_routing_provider
-	 *
-	 * @param string      $structure  Permalink structure.
-	 * @param string|null $rest_route GET rest_route, or null for none.
-	 * @param bool        $targets    Whether the request targets the MCP route.
-	 */
-	public function test_the_mcp_path_counts_only_when_wordpress_routes_paths( string $structure, ?string $rest_route, bool $targets ): void {
-		$this->set_permalink_structure( $structure );
-		$uid    = self::factory()->user->create();
-		$tokens = aafm_oauth_mint_tokens(
-			array(
-				'wp_user_id' => $uid,
-				'client_id'  => 'c',
-				'resource'   => aafm_endpoint_url(),
-			)
-		);
-		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
-		$_SERVER['REQUEST_URI'] = '/wp-json/agent-abilities-for-mcp/mcp';
-		if ( null !== $rest_route ) {
-			$_GET['rest_route'] = $rest_route; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- test fixture for the request.
-		}
-
-		$this->assertSame( $targets, aafm_oauth_request_targets_mcp_route() );
-		$this->assertSame( $targets ? $uid : false, aafm_oauth_resolve_current_user( false ) );
-	}
-
-	/**
-	 * Before WordPress builds $wp_rewrite, the stored permalink structure decides: plain means the
-	 * /wp-json/ path is not the MCP endpoint, pretty means it is.
-	 */
-	public function test_the_permalink_check_reads_the_stored_structure_before_wp_rewrite_exists(): void {
-		$_SERVER['REQUEST_URI'] = '/wp-json/agent-abilities-for-mcp/mcp';
-		$saved_rewrite          = $GLOBALS['wp_rewrite'];
-		try {
-			update_option( 'permalink_structure', '' );
-			$GLOBALS['wp_rewrite'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the pre-$wp_rewrite window, restored below.
-			$this->assertFalse( aafm_oauth_request_targets_mcp_route() );
-
-			update_option( 'permalink_structure', '/%postname%/' );
-			$this->assertTrue( aafm_oauth_request_targets_mcp_route() );
-		} finally {
-			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-			$GLOBALS['wp_rewrite'] = $saved_rewrite;
-		}
-	}
-
-	/**
-	 * B40: the route guard must match the MCP route case-insensitively, like core routing does.
-	 *
-	 * Core compiles its REST route regexes with the `i` modifier (class-wp-rest-server.php), so
-	 * WordPress dispatches /wp-json/Agent-Abilities-For-MCP/MCP to the MCP endpoint. The swept
-	 * siblings (aafm_mcp_filter_governed_error_status(), aafm_oauth_filter_malformed_json())
-	 * already compare with strcasecmp() for exactly that reason. A case-sensitive comparison here
-	 * fails closed - the bearer never resolves, so OAuth breaks on an odd-cased request that core
-	 * still dispatches to the endpoint - but it must agree with its siblings and with core.
-	 */
-	public function test_route_match_is_case_insensitive_like_core_routing(): void {
-		// Pretty-permalink branch: an odd-cased request path still targets the MCP route.
-		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/Agent-Abilities-For-MCP/MCP';
-		unset( $_GET['rest_route'] );
-		$this->assertTrue(
-			aafm_oauth_request_targets_mcp_route(),
-			'An odd-cased MCP request path must still classify as MCP-targeted.'
-		);
-
-		// Plain-permalink branch: the authoritative rest_route query var is matched the same way.
-		$_SERVER['REQUEST_URI'] = '/index.php';
-		$_GET['rest_route']     = '/Agent-Abilities-For-MCP/MCP';
-		$this->assertTrue(
-			aafm_oauth_request_targets_mcp_route(),
-			'An odd-cased rest_route query var must still classify as MCP-targeted.'
-		);
-
-		// A genuinely different route stays false in both branches, whatever the case.
-		$_GET['rest_route'] = '/WP/v2/Posts';
-		$this->assertFalse( aafm_oauth_request_targets_mcp_route() );
 	}
 
 	/**
@@ -1198,5 +1028,717 @@ class ValidatorTest extends TestCase {
 			$guard,
 			'The pre-bootstrap guard must run before the audience binding that needs aafm_endpoint_url().'
 		);
+	}
+
+	/**
+	 * Mint a token for a new user bound to this endpoint, as the endpoint URL reads now, and present it.
+	 *
+	 * @param string $role Role of the approving user.
+	 * @return int The approving user's id.
+	 */
+	private function present_valid_bearer( string $role = 'subscriber' ): int {
+		$uid    = self::factory()->user->create( array( 'role' => $role ) );
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+		return $uid;
+	}
+
+	/**
+	 * Remove the REST rewrite rules core registers from the rewrite object's top rules, and put them
+	 * back in tear_down().
+	 *
+	 * @return void
+	 */
+	private function drop_rest_top_rules(): void {
+		global $wp_rewrite;
+		$saved = $wp_rewrite->extra_rules_top;
+		foreach ( array_keys( $wp_rewrite->extra_rules_top ) as $regex ) {
+			if ( false !== strpos( $regex, 'wp-json' ) ) {
+				unset( $wp_rewrite->extra_rules_top[ $regex ] );
+			}
+		}
+		$this->cleanups[] = static function () use ( $saved ): void {
+			$GLOBALS['wp_rewrite']->extra_rules_top = $saved;
+		};
+	}
+
+	/**
+	 * One row per routing state WordPress can be in: the permalink structure, the request, any
+	 * code-set setup, the rest_route core parses (the literal), and whether that is the MCP route.
+	 *
+	 * @return array<string,array{0:string,1:string,2:string|null,3:mixed,4:mixed,5:string,6:string,7:mixed,8:bool}>
+	 */
+	public function wordpress_routing_provider(): array {
+		$m = '/agent-abilities-for-mcp/mcp';
+		$p = '/%postname%/';
+		$i = '/index.php/%postname%/';
+		$n = '';
+		// structure, REQUEST_URI, PATH_INFO, GET rest_route, POST rest_route, parse_request() extra, setup, parsed rest_route, targets MCP.
+		return array(
+			'R01 pretty path'                          => array( $p, '/wp-json' . $m, null, null, null, '', '', $m, true ),
+			'R02 pretty path, trailing slash'          => array( $p, '/wp-json' . $m . '/', null, null, null, '', '', $m, true ),
+			'R03 pretty path, mixed case'              => array( $p, '/wp-json/Agent-Abilities-For-MCP/MCP', null, null, null, '', '', '/Agent-Abilities-For-MCP/MCP', true ),
+			'R04 upper-case prefix'                    => array( $p, '/WP-JSON' . $m, null, null, null, '', '', null, false ),
+			'R05 NUL in the prefix'                    => array( $p, '/wp-%00json' . $m, null, null, null, '', '', null, false ),
+			'R06 encoded letter in the prefix'         => array( $p, '/wp-%6Ason' . $m, null, null, null, '', '', $m, true ),
+			'R07 index.php path'                       => array( $p, '/index.php/wp-json' . $m, null, null, null, '', '', $m, true ),
+			'R08 PATH_INFO names the route'            => array( $p, '/index.php/wp-json' . $m, '/wp-json' . $m, null, null, '', '', $m, true ),
+			'R09 PATH_INFO names a page'               => array( $p, '/wp-json' . $m, '/sample-page', null, null, '', '', null, false ),
+			'R10 index structure, index.php path'      => array( $i, '/index.php/wp-json' . $m, null, null, null, '', '', $m, true ),
+			'R11 index structure, bare path'           => array( $i, '/wp-json' . $m, null, null, null, '', '', $m, true ),
+			'R12 site under /blog'                     => array( $p, '/blog/wp-json' . $m, null, null, null, '', 'home_blog', $m, true ),
+			'R13 prefix api, /api path'                => array( $p, '/api' . $m, null, null, null, '', 'prefix_api', $m, true ),
+			'R14 prefix api, /wp-json path'            => array( $p, '/wp-json' . $m, null, null, null, '', 'prefix_api', null, false ),
+			'R15 rest_url filtered to /proxy, proxy'   => array( $p, '/proxy/wp-json' . $m, null, null, null, '', 'rest_url_proxy', null, false ),
+			'R16 rest_url filtered to /proxy, direct'  => array( $p, '/wp-json' . $m, null, null, null, '', 'rest_url_proxy', $m, true ),
+			'R17 plain permalinks, pretty path'        => array( $n, '/wp-json' . $m, null, null, null, '', '', null, false ),
+			'R18 plain structure, stored REST rules'   => array( $n, '/wp-json' . $m, null, null, null, '', 'stored_rest_rules', $m, true ),
+			'R19 pretty structure, no REST rules'      => array( $p, '/wp-json' . $m, null, null, null, '', 'drop_rest_rules', null, false ),
+			'R20 plain permalinks, rest_route'         => array( $n, '/index.php?rest_route=' . $m, null, $m, null, '', '', $m, true ),
+			'R21 pretty permalinks, rest_route'        => array( $p, '/?rest_route=' . $m, null, $m, null, '', '', $m, true ),
+			'R22 POST rest_route'                      => array( $p, '/', null, null, $m, '', '', $m, true ),
+			'R23 GET and POST agree'                   => array( $p, '/?rest_route=' . $m, null, $m, $m, '', '', $m, true ),
+			'R24 GET and POST differ'                  => array( $p, '/?rest_route=' . $m, null, $m, '/wp/v2/users/me', '', 'expect_die', null, false ),
+			'R25 array rest_route'                     => array( $p, '/', null, array( 'x' ), null, '', '', array( 'x' ), false ),
+			'R26 empty rest_route on the pretty path'  => array( $p, '/wp-json' . $m . '?rest_route=', null, '', null, '', '', '', false ),
+			'R27 markup after the route'               => array( $p, '/', null, $m . '<b>', null, '', '', $m . '<b>', false ),
+			'R28 literal percent sequence, GET'        => array( $p, '/', null, $m . '%41', null, '', '', $m . '%41', false ),
+			'R29 literal percent sequence, POST'       => array( $p, '/', null, null, $m . '%41', '', '', $m . '%41', false ),
+			'R30 trailing backslash'                   => array( $p, '/', null, $m . '\\', null, '', '', $m . '\\', true ),
+			'R31 trailing newline'                     => array( $p, '/', null, $m . "\n", null, '', '', $m . "\n", true ),
+			'R32 pretty path, rest_route elsewhere'    => array( $p, '/wp-json' . $m, null, '/wp/v2/users/me', null, '', '', '/wp/v2/users/me', false ),
+			'R33 page path, rest_route MCP'            => array( $p, '/sample-page/', null, $m, null, '', '', $m, true ),
+			'R34 rest_route, mixed case'               => array( $p, '/', null, '/Agent-Abilities-For-MCP/MCP', null, '', '', '/Agent-Abilities-For-MCP/MCP', true ),
+			'R35 parse_request() extra vars elsewhere' => array( $p, '/', null, $m, null, 'rest_route=/wp/v2/users/me', '', '/wp/v2/users/me', false ),
+			'R36 request filter elsewhere'             => array( $p, '/', null, $m, null, '', 'request_users_me', '/wp/v2/users/me', false ),
+			'R37 query_vars filter drops rest_route'   => array( $p, '/', null, $m, null, '', 'query_vars_drop', null, false ),
+			'R38 do_parse_request false'               => array( $p, '/', null, $m, null, '', 'do_parse_false', null, false ),
+			'R39 request filter sets MCP'              => array( $p, '/sample-page/', null, null, null, '', 'request_mcp', $m, true ),
+		);
+	}
+
+	/**
+	 * The bearer resolves exactly when WordPress parsed the request to the MCP route, whatever the
+	 * request looked like and whatever code shaped the parse.
+	 *
+	 * @dataProvider wordpress_routing_provider
+	 *
+	 * @param string      $structure Permalink structure.
+	 * @param string      $uri       REQUEST_URI.
+	 * @param string|null $path_info PATH_INFO, or null for none.
+	 * @param mixed       $get       GET rest_route, or null for none.
+	 * @param mixed       $post      POST rest_route, or null for none.
+	 * @param string      $extra     parse_request() extra query vars.
+	 * @param string      $setup     Named code-set setup.
+	 * @param mixed       $parsed    The rest_route core parses.
+	 * @param bool        $targets   Whether that is the MCP route.
+	 */
+	public function test_the_audience_follows_the_route_wordpress_parsed( string $structure, string $uri, ?string $path_info, $get, $post, string $extra, string $setup, $parsed, bool $targets ): void {
+		global $wp_rewrite;
+		$this->route_off_mcp();
+		$this->set_permalink_structure( $structure );
+		// A WP object built by go_to() lacks the rest_route var rest_api_register_rewrites() adds on
+		// init, and parse_request() keeps whatever the query_vars filter returns, so pin and restore it.
+		$public_vars = $GLOBALS['wp']->public_query_vars;
+		$GLOBALS['wp']->add_query_var( 'rest_route' );
+		$this->cleanups[] = static function () use ( $public_vars ): void {
+			$GLOBALS['wp']->public_query_vars = $public_vars;
+		};
+
+		switch ( $setup ) {
+			case 'home_blog':
+				$home = get_option( 'home' );
+				update_option( 'home', 'http://example.org/blog' );
+				$this->cleanups[] = static function () use ( $home ): void {
+					update_option( 'home', $home );
+				};
+				break;
+			case 'prefix_api':
+				$this->drop_rest_top_rules();
+				add_filter(
+					'rest_url_prefix',
+					static function (): string {
+						return 'api';
+					}
+				);
+				rest_api_register_rewrites();
+				$wp_rewrite->flush_rules();
+				break;
+			case 'rest_url_proxy':
+				add_filter(
+					'rest_url',
+					static function ( $url ) {
+						return str_replace( '/wp-json/', '/proxy/wp-json/', (string) $url );
+					}
+				);
+				break;
+			case 'stored_rest_rules':
+				$rules = array();
+				foreach ( $wp_rewrite->extra_rules_top as $regex => $query ) {
+					if ( false !== strpos( $regex, 'wp-json' ) ) {
+						$rules[ $regex ] = $query;
+					}
+				}
+				update_option( 'permalink_structure', '' );
+				$wp_rewrite->init();
+				update_option( 'rewrite_rules', $rules );
+				break;
+			case 'drop_rest_rules':
+				add_filter(
+					'rewrite_rules_array',
+					static function ( $rules ) {
+						foreach ( array_keys( $rules ) as $regex ) {
+							if ( false !== strpos( $regex, 'wp-json' ) ) {
+								unset( $rules[ $regex ] );
+							}
+						}
+						return $rules;
+					}
+				);
+				$wp_rewrite->flush_rules();
+				break;
+			case 'request_users_me':
+			case 'request_mcp':
+				$route = 'request_mcp' === $setup ? aafm_mcp_rest_route() : '/wp/v2/users/me';
+				add_filter(
+					'request',
+					static function ( $query_vars ) use ( $route ) {
+						$query_vars['rest_route'] = $route;
+						return $query_vars;
+					}
+				);
+				break;
+			case 'query_vars_drop':
+				add_filter(
+					'query_vars',
+					static function ( $vars ) {
+						return array_values( array_diff( $vars, array( 'rest_route' ) ) );
+					}
+				);
+				break;
+			case 'do_parse_false':
+				add_filter( 'do_parse_request', '__return_false' );
+				break;
+		}
+
+		$uid = $this->present_valid_bearer();
+
+		$_SERVER['REQUEST_URI'] = $uri;
+		$_SERVER['PHP_SELF']    = '/index.php';
+		unset( $_SERVER['PATH_INFO'], $_GET['rest_route'], $_POST['rest_route'] );
+		if ( null !== $path_info ) {
+			$_SERVER['PATH_INFO'] = $path_info;
+		}
+		if ( null !== $get ) {
+			$_GET['rest_route'] = $get;
+		}
+		if ( null !== $post ) {
+			$_POST['rest_route'] = $post;
+		}
+		remove_action( 'parse_request', 'rest_api_loaded' );
+
+		if ( 'expect_die' === $setup ) {
+			try {
+				$GLOBALS['wp']->parse_request( $extra );
+				$this->fail( 'WordPress refuses a GET and POST rest_route that differ.' );
+			} catch ( \WPDieException $e ) {
+				unset( $e );
+			}
+		} else {
+			$GLOBALS['wp']->parse_request( $extra );
+		}
+
+		$this->assertSame( $parsed, $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'The rest_route WordPress parsed.' );
+		$this->assertSame( $targets, aafm_oauth_request_targets_mcp_route() );
+		$this->assertSame( $targets ? $uid : false, aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * Core's half of an array rest_route: rest_api_loaded() refuses it before REST_REQUEST is defined.
+	 */
+	public function test_core_refuses_a_rest_route_that_is_not_a_string(): void {
+		$GLOBALS['wp']->query_vars['rest_route'] = array( 'x' );
+		try {
+			rest_api_loaded();
+			$this->fail( 'rest_api_loaded() must refuse a non-string rest_route.' );
+		} catch ( \WPDieException $e ) {
+			$this->assertStringContainsString( 'The REST route parameter must be a string.', $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Before WordPress parses the request nothing is routed, so a bearer aimed at the MCP route by
+	 * its raw request resolves nobody.
+	 */
+	public function test_nothing_resolves_before_wordpress_parses_the_request(): void {
+		$this->route_off_mcp();
+		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+		$_GET['rest_route']     = aafm_mcp_rest_route();
+		$this->present_valid_bearer();
+
+		$this->assertFalse( aafm_oauth_request_targets_mcp_route() );
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- a fresh lookup, restored in tear_down().
+		$this->assertSame( 0, get_current_user_id() );
+	}
+
+	/**
+	 * Entry points WordPress serves without parsing a request.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function unparsed_entry_point_provider(): array {
+		return array(
+			'admin-ajax.php'       => array( '/wp-admin/admin-ajax.php' ),
+			'admin-post.php'       => array( '/wp-admin/admin-post.php' ),
+			'wp-comments-post.php' => array( '/wp-comments-post.php' ),
+		);
+	}
+
+	/**
+	 * A bearer with ?rest_route=<MCP route> on an entry point that never parses the request resolves
+	 * nobody there.
+	 *
+	 * @dataProvider unparsed_entry_point_provider
+	 *
+	 * @param string $script The entry point's path.
+	 */
+	public function test_an_entry_point_that_never_parses_resolves_nobody( string $script ): void {
+		$this->route_off_mcp();
+		$_SERVER['PHP_SELF']    = $script;
+		$_SERVER['SCRIPT_NAME'] = $script;
+		$_SERVER['REQUEST_URI'] = $script . '?rest_route=' . aafm_mcp_rest_route();
+		$_GET['rest_route']     = aafm_mcp_rest_route();
+		if ( '/wp-admin/admin-ajax.php' === $script ) {
+			add_filter( 'wp_doing_ajax', '__return_true' );
+		} elseif ( '/wp-admin/admin-post.php' === $script ) {
+			$screen = $GLOBALS['current_screen'] ?? null;
+			set_current_screen( 'dashboard' );
+			$this->cleanups[] = static function () use ( $screen ): void {
+				$GLOBALS['current_screen'] = $screen; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restored as found.
+			};
+		}
+		$this->present_valid_bearer();
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- a fresh lookup, restored in tear_down().
+		$this->assertSame( 0, get_current_user_id() );
+	}
+
+	/**
+	 * Put a JSON initialize call in the request for serve_request() to read.
+	 *
+	 * @return void
+	 */
+	private function initialize_body_in_request(): void {
+		$_SERVER['REQUEST_METHOD']     = 'POST';
+		$_SERVER['CONTENT_TYPE']       = 'application/json';
+		$_SERVER['HTTP_ACCEPT']        = 'application/json, text/event-stream';
+		$GLOBALS['HTTP_RAW_POST_DATA'] = wp_json_encode( // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the body core's get_raw_data() reads.
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'method'  => 'initialize',
+				'params'  => array(
+					'protocolVersion' => '2025-06-18',
+					'capabilities'    => new \stdClass(),
+					'clientInfo'      => array(
+						'name'    => 'validator-test',
+						'version' => '1.0',
+					),
+				),
+			)
+		);
+		$this->cleanups[]              = static function (): void {
+			unset( $GLOBALS['HTTP_RAW_POST_DATA'] );
+		};
+	}
+
+	/**
+	 * WP::init() looks the user up before the parse and caches "nobody"; core's own clear in
+	 * serve_request() is what lets the bearer resolve, with this plugin's rest_api_init clear removed.
+	 */
+	public function test_cores_serve_request_clear_resolves_the_bearer_after_an_early_lookup(): void {
+		$this->route_off_mcp();
+		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+		$uid                    = $this->present_valid_bearer();
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+		$this->assertSame( 0, get_current_user_id(), 'The lookup before the parse resolves nobody.' );
+
+		remove_action( 'rest_api_init', 'aafm_oauth_forget_anonymous_user_on_mcp_route', PHP_INT_MIN );
+		$this->route_as_rest_request();
+		$server = $this->mcp_spy_server();
+		$this->assertSame( 0, get_current_user_id(), 'Without the rest_api_init clear, registration still sees nobody.' );
+
+		$this->initialize_body_in_request();
+		$server->serve_request( aafm_mcp_rest_route() );
+
+		$this->assertSame( $uid, get_current_user_id(), 'serve_request() forgets the cached nobody and the bearer resolves.' );
+	}
+
+	/**
+	 * Register two abilities an editor splits on (one anyone can discover, one needing manage_options),
+	 * enabled and in the registry, the harness HandshakeTest uses.
+	 *
+	 * @return array<int,string> Their names.
+	 */
+	private function register_discovery_fixtures(): array {
+		add_filter(
+			'aafm_abilities_registry',
+			static function ( array $registry ): array {
+				$registry['aafm/pub-read']    = array(
+					'label'        => 'Pub Read',
+					'description'  => 'Anyone may read.',
+					'group'        => 'reads',
+					'risk'         => 'read',
+					'args_builder' => '__return_empty_array',
+				);
+				$registry['aafm/admin-write'] = array(
+					'label'        => 'Admin Write',
+					'description'  => 'Admin only.',
+					'group'        => 'writes',
+					'risk'         => 'write',
+					'args_builder' => '__return_empty_array',
+				);
+				return $registry;
+			}
+		);
+		aafm_flush_registry_cache();
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				$fixtures = array(
+					'aafm/pub-read'    => array( 'aafm-reads', '__return_true' ),
+					'aafm/admin-write' => array(
+						'aafm-writes',
+						static function () {
+							return current_user_can( 'manage_options' );
+						},
+					),
+				);
+				foreach ( $fixtures as $name => $fixture ) {
+					if ( wp_has_ability( $name ) ) {
+						continue;
+					}
+					aafm_register_ability_with_log(
+						$name,
+						array(
+							'label'               => $name,
+							'description'         => $name,
+							'category'            => $fixture[0],
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'output_schema'       => array( 'type' => 'object' ),
+							'execute_callback'    => static fn() => array(),
+							'permission_callback' => $fixture[1],
+						)
+					);
+				}
+			}
+		);
+		update_option( 'aafm_enabled_abilities', array( 'aafm/pub-read', 'aafm/admin-write' ) );
+		return array( 'aafm/pub-read', 'aafm/admin-write' );
+	}
+
+	/**
+	 * On an MCP request with our bearer, code on rest_api_init (the adapter's tool registry) sees the
+	 * approver, not the "nobody" WP::init() cached, so it builds the approver's tool set.
+	 */
+	public function test_registration_on_an_mcp_request_sees_the_approver(): void {
+		$names = $this->register_discovery_fixtures();
+		$this->route_off_mcp();
+		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+		$uid                    = $this->present_valid_bearer( 'editor' );
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+		$this->assertSame( 0, get_current_user_id(), 'The lookup before the parse resolves nobody.' );
+
+		$seen = array();
+		add_action(
+			'rest_api_init',
+			static function () use ( &$seen, $names ): void {
+				$seen['user']  = get_current_user_id();
+				$seen['tools'] = aafm_build_server_tools( $names );
+			},
+			1
+		);
+		$this->route_as_rest_request();
+		$server = $this->mcp_spy_server();
+
+		$this->assertSame( $uid, $seen['user'] ?? null, 'rest_api_init sees the approver.' );
+		wp_set_current_user( $uid );
+		$this->assertSame( aafm_build_server_tools( $names ), $seen['tools'] ?? null, 'The tool set built on rest_api_init is the approver\'s.' );
+		$this->assertSame( array( 'aafm/pub-read' ), $seen['tools'] ?? null );
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- serve_request() re-resolves, restored in tear_down().
+		wp_get_current_user();
+		$this->initialize_body_in_request();
+		$server->serve_request( aafm_mcp_rest_route() );
+		$this->assertSame( $uid, get_current_user_id(), 'The request is served as the approver.' );
+	}
+
+	/**
+	 * An Application Password request carries no aafm_oat_ bearer, so rest_api_init leaves its cached
+	 * lookup alone, as before.
+	 */
+	public function test_registration_without_our_bearer_is_left_alone(): void {
+		$this->route_off_mcp();
+		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+		$this->set_bearer( 'Basic ' . base64_encode( 'someone:abcd efgh ijkl mnop qrst uvwx' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- a Basic credential header, not obfuscation.
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+		$seen = array();
+		add_action(
+			'rest_api_init',
+			static function () use ( &$seen ): void {
+				$seen['user'] = get_current_user_id();
+			},
+			1
+		);
+		$this->route_as_rest_request();
+		$this->mcp_spy_server();
+
+		$this->assertSame( 0, $seen['user'] ?? null );
+	}
+
+	/**
+	 * Record whether a cached user object survives this plugin's rest_api_init clear, from a
+	 * rest_api_init callback that runs straight after it.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function watch_rest_api_init_user(): array {
+		$seen = array();
+		add_action(
+			'rest_api_init',
+			static function () use ( &$seen ): void {
+				$seen['cached'] = $GLOBALS['current_user'] ?? null;
+			},
+			PHP_INT_MIN + 1
+		);
+		$this->mcp_spy_server();
+		return $seen;
+	}
+
+	/**
+	 * A bearer on a REST route other than MCP: the cached "nobody" is not forgotten on rest_api_init.
+	 */
+	public function test_the_rest_api_init_clear_leaves_other_rest_routes_alone(): void {
+		$this->route_as_rest_request();
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wp/v2/posts';
+		$this->present_valid_bearer();
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- a fresh lookup, restored in tear_down().
+		$cached                  = wp_get_current_user();
+		$this->assertSame( 0, $cached->ID );
+
+		$this->assertSame( $cached, $this->watch_rest_api_init_user()['cached'] ?? null );
+	}
+
+	/**
+	 * Where WordPress never parsed the request (a plugin calling rest_get_server() inside admin-ajax
+	 * fires rest_api_init), a rest_route query var left over forgets nothing.
+	 */
+	public function test_the_rest_api_init_clear_needs_the_parse(): void {
+		$this->route_off_mcp();
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$this->present_valid_bearer();
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- a fresh lookup, restored in tear_down().
+		$cached                  = wp_get_current_user();
+		$this->assertSame( 0, $cached->ID );
+
+		$this->assertSame( $cached, $this->watch_rest_api_init_user()['cached'] ?? null );
+	}
+
+	/**
+	 * A cookie-authenticated user is never forgotten, even with our bearer on the MCP route.
+	 */
+	public function test_the_rest_api_init_clear_never_forgets_a_real_user(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$this->present_valid_bearer();
+		wp_set_current_user( $admin );
+		$cached = wp_get_current_user();
+
+		$this->assertSame( $cached, $this->watch_rest_api_init_user()['cached'] ?? null );
+		$this->assertSame( $admin, get_current_user_id() );
+	}
+
+	/**
+	 * The route check reads core's parse and nothing from the raw request, options or URLs.
+	 */
+	public function test_the_route_check_reads_only_cores_parse(): void {
+		$fn     = new \ReflectionFunction( 'aafm_oauth_request_targets_mcp_route' );
+		$lines  = file( (string) $fn->getFileName() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file -- reading the plugin's own source from disk in a test.
+		$source = implode( '', array_slice( (array) $lines, $fn->getStartLine() - 1, $fn->getEndLine() - $fn->getStartLine() + 1 ) );
+
+		foreach ( array( '$_GET', '$_POST', '$_REQUEST', '$_SERVER', 'get_option', 'rest_url', 'home_url', 'sanitize_text_field' ) as $read ) {
+			$this->assertStringNotContainsString( $read, $source );
+		}
+	}
+
+	/**
+	 * Before $wp_rewrite exists on a plain-permalink site, the audience URL is core's plain REST URL.
+	 */
+	public function test_the_plain_permalink_audience_matches_rest_url_before_wp_rewrite_exists(): void {
+		$this->set_permalink_structure( '' );
+		$expected              = trailingslashit( home_url() ) . 'index.php?rest_route=/agent-abilities-for-mcp/mcp';
+		$saved                 = $GLOBALS['wp_rewrite'];
+		$GLOBALS['wp_rewrite'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the pre-$wp_rewrite window, restored below.
+		try {
+			$early = aafm_endpoint_url();
+		} finally {
+			$GLOBALS['wp_rewrite'] = $saved; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restored.
+		}
+
+		$this->assertSame( $expected, $early );
+		$this->assertSame( rest_url( 'agent-abilities-for-mcp/mcp' ), $early );
+	}
+
+	/**
+	 * A discovery-document URL with ?rest_route=<MCP route>: WordPress serves the document at
+	 * parse_request and never dispatches REST, so init callbacks and early parse_request callbacks
+	 * see nobody.
+	 */
+	public function test_a_discovery_url_naming_the_mcp_route_resolves_nobody(): void {
+		$this->route_off_mcp();
+		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
+		$_SERVER['PHP_SELF']    = '/index.php';
+		$_GET['rest_route']     = aafm_mcp_rest_route();
+		$this->present_valid_bearer();
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+
+		$seen = array();
+		add_action(
+			'init',
+			static function () use ( &$seen ): void {
+				$seen['init'] = get_current_user_id();
+			},
+			PHP_INT_MAX
+		);
+		do_action( 'init' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, fired to reach init callbacks.
+
+		remove_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
+		remove_action( 'parse_request', 'rest_api_loaded' );
+		add_action(
+			'parse_request',
+			static function () use ( &$seen ): void {
+				$seen['parse_request'] = get_current_user_id();
+			},
+			0
+		);
+		$GLOBALS['wp']->parse_request();
+
+		$this->assertSame( 0, $seen['init'] ?? null );
+		$this->assertSame( 0, $seen['parse_request'] ?? null );
+	}
+
+	/**
+	 * Capture the target of a call that ends in wp_redirect() + exit (AuthorizeTest's idiom).
+	 *
+	 * @param callable $callback The redirecting call.
+	 * @return string The captured Location target.
+	 */
+	private function capture_redirect( callable $callback ): string {
+		$captured = '';
+		$catch    = static function ( $location ) use ( &$captured ) {
+			$captured = (string) $location;
+			throw new \RuntimeException( 'aafm_test_redirect' );
+		};
+		add_filter( 'wp_redirect', $catch, 1 );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- test harness only: demotes the CLI "headers already sent" warning so the redirect capture runs.
+		set_error_handler(
+			static function ( $errno, $errstr ) {
+				return str_contains( $errstr, 'Cannot modify header information' );
+			},
+			E_WARNING
+		);
+		try {
+			$callback();
+		} catch ( \RuntimeException $e ) {
+			unset( $e );
+		} finally {
+			restore_error_handler();
+			remove_filter( 'wp_redirect', $catch, 1 );
+		}
+		return $captured;
+	}
+
+	/**
+	 * The consent URL with ?rest_route=<MCP route> and a bearer: the consent handler on init sees a
+	 * logged-out visitor and sends them to wp-login, rendering no consent form.
+	 */
+	public function test_the_consent_screen_does_not_accept_an_mcp_bearer(): void {
+		$this->route_off_mcp();
+		$client = aafm_oauth_register_client( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) );
+		$this->assertIsArray( $client );
+		$_GET                   = array(
+			'aafm_oauth'            => 'authorize',
+			'rest_route'            => aafm_mcp_rest_route(),
+			'response_type'         => 'code',
+			'client_id'             => (string) $client['client_id'],
+			'redirect_uri'          => 'https://app.example/cb',
+			'code_challenge'        => str_repeat( 'a', 43 ),
+			'code_challenge_method' => 'S256',
+			'state'                 => 'st',
+		);
+		$_SERVER['REQUEST_URI'] = '/?' . http_build_query( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the request fixture this test just built.
+		$this->present_valid_bearer( 'administrator' );
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+		$this->assertSame( 0, get_current_user_id(), 'On init the MCP bearer is not a login.' );
+
+		ob_start();
+		$location = $this->capture_redirect( 'aafm_oauth_handle_authorize' );
+		$output   = (string) ob_get_clean();
+
+		$this->assertStringStartsWith( wp_login_url(), $location );
+		$this->assertStringNotContainsString( 'aafm_oauth_consent_nonce', $output );
+	}
+
+	/**
+	 * A rest_route query var set without WordPress parsing the request is ignored.
+	 */
+	public function test_a_rest_route_set_without_a_parse_is_ignored(): void {
+		$this->route_off_mcp();
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$_GET['rest_route']                      = aafm_mcp_rest_route();
+		$this->present_valid_bearer();
+
+		$this->assertFalse( aafm_oauth_request_targets_mcp_route() );
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * When do_parse_request skips the parse, a stale rest_route query var survives it, and no parse
+	 * is counted, so it is ignored.
+	 */
+	public function test_a_stale_rest_route_after_a_skipped_parse_is_ignored(): void {
+		$this->route_off_mcp();
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$_GET['rest_route']                      = aafm_mcp_rest_route();
+		add_filter( 'do_parse_request', '__return_false' );
+		remove_action( 'parse_request', 'rest_api_loaded' );
+		$this->present_valid_bearer();
+
+		$this->assertFalse( $GLOBALS['wp']->parse_request() );
+		$this->assertSame( aafm_mcp_rest_route(), $GLOBALS['wp']->query_vars['rest_route'] );
+		$this->assertSame( 0, did_action( 'parse_request' ) );
+		$this->assertFalse( aafm_oauth_request_targets_mcp_route() );
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
 	}
 }

@@ -170,17 +170,30 @@ abstract class TestCase extends WP_UnitTestCase {
 
 	/**
 	 * Make this request one WordPress has routed as REST (core's parsed rest_route, the test
-	 * rest_api_loaded() applies), so policy reads take the batched path.
+	 * rest_api_loaded() applies), so policy reads take the batched path. Routing implies the parse,
+	 * so the parse_request action is counted too.
 	 *
 	 * @return void
 	 */
 	protected function route_as_rest_request(): void {
 		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$GLOBALS['wp_actions']['parse_request']  = max( 1, (int) did_action( 'parse_request' ) );
 		aafm_policy_reset_request_state();
 	}
 
 	/**
-	 * The MCP endpoint's request path, built as aafm_oauth_request_targets_mcp_route() builds it.
+	 * Take this request off the MCP route under either suite setting: no parsed rest_route, no
+	 * REQUEST_URI, and no parse_request counted yet.
+	 *
+	 * @return void
+	 */
+	protected function route_off_mcp(): void {
+		$this->use_front_end_policy_path();
+		unset( $GLOBALS['wp_actions']['parse_request'] );
+	}
+
+	/**
+	 * The MCP endpoint's pretty REST path.
 	 *
 	 * @return string
 	 */

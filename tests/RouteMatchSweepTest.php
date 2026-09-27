@@ -34,7 +34,6 @@ final class RouteMatchSweepTest extends TestCase {
 		'includes/bootstrap.php|aafm_mcp_rest_route'      => 1,
 		'includes/admin/connection.php|aafm_endpoint_url' => 1,
 		'includes/admin/connection.php|aafm_diagnostic_checks' => 1,
-		'includes/oauth/validator.php|aafm_oauth_request_targets_mcp_route' => 1,
 	);
 
 	/**

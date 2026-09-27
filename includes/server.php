@@ -69,10 +69,10 @@ function aafm_mcp_tool_name( string $ability_name ): string {
 function aafm_build_server_tools( array $enabled, array &$omitted = array() ): array {
 	$tools = array();
 	foreach ( aafm_ownership_filter_server_tools( $enabled, $omitted ) as $name ) {
-		// If a user is already resolved (e.g. unit tests, or a transport that resolves auth
-		// before rest_api_init), drop abilities this user cannot call. On the live HTTP path
-		// the user is anonymous here, so this is a no-op and the request-time filter does the
-		// real work - belt and suspenders, never advertising more than the catalog.
+		// If a user is resolved, drop abilities this user cannot call. On an MCP request with an
+		// OAuth bearer that user is the approver (aafm_oauth_forget_anonymous_user_on_mcp_route()
+		// runs first on rest_api_init); otherwise it is anonymous here, and the request-time
+		// filter does the real work - belt and suspenders, never advertising more than the catalog.
 		if ( is_user_logged_in() && ! aafm_user_can_discover_ability( $name ) ) {
 			continue;
 		}
@@ -1586,8 +1586,9 @@ function aafm_register_mcp_server( $adapter ): void {
 	$bounded = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
 	$tools   = aafm_build_server_tools( $bounded );
 
-	// Per-connection capability gate at request time (the user is anonymous here; see
-	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.
+	// Per-connection capability gate at request time (the user here is the bearer's approver on an
+	// OAuth MCP request and anonymous otherwise; see aafm_build_server_tools()). Priority 5 so it
+	// runs before any consumer reordering.
 	//
 	// Codex hunt F11: a separate plugin's own later-priority mcp_adapter_tools_list callback
 	// could still re-add a tool DTO this filter already removed - discovery narrowing here is

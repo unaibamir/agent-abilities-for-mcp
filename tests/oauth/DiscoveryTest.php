@@ -150,4 +150,164 @@ class DiscoveryTest extends TestCase {
 		$this->assertFalse( aafm_oauth_dcr_enabled(), 'The filter wins over the stored toggle.' );
 		remove_filter( 'aafm_oauth_dcr_enabled', '__return_false' );
 	}
+
+
+	/**
+	 * The $_SERVER['HTTPS'] value the discovery fallback tests found, restored in tear_down().
+	 *
+	 * @var array{set: bool, value: mixed}
+	 */
+	private array $saved_https = array(
+		'set'   => false,
+		'value' => null,
+	);
+
+	/**
+	 * Snapshot $_SERVER['HTTPS'], which the discovery fallback tests change.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		$this->saved_https = array(
+			'set'   => array_key_exists( 'HTTPS', $_SERVER ),
+			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- snapshot restored verbatim in tear_down().
+			'value' => $_SERVER['HTTPS'] ?? null,
+		);
+	}
+
+	/**
+	 * Put $_SERVER['HTTPS'] back and drop the REST server these tests built, so no route set
+	 * registered under one OAuth state or permalink structure outlives the test.
+	 */
+	public function tear_down(): void {
+		if ( $this->saved_https['set'] ) {
+			$_SERVER['HTTPS'] = $this->saved_https['value'];
+		} else {
+			unset( $_SERVER['HTTPS'] );
+		}
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- core REST server, rebuilt on next use.
+		$GLOBALS['wp_rest_server'] = null;
+		parent::tear_down();
+	}
+
+	/**
+	 * GET a discovery fallback route on a freshly built REST server, so the routes are registered
+	 * under the OAuth state and permalink structure the test has just set.
+	 *
+	 * @param string $suffix Route below the OAuth namespace, with a leading slash.
+	 * @return \WP_REST_Response
+	 */
+	private function get_discovery_route( string $suffix ): \WP_REST_Response {
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- core REST server, rebuilt so rest_api_init fires again.
+		$GLOBALS['wp_rest_server'] = null;
+		return rest_do_request( new \WP_REST_Request( 'GET', '/' . aafm_oauth_rest_namespace() . $suffix ) );
+	}
+
+	/**
+	 * The three fallback routes, each mapped to the builder of the root document it must serve.
+	 * Pretty permalinks are set first so the resource URL has a path and the RFC 9728 3.1
+	 * path-suffixed form exists.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	private function fallback_routes_with_root_documents(): array {
+		$this->set_permalink_structure( '/%postname%/' );
+		$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
+		$this->assertNotSame( '', $resource_path, 'Pretty permalinks must give the MCP endpoint a path.' );
+
+		return array(
+			'/protected-resource'                   => aafm_oauth_protected_resource_metadata(),
+			'/protected-resource/' . $resource_path => aafm_oauth_protected_resource_metadata(),
+			'/authorization-server'                 => aafm_oauth_authorization_server_metadata(),
+		);
+	}
+
+	/**
+	 * Step 13 (doc 261 A5): with OAuth on, each /wp-json fallback serves exactly the document the
+	 * root .well-known handler serves, the same array and the same wp_json_encode() string, with
+	 * Cache-Control: no-store as the root's 200 sends. The route paths carry no dot segment, since
+	 * the stock nginx dotfile rule refuses /wp-json/.../.well-known/... with a 403.
+	 */
+	public function test_discovery_fallback_routes_serve_the_root_documents(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$_SERVER['HTTPS'] = 'on';
+
+		foreach ( $this->fallback_routes_with_root_documents() as $suffix => $root_document ) {
+			$response = $this->get_discovery_route( $suffix );
+
+			$this->assertSame( 200, $response->get_status(), $suffix );
+			$this->assertSame( $root_document, $response->get_data(), $suffix );
+			$this->assertSame( wp_json_encode( $root_document ), wp_json_encode( $response->get_data() ), $suffix );
+			$this->assertSame( 'no-store', $response->get_headers()['Cache-Control'] ?? null, $suffix );
+		}
+
+		$routes = array_keys( rest_get_server()->get_routes( aafm_oauth_rest_namespace() ) );
+		$this->assertContains( '/' . aafm_oauth_rest_namespace() . '/protected-resource', $routes );
+		$this->assertContains( '/' . aafm_oauth_rest_namespace() . '/authorization-server', $routes );
+		foreach ( $routes as $route ) {
+			$this->assertDoesNotMatchRegularExpression( '#/\.#', $route, 'No OAuth route path may carry a dot segment.' );
+		}
+	}
+
+	/**
+	 * OAuth off: the fallback routes are not registered, so REST answers rest_no_route with 404.
+	 */
+	public function test_discovery_fallback_routes_are_not_registered_while_oauth_is_off(): void {
+		delete_option( 'aafm_oauth_enabled' );
+		$_SERVER['HTTPS'] = 'on';
+
+		foreach ( array_keys( $this->fallback_routes_with_root_documents() ) as $suffix ) {
+			$response = $this->get_discovery_route( $suffix );
+
+			$this->assertSame( 404, $response->get_status(), $suffix );
+			$this->assertSame( 'rest_no_route', $response->get_data()['code'] ?? null, $suffix );
+		}
+	}
+
+	/**
+	 * HTTPS required and the request not over SSL: 403 with response data null and no
+	 * Cache-Control header, as the root's 403 sends none. Isolated so no AAFM_OAUTH_ALLOW_HTTP
+	 * defined by an earlier suite in the same process relaxes the requirement.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_discovery_fallback_refuses_plain_http_when_https_is_required(): void {
+		if ( ! aafm_oauth_https_required() ) {
+			$this->markTestSkipped( 'HTTPS is not required in this environment; the plain-http gate cannot be exercised.' );
+		}
+		update_option( 'aafm_oauth_enabled', '1' );
+		unset( $_SERVER['HTTPS'] );
+
+		foreach ( array_keys( $this->fallback_routes_with_root_documents() ) as $suffix ) {
+			$response = $this->get_discovery_route( $suffix );
+
+			$this->assertSame( 403, $response->get_status(), $suffix );
+			$this->assertNull( $response->get_data(), $suffix );
+			$this->assertArrayNotHasKey( 'Cache-Control', $response->get_headers(), $suffix );
+		}
+	}
+
+	/**
+	 * The development setting (AAFM_OAUTH_ALLOW_HTTP) relaxes the HTTPS requirement, and the
+	 * fallback then serves each document over plain HTTP, as the root does.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_discovery_fallback_serves_plain_http_under_the_development_setting(): void {
+		if ( ! defined( 'AAFM_OAUTH_ALLOW_HTTP' ) ) {
+			define( 'AAFM_OAUTH_ALLOW_HTTP', true );
+		}
+		$this->assertFalse( aafm_oauth_https_required() );
+		update_option( 'aafm_oauth_enabled', '1' );
+		unset( $_SERVER['HTTPS'] );
+
+		foreach ( $this->fallback_routes_with_root_documents() as $suffix => $root_document ) {
+			$response = $this->get_discovery_route( $suffix );
+
+			$this->assertSame( 200, $response->get_status(), $suffix );
+			$this->assertSame( $root_document, $response->get_data(), $suffix );
+			$this->assertSame( 'no-store', $response->get_headers()['Cache-Control'] ?? null, $suffix );
+		}
+	}
 }

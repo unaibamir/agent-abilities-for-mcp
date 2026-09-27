@@ -286,6 +286,8 @@ add_filter( 'rest_allowed_cors_headers', 'aafm_oauth_filter_allowed_cors_headers
 // OAuth REST endpoints: dynamic client registration, token, and revocation.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/rest.php';
 add_action( 'rest_api_init', 'aafm_oauth_register_rest_routes' );
+// The same discovery documents under /wp-json, for hosts that never pass /.well-known/ to WordPress.
+add_action( 'rest_api_init', 'aafm_oauth_register_discovery_routes' );
 
 // Re-shape core's malformed-JSON rejection into RFC 6749 on the three OAuth routes only;
 // every other route's rest_invalid_json response passes through untouched.

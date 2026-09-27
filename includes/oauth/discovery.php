@@ -611,3 +611,69 @@ function aafm_oauth_maybe_serve_well_known(): void {
 	echo wp_json_encode( $metadata );
 	exit;
 }
+
+/**
+ * Register the /wp-json fallback for the two discovery documents.
+ *
+ * Hooked on `rest_api_init`. Some hosts never pass a /.well-known/ request to WordPress, so the
+ * documents aafm_oauth_maybe_serve_well_known() serves at the root are also served under this
+ * plugin's OAuth namespace:
+ *
+ *   /protected-resource                  - RFC 9728 protected-resource metadata.
+ *   /protected-resource/<resource path>  - the same document at the RFC 9728 3.1 path-suffixed
+ *                                          form, registered only when the resource URL has a path.
+ *   /authorization-server                - RFC 8414 authorization-server metadata.
+ *
+ * The paths carry no dot segment because the stock nginx dotfile rule answers 403 to any
+ * /wp-json/.../.well-known/... path. The routes apply the root handler's two gates in its order:
+ * nothing is registered while OAuth is off, so REST answers rest_no_route, and a plain-HTTP
+ * request where HTTPS is required gets a bare 403 with no Cache-Control header, as the root's
+ * does. A 200 carries Cache-Control: no-store, as the root's does.
+ *
+ * `permission_callback` is `__return_true` for all three: discovery metadata is public by design
+ * (RFC 8414 section 3, RFC 9728 section 3), since a client fetches it before it holds any
+ * credential, and the documents carry no user data.
+ *
+ * @return void
+ */
+function aafm_oauth_register_discovery_routes(): void {
+	if ( ! aafm_oauth_enabled() ) {
+		return;
+	}
+
+	$routes = array(
+		'/protected-resource'   => 'protected-resource',
+		'/authorization-server' => 'authorization-server',
+	);
+
+	// The same resource path aafm_oauth_match_well_known() accepts after the well-known segment.
+	$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
+	if ( '' !== $resource_path ) {
+		$routes[ '/protected-resource/' . preg_quote( $resource_path, '@' ) ] = 'protected-resource';
+	}
+
+	foreach ( $routes as $route => $which ) {
+		register_rest_route(
+			aafm_oauth_rest_namespace(),
+			$route,
+			array(
+				'methods'             => 'GET',
+				'callback'            => static function () use ( $which ): WP_REST_Response {
+					if ( aafm_oauth_https_required() && ! is_ssl() ) {
+						return new WP_REST_Response( null, 403 );
+					}
+
+					$metadata = 'protected-resource' === $which
+						? aafm_oauth_protected_resource_metadata()
+						: aafm_oauth_authorization_server_metadata();
+
+					$response = new WP_REST_Response( $metadata, 200 );
+					$response->header( 'Cache-Control', 'no-store' );
+					return $response;
+				},
+				// Public discovery document (RFC 8414 / RFC 9728); read before any credential exists.
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
+}

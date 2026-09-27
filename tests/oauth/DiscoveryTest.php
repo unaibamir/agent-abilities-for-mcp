@@ -342,7 +342,20 @@ class DiscoveryTest extends TestCase {
 	public function test_discovery_fallback_self_link_answers_when_the_resource_path_has_a_dot(): void {
 		update_option( 'aafm_oauth_enabled', '1' );
 		$_SERVER['HTTPS'] = 'on';
+		// $wp_rewrite outlives the test's transaction, so its structure is put back afterwards.
+		$saved_structure = (string) $GLOBALS['wp_rewrite']->permalink_structure;
 		$this->set_permalink_structure( '/index.php/%postname%/' );
+		try {
+			$this->assert_dotted_resource_path_self_link_answers();
+		} finally {
+			$this->set_permalink_structure( $saved_structure );
+		}
+	}
+
+	/**
+	 * The dotted-path assertions, run while the PATHINFO structure is in place.
+	 */
+	private function assert_dotted_resource_path_self_link_answers(): void {
 		$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
 		$this->assertStringContainsString( '.', $resource_path, 'Guard: the resource path carries a dot.' );
 

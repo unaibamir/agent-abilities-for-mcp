@@ -2880,9 +2880,11 @@ function aafm_mixed_write_partial_failure_message( string $saved_label, string $
  * and the global $post goes back to what it was, never to a state rebuilt from the main query.
  * wp_reset_postdata() would rebuild it, and so clobber the $post of a secondary loop in progress.
  *
- * The buffer unwind closes only buffers opened after entry, and stops at the first one it cannot
- * close: a hook can open a buffer without the removable flag, and ob_end_clean() then returns false
- * without lowering the level, so looping on it would never end.
+ * The buffer unwind closes only buffers opened after entry, on success and on a throw, and stops
+ * at the first one it cannot close: a hook can open a buffer without the removable flag, and
+ * ob_end_clean() then returns false without lowering the level, so looping on it would never end.
+ * A render that leaves a buffer open still returns all of its output; one that closes the scope's
+ * own buffer, or one that cannot be closed, gives ''.
  *
  * @param int      $post_id Post to render against.
  * @param callable $render  Zero-arg callback that echoes the head.
@@ -2928,7 +2930,19 @@ function aafm_with_seo_render_scope( int $post_id, callable $render ): string {
 
 		ob_start();
 		$render();
-		$rendered = (string) ob_get_clean();
+
+		// A head hook can leave a buffer open or close one too many. Collect and close every buffer
+		// above the entry level, innermost first, and join them in the order they were opened. At or
+		// below the entry level the scope's own buffer is gone, so there is nothing of the head to
+		// return and the caller's buffers are not ours to read.
+		$parts = array();
+		while ( ob_get_level() > $saved_ob_level ) {
+			$parts[] = (string) ob_get_contents();
+			if ( ! ob_end_clean() ) {
+				break;
+			}
+		}
+		$rendered = ob_get_level() > $saved_ob_level ? '' : implode( '', array_reverse( $parts ) );
 	} catch ( \Throwable $e ) {
 		while ( ob_get_level() > $saved_ob_level ) {
 			if ( ! ob_end_clean() ) {

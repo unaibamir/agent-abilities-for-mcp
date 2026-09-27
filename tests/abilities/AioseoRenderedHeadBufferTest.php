@@ -137,4 +137,140 @@ final class AioseoRenderedHeadBufferTest extends TestCase {
 			$this->assertArrayNotHasKey( $name, $GLOBALS, "The render must not leave the \$$name global behind." );
 		}
 	}
+
+	/**
+	 * Define a real-shaped aioseo() stub whose output() runs the callable in
+	 * $GLOBALS['aafm_test_render'], so each test decides what the head render does.
+	 */
+	private function stub_aioseo_with_a_render_callback(): void {
+		if ( ! function_exists( 'aioseo' ) ) {
+			eval( // phpcs:ignore Squiz.PHP.Eval.Discouraged -- process-isolated test stub, never shipped.
+				'class AAFM_Test_Aioseo_Callback_Stub {'
+				. 'public function output() { ( $GLOBALS["aafm_test_render"] )(); }'
+				. '}'
+				. 'function aioseo() {'
+				. 'static $plugin;'
+				. 'if ( null === $plugin ) {'
+				. '$plugin = new \stdClass();'
+				. '$plugin->head = new \AAFM_Test_Aioseo_Callback_Stub();'
+				. '}'
+				. 'return $plugin;'
+				. '}'
+			);
+		}
+	}
+
+	/**
+	 * Step 12 (fixsurface-4 a, b): a render that throws after the globals swap, with a buffer of its
+	 * own still open. The fallback head comes back, both query globals and $post are what they were,
+	 * no absent post-data global is left set, and only buffers opened inside the scope are closed.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_render_that_throws_after_the_globals_swap_restores_them_and_closes_only_its_own_buffers(): void {
+		$post_a  = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_b  = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_id = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->stub_aioseo_with_a_render_callback();
+		$GLOBALS['aafm_test_render'] = static function (): void {
+			echo '<meta a>';
+			ob_start();
+			echo '<meta b>';
+			throw new \RuntimeException( 'thrown after the globals swap' );
+		};
+
+		$main_query = new WP_Query( array( 'p' => $post_a ) );
+		$in_loop    = get_post( $post_b );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test setup, the state under test.
+		$GLOBALS['wp_query'] = $main_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test setup, the state under test.
+		$GLOBALS['wp_the_query'] = $main_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test setup, the state under test.
+		$GLOBALS['post'] = $in_loop;
+
+		$absent = array( 'id', 'authordata', 'currentday', 'currentmonth', 'page', 'pages', 'multipage', 'more', 'numpages' );
+		foreach ( $absent as $name ) {
+			unset( $GLOBALS[ $name ] );
+		}
+
+		$level_before = ob_get_level();
+		ob_start();
+		echo 'caller-owned-buffer';
+		$result = aafm_aioseo_rendered_head( 'fallback-head', $post_id, 'aioseo' );
+		$level  = ob_get_level();
+		$caller = ob_get_contents();
+		ob_end_clean();
+
+		$this->assertSame( 'fallback-head', $result );
+		$this->assertSame( $level_before + 1, $level, 'Only the buffers opened inside the scope may be closed.' );
+		$this->assertSame( 'caller-owned-buffer', $caller );
+		$this->assertSame( $main_query, $GLOBALS['wp_query'] );
+		$this->assertSame( $main_query, $GLOBALS['wp_the_query'] );
+		$this->assertSame( $in_loop, $GLOBALS['post'] );
+		foreach ( $absent as $name ) {
+			$this->assertArrayNotHasKey( $name, $GLOBALS, "The render must not leave the \$$name global behind." );
+		}
+	}
+
+	/**
+	 * Step 12 (b5hunta-3): a render that returns with one more buffer open than it found. The scope
+	 * collects every buffer opened after entry in order, closes them, and leaves the caller's alone.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_render_that_leaves_a_buffer_open_returns_all_of_its_output_and_closes_that_buffer(): void {
+		$post_id = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->stub_aioseo_with_a_render_callback();
+		$GLOBALS['aafm_test_render'] = static function (): void {
+			echo '<meta a>';
+			ob_start();
+			echo '<meta b>';
+		};
+
+		$level_before = ob_get_level();
+		ob_start();
+		echo 'caller-owned-buffer';
+		$result = aafm_aioseo_rendered_head( 'fallback-head', $post_id, 'aioseo' );
+		$level  = ob_get_level();
+		$caller = ob_get_contents();
+		while ( ob_get_level() > $level_before ) {
+			ob_end_clean();
+		}
+
+		$this->assertSame( '<meta a><meta b>', $result );
+		$this->assertSame( $level_before + 1, $level, 'The buffer the render left open must be closed.' );
+		$this->assertSame( 'caller-owned-buffer', $caller );
+	}
+
+	/**
+	 * Step 12 (b5c2r1-codex-4): a render that closes the scope's own buffer. The scope takes the
+	 * fallback and never reads or closes the caller's buffer as if it were the head.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_render_that_closes_the_scope_buffer_returns_the_fallback_and_leaves_the_caller_buffer(): void {
+		$post_id = (int) self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->stub_aioseo_with_a_render_callback();
+		$GLOBALS['aafm_test_render'] = static function (): void {
+			echo '<meta a>';
+			ob_end_clean();
+		};
+
+		$level_before = ob_get_level();
+		ob_start();
+		echo 'caller-owned-buffer';
+		$result = aafm_aioseo_rendered_head( 'fallback-head', $post_id, 'aioseo' );
+		$level  = ob_get_level();
+		$caller = ob_get_level() > $level_before ? ob_get_contents() : false;
+		while ( ob_get_level() > $level_before ) {
+			ob_end_clean();
+		}
+
+		$this->assertSame( 'fallback-head', $result );
+		$this->assertSame( $level_before + 1, $level, 'The caller-owned buffer must still be open.' );
+		$this->assertSame( 'caller-owned-buffer', $caller );
+	}
 }

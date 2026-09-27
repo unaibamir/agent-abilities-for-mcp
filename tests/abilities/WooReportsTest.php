@@ -1917,6 +1917,103 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * A stored false is not a stored ''. The row holds false for the title, a veto keeps that row,
+	 * and the requested '' title is reported failed rather than matched by its string form (ledger
+	 * b5c2r2-codex-1).
+	 */
+	public function test_gateway_setting_stored_as_false_does_not_confirm_a_requested_empty_string(): void {
+		$this->acting_as( 'administrator' );
+		$row          = WcGatewayStubStore::get( 'paypal' )['settings'];
+		$row['title'] = false;
+		delete_option( 'woocommerce_paypal_settings' );
+		add_option( 'woocommerce_paypal_settings', $row, '', false );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+		$filter       = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'title'      => '',
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+		}
+
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ), 'Guard: the veto kept the row.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'title' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * A stored position that is not numeric is not position 0. The ordering row holds 'abc' for the
+	 * gateway, a veto keeps that row, and the requested order 0 is reported failed rather than
+	 * matched through (int) 'abc' (ledger b5c2r2-codex-1).
+	 */
+	public function test_gateway_order_stored_as_a_non_numeric_string_does_not_confirm_position_zero(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 'abc' ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5 = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$filter    = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'order'      => 0,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
+		}
+
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ), 'Guard: the veto kept the row.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * WooCommerce can store a position as a numeric string, and that still confirms the order it
+	 * equals: a vetoed write over a row holding '3' reports order 3 persisted.
+	 */
+	public function test_gateway_order_stored_as_a_numeric_string_confirms_the_equal_position(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => '3' ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'order'      => 3,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
+		}
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 3, $res['order'] );
+	}
+
+	/**
 	 * The ordering read-back gives the restrictive answer when it cannot read the row. The UPDATE
 	 * of the ordering fails, and every read of its row after the write fails too.
 	 */

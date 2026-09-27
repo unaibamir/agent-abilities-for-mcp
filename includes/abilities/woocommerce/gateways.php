@@ -834,14 +834,16 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	// and report a false success. Re-read the persisted settings row (get_option_key()) so only a
 	// genuinely persisted value counts as success. A row that cannot be read, or a row with no entry
 	// for a requested key (a pre_update_option filter can keep an old row that lacks it), counts as
-	// not persisted: a missing value is never matched against a requested ''.
+	// not persisted: a missing value is never matched against a requested ''. Only a stored string or
+	// number is compared, so a stored false, null or array never passes for '' by its string form.
 	$persisted_keys = array();
 	$failed_keys    = array();
 	if ( ! empty( $desired ) ) {
 		$settings  = aafm_read_option_views( $gateway->get_option_key() );
 		$persisted = ! $settings['db_error'] && is_array( $settings['db_value'] ) ? $settings['db_value'] : array();
 		foreach ( $desired as $key => $value ) {
-			if ( array_key_exists( $key, $persisted ) && (string) $persisted[ $key ] === (string) $value ) {
+			$stored = $persisted[ $key ] ?? null;
+			if ( ( is_string( $stored ) || is_int( $stored ) || is_float( $stored ) ) && (string) $stored === (string) $value ) {
 				$persisted_keys[] = $key;
 			} else {
 				$failed_keys[] = $key;
@@ -849,8 +851,11 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		}
 	}
 	if ( null !== $order_val ) {
+		// A numeric string still counts (WooCommerce can store positions that way); anything else,
+		// such as 'abc', never passes for position 0 through an (int) cast.
 		$saved_order = aafm_option_row( 'woocommerce_gateway_order' );
-		if ( $saved_order['found'] && is_array( $saved_order['value'] ) && (int) ( $saved_order['value'][ $gateway_id ] ?? -1 ) === $order_val ) {
+		$saved_pos   = $saved_order['found'] && is_array( $saved_order['value'] ) ? ( $saved_order['value'][ $gateway_id ] ?? null ) : null;
+		if ( is_numeric( $saved_pos ) && (int) $saved_pos === $order_val ) {
 			$persisted_keys[] = 'order';
 		} else {
 			$failed_keys[] = 'order';

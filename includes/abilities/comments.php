@@ -249,10 +249,12 @@ function aafm_exec_get_comments( array $input ): array {
 		);
 	}
 
-	$scan_cap    = aafm_comments_sitewide_scan_cap();
-	$is_readable = static fn( $comment ): bool => $comment instanceof WP_Comment
+	$scan_cap        = aafm_comments_sitewide_scan_cap();
+	$is_readable     = static fn( $comment ): bool => $comment instanceof WP_Comment
 		&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID );
-	$scanned     = get_comments(
+	$may_be_readable = static fn( $comment ): bool => $comment instanceof WP_Comment
+		&& false !== aafm_comment_post_readable_state( (int) $comment->comment_post_ID );
+	$scanned         = get_comments(
 		array(
 			'status' => 'approve',
 			'number' => min( $raw_total, $scan_cap ),
@@ -279,7 +281,9 @@ function aafm_exec_get_comments( array $input ): array {
 	// comes back short of what was asked for (proving no more approved comments exist at all,
 	// resolving this false), or a small reserve of probe batches is exhausted without resolving
 	// either way - at which point, as with that same GeoDirectory probe, an unresolved state
-	// reports true rather than assert a "nothing more" the scan never actually confirmed.
+	// reports true rather than assert a "nothing more" the scan never actually confirmed. For the
+	// same reason a readability check that could not decide counts as readable in the probe only,
+	// while the list above still omits every comment it could not prove readable.
 	$truncated = false;
 	if ( count( (array) $scanned ) < $raw_total ) {
 		$excluded  = array_map(
@@ -295,7 +299,7 @@ function aafm_exec_get_comments( array $input ): array {
 					'comment__not_in' => $excluded,
 				)
 			);
-			if ( array() !== array_filter( (array) $probe, $is_readable ) ) {
+			if ( array() !== array_filter( (array) $probe, $may_be_readable ) ) {
 				$truncated = true;
 				break;
 			}
@@ -338,13 +342,35 @@ function aafm_exec_get_comments( array $input ): array {
  * @return bool
  */
 function aafm_comment_post_is_readable( int $post_id ): bool {
+	return true === aafm_comment_post_readable_state( $post_id );
+}
+
+/**
+ * Whether the current user may read the post a comment belongs to, as true, false, or null when
+ * the check could not decide.
+ *
+ * False means the post is certainly unreadable: an id of 0, a post whose row is certainly absent,
+ * a revision whose parent row is certainly absent (core denies that case), or a capability check
+ * that answered no. Null means a load or the checked-read scope failed, so nothing was proved.
+ *
+ * @param int $post_id Parent post id.
+ * @return bool|null
+ */
+function aafm_comment_post_readable_state( int $post_id ): ?bool {
 	if ( $post_id <= 0 ) {
 		return false;
 	}
 
 	$post = aafm_exact_object_chain( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
-		return false;
+		if ( aafm_object_absent( 'post', $post_id ) ) {
+			return false;
+		}
+		$node = aafm_exact_object( 'post', $post_id );
+		if ( $node instanceof WP_Post && 'revision' === $node->post_type && aafm_object_absent( 'post', (int) $node->post_parent ) ) {
+			return false;
+		}
+		return null;
 	}
 
 	$read = aafm_with_checked_reads(
@@ -374,7 +400,7 @@ function aafm_comment_post_is_readable( int $post_id ): bool {
 		aafm_generic_error()
 	);
 
-	return ! is_wp_error( $read ) && true === $read['readable'];
+	return is_wp_error( $read ) ? null : true === $read['readable'];
 }
 
 /**

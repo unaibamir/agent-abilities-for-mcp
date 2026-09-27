@@ -1971,8 +1971,8 @@ final class MetaWriteSweepTest extends TestCase {
 	 * aafm_with_checked_reads() scope; scopes do not nest.
 	 */
 	private const RAW_POST_CAPABILITY_CALLS_IN_A_SCOPE = array(
-		'includes/abilities/comments.php|aafm_comment_post_is_readable|current_user_can|1',
-		'includes/abilities/comments.php|aafm_comment_post_is_readable|current_user_can|2',
+		'includes/abilities/comments.php|aafm_comment_post_readable_state|current_user_can|1',
+		'includes/abilities/comments.php|aafm_comment_post_readable_state|current_user_can|2',
 	);
 
 	/**

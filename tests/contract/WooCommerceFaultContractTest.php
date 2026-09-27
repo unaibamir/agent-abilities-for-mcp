@@ -35,7 +35,7 @@ final class WooCommerceFaultContractTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		if ( ! class_exists( '\WC_Tax' ) ) {
-			$this->markTestSkipped( 'WooCommerce not provisioned — run tests/bin/install-vendors.sh.' );
+			$this->markTestSkipped( 'WooCommerce not provisioned. Run tests/bin/install-vendors.sh.' );
 		}
 		QueryFaultInjector::reset_fired_count();
 	}

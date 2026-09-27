@@ -90,7 +90,12 @@ function aafm_oauth_rate_ok( string $bucket, int $per_ip, int $global ): bool {
 function aafm_oauth_bump_counter( string $key, int $window ): int {
 	$transient_key = 'aafm_oauth_' . $key;
 
-	$count = (int) get_transient( $transient_key ) + 1;
+	$count = aafm_transient_count( $transient_key );
+	if ( null === $count ) {
+		// The count cannot be read: over every limit, and nothing is written over the real count.
+		return PHP_INT_MAX;
+	}
+	++$count;
 	set_transient( $transient_key, $count, $window );
 
 	return $count;

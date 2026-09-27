@@ -538,6 +538,26 @@ function aafm_option_row_if_cache_agrees( string $option ): ?array {
 }
 
 /**
+ * A transient counter's value, read so a failed read never restarts the count. With no external
+ * object cache, a transient get_transient() did not answer is read from its row: an unreadable row
+ * gives null, no row gives 0.
+ *
+ * @param string $transient Transient name.
+ * @return int|null Null when the count cannot be read.
+ */
+function aafm_transient_count( string $transient ): ?int {
+	$raw = get_transient( $transient );
+	if ( false !== $raw || wp_using_ext_object_cache() ) {
+		return (int) $raw;
+	}
+	$row = aafm_option_row( '_transient_' . $transient );
+	if ( ! $row['ok'] ) {
+		return null;
+	}
+	return $row['found'] ? (int) $row['value'] : 0;
+}
+
+/**
  * Shared engine behind the three *_allow_has_star() functions: whether an option's RAW value
  * (not the filtered getter, which strips the sentinel) carries the `*` wildcard.
  *

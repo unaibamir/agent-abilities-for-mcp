@@ -72,8 +72,8 @@ function aafm_rate_limit_consume( int $user_id ): bool {
 		return true; // Off, or no authenticated principal to limit.
 	}
 	$key   = 'aafm_rl_' . $user_id . '_' . gmdate( 'YmdHi' );
-	$count = (int) get_transient( $key );
-	if ( $count >= $limit ) {
+	$count = aafm_transient_count( $key );
+	if ( null === $count || $count >= $limit ) {
 		return false;
 	}
 	set_transient( $key, $count + 1, 2 * MINUTE_IN_SECONDS );

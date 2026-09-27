@@ -2942,8 +2942,9 @@ function aafm_mixed_write_partial_failure_message( string $saved_label, string $
  * ob_end_clean() then returns false without lowering the level, so looping on it would never end.
  * The result is decided by buffer level: every buffer above the entry level is returned, joined in
  * the order opened, so a render that leaves a buffer open returns all of its output, and one that
- * closes the scope's own buffer and opens another returns that buffer's output. It is '' only when
- * the level ends at or below entry, or a buffer above it cannot be closed.
+ * closes the scope's own buffer and opens another returns that buffer's output. Past a missing post
+ * or a throw, it is '' only when the level ends at or below entry, or a buffer above it cannot be
+ * closed.
  *
  * @param int      $post_id Post to render against.
  * @param callable $render  Zero-arg callback that echoes the head.

@@ -2775,7 +2775,8 @@ PHP;
 	 * What one argument is, as a callable: array( 'literal', the known function it names or null ),
 	 * array( 'closure', null ), array( 'null', null ), array( 'variable', its name ),
 	 * array( 'spread', null ), array( 'named', null ) or array( 'other', null ). A string naming a
-	 * static method, `'C::m'`, is 'other': the scan does not resolve it.
+	 * static method, `'C::m'`, or a namespaced function, `'Ns\\f'`, is 'other': the scan does not
+	 * resolve it. A leading `\\` alone, `'\\f'`, still names a global function.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens  token_get_all() output.
 	 * @param int[]                                         $indices The argument's significant tokens.
@@ -2793,7 +2794,8 @@ PHP;
 		}
 		if ( 1 === count( $indices ) && is_array( $first ) ) {
 			if ( T_CONSTANT_ENCAPSED_STRING === $first[0] ) {
-				if ( false !== strpos( $this->decode_string_literal( $first[1] ), '::' ) ) {
+				$name = $this->decode_string_literal( $first[1] );
+				if ( false !== strpos( $name, '::' ) || false !== strpos( ltrim( $name, '\\' ), '\\' ) ) {
 					return array( 'other', null );
 				}
 				return array( 'literal', $this->literal_callable( $first, $known ) );
@@ -3218,6 +3220,28 @@ PHP;
 		$this->assertSame(
 			array( 'includes/fixture.php|w|$shape|1' ),
 			$this->nested_capability_keys( array( 'includes/fixture.php' => $parameter ) )
+		);
+	}
+
+	/**
+	 * A string naming a namespaced function, `'Ns\\f'`, passed to a listed function in a build is
+	 * not resolved by the scan, so the call is flagged rather than read as a callable it cannot
+	 * follow.
+	 */
+	public function test_flags_a_namespaced_string_callable_in_a_checked_read_scope(): void {
+		$fixture = <<<'PHP'
+<?php
+namespace Ns;
+function f( $id ) {
+	return aafm_user_can_checked( 'edit_post', $id );
+}
+function b( $ids ) {
+	return aafm_with_checked_reads( static fn(): array => array_map( 'Ns\\f', $ids ), aafm_generic_error() );
+}
+PHP;
+		$this->assertSame(
+			array( 'includes/fixture.php|b|array_map|1' ),
+			$this->nested_capability_keys( array( 'includes/fixture.php' => $fixture ) )
 		);
 	}
 

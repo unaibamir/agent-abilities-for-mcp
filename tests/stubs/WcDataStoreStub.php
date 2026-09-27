@@ -1,6 +1,6 @@
 <?php
 /**
- * A test stand-in for WooCommerce's data store registry, WC_Data_Store (woocommerce 11.1.1
+ * A test stand-in for WooCommerce's data store registry, WC_Data_Store (woocommerce 11.1.2
  * includes/class-wc-data-store.php), plus the four core store class names it can report.
  *
  * Required only by tests/abilities/VendorReaderLoadTest.php, never by the bootstrap, so a test

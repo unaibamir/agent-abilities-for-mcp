@@ -187,9 +187,18 @@ function aafm_ability_allowed_for_principal( string $ability_name, int $user_id,
 		return true; // No override rows at all: identical to today's behavior.
 	}
 
+	// The current user's roles come from the object the capability check already used, so both
+	// decisions rest on one load. Any other user is loaded inside the checked-read scope, and a load
+	// that fails denies rather than reading as a user with no roles.
 	$roles = array();
-	if ( $user_id > 0 ) {
-		$user = aafm_exact_object( 'user', $user_id );
+	if ( $user_id > 0 && get_current_user_id() === $user_id ) {
+		$roles = (array) wp_get_current_user()->roles;
+	} elseif ( $user_id > 0 ) {
+		$loaded = aafm_with_checked_reads(
+			static fn(): array => array( 'user' => aafm_exact_object( 'user', $user_id ) ),
+			aafm_generic_error()
+		);
+		$user   = is_wp_error( $loaded ) ? null : $loaded['user'];
 		if ( ! $user instanceof WP_User ) {
 			return false;
 		}

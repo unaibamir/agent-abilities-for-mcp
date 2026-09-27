@@ -32,10 +32,11 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
  * Remember (or read) the OAuth client_id a bearer token resolved for the current request.
  *
  * Only aafm_oauth_resolve_current_user() writes it, and only AFTER a token has already fully resolved
- * a user. It never grants anything, but three readers rely on it: the activity-log wrapper in
- * register.php attributes the ability call to the OAuth client that made it; the allowlist keys its
- * per-connection scope on it as the principal's client; and aafm_oauth_confine_bearer_to_mcp_handler()
- * reads a non-empty value as the marker that the current user came from our bearer. Mirrors the
+ * a user. It never grants anything, but it has three kinds of reader: the activity-log rows for
+ * ability calls, transport outcomes and write outcomes record it as the calling connection; the
+ * allowlist keys its per-connection scope on it as the principal's client; and
+ * aafm_oauth_confine_bearer_to_mcp_handler() reads a non-empty value as the marker that the current
+ * user came from our bearer. Mirrors the
  * aafm_remember_raw_permission() static store in register.php. A non-OAuth (Application
  * Password/cookie) request never writes it.
  *
@@ -413,9 +414,10 @@ function aafm_oauth_forget_anonymous_user_on_mcp_route(): void {
  *
  * Core runs the first handler whose route matches, so a route another plugin registers inside our
  * namespace could run ahead of the adapter's on the MCP path. Runs on rest_request_before_callbacks,
- * after core matched the handler and before its permission_callback and callback: when the request
- * is the MCP route and the current user came from an aafm_oat_ bearer, any handler whose callback
- * is not an HttpTransport method gets the same 401 an unauthenticated MCP call gets.
+ * after core matched the handler and before the dispatch runs its permission_callback and callback
+ * (core's Allow-header pass still calls that permission_callback afterwards; see Limits). When the
+ * request is the MCP route and the current user came from an aafm_oat_ bearer, any handler whose
+ * callback is not an HttpTransport method gets the same 401 an unauthenticated MCP call gets.
  *
  * Limits (named residuals U-1b and U-1c): a second HttpTransport server registered at a route
  * matching ours is let through; a foreign handler's argument validate and sanitize callbacks, core's

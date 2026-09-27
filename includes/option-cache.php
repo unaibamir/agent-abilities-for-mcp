@@ -461,8 +461,8 @@ function aafm_option_value_matches( $stored, $expected ): bool {
 }
 
 /**
- * Whether a stored value is exactly the object id a write asked for: the int itself, or the string
- * core stores for it (its ASCII decimal digits).
+ * Whether a stored value is exactly the object id a write asked for: the int itself, or exactly
+ * (string) $id, the string core stores for it, with no sign, space, leading zero or fraction.
  *
  * A cast is the wrong test. `(int)` reads '12.9', '12abc', ' 12', '012' and true as an id, so an
  * old row a vetoing filter left behind would confirm a write that never happened.

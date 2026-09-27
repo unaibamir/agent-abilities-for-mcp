@@ -304,10 +304,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/validator.php';
 // surfaced only through this resolver returning no user, never by attaching a
 // filter that could turn "no user resolved" into a hard failure on unrelated routes.
 add_filter( 'determine_current_user', 'aafm_oauth_resolve_current_user', 20 );
-// Registration on an MCP request sees the approver (the same clear serve_request() makes, earlier),
-// and a handler other than the adapter's own MCP handler that core matches on the MCP path is refused
-// before its callback runs, within the limits named at aafm_oauth_confine_bearer_to_mcp_handler(). The
-// last priority keeps a normal-priority rest_request_before_callbacks filter from undoing the refusal.
+// In the normal routing order (the REST server built after the parse), registration on an MCP request
+// sees the approver (the same clear serve_request() makes, earlier). A handler other than the
+// adapter's own MCP handler that core matches on the MCP path is refused before its callback runs,
+// within the limits named at aafm_oauth_confine_bearer_to_mcp_handler(). The last priority keeps a
+// normal-priority rest_request_before_callbacks filter from undoing the refusal.
 add_action( 'rest_api_init', 'aafm_oauth_forget_anonymous_user_on_mcp_route', PHP_INT_MIN );
 add_filter( 'rest_request_before_callbacks', 'aafm_oauth_confine_bearer_to_mcp_handler', PHP_INT_MAX, 3 );
 

@@ -70,9 +70,10 @@ function aafm_build_server_tools( array $enabled, array &$omitted = array() ): a
 	$tools = array();
 	foreach ( aafm_ownership_filter_server_tools( $enabled, $omitted ) as $name ) {
 		// If a user is resolved, drop abilities this user cannot call. That is whoever is resolved at
-		// rest_api_init: the approver on an MCP request with an OAuth bearer
-		// (aafm_oauth_forget_anonymous_user_on_mcp_route() runs first on rest_api_init), a cookie
-		// user, or nobody. The request-time filter does the real work - belt and suspenders, never
+		// rest_api_init: in the normal routing order, the approver on an MCP request with an OAuth
+		// bearer (aafm_oauth_forget_anonymous_user_on_mcp_route() runs first on rest_api_init); a
+		// cookie user; or nobody, including on a site where code built the REST server before the
+		// parse. The request-time filter does the real work - belt and suspenders, never
 		// advertising more than the catalog.
 		if ( is_user_logged_in() && ! aafm_user_can_discover_ability( $name ) ) {
 			continue;

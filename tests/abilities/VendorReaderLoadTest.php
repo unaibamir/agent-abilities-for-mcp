@@ -958,10 +958,10 @@ final class VendorReaderLoadTest extends TestCase {
 	}
 
 	/**
-	 * A registry that throws an Error, not only an Exception, reads as a store that is not core,
-	 * and the order helpers take their non-core path without letting it escape.
+	 * A registry that throws an Error, not only an Exception, reads as an unknown store (null),
+	 * and the order helpers take their unknown-store path without letting it escape.
 	 */
-	public function test_a_registry_error_reads_as_a_store_that_is_not_core(): void {
+	public function test_a_registry_error_reads_as_an_unknown_store(): void {
 		$this->stub_woocommerce();
 		$this->core_stores( array( 'product', 'order' ) );
 		$order = $this->stub_order();

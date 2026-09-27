@@ -90,8 +90,9 @@ function aafm_block_guard_is_strict(): bool {
 	 *
 	 * @param bool $strict True to reject writes whose block markup fails the guard.
 	 */
-	$on = (bool) get_option( 'aafm_block_guard_strict', false );
-	if ( ! $on ) {
+	$raw = get_option( 'aafm_block_guard_strict', false );
+	$on  = (bool) $raw;
+	if ( false === $raw ) {
 		// Off may be a failed read's default: the row decides, and an unreadable row means on.
 		$row = aafm_option_row( 'aafm_block_guard_strict' );
 		$on  = ! $row['ok'] || ( $row['found'] && (bool) $row['value'] );

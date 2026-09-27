@@ -106,8 +106,9 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 		'aafm_oauth_refresh_ttl' => (int) AAFM_OAUTH_REFRESH_TTL,
 	);
 	foreach ( $ttls as $option => $default ) {
-		$ttls[ $option ] = (int) get_option( $option, $default );
-		if ( $ttls[ $option ] !== $default ) {
+		$raw             = get_option( $option, $default );
+		$ttls[ $option ] = (int) $raw;
+		if ( $raw !== $default ) {
 			continue;
 		}
 		// The constant may be a failed read's default: a shorter stored lifetime wins, and an

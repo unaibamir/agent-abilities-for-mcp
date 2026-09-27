@@ -340,21 +340,140 @@ final class PolicySwitchReadFailureTest extends TestCase {
 	}
 
 	/**
-	 * Row (vi): a pre_option_{name} filter answers the permissive value while the row holds a
-	 * restrictive one. The row wins, following the one-directional rule of read-only mode, for one
-	 * SELECT (core's is short-circuited).
+	 * Row (vi): a filter answers exactly the default get_option() was passed while the row holds a
+	 * restrictive value. The row wins, following the one-directional rule of read-only mode. For most
+	 * switches a pre_option_{name} filter answers it, for one SELECT (core's is short-circuited). The
+	 * read-only, force-draft and strict-guard default is false, which a pre_option filter cannot
+	 * answer (core reads false as no short-circuit), so an option_{name} filter answers false over the
+	 * row core has just read, for two SELECTs: core's and the re-read.
 	 */
 	public function test_a_filter_hiding_a_restrictive_row_does_not_win(): void {
 		foreach ( $this->switches() as $label => $switch ) {
+			$by_option = in_array( $label, array( 'read-only', 'force-draft', 'strict guard' ), true );
+			$hook      = ( $by_option ? 'option_' : 'pre_option_' ) . $switch['option'];
 			$this->plant_row( $switch['option'], $switch['stored'] );
-			$value                    = $switch['filter'];
+			$value                    = $by_option ? false : $switch['filter'];
 			$filter                   = static fn() => $value;
-			add_filter( 'pre_option_' . $switch['option'], $filter );
+			add_filter( $hook, $filter );
 			list( $answer, $selects ) = $this->count_selects( $switch['option'], $switch['get'] );
-			remove_filter( 'pre_option_' . $switch['option'], $filter );
+			remove_filter( $hook, $filter );
 			$this->assertSame( $switch['restrictive'], $answer, $label );
-			$this->assertSame( 1, $selects, $label );
+			$this->assertSame( $by_option ? 2 : 1, $selects, $label );
 			$this->remove_row( $switch['option'] );
+		}
+	}
+
+	/**
+	 * One row per switch whose pre_option_{name} answer is not the default get_option() was passed but
+	 * normalises to the permissive answer, over a restrictive row: 1.7.5's answer and no row read,
+	 * because only a raw answer identical to that default can be a failed read's.
+	 *
+	 * @return array<string,array{option:string,get:callable,stored:mixed,filter:mixed,answer:mixed}>
+	 */
+	private function normalised_default_answers(): array {
+		return array(
+			'read-only'        => array(
+				'option' => 'aafm_read_only_mode',
+				'get'    => static fn() => aafm_read_only_mode(),
+				'stored' => '1',
+				'filter' => '0',
+				'answer' => false,
+			),
+			'meta deny list'   => array(
+				'option' => 'aafm_denied_meta_keys',
+				'get'    => static fn() => aafm_denied_meta_keys(),
+				'stored' => array( 'secret_key' ),
+				'filter' => 'secret_key',
+				'answer' => array(),
+			),
+			'meta deny star'   => array(
+				'option' => 'aafm_denied_meta_keys',
+				'get'    => static fn() => aafm_meta_deny_has_star(),
+				'stored' => array( '*' ),
+				'filter' => '*',
+				'answer' => false,
+			),
+			'IP allowlist'     => array(
+				'option' => 'aafm_ip_allowlist',
+				'get'    => static fn() => aafm_ip_allowlist(),
+				'stored' => array( '10.0.0.1' ),
+				'filter' => array( ' ' ),
+				'answer' => array(),
+			),
+			'rate limit'       => array(
+				'option' => 'aafm_rate_limit_per_min',
+				'get'    => static fn() => aafm_rate_limit_per_min(),
+				'stored' => 5,
+				'filter' => -1,
+				'answer' => 0,
+			),
+			'force-draft'      => array(
+				'option' => 'aafm_force_draft',
+				'get'    => static fn() => aafm_force_draft(),
+				'stored' => '1',
+				'filter' => '0',
+				'answer' => false,
+			),
+			'title cap'        => array(
+				'option' => 'aafm_max_title_len',
+				'get'    => static fn() => aafm_max_title_len(),
+				'stored' => 50,
+				'filter' => 'abc',
+				'answer' => 0,
+			),
+			'strict guard'     => array(
+				'option' => 'aafm_block_guard_strict',
+				'get'    => static fn() => aafm_block_guard_is_strict(),
+				'stored' => '1',
+				'filter' => '0',
+				'answer' => false,
+			),
+			'DCR'              => array(
+				'option' => 'aafm_oauth_dcr_enabled',
+				'get'    => static fn() => aafm_oauth_dcr_enabled(),
+				'stored' => '0',
+				'filter' => 'yes',
+				'answer' => true,
+			),
+			'access lifetime'  => array(
+				'option' => 'aafm_oauth_access_ttl',
+				'get'    => fn() => $this->minted_lifetimes()[0],
+				'stored' => 60,
+				'filter' => (string) AAFM_OAUTH_ACCESS_TTL,
+				'answer' => AAFM_OAUTH_ACCESS_TTL,
+			),
+			'refresh lifetime' => array(
+				'option' => 'aafm_oauth_refresh_ttl',
+				'get'    => fn() => $this->minted_lifetimes()[1],
+				'stored' => 120,
+				'filter' => (string) AAFM_OAUTH_REFRESH_TTL,
+				'answer' => AAFM_OAUTH_REFRESH_TTL,
+			),
+			'log retention'    => array(
+				'option' => 'aafm_log_retention_days',
+				'get'    => static fn() => aafm_log_retention_days(),
+				'stored' => 90,
+				'filter' => '30',
+				'answer' => 30,
+			),
+		);
+	}
+
+	/**
+	 * Row (vi-c): a filter answer that only normalises to the default still decides, as in 1.7.5,
+	 * and the row is not read.
+	 */
+	public function test_a_filter_answer_that_normalises_to_the_default_still_decides(): void {
+		foreach ( $this->normalised_default_answers() as $label => $row ) {
+			$this->plant_row( $row['option'], $row['stored'] );
+			$value                    = $row['filter'];
+			$filter                   = static fn() => $value;
+			add_filter( 'pre_option_' . $row['option'], $filter );
+			list( $answer, $selects ) = $this->count_selects( $row['option'], $row['get'] );
+			remove_filter( 'pre_option_' . $row['option'], $filter );
+			$this->assertSame( $row['answer'], $answer, $label );
+			$this->assertSame( 0, $selects, $label );
+			$this->remove_row( $row['option'] );
 		}
 	}
 

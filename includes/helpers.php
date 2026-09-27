@@ -422,17 +422,18 @@ function aafm_scoped_denied_meta_keys( string $option_name ): array {
 /**
  * A deny option's raw value, read so a failed read can never answer "nothing denied".
  *
- * A non-empty array from get_option() is returned as it is. An empty or non-array answer is what a
- * missing row and a failed read both produce, so the row is read from the database: an unreadable
- * row gives null, a stored array is returned, anything else is the empty list.
+ * A non-empty array from get_option() is returned as it is, and any other answer except the exact
+ * default gives the empty list. That default, array(), is what a missing row and a failed read both
+ * produce, so the row is read from the database: an unreadable row gives null, a stored array is
+ * returned, anything else is the empty list.
  *
  * @param string $option_name The denied-keys option name for a scope.
  * @return array<mixed>|null Null when the row could not be read.
  */
 function aafm_scoped_deny_option_raw( string $option_name ): ?array {
 	$stored = get_option( $option_name, array() );
-	if ( is_array( $stored ) && array() !== $stored ) {
-		return $stored;
+	if ( array() !== $stored ) {
+		return is_array( $stored ) ? $stored : array();
 	}
 	$row = aafm_option_row( $option_name );
 	if ( ! $row['ok'] ) {

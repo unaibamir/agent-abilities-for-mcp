@@ -15,8 +15,9 @@ defined( 'ABSPATH' ) || exit;
  * @return int Clamped to >= 0.
  */
 function aafm_rate_limit_per_min(): int {
-	$stored = max( 0, (int) get_option( 'aafm_rate_limit_per_min', 0 ) );
-	if ( 0 === $stored ) {
+	$raw    = get_option( 'aafm_rate_limit_per_min', 0 );
+	$stored = max( 0, (int) $raw );
+	if ( 0 === $raw ) {
 		// No limit may be a failed read's default: the row decides, and an unreadable row limits to 1.
 		$row    = aafm_option_row( 'aafm_rate_limit_per_min' );
 		$stored = ! $row['ok'] ? 1 : ( $row['found'] ? max( 0, (int) $row['value'] ) : 0 );
@@ -91,8 +92,9 @@ function aafm_ip_allowlist(): array {
 		)
 	);
 
-	$stored = $normalize( get_option( 'aafm_ip_allowlist', array() ) );
-	if ( array() === $stored ) {
+	$raw    = get_option( 'aafm_ip_allowlist', array() );
+	$stored = $normalize( $raw );
+	if ( array() === $raw ) {
 		// An empty list may be a failed read's default: the row decides. An unreadable row gives
 		// one entry that is not an address, so it matches nothing and every IP is refused.
 		$row    = aafm_option_row( 'aafm_ip_allowlist' );
@@ -278,8 +280,9 @@ function aafm_force_draft(): bool {
 	 *
 	 * @param bool $force True to force draft status.
 	 */
-	$on = (bool) get_option( 'aafm_force_draft', false );
-	if ( ! $on ) {
+	$raw = get_option( 'aafm_force_draft', false );
+	$on  = (bool) $raw;
+	if ( false === $raw ) {
 		// Off may be a failed read's default: the row decides, and an unreadable row means on.
 		$row = aafm_option_row( 'aafm_force_draft' );
 		$on  = ! $row['ok'] || ( $row['found'] && (bool) $row['value'] );
@@ -294,8 +297,9 @@ function aafm_force_draft(): bool {
  * @return int Clamped to >= 0.
  */
 function aafm_max_title_len(): int {
-	$stored = max( 0, (int) get_option( 'aafm_max_title_len', 0 ) );
-	if ( 0 === $stored ) {
+	$raw    = get_option( 'aafm_max_title_len', 0 );
+	$stored = max( 0, (int) $raw );
+	if ( 0 === $raw ) {
 		// No cap may be a failed read's default: the row decides, and an unreadable row caps at 1.
 		$row    = aafm_option_row( 'aafm_max_title_len' );
 		$stored = ! $row['ok'] ? 1 : ( $row['found'] ? max( 0, (int) $row['value'] ) : 0 );
@@ -331,8 +335,9 @@ function aafm_max_title_len(): int {
  * @return int Retention window in days, clamped to [0, 3650]. Default 30.
  */
 function aafm_log_retention_days(): int {
-	$days = max( 0, min( 3650, (int) get_option( 'aafm_log_retention_days', 30 ) ) );
-	if ( 30 === $days ) {
+	$raw  = get_option( 'aafm_log_retention_days', 30 );
+	$days = max( 0, min( 3650, (int) $raw ) );
+	if ( 30 === $raw ) {
 		// 30 may be a failed read's default, and the prune deletes rows: the row decides when it
 		// keeps more (0, keep forever, or a longer window), and an unreadable row prunes nothing.
 		$row = aafm_option_row( 'aafm_log_retention_days' );

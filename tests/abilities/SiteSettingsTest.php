@@ -687,9 +687,9 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * A key with no alloptions entry is answered from its per-option cache entry, by get_option()
-	 * and by update_option()'s old-value compare alike. A stale per-option entry holding the
-	 * requested value refuses the request before any write.
+	 * A key with no alloptions entry and no notoptions entry is answered from its per-option cache
+	 * entry, by get_option() and by update_option()'s old-value compare alike. A stale per-option
+	 * entry holding the requested value refuses the request before any write.
 	 */
 	public function test_a_stale_per_option_entry_of_a_key_missing_from_alloptions_refuses_the_request(): void {
 		$this->register_all();
@@ -711,5 +711,82 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertSame( 'aafm_error', $res->get_error_code() );
 		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
 		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * An empty alloptions entry over a missing row: get_option() answers '', so update_option() runs
+	 * an UPDATE that matches no row and the response would echo the stale ''. A cached value over no
+	 * row refuses the request before any write.
+	 */
+	public function test_an_empty_alloptions_entry_over_a_missing_row_refuses_the_request(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		delete_option( 'blogname' );
+		$this->plant_stale_alloptions( 'blogname', '' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertNull( $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * A notoptions entry over an existing row makes get_option() answer the registered default (10
+	 * for posts_per_page), so a request for 10 is skipped by update_option()'s same-value check while
+	 * the row keeps 5. A notoptions entry over a row refuses the request before any write.
+	 */
+	public function test_a_notoptions_entry_over_an_existing_row_refuses_the_request(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'posts_per_page', 5 );
+		wp_cache_delete( 'posts_per_page', 'options' );
+		$all = wp_load_alloptions();
+		unset( $all['posts_per_page'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$not                   = (array) wp_cache_get( 'notoptions', 'options' );
+		$not['posts_per_page'] = true;
+		wp_cache_set( 'notoptions', $not, 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'posts_per_page' => 10 ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( '5', $this->option_row( 'posts_per_page' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * P-8 healthy pin: with no row and nothing cached, the dry-run's own read leaves a notoptions
+	 * entry, which agrees with the missing row, so the write lands as it did before the check.
+	 */
+	public function test_a_missing_row_with_nothing_cached_still_takes_the_write(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		delete_option( 'blogdescription' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogdescription' => 'A tagline' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'A tagline' ) ), $res );
+		$this->assertSame( 'A tagline', $this->option_row( 'blogdescription' ) );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'] );
 	}
 }

@@ -257,15 +257,17 @@ function aafm_exec_update_site_settings( array $input ) {
 		}
 	}
 
-	// A stale persistent cache can make update_option() skip a write, because it compares against
-	// the cached old value. So before anything is written, each key's cache entries have to agree
-	// with its row; a disagreement, or a row that cannot be read, refuses the whole request. Both
-	// entries are checked: get_option() answers from alloptions before the per-option key, while
-	// aafm_read_option_views() reports the per-option key first.
+	// A stale persistent cache can make update_option() skip or misdirect a write, because it decides
+	// from get_option()'s answer: the alloptions entry first, then notoptions (which answers the
+	// default), then the per-option key, and only then the row. So before anything is written, each
+	// key's cache has to agree with its row, read through aafm_option_row() so a missing row and a
+	// stored '' stay apart. A row that cannot be read refuses. With a row, a notoptions entry or a
+	// cached value that differs refuses; with no row, any cached value refuses, while a notoptions
+	// entry agrees. A refusal on any key refuses the whole request before the first write.
 	foreach ( array_keys( $settings ) as $key ) {
-		$key   = (string) $key;
-		$views = aafm_read_option_views( $key );
-		if ( $views['db_error'] ) {
+		$key = (string) $key;
+		$row = aafm_option_row( $key );
+		if ( ! $row['ok'] ) {
 			return aafm_generic_error();
 		}
 		$cached = array();
@@ -278,8 +280,18 @@ function aafm_exec_update_site_settings( array $input ) {
 		if ( is_array( $all ) && array_key_exists( $key, $all ) ) {
 			$cached[] = maybe_unserialize( $all[ $key ] );
 		}
+		if ( ! $row['found'] ) {
+			if ( array() !== $cached ) {
+				return aafm_generic_error();
+			}
+			continue;
+		}
+		$not = wp_cache_get( 'notoptions', 'options', true );
+		if ( is_array( $not ) && isset( $not[ $key ] ) ) {
+			return aafm_generic_error();
+		}
 		foreach ( $cached as $value ) {
-			if ( ! aafm_option_value_matches( $value, $views['db_value'] ) ) {
+			if ( ! aafm_option_value_matches( $value, $row['value'] ) ) {
 				return aafm_generic_error();
 			}
 		}

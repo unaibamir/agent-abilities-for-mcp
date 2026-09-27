@@ -608,9 +608,11 @@ function aafm_policy_options(): array {
  * REST request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own
  * parsed rest_route (the empty() test rest_api_loaded() applies). The request path is never read.
  *
- * A "no" is never kept: a read before WordPress routes a REST request, a front-end page load, the
- * OAuth authorize screen and the well-known documents read policy as 1.7.5 did, and a later read in
- * the same request decides again. A "yes" is kept for the request and registers the memo's hooks.
+ * A "no" is never kept, and a later read in the same request decides again. A read before
+ * WordPress routes a REST request and a front-end page load read policy as 1.7.5 did, and so do the
+ * OAuth authorize request and the root /.well-known/ documents, which are not REST-routed; their
+ * /wp-json/ copies are REST routes and batch. A "yes" is kept for the request and registers the
+ * memo's hooks.
  *
  * @return bool
  */

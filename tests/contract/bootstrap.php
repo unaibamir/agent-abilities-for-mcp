@@ -119,6 +119,10 @@ tests_add_filter(
 				require_once $path;
 			}
 		}
+		// Name the WooCommerce this run loaded, so each contract leg's output says which pin it tested.
+		if ( defined( 'WC_VERSION' ) ) {
+			fwrite( STDERR, 'Contract WooCommerce ' . WC_VERSION . "\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- test bootstrap output.
+		}
 
 		require dirname( __DIR__, 2 ) . '/agent-abilities-for-mcp.php';
 	}

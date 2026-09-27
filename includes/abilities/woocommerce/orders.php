@@ -167,7 +167,7 @@ function aafm_wc_get_order_object( int $id ): ?\WC_Order {
 	if ( $id < 1 || ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
-	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+	if ( false !== aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return null;
 	}
 	$order = wc_get_order( $id );
@@ -770,7 +770,7 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$adde
 		// A product whose post does not load exactly stays unresolved, like an unknown id.
 		$pid     = absint( $item['product_id'] ?? 0 );
 		$qty     = max( 1, absint( $item['quantity'] ?? 1 ) );
-		$product = ( $pid > 0 && function_exists( 'wc_get_product' ) && ( ! aafm_wc_store_is_core( 'product' ) || aafm_exact_object( 'post', $pid ) instanceof WP_Post ) ) ? wc_get_product( $pid ) : false;
+		$product = ( $pid > 0 && function_exists( 'wc_get_product' ) && ( false === aafm_wc_store_is_core( 'product' ) || aafm_exact_object( 'post', $pid ) instanceof WP_Post ) ) ? wc_get_product( $pid ) : false;
 		if ( $product instanceof \WC_Product ) {
 			$resolved[] = array(
 				'product' => $product,
@@ -1298,7 +1298,7 @@ function aafm_wc_load_order_or_null( int $order_id ): ?\WC_Order {
 	if ( $order_id <= 0 || ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
-	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
+	if ( false !== aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
 		return null;
 	}
 	try {
@@ -1404,8 +1404,13 @@ function aafm_wc_order_still_exists( int $order_id ): bool {
 	if ( $order_id < 1 || ! function_exists( 'wc_get_order' ) ) {
 		return false;
 	}
-	// A post that does not load exactly is gone only when a failure-aware query says the row is.
-	if ( aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
+	// A store the registry cannot name certifies nothing. A post that does not load exactly is gone
+	// only when a failure-aware query says the row is.
+	$core = aafm_wc_store_is_core( 'order' );
+	if ( null === $core ) {
+		return true;
+	}
+	if ( $core && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
 		return ! aafm_object_absent( 'post', $order_id );
 	}
 	// The class_exists() check only narrows the type for static analysis: WooCommerce's registry
@@ -2023,6 +2028,12 @@ function aafm_exec_wc_update_order_status( array $input ) {
  * @return object|null stdClass note object or null.
  */
 function aafm_wc_get_order_note( int $order_id, int $note_id ): ?object {
+	// A note is a core comment on its order, so load it exactly first: a faulted notes query can
+	// hand back another order's notes, and one of those can carry the requested id.
+	$comment = aafm_exact_object( 'comment', $note_id );
+	if ( ! $comment instanceof WP_Comment || (int) $comment->comment_post_ID !== $order_id ) {
+		return null;
+	}
 	$notes = wc_get_order_notes( array( 'order_id' => $order_id ) );
 	foreach ( $notes as $note ) {
 		// wc_get_order_notes() returns normalized objects whose id lives in ->id (not ->comment_ID).
@@ -2284,7 +2295,7 @@ function aafm_wc_get_refund_object( int $refund_id ): ?\WC_Order_Refund {
 	if ( ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
-	if ( ( aafm_wc_store_is_core( 'order' ) || aafm_wc_store_is_core( 'order-refund' ) ) && ! aafm_exact_object( 'post', $refund_id ) instanceof WP_Post ) {
+	if ( ( false !== aafm_wc_store_is_core( 'order' ) || false !== aafm_wc_store_is_core( 'order-refund' ) ) && ! aafm_exact_object( 'post', $refund_id ) instanceof WP_Post ) {
 		return null;
 	}
 	$refund = wc_get_order( $refund_id );

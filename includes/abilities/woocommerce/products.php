@@ -112,7 +112,7 @@ function aafm_wc_get_product( int $id ): ?\WC_Product {
 	if ( $id < 1 || ! function_exists( 'wc_get_product' ) ) {
 		return null;
 	}
-	if ( aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+	if ( false !== aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return null;
 	}
 	$product = wc_get_product( $id );
@@ -1394,7 +1394,7 @@ function aafm_perm_wc_delete_product( array $input ): bool {
 		return false;
 	}
 	$id = isset( $input['product_id'] ) ? absint( $input['product_id'] ) : 0;
-	if ( $id && aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+	if ( $id && false !== aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_object_absent( 'post', $id );
 	}
 	$read = aafm_with_checked_reads(
@@ -1453,7 +1453,12 @@ function aafm_exec_wc_delete_product( array $input ) {
 	// action and drops the product-instance cache there (live-probed, twice, on a throwaway product).
 	// That hook is a version-dependent internal, not a documented guarantee, so if a later
 	// WooCommerce ever serves a stale read here, switch this branch to the post-row check above.
-	if ( aafm_wc_store_is_core( 'product' ) ? ( aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_object_absent( 'post', $id ) ) : null !== aafm_wc_get_product( $id ) ) {
+	// A store the registry cannot name certifies nothing.
+	$core = aafm_wc_store_is_core( 'product' );
+	if ( null === $core ) {
+		return aafm_generic_error();
+	}
+	if ( $core ? ( aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_object_absent( 'post', $id ) ) : null !== aafm_wc_get_product( $id ) ) {
 		return aafm_generic_error();
 	}
 

@@ -1,11 +1,12 @@
 <?php
 /**
- * WooCommerce contract tests under an injected database fault.
+ * WooCommerce contract tests under an injected database fault, plus two shipping parity pins.
  *
  * Real WooCommerce's by-id tax rate read (WC_Tax::_get_tax_rate(), a bare get_row() with no
  * filter) is faulted so the previous query's row answers it. The tax abilities must report that
- * as not found or not confirmed, never as another rate. Runs on every WooCommerce leg the contract
- * workflow installs.
+ * as not found or not confirmed, never as another rate. The shipping pins keep 1.7.5's answer for
+ * a zone_loaded listener and a foreign-zone methods filter, which real WooCommerce fires and the
+ * stubs do not. Runs on every WooCommerce leg the contract workflow installs.
  *
  * Run: vendor/bin/phpunit -c phpunit-contract.xml.dist (after tests/bin/install-vendors.sh).
  *
@@ -21,7 +22,8 @@ use AAFM\Tests\TestCase;
 use WP_Error;
 
 /**
- * Tax rate reads that another rate's row answers, on real WooCommerce.
+ * Tax rate reads that another rate's row answers, and shipping writes under healthy vendor
+ * hooks, on real WooCommerce.
  *
  * @group contract
  */
@@ -164,5 +166,125 @@ final class WooCommerceFaultContractTest extends TestCase {
 		$this->assertSame( 'aafm_not_found', $update->get_error_code() );
 		$this->assertSame( 'Rate A', $this->stored_name( $a ), 'nothing was written' );
 		$this->assertSame( 'Rate B', $this->stored_name( $b ), 'the other rate is untouched' );
+	}
+
+	/**
+	 * A zone created through WooCommerce itself.
+	 *
+	 * @param string $name  Zone name.
+	 * @param int    $order Zone order.
+	 * @return \WC_Shipping_Zone
+	 */
+	private function zone( string $name, int $order ): \WC_Shipping_Zone {
+		$zone = new \WC_Shipping_Zone();
+		$zone->set_zone_name( $name );
+		$zone->set_zone_order( $order );
+		$zone->save();
+		return $zone;
+	}
+
+	/**
+	 * A zone's stored name and order, read from its row.
+	 *
+	 * @param int $zone_id Zone id.
+	 * @return array<string,string>|null
+	 */
+	private function stored_zone( int $zone_id ): ?array {
+		global $wpdb;
+		return $wpdb->get_row( $wpdb->prepare( 'SELECT zone_name, zone_order FROM %i WHERE zone_id = %d', $wpdb->prefix . 'woocommerce_shipping_zones', $zone_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- checks the row itself.
+	}
+
+	/**
+	 * A zone_loaded listener that renames a zone is saved with the update, as WooCommerce saves
+	 * what a listener changed and as 1.7.5 did (the step 14 shipping residual).
+	 */
+	public function test_a_zone_loaded_listener_rename_is_saved_with_the_update(): void {
+		$zone_id  = $this->zone( 'Zone A', 1 )->get_id();
+		$listener = static function ( $zone ) use ( $zone_id ): void {
+			if ( $zone instanceof \WC_Shipping_Zone && $zone_id === $zone->get_id() ) {
+				$zone->set_zone_name( 'Listener name' );
+			}
+		};
+		add_action( 'woocommerce_shipping_zone_loaded', $listener );
+		try {
+			$result = aafm_exec_wc_update_shipping_zone(
+				array(
+					'zone_id'    => $zone_id,
+					'zone_order' => 7,
+				)
+			);
+		} finally {
+			remove_action( 'woocommerce_shipping_zone_loaded', $listener );
+		}
+
+		$this->assertSame(
+			array(
+				'id'             => $zone_id,
+				'zone_name'      => 'Listener name',
+				'zone_order'     => 7,
+				'zone_locations' => array(),
+			),
+			$result
+		);
+		$this->assertSame(
+			array(
+				'zone_name'  => 'Listener name',
+				'zone_order' => '7',
+			),
+			$this->stored_zone( $zone_id ),
+			'the listener rename and the requested order are both stored'
+		);
+	}
+
+	/**
+	 * A methods filter that lists another zone's method under this zone lets update-method write
+	 * that method, as 1.7.5 did (the step 14 shipping residual).
+	 */
+	public function test_a_foreign_zone_method_added_by_a_filter_is_written(): void {
+		$zone_a = $this->zone( 'Zone A', 1 );
+		$zone_b = $this->zone( 'Zone B', 2 );
+		$zone_a->add_shipping_method( 'flat_rate' );
+		$foreign  = (int) $zone_b->add_shipping_method( 'flat_rate' );
+		$a_id     = $zone_a->get_id();
+		$b_id     = $zone_b->get_id();
+		$add_from = static function ( $methods, $raw, $allowed, $zone ) use ( $a_id, $b_id, $foreign ) {
+			if ( $zone instanceof \WC_Shipping_Zone && $a_id === $zone->get_id() ) {
+				$methods[ $foreign ] = ( new \WC_Shipping_Zone( $b_id ) )->get_shipping_methods()[ $foreign ];
+			}
+			return $methods;
+		};
+		add_filter( 'woocommerce_shipping_zone_shipping_methods', $add_from, 10, 4 );
+		try {
+			$result = aafm_exec_wc_update_shipping_method(
+				array(
+					'zone_id'      => $a_id,
+					'instance_id'  => $foreign,
+					'enabled'      => 'no',
+					'method_title' => 'Written through A',
+				)
+			);
+		} finally {
+			remove_filter( 'woocommerce_shipping_zone_shipping_methods', $add_from, 10 );
+		}
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $foreign, $result['instance_id'] );
+		$this->assertSame( 'flat_rate', $result['id'] );
+		$this->assertSame( 'Written through A', $result['method_title'] );
+		$this->assertSame( 'no', $result['enabled'] );
+
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT zone_id, is_enabled FROM %i WHERE instance_id = %d', $wpdb->prefix . 'woocommerce_shipping_zone_methods', $foreign ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- checks the row itself.
+		$this->assertSame(
+			array(
+				'zone_id'    => (string) $b_id,
+				'is_enabled' => '0',
+			),
+			$row,
+			'zone B\'s method row holds the write'
+		);
+		$settings = aafm_option_row( 'woocommerce_flat_rate_' . $foreign . '_settings' );
+		$this->assertTrue( $settings['ok'] && $settings['found'] );
+		$this->assertSame( 'Written through A', $settings['value']['title'] ?? null );
 	}
 }

@@ -31,11 +31,13 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
 /**
  * Remember (or read) the OAuth client_id a bearer token resolved for the current request.
  *
- * Read-only observability for M16: this store has no bearing on authentication or capability
- * decisions - aafm_oauth_resolve_current_user() writes to it only AFTER a token has already fully
- * resolved a user, purely so the activity-log wrapper in register.php can attribute the resulting
- * ability call to the OAuth client that made it. Mirrors the aafm_remember_raw_permission() static
- * store in register.php. A non-OAuth (Application Password/cookie) request never writes it.
+ * Only aafm_oauth_resolve_current_user() writes it, and only AFTER a token has already fully resolved
+ * a user. It never grants anything, but three readers rely on it: the activity-log wrapper in
+ * register.php attributes the ability call to the OAuth client that made it; the allowlist keys its
+ * per-connection scope on it as the principal's client; and aafm_oauth_confine_bearer_to_mcp_handler()
+ * reads a non-empty value as the marker that the current user came from our bearer. Mirrors the
+ * aafm_remember_raw_permission() static store in register.php. A non-OAuth (Application
+ * Password/cookie) request never writes it.
  *
  * The store has to be per request, and a bare function static is not that on its own. On php-fpm and
  * mod_php the process ends with the request, so the two are the same. Under a persistent worker SAPI
@@ -321,18 +323,20 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
  * Whether WordPress routed this request to the MCP REST route.
  *
  * The answer is core's own: the rest_route WordPress::parse_request() settled on, untrailingslashed
- * as rest_api_loaded() does, matched by aafm_is_mcp_route() as core's router matches it. Before
- * the parse_request action has fired in this process nothing is routed yet, so the answer is
- * false. That is the same wait core's Application Passwords make (they authenticate only once
- * REST_REQUEST is defined), and it is safe for a healthy MCP call: WP_REST_Server::serve_request()
- * forgets a cached anonymous user before dispatch, so the bearer resolves then. Entry points that
- * never parse (wp-admin, admin-ajax, admin-post, wp-comments-post, cron, CLI) never match.
+ * as rest_api_loaded() does, matched by aafm_is_mcp_route() as core's router matches it. Until
+ * WordPress has parsed the request and begun REST routing (rest_api_init fires inside
+ * rest_get_server(), right after rest_api_loaded() defines REST_REQUEST) the answer is false. That
+ * is the same wait core's Application Passwords make (they authenticate only once REST_REQUEST is
+ * defined), and it is safe for a healthy MCP call: WP_REST_Server::serve_request() forgets a
+ * cached anonymous user before dispatch, so the bearer resolves then. Entry points that never
+ * parse (wp-admin, admin-ajax, admin-post, wp-comments-post, cron, CLI), and requests served
+ * before REST routing (a parse_request handler that exits), never match.
  *
  * @return bool True only when core routed the request to the MCP endpoint.
  */
 function aafm_oauth_request_targets_mcp_route(): bool {
 	$wp = $GLOBALS['wp'] ?? null;
-	if ( ! did_action( 'parse_request' ) || ! $wp instanceof WP ) {
+	if ( ! did_action( 'parse_request' ) || ! did_action( 'rest_api_init' ) || ! $wp instanceof WP ) {
 		return false;
 	}
 	$route = $wp->query_vars['rest_route'] ?? null;
@@ -365,13 +369,19 @@ function aafm_oauth_forget_anonymous_user_on_mcp_route(): void {
 }
 
 /**
- * Let a user resolved from our bearer reach only the MCP adapter's own handler.
+ * Refuse a user resolved from our bearer at any handler on the MCP path but an MCP transport's.
  *
  * Core runs the first handler whose route matches, so a route another plugin registers inside our
  * namespace could run ahead of the adapter's on the MCP path. Runs on rest_request_before_callbacks,
  * after core matched the handler and before its permission_callback and callback: when the request
  * is the MCP route and the current user came from an aafm_oat_ bearer, any handler whose callback
  * is not an HttpTransport method gets the same 401 an unauthenticated MCP call gets.
+ *
+ * Limits (named residuals U-1b and U-1c): a second HttpTransport server registered at a route
+ * matching ours is let through; a foreign handler's argument validate and sanitize callbacks, core's
+ * Allow-header pass over its permission_callback, and any rest_request_before_callbacks filter that
+ * runs before this one still run with the bearer's user; and a filter another plugin adds at the same
+ * last priority after this one can undo the refusal.
  *
  * @param mixed $response The response so far (WP_Error, a short-circuit value, or null).
  * @param mixed $handler  The matched route handler.

@@ -12,11 +12,11 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The MCP endpoint URL for this site.
  *
- * Calls rest_url() only after confirming $wp_rewrite is available. The global $wp_rewrite
- * is not yet instantiated when the determine_current_user filter fires on the OAuth bearer
- * path (e.g. Query Monitor calls current_user_can() that early), and rest_url() ->
- * get_rest_url() dereferences it, causing a fatal. When $wp_rewrite is absent the URL is
- * reconstructed without it.
+ * Calls rest_url() only after confirming $wp_rewrite is available: rest_url() ->
+ * get_rest_url() dereferences it, and a fatal is the result when it is not yet instantiated.
+ * The OAuth bearer path no longer reaches here that early (the bearer resolves only once REST
+ * routing has begun), so the branch that reconstructs the URL without $wp_rewrite is defensive,
+ * for any caller that asks early. ValidatorTest pins its plain-permalink form.
  *
  * Both branches MUST produce byte-identical output so the RFC 8707 audience
  * hash_equals() check in the validator passes regardless of which branch ran at

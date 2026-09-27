@@ -11,7 +11,9 @@
  * (d) a string compare (strcasecmp, strcmp, strncasecmp, strncmp, stripos, strpos,
  *     str_starts_with) whose arguments carry get_route() or a variable assigned from it, outside
  *     ROUTE_COMPARES;
- * (e) AAFM_MCP_NAMESPACE concatenated with a literal that starts with /mcp, anywhere.
+ * (e) AAFM_MCP_NAMESPACE concatenated with a literal that starts with /mcp, anywhere, and any other
+ *     use of AAFM_MCP_NAMESPACE outside NAMESPACE_USES.
+ * Function and constant names are matched whether written plain or fully qualified (\name).
  * Every key carries its count, and a key that no longer matches fails, so a stale entry cannot
  * hide a new site.
  *
@@ -56,6 +58,16 @@ final class RouteMatchSweepTest extends TestCase {
 	);
 
 	/**
+	 * (e) Uses of AAFM_MCP_NAMESPACE, key => count.
+	 *
+	 * @var array<string,int>
+	 */
+	private const NAMESPACE_USES = array(
+		'includes/bootstrap.php|aafm_mcp_rest_namespace_route' => 1,
+		'includes/server.php|aafm_register_mcp_server' => 1,
+	);
+
+	/**
 	 * (d) String compares on a route read from get_route(), key => count. The OAuth sub-namespace
 	 * prefix test is a different route family.
 	 *
@@ -72,24 +84,26 @@ final class RouteMatchSweepTest extends TestCase {
 	 *
 	 * @param string $source Full file contents.
 	 * @param string $path   Path the source is keyed under.
-	 * @return array{calls:array<string,int>,literals:array<string,int>,segment:array<string,int>,compares:array<string,int>,namespace:array<string,int>}
+	 * @return array{calls:array<string,int>,literals:array<string,int>,segment:array<string,int>,compares:array<string,int>,namespace:array<string,int>,ns_uses:array<string,int>}
 	 */
 	private function scan( string $source, string $path ): array {
-		$tokens   = token_get_all( $source );
-		$nullsafe = defined( 'T_NULLSAFE_OBJECT_OPERATOR' ) ? constant( 'T_NULLSAFE_OBJECT_OPERATOR' ) : -1;
-		$skip     = array( T_FUNCTION, T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NEW, $nullsafe );
-		$stack    = array();
-		$pending  = null;
-		$depth    = 0;
-		$found    = array(
+		$tokens    = token_get_all( $source );
+		$nullsafe  = defined( 'T_NULLSAFE_OBJECT_OPERATOR' ) ? constant( 'T_NULLSAFE_OBJECT_OPERATOR' ) : -1;
+		$skip      = array( T_FUNCTION, T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NEW, $nullsafe );
+		$stack     = array();
+		$pending   = null;
+		$depth     = 0;
+		$found     = array(
 			'calls'     => array(),
 			'literals'  => array(),
 			'segment'   => array(),
 			'compares'  => array(),
 			'namespace' => array(),
+			'ns_uses'   => array(),
 		);
-		$routes   = array(); // key => variables assigned from get_route() in that function.
-		$total    = count( $tokens );
+		$qualified = defined( 'T_NAME_FULLY_QUALIFIED' ) ? constant( 'T_NAME_FULLY_QUALIFIED' ) : -1;
+		$routes    = array(); // key => variables assigned from get_route() in that function.
+		$total     = count( $tokens );
 
 		for ( $i = 0; $i < $total; $i++ ) {
 			$token = $tokens[ $i ];
@@ -130,16 +144,21 @@ final class RouteMatchSweepTest extends TestCase {
 				}
 				continue;
 			}
-			if ( T_STRING !== $token[0] ) {
+			if ( T_STRING === $token[0] ) {
+				$name = $token[1];
+			} elseif ( $qualified === $token[0] ) {
+				$name = ltrim( $token[1], '\\' );
+			} else {
 				continue;
 			}
-			if ( 'AAFM_MCP_ROUTE_SEGMENT' === $token[1] ) {
+			if ( 'AAFM_MCP_ROUTE_SEGMENT' === $name ) {
 				$found['segment'][ $key ] = ( $found['segment'][ $key ] ?? 0 ) + 1;
 				continue;
 			}
-			if ( 'AAFM_MCP_NAMESPACE' === $token[1] ) {
-				$dot    = $this->next_significant( $tokens, $i + 1, 1 );
-				$string = null === $dot ? null : $this->next_significant( $tokens, $dot + 1, 1 );
+			if ( 'AAFM_MCP_NAMESPACE' === $name ) {
+				$found['ns_uses'][ $key ] = ( $found['ns_uses'][ $key ] ?? 0 ) + 1;
+				$dot                      = $this->next_significant( $tokens, $i + 1, 1 );
+				$string                   = null === $dot ? null : $this->next_significant( $tokens, $dot + 1, 1 );
 				if ( null !== $string && '.' === $tokens[ $dot ] && is_array( $tokens[ $string ] ) && T_CONSTANT_ENCAPSED_STRING === $tokens[ $string ][0]
 					&& 0 === stripos( substr( $tokens[ $string ][1], 1 ), '/mcp' )
 				) {
@@ -153,7 +172,7 @@ final class RouteMatchSweepTest extends TestCase {
 			}
 			$before = $this->next_significant( $tokens, $i - 1, -1 );
 			$method = null !== $before && is_array( $tokens[ $before ] ) && in_array( $tokens[ $before ][0], array( T_OBJECT_OPERATOR, $nullsafe ), true );
-			if ( 'get_route' === $token[1] && $method ) {
+			if ( 'get_route' === $name && $method ) {
 				$start = $i;
 				while ( $start > 0 && ! in_array( $tokens[ $start - 1 ], array( ';', '{', '}' ), true ) ) {
 					--$start;
@@ -168,9 +187,9 @@ final class RouteMatchSweepTest extends TestCase {
 			if ( null !== $before && is_array( $tokens[ $before ] ) && in_array( $tokens[ $before ][0], $skip, true ) ) {
 				continue;
 			}
-			if ( in_array( $token[1], array( 'aafm_mcp_rest_route', 'aafm_mcp_rest_namespace_route' ), true ) ) {
+			if ( in_array( $name, array( 'aafm_mcp_rest_route', 'aafm_mcp_rest_namespace_route' ), true ) ) {
 				$found['calls'][ $key ] = ( $found['calls'][ $key ] ?? 0 ) + 1;
-			} elseif ( in_array( $token[1], self::COMPARE_FUNCTIONS, true ) && $this->reads_route( $tokens, $open, $routes[ $key ] ?? array() ) ) {
+			} elseif ( in_array( $name, self::COMPARE_FUNCTIONS, true ) && $this->reads_route( $tokens, $open, $routes[ $key ] ?? array() ) ) {
 				$found['compares'][ $key ] = ( $found['compares'][ $key ] ?? 0 ) + 1;
 			}
 		}
@@ -263,18 +282,29 @@ final class RouteMatchSweepTest extends TestCase {
 	}
 
 	public function test_the_scanner_finds_each_route_spelling(): void {
-		$source = "<?php\nfunction f( \$r ) {\n\t\$a = aafm_mcp_rest_route();\n\t\$b = 'x/agent-abilities-for-mcp/MCP';\n\t\$c = AAFM_MCP_ROUTE_SEGMENT;\n\t\$d = AAFM_MCP_NAMESPACE . '/mcp';\n\tstrcmp( 'Mcp-Session-Id', \$a );\n\treturn 0 === strcasecmp( \$r->get_route(), \$a );\n}\nfunction g( \$o, \$r ) {\n\t\$o->aafm_mcp_rest_route();\n\t\$route = \$r->get_route();\n\tstrpos( 'a', 'b' );\n\treturn stripos( \$route, 'x' );\n}\nfunction aafm_mcp_rest_route() {}\n";
+		$source = "<?php\nfunction f( \$r ) {\n\t\$a = aafm_mcp_rest_route();\n\t\$b = 'x/agent-abilities-for-mcp/MCP';\n\t\$c = AAFM_MCP_ROUTE_SEGMENT;\n\t\$d = AAFM_MCP_NAMESPACE . '/mcp';\n\tstrcmp( 'Mcp-Session-Id', \$a );\n\treturn 0 === strcasecmp( \$r->get_route(), \$a );\n}\nfunction g( \$o, \$r ) {\n\t\$o->aafm_mcp_rest_route();\n\t\$route = \$r->get_route();\n\tstrpos( 'a', 'b' );\n\treturn stripos( \$route, 'x' );\n}\nfunction h( \$request ) {\n\t\$n = \\AAFM_MCP_NAMESPACE;\n\t\$s = \\AAFM_MCP_ROUTE_SEGMENT;\n\treturn 0 === \\strcasecmp( \$request->get_route(), \\aafm_mcp_rest_route() );\n}\nfunction aafm_mcp_rest_route() {}\n";
 
 		$this->assertSame(
 			array(
-				'calls'     => array( 'x.php|f' => 1 ),
+				'calls'     => array(
+					'x.php|f' => 1,
+					'x.php|h' => 1,
+				),
 				'literals'  => array( 'x.php|f' => 1 ),
-				'segment'   => array( 'x.php|f' => 1 ),
+				'segment'   => array(
+					'x.php|f' => 1,
+					'x.php|h' => 1,
+				),
 				'compares'  => array(
 					'x.php|f' => 1,
 					'x.php|g' => 1,
+					'x.php|h' => 1,
 				),
 				'namespace' => array( 'x.php|f' => 1 ),
+				'ns_uses'   => array(
+					'x.php|f' => 1,
+					'x.php|h' => 1,
+				),
 			),
 			$this->scan( $source, 'x.php' )
 		);
@@ -288,5 +318,6 @@ final class RouteMatchSweepTest extends TestCase {
 		$this->assertSame( $this->sorted( self::SEGMENT_USES ), $found['segment'] ?? array(), 'AAFM_MCP_ROUTE_SEGMENT is used outside the keyed sites.' );
 		$this->assertSame( $this->sorted( self::ROUTE_COMPARES ), $found['compares'] ?? array(), 'A function that reads get_route() compares strings; use aafm_is_mcp_route().' );
 		$this->assertSame( array(), $found['namespace'] ?? array(), 'AAFM_MCP_NAMESPACE is joined to /mcp; use aafm_mcp_rest_route() through aafm_is_mcp_route().' );
+		$this->assertSame( $this->sorted( self::NAMESPACE_USES ), $found['ns_uses'] ?? array(), 'AAFM_MCP_NAMESPACE is used outside the keyed sites.' );
 	}
 }

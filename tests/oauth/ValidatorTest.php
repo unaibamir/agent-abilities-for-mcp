@@ -329,12 +329,20 @@ class ValidatorTest extends TestCase {
 	/**
 	 * Where HTTPS is required (production) and the request is plain http, a valid token does
 	 * not resolve - the validator enforces the same HTTPS policy as the other OAuth paths.
+	 *
+	 * Runs in its own process so no AAFM_OAUTH_ALLOW_HTTP defined by an earlier suite (HandshakeTest,
+	 * RestEndpointsTest) relaxes the requirement it tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_token_does_not_resolve_over_plain_http_when_https_required(): void {
-		if ( ! aafm_oauth_https_required() ) {
-			$this->markTestSkipped( 'HTTPS is not required in this environment; the plain-http gate cannot be exercised.' );
-		}
+		$this->assertSame( 'production', wp_get_environment_type(), 'This test runs in its own process, on the production environment type.' );
+		$this->assertTrue( aafm_oauth_https_required(), 'No AAFM_OAUTH_ALLOW_HTTP from another suite reaches this process.' );
 
+		// Plain http from the start, so the token's audience is this endpoint as plain http sees it
+		// and only the HTTPS policy can refuse it.
+		unset( $_SERVER['HTTPS'] );
 		$uid    = self::factory()->user->create();
 		$tokens = aafm_oauth_mint_tokens(
 			array(
@@ -345,8 +353,6 @@ class ValidatorTest extends TestCase {
 		);
 		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
 
-		// Drop TLS: is_ssl() now returns false while HTTPS is still required.
-		unset( $_SERVER['HTTPS'] );
 		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'A bearer over plain http must not resolve when HTTPS is required.' );
 	}
 
@@ -354,11 +360,16 @@ class ValidatorTest extends TestCase {
 	 * Transport visibility: the HTTPS-required plain-http bail used to be silent. A real aafm_oat_
 	 * bearer presented over http now leaves one bounded (transport) denied row so the failure is
 	 * traceable, while the auth decision itself (no user resolved) is unchanged.
+	 *
+	 * Runs in its own process so no AAFM_OAUTH_ALLOW_HTTP defined by an earlier suite (HandshakeTest,
+	 * RestEndpointsTest) relaxes the requirement it tests.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_plain_http_bail_writes_a_transport_row(): void {
-		if ( ! aafm_oauth_https_required() ) {
-			$this->markTestSkipped( 'HTTPS is not required in this environment; the plain-http gate cannot be exercised.' );
-		}
+		$this->assertSame( 'production', wp_get_environment_type(), 'This test runs in its own process, on the production environment type.' );
+		$this->assertTrue( aafm_oauth_https_required(), 'No AAFM_OAUTH_ALLOW_HTTP from another suite reaches this process.' );
 
 		$uid    = self::factory()->user->create();
 		$tokens = aafm_oauth_mint_tokens(
@@ -780,11 +791,10 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * A full bearer-token resolve still works when $wp_rewrite is null at the time the
-	 * determine_current_user filter fires. This is the exact scenario that caused HTTP
-	 * 500 on the claude.ai OAuth connect flow: the audience check in the validator calls
-	 * aafm_endpoint_url(), which previously called rest_url() unconditionally and fataled
-	 * on a null $wp_rewrite. With the fix in place, a valid token must resolve its user.
+	 * A full bearer-token resolve still works when $wp_rewrite is null. The bearer now resolves
+	 * only once REST routing has begun, so its path no longer meets a null $wp_rewrite; this pins
+	 * the defensive branch aafm_endpoint_url() keeps for early callers (it caused HTTP 500 on the
+	 * claude.ai OAuth connect flow when the audience check called rest_url() unconditionally).
 	 */
 	public function test_bearer_resolves_with_null_wp_rewrite(): void {
 		$uid    = self::factory()->user->create();
@@ -884,7 +894,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * The resolver's re-entrancy guard. Steps 5-9 build site URLs, firing the home_url/rest_url
+	 * The resolver's re-entrancy guard. Step 9 builds the endpoint URL, firing the home_url/rest_url
 	 * filter chain DURING user resolution. A third-party filter there that resolves the current user
 	 * would re-enter this callback; without the guard that recurses until memory is exhausted. Prove
 	 * the outer resolve still completes and the nested re-entrant call returns the incoming value
@@ -1069,6 +1079,21 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * A WP object built by go_to() lacks the rest_route var rest_api_register_rewrites() adds on
+	 * init, and parse_request() keeps whatever the query_vars filter returns, so add it and put the
+	 * list back in tear_down().
+	 *
+	 * @return void
+	 */
+	private function make_rest_route_a_query_var(): void {
+		$public_vars = $GLOBALS['wp']->public_query_vars;
+		$GLOBALS['wp']->add_query_var( 'rest_route' );
+		$this->cleanups[] = static function () use ( $public_vars ): void {
+			$GLOBALS['wp']->public_query_vars = $public_vars;
+		};
+	}
+
+	/**
 	 * One row per routing state WordPress can be in: the permalink structure, the request, any
 	 * code-set setup, the rest_route core parses (the literal), and whether that is the MCP route.
 	 *
@@ -1143,13 +1168,7 @@ class ValidatorTest extends TestCase {
 		global $wp_rewrite;
 		$this->route_off_mcp();
 		$this->set_permalink_structure( $structure );
-		// A WP object built by go_to() lacks the rest_route var rest_api_register_rewrites() adds on
-		// init, and parse_request() keeps whatever the query_vars filter returns, so pin and restore it.
-		$public_vars = $GLOBALS['wp']->public_query_vars;
-		$GLOBALS['wp']->add_query_var( 'rest_route' );
-		$this->cleanups[] = static function () use ( $public_vars ): void {
-			$GLOBALS['wp']->public_query_vars = $public_vars;
-		};
+		$this->make_rest_route_a_query_var();
 
 		switch ( $setup ) {
 			case 'home_blog':
@@ -1252,6 +1271,12 @@ class ValidatorTest extends TestCase {
 			}
 		} else {
 			$GLOBALS['wp']->parse_request( $extra );
+		}
+		// rest_api_loaded(), removed above, would go on to fire rest_api_init (via rest_get_server())
+		// for a parsed, non-empty string rest_route.
+		$parsed_route = $GLOBALS['wp']->query_vars['rest_route'] ?? null;
+		if ( did_action( 'parse_request' ) && is_string( $parsed_route ) && '' !== $parsed_route ) {
+			$GLOBALS['wp_actions']['rest_api_init'] = 1;
 		}
 
 		$this->assertSame( $parsed, $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'The rest_route WordPress parsed.' );
@@ -1613,6 +1638,7 @@ class ValidatorTest extends TestCase {
 	 */
 	public function test_a_discovery_url_naming_the_mcp_route_resolves_nobody(): void {
 		$this->route_off_mcp();
+		$this->make_rest_route_a_query_var();
 		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
 		$_SERVER['PHP_SELF']    = '/index.php';
 		$_GET['rest_route']     = aafm_mcp_rest_route();
@@ -1644,6 +1670,39 @@ class ValidatorTest extends TestCase {
 
 		$this->assertSame( 0, $seen['init'] ?? null );
 		$this->assertSame( 0, $seen['parse_request'] ?? null );
+	}
+
+	/**
+	 * On a discovery-document URL with ?rest_route=<MCP route>, WordPress parses the request but never
+	 * begins REST routing (the discovery handler exits at parse_request). A parse_request callback
+	 * that forgets the cached user and asks again still sees nobody.
+	 */
+	public function test_a_parse_request_callback_that_forgets_the_user_still_sees_nobody(): void {
+		$this->route_off_mcp();
+		$this->make_rest_route_a_query_var();
+		$_SERVER['REQUEST_URI'] = '/.well-known/oauth-authorization-server';
+		$_SERVER['PHP_SELF']    = '/index.php';
+		$_GET['rest_route']     = aafm_mcp_rest_route();
+		$this->present_valid_bearer();
+
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+
+		remove_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
+		remove_action( 'parse_request', 'rest_api_loaded' );
+		$seen = array();
+		add_action(
+			'parse_request',
+			static function () use ( &$seen ): void {
+				$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the site code under test forgets the cached user.
+				$seen['user']            = get_current_user_id();
+			},
+			-1
+		);
+		$GLOBALS['wp']->parse_request();
+
+		$this->assertSame( aafm_mcp_rest_route(), $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'WordPress parsed the MCP route.' );
+		$this->assertSame( 0, $seen['user'] ?? null );
 	}
 
 	/**

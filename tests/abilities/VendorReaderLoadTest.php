@@ -1146,6 +1146,62 @@ final class VendorReaderLoadTest extends TestCase {
 	}
 
 	/**
+	 * Every store-check call in includes/ handles a throwing registry: a guard compares the answer
+	 * to false (so null takes the exact load), and the two certifiers read it into $core and
+	 * refuse to certify on null. A new call fails until it takes one of the two shapes.
+	 */
+	public function test_every_store_check_call_handles_a_throwing_registry(): void {
+		$root       = dirname( __DIR__, 2 );
+		$certifiers = array(
+			'includes/abilities/woocommerce/products.php|aafm_exec_wc_delete_product' => 0,
+			'includes/abilities/woocommerce/orders.php|aafm_wc_order_still_exists'    => 0,
+		);
+		$guards     = 0;
+		$bad        = array();
+		$files      = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/includes', \FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $files as $file ) {
+			if ( 'php' !== $file->getExtension() ) {
+				continue;
+			}
+			$path     = substr( $file->getPathname(), strlen( $root ) + 1 );
+			$tokens   = array_values(
+				array_filter(
+					token_get_all( (string) file_get_contents( $file->getPathname() ) ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reads a local source file.
+					static fn( $t ): bool => ! is_array( $t ) || ! in_array( $t[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true )
+				)
+			);
+			$function = '';
+			foreach ( $tokens as $i => $token ) {
+				if ( is_array( $token ) && T_FUNCTION === $token[0] && is_array( $tokens[ $i + 1 ] ?? null ) && T_STRING === $tokens[ $i + 1 ][0] ) {
+					$function = $tokens[ $i + 1 ][1];
+					continue;
+				}
+				if ( ! is_array( $token ) || T_STRING !== $token[0] || 'aafm_wc_store_is_core' !== $token[1] || '(' !== ( $tokens[ $i + 1 ] ?? '' ) ) {
+					continue;
+				}
+				$prev   = $tokens[ $i - 1 ] ?? '';
+				$before = $tokens[ $i - 2 ] ?? '';
+				if ( is_array( $prev ) && T_FUNCTION === $prev[0] ) {
+					continue;
+				}
+				if ( is_array( $prev ) && in_array( $prev[0], array( T_IS_IDENTICAL, T_IS_NOT_IDENTICAL ), true ) && is_array( $before ) && 'false' === strtolower( $before[1] ) ) {
+					++$guards;
+				} elseif ( '=' === $prev && is_array( $before ) && '$core' === $before[1] && isset( $certifiers[ "$path|$function" ] ) ) {
+					++$certifiers[ "$path|$function" ];
+				} else {
+					$bad[] = "$path:{$token[2]} $function";
+				}
+			}
+		}
+
+		$this->assertSame( array(), $bad, 'store-check calls that read null as false' );
+		$this->assertSame( 14, $guards, 'guard calls compared to false' );
+		foreach ( $certifiers as $key => $count ) {
+			$this->assertSame( 1, $count, "certifier $key" );
+		}
+	}
+
+	/**
 	 * With every store core and real posts behind the stub ids, the product, order, coupon and
 	 * customer read and write bodies equal the bodies the same calls give with no core store.
 	 */

@@ -531,7 +531,11 @@ final class UserMetaTest extends TestCase {
 		$this->assertSame( 'old', get_user_meta( $id, 'aafm_note', true ) );
 	}
 
+	/**
+	 * Pinned to the front-end policy path: the no-flush fault hands core the last query's rows, which on the batched path are the policy batch's (PM build-5, s14a3-6).
+	 */
 	public function test_delete_user_meta_with_a_failed_baseline_read_returns_the_read_failed_error(): void {
+		$this->use_front_end_policy_path();
 		global $wpdb;
 		$id = $this->note_user();
 		update_user_meta( $id, 'aafm_note', 'old' );
@@ -589,9 +593,10 @@ final class UserMetaTest extends TestCase {
 	}
 
 	/**
-	 * A failed load on that response read is an error, never a made-up value.
+	 * A failed load on that response read is an error, never a made-up value. Pinned to the front-end policy path: the no-flush fault hands core the last query's rows, which on the batched path are the policy batch's (PM build-5, s14a3-6).
 	 */
 	public function test_update_user_meta_with_its_response_read_faulted_returns_the_unconfirmed_error(): void {
+		$this->use_front_end_policy_path();
 		global $wpdb;
 		foreach ( array( 'no-flush', 'real-error' ) as $shape ) {
 			$id = $this->note_user();
@@ -614,7 +619,11 @@ final class UserMetaTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Pinned to the front-end policy path: the no-flush fault hands core the last query's rows, which on the batched path are the policy batch's (PM build-5, s14a3-6).
+	 */
 	public function test_update_user_meta_with_a_failed_baseline_read_returns_the_read_failed_error(): void {
+		$this->use_front_end_policy_path();
 		global $wpdb;
 		$id = $this->note_user();
 		update_user_meta( $id, 'aafm_note', 'old' );

@@ -178,18 +178,27 @@ function aafm_allowlist_set_permits( $set, string $ability_name ): bool {
  * @return bool
  */
 function aafm_ability_allowed_for_principal( string $ability_name, int $user_id, ?string $oauth_client_id ): bool {
-	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
-	if ( $views['db_error'] ) {
-		return false; // Cannot certify the restriction state: deny rather than fail open.
+	$row = aafm_policy_row( 'aafm_ability_allowlist_overrides' );
+	if ( ! $row['ok'] || ( $row['found'] && ! is_array( $row['value'] ) ) ) {
+		return false; // Cannot certify the restriction state, or it is not a list of rows: deny rather than fail open.
 	}
-	$rows = is_array( $views['db_value'] ) ? $views['db_value'] : array();
+	$rows = $row['found'] ? $row['value'] : array();
 	if ( array() === $rows ) {
 		return true; // No override rows at all: identical to today's behavior.
 	}
 
+	// The current user's roles come from the object the capability check already used, so both
+	// decisions rest on one load. Any other user is loaded inside the checked-read scope, and a load
+	// that fails denies rather than reading as a user with no roles.
 	$roles = array();
-	if ( $user_id > 0 ) {
-		$user = aafm_exact_object( 'user', $user_id );
+	if ( $user_id > 0 && get_current_user_id() === $user_id ) {
+		$roles = (array) wp_get_current_user()->roles;
+	} elseif ( $user_id > 0 ) {
+		$loaded = aafm_with_checked_reads(
+			static fn(): array => array( 'user' => aafm_exact_object( 'user', $user_id ) ),
+			aafm_generic_error()
+		);
+		$user   = is_wp_error( $loaded ) ? null : $loaded['user'];
 		if ( ! $user instanceof WP_User ) {
 			return false;
 		}

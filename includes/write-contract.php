@@ -332,42 +332,145 @@ function aafm_meta_get( string $type, int $id, string $key = '', bool $single = 
  * Run $build with core's own metadata load made failure-aware, so a response field computed
  * alongside a write fails the call instead of returning a made-up empty value.
  *
- * Hooks update_{post,term,user,comment}_metadata_cache at the last priority for the life of
- * $build. An incoming non-null value means another plugin already took over the load and is left
- * untouched. Otherwise this determines which requested ids core's own cache does not already hold
- * (the same wp_cache_get_multiple() test core makes) and runs a copy of core's own load query for
- * them. A failed query marks the scope failed and returns false, so core returns without running
- * its own query and without caching anything. A successful query is shaped exactly as core shapes
- * it and stored with wp_cache_set_multiple() (never wp_cache_add_multiple(), so a scope suspended
- * with wp_suspend_cache_addition() still installs the rows core's own query would have read).
+ * Hooks get_{post,term,user,comment}_metadata and update_{post,term,user,comment}_metadata_cache
+ * at the last priority for the life of $build. An incoming non-null value on either hook means
+ * another plugin already answered and is left untouched. An object that core's cache does not
+ * hold (core's own wp_cache_get() test, so an object cached with no meta counts as held) is
+ * loaded with a copy of core's own load query. Before it loads, a read runs the whole
+ * update_{type}_metadata_cache chain for its object with the scope's own handler inert, so a plugin
+ * that takes over the load there keeps it and core continues as it would without the scope; that
+ * plugin is called up to twice per read. A failed query marks the scope failed: the read gets an
+ * empty answer in core's shape and the primer gets false, so core runs no query of its own, and
+ * the build's result is discarded. A successful query is shaped exactly as core shapes it and
+ * stored with wp_cache_set_multiple() (never wp_cache_add_multiple(), so a scope suspended with
+ * wp_suspend_cache_addition() still installs the rows core's own query would have read).
+ *
+ * The rows are then read back with the same wp_cache_get_multiple() core runs. An object the
+ * cache did not keep (a Redis at maxmemory, or a cache that reports success and keeps nothing)
+ * is served from the scope's own rows for the rest of the build: a present key, every key, or
+ * every key for a single read. Only an absent key falls through to core, whose own query can then
+ * only confirm "absent". A metadata write through core's meta functions drops that object's
+ * served rows, so the next read loads it again.
  *
  * @param callable $build The response builder to run inside the scope.
  * @param WP_Error $error The error to return in place of $build's result when a load failed.
  * @return array<string,mixed>|WP_Error
  */
 function aafm_with_checked_reads( callable $build, WP_Error $error ) {
-	$failed = false;
-	$types  = array( 'post', 'term', 'user', 'comment' );
+	$failed  = false;
+	$probing = false;
+	$served  = array();
+	$types   = array( 'post', 'term', 'user', 'comment' );
 
-	// core's update_{type}_metadata_cache filter is called with exactly two arguments
-	// (apply_filters( "update_{$meta_type}_metadata_cache", null, $object_ids ), wp-includes/meta.php),
-	// so $meta_type has to be baked into a per-type closure rather than received as a third argument.
-	$make_handler = static function ( string $meta_type ) use ( &$failed ): callable {
-		return static function ( $check, $object_ids ) use ( $meta_type, &$failed ) {
+	// Loads $object_ids with the checked query and installs the rows. Ids the cache does not keep
+	// join $served. Returns false, and counts a failure, when the query fails.
+	$load = static function ( string $meta_type, array $object_ids ) use ( &$failed, &$served ): bool {
+		global $wpdb;
+		$table            = _get_meta_table( $meta_type );
+		$cache_key        = $meta_type . '_meta';
+		$cols             = aafm_meta_columns( $meta_type );
+		$id_column        = $cols['id_column'];
+		$object_id_column = $cols['object_id_column'];
+		$placeholders     = implode( ', ', array_fill( 0, count( $object_ids ), '%d' ) );
+		$sql              = "SELECT {$object_id_column}, meta_key, meta_value FROM %i WHERE {$object_id_column} IN ({$placeholders}) ORDER BY {$id_column} ASC";
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- identifiers are internal, computed from the fixed {post,term,user,comment} set.
+		$view = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $table ), $object_ids ) ) );
+
+		if ( ! $view['ok'] ) {
+			$failed = true;
+			return false;
+		}
+
+		$shaped = array();
+		foreach ( $object_ids as $object_id ) {
+			$shaped[ $object_id ] = array();
+		}
+		foreach ( (array) $view['value'] as $row ) {
+			$object_id = (int) $row[ $object_id_column ];
+			$meta_key  = (string) $row['meta_key'];
+			if ( ! isset( $shaped[ $object_id ][ $meta_key ] ) ) {
+				$shaped[ $object_id ][ $meta_key ] = array();
+			}
+			$shaped[ $object_id ][ $meta_key ][] = $row['meta_value'];
+		}
+
+		wp_cache_set_multiple( $shaped, $cache_key );
+
+		foreach ( wp_cache_get_multiple( $object_ids, $cache_key ) as $object_id => $kept ) {
+			if ( false === $kept ) {
+				$served[ $meta_type ][ (int) $object_id ] = $shaped[ $object_id ];
+			}
+		}
+
+		return true;
+	};
+
+	// Answers a read of a served object in core's shape (get_metadata_raw(), wp-includes/meta.php):
+	// core takes [0] of an array for a single read, so a no-key single read is wrapped once. Core's
+	// no-key test is ! $meta_key, so key '0' is a no-key read too.
+	$serve = static function ( array $rows, string $meta_key, bool $single ) {
+		if ( ! $meta_key ) {
+			return $single ? array( $rows ) : $rows;
+		}
+		return isset( $rows[ $meta_key ] ) ? array_map( 'maybe_unserialize', $rows[ $meta_key ] ) : null;
+	};
+
+	// core's get_{type}_metadata filter does not always pass $meta_type (metadata_exists() does,
+	// get_metadata_raw() does), and update_{type}_metadata_cache never does, so each type gets its
+	// own closures.
+	$make_getter = static function ( string $meta_type ) use ( &$served, &$probing, $load, $serve ): callable {
+		return static function ( $check, $object_id, $meta_key = '', $single = false ) use ( $meta_type, &$served, &$probing, $load, $serve ) {
 			if ( null !== $check ) {
 				return $check;
 			}
 
-			global $wpdb;
-			$table = _get_meta_table( $meta_type );
-			if ( ! $table ) {
+			$object_id = (int) $object_id;
+			$meta_key  = (string) $meta_key;
+			$single    = (bool) $single;
+
+			if ( ! isset( $served[ $meta_type ][ $object_id ] ) ) {
+				if ( false !== wp_cache_get( $object_id, $meta_type . '_meta' ) ) {
+					return null;
+				}
+				// A plugin that takes over core's load (a non-null answer from the chain) keeps it,
+				// and core continues as it would without the scope. The scope's own primer stays out
+				// of this call.
+				$was_probing = $probing;
+				$probing     = true;
+				try {
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own metadata load filter.
+					$taken = apply_filters( "update_{$meta_type}_metadata_cache", null, array( $object_id ) );
+				} finally {
+					$probing = $was_probing;
+				}
+				if ( null !== $taken ) {
+					return null;
+				}
+				if ( ! $load( $meta_type, array( $object_id ) ) ) {
+					// An empty answer in core's shape; the scope already returns $error.
+					if ( ! $meta_key ) {
+						return $single ? array( array() ) : array();
+					}
+					return array( '' );
+				}
+				if ( ! isset( $served[ $meta_type ][ $object_id ] ) ) {
+					return null;
+				}
+			}
+
+			return $serve( $served[ $meta_type ][ $object_id ], $meta_key, $single );
+		};
+	};
+
+	$make_primer = static function ( string $meta_type ) use ( &$served, &$probing, $load ): callable {
+		return static function ( $check, $object_ids ) use ( $meta_type, &$served, &$probing, $load ) {
+			if ( null !== $check || $probing ) { // @phpstan-ignore-line booleanOr.rightAlwaysFalse ($probing is set by reference in the getter; phpstan analyses this closure body in isolation)
 				return $check;
 			}
 
-			$cache_key = $meta_type . '_meta';
-			$missing   = array();
-			foreach ( wp_cache_get_multiple( $object_ids, $cache_key ) as $object_id => $cached ) {
-				if ( false === $cached ) {
+			$missing = array();
+			foreach ( wp_cache_get_multiple( $object_ids, $meta_type . '_meta' ) as $object_id => $cached ) {
+				if ( false === $cached && ! isset( $served[ $meta_type ][ (int) $object_id ] ) ) {
 					$missing[] = $object_id;
 				}
 			}
@@ -375,49 +478,34 @@ function aafm_with_checked_reads( callable $build, WP_Error $error ) {
 				return null;
 			}
 
-			$cols             = aafm_meta_columns( $meta_type );
-			$id_column        = $cols['id_column'];
-			$object_id_column = $cols['object_id_column'];
-			$placeholders     = implode( ', ', array_fill( 0, count( $missing ), '%d' ) );
-			$sql              = "SELECT {$object_id_column}, meta_key, meta_value FROM %i WHERE {$object_id_column} IN ({$placeholders}) ORDER BY {$id_column} ASC";
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- identifiers are internal, computed from the fixed {post,term,user,comment} set.
-			$view = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $table ), $missing ) ) );
-
-			if ( ! $view['ok'] ) {
-				$failed = true;
-				return false;
-			}
-
-			$shaped = array();
-			foreach ( $missing as $object_id ) {
-				$shaped[ $object_id ] = array();
-			}
-			foreach ( (array) $view['value'] as $row ) {
-				$object_id = (int) $row[ $object_id_column ];
-				$meta_key  = (string) $row['meta_key'];
-				if ( ! isset( $shaped[ $object_id ][ $meta_key ] ) ) {
-					$shaped[ $object_id ][ $meta_key ] = array();
-				}
-				$shaped[ $object_id ][ $meta_key ][] = $row['meta_value'];
-			}
-
-			wp_cache_set_multiple( $shaped, $cache_key );
-
-			return null;
+			return $load( $meta_type, $missing ) ? null : false;
 		};
 	};
 
-	$handlers = array();
+	$make_dropper = static function ( string $meta_type ) use ( &$served ): callable {
+		return static function ( $meta_ids, $object_id ) use ( $meta_type, &$served ): void {
+			unset( $served[ $meta_type ][ (int) $object_id ] );
+		};
+	};
+
+	$hooks = array();
 	foreach ( $types as $type ) {
-		$handlers[ $type ] = $make_handler( $type );
-		add_filter( "update_{$type}_metadata_cache", $handlers[ $type ], PHP_INT_MAX, 2 );
+		$hooks[] = array( "get_{$type}_metadata", $make_getter( $type ), 4 );
+		$hooks[] = array( "update_{$type}_metadata_cache", $make_primer( $type ), 2 );
+		$dropper = $make_dropper( $type );
+		foreach ( array( 'added', 'updated', 'deleted' ) as $verb ) {
+			$hooks[] = array( "{$verb}_{$type}_meta", $dropper, 2 );
+		}
+	}
+	foreach ( $hooks as $hook ) {
+		add_filter( $hook[0], $hook[1], PHP_INT_MAX, $hook[2] );
 	}
 
 	try {
 		$built = $build();
 	} finally {
-		foreach ( $types as $type ) {
-			remove_filter( "update_{$type}_metadata_cache", $handlers[ $type ], PHP_INT_MAX );
+		foreach ( $hooks as $hook ) {
+			remove_filter( $hook[0], $hook[1], PHP_INT_MAX );
 		}
 	}
 

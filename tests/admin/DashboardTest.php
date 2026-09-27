@@ -481,4 +481,45 @@ final class DashboardTest extends TestCase {
 
 		$this->assertSame( 1, aafm_recent_agent_count() );
 	}
+
+	/**
+	 * W2-T6 (step 14, row D2): a candidate whose caps load fails shows no roles and reads as an
+	 * administrator. The application-password read is answered by a filter, so the user's meta is
+	 * not cached before the roles load and that load is the one that fails.
+	 */
+	public function test_agent_user_candidates_flag_a_user_whose_caps_load_fails_as_admin(): void {
+		global $wpdb;
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		WP_Application_Passwords::create_new_application_password( $user_id, array( 'name' => 'mcp-a' ) );
+		wp_cache_delete( $user_id, 'user_meta' );
+
+		$answer = static function ( $value, $object_id, $meta_key ) use ( $user_id ) {
+			if ( $user_id === (int) $object_id && WP_Application_Passwords::USERMETA_KEY_APPLICATION_PASSWORDS === $meta_key ) {
+				return array(
+					array(
+						array(
+							'uuid' => 'w2-t6',
+							'name' => 'mcp-a',
+						),
+					),
+				);
+			}
+			return $value;
+		};
+		add_filter( 'get_user_metadata', $answer, 10, 3 );
+		try {
+			$cands = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+				array( $wpdb->usermeta, "user_id IN ({$user_id})" ),
+				static fn(): array => aafm_agent_user_candidates()
+			);
+		} finally {
+			remove_filter( 'get_user_metadata', $answer, 10 );
+		}
+
+		$row = current( array_filter( $cands, static fn( $c ) => $c['id'] === $user_id ) );
+		$this->assertIsArray( $row, 'the candidate must still be listed.' );
+		$this->assertSame( get_userdata( $user_id )->user_login, $row['login'] );
+		$this->assertSame( array(), $row['roles'] );
+		$this->assertTrue( $row['is_admin'] );
+	}
 }

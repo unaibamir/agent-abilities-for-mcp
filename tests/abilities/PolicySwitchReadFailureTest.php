@@ -23,6 +23,8 @@ final class PolicySwitchReadFailureTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
+		// A named front-end pin: every method counts or faults the per-option statement.
+		$this->use_front_end_policy_path();
 		aafm_install_oauth_tables();
 		QueryFaultInjector::reset_fired_count();
 	}

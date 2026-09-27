@@ -835,6 +835,54 @@ final class MetaWriteWireTest extends TestCase {
 	}
 
 	/**
+	 * UG-T3 rows (ledger s14w1-code-3): stored values a cast reads as the requested id.
+	 *
+	 * @return array<string,array{0:string,1:bool}> Stored meta_value template ('%d' is the image id), and whether the request is id 1.
+	 */
+	public function featured_id_lookalike_provider(): array {
+		return array(
+			'decimal'         => array( '%d.9', false ),
+			'trailing text'   => array( '%dabc', false ),
+			'leading space'   => array( ' %d', false ),
+			'leading zero'    => array( '0%d', false ),
+			'serialized true' => array( 'b:1;', true ),
+		);
+	}
+
+	/**
+	 * UG-T3: an old _thumbnail_id row that only casts to the requested id, kept by a vetoing filter,
+	 * reports refused, not written or unchanged.
+	 *
+	 * @dataProvider featured_id_lookalike_provider
+	 *
+	 * @param string $stored  The stored meta_value template.
+	 * @param bool   $request_one Whether the request asks for id 1.
+	 */
+	public function test_enrichment_featured_image_over_a_row_that_only_casts_to_the_id_reports_refused( string $stored, bool $request_one ): void {
+		global $wpdb;
+		list( $post, $image ) = $this->post_and_image();
+		$request              = $request_one ? 1 : $image;
+		update_post_meta( $post, '_thumbnail_id', 'placeholder' );
+		$wpdb->update(
+			$wpdb->postmeta,
+			array( 'meta_value' => sprintf( $stored, $image ) ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- test fixture: plants the exact stored bytes.
+			array(
+				'post_id'  => $post,
+				'meta_key' => '_thumbnail_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture.
+			)
+		);
+		wp_cache_delete( $post, 'post_meta' );
+		$veto = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		add_filter( 'delete_post_metadata', $veto, 10, 3 );
+		$status = $this->featured_status( $post, $request );
+		remove_filter( 'update_post_metadata', $veto, 10 );
+		remove_filter( 'delete_post_metadata', $veto, 10 );
+
+		$this->assertSame( 'refused', $status );
+	}
+
+	/**
 	 * The stated residual (262 s12, ledger b5d1-10): a veto-true filter on a post whose thumbnail
 	 * already is the requested id writes nothing, yet reads as written, because the status is read
 	 * only after the call. Pinned so a later read before the call shows up as a changed assertion.

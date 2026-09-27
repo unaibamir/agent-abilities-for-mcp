@@ -719,7 +719,7 @@ function aafm_render_settings_tab(): void {
 	// while it is on, every write is held, including the ones the high-risk row below it governs.
 	// Same .aafm-switch / .aafm-set-row contract as every other row, and inside #aafm-settings-form
 	// so admin.js reads it.
-	$read_only_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-read-only-mode" name="aafm_read_only_mode" value="1" ' . checked( (bool) get_option( 'aafm_read_only_mode', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	$read_only_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-read-only-mode" name="aafm_read_only_mode" value="1" ' . checked( aafm_read_only_mode_stored(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
 	$read_only_control .= '<label for="aafm-read-only-mode">' . esc_html__( 'Let agents read this site, and nothing else.', 'agent-abilities-for-mcp' ) . '</label>';
 	$read_only_control .= '<p class="help">' . esc_html__( 'While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable.', 'agent-abilities-for-mcp' ) . '</p>';
 
@@ -761,7 +761,15 @@ function aafm_render_settings_tab(): void {
 		)
 		: '';
 
-	$high_risk_control .= '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( (bool) get_option( 'aafm_high_risk_abilities_unlocked', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	// Only a scalar is a stored switch. A cache copy that disagrees with the row, or an unreadable
+	// row, renders the box unchecked (locked).
+	$high_risk_checked = get_option( 'aafm_high_risk_abilities_unlocked', false );
+	$high_risk_checked = is_scalar( $high_risk_checked ) && (bool) $high_risk_checked;
+	$high_risk_row     = aafm_policy_row_if_stale( 'aafm_high_risk_abilities_unlocked' );
+	if ( null !== $high_risk_row ) {
+		$high_risk_checked = $high_risk_checked && $high_risk_row['ok'] && $high_risk_row['found'] && is_scalar( $high_risk_row['value'] ) && (bool) $high_risk_row['value'];
+	}
+	$high_risk_control .= '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( $high_risk_checked, true, false ) . '><span class="aafm-switch-track"></span></label> ';
 	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
 	$high_risk_control .= '<p class="help">' . esc_html__( 'While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab.', 'agent-abilities-for-mcp' ) . '</p>';
 
@@ -878,7 +886,15 @@ function aafm_render_settings_tab(): void {
 	// whichever way this switch is set - is long enough to break the rhythm of the card, so it sits
 	// behind the row's "See more" as its own paragraph rather than getting run together with the
 	// first one.
-	$delete_on_uninstall_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-delete-data-on-uninstall" name="aafm_delete_data_on_uninstall" value="1" ' . checked( (bool) get_option( 'aafm_delete_data_on_uninstall', false ), true, false ) . '><span class="aafm-switch-track"></span></label> '
+	// Only a scalar is a stored switch. A cache copy that disagrees with the row, or an unreadable
+	// row, renders the box unchecked (keep data).
+	$delete_checked = get_option( 'aafm_delete_data_on_uninstall', false );
+	$delete_checked = is_scalar( $delete_checked ) && (bool) $delete_checked;
+	$delete_row     = aafm_policy_row_if_stale( 'aafm_delete_data_on_uninstall' );
+	if ( null !== $delete_row ) {
+		$delete_checked = $delete_checked && $delete_row['ok'] && $delete_row['found'] && is_scalar( $delete_row['value'] ) && (bool) $delete_row['value'];
+	}
+	$delete_on_uninstall_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-delete-data-on-uninstall" name="aafm_delete_data_on_uninstall" value="1" ' . checked( $delete_checked, true, false ) . '><span class="aafm-switch-track"></span></label> '
 		. '<label for="aafm-delete-data-on-uninstall">' . esc_html__( 'Permanently remove all plugin data when the plugin is deleted.', 'agent-abilities-for-mcp' ) . '</label>';
 	$delete_on_uninstall_control .= '<p class="help">' . esc_html__( 'When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
 	$delete_on_uninstall_control .= aafm_get_set_more_html(

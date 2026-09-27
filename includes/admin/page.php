@@ -247,8 +247,18 @@ function aafm_enqueue_admin_assets( string $hook ): void {
  * @return array<int,string>
  */
 function aafm_get_stored_enabled_abilities_raw(): array {
-	$stored = get_option( 'aafm_enabled_abilities', array() );
-	return is_array( $stored ) ? array_values( array_filter( array_map( 'strval', $stored ) ) ) : array();
+	$normalize = static function ( $value ): array {
+		return is_array( $value ) ? array_values( array_filter( array_map( 'strval', $value ) ) ) : array();
+	};
+
+	// This list is carried forward into the next save, so when a cache copy disagrees with the row
+	// the row is the truth. A save refuses outright when the row cannot be read
+	// (aafm_set_enabled_abilities()).
+	$row = aafm_policy_row_if_stale( 'aafm_enabled_abilities' );
+	if ( null !== $row ) {
+		return $row['ok'] ? $normalize( $row['value'] ) : array();
+	}
+	return $normalize( get_option( 'aafm_enabled_abilities', array() ) );
 }
 
 /**
@@ -293,6 +303,13 @@ function aafm_get_stored_enabled_abilities_raw(): array {
  * @return array<int,string> The names actually written (newly attempted locked names removed).
  */
 function aafm_set_enabled_abilities( array $enabled, ?bool &$persisted = null ): array {
+	// The stored list cannot be read this request, so the carry-forward is unknown: write nothing.
+	$row = aafm_policy_row_if_stale( 'aafm_enabled_abilities' );
+	if ( null !== $row && ! $row['ok'] ) {
+		$persisted = false;
+		return $enabled;
+	}
+
 	$before = aafm_get_stored_enabled_abilities_raw();
 
 	$locked  = array_values( array_filter( $enabled, 'aafm_ability_is_locked' ) );

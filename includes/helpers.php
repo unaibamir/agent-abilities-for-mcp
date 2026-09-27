@@ -81,6 +81,12 @@ function aafm_eligible_post_types(): array {
 function aafm_allowed_post_types(): array {
 	$stored = get_option( 'aafm_allowed_post_types', array() );
 	$stored = is_array( $stored ) ? array_map( 'sanitize_key', $stored ) : array();
+	// A cache copy that disagrees with the row exposes only what both hold; an unreadable row
+	// exposes no opt-in type.
+	$row = aafm_policy_row_if_stale( 'aafm_allowed_post_types' );
+	if ( null !== $row ) {
+		$stored = $row['ok'] && is_array( $row['value'] ) ? array_values( array_intersect( $stored, array_map( 'sanitize_key', $row['value'] ) ) ) : array();
+	}
 
 	$allowed = array_merge( array( 'post', 'page' ), $stored );
 	$allowed = array_values( array_unique( array_filter( $allowed, 'aafm_post_type_is_eligible' ) ) );
@@ -369,6 +375,12 @@ function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag,
 
 	$stored = get_option( $option_name, array() );
 	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+	// A cache copy that disagrees with the row allows only what both hold; an unreadable row allows
+	// nothing.
+	$row = aafm_policy_row_if_stale( $option_name );
+	if ( null !== $row ) {
+		$stored = $row['ok'] && is_array( $row['value'] ) ? array_values( array_intersect( $stored, array_map( 'strval', $row['value'] ) ) ) : array();
+	}
 
 	if ( $pre_filter_floor ) {
 		$stored = $unblocked( $stored );
@@ -431,15 +443,34 @@ function aafm_scoped_denied_meta_keys( string $option_name ): array {
  * @return array<mixed>|null Null when the row could not be read.
  */
 function aafm_scoped_deny_option_raw( string $option_name ): ?array {
+	// An array is a stored deny list and a scalar reads as empty, as in 1.7.5; an object denies
+	// every key.
+	$shaped = static function ( $value ): array {
+		return is_array( $value ) ? $value : ( is_object( $value ) ? array( '*' ) : array() );
+	};
+
 	$stored = get_option( $option_name, array() );
 	if ( array() !== $stored ) {
-		return is_array( $stored ) ? $stored : array();
+		$stored = $shaped( $stored );
+	} else {
+		$row = aafm_policy_row( $option_name );
+		if ( ! $row['ok'] ) {
+			return null;
+		}
+		$stored = $row['found'] ? $shaped( $row['value'] ) : array();
 	}
-	$row = aafm_option_row( $option_name );
-	if ( ! $row['ok'] ) {
-		return null;
+
+	// A cache copy that disagrees with the row denies what either holds; an unreadable row denies
+	// every key.
+	$row = aafm_policy_row_if_stale( $option_name );
+	if ( null !== $row ) {
+		if ( ! $row['ok'] ) {
+			return null;
+		}
+		$stored = array_merge( $stored, $row['found'] ? $shaped( $row['value'] ) : array() );
 	}
-	return $row['found'] && is_array( $row['value'] ) ? $row['value'] : array();
+
+	return $stored;
 }
 
 /**
@@ -538,6 +569,230 @@ function aafm_option_row_if_cache_agrees( string $option ): ?array {
 }
 
 /**
+ * The policy options: every option a policy read decides from. aafm_policy_row() reads them all
+ * in one query.
+ *
+ * @return list<string>
+ */
+function aafm_policy_options(): array {
+	return array(
+		'aafm_enabled_abilities',
+		'aafm_enabled_bridged_abilities',
+		'aafm_high_risk_abilities_unlocked',
+		'aafm_oauth_enabled',
+		'aafm_oauth_dcr_enabled',
+		'aafm_allowed_post_types',
+		'aafm_allowed_meta_keys',
+		'aafm_exposed_term_meta_keys',
+		'aafm_exposed_user_meta_keys',
+		'aafm_denied_meta_keys',
+		'aafm_denied_term_meta_keys',
+		'aafm_denied_user_meta_keys',
+		'aafm_read_only_mode',
+		'aafm_block_guard_strict',
+		'aafm_rate_limit_per_min',
+		'aafm_ip_allowlist',
+		'aafm_force_draft',
+		'aafm_max_title_len',
+		'aafm_log_retention_days',
+		'aafm_oauth_access_ttl',
+		'aafm_oauth_refresh_ttl',
+		'default_role',
+		'aafm_ability_allowlist_overrides',
+		'aafm_delete_data_on_uninstall',
+	);
+}
+
+/**
+ * Whether this request reads policy through the batched row: an MCP, REST, admin, cron, CLI,
+ * OAuth authorize or well-known request. A front-end page load never does, so it reads policy
+ * exactly as 1.7.5 did. Decided once per request.
+ *
+ * The REST path is rebuilt from the home path and the REST prefix, the way
+ * aafm_oauth_request_targets_mcp_route() does, so no $wp_rewrite is needed.
+ *
+ * @return bool
+ */
+function aafm_policy_batch_allowed(): bool {
+	global $aafm_policy_state;
+	if ( isset( $aafm_policy_state['batch_allowed'] ) ) {
+		return $aafm_policy_state['batch_allowed'];
+	}
+
+	$allowed = is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) || ( defined( 'REST_REQUEST' ) && REST_REQUEST );
+	// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only routing checks, no state change.
+	if ( ! $allowed ) {
+		$allowed = isset( $_GET['rest_route'] )
+			|| ( isset( $_GET['aafm_oauth'] ) && 'authorize' === sanitize_text_field( wp_unslash( $_GET['aafm_oauth'] ) ) );
+	}
+	// phpcs:enable WordPress.Security.NonceVerification.Recommended
+	if ( ! $allowed ) {
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		$path        = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
+		if ( '' !== $path ) {
+			$segments = array_filter(
+				array( trim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' ), trim( rest_get_url_prefix(), '/' ) ),
+				static function ( string $segment ): bool {
+					return '' !== $segment;
+				}
+			);
+			$prefix   = '/' . implode( '/', $segments ) . '/';
+			$allowed  = 0 === stripos( rtrim( $path, '/' ) . '/', $prefix ) || '' !== aafm_oauth_match_well_known( $path );
+		}
+	}
+
+	$aafm_policy_state['batch_allowed'] = $allowed;
+	if ( $allowed && ! has_action( 'shutdown', 'aafm_policy_reset_request_state' ) ) {
+		add_action( 'added_option', 'aafm_policy_forget_row' );
+		add_action( 'updated_option', 'aafm_policy_forget_row' );
+		add_action( 'deleted_option', 'aafm_policy_forget_row' );
+		add_action( 'shutdown', 'aafm_policy_reset_request_state' );
+	}
+	return $allowed;
+}
+
+/**
+ * One policy option's row. On a batched request the first call reads every policy option in one
+ * failure-aware query and keeps the rows for the rest of the request; a failed query is kept too,
+ * so every later policy read in the request fails closed. A write to a policy option drops its
+ * entry, and the next read of it reads the row alone. Any other option, or any other request, is
+ * aafm_option_row().
+ *
+ * @param string $option Option name.
+ * @return array{ok:bool,found:bool,value:mixed}
+ */
+function aafm_policy_row( string $option ): array {
+	global $aafm_policy_state, $wpdb;
+	$options = aafm_policy_options();
+	if ( ! in_array( $option, $options, true ) || ! aafm_policy_batch_allowed() ) {
+		return aafm_option_row( $option );
+	}
+
+	// A failed batch fails every later policy read closed for the rest of the request, on any blog.
+	if ( ! empty( $aafm_policy_state['failed'] ) ) {
+		return array(
+			'ok'    => false,
+			'found' => false,
+			'value' => false,
+		);
+	}
+
+	// Rows are kept per blog, so a switch_to_blog() never serves one site's row to another.
+	$blog = get_current_blog_id();
+	if ( isset( $aafm_policy_state['rows'][ $blog ][ $option ] ) ) {
+		return $aafm_policy_state['rows'][ $blog ][ $option ];
+	}
+	if ( isset( $aafm_policy_state['batched'][ $blog ] ) ) {
+		$aafm_policy_state['rows'][ $blog ][ $option ] = aafm_option_row( $option );
+		return $aafm_policy_state['rows'][ $blog ][ $option ];
+	}
+
+	$aafm_policy_state['batched'][ $blog ] = true;
+
+	$placeholders = implode( ', ', array_fill( 0, count( $options ), '%s' ) );
+	$sql          = "SELECT option_name, option_value FROM $wpdb->options WHERE option_name IN ({$placeholders})";
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql holds only the table name and generated %s placeholders; the object cache is bypassed on purpose, the question is what the rows hold.
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $options ) );
+
+	$aafm_policy_state['failed'] = ! $view['ok'];
+
+	$stored = array();
+	foreach ( $view['ok'] ? (array) $view['value'] : array() as $row ) {
+		$stored[ (string) $row['option_name'] ] = $row['option_value'];
+	}
+	foreach ( $options as $name ) {
+		$found = $view['ok'] && array_key_exists( $name, $stored );
+
+		$aafm_policy_state['rows'][ $blog ][ $name ] = array(
+			'ok'    => $view['ok'],
+			'found' => $found,
+			'value' => $found ? maybe_unserialize( $stored[ $name ] ) : false,
+		);
+	}
+
+	return $aafm_policy_state['rows'][ $blog ][ $option ];
+}
+
+/**
+ * A policy option's row when the cache copy core's get_option() answered from disagrees with it,
+ * or when the row could not be read; null when they agree, or when this request does not batch.
+ *
+ * The copy is found in core's order with runtime reads only (no forced fetch): the alloptions
+ * entry, then the notoptions entry, then the per-option entry. No copy means get_option() read the
+ * row itself, which agrees. A notoptions entry agrees only with no row; a value copy agrees only
+ * with a found row that aafm_option_value_matches() says is equal.
+ *
+ * @param string $option Option name.
+ * @return array{ok:bool,found:bool,value:mixed}|null
+ */
+function aafm_policy_row_if_stale( string $option ): ?array {
+	if ( ! aafm_policy_batch_allowed() ) {
+		return null;
+	}
+	$row = aafm_policy_row( $option );
+	if ( ! $row['ok'] ) {
+		return $row;
+	}
+
+	$alloptions = wp_cache_get( 'alloptions', 'options' );
+	if ( is_array( $alloptions ) && isset( $alloptions[ $option ] ) ) {
+		$agrees = $row['found'] && aafm_option_value_matches( maybe_unserialize( $alloptions[ $option ] ), $row['value'] );
+		return $agrees ? null : $row;
+	}
+	$notoptions = wp_cache_get( 'notoptions', 'options' );
+	if ( is_array( $notoptions ) && isset( $notoptions[ $option ] ) ) {
+		return $row['found'] ? $row : null;
+	}
+	$single = wp_cache_get( $option, 'options' );
+	$agrees = false === $single || ( $row['found'] && aafm_option_value_matches( maybe_unserialize( $single ), $row['value'] ) );
+
+	return $agrees ? null : $row;
+}
+
+/**
+ * Forget this request's policy rows and whether it batches. Hooked on shutdown once a request
+ * batches, so a persistent worker starts each request cold.
+ *
+ * @return void
+ */
+function aafm_policy_reset_request_state(): void {
+	global $aafm_policy_state;
+	$aafm_policy_state = array();
+}
+
+/**
+ * Drop one policy option's row when core writes the option, so a save and a read in one request
+ * agree. Hooked on core's option write actions once a request batches.
+ *
+ * @param string $option Option name.
+ * @return void
+ */
+function aafm_policy_forget_row( $option ): void {
+	global $aafm_policy_state;
+	unset( $aafm_policy_state['rows'][ get_current_blog_id() ][ (string) $option ] );
+}
+
+/**
+ * A transient counter's value, read so a failed read never restarts the count. With no external
+ * object cache, a transient get_transient() did not answer is read from its row: an unreadable row
+ * gives null, no row gives 0.
+ *
+ * @param string $transient Transient name.
+ * @return int|null Null when the count cannot be read.
+ */
+function aafm_transient_count( string $transient ): ?int {
+	$raw = get_transient( $transient );
+	if ( false !== $raw || wp_using_ext_object_cache() ) {
+		return (int) $raw;
+	}
+	$row = aafm_option_row( '_transient_' . $transient );
+	if ( ! $row['ok'] ) {
+		return null;
+	}
+	return $row['found'] ? (int) $row['value'] : 0;
+}
+
+/**
  * Shared engine behind the three *_allow_has_star() functions: whether an option's RAW value
  * (not the filtered getter, which strips the sentinel) carries the `*` wildcard.
  *
@@ -545,8 +800,17 @@ function aafm_option_row_if_cache_agrees( string $option ): ?array {
  * @return bool
  */
 function aafm_scoped_meta_has_star( string $option_name ): bool {
-	$raw = get_option( $option_name, array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	$has_star = static function ( $raw ): bool {
+		return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	};
+
+	// A cache copy that disagrees with the row carries the wildcard only when the row does too.
+	$star = $has_star( get_option( $option_name, array() ) );
+	$row  = aafm_policy_row_if_stale( $option_name );
+	if ( null !== $row ) {
+		$star = $star && $row['ok'] && $has_star( $row['value'] );
+	}
+	return $star;
 }
 
 /**
@@ -1682,7 +1946,7 @@ function aafm_apply_write_enrichment( int $post_id, array $bundle ): array {
 		$row = aafm_meta_row( 'post', $post_id, '_thumbnail_id' );
 		if ( ! $row['ok'] ) {
 			$outcome['featured_media'] = AAFM_WRITE_UNCONFIRMED;
-		} elseif ( ! $row['exists'] || ! is_scalar( $row['value'] ) || (int) $row['value'] !== $bundle['featured_media'] ) {
+		} elseif ( ! $row['exists'] || ! aafm_stored_id_matches( $row['value'], $bundle['featured_media'] ) ) {
 			$outcome['featured_media'] = AAFM_WRITE_REFUSED;
 		} else {
 			$outcome['featured_media'] = false !== $set ? AAFM_WRITE_WRITTEN : AAFM_WRITE_UNCHANGED;
@@ -2942,8 +3206,9 @@ function aafm_mixed_write_partial_failure_message( string $saved_label, string $
  * ob_end_clean() then returns false without lowering the level, so looping on it would never end.
  * The result is decided by buffer level: every buffer above the entry level is returned, joined in
  * the order opened, so a render that leaves a buffer open returns all of its output, and one that
- * closes the scope's own buffer and opens another returns that buffer's output. It is '' only when
- * the level ends at or below entry, or a buffer above it cannot be closed.
+ * closes the scope's own buffer and opens another returns that buffer's output. Past a missing post
+ * or a throw, it is '' only when the level ends at or below entry, or a buffer above it cannot be
+ * closed.
  *
  * @param int      $post_id Post to render against.
  * @param callable $render  Zero-arg callback that echoes the head.

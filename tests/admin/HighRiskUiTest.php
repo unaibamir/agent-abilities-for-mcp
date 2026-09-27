@@ -315,4 +315,38 @@ final class HighRiskUiTest extends TestCase {
 			$this->render_settings_tab()
 		);
 	}
+
+	/**
+	 * RP-T4 rows (W-3 site P20): the stored row, the runtime alloptions copy, and whether the
+	 * switch renders checked.
+	 *
+	 * @return array<string,array{0:string,1:string,2:bool}>
+	 */
+	public function stale_switch_provider(): array {
+		return array(
+			'P20 stale unlock over a locked row' => array( '0', '1', false ),
+			'P20 healthy unlock'                 => array( '1', '1', true ),
+		);
+	}
+
+	/**
+	 * RP-T4 (P20): on the settings screen, a stale cached unlock over a locked row renders the
+	 * switch unchecked (locked); a healthy unlock renders checked, as in 1.7.5.
+	 *
+	 * @dataProvider stale_switch_provider
+	 *
+	 * @param string $row     Stored row.
+	 * @param string $cached  Runtime alloptions copy.
+	 * @param bool   $checked Whether the switch renders checked.
+	 */
+	public function test_the_switch_renders_from_the_row_under_a_stale_cache( string $row, string $cached, bool $checked ): void {
+		set_current_screen( 'toplevel_page_agent-abilities-for-mcp' );
+		update_option( 'aafm_high_risk_abilities_unlocked', $row );
+		$all                                      = wp_load_alloptions();
+		$all['aafm_high_risk_abilities_unlocked'] = $cached;
+		wp_cache_set( 'alloptions', $all, 'options' );
+		aafm_policy_reset_request_state();
+
+		$this->assertSame( $checked, str_contains( $this->high_risk_input(), 'checked' ) );
+	}
 }

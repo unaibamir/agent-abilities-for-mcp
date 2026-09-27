@@ -202,4 +202,58 @@ final class SafetyTest extends TestCase {
 		$this->assertFalse( aafm_rate_limit_consume( 101 ) );   // user 101: 2nd over.
 		$this->assertTrue( aafm_rate_limit_consume( 202 ) );    // user 202 independent window -> ok.
 	}
+
+	/**
+	 * Store a transient counter's row, and take it out of the runtime cache so get_transient()
+	 * reads the row.
+	 *
+	 * @param string $transient Transient name.
+	 * @param int    $count     Stored count.
+	 */
+	private function store_uncached_counter( string $transient, int $count ): void {
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		set_transient( $transient, $count, 2 * MINUTE_IN_SECONDS );
+		wp_cache_delete( '_transient_' . $transient, 'options' );
+		wp_cache_delete( '_transient_timeout_' . $transient, 'options' );
+	}
+
+	/**
+	 * RC-T1 (T3, ledger s14w1-code-4): get_transient()'s read of the counter fails while its row
+	 * holds 5. The limiter counts 5 and refuses at a limit of 5, and the row is not reset to 1.
+	 */
+	public function test_a_failed_counter_read_counts_the_stored_row(): void {
+		update_option( 'aafm_rate_limit_per_min', 5 );
+		$uid = 303;
+		$key = 'aafm_rl_' . $uid . '_' . gmdate( 'YmdHi' );
+		$this->store_uncached_counter( $key, 5 );
+
+		$allowed = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT', "'_transient_" . $key . "'" ),
+			static fn() => aafm_rate_limit_consume( $uid ),
+			1
+		);
+
+		$this->assertGreaterThan( 0, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertFalse( $allowed );
+		$this->assertSame( '5', aafm_option_row( '_transient_' . $key )['value'] );
+	}
+
+	/**
+	 * RC-T2 (T4): the counter's read and re-read both fail. The limiter refuses and writes nothing.
+	 */
+	public function test_a_counter_that_cannot_be_read_refuses(): void {
+		update_option( 'aafm_rate_limit_per_min', 5 );
+		$uid = 304;
+		$key = 'aafm_rl_' . $uid . '_' . gmdate( 'YmdHi' );
+		$this->store_uncached_counter( $key, 2 );
+
+		$allowed = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT', "'_transient_" . $key . "'" ),
+			static fn() => aafm_rate_limit_consume( $uid )
+		);
+
+		$this->assertGreaterThan( 0, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertFalse( $allowed );
+		$this->assertSame( '2', aafm_option_row( '_transient_' . $key )['value'] );
+	}
 }

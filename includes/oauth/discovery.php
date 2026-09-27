@@ -43,19 +43,29 @@ defined( 'ABSPATH' ) || exit;
 function aafm_oauth_option_is_on( string $key, string $fallback = '0' ): bool {
 	$value = get_option( $key, $fallback );
 
-	$off = array( false, 0, '0', '', 'false', 'no', 'off' );
+	// Only a scalar is a stored switch; any other shape reads as off.
+	$is_on = static function ( $stored ): bool {
+		return is_scalar( $stored ) && ! in_array( $stored, array( false, 0, '0', '', 'false', 'no', 'off' ), true ) && (bool) $stored;
+	};
 
-	$on = ! in_array( $value, $off, true ) && (bool) $value;
+	$on = $is_on( $value );
 	if ( '1' === $fallback && $fallback === $value ) {
 		// On may be a failed read's default: the row decides when it is off, and an unreadable row
 		// means off.
-		$row = aafm_option_row( $key );
+		$row = aafm_policy_row( $key );
 		if ( ! $row['ok'] ) {
 			return false;
 		}
 		if ( $row['found'] ) {
-			$on = ! in_array( $row['value'], $off, true ) && (bool) $row['value'];
+			$on = $is_on( $row['value'] );
 		}
+	}
+
+	// A cache copy that disagrees with the row reads on only when the row does too. The check waits
+	// for helpers.php (plugins_loaded): determine_current_user can reach this earlier.
+	$row = function_exists( 'aafm_policy_row_if_stale' ) ? aafm_policy_row_if_stale( $key ) : null;
+	if ( null !== $row ) {
+		$on = $on && $row['ok'] && ( $row['found'] ? $is_on( $row['value'] ) : '1' === $fallback );
 	}
 
 	return $on;

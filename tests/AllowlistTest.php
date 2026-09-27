@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests;
 
+use AAFM\Tests\Support\QueryFaultInjector;
+
 final class AllowlistTest extends TestCase {
 
 	public function set_up(): void {
@@ -161,12 +163,15 @@ final class AllowlistTest extends TestCase {
 		);
 		$user_id = self::factory()->user->create( array( 'role' => 'author' ) );
 
+		$fired = 0;
 		add_filter(
 			'query',
-			static function ( string $query ): string {
-				return false !== strpos( $query, "option_name = 'aafm_ability_allowlist_overrides'" )
-					? 'SELECT * FROM aafm_missing_table_for_test'
-					: $query;
+			static function ( string $query ) use ( &$fired ): string {
+				if ( false !== strpos( $query, 'SELECT' ) && false !== strpos( $query, "'aafm_ability_allowlist_overrides'" ) ) {
+					++$fired;
+					return 'SELECT * FROM aafm_missing_table_for_test';
+				}
+				return $query;
 			}
 		);
 
@@ -183,6 +188,7 @@ final class AllowlistTest extends TestCase {
 			$result,
 			'A read that itself fails must deny the call, not fall through to "no restriction".'
 		);
+		$this->assertGreaterThan( 0, $fired, 'The overrides read must have faulted.' );
 	}
 
 	public function test_an_unrestricted_all_row_permits_everything_from_that_scope(): void {
@@ -221,5 +227,66 @@ final class AllowlistTest extends TestCase {
 
 		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/delete-post', $user_id, null ) );
 		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/get-posts', $user_id, null ) );
+	}
+
+	/**
+	 * Restrict the author role to get-posts, the row every role-decision test below starts from.
+	 */
+	private function restrict_authors_to_get_posts(): void {
+		update_option(
+			'aafm_ability_allowlist_overrides',
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'author',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+	}
+
+	/**
+	 * W2-T1 (step 14, row A2): the current user's roles come from the object the capability check
+	 * used. A fresh load of the same id, made after the user's meta entry left the cache and
+	 * faulted, must not read as a user with no roles and skip the author restriction.
+	 */
+	public function test_the_current_users_restriction_holds_when_a_fresh_load_of_the_same_id_faults(): void {
+		global $wpdb;
+		$this->restrict_authors_to_get_posts();
+		$user_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $user_id );
+		wp_cache_delete( $user_id, 'user_meta' );
+
+		$result = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->usermeta, "user_id IN ({$user_id})" ),
+			static fn(): array => array(
+				'restricted' => aafm_ability_allowed_for_principal( 'aafm/delete-post', $user_id, null ),
+				'listed'     => aafm_ability_allowed_for_principal( 'aafm/get-posts', $user_id, null ),
+			)
+		);
+
+		$this->assertFalse( $result['restricted'], 'The author restriction must still apply to the current user.' );
+		$this->assertTrue( $result['listed'], 'The current user keeps the abilities their role row lists.' );
+	}
+
+	/**
+	 * W2-T2 (step 14, row A3): a decision about another user loads that user inside the
+	 * checked-read scope, and a load that fails denies.
+	 */
+	public function test_another_users_decision_denies_when_their_load_faults(): void {
+		global $wpdb;
+		$this->restrict_authors_to_get_posts();
+		$this->acting_as( 'administrator' );
+		$user_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_cache_delete( $user_id, 'user_meta' );
+		QueryFaultInjector::reset_fired_count();
+
+		$result = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->usermeta, "user_id IN ({$user_id})" ),
+			static fn(): bool => aafm_ability_allowed_for_principal( 'aafm/get-posts', $user_id, null )
+		);
+
+		$this->assertFalse( $result, 'A user whose load fails must be denied, not read as holding no role.' );
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
 	}
 }

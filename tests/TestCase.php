@@ -21,6 +21,14 @@ abstract class TestCase extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		// Policy reads are memoised per request; each test is a fresh request. With
+		// AAFM_TEST_POLICY_PATH=batched every test runs as an MCP REST request, so policy reads
+		// take the batched path; unset, they take the front-end path.
+		aafm_policy_reset_request_state();
+		$this->policy_request_uri = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- snapshot, restored as it was.
+		if ( 'batched' === getenv( 'AAFM_TEST_POLICY_PATH' ) ) {
+			$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+		}
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is invoked.
 		aafm_install_activity_log();
@@ -90,7 +98,46 @@ abstract class TestCase extends WP_UnitTestCase {
 		if ( function_exists( 'aafm_oauth_current_client_id' ) ) {
 			aafm_oauth_current_client_id( '' );
 		}
+		if ( null === $this->policy_request_uri ) {
+			unset( $_SERVER['REQUEST_URI'] );
+		} else {
+			$_SERVER['REQUEST_URI'] = $this->policy_request_uri;
+		}
+		aafm_policy_reset_request_state();
 		parent::tear_down();
+	}
+
+	/**
+	 * REQUEST_URI as set_up() found it, restored in tear_down().
+	 *
+	 * @var string|null
+	 */
+	private $policy_request_uri = null;
+
+	/**
+	 * The MCP endpoint's request path, built as aafm_oauth_request_targets_mcp_route() builds it.
+	 *
+	 * @return string
+	 */
+	protected static function mcp_rest_path(): string {
+		$segments = array_filter(
+			array( trim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' ), trim( rest_get_url_prefix(), '/' ) ),
+			static function ( string $segment ): bool {
+				return '' !== $segment;
+			}
+		);
+		return '/' . implode( '/', $segments ) . aafm_mcp_rest_route();
+	}
+
+	/**
+	 * Run this test on the front-end policy path (no batched read) under either suite setting.
+	 * Only a named front-end pin calls it.
+	 *
+	 * @return void
+	 */
+	protected function use_front_end_policy_path(): void {
+		unset( $_SERVER['REQUEST_URI'] );
+		aafm_policy_reset_request_state();
 	}
 
 	/**

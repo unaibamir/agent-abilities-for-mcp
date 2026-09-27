@@ -44,14 +44,30 @@ function aafm_agent_user_candidates(): array {
 			continue;
 		}
 
-		$wp_user = aafm_exact_object( 'user', $user_id );
-		$roles   = ( $wp_user instanceof WP_User ) ? array_values( $wp_user->roles ) : array();
+		// Roles and the admin flag are read inside the checked-read scope. A caps load that fails
+		// shows no roles and flags the account as an administrator, the cautious reading.
+		$read = aafm_with_checked_reads(
+			static function () use ( $user_id ): array {
+				$wp_user = aafm_exact_object( 'user', $user_id );
+				return array(
+					'roles'    => ( $wp_user instanceof WP_User ) ? array_values( $wp_user->roles ) : array(),
+					'is_admin' => user_can( $user_id, 'manage_options' ),
+				);
+			},
+			aafm_generic_error()
+		);
+		if ( is_wp_error( $read ) ) {
+			$read = array(
+				'roles'    => array(),
+				'is_admin' => true,
+			);
+		}
 
 		$candidates[] = array(
 			'id'       => $user_id,
 			'login'    => (string) $user->user_login,
-			'roles'    => array_map( 'strval', $roles ),
-			'is_admin' => user_can( $user_id, 'manage_options' ),
+			'roles'    => array_map( 'strval', $read['roles'] ),
+			'is_admin' => $read['is_admin'],
 		);
 	}
 

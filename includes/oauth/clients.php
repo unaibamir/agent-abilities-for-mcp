@@ -583,9 +583,25 @@ function aafm_oauth_list_grants(): array {
 	$out = array();
 	foreach ( $view['value'] as $row ) {
 		$user_id = (int) $row['wp_user_id'];
-		$user    = aafm_exact_object( 'user', $user_id );
+		// The user and their privilege are read inside the checked-read scope, so a caps load that
+		// fails shows the fallback row below instead of a real account with no role.
+		$loaded = aafm_with_checked_reads(
+			static function () use ( $user_id ): array {
+				$user = aafm_exact_object( 'user', $user_id );
+				if ( ! $user instanceof WP_User ) {
+					return array( 'user' => null );
+				}
+				return array(
+					'user'              => $user,
+					'user_roles'        => array_values( array_map( 'strval', $user->roles ) ),
+					'is_high_privilege' => function_exists( 'aafm_oauth_user_is_high_privilege' ) && aafm_oauth_user_is_high_privilege( $user ),
+				);
+			},
+			aafm_generic_error()
+		);
+		$user   = is_wp_error( $loaded ) ? null : $loaded['user'];
 		if ( ! $user instanceof WP_User ) {
-			if ( aafm_object_absent( 'user', $user_id ) ) {
+			if ( ! is_wp_error( $loaded ) && aafm_object_absent( 'user', $user_id ) ) {
 				continue; // The account is certainly gone; nothing to display or revoke.
 			}
 			$out[] = array(
@@ -608,8 +624,8 @@ function aafm_oauth_list_grants(): array {
 			'client_id'         => (string) $row['client_id'],
 			'client_name'       => (string) $row['client_name'],
 			'granted_at'        => (string) $row['granted_at'],
-			'user_roles'        => array_values( array_map( 'strval', $user->roles ) ),
-			'is_high_privilege' => function_exists( 'aafm_oauth_user_is_high_privilege' ) && aafm_oauth_user_is_high_privilege( $user ),
+			'user_roles'        => $loaded['user_roles'],
+			'is_high_privilege' => $loaded['is_high_privilege'],
 		);
 	}
 

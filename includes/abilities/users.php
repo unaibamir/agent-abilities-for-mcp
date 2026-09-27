@@ -374,7 +374,14 @@ function aafm_exec_create_user( array $input ) {
 	// get_editable_roles() (which honors the editable_roles filter). Anything else floors to
 	// subscriber. get_option()'s fallback only fires when the option is ABSENT, and an empty
 	// string would create a roleless user, so the empty-string floor stays too.
-	$default_role = (string) get_option( 'default_role', 'subscriber' );
+	// The role is get_option()'s answer. A cache copy that disagrees with the row, an unreadable
+	// row, or a value that is not a role name refuses: roles have no order, so neither side can be
+	// picked as the safer one.
+	$default_role = get_option( 'default_role', 'subscriber' );
+	if ( is_array( $default_role ) || is_object( $default_role ) || null !== aafm_policy_row_if_stale( 'default_role' ) ) {
+		return aafm_generic_error();
+	}
+	$default_role = (string) $default_role;
 	$default_role = '' !== $default_role ? $default_role : 'subscriber';
 
 	// get_editable_roles() lives in wp-admin/includes/user.php, not loaded in a REST/MCP
@@ -642,7 +649,13 @@ function aafm_exec_update_user( array $input ) {
 		}
 	}
 
-	$target = $id ? aafm_exact_object( 'user', $id ) : false;
+	// The target's roles decide the last-admin guard below, so it is loaded inside the
+	// checked-read scope: a caps load that fails refuses instead of reading as no role.
+	$loaded = aafm_with_checked_reads(
+		static fn(): array => array( 'user' => $id ? aafm_exact_object( 'user', $id ) : null ),
+		aafm_generic_error()
+	);
+	$target = is_wp_error( $loaded ) ? null : $loaded['user'];
 	if ( ! $target instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -786,7 +799,13 @@ function aafm_perm_delete_user( array $input ): bool {
 function aafm_exec_delete_user( array $input ) {
 	$id       = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	$reassign = isset( $input['reassign_to'] ) ? absint( $input['reassign_to'] ) : 0;
-	$victim   = $id ? aafm_exact_object( 'user', $id ) : false;
+	// The victim's roles decide the last-admin guard below, so it is loaded inside the
+	// checked-read scope: a caps load that fails refuses instead of reading as no role.
+	$loaded = aafm_with_checked_reads(
+		static fn(): array => array( 'user' => $id ? aafm_exact_object( 'user', $id ) : null ),
+		aafm_generic_error()
+	);
+	$victim = is_wp_error( $loaded ) ? null : $loaded['user'];
 	if ( ! $victim instanceof WP_User ) {
 		return aafm_generic_error();
 	}

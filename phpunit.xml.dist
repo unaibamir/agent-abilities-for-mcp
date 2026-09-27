@@ -45,6 +45,7 @@
 			<file>tests/MetaWriteSweepTest.php</file>
 			<file>tests/MetaWriteWireTest.php</file>
 			<file>tests/SeoWriteWireTest.php</file>
+			<file>tests/RoleReadSweepTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

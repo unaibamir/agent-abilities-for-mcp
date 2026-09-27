@@ -653,7 +653,7 @@ function aafm_exec_set_featured_image( array $input ) {
 	// set_post_thumbnail() also returns true for a write a filter vetoed and for the delete it
 	// makes when the image cannot render, so the _thumbnail_id row read after the call decides.
 	$row = aafm_meta_row( 'post', $post_id, '_thumbnail_id' );
-	if ( ! $row['ok'] || ! $row['exists'] || ! is_scalar( $row['value'] ) || (int) $row['value'] !== $att_id ) {
+	if ( ! $row['ok'] || ! $row['exists'] || ! aafm_stored_id_matches( $row['value'], $att_id ) ) {
 		return aafm_generic_error();
 	}
 

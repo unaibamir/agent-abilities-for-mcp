@@ -59,12 +59,16 @@ function aafm_wc_store_class( string $store ): ?string {
  * such as the orders table under HPOS, load no post, so the reader skips the exact load. A store
  * that extends a core store is not a core store here, since it may read another table.
  *
+ * A store that cannot be named is held to the core store's exact load and certifies nothing: a
+ * registry that throws gives null, and callers treat null as core for a load and as unknown for a
+ * delete or rollback check.
+ *
  * @param string $store Data store key: 'product', 'product-variation', 'order', 'order-refund',
  *                      'coupon' or 'customer'.
- * @return bool False for an unknown key (without asking the registry), without WooCommerce, or
- *              when the registry throws.
+ * @return bool|null False for an unknown key (without asking the registry), without WooCommerce, or
+ *                   for another store; null when WooCommerce's registry throws.
  */
-function aafm_wc_store_is_core( string $store ): bool {
+function aafm_wc_store_is_core( string $store ): ?bool {
 	$core = array(
 		'product'           => 'wc_product_data_store_cpt',
 		'product-variation' => 'wc_product_variation_data_store_cpt',
@@ -73,7 +77,14 @@ function aafm_wc_store_is_core( string $store ): bool {
 		'coupon'            => 'wc_coupon_data_store_cpt',
 		'customer'          => 'wc_customer_data_store',
 	);
-	return isset( $core[ $store ] ) && aafm_wc_store_class( $store ) === $core[ $store ];
+	if ( ! isset( $core[ $store ] ) ) {
+		return false;
+	}
+	$class = aafm_wc_store_class( $store );
+	if ( null === $class ) {
+		return class_exists( 'WC_Data_Store' ) ? null : false;
+	}
+	return $class === $core[ $store ];
 }
 
 /**

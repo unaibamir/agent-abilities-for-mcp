@@ -1074,7 +1074,10 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		$row       = aafm_option_row( $method->get_instance_option_key() );
 		$persisted = ( $row['ok'] && $row['found'] ) ? $row['value'] : array();
 		$expected  = is_array( $instance_settings ) && array_key_exists( 'title', $instance_settings ) ? $instance_settings['title'] : $title;
-		if ( ! is_array( $persisted ) || ! array_key_exists( 'title', $persisted ) || ! aafm_option_value_matches( $persisted['title'], $expected ) ) {
+		// A bool or null on either side is compared by identity: its string form would let a kept
+		// false or null confirm a requested '', or a kept '' confirm a filtered false.
+		if ( ! is_array( $persisted ) || ! array_key_exists( 'title', $persisted ) || ! aafm_option_value_matches( $persisted['title'], $expected )
+			|| ( ( is_bool( $persisted['title'] ) || null === $persisted['title'] || is_bool( $expected ) || null === $expected ) && $persisted['title'] !== $expected ) ) {
 			// `enabled` (if present in this request) is written strictly before this point and
 			// already returned on its own failure above, so reaching here means any `enabled`
 			// write in THIS request genuinely persisted - the message must not claim otherwise.

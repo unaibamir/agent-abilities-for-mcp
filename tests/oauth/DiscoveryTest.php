@@ -163,10 +163,28 @@ class DiscoveryTest extends TestCase {
 	);
 
 	/**
-	 * Snapshot $_SERVER['HTTPS'], which the discovery fallback tests change.
+	 * The permalink structure the class starts with. $wp_rewrite outlives each test's
+	 * transaction, so tear_down() puts it back after every test.
+	 *
+	 * @var string
+	 */
+	private static string $class_structure = '';
+
+	/**
+	 * Record the permalink structure the class starts with.
+	 */
+	public static function set_up_before_class(): void {
+		parent::set_up_before_class();
+		self::$class_structure = (string) $GLOBALS['wp_rewrite']->permalink_structure;
+	}
+
+	/**
+	 * Snapshot $_SERVER['HTTPS'], which the discovery fallback tests change, and check that no
+	 * earlier test left its permalink structure behind.
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		$this->assertSame( self::$class_structure, (string) $GLOBALS['wp_rewrite']->permalink_structure, 'An earlier test left its permalink structure behind.' );
 		$this->saved_https = array(
 			'set'   => array_key_exists( 'HTTPS', $_SERVER ),
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- snapshot restored verbatim in tear_down().
@@ -186,6 +204,7 @@ class DiscoveryTest extends TestCase {
 		}
 		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- core REST server, rebuilt on next use.
 		$GLOBALS['wp_rest_server'] = null;
+		$this->set_permalink_structure( self::$class_structure );
 		parent::tear_down();
 	}
 
@@ -342,14 +361,8 @@ class DiscoveryTest extends TestCase {
 	public function test_discovery_fallback_self_link_answers_when_the_resource_path_has_a_dot(): void {
 		update_option( 'aafm_oauth_enabled', '1' );
 		$_SERVER['HTTPS'] = 'on';
-		// $wp_rewrite outlives the test's transaction, so its structure is put back afterwards.
-		$saved_structure = (string) $GLOBALS['wp_rewrite']->permalink_structure;
 		$this->set_permalink_structure( '/index.php/%postname%/' );
-		try {
-			$this->assert_dotted_resource_path_self_link_answers();
-		} finally {
-			$this->set_permalink_structure( $saved_structure );
-		}
+		$this->assert_dotted_resource_path_self_link_answers();
 	}
 
 	/**

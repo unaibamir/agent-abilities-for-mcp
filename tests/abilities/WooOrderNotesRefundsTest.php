@@ -19,6 +19,7 @@ namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\WcOrderStubStore;
 use WP_Error;
 
@@ -1371,5 +1372,82 @@ final class WooOrderNotesRefundsTest extends TestCase {
 			array_keys( $refund_tax ),
 			'refund_tax must be keyed by the real tax rate ids.'
 		);
+	}
+
+	// -------------------------------------------------------------------------
+	// A single note is loaded as its own comment first
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A real order-note comment on $order_id, listed for that order in the notes store.
+	 *
+	 * @param int $order_id Order id.
+	 * @return int The note (comment) id.
+	 */
+	private function real_note( int $order_id ): int {
+		return (int) wp_insert_comment(
+			array(
+				'comment_post_ID'  => $order_id,
+				'comment_type'     => 'order_note',
+				'comment_content'  => 'Note on ' . $order_id,
+				'comment_approved' => 1,
+			)
+		);
+	}
+
+	/**
+	 * Another order's note id, handed back under this order by a faulted notes query, is not
+	 * found; this order's own note still is.
+	 */
+	public function test_a_note_of_another_order_is_not_found_under_this_order(): void {
+		$a  = (int) self::factory()->post->create( array( 'post_type' => 'shop_order' ) );
+		$b  = (int) self::factory()->post->create( array( 'post_type' => 'shop_order' ) );
+		$na = $this->real_note( $a );
+		$nb = $this->real_note( $b );
+		WcOrderStubStore::seed_notes(
+			$a,
+			array(
+				array(
+					'id'   => $na,
+					'note' => 'Note on ' . $a,
+				),
+				array(
+					'id'   => $nb,
+					'note' => 'Note on ' . $b,
+				),
+			)
+		);
+
+		$this->assertNull( aafm_wc_get_order_note( $a, $nb ), "order B's note listed under order A" );
+		$own = aafm_wc_get_order_note( $a, $na );
+		$this->assertSame( $na, null === $own ? null : (int) $own->id, "order A's own note" );
+	}
+
+	/**
+	 * A note whose own comment load fails is not found, even when the notes list has it.
+	 */
+	public function test_a_note_whose_comment_load_fails_is_not_found(): void {
+		global $wpdb;
+		$a  = (int) self::factory()->post->create( array( 'post_type' => 'shop_order' ) );
+		$na = $this->real_note( $a );
+		WcOrderStubStore::seed_notes(
+			$a,
+			array(
+				array(
+					'id'   => $na,
+					'note' => 'Note on ' . $a,
+				),
+			)
+		);
+		wp_cache_delete( $na, 'comment' );
+		QueryFaultInjector::reset_fired_count();
+
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT * FROM', $wpdb->comments, "WHERE comment_ID = {$na} LIMIT 1" ),
+			static fn() => aafm_wc_get_order_note( $a, $na )
+		);
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the comment load was faulted' );
+		$this->assertNull( $out );
 	}
 }

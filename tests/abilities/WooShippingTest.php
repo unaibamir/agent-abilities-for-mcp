@@ -974,6 +974,116 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * Vetoed title writes where a bool or null meets '' by its string form (UG-T5): the kept row
+	 * is not the requested title, so each reports the title failure.
+	 *
+	 * @return array<string,array{0:mixed,1:mixed}>
+	 */
+	public function vetoed_bool_or_null_titles(): array {
+		return array(
+			'stored false, requested empty'         => array( false, null ),
+			'stored null, requested empty'          => array( null, null ),
+			'stored empty, filter sets title false' => array( '', false ),
+		);
+	}
+
+	/**
+	 * A vetoing filter keeps the old row. A bool or null on either side is compared by identity, so
+	 * a kept false or null never confirms a requested '', and a kept '' never confirms a filtered
+	 * false (UG-T5).
+	 *
+	 * @dataProvider vetoed_bool_or_null_titles
+	 *
+	 * @param mixed $stored   The title the kept row holds.
+	 * @param mixed $filtered The title the instance-settings filter hands to the write, or null to leave the requested ''.
+	 */
+	public function test_a_vetoed_bool_or_null_title_reports_the_title_write_failure( $stored, $filtered ): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => $stored ) );
+		$to_filtered = static function ( $settings ) use ( $filtered ) {
+			$settings['title'] = $filtered;
+			return $settings;
+		};
+		$veto        = array( self::class, 'keep_old_value' );
+		if ( null !== $filtered ) {
+			add_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_filtered );
+		}
+		add_filter( 'pre_update_option_' . $option_key, $veto, 10, 2 );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'method_title' => '',
+			)
+		);
+
+		remove_filter( 'pre_update_option_' . $option_key, $veto, 10 );
+		remove_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_filtered );
+
+		$this->assertSame( array( 'title' => $stored ), maybe_unserialize( $this->option_row( $option_key ) ), 'precondition: the veto kept the row' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $res->get_error_code() );
+	}
+
+	/**
+	 * A filter that sets the title to null or false, with no veto, stores exactly that value, and
+	 * the write reports success (UG-T5b).
+	 */
+	public function test_a_filtered_null_or_false_title_that_lands_is_saved(): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => 'Original Title' ) );
+
+		foreach ( array( null, false ) as $title ) {
+			$to_title = static function ( $settings ) use ( $title ) {
+				$settings['title'] = $title;
+				return $settings;
+			};
+			add_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_title );
+			$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+				array(
+					'zone_id'      => 1,
+					'instance_id'  => 1,
+					'method_title' => 'Requested Title',
+				)
+			);
+			remove_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_title );
+
+			$label = var_export( $title, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- assertion label.
+			$this->assertNotInstanceOf( WP_Error::class, $res, $label );
+			$this->assertSame( $title, maybe_unserialize( $this->option_row( $option_key ) )['title'], $label );
+		}
+	}
+
+	/**
+	 * A vetoed title write over a row holding int 5 or float 5.0 still confirms a request of '5',
+	 * the number's own text (UG-T6).
+	 */
+	public function test_a_vetoed_numeric_title_confirms_the_equal_text(): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		$veto       = array( self::class, 'keep_old_value' );
+
+		foreach ( array( 5, 5.0 ) as $stored ) {
+			update_option( $option_key, array( 'title' => $stored ) );
+			add_filter( 'pre_update_option_' . $option_key, $veto, 10, 2 );
+			$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+				array(
+					'zone_id'      => 1,
+					'instance_id'  => 1,
+					'method_title' => '5',
+				)
+			);
+			remove_filter( 'pre_update_option_' . $option_key, $veto, 10 );
+
+			$this->assertSame( $stored, maybe_unserialize( $this->option_row( $option_key ) )['title'], gettype( $stored ) . ': precondition, the veto kept the row' );
+			$this->assertNotInstanceOf( WP_Error::class, $res, gettype( $stored ) );
+		}
+	}
+
+	/**
 	 * Audit: a successful execute is recorded under the calling ability.
 	 *
 	 * @dataProvider provide_success_audit_cases

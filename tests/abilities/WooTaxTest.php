@@ -16,6 +16,7 @@ namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\WcTaxStubStore;
 use WP_Error;
 
@@ -761,5 +762,132 @@ final class WooTaxTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'wc_tax', $res->get_error_code() );
 		$this->assertSame( array( $this->wc_row( 'tax_class', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	// =========================================================================
+	// A by-id rate read that another rate's row answers
+	// =========================================================================
+
+	/**
+	 * The two seeded rate ids, in insert order.
+	 *
+	 * @return int[]
+	 */
+	private function seeded_rate_ids(): array {
+		global $wpdb;
+		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT tax_rate_id FROM %i ORDER BY tax_rate_id', $wpdb->prefix . 'woocommerce_tax_rates' ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- reads the fixture table.
+	}
+
+	/**
+	 * Run $run while the $occurrence-th by-id read that matches $needle answers with rate $leak's
+	 * row, database errors suppressed and output discarded.
+	 *
+	 * @param string|string[] $needle     The by-id read to fault.
+	 * @param int             $leak       The rate whose row is left behind.
+	 * @param int             $occurrence Which matching read to fault.
+	 * @param callable        $run        The call.
+	 * @return mixed
+	 */
+	private function with_leaked_rate( $needle, int $leak, int $occurrence, callable $run ) {
+		global $wpdb;
+		$filter     = QueryFaultInjector::leak_row_filter( $needle, $wpdb->prepare( 'SELECT * FROM %i WHERE tax_rate_id = %d', $wpdb->prefix . 'woocommerce_tax_rates', $leak ), $occurrence, is_string( $needle ) );
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * The read the tax abilities make for one rate id.
+	 *
+	 * @param int $rate_id Rate id.
+	 */
+	private function rate_read( int $rate_id ): string {
+		global $wpdb;
+		return $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id = %d", $rate_id ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the fixture table name.
+	}
+
+	/**
+	 * A confirming read that another rate's row answers reports the write as not confirmed, never
+	 * the other rate as the result. The write itself has landed.
+	 */
+	public function test_a_confirming_read_that_leaks_another_rate_is_not_a_success(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		QueryFaultInjector::reset_fired_count();
+		list( $a, $b ) = $this->seeded_rate_ids();
+
+		$update = $this->with_leaked_rate(
+			$this->rate_read( $a ),
+			$b,
+			2,
+			static fn() => aafm_exec_wc_update_tax_rate(
+				array(
+					'rate_id' => $a,
+					'name'    => 'Renamed A',
+				)
+			)
+		);
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'update: the confirming read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $update, 'update' );
+		$this->assertSame( 'aafm_error', $update->get_error_code() );
+		$this->assertSame( 'Renamed A', $wpdb->get_var( $wpdb->prepare( 'SELECT tax_rate_name FROM %i WHERE tax_rate_id = %d', $wpdb->prefix . 'woocommerce_tax_rates', $a ) ), 'the update landed' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- checks the row itself.
+
+		QueryFaultInjector::reset_fired_count();
+		$create = $this->with_leaked_rate(
+			array( 'SELECT * FROM', 'woocommerce_tax_rates', 'WHERE tax_rate_id = ' ),
+			$b,
+			1,
+			static fn() => aafm_exec_wc_create_tax_rate(
+				array(
+					'rate'    => '7.0000',
+					'name'    => 'New C',
+					'country' => 'US',
+				)
+			)
+		);
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'create: the confirming read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $create, 'create' );
+		$this->assertSame( 'aafm_error', $create->get_error_code() );
+	}
+
+	/**
+	 * A get or an update's pre-read that another rate's row answers is not found, and the update
+	 * writes nothing.
+	 */
+	public function test_a_read_that_leaks_another_rate_is_not_found(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		QueryFaultInjector::reset_fired_count();
+		list( $a, $b ) = $this->seeded_rate_ids();
+		$before        = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i ORDER BY tax_rate_id', $wpdb->prefix . 'woocommerce_tax_rates' ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- snapshots the fixture table.
+
+		$get = $this->with_leaked_rate( $this->rate_read( $a ), $b, 1, static fn() => aafm_exec_wc_get_tax_rate( array( 'rate_id' => $a ) ) );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'get: the read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $get, 'get' );
+		$this->assertSame( 'aafm_not_found', $get->get_error_code() );
+
+		QueryFaultInjector::reset_fired_count();
+		$update = $this->with_leaked_rate(
+			$this->rate_read( $a ),
+			$b,
+			1,
+			static fn() => aafm_exec_wc_update_tax_rate(
+				array(
+					'rate_id' => $a,
+					'name'    => 'Renamed A',
+				)
+			)
+		);
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'update: the pre-read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $update, 'update' );
+		$this->assertSame( 'aafm_not_found', $update->get_error_code() );
+		$this->assertSame( $before, $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i ORDER BY tax_rate_id', $wpdb->prefix . 'woocommerce_tax_rates' ), ARRAY_A ), 'nothing was written' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- checks the fixture table.
 	}
 }

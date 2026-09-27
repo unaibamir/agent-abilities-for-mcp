@@ -851,11 +851,11 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		}
 	}
 	if ( null !== $order_val ) {
-		// A numeric string still counts (WooCommerce can store positions that way); anything else,
-		// such as 'abc', never passes for position 0 through an (int) cast.
+		// Only the requested integer or its string form counts: a stored 3.9, '3e0' or ' 3' is not
+		// position 3, and 'abc' is not position 0.
 		$saved_order = aafm_option_row( 'woocommerce_gateway_order' );
 		$saved_pos   = $saved_order['found'] && is_array( $saved_order['value'] ) ? ( $saved_order['value'][ $gateway_id ] ?? null ) : null;
-		if ( is_numeric( $saved_pos ) && (int) $saved_pos === $order_val ) {
+		if ( aafm_stored_id_matches( $saved_pos, $order_val ) ) {
 			$persisted_keys[] = 'order';
 		} else {
 			$failed_keys[] = 'order';

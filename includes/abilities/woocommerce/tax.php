@@ -189,7 +189,8 @@ function aafm_wc_get_all_tax_rates(): array {
  */
 function aafm_wc_get_tax_rate_by_id( int $rate_id ): ?array {
 	$row = \WC_Tax::_get_tax_rate( $rate_id, ARRAY_A );
-	if ( ! is_array( $row ) ) {
+	// The row carries its own id, so a read that another rate's row answered is caught here.
+	if ( ! is_array( $row ) || (int) ( $row['tax_rate_id'] ?? 0 ) !== $rate_id ) {
 		return null;
 	}
 	return aafm_wc_tax_rate_shape( $row );

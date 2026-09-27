@@ -2014,6 +2014,94 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * Stored positions that are not the requested integer or its decimal string, one row each
+	 * (design 3.3 rows G-d to G-l).
+	 *
+	 * @return array<string,array{0:mixed,1:int}>
+	 */
+	public function non_canonical_positions(): array {
+		return array(
+			'G-d float'               => array( 3.9, 3 ),
+			'G-e decimal string'      => array( '3.9', 3 ),
+			'G-f exponent string'     => array( '3e0', 3 ),
+			'G-g leading space'       => array( ' 3', 3 ),
+			'G-h nan'                 => array( NAN, 0 ),
+			'G-i leading zero'        => array( '03', 3 ),
+			'G-j whole float'         => array( 3.0, 3 ),
+			'G-l decimal zero string' => array( '3.0', 3 ),
+		);
+	}
+
+	/**
+	 * Under a veto that keeps the old ordering row, only the requested integer or its decimal
+	 * string confirms the order; any other stored position reports it failed.
+	 *
+	 * @dataProvider non_canonical_positions
+	 *
+	 * @param mixed $stored  The position the kept row holds.
+	 * @param int   $request The requested order.
+	 */
+	public function test_gateway_order_confirms_only_the_requested_integer_under_a_veto( $stored, int $request ): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => $stored ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5 = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$filter    = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'order'      => $request,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
+		}
+
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ), 'Guard: the veto kept the row.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * A gateway setting stored as a number still confirms the equal text: a vetoed title write
+	 * over a row holding int 5 or float 5.0 reports the title persisted for a request of '5'.
+	 */
+	public function test_gateway_setting_stored_as_a_number_confirms_the_equal_text(): void {
+		$this->acting_as( 'administrator' );
+		$filter = array( self::class, 'keep_old_value' );
+		foreach ( array(
+			'int'   => 5,
+			'float' => 5.0,
+		) as $label => $stored ) {
+			delete_option( 'woocommerce_paypal_settings' );
+			add_option( 'woocommerce_paypal_settings', array( 'title' => $stored ), '', false );
+			wp_cache_delete( 'woocommerce_paypal_settings', 'options' );
+			add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+			try {
+				$res = aafm_exec_wc_update_payment_gateway(
+					array(
+						'gateway_id' => 'paypal',
+						'title'      => '5',
+					)
+				);
+			} finally {
+				remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+			}
+
+			$this->assertIsArray( $res, $label );
+		}
+	}
+
+	/**
 	 * The ordering read-back gives the restrictive answer when it cannot read the row. The UPDATE
 	 * of the ordering fails, and every read of its row after the write fails too.
 	 */

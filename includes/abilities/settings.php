@@ -258,12 +258,30 @@ function aafm_exec_update_site_settings( array $input ) {
 	}
 
 	// A stale persistent cache can make update_option() skip a write, because it compares against
-	// the cached old value. So before anything is written, each key's cache view has to agree with
-	// its row; a disagreement, or a row that cannot be read, refuses the whole request.
+	// the cached old value. So before anything is written, each key's cache entries have to agree
+	// with its row; a disagreement, or a row that cannot be read, refuses the whole request. Both
+	// entries are checked: get_option() answers from alloptions before the per-option key, while
+	// aafm_read_option_views() reports the per-option key first.
 	foreach ( array_keys( $settings ) as $key ) {
-		$views = aafm_read_option_views( (string) $key );
-		if ( $views['db_error'] || ( $views['cache_found'] && ! aafm_option_value_matches( $views['cache_value'], $views['db_value'] ) ) ) {
+		$key   = (string) $key;
+		$views = aafm_read_option_views( $key );
+		if ( $views['db_error'] ) {
 			return aafm_generic_error();
+		}
+		$cached = array();
+		$found  = false;
+		$single = wp_cache_get( $key, 'options', true, $found );
+		if ( $found ) {
+			$cached[] = maybe_unserialize( $single );
+		}
+		$all = wp_cache_get( 'alloptions', 'options', true );
+		if ( is_array( $all ) && array_key_exists( $key, $all ) ) {
+			$cached[] = maybe_unserialize( $all[ $key ] );
+		}
+		foreach ( $cached as $value ) {
+			if ( ! aafm_option_value_matches( $value, $views['db_value'] ) ) {
+				return aafm_generic_error();
+			}
 		}
 	}
 

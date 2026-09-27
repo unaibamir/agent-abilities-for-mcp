@@ -629,4 +629,87 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'] );
 	}
+
+	/**
+	 * The failed-read twin on a key with no cache entry at all, with every read of the row failing:
+	 * core's own read before the check leaves only a notoptions entry, so the check finds nothing
+	 * cached to disagree with, and only the failed read itself can refuse the request.
+	 */
+	public function test_a_failed_views_read_of_an_uncached_key_refuses_the_request_before_any_write(): void {
+		global $wpdb;
+		update_option( 'blogname', 'Old Name' );
+		wp_cache_delete( 'blogname', 'options' );
+		$all = wp_load_alloptions();
+		unset( $all['blogname'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->options, 'SELECT option_value', "option_name = 'blogname'" ),
+			static fn() => aafm_exec_update_site_settings( array( 'settings' => array( 'blogname' => 'New Name' ) ) ),
+			0
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( 2, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * The per-option cache entry agrees with the row while the alloptions entry holds the
+	 * requested value. get_option(), and so update_option()'s old-value compare, answers from
+	 * alloptions first, so the write would be skipped and reported as done. The request refuses
+	 * before any write.
+	 */
+	public function test_a_stale_alloptions_entry_beside_an_agreeing_per_option_entry_refuses_the_request(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		$this->plant_stale_alloptions( 'blogname', 'New Name' );
+		wp_cache_set( 'blogname', 'Old Name', 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * A key with no alloptions entry is answered from its per-option cache entry, by get_option()
+	 * and by update_option()'s old-value compare alike. A stale per-option entry holding the
+	 * requested value refuses the request before any write.
+	 */
+	public function test_a_stale_per_option_entry_of_a_key_missing_from_alloptions_refuses_the_request(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		$all = wp_load_alloptions();
+		unset( $all['blogname'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		wp_cache_set( 'blogname', 'New Name', 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
 }

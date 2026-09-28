@@ -323,8 +323,8 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
 /**
  * Remember (or read) whether REST routing began after WordPress parsed this request.
  *
- * Set by aafm_oauth_forget_anonymous_user_on_mcp_route() on rest_api_init when the parse has
- * already happened. rest_api_init fires once per process, on the first rest_get_server() from any
+ * Set by aafm_oauth_forget_anonymous_user_on_mcp_route() when rest_api_init fires while WordPress is
+ * running parse_request, as it does inside core's rest_api_loaded(). rest_api_init fires once per process, on the first rest_get_server() from any
  * caller, so a count of it alone cannot tell this request's REST routing from a REST server some
  * plugin built earlier; this flag can. Cleared on `shutdown`, like the client id store, so a
  * persistent worker starts each request without it.
@@ -381,8 +381,12 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 /**
  * Forget a cached anonymous user when an MCP-routed request carries our bearer.
  *
- * Runs first on rest_api_init. It records that REST routing began after the parse
- * (aafm_oauth_rest_routing_began()) when the parse has happened. WP::init() looks the user up before
+ * Runs first on rest_api_init, and does anything only while WordPress is still running parse_request:
+ * core serves a parsed rest_route from rest_api_loaded(), a parse_request callback, so a genuine REST
+ * dispatch builds the REST server there. A server built later (during a page render on a site that
+ * unhooked rest_api_loaded()) or earlier (a plugin at plugins_loaded) is outside it, and this does
+ * nothing. Inside it, it records that REST routing began after the parse
+ * (aafm_oauth_rest_routing_began()). WP::init() looks the user up before
  * WordPress parses the request, when the bearer cannot resolve yet, and caches "nobody". This makes
  * the same clear core's WP_REST_Server::serve_request() makes, one step earlier, so in the normal
  * routing order the tool registry built on rest_api_init sees the approver. On a site where code
@@ -394,9 +398,10 @@ function aafm_oauth_request_targets_mcp_route(): bool {
  */
 function aafm_oauth_forget_anonymous_user_on_mcp_route(): void {
 	global $current_user;
-	if ( did_action( 'parse_request' ) ) {
-		aafm_oauth_rest_routing_began( true );
+	if ( ! doing_action( 'parse_request' ) ) {
+		return;
 	}
+	aafm_oauth_rest_routing_began( true );
 	if ( ! $current_user instanceof WP_User || $current_user->exists() || ! function_exists( 'aafm_is_mcp_route' ) ) {
 		return;
 	}

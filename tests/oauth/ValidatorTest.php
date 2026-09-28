@@ -1477,15 +1477,19 @@ class ValidatorTest extends TestCase {
 
 	/**
 	 * On an MCP request with our bearer, code on rest_api_init (the adapter's tool registry) sees the
-	 * approver, not the "nobody" WP::init() cached, so it builds the approver's tool set.
+	 * approver, not the "nobody" WP::init() cached, so it builds the approver's tool set. Driven through
+	 * core's rest_api_loaded(), which defines REST_REQUEST before it builds the server, so it runs in its
+	 * own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_registration_on_an_mcp_request_sees_the_approver(): void {
 		$names = $this->register_discovery_fixtures();
 		$this->route_off_mcp();
-		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
-		$uid                    = $this->present_valid_bearer( 'editor' );
+		$uid = $this->present_valid_bearer( 'editor' );
 
-		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes.
 		wp_get_current_user();
 		$this->assertSame( 0, get_current_user_id(), 'The lookup before the parse resolves nobody.' );
 
@@ -1498,31 +1502,27 @@ class ValidatorTest extends TestCase {
 			},
 			1
 		);
-		$this->route_as_rest_request();
-		$server = $this->mcp_spy_server_inside_parse_request();
+		$served = $this->serve_mcp_through_core();
 
 		$this->assertSame( $uid, $seen['user'] ?? null, 'rest_api_init sees the approver.' );
 		wp_set_current_user( $uid );
 		$this->assertSame( aafm_build_server_tools( $names ), $seen['tools'] ?? null, 'The tool set built on rest_api_init is the approver\'s.' );
 		$this->assertSame( array( 'aafm/pub-read' ), $seen['tools'] ?? null );
-
-		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- serve_request() re-resolves, restored in tear_down().
-		wp_get_current_user();
-		$this->initialize_body_in_request();
-		$server->serve_request( aafm_mcp_rest_route() );
-		$this->assertSame( $uid, get_current_user_id(), 'The request is served as the approver.' );
+		$this->assertSame( $uid, $served['user'] ?? null, 'The request is served as the approver.' );
 	}
 
 	/**
 	 * An Application Password request carries no aafm_oat_ bearer, so rest_api_init leaves its cached
-	 * lookup alone, as before.
+	 * lookup alone, as before. Driven through core's rest_api_loaded(), in its own process.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_registration_without_our_bearer_is_left_alone(): void {
 		$this->route_off_mcp();
-		$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
 		$this->set_bearer( 'Basic ' . base64_encode( 'someone:abcd efgh ijkl mnop qrst uvwx' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- a Basic credential header, not obfuscation.
 
-		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes.
 		wp_get_current_user();
 		$seen = array();
 		add_action(
@@ -1532,15 +1532,16 @@ class ValidatorTest extends TestCase {
 			},
 			1
 		);
-		$this->route_as_rest_request();
-		$this->mcp_spy_server_inside_parse_request();
+		$this->serve_mcp_through_core();
 
 		$this->assertSame( 0, $seen['user'] ?? null );
 	}
 
 	/**
 	 * Record whether a cached user object survives this plugin's rest_api_init clear, from a
-	 * rest_api_init callback that runs straight after it.
+	 * rest_api_init callback that runs straight after it. REST_REQUEST is defined first, as core's
+	 * rest_api_loaded() defines it before it builds the server, so only the condition under test
+	 * stops the clear, and callers run in their own process.
 	 *
 	 * @return array<string,mixed>
 	 */
@@ -1553,12 +1554,18 @@ class ValidatorTest extends TestCase {
 			},
 			PHP_INT_MIN + 1
 		);
+		if ( ! defined( 'REST_REQUEST' ) ) {
+			define( 'REST_REQUEST', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- core's constant, defined as rest_api_loaded() defines it.
+		}
 		$this->mcp_spy_server_inside_parse_request();
 		return $seen;
 	}
 
 	/**
 	 * A bearer on a REST route other than MCP: the cached "nobody" is not forgotten on rest_api_init.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_the_rest_api_init_clear_leaves_other_rest_routes_alone(): void {
 		$this->route_as_rest_request();
@@ -1574,6 +1581,9 @@ class ValidatorTest extends TestCase {
 	/**
 	 * Where WordPress never parsed the request (a plugin calling rest_get_server() inside admin-ajax
 	 * fires rest_api_init), a rest_route query var left over forgets nothing.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_the_rest_api_init_clear_needs_the_parse(): void {
 		$this->route_off_mcp();
@@ -1589,6 +1599,9 @@ class ValidatorTest extends TestCase {
 
 	/**
 	 * A cookie-authenticated user is never forgotten, even with our bearer on the MCP route.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_the_rest_api_init_clear_never_forgets_a_real_user(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -1804,37 +1817,60 @@ class ValidatorTest extends TestCase {
 	 */
 	public function test_rest_request_resolves_the_bearer_when_the_server_was_built_before_the_parse(): void {
 		$this->route_off_mcp();
-		$this->make_rest_route_a_query_var();
 		$server = $this->mcp_spy_server();
 		$this->assertFalse( aafm_oauth_rest_routing_began(), 'The server was built before the parse.' );
 		$uid = $this->present_valid_bearer();
 
-		$_SERVER['REQUEST_URI']        = '/?rest_route=' . aafm_mcp_rest_route();
-		$_SERVER['PHP_SELF']           = '/index.php';
-		$_SERVER['REQUEST_METHOD']     = 'POST';
-		$_SERVER['CONTENT_TYPE']       = 'application/json';
-		$_SERVER['HTTP_ACCEPT']        = 'application/json, text/event-stream';
-		$_GET['rest_route']            = aafm_mcp_rest_route();
-		$GLOBALS['HTTP_RAW_POST_DATA'] = wp_json_encode( // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the body core's get_raw_data() reads.
-			array(
-				'jsonrpc' => '2.0',
-				'id'      => 1,
-				'method'  => 'initialize',
-				'params'  => array(
-					'protocolVersion' => '2025-06-18',
-					'capabilities'    => new \stdClass(),
-					'clientInfo'      => array(
-						'name'    => 'validator-test',
-						'version' => '1.0',
-					),
-				),
-			)
-		);
-		$GLOBALS['current_user']       = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes.
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes.
 		wp_get_current_user();
+		$served = array();
+		$this->serve_mcp_through_core( $served );
+
+		$this->assertTrue( defined( 'REST_REQUEST' ) && REST_REQUEST, 'rest_api_loaded() defined REST_REQUEST.' );
+		$this->assertFalse( aafm_oauth_rest_routing_began(), 'rest_api_init did not fire again after the parse.' );
+		$this->assertSame( 200, $server->status );
+		$this->assertSame( $uid, $served['user'] ?? null, 'The MCP handler answered as the approver.' );
+		$this->assertArrayHasKey( 'result', (array) ( $served['result'] ?? array() ) );
+
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wp/v2/users/me';
+		$GLOBALS['current_user']                 = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- a fresh lookup for the second request.
+		$_SERVER['REQUEST_METHOD']               = 'GET';
+		unset( $GLOBALS['HTTP_RAW_POST_DATA'] );
+		$served = array();
+		$level  = ob_get_level();
+		try {
+			$server->serve_request( '/wp/v2/users/me' );
+		} catch ( \RuntimeException $e ) {
+			unset( $e );
+		} finally {
+			while ( ob_get_level() > $level ) {
+				ob_end_clean();
+			}
+		}
+
+		$this->assertSame( 401, $server->status );
+		$this->assertSame( 0, $served['user'] ?? null );
+		$this->assertSame( 'rest_not_logged_in', $served['result']['code'] ?? null );
+	}
+
+	/**
+	 * Serve an MCP initialize call on ?rest_route=<MCP route> through core: WordPress parses the
+	 * request, and rest_api_loaded() defines REST_REQUEST, builds or reuses the REST server and serves
+	 * the request. rest_api_loaded() ends in die(), so the response is caught by throwing from
+	 * rest_pre_echo_response once it is built. Only for tests that run in their own process.
+	 *
+	 * @param array<string,mixed> $served Filled with the user the response was built for ('user') and the
+	 *                                    response ('result') each time a response is echoed.
+	 * @return array<string,mixed> The same.
+	 */
+	private function serve_mcp_through_core( array &$served = array() ): array {
+		$this->make_rest_route_a_query_var();
+		$_SERVER['REQUEST_URI'] = '/?rest_route=' . aafm_mcp_rest_route();
+		$_SERVER['PHP_SELF']    = '/index.php';
+		$_GET['rest_route']     = aafm_mcp_rest_route();
+		$this->initialize_body_in_request();
 		remove_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 
-		$served = array();
 		add_filter(
 			'rest_pre_echo_response',
 			static function ( $result ) use ( &$served ) {
@@ -1856,31 +1892,87 @@ class ValidatorTest extends TestCase {
 				ob_end_clean();
 			}
 		}
+		return $served;
+	}
 
-		$this->assertTrue( defined( 'REST_REQUEST' ) && REST_REQUEST, 'rest_api_loaded() defined REST_REQUEST.' );
-		$this->assertFalse( aafm_oauth_rest_routing_began(), 'rest_api_init did not fire again after the parse.' );
-		$this->assertSame( 200, $server->status );
-		$this->assertSame( $uid, $served['user'] ?? null, 'The MCP handler answered as the approver.' );
-		$this->assertArrayHasKey( 'result', (array) ( $served['result'] ?? array() ) );
+	/**
+	 * Put a parsed ?rest_route=<MCP route> request with our bearer in place, after WP::init() cached
+	 * "nobody".
+	 *
+	 * @return void
+	 */
+	private function request_mcp_with_a_bearer_after_an_early_lookup(): void {
+		$this->route_off_mcp();
+		$this->make_rest_route_a_query_var();
+		$_SERVER['REQUEST_URI'] = '/?rest_route=' . aafm_mcp_rest_route();
+		$_SERVER['PHP_SELF']    = '/index.php';
+		$_GET['rest_route']     = aafm_mcp_rest_route();
+		$this->present_valid_bearer( 'administrator' );
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes, restored in tear_down().
+		wp_get_current_user();
+	}
 
-		$GLOBALS['wp']->query_vars['rest_route'] = '/wp/v2/users/me';
-		$GLOBALS['current_user']                 = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- a fresh lookup for the second request.
-		$_SERVER['REQUEST_METHOD']               = 'GET';
-		unset( $GLOBALS['HTTP_RAW_POST_DATA'] );
-		$served = array();
+	/**
+	 * On a site that unhooked rest_api_loaded(), a parse_request callback that builds the REST server
+	 * on ?rest_route=<MCP route> is not core's REST dispatch: the cached "nobody" is not forgotten,
+	 * REST routing is not recorded as begun, and a fresh lookup still resolves nobody.
+	 */
+	public function test_a_server_built_in_parse_request_without_cores_rest_loader_changes_nobody(): void {
+		$this->request_mcp_with_a_bearer_after_an_early_lookup();
+		remove_action( 'parse_request', 'rest_api_loaded' );
+		$seen = array();
+		add_action(
+			'parse_request',
+			function () use ( &$seen ): void {
+				$this->mcp_spy_server();
+				$seen['user'] = get_current_user_id();
+			},
+			20
+		);
+
+		$GLOBALS['wp']->parse_request();
+
+		$this->assertSame( aafm_mcp_rest_route(), $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'WordPress parsed the MCP route.' );
+		$this->assertSame( 0, $seen['user'] ?? null );
+		$this->assertFalse( aafm_oauth_rest_routing_began() );
+		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- a fresh lookup, restored in tear_down().
+		$this->assertSame( 0, get_current_user_id(), 'A fresh lookup still resolves nobody.' );
+	}
+
+	/**
+	 * With core's rest_api_loaded() hooked, a parse_request callback that runs ahead of it and builds
+	 * the REST server is not core's REST dispatch either: REST_REQUEST is not defined yet, so inside
+	 * that callback the current user is still nobody. Runs in its own process because the callback
+	 * stops parse_request before rest_api_loaded() serves and dies.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_server_built_in_parse_request_ahead_of_cores_rest_loader_changes_nobody(): void {
+		$this->request_mcp_with_a_bearer_after_an_early_lookup();
+		remove_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
+		$seen = array();
+		add_action(
+			'parse_request',
+			function () use ( &$seen ): void {
+				$this->mcp_spy_server();
+				$seen['user'] = get_current_user_id();
+				throw new \RuntimeException( 'aafm_test_early_builder' );
+			},
+			5
+		);
+
 		try {
-			$server->serve_request( '/wp/v2/users/me' );
+			$GLOBALS['wp']->parse_request();
+			$this->fail( 'The early builder must stop parse_request.' );
 		} catch ( \RuntimeException $e ) {
-			unset( $e );
-		} finally {
-			while ( ob_get_level() > $level ) {
-				ob_end_clean();
-			}
+			$this->assertSame( 'aafm_test_early_builder', $e->getMessage() );
 		}
 
-		$this->assertSame( 401, $server->status );
-		$this->assertSame( 0, $served['user'] ?? null );
-		$this->assertSame( 'rest_not_logged_in', $served['result']['code'] ?? null );
+		$this->assertNotFalse( has_action( 'parse_request', 'rest_api_loaded' ), 'Core\'s REST loader is hooked.' );
+		$this->assertFalse( defined( 'REST_REQUEST' ), 'Core has not defined REST_REQUEST yet.' );
+		$this->assertSame( aafm_mcp_rest_route(), $GLOBALS['wp']->query_vars['rest_route'] ?? null, 'WordPress parsed the MCP route.' );
+		$this->assertSame( 0, $seen['user'] ?? null );
 	}
 
 	/**

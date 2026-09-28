@@ -235,8 +235,9 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 
 		// 11. Token capability map. The token resolves to the approver's FULL account by default
 		// (unchanged behaviour). A site that registers aafm_oauth_token_capabilities replaces the
-		// listed capabilities for the rest of this MCP request, a capability the approver lacks
-		// included, in every user_has_cap check the request makes. The resolved identity is unchanged.
+		// token's capabilities for the rest of this MCP request: each listed capability is set
+		// outright, a capability the approver lacks included, and every other capability is denied,
+		// in every user_has_cap check the request makes. The resolved identity is unchanged.
 		aafm_oauth_apply_token_capability_scope(
 			(int) $row['wp_user_id'],
 			isset( $row['scope'] ) ? (string) $row['scope'] : '',

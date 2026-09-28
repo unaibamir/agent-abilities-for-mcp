@@ -180,8 +180,9 @@ class SchemaTest extends TestCase {
 	/**
 	 * The codes and access-tokens tables carry the persisted `scope` column (v6). The requested
 	 * OAuth scope is recorded through code -> token so it is auditable and available to the
-	 * aafm_oauth_token_capabilities filter, whose map replaces the listed caps; the column
-	 * defaults to '' so existing rows and behaviour are unchanged.
+	 * aafm_oauth_token_capabilities filter, whose map replaces the token's capabilities (listed
+	 * ones set outright, every other one denied); the column defaults to '' so existing rows and
+	 * behaviour are unchanged.
 	 */
 	public function test_scope_column_present_on_codes_and_tokens(): void {
 		aafm_install_oauth_tables();

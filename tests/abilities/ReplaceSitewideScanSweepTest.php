@@ -16,6 +16,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\UseImportScanner;
 use AAFM\Tests\TestCase;
 
 final class ReplaceSitewideScanSweepTest extends TestCase {
@@ -47,11 +48,13 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 	 * @return list<string> One enclosing function name per call, in source order.
 	 */
 	private function calls_in( string $source ): array {
-		$tokens  = token_get_all( $source );
-		$stack   = array();
-		$pending = null;
-		$found   = array();
-		$count   = count( $tokens );
+		$tokens     = token_get_all( $source );
+		$name_types = $this->name_token_types();
+		$not_a_call = array( T_FUNCTION, T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NEW, defined( 'T_NULLSAFE_OBJECT_OPERATOR' ) ? constant( 'T_NULLSAFE_OBJECT_OPERATOR' ) : -1 );
+		$stack      = array();
+		$pending    = null;
+		$found      = array();
+		$count      = count( $tokens );
 		for ( $i = 0; $i < $count; $i++ ) {
 			$token   = $tokens[ $i ];
 			$current = array() === $stack ? '{main}' : (string) end( $stack );
@@ -77,21 +80,44 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 				continue;
 			}
 			$next = $this->next_significant( $tokens, $i + 1 );
-			if ( T_NEW === $token[0] && null !== $next && is_array( $tokens[ $next ] ) && 'wp_query' === strtolower( ltrim( $tokens[ $next ][1], '\\' ) ) ) {
-				$paren = $this->next_significant( $tokens, $next + 1 );
-				if ( null !== $paren && '(' === $tokens[ $paren ] ) {
-					$found[] = $current;
+			if ( T_NEW === $token[0] ) {
+				while ( null !== $next && is_array( $tokens[ $next ] ) && ( in_array( $tokens[ $next ][0], array( T_NS_SEPARATOR, T_NAMESPACE ), true ) || ( T_STRING === $tokens[ $next ][0] && is_array( $tokens[ $next + 1 ] ?? null ) && T_NS_SEPARATOR === $tokens[ $next + 1 ][0] ) ) ) {
+					++$next;
+				}
+				if ( null !== $next && is_array( $tokens[ $next ] ) && in_array( $tokens[ $next ][0], $name_types, true ) && 'wp_query' === strtolower( UseImportScanner::trailing_name_segment( $tokens[ $next ][1] ) ) ) {
+					$paren = $this->next_significant( $tokens, $next + 1 );
+					if ( null !== $paren && '(' === $tokens[ $paren ] ) {
+						$found[] = $current;
+					}
 				}
 				continue;
 			}
-			if ( T_STRING === $token[0] && 'get_posts' === strtolower( $token[1] ) && null !== $next && '(' === $tokens[ $next ] ) {
+			if ( in_array( $token[0], $name_types, true ) && 'get_posts' === strtolower( UseImportScanner::trailing_name_segment( $token[1] ) ) && null !== $next && '(' === $tokens[ $next ] ) {
 				$prev = $this->previous_significant( $tokens, $i - 1 );
-				if ( null === $prev || ! is_array( $tokens[ $prev ] ) || ! in_array( $tokens[ $prev ][0], array( T_FUNCTION, T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NEW ), true ) ) {
+				if ( null === $prev || ! is_array( $tokens[ $prev ] ) || ! in_array( $tokens[ $prev ][0], $not_a_call, true ) ) {
 					$found[] = $current;
 				}
 			}
 		}
 		return $found;
+	}
+
+	/**
+	 * The token types a name can arrive as: T_STRING always, plus PHP 8's name tokens where the
+	 * running PHP defines them. PHP 7.4 splits `\WP_Query` or `Ns\WP_Query` into T_NAMESPACE,
+	 * T_NS_SEPARATOR and T_STRING pieces instead, so calls_in() walks past them after `new` to
+	 * the last one. Same list as MetaWriteSweepTest::name_token_types().
+	 *
+	 * @return int[]
+	 */
+	private function name_token_types(): array {
+		$types = array( T_STRING );
+		foreach ( array( 'T_NAME_FULLY_QUALIFIED', 'T_NAME_QUALIFIED', 'T_NAME_RELATIVE' ) as $constant ) {
+			if ( defined( $constant ) ) {
+				$types[] = constant( $constant );
+			}
+		}
+		return $types;
 	}
 
 	/**
@@ -154,6 +180,19 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 		$expected = array_keys( self::CALLS );
 		sort( $expected );
 		$this->assertSame( $expected, $this->call_keys(), 'A WP_Query or get_posts() call was added, moved or removed; class it here.' );
+	}
+
+	/**
+	 * PHP 7.4 tokenizes `\WP_Query` and `\get_posts` as T_NS_SEPARATOR plus T_STRING, PHP 8 as one
+	 * name token. The scan must find all four forms on either PHP, or a CI leg misses a call.
+	 */
+	public function test_the_scan_finds_bare_and_fully_qualified_calls(): void {
+		$source = '<?php
+			function a() { new WP_Query( array() ); }
+			function b() { new \WP_Query( array() ); }
+			function c() { get_posts( array() ); }
+			function d() { \get_posts( array() ); }';
+		$this->assertSame( array( 'a', 'b', 'c', 'd' ), $this->calls_in( $source ) );
 	}
 
 	public function test_the_one_write_feed_scan_is_failure_aware(): void {

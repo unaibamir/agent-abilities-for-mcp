@@ -15,33 +15,15 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 // Status constants. PHP 7.4 floor: string constants, not an enum.
-if ( ! defined( 'AAFM_WRITE_WRITTEN' ) ) {
-	define( 'AAFM_WRITE_WRITTEN', 'written' );
-}
-if ( ! defined( 'AAFM_WRITE_UNCHANGED' ) ) {
-	define( 'AAFM_WRITE_UNCHANGED', 'unchanged' );
-}
-if ( ! defined( 'AAFM_WRITE_DELETED' ) ) {
-	define( 'AAFM_WRITE_DELETED', 'deleted' );
-}
-if ( ! defined( 'AAFM_WRITE_ABSENT' ) ) {
-	define( 'AAFM_WRITE_ABSENT', 'absent' );
-}
-if ( ! defined( 'AAFM_WRITE_REFUSED' ) ) {
-	define( 'AAFM_WRITE_REFUSED', 'refused' );
-}
-if ( ! defined( 'AAFM_WRITE_READ_FAILED' ) ) {
-	define( 'AAFM_WRITE_READ_FAILED', 'read_failed' );
-}
-if ( ! defined( 'AAFM_WRITE_UNCONFIRMED' ) ) {
-	define( 'AAFM_WRITE_UNCONFIRMED', 'unconfirmed' );
-}
-if ( ! defined( 'AAFM_WRITE_PARTIAL' ) ) {
-	define( 'AAFM_WRITE_PARTIAL', 'partial' );
-}
-if ( ! defined( 'AAFM_WRITE_ACCEPTED' ) ) {
-	define( 'AAFM_WRITE_ACCEPTED', 'accepted' );
-}
+define( 'AAFM_WRITE_WRITTEN', 'written' );
+define( 'AAFM_WRITE_UNCHANGED', 'unchanged' );
+define( 'AAFM_WRITE_DELETED', 'deleted' );
+define( 'AAFM_WRITE_ABSENT', 'absent' );
+define( 'AAFM_WRITE_REFUSED', 'refused' );
+define( 'AAFM_WRITE_READ_FAILED', 'read_failed' );
+define( 'AAFM_WRITE_UNCONFIRMED', 'unconfirmed' );
+define( 'AAFM_WRITE_PARTIAL', 'partial' );
+define( 'AAFM_WRITE_ACCEPTED', 'accepted' );
 
 /**
  * The plain map of write kind to its writer functions, built once with no filter.

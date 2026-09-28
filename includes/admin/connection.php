@@ -106,7 +106,7 @@ function aafm_diagnostic_checks(): array {
 	$checks = array();
 
 	// 1. Adapter active and at or above the version floor.
-	$version  = function_exists( 'aafm_loaded_adapter_version' ) ? aafm_loaded_adapter_version() : null;
+	$version  = aafm_loaded_adapter_version();
 	$checks[] = array(
 		'id'     => 'adapter',
 		'label'  => __( 'MCP adapter active and compatible', 'agent-abilities-for-mcp' ),

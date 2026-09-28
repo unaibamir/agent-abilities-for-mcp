@@ -114,7 +114,7 @@ function aafm_render_bridge_directory(): void {
  * @return void
  */
 function aafm_render_bridge_collision_notice(): void {
-	$collisions = function_exists( 'aafm_bridge_collisions' ) ? aafm_bridge_collisions() : array();
+	$collisions = aafm_bridge_collisions();
 	if ( empty( $collisions ) ) {
 		return;
 	}

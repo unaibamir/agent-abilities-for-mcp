@@ -204,13 +204,12 @@ function aafm_recent_agent_count(): int {
 /**
  * Whether any user has approved an OAuth connection (a live grant exists).
  *
- * Read-only; returns false when OAuth is disabled or nobody has approved yet so
- * callers never need to guard around the OAuth functions existing.
+ * Read-only; returns false when OAuth is disabled or nobody has approved yet.
  *
  * @return bool
  */
 function aafm_has_oauth_grant(): bool {
-	return function_exists( 'aafm_oauth_list_grants' ) && ! empty( aafm_oauth_list_grants() );
+	return ! empty( aafm_oauth_list_grants() );
 }
 
 /**

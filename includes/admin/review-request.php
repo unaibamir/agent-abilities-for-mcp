@@ -466,7 +466,7 @@ function aafm_render_review_request_notice(): void {
 	// scoped to that screen; on the Plugins list there is no flow to interrupt.
 	$screen = get_current_screen();
 	if ( $screen && 'toplevel_page_agent-abilities-for-mcp' === $screen->id
-		&& function_exists( 'aafm_quickconnect_should_render' ) && aafm_quickconnect_should_render() ) {
+		&& aafm_quickconnect_should_render() ) {
 		return;
 	}
 	if ( ! aafm_review_request_eligible() ) {

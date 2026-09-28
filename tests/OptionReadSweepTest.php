@@ -157,6 +157,7 @@ final class OptionReadSweepTest extends TestCase {
 	private function calls( string $source, string $path, array $callees ): array {
 		$tokens   = token_get_all( $source );
 		$nullsafe = defined( 'T_NULLSAFE_OBJECT_OPERATOR' ) ? constant( 'T_NULLSAFE_OBJECT_OPERATOR' ) : -1;
+		$names    = array( T_STRING, defined( 'T_NAME_FULLY_QUALIFIED' ) ? constant( 'T_NAME_FULLY_QUALIFIED' ) : T_STRING );
 		$skip     = array( T_FUNCTION, T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_NEW, $nullsafe );
 		$stack    = array(); // [ name, depth at which its body opened ].
 		$pending  = null;
@@ -193,14 +194,19 @@ final class OptionReadSweepTest extends TestCase {
 				--$depth;
 				continue;
 			}
-			if ( ! is_array( $token ) || T_STRING !== $token[0] || ! in_array( $token[1], $callees, true ) ) {
+			// PHP 8 reads `\get_option` as one name token; PHP 7.4 reads a separator, then the name.
+			if ( ! is_array( $token ) || ! in_array( $token[0], $names, true ) || ! in_array( ltrim( $token[1], '\\' ), $callees, true ) ) {
 				continue;
 			}
+			$name = ltrim( $token[1], '\\' );
 			$open = $this->next_significant( $tokens, $i + 1, 1 );
 			if ( null === $open || '(' !== $tokens[ $open ] ) {
 				continue;
 			}
 			$before = $this->next_significant( $tokens, $i - 1, -1 );
+			if ( null !== $before && is_array( $tokens[ $before ] ) && T_NS_SEPARATOR === $tokens[ $before ][0] ) {
+				$before = $this->next_significant( $tokens, $before - 1, -1 );
+			}
 			if ( null !== $before && is_array( $tokens[ $before ] ) && in_array( $tokens[ $before ][0], $skip, true ) ) {
 				continue;
 			}
@@ -224,9 +230,9 @@ final class OptionReadSweepTest extends TestCase {
 				}
 			}
 
-			$base                                = $path . '|' . ( array() === $stack ? '{main}' : end( $stack )[0] );
-			$ordinals[ $base . '|' . $token[1] ] = ( $ordinals[ $base . '|' . $token[1] ] ?? 0 ) + 1;
-			$calls[ $token[1] ][ $base . '|' . $ordinals[ $base . '|' . $token[1] ] ] = $argument;
+			$base                            = $path . '|' . ( array() === $stack ? '{main}' : end( $stack )[0] );
+			$ordinals[ $base . '|' . $name ] = ( $ordinals[ $base . '|' . $name ] ?? 0 ) + 1;
+			$calls[ $name ][ $base . '|' . $ordinals[ $base . '|' . $name ] ] = $argument;
 		}
 
 		return $calls;
@@ -304,13 +310,14 @@ final class OptionReadSweepTest extends TestCase {
 	}
 
 	public function test_the_scanner_keys_calls_and_their_first_argument(): void {
-		$source = "<?php\nfunction f( \$k ) {\n\t\$a = get_option( 'x', 1 );\n\t\$b = static function () use ( \$k ) {\n\t\treturn get_option( \$k );\n\t};\n\t\$o->get_option( 'y' );\n\tWP::get_option( 'z' );\n}\nfunction get_option() {}\n";
+		$source = "<?php\nfunction f( \$k ) {\n\t\$a = get_option( 'x', 1 );\n\t\$b = static function () use ( \$k ) {\n\t\treturn get_option( \$k );\n\t};\n\t\$o->get_option( 'y' );\n\tWP::get_option( 'z' );\n\t\\get_option( 'y' );\n}\nfunction get_option() {}\n";
 
 		$this->assertSame(
 			array(
 				'get_option' => array(
 					'x.php|f|1' => "'x'",
 					'x.php|f|2' => '$k',
+					'x.php|f|3' => "'y'",
 				),
 			),
 			$this->calls( $source, 'x.php', array( 'get_option' ) )

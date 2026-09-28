@@ -1158,6 +1158,7 @@ final class VendorReaderLoadTest extends TestCase {
 		);
 		$guards     = 0;
 		$bad        = array();
+		$names      = array( T_STRING, defined( 'T_NAME_FULLY_QUALIFIED' ) ? constant( 'T_NAME_FULLY_QUALIFIED' ) : T_STRING );
 		$files      = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/includes', \FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $files as $file ) {
 			if ( 'php' !== $file->getExtension() ) {
@@ -1176,11 +1177,13 @@ final class VendorReaderLoadTest extends TestCase {
 					$function = $tokens[ $i + 1 ][1];
 					continue;
 				}
-				if ( ! is_array( $token ) || T_STRING !== $token[0] || 'aafm_wc_store_is_core' !== $token[1] || '(' !== ( $tokens[ $i + 1 ] ?? '' ) ) {
+				// PHP 8 reads `\aafm_wc_store_is_core` as one name token; PHP 7.4 reads a separator, then the name.
+				if ( ! is_array( $token ) || ! in_array( $token[0], $names, true ) || 'aafm_wc_store_is_core' !== ltrim( $token[1], '\\' ) || '(' !== ( $tokens[ $i + 1 ] ?? '' ) ) {
 					continue;
 				}
-				$prev   = $tokens[ $i - 1 ] ?? '';
-				$before = $tokens[ $i - 2 ] ?? '';
+				$back   = is_array( $tokens[ $i - 1 ] ?? null ) && T_NS_SEPARATOR === $tokens[ $i - 1 ][0] ? 1 : 0;
+				$prev   = $tokens[ $i - 1 - $back ] ?? '';
+				$before = $tokens[ $i - 2 - $back ] ?? '';
 				if ( is_array( $prev ) && T_FUNCTION === $prev[0] ) {
 					continue;
 				}

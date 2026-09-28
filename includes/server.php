@@ -159,10 +159,8 @@ function aafm_ownership_filter_server_tools( array $enabled, array &$omitted = a
 function aafm_all_server_ability_names(): array {
 	$native  = function_exists( 'aafm_get_enabled_abilities' ) ? aafm_get_enabled_abilities() : array();
 	$bridged = array();
-	if ( function_exists( 'aafm_get_enabled_bridged_abilities' ) ) {
-		foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
-			$bridged[] = aafm_bridge_tool_name( $foreign_slug );
-		}
+	foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
+		$bridged[] = aafm_bridge_tool_name( $foreign_slug );
 	}
 	return array_values( array_unique( array_merge( $native, $bridged ) ) );
 }
@@ -1789,10 +1787,6 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
  */
 function aafm_mcp_guard_unpersisted_session( $response, $server, $request ) {
 	unset( $server );
-
-	if ( ! function_exists( 'aafm_is_mcp_route' ) ) {
-		return $response;
-	}
 
 	// Route check first: rest_post_dispatch fires on every REST request the whole site serves,
 	// and this alone rules out all but the one MCP route. aafm_is_mcp_route(), core's matcher.

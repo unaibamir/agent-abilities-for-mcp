@@ -512,10 +512,7 @@ function aafm_args_wc_list_payment_gateways(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_list_payment_gateways( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( 'WC_Payment_Gateways' ) ) {
 		return aafm_generic_error();
 	}
 	$gateways = \WC_Payment_Gateways::instance()->payment_gateways();
@@ -591,10 +588,7 @@ function aafm_args_wc_get_payment_gateway(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_get_payment_gateway( array $input ) {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( 'WC_Payment_Gateways' ) ) {
 		return aafm_generic_error();
 	}
 	$gateway_id = sanitize_text_field( (string) ( $input['gateway_id'] ?? '' ) );
@@ -723,10 +717,7 @@ function aafm_wc_gateway_write_failed_error( array $persisted, array $failed ): 
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_update_payment_gateway( array $input ) {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( 'WC_Payment_Gateways' ) ) {
 		return aafm_generic_error();
 	}
 	$gateway_id = sanitize_text_field( (string) ( $input['gateway_id'] ?? '' ) );

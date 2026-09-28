@@ -241,3 +241,61 @@ function aafm_get_set_more_html( string $label, string $body ): string {
 		$body
 	);
 }
+
+/**
+ * Render the search box and All / Read Only / Write buttons shared by the integration cards and
+ * the bridge directory. The caller prints the wrapping .aafm-integration-filter element.
+ *
+ * @param string $input_id Id of the search input, which its visually-hidden label points at.
+ * @return void
+ */
+function aafm_render_filter_controls( string $input_id ): void {
+	// Visually-hidden label keeps the search input accessible without adding visible chrome.
+	printf(
+		'<label class="screen-reader-text" for="%1$s">%2$s</label>',
+		esc_attr( $input_id ),
+		esc_html__( 'Search abilities', 'agent-abilities-for-mcp' )
+	);
+	printf(
+		'<input type="search" id="%1$s" class="aafm-integration-search" placeholder="%2$s" autocomplete="off">',
+		esc_attr( $input_id ),
+		esc_attr__( 'Search abilities…', 'agent-abilities-for-mcp' )
+	);
+
+	// All / Read Only / Write toggle group. "All" starts selected. Each button is type="button".
+	echo '<div class="aafm-filter-risk" role="group" aria-label="' . esc_attr__( 'Filter by risk', 'agent-abilities-for-mcp' ) . '">';
+	$risks = array(
+		'all'   => __( 'All', 'agent-abilities-for-mcp' ),
+		'read'  => __( 'Read Only', 'agent-abilities-for-mcp' ),
+		'write' => __( 'Write', 'agent-abilities-for-mcp' ),
+	);
+	foreach ( $risks as $value => $label ) {
+		printf(
+			'<button type="button" class="aafm-filter-btn%1$s" data-filter-risk="%2$s" aria-pressed="%3$s">%4$s</button>',
+			'all' === $value ? ' is-active' : '',
+			esc_attr( $value ),
+			'all' === $value ? 'true' : 'false',
+			esc_html( $label )
+		);
+	}
+	echo '</div>';
+}
+
+/**
+ * Render the head of a stat card: the card's opening element, its label and its icon. The caller
+ * prints the value and any sub line, then closes the card.
+ *
+ * @param string $modifier Modifier class, e.g. 'aafm-stat-abilities'.
+ * @param string $label    Translated label, escaped here.
+ * @param string $icon     Icon name passed to aafm_icon().
+ * @return void
+ */
+function aafm_render_stat_head( string $modifier, string $label, string $icon ): void {
+	echo '<div class="aafm-stat ' . esc_attr( $modifier ) . '">';
+	echo '<div class="stat-top">';
+	echo '<span class="stat-label">' . esc_html( $label ) . '</span>';
+	echo '<span class="stat-ic">';
+	echo wp_kses( aafm_icon( $icon ), aafm_svg_allowed_html() );
+	echo '</span>';
+	echo '</div>';
+}

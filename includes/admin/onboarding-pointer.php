@@ -158,16 +158,10 @@ function aafm_quickconnect_mark_pointer_dismissed_for_user(): void {
  * @return bool
  */
 function aafm_quickconnect_pointer_should_show( string $hook ): bool {
-	if ( '1' !== (string) get_option( 'aafm_menu_pointer_active', '' ) ) {
-		return false;
-	}
-	if ( ! current_user_can( 'manage_options' ) ) {
-		return false;
-	}
-	if ( 'toplevel_page_agent-abilities-for-mcp' === $hook ) {
-		return false;
-	}
-	return ! aafm_quickconnect_pointer_dismissed_for_user();
+	return '1' === (string) get_option( 'aafm_menu_pointer_active', '' )
+		&& current_user_can( 'manage_options' )
+		&& 'toplevel_page_agent-abilities-for-mcp' !== $hook
+		&& ! aafm_quickconnect_pointer_dismissed_for_user();
 }
 
 /**

@@ -61,7 +61,6 @@ function aafm_quickconnect_is_dismissed(): bool {
  *
  *   - an ability is switched on (the option ships empty, so anything at all is a deliberate act)
  *   - an OAuth client is registered
- *   - a grant is live
  *   - an agent has actually called something
  *
  * That last one counts real agent calls through aafm_agent_call_count(), never raw log rows. A
@@ -105,14 +104,7 @@ function aafm_quickconnect_site_looks_configured(): bool {
 	// no client is active, where every row it can match belongs to a revoked or deleted client. It
 	// would suppress the first-run wizard for an administrator who had revoked their only client
 	// and left them no way to get it back.
-	if ( function_exists( 'aafm_oauth_count_active_clients' ) && aafm_oauth_count_active_clients() > 0 ) {
-		return true;
-	}
-	if ( function_exists( 'aafm_agent_call_count' ) && aafm_agent_call_count() > 0 ) {
-		return true;
-	}
-
-	return false;
+	return aafm_oauth_count_active_clients() > 0 || aafm_agent_call_count() > 0;
 }
 
 /**
@@ -125,13 +117,10 @@ function aafm_quickconnect_site_looks_configured(): bool {
  * @return bool
  */
 function aafm_quickconnect_should_render(): bool {
-	if ( ! current_user_can( 'manage_options' ) ) {
-		return false;
-	}
-	if ( aafm_quickconnect_is_finished() || aafm_quickconnect_is_dismissed() ) {
-		return false;
-	}
-	return ! aafm_quickconnect_site_looks_configured();
+	return current_user_can( 'manage_options' )
+		&& ! aafm_quickconnect_is_finished()
+		&& ! aafm_quickconnect_is_dismissed()
+		&& ! aafm_quickconnect_site_looks_configured();
 }
 
 /**

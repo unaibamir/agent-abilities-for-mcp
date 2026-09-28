@@ -449,54 +449,7 @@ function aafm_args_wc_get_order(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'            => array( 'type' => 'integer' ),
-				'number'        => array( 'type' => 'string' ),
-				'status'        => array( 'type' => 'string' ),
-				'currency'      => array( 'type' => 'string' ),
-				'date_created'  => array( 'type' => array( 'string', 'null' ) ),
-				'date_paid'     => array( 'type' => array( 'string', 'null' ) ),
-				'customer_id'   => array( 'type' => 'integer' ),
-				'customer_note' => array( 'type' => 'string' ),
-				'line_items'    => array(
-					'type'  => 'array',
-					'items' => array(
-						'type'                 => 'object',
-						'properties'           => array(
-							'id'         => array(
-								'type'        => 'integer',
-								'description' => __( "The order's own line item id - the value wc-create-order-refund's line_items[].line_item_id expects. Not a product id.", 'agent-abilities-for-mcp' ),
-							),
-							'name'       => array( 'type' => 'string' ),
-							'product_id' => array( 'type' => 'integer' ),
-							'quantity'   => array( 'type' => 'integer' ),
-							'subtotal'   => array( 'type' => 'string' ),
-							'total'      => array( 'type' => 'string' ),
-						),
-						'additionalProperties' => false,
-					),
-				),
-				'totals'        => array(
-					'type'                 => 'object',
-					'properties'           => array(
-						'total'    => array( 'type' => 'string' ),
-						'subtotal' => array( 'type' => 'string' ),
-						'tax'      => array( 'type' => 'string' ),
-						'shipping' => array( 'type' => 'string' ),
-					),
-					'additionalProperties' => false,
-				),
-				'billing'       => array(
-					'type'                 => 'object',
-					'properties'           => aafm_wc_address_schema_props( 'billing', false ),
-					'additionalProperties' => false,
-				),
-				'shipping'      => array(
-					'type'                 => 'object',
-					'properties'           => aafm_wc_address_schema_props( 'shipping', false ),
-					'additionalProperties' => false,
-				),
-			),
+			'properties' => aafm_wc_order_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_order',
 		'permission_callback' => 'aafm_wc_perm',

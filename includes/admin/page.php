@@ -1621,22 +1621,10 @@ function aafm_render_abilities_tab(): void {
 	$ability_total   = aafm_available_ability_count();
 	$ability_enabled = aafm_enabled_ability_count();
 	echo '<div class="aafm-stat-grid aafm-abilities-stats">';
-	echo '<div class="aafm-stat aafm-stat-abilities">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Total abilities', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'abilities' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-abilities', __( 'Total abilities', 'agent-abilities-for-mcp' ), 'abilities' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $ability_total ) ) );
 	echo '</div>';
-	echo '<div class="aafm-stat aafm-stat-enabled">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Enabled', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'bolt' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-enabled', __( 'Enabled', 'agent-abilities-for-mcp' ), 'bolt' );
 	// This stat aggregates core abilities plus every integration's total, so unlike the section
 	// counts below it cannot be recomputed from this tab's own checkboxes after a save (the
 	// integration abilities live on a different page load entirely). It carries its own class

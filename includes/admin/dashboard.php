@@ -204,13 +204,12 @@ function aafm_recent_agent_count(): int {
 /**
  * Whether any user has approved an OAuth connection (a live grant exists).
  *
- * Read-only; returns false when OAuth is disabled or nobody has approved yet so
- * callers never need to guard around the OAuth functions existing.
+ * Read-only; returns false when OAuth is disabled or nobody has approved yet.
  *
  * @return bool
  */
 function aafm_has_oauth_grant(): bool {
-	return function_exists( 'aafm_oauth_list_grants' ) && ! empty( aafm_oauth_list_grants() );
+	return ! empty( aafm_oauth_list_grants() );
 }
 
 /**
@@ -412,13 +411,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<div class="aafm-stat-grid">';
 
 	// Enabled abilities.
-	echo '<div class="aafm-stat aafm-stat-abilities">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Enabled abilities', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'bolt' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-abilities', __( 'Enabled abilities', 'agent-abilities-for-mcp' ), 'bolt' );
 	printf(
 		'<div class="stat-value">%1$s <small>%2$s</small></div>',
 		esc_html( number_format_i18n( $enabled ) ),
@@ -448,25 +441,13 @@ function aafm_render_dashboard_tab(): void {
 	echo '</div>';
 
 	// Recent agents (24h).
-	echo '<div class="aafm-stat aafm-stat-recent">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Recent agents (24h)', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'recent' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-recent', __( 'Recent agents (24h)', 'agent-abilities-for-mcp' ), 'recent' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $recent ) ) );
 	echo '<div class="stat-sub">' . esc_html__( 'Separate agent users seen in the activity log in the last 24 hours. This is recent activity from the log, not a count of live connections.', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '</div>';
 
 	// Audit log.
-	echo '<div class="aafm-stat aafm-stat-audit">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Audit log', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'audit' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-audit', __( 'Audit log', 'agent-abilities-for-mcp' ), 'audit' );
 	printf(
 		'<div class="stat-value">%1$s <small>%2$s</small></div>',
 		esc_html( number_format_i18n( $log_rows ) ),
@@ -495,13 +476,7 @@ function aafm_render_dashboard_tab(): void {
 	// security heads-up computed from the broad candidate set, worded so it does not imply those
 	// admins are agent users.
 	$created_count = count( $created_agents );
-	echo '<div class="aafm-stat aafm-stat-agent-users">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Agent users', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'groups' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-agent-users', __( 'Agent users', 'agent-abilities-for-mcp' ), 'groups' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $created_count ) ) );
 	if ( 0 === $created_count ) {
 		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet', 'agent-abilities-for-mcp' ) . '</div>';

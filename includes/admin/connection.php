@@ -106,7 +106,7 @@ function aafm_diagnostic_checks(): array {
 	$checks = array();
 
 	// 1. Adapter active and at or above the version floor.
-	$version  = function_exists( 'aafm_loaded_adapter_version' ) ? aafm_loaded_adapter_version() : null;
+	$version  = aafm_loaded_adapter_version();
 	$checks[] = array(
 		'id'     => 'adapter',
 		'label'  => __( 'MCP adapter active and compatible', 'agent-abilities-for-mcp' ),
@@ -1058,6 +1058,83 @@ function aafm_format_admin_datetime( string $utc ): string {
 }
 
 /**
+ * Render the OS tabs and client grid shared by the OAuth and App Password pickers.
+ *
+ * @param string               $label_id Id of the OS label that names the tablist.
+ * @param string               $grid_id  Id of the client grid.
+ * @param array<string,string> $clients  Client slug => label, in display order.
+ * @return void
+ */
+function aafm_render_client_picker( string $label_id, string $grid_id, array $clients ): void {
+	echo '<div class="aafm-connect-os">';
+	echo '<div class="aafm-stat-label" id="' . esc_attr( $label_id ) . '">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
+	// The OS tabs are a cross-cutting filter over the per-client snippet pairs (one tablist,
+	// many panels), so they carry no aria-controls (optional in the WAI-ARIA tabs pattern);
+	// the tablist is given an accessible name via aria-labelledby instead.
+	echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="' . esc_attr( $label_id ) . '">';
+	printf(
+		'<button type="button" class="aafm-os-tab is-active" data-os="unix" role="tab" aria-selected="true">%s</button>',
+		esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
+	);
+	printf(
+		'<button type="button" class="aafm-os-tab" data-os="windows" role="tab" aria-selected="false">%s</button>',
+		esc_html__( 'Windows', 'agent-abilities-for-mcp' )
+	);
+	echo '</div>';
+	echo '</div>';
+
+	echo '<div class="aafm-connect-client">';
+	echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-client-grid" id="' . esc_attr( $grid_id ) . '">';
+	$first = true;
+	foreach ( $clients as $slug => $label ) {
+		// A real <button> with aria-pressed, not a click-only div: the OAuth picker is the
+		// only route to the OAuth instructions, so it has to be reachable by keyboard
+		// and announce its selected state. admin.js keeps aria-pressed and .on in step.
+		echo wp_kses(
+			sprintf(
+				'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
+				$first ? ' on' : '',
+				esc_attr( $slug ),
+				aafm_icon( 'client-' . $slug ),
+				esc_html( $label ),
+				$first ? 'true' : 'false'
+			),
+			aafm_admin_allowed_html()
+		);
+		$first = false;
+	}
+	echo '</div>';
+	echo '</div>';
+}
+
+/**
+ * Render one config snippet in a code block with its copy button.
+ *
+ * @param string $snippet The snippet text.
+ * @param string $os      'unix' or 'windows' for an OS-switched block (windows starts hidden), '' for a plain block.
+ * @return void
+ */
+function aafm_render_snippet_block( string $snippet, string $os = '' ): void {
+	if ( '' === $os ) {
+		echo '<div class="aafm-codeblock">';
+	} else {
+		printf( '<div class="aafm-codeblock aafm-snippet" data-os="%s"%s>', esc_attr( $os ), 'windows' === $os ? ' hidden' : '' );
+	}
+	printf( '<pre>%s</pre>', esc_html( $snippet ) );
+	echo wp_kses(
+		sprintf(
+			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
+			esc_attr( $snippet ),
+			aafm_icon( 'copy' ),
+			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		),
+		aafm_admin_allowed_html()
+	);
+	echo '</div>';
+}
+
+/**
  * Render the Connection tab.
  *
  * Layout (OAuth-first):
@@ -1118,48 +1195,7 @@ function aafm_render_connection_tab(): void {
 
 		// OAuth client picker: OS tabs + client grid + per-client instructions and bridge snippet.
 		echo '<div class="aafm-connect-controls aafm-oauth-picker">';
-
-		echo '<div class="aafm-connect-os">';
-		echo '<div class="aafm-stat-label" id="aafm-os-label-oauth">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
-		// The OS tabs are a cross-cutting filter over the per-client snippet pairs (one tablist,
-		// many panels), so they carry no aria-controls (optional in the WAI-ARIA tabs pattern);
-		// the tablist is given an accessible name via aria-labelledby instead.
-		echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="aafm-os-label-oauth">';
-		printf(
-			'<button type="button" class="aafm-os-tab is-active" data-os="unix" role="tab" aria-selected="true">%s</button>',
-			esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
-		);
-		printf(
-			'<button type="button" class="aafm-os-tab" data-os="windows" role="tab" aria-selected="false">%s</button>',
-			esc_html__( 'Windows', 'agent-abilities-for-mcp' )
-		);
-		echo '</div>';
-		echo '</div>';
-
-		echo '<div class="aafm-connect-client">';
-		echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
-		echo '<div class="aafm-client-grid" id="aafm-oauth-clients">';
-		$first = true;
-		foreach ( aafm_quickstart_clients() as $slug => $label ) {
-			// A real <button> with aria-pressed, not a click-only div: this picker is the
-			// only route to the OAuth instructions, so it has to be reachable by keyboard
-			// and announce its selected state. admin.js keeps aria-pressed and .on in step.
-			echo wp_kses(
-				sprintf(
-					'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
-					$first ? ' on' : '',
-					esc_attr( $slug ),
-					aafm_icon( 'client-' . $slug ),
-					esc_html( $label ),
-					$first ? 'true' : 'false'
-				),
-				aafm_admin_allowed_html()
-			);
-			$first = false;
-		}
-		echo '</div>';
-		echo '</div>';
-
+		aafm_render_client_picker( 'aafm-os-label-oauth', 'aafm-oauth-clients', aafm_quickstart_clients() );
 		echo '</div>'; // .aafm-oauth-picker
 
 		// Per-client OAuth instructions + bridge snippet: hidden data cards the JS swaps in.
@@ -1223,31 +1259,8 @@ function aafm_render_connection_tab(): void {
 			}
 
 			// Bridge snippet (shown for both modes; inside <details> for native clients).
-			echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
-			printf( '<pre>%s</pre>', esc_html( $unix_oauth ) );
-			echo wp_kses(
-				sprintf(
-					'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-					esc_attr( $unix_oauth ),
-					aafm_icon( 'copy' ),
-					esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-				),
-				aafm_admin_allowed_html()
-			);
-			echo '</div>';
-
-			echo '<div class="aafm-codeblock aafm-snippet" data-os="windows" hidden>';
-			printf( '<pre>%s</pre>', esc_html( $windows_oauth ) );
-			echo wp_kses(
-				sprintf(
-					'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-					esc_attr( $windows_oauth ),
-					aafm_icon( 'copy' ),
-					esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-				),
-				aafm_admin_allowed_html()
-			);
-			echo '</div>';
+			aafm_render_snippet_block( $unix_oauth, 'unix' );
+			aafm_render_snippet_block( $windows_oauth, 'windows' );
 
 			if ( 'native' === $mode ) {
 				echo '</details>'; // .aafm-bridge-alt
@@ -1387,46 +1400,7 @@ function aafm_render_connection_tab(): void {
 
 	// OS toggle + client picker row.
 	echo '<div class="aafm-card-pad aafm-connect-controls">';
-
-	echo '<div class="aafm-connect-os">';
-	echo '<div class="aafm-stat-label" id="aafm-os-label-bridge">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
-	// The .aafm-seg buttons double as the OS tabs admin.js binds (aafm-os-tab + data-os).
-	// One tablist filters many snippet panels, so no aria-controls; named via aria-labelledby.
-	echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="aafm-os-label-bridge">';
-	printf(
-		'<button type="button" class="aafm-os-tab is-active" data-os="unix" role="tab" aria-selected="true">%s</button>',
-		esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
-	);
-	printf(
-		'<button type="button" class="aafm-os-tab" data-os="windows" role="tab" aria-selected="false">%s</button>',
-		esc_html__( 'Windows', 'agent-abilities-for-mcp' )
-	);
-	echo '</div>';
-	echo '</div>';
-
-	echo '<div class="aafm-connect-client">';
-	echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
-	echo '<div class="aafm-client-grid" id="aafm-clients">';
-	$first = true;
-	foreach ( aafm_config_snippet_clients() as $slug => $label ) {
-		// Same contract as the OAuth picker above: a focusable <button> carrying its own
-		// pressed state, so the card is operable without a mouse.
-		echo wp_kses(
-			sprintf(
-				'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
-				$first ? ' on' : '',
-				esc_attr( $slug ),
-				aafm_icon( 'client-' . $slug ),
-				esc_html( $label ),
-				$first ? 'true' : 'false'
-			),
-			aafm_admin_allowed_html()
-		);
-		$first = false;
-	}
-	echo '</div>';
-	echo '</div>';
-
+	aafm_render_client_picker( 'aafm-os-label-bridge', 'aafm-clients', aafm_config_snippet_clients() );
 	echo '</div>'; // .aafm-connect-controls
 
 	// Primary config block: the default (first) client, one .aafm-codeblock per OS.
@@ -1439,31 +1413,8 @@ function aafm_render_connection_tab(): void {
 	$unix_snippet    = aafm_client_snippet( 'claude-code', $existing_agent_login, 'unix' );
 	$windows_snippet = aafm_client_snippet( 'claude-code', $existing_agent_login, 'windows' );
 
-	echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
-	printf( '<pre>%s</pre>', esc_html( $unix_snippet ) );
-	echo wp_kses(
-		sprintf(
-			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-			esc_attr( $unix_snippet ),
-			aafm_icon( 'copy' ),
-			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-		),
-		aafm_admin_allowed_html()
-	);
-	echo '</div>';
-
-	echo '<div class="aafm-codeblock aafm-snippet" data-os="windows" hidden>';
-	printf( '<pre>%s</pre>', esc_html( $windows_snippet ) );
-	echo wp_kses(
-		sprintf(
-			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-			esc_attr( $windows_snippet ),
-			aafm_icon( 'copy' ),
-			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-		),
-		aafm_admin_allowed_html()
-	);
-	echo '</div>';
+	aafm_render_snippet_block( $unix_snippet, 'unix' );
+	aafm_render_snippet_block( $windows_snippet, 'windows' );
 
 	// Windows / certificate notices.
 	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves - use the Windows tab above.', 'agent-abilities-for-mcp' );
@@ -1507,18 +1458,7 @@ function aafm_render_connection_tab(): void {
 		echo '<div class="aafm-quickstart-card" data-client="' . esc_attr( $slug ) . '" data-config="' . esc_attr( $snippet ) . '">';
 		echo '<h4 class="aafm-quickstart-name">' . esc_html( $label ) . '</h4>';
 		echo '<p class="aafm-quickstart-where">' . esc_html( aafm_quickstart_note( $slug ) ) . '</p>';
-		echo '<div class="aafm-codeblock">';
-		printf( '<pre>%s</pre>', esc_html( $snippet ) );
-		echo wp_kses(
-			sprintf(
-				'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-				esc_attr( $snippet ),
-				aafm_icon( 'copy' ),
-				esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-			),
-			aafm_admin_allowed_html()
-		);
-		echo '</div>';
+		aafm_render_snippet_block( $snippet );
 		echo '</div>';
 	}
 	echo '</div>';

@@ -280,19 +280,7 @@ function aafm_exec_get_media( array $input ) {
 		);
 	};
 
-	$attachments = array();
-	$total       = 0;
-	if ( 'all' === $lang ) {
-		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$shaped      = $shape_language( $code );
-			$attachments = array_merge( $attachments, $shaped['rows'] );
-			$total      += $shaped['found'];
-		}
-	} else {
-		$shaped      = $shape_language( $lang );
-		$attachments = $shaped['rows'];
-		$total       = $shaped['found'];
-	}
+	list( $attachments, $total ) = aafm_collect_by_language( $lang, $shape_language );
 
 	return array(
 		'media'    => $attachments,

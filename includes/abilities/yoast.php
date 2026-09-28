@@ -615,19 +615,12 @@ function aafm_exec_yoast_update_post( array $input ) {
 		$intended[ $spec['key'] ] = implode( ',', $kept );
 	}
 
-	if ( array() === $intended ) {
-		return aafm_seo_group_write_response(
-			'aafm_yoast_write_unconfirmed',
-			$id,
-			array(
-				'status' => AAFM_WRITE_UNCHANGED,
-				'keys'   => array(),
-			),
-			'aafm_yoast_read_fields'
-		);
-	}
+	$result = array() === $intended ? array(
+		'status' => AAFM_WRITE_UNCHANGED,
+		'keys'   => array(),
+	) : aafm_yoast_write_meta( $id, $intended );
 
-	return aafm_seo_group_write_response( 'aafm_yoast_write_unconfirmed', $id, aafm_yoast_write_meta( $id, $intended ), 'aafm_yoast_read_fields' );
+	return aafm_seo_group_write_response( 'aafm_yoast_write_unconfirmed', $id, $result, 'aafm_yoast_read_fields' );
 }
 
 /**

@@ -286,10 +286,11 @@ function aafm_exec_get_comments( array $input ): array {
 	// while the list above still omits every comment it could not prove readable.
 	$truncated = false;
 	if ( count( (array) $scanned ) < $raw_total ) {
-		$excluded  = array_map(
+		$ids_of    = static fn( array $comments ): array => array_map(
 			static fn( $comment ): int => $comment instanceof WP_Comment ? (int) $comment->comment_ID : 0,
-			(array) $scanned
+			$comments
 		);
+		$excluded  = $ids_of( (array) $scanned );
 		$probe_cap = 2; // Small, fixed reserve - see the docblock above for why an unresolved probe defaults to true rather than growing without bound.
 		for ( $i = 0; $i < $probe_cap; $i++ ) {
 			$probe = get_comments(
@@ -306,13 +307,7 @@ function aafm_exec_get_comments( array $input ): array {
 			if ( count( (array) $probe ) < $scan_cap ) {
 				break; // A short batch proves no more approved comments exist at all: stays false.
 			}
-			$excluded = array_merge(
-				$excluded,
-				array_map(
-					static fn( $comment ): int => $comment instanceof WP_Comment ? (int) $comment->comment_ID : 0,
-					(array) $probe
-				)
-			);
+			$excluded = array_merge( $excluded, $ids_of( (array) $probe ) );
 			if ( $i === $probe_cap - 1 ) {
 				$truncated = true; // Reserve exhausted without resolving either way: unknown, so assume yes.
 			}

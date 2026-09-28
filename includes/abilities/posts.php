@@ -311,25 +311,32 @@ function aafm_exec_get_posts( array $input ) {
 		);
 	};
 
-	$posts = array();
-	$total = 0;
-	if ( 'all' === $lang ) {
-		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$shaped = $shape_language( $code );
-			$posts  = array_merge( $posts, $shaped['rows'] );
-			$total += $shaped['found'];
-		}
-	} else {
-		$shaped = $shape_language( $lang );
-		$posts  = $shaped['rows'];
-		$total  = $shaped['found'];
-	}
+	list( $posts, $total ) = aafm_collect_by_language( $lang, $shape_language );
 
 	return array(
 		'posts'    => $posts,
 		'total'    => $total,
 		'language' => $lang,
 	);
+}
+
+/**
+ * Shape one language, or every WPML language when $lang is 'all', joining the rows in language
+ * order and summing each language's found count.
+ *
+ * @param string|null $lang           A resolved language code, 'all', or null.
+ * @param callable    $shape_language Maps one language code to an array of 'rows' (a list) and 'found' (an int).
+ * @return array<int,mixed> The joined rows at index 0 and the summed total at index 1.
+ */
+function aafm_collect_by_language( ?string $lang, callable $shape_language ): array {
+	$rows  = array();
+	$total = 0;
+	foreach ( 'all' === $lang ? aafm_wpml_all_language_codes_for_iteration() : array( $lang ) as $code ) {
+		$shaped = $shape_language( $code );
+		$rows   = array_merge( $rows, $shaped['rows'] );
+		$total += $shaped['found'];
+	}
+	return array( $rows, $total );
 }
 
 /**

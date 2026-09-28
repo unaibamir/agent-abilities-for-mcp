@@ -611,10 +611,10 @@ function aafm_policy_options(): array {
  * such as the MCP adapter's STDIO server, reads each policy row per call.
  *
  * A "no" is never kept, and a later read in the same request decides again. A read before
- * WordPress routes a REST request and a front-end page load read policy as 1.7.5 did, and so do the
- * OAuth authorize request and the root /.well-known/ documents, which are not REST-routed; their
- * /wp-json/ copies are REST routes and batch. A "yes" is kept for the request and registers the
- * memo's hooks.
+ * WordPress routes a REST request and a front-end page load read policy as 9626307 did (no
+ * stale-copy check), and so do the OAuth authorize request and the root /.well-known/ documents,
+ * which are not REST-routed; their /wp-json/ copies are REST routes and batch. A "yes" is kept for
+ * the request and registers the memo's hooks.
  *
  * @return bool
  */
@@ -764,9 +764,9 @@ function aafm_policy_forget_row( $option ): void {
 }
 
 /**
- * A transient counter's value, read so a failed read never restarts the count. With no external
- * object cache, a transient get_transient() did not answer is read from its row: an unreadable row
- * gives null, no row gives 0.
+ * A transient counter's value. With no external object cache, a failed read never restarts the
+ * count: a transient get_transient() did not answer is read from its row, where an unreadable row
+ * gives null and no row gives 0. With one, a miss and a failed backend both read 0.
  *
  * @param string $transient Transient name.
  * @return int|null Null when the count cannot be read.

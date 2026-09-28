@@ -45,7 +45,10 @@ function aafm_agent_user_candidates(): array {
 		}
 
 		// Roles and the admin flag are read inside the checked-read scope. A caps load that fails
-		// shows no roles and flags the account as an administrator, the cautious reading.
+		// there shows no roles and flags the account as an administrator, the cautious reading. The
+		// application-passwords read above loads the same usermeta first, outside the scope, so that
+		// row appears only when the cache did not keep that load; a load that fails above drops the
+		// user from this list instead.
 		$read = aafm_with_checked_reads(
 			static function () use ( $user_id ): array {
 				$wp_user = aafm_exact_object( 'user', $user_id );

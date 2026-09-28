@@ -123,12 +123,13 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 	}
 
 	// 3. Re-entrancy guard. Everything below can build site URLs (aafm_endpoint_url() at step 9),
-	// which fires the site-wide home_url/rest_url filter chains DURING user resolution. WordPress's _wp_get_current_user() has no re-entrancy lock, so a
-	// third-party filter on those URLs that calls a current-user function would re-enter this callback
-	// and recurse until memory is exhausted (a white-screen). Once we are already resolving, a nested
-	// call resolves no OAuth user. The bearer read above stays outside the guard so bearer-less
-	// traffic is unaffected. This CANNOT deadlock a legitimate token: only a nested (re-entrant) call
-	// sees the flag set; the outer call always resets it in the finally below.
+	// which fires the site-wide home_url/rest_url filter chains DURING user resolution. WordPress's
+	// _wp_get_current_user() has no re-entrancy lock, so a third-party filter on those URLs that
+	// calls a current-user function would re-enter this callback and recurse until memory is
+	// exhausted (a white-screen). Once we are already resolving, a nested call resolves no OAuth
+	// user. The bearer read above stays outside the guard so bearer-less traffic is unaffected. This
+	// CANNOT deadlock a legitimate token: only a nested (re-entrant) call sees the flag set; the
+	// outer call always resets it in the finally below.
 	static $resolving = false;
 	if ( $resolving ) {
 		return $user_id;
@@ -241,9 +242,11 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			(string) $row['client_id']
 		);
 
-		// 12. M16: record the resolved client_id purely for activity-log attribution. Read-only -
-		// this happens only after the token has fully resolved a user through every guard above, so
-		// it can never influence the auth decision itself, only observability of its outcome.
+		// 12. M16: record the resolved client_id. The activity-log rows attribute calls by it, the
+		// allowlist keys its per-connection scopes on it (aafm_ability_allowed_for_principal()), and
+		// aafm_oauth_confine_bearer_to_mcp_handler() reads it as the marker that the current user came
+		// from our bearer. It is written only after the token has resolved a user through every guard
+		// above, so it cannot change this resolution.
 		aafm_oauth_current_client_id( (string) $row['client_id'] );
 
 		return (int) $row['wp_user_id'];
@@ -278,9 +281,10 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
 	 * Filter the capabilities an OAuth-authenticated request may exercise.
 	 *
 	 * Return null (the default) to apply NO restriction - the token acts with the approving
-	 * user's full capabilities, exactly as before. Return an array of capability => bool to cap the
-	 * token to that allow-list for the current request; any capability not present in the map is
-	 * denied.
+	 * user's full capabilities, exactly as before. Return an array of capability => bool to replace
+	 * the capabilities for the rest of this MCP request: each listed capability is granted or denied
+	 * outright, a capability the approver lacks included, and any capability not in the map is
+	 * denied. The map applies to every user_has_cap check in that request, whichever user it is for.
 	 *
 	 * @param array<string,bool>|null $caps      Capability allow-map, or null for no restriction.
 	 * @param string                  $scope     The scope the token was minted with (may be '').

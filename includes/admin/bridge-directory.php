@@ -149,38 +149,8 @@ function aafm_render_bridge_collision_notice(): void {
  * @return void
  */
 function aafm_render_bridge_filter(): void {
-	$input_id = 'aafm-bridge-search';
-
 	echo '<div class="aafm-integration-filter aafm-bridge-filter" id="aafm-bridge-filter">';
-
-	printf(
-		'<label class="screen-reader-text" for="%1$s">%2$s</label>',
-		esc_attr( $input_id ),
-		esc_html__( 'Search abilities', 'agent-abilities-for-mcp' )
-	);
-	printf(
-		'<input type="search" id="%1$s" class="aafm-integration-search" placeholder="%2$s" autocomplete="off">',
-		esc_attr( $input_id ),
-		esc_attr__( 'Search abilities…', 'agent-abilities-for-mcp' )
-	);
-
-	echo '<div class="aafm-filter-risk" role="group" aria-label="' . esc_attr__( 'Filter by risk', 'agent-abilities-for-mcp' ) . '">';
-	$risks = array(
-		'all'   => __( 'All', 'agent-abilities-for-mcp' ),
-		'read'  => __( 'Read Only', 'agent-abilities-for-mcp' ),
-		'write' => __( 'Write', 'agent-abilities-for-mcp' ),
-	);
-	foreach ( $risks as $value => $label ) {
-		printf(
-			'<button type="button" class="aafm-filter-btn%1$s" data-filter-risk="%2$s" aria-pressed="%3$s">%4$s</button>',
-			'all' === $value ? ' is-active' : '',
-			esc_attr( $value ),
-			'all' === $value ? 'true' : 'false',
-			esc_html( $label )
-		);
-	}
-	echo '</div>';
-
+	aafm_render_filter_controls( 'aafm-bridge-search' );
 	echo '</div>';
 }
 

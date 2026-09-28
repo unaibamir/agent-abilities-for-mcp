@@ -1546,6 +1546,7 @@ class ValidatorTest extends TestCase {
 	 * @return array<string,mixed>
 	 */
 	private function watch_rest_api_init_user(): array {
+		$this->assertTrue( $this->isInIsolation(), 'This defines REST_REQUEST, so only a test in its own process may call it.' );
 		$seen = array();
 		add_action(
 			'rest_api_init',
@@ -1864,6 +1865,7 @@ class ValidatorTest extends TestCase {
 	 * @return array<string,mixed> The same.
 	 */
 	private function serve_mcp_through_core( array &$served = array() ): array {
+		$this->assertTrue( $this->isInIsolation(), 'rest_api_loaded() defines REST_REQUEST, so only a test in its own process may call this.' );
 		$this->make_rest_route_a_query_var();
 		$_SERVER['REQUEST_URI'] = '/?rest_route=' . aafm_mcp_rest_route();
 		$_SERVER['PHP_SELF']    = '/index.php';

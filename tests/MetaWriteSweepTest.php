@@ -311,7 +311,8 @@ final class MetaWriteSweepTest extends TestCase {
 	 * defines them, so `\update_post_meta(` and `namespace\delete_post_meta(` are matched on
 	 * PHP 8 the same way a bare `update_post_meta(` is. PHP 7.4 tokenizes the same source as
 	 * T_NS_SEPARATOR (or, after T_NAMESPACE for the relative form) plus a T_STRING, which the
-	 * T_STRING branch already matches, so the floor needs no separate handling.
+	 * T_STRING branch already matches; the checks that read the token before a name (whether
+	 * it follows `new`) step back over that T_NS_SEPARATOR first.
 	 *
 	 * @return int[]
 	 */
@@ -620,7 +621,10 @@ final class MetaWriteSweepTest extends TestCase {
 			$lname = strtolower( $name );
 
 			$prev_idx = $this->previous_significant_index( $tokens, $i - 1 );
-			$prev     = null !== $prev_idx ? $tokens[ $prev_idx ] : null;
+			if ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && T_NS_SEPARATOR === $tokens[ $prev_idx ][0] ) {
+				$prev_idx = $this->previous_significant_index( $tokens, $prev_idx - 1 );
+			}
+			$prev = null !== $prev_idx ? $tokens[ $prev_idx ] : null;
 
 			$preceded_by_operator = is_array( $prev ) && in_array( $prev[0], $operator_tokens, true );
 			$preceded_by_colons   = is_array( $prev ) && T_DOUBLE_COLON === $prev[0];
@@ -2439,11 +2443,14 @@ PHP;
 				}
 				list( $open, $open_idx ) = $this->significant_token( $tokens, $i + 1 );
 				$prev_idx                = $this->previous_significant_index( $tokens, $i - 1 );
-				$prev                    = null === $prev_idx ? null : $tokens[ $prev_idx ];
-				$by_method               = is_array( $prev ) && in_array( $prev[0], $methods, true );
-				$by_new                  = is_array( $prev ) && T_NEW === $prev[0];
-				$plain                   = '(' === $open && ! $by_method && ! $by_new;
-				$name                    = $this->resolved_function_name( $token[1], $aliases );
+				if ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && T_NS_SEPARATOR === $tokens[ $prev_idx ][0] ) {
+					$prev_idx = $this->previous_significant_index( $tokens, $prev_idx - 1 );
+				}
+				$prev      = null === $prev_idx ? null : $tokens[ $prev_idx ];
+				$by_method = is_array( $prev ) && in_array( $prev[0], $methods, true );
+				$by_new    = is_array( $prev ) && T_NEW === $prev[0];
+				$plain     = '(' === $open && ! $by_method && ! $by_new;
+				$name      = $this->resolved_function_name( $token[1], $aliases );
 				if ( in_array( $name, $known, true ) && ! $by_method ) {
 					$references[ $name ][] = $plain ? $this->argument_kinds( $tokens, $open_idx, $known ) : null;
 				}
@@ -3371,6 +3378,9 @@ PHP;
 				continue;
 			}
 			$prev_idx = $this->previous_significant_index( $tokens, $i - 1 );
+			if ( null !== $prev_idx && is_array( $tokens[ $prev_idx ] ) && T_NS_SEPARATOR === $tokens[ $prev_idx ][0] ) {
+				$prev_idx = $this->previous_significant_index( $tokens, $prev_idx - 1 );
+			}
 			if ( null === $prev_idx || ! is_array( $tokens[ $prev_idx ] ) || T_NEW !== $tokens[ $prev_idx ][0] ) {
 				continue;
 			}
@@ -3397,6 +3407,11 @@ PHP;
 
 	public function test_flags_an_error_after_a_metadata_write_without_the_writer_error_data(): void {
 		$source = "<?php\nfunction f( \$id ) {\n\t\$r = aafm_meta_delete( 'post', \$id, 'k' );\n\treturn new WP_Error( 'x', 'y' );\n}\n";
+		$this->assertSame( array( 'includes/fixture.php|f|1' ), $this->meta_writer_error_keys( $source, 'includes/fixture.php' ) );
+	}
+
+	public function test_flags_a_fully_qualified_error_after_a_metadata_write(): void {
+		$source = "<?php\nfunction f( \$id ) {\n\t\$r = aafm_meta_delete( 'post', \$id, 'k' );\n\treturn new \\WP_Error( 'x', 'y' );\n}\n";
 		$this->assertSame( array( 'includes/fixture.php|f|1' ), $this->meta_writer_error_keys( $source, 'includes/fixture.php' ) );
 	}
 

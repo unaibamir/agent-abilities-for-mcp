@@ -104,9 +104,10 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 
 	/**
 	 * The token types a name can arrive as: T_STRING always, plus PHP 8's name tokens where the
-	 * running PHP defines them. PHP 7.4 splits `\WP_Query` or `Ns\WP_Query` into T_NAMESPACE,
-	 * T_NS_SEPARATOR and T_STRING pieces instead, so calls_in() walks past them after `new` to
-	 * the last one. Same list as MetaWriteSweepTest::name_token_types().
+	 * running PHP defines them. PHP 7.4 splits `\WP_Query` into T_NS_SEPARATOR and T_STRING,
+	 * `Ns\WP_Query` into T_STRING, T_NS_SEPARATOR and T_STRING, and `namespace\WP_Query` into
+	 * T_NAMESPACE, T_NS_SEPARATOR and T_STRING, so calls_in() walks past those pieces after
+	 * `new` to the last one. Same list as MetaWriteSweepTest::name_token_types().
 	 *
 	 * @return int[]
 	 */

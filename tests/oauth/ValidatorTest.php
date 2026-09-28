@@ -1512,22 +1512,25 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * An Application Password request carries no aafm_oat_ bearer, so rest_api_init leaves its cached
+	 * An Application Password or a JWT bearer carries no aafm_oat_ token, so rest_api_init leaves its cached
 	 * lookup alone, as before. Driven through core's rest_api_loaded(), in its own process.
 	 *
+	 * @testWith ["Basic c29tZW9uZTphYmNkIGVmZ2ggaWprbCBtbm9wIHFyc3QgdXZ3eA=="]
+	 *           ["Bearer eyJhbGciOiJIUzI1NiJ9.e30.c2ln"]
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
+	 * @param string $authorization The Authorization header.
 	 */
-	public function test_registration_without_our_bearer_is_left_alone(): void {
+	public function test_registration_without_our_bearer_is_left_alone( string $authorization ): void {
 		$this->route_off_mcp();
-		$this->set_bearer( 'Basic ' . base64_encode( 'someone:abcd efgh ijkl mnop qrst uvwx' ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- a Basic credential header, not obfuscation.
+		$this->set_bearer( $authorization );
 
 		$GLOBALS['current_user'] = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the lookup WP::init() makes.
-		wp_get_current_user();
-		$seen = array();
+		$seen                    = array( 'cached' => wp_get_current_user() );
 		add_action(
 			'rest_api_init',
 			static function () use ( &$seen ): void {
+				$seen['kept'] = $GLOBALS['current_user'] ?? null;
 				$seen['user'] = get_current_user_id();
 			},
 			1
@@ -1535,6 +1538,7 @@ class ValidatorTest extends TestCase {
 		$this->serve_mcp_through_core();
 
 		$this->assertSame( 0, $seen['user'] ?? null );
+		$this->assertSame( $seen['cached'], $seen['kept'] ?? null, 'rest_api_init sees the user object cached before the parse.' );
 	}
 
 	/**

@@ -335,16 +335,14 @@ function aafm_review_request_eligible(): bool {
 		// so merging them forward loses nothing: the stamp still cannot be restarted or shortened
 		// by a log clear.
 		if ( $changed ) {
-			wp_cache_delete( 'aafm_review_request', 'options' );
-			// The option's own key is only half of the cache. get_option() consults the
-			// 'notoptions' blob BEFORE the per-option cache and records a missing row there on the
-			// first read, so on a site where the row does not exist yet - a fresh install, or one
-			// the operator has just reset - dropping the key alone leaves the re-read answering
-			// defaults out of memory without ever reaching the database. It would then miss an
-			// answer another tab stored in the meantime and write straight over it. Core rebuilds
-			// the blob on the next miss, so this costs one cache round trip on a path that is
-			// about to write anyway.
-			wp_cache_delete( 'notoptions', 'options' );
+			// The re-read has to reach the database. get_option() consults the 'notoptions' blob
+			// BEFORE the per-option cache and records a missing row there on the first read, so on a
+			// site where the row does not exist yet (a fresh install, or one the operator has just
+			// reset) a re-read with that entry still cached answers defaults out of memory. It would
+			// then miss an answer another tab stored in the meantime and write straight over it. So
+			// this option comes out of the per-option cache, alloptions and notoptions, and every other
+			// plugin's cached entries stay as they are.
+			aafm_forget_option_caches( 'aafm_review_request' );
 			$fresh = aafm_review_request_state();
 			if ( in_array( $fresh['status'], array( 'reviewed', 'dismissed' ), true ) ) {
 				// Answered for good while this request was counting. Leaving the stored answer alone

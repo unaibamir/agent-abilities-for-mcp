@@ -450,6 +450,22 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * The cache drop before that re-read removes this plugin's option only. Another plugin's "no
+	 * such option" entry in the notoptions blob is still cached after the stamp is written.
+	 */
+	public function test_the_stamp_leaves_other_plugins_notoptions_entries_alone(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 1 );
+		$this->assertFalse( get_option( 'another_plugin_absent_option', false ) );
+		$this->assertArrayHasKey( 'another_plugin_absent_option', (array) wp_cache_get( 'notoptions', 'options' ) );
+
+		aafm_review_request_eligible();
+
+		$this->assertGreaterThan( 0, aafm_review_request_state()['first_success_seen_at'], 'The stamp was written.' );
+		$this->assertArrayHasKey( 'another_plugin_absent_option', (array) wp_cache_get( 'notoptions', 'options' ) );
+	}
+
+	/**
 	 * Until the threshold latches, the eligibility check runs the count on every admin page load,
 	 * and a site that stays under ten successes never latches, so that is forever. It reads the
 	 * same five-minute memo the heading does. Both fields it can move only move one way, so a

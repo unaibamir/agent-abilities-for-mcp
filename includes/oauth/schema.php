@@ -24,7 +24,7 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// tables so the requested OAuth scope is persisted through code -> token and is
 	// recorded/auditable (it previously reached the code context but was discarded at mint).
 	// The column defaults to '' so existing rows and the current "acts as the approver's
-	// full account" behaviour are unchanged; narrowing is opt-in via the
+	// full account" behaviour are unchanged; a map replacing the listed caps is opt-in via the
 	// aafm_oauth_token_capabilities filter. Bumping the version makes
 	// aafm_maybe_upgrade_oauth_tables() re-run dbDelta so existing installs pick the change
 	// up (additive - one nullable-defaulted column per table, no data migration).

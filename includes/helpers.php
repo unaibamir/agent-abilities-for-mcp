@@ -608,7 +608,8 @@ function aafm_policy_options(): array {
  * request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own parsed
  * rest_route (the empty() test rest_api_loaded() applies). The request path is never read. The
  * batch lives only in a process that serves one request (HTTP, admin, cron). A WP-CLI process,
- * such as the MCP adapter's STDIO server, reads each policy row per call.
+ * such as the MCP adapter's STDIO server, keeps no batch and no memo and reads policy as 9626307
+ * did.
  *
  * A "no" is never kept, and a later read in the same request decides again. A read before
  * WordPress routes a REST request and a front-end page load read policy as 9626307 did (no

@@ -33,12 +33,11 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
  *
  * Only aafm_oauth_resolve_current_user() writes it, and only AFTER a token has already fully resolved
  * a user. It never grants anything, but it has three kinds of reader: the activity-log rows for
- * ability calls, transport outcomes and write outcomes record it as the calling connection; the
- * allowlist keys its per-connection scope on it as the principal's client; and
+ * ability calls, discovery denials, transport outcomes and write outcomes record it as the calling
+ * connection; the allowlist keys its per-connection scope on it as the principal's client; and
  * aafm_oauth_confine_bearer_to_mcp_handler() reads a non-empty value as the marker that the current
- * user came from our bearer. Mirrors the
- * aafm_remember_raw_permission() static store in register.php. A non-OAuth (Application
- * Password/cookie) request never writes it.
+ * user came from our bearer. Mirrors the aafm_remember_raw_permission() static store in
+ * register.php. A non-OAuth (Application Password/cookie) request never writes it.
  *
  * The store has to be per request, and a bare function static is not that on its own. On php-fpm and
  * mod_php the process ends with the request, so the two are the same. Under a persistent worker SAPI
@@ -362,7 +361,9 @@ add_action( 'shutdown', 'aafm_oauth_forget_rest_routing' );
  * bearer resolves then. Entry points that never parse (wp-admin, admin-ajax, admin-post,
  * wp-comments-post, cron, CLI) and requests answered during parse_request (the discovery documents)
  * never match, even on a site where a plugin built the REST server before the parse. What is left is
- * code that builds the REST server inside an early parse_request callback on a non-REST request.
+ * code that builds the REST server inside an early parse_request callback on a non-REST request, and,
+ * as for core's Application Passwords, code that defines REST_REQUEST itself on a request core does
+ * not serve as REST.
  *
  * @return bool True only when core routed the request to the MCP endpoint.
  */

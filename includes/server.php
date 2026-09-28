@@ -126,7 +126,9 @@ function aafm_build_server_tools( array $enabled, array &$omitted = array() ): a
 function aafm_ownership_filter_server_tools( array $enabled, array &$omitted = array() ): array {
 	$owned = array();
 	foreach ( $enabled as $name ) {
-		$ability = wp_get_ability( $name );
+		// wp_has_ability() first: an enabled name with nothing registered (a bridge wrapper whose host
+		// plugin is inactive) is ordinary, and wp_get_ability() raises _doing_it_wrong for it.
+		$ability = wp_has_ability( $name ) ? wp_get_ability( $name ) : null;
 		if ( ! $ability instanceof WP_Ability ) {
 			continue;
 		}
@@ -933,7 +935,7 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
 	$enabled_by_tool_name = array();
 	foreach ( aafm_all_server_ability_names() as $ability_name ) {
 		$tool_name = aafm_mcp_tool_name( $ability_name );
-		$ability   = function_exists( 'wp_get_ability' ) ? wp_get_ability( $ability_name ) : null;
+		$ability   = function_exists( 'wp_get_ability' ) && wp_has_ability( $ability_name ) ? wp_get_ability( $ability_name ) : null;
 		if ( $ability instanceof WP_Ability ) {
 			/** This filter is defined by the MCP adapter (RegisterAbilityAsMcpTool::resolve_tool_name). */
 			$filtered = apply_filters( 'mcp_adapter_tool_name', $tool_name, $ability ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook; we apply it to match its tool-name derivation.
@@ -1230,7 +1232,7 @@ function aafm_schema_bounds_walk( $value, int $depth, int &$nodes ): ?string {
  *                     when within bounds.
  */
 function aafm_schema_bounds_violation( string $ability_name ): ?string {
-	$ability = function_exists( 'wp_get_ability' ) ? wp_get_ability( $ability_name ) : null;
+	$ability = function_exists( 'wp_get_ability' ) && wp_has_ability( $ability_name ) ? wp_get_ability( $ability_name ) : null;
 	if ( ! $ability instanceof WP_Ability ) {
 		return null;
 	}

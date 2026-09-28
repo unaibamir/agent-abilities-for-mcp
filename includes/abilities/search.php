@@ -214,19 +214,7 @@ function aafm_exec_search_content( array $input ) {
 		);
 	};
 
-	$results = array();
-	$total   = 0;
-	if ( 'all' === $lang ) {
-		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$shaped  = $shape_language( $code );
-			$results = array_merge( $results, $shaped['rows'] );
-			$total  += $shaped['found'];
-		}
-	} else {
-		$shaped  = $shape_language( $lang );
-		$results = $shaped['rows'];
-		$total   = $shaped['found'];
-	}
+	list( $results, $total ) = aafm_collect_by_language( $lang, $shape_language );
 
 	return array(
 		'results'  => $results,

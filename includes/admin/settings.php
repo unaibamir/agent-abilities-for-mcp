@@ -322,20 +322,12 @@ function aafm_ajax_save_settings(): void {
 	}
 
 	wp_send_json_success(
-		array(
-			'aafm_rate_limit_per_min'           => $clean['aafm_rate_limit_per_min'],
-			'aafm_max_title_len'                => $clean['aafm_max_title_len'],
-			'aafm_log_retention_days'           => $clean['aafm_log_retention_days'],
-			'aafm_force_draft'                  => $clean['aafm_force_draft'],
-			'aafm_block_guard_strict'           => $clean['aafm_block_guard_strict'],
-			'aafm_delete_data_on_uninstall'     => $clean['aafm_delete_data_on_uninstall'],
-			'aafm_high_risk_abilities_unlocked' => $clean['aafm_high_risk_abilities_unlocked'],
-			'aafm_read_only_mode'               => $clean['aafm_read_only_mode'],
-			'aafm_oauth_enabled'                => $clean['aafm_oauth_enabled'],
-			'aafm_oauth_dcr_enabled'            => $clean['aafm_oauth_dcr_enabled'],
-			'aafm_ip_allowlist'                 => $clean['aafm_ip_allowlist'],
-			'aafm_ip_allowlist_text'            => implode( "\n", $clean['aafm_ip_allowlist'] ),
-			'aafm_ip_dropped'                   => $dropped,
+		array_merge(
+			$clean,
+			array(
+				'aafm_ip_allowlist_text' => implode( "\n", $clean['aafm_ip_allowlist'] ),
+				'aafm_ip_dropped'        => $dropped,
+			)
 		)
 	);
 }

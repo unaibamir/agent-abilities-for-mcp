@@ -154,13 +154,9 @@ function aafm_slim_seo_write_meta( int $id, array $changes ) {
 		return $result;
 	}
 
-	$merged = is_array( $stored['value'] ) ? $stored['value'] : array();
-	foreach ( $changes as $field => $value ) {
-		$merged[ $field ] = $value;
-	}
+	$merged = array_replace( is_array( $stored['value'] ) ? $stored['value'] : array(), $changes );
 
-	$result = aafm_meta_set( 'post', $id, 'slim_seo', $merged, (string) get_object_subtype( 'post', $id ), false );
-	return $result;
+	return aafm_meta_set( 'post', $id, 'slim_seo', $merged, (string) get_object_subtype( 'post', $id ), false );
 }
 
 /**

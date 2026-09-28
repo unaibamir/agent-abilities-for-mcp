@@ -280,3 +280,22 @@ function aafm_render_filter_controls( string $input_id ): void {
 	}
 	echo '</div>';
 }
+
+/**
+ * Render the head of a stat card: the card's opening element, its label and its icon. The caller
+ * prints the value and any sub line, then closes the card.
+ *
+ * @param string $modifier Modifier class, e.g. 'aafm-stat-abilities'.
+ * @param string $label    Translated label, escaped here.
+ * @param string $icon     Icon name passed to aafm_icon().
+ * @return void
+ */
+function aafm_render_stat_head( string $modifier, string $label, string $icon ): void {
+	echo '<div class="aafm-stat ' . esc_attr( $modifier ) . '">';
+	echo '<div class="stat-top">';
+	echo '<span class="stat-label">' . esc_html( $label ) . '</span>';
+	echo '<span class="stat-ic">';
+	echo wp_kses( aafm_icon( $icon ), aafm_svg_allowed_html() );
+	echo '</span>';
+	echo '</div>';
+}

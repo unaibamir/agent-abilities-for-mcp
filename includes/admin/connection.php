@@ -1109,6 +1109,32 @@ function aafm_render_client_picker( string $label_id, string $grid_id, array $cl
 }
 
 /**
+ * Render one config snippet in a code block with its copy button.
+ *
+ * @param string $snippet The snippet text.
+ * @param string $os      'unix' or 'windows' for an OS-switched block (windows starts hidden), '' for a plain block.
+ * @return void
+ */
+function aafm_render_snippet_block( string $snippet, string $os = '' ): void {
+	if ( '' === $os ) {
+		echo '<div class="aafm-codeblock">';
+	} else {
+		printf( '<div class="aafm-codeblock aafm-snippet" data-os="%s"%s>', esc_attr( $os ), 'windows' === $os ? ' hidden' : '' );
+	}
+	printf( '<pre>%s</pre>', esc_html( $snippet ) );
+	echo wp_kses(
+		sprintf(
+			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
+			esc_attr( $snippet ),
+			aafm_icon( 'copy' ),
+			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		),
+		aafm_admin_allowed_html()
+	);
+	echo '</div>';
+}
+
+/**
  * Render the Connection tab.
  *
  * Layout (OAuth-first):
@@ -1233,31 +1259,8 @@ function aafm_render_connection_tab(): void {
 			}
 
 			// Bridge snippet (shown for both modes; inside <details> for native clients).
-			echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
-			printf( '<pre>%s</pre>', esc_html( $unix_oauth ) );
-			echo wp_kses(
-				sprintf(
-					'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-					esc_attr( $unix_oauth ),
-					aafm_icon( 'copy' ),
-					esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-				),
-				aafm_admin_allowed_html()
-			);
-			echo '</div>';
-
-			echo '<div class="aafm-codeblock aafm-snippet" data-os="windows" hidden>';
-			printf( '<pre>%s</pre>', esc_html( $windows_oauth ) );
-			echo wp_kses(
-				sprintf(
-					'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-					esc_attr( $windows_oauth ),
-					aafm_icon( 'copy' ),
-					esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-				),
-				aafm_admin_allowed_html()
-			);
-			echo '</div>';
+			aafm_render_snippet_block( $unix_oauth, 'unix' );
+			aafm_render_snippet_block( $windows_oauth, 'windows' );
 
 			if ( 'native' === $mode ) {
 				echo '</details>'; // .aafm-bridge-alt
@@ -1410,31 +1413,8 @@ function aafm_render_connection_tab(): void {
 	$unix_snippet    = aafm_client_snippet( 'claude-code', $existing_agent_login, 'unix' );
 	$windows_snippet = aafm_client_snippet( 'claude-code', $existing_agent_login, 'windows' );
 
-	echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
-	printf( '<pre>%s</pre>', esc_html( $unix_snippet ) );
-	echo wp_kses(
-		sprintf(
-			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-			esc_attr( $unix_snippet ),
-			aafm_icon( 'copy' ),
-			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-		),
-		aafm_admin_allowed_html()
-	);
-	echo '</div>';
-
-	echo '<div class="aafm-codeblock aafm-snippet" data-os="windows" hidden>';
-	printf( '<pre>%s</pre>', esc_html( $windows_snippet ) );
-	echo wp_kses(
-		sprintf(
-			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-			esc_attr( $windows_snippet ),
-			aafm_icon( 'copy' ),
-			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-		),
-		aafm_admin_allowed_html()
-	);
-	echo '</div>';
+	aafm_render_snippet_block( $unix_snippet, 'unix' );
+	aafm_render_snippet_block( $windows_snippet, 'windows' );
 
 	// Windows / certificate notices.
 	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves - use the Windows tab above.', 'agent-abilities-for-mcp' );
@@ -1478,18 +1458,7 @@ function aafm_render_connection_tab(): void {
 		echo '<div class="aafm-quickstart-card" data-client="' . esc_attr( $slug ) . '" data-config="' . esc_attr( $snippet ) . '">';
 		echo '<h4 class="aafm-quickstart-name">' . esc_html( $label ) . '</h4>';
 		echo '<p class="aafm-quickstart-where">' . esc_html( aafm_quickstart_note( $slug ) ) . '</p>';
-		echo '<div class="aafm-codeblock">';
-		printf( '<pre>%s</pre>', esc_html( $snippet ) );
-		echo wp_kses(
-			sprintf(
-				'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-				esc_attr( $snippet ),
-				aafm_icon( 'copy' ),
-				esc_html__( 'Copy', 'agent-abilities-for-mcp' )
-			),
-			aafm_admin_allowed_html()
-		);
-		echo '</div>';
+		aafm_render_snippet_block( $snippet );
 		echo '</div>';
 	}
 	echo '</div>';

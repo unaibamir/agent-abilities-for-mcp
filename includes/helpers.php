@@ -604,15 +604,17 @@ function aafm_policy_options(): array {
 }
 
 /**
- * Whether this request reads policy through the batched row: an admin, CLI or cron request, or a
- * REST request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own
- * parsed rest_route (the empty() test rest_api_loaded() applies). The request path is never read.
+ * Whether this request reads policy through the batched row: an admin or cron request, or a REST
+ * request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own parsed
+ * rest_route (the empty() test rest_api_loaded() applies). The request path is never read. The
+ * batch lives only in a process that serves one request (HTTP, admin, cron). A WP-CLI process,
+ * such as the MCP adapter's STDIO server, reads each policy row per call.
  *
  * A "no" is never kept, and a later read in the same request decides again. A read before
- * WordPress routes a REST request and a front-end page load read policy as 1.7.5 did, and so do the
- * OAuth authorize request and the root /.well-known/ documents, which are not REST-routed; their
- * /wp-json/ copies are REST routes and batch. A "yes" is kept for the request and registers the
- * memo's hooks.
+ * WordPress routes a REST request and a front-end page load read policy as 9626307 did (no
+ * stale-copy check), and so do the OAuth authorize request and the root /.well-known/ documents,
+ * which are not REST-routed; their /wp-json/ copies are REST routes and batch. A "yes" is kept for
+ * the request and registers the memo's hooks.
  *
  * @return bool
  */
@@ -624,7 +626,6 @@ function aafm_policy_batch_allowed(): bool {
 
 	$allowed = ( defined( 'REST_REQUEST' ) && REST_REQUEST )
 		|| is_admin()
-		|| ( defined( 'WP_CLI' ) && WP_CLI )
 		|| ( defined( 'DOING_CRON' ) && DOING_CRON ) // @phpstan-ignore-line The constant, not wp_doing_cron(): the decision fires no filter.
 		|| ( isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof WP && ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) );
 	if ( ! $allowed ) {
@@ -763,9 +764,9 @@ function aafm_policy_forget_row( $option ): void {
 }
 
 /**
- * A transient counter's value, read so a failed read never restarts the count. With no external
- * object cache, a transient get_transient() did not answer is read from its row: an unreadable row
- * gives null, no row gives 0.
+ * A transient counter's value. With no external object cache, a failed read never restarts the
+ * count: a transient get_transient() did not answer is read from its row, where an unreadable row
+ * gives null and no row gives 0. With one, a miss and a failed backend both read 0.
  *
  * @param string $transient Transient name.
  * @return int|null Null when the count cannot be read.

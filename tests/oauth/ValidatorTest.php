@@ -1138,6 +1138,7 @@ class ValidatorTest extends TestCase {
 			'R30 trailing backslash'                   => array( $p, '/', null, $m . '\\', null, '', '', $m . '\\', true ),
 			'R31 trailing newline'                     => array( $p, '/', null, $m . "\n", null, '', '', $m . "\n", true ),
 			'R32 pretty path, rest_route elsewhere'    => array( $p, '/wp-json' . $m, null, '/wp/v2/users/me', null, '', '', '/wp/v2/users/me', false ),
+			'R32b pretty path, POST route elsewhere'   => array( $p, '/wp-json' . $m, null, null, '/wp/v2/users/me', '', '', '/wp/v2/users/me', false ),
 			'R33 page path, rest_route MCP'            => array( $p, '/sample-page/', null, $m, null, '', '', $m, true ),
 			'R34 rest_route, mixed case'               => array( $p, '/', null, '/Agent-Abilities-For-MCP/MCP', null, '', '', '/Agent-Abilities-For-MCP/MCP', true ),
 			'R35 parse_request() extra vars elsewhere' => array( $p, '/', null, $m, null, 'rest_route=/wp/v2/users/me', '', '/wp/v2/users/me', false ),

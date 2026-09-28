@@ -52,9 +52,9 @@ const AAFM_ALLOWLIST_MAX_ROWS = 200;
  * aafm_ability_allowed_for_principal()'s own docblock for why it must fail the opposite way).
  * What remains here is a plain raw-read helper, kept for the test suite, which only needs the
  * stored rows as-is. aafm_allowlist_overrides_for_display() below does not use it: it reads the
- * views itself so it can report a failed or malformed row. It still reads through aafm_read_option_views() rather than
- * get_option(), for the same stale-persistent-object-cache reason the 1.7.3 hotfix fixed for the
- * read-only-mode and high-risk switches.
+ * views itself so it can report a failed or malformed row. It still reads through
+ * aafm_read_option_views() rather than get_option(), for the same stale-persistent-object-cache
+ * reason the 1.7.3 hotfix fixed for the read-only-mode and high-risk switches.
  *
  * @return array<int,array<string,mixed>>
  */

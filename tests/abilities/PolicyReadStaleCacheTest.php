@@ -752,6 +752,57 @@ final class PolicyReadStaleCacheTest extends TestCase {
 	}
 
 	/**
+	 * PM round f (s14f-code-1): a WP-CLI process keeps no policy memo. The MCP adapter's STDIO
+	 * server is one WP-CLI process for a whole agent session, so read-only mode and a narrower
+	 * allowlist saved by another process reach its next call, as 9626307's per-call read did.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_a_wp_cli_process_reads_each_policy_row_per_call(): void {
+		global $wpdb;
+		$this->assertTrue( $this->isInIsolation() );
+		$this->plant( 'aafm_read_only_mode', self::ABSENT );
+		$this->plant( 'aafm_ability_allowlist_overrides', self::ABSENT );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		unset( $GLOBALS['wp']->query_vars['rest_route'] );
+		aafm_policy_reset_request_state();
+		define( 'WP_CLI', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- WP-CLI's own constant, defined as its bootstrap does.
+
+		$this->assertFalse( aafm_read_only_mode() );
+		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/delete-post', $author, null ) );
+
+		// Another process saves both. Raw rows, so no option hook in this process hears the save.
+		$wpdb->insert(
+			$wpdb->options,
+			array(
+				'option_name'  => 'aafm_read_only_mode',
+				'option_value' => '1',
+				'autoload'     => 'off',
+			)
+		);
+		$wpdb->insert(
+			$wpdb->options,
+			array(
+				'option_name'  => 'aafm_ability_allowlist_overrides',
+				'option_value' => maybe_serialize(
+					array(
+						array(
+							'scope_type'        => 'role',
+							'scope_id'          => 'author',
+							'allowed_abilities' => array( 'aafm/get-posts' ),
+						),
+					)
+				),
+				'autoload'     => 'off',
+			)
+		);
+
+		$this->assertTrue( aafm_read_only_mode(), 'Read-only mode saved by another process applies to the next call.' );
+		$this->assertFalse( aafm_ability_allowed_for_principal( 'aafm/delete-post', $author, null ), 'A narrower allowlist saved by another process applies to the next call.' );
+	}
+
+	/**
 	 * Run $callback and count the batched policy queries it runs.
 	 *
 	 * @param callable $callback Code to run.

@@ -27,7 +27,7 @@ final class RoleReadSweepTest extends TestCase {
 		'includes/abilities/users.php|aafm_exec_update_user|1' => 'decision, last-admin demotion guard: target loaded in the checked-read scope',
 		'includes/abilities/users.php|aafm_exec_delete_user|1' => 'decision, last-admin delete guard: victim loaded in the checked-read scope',
 		'includes/oauth/clients.php|aafm_oauth_list_grants|1' => 'display: scope, fallback row on error',
-		'includes/admin/dashboard.php|aafm_agent_user_candidates|1' => 'display: scope, no roles and admin on error',
+		'includes/admin/dashboard.php|aafm_agent_user_candidates|1' => 'display: scope, no roles and admin on error, only when the cache lost the earlier usermeta load',
 		'includes/helpers.php|aafm_redact_user|1' => 'response field: inside the scope on create/update-user, pure reads as 1.7.5',
 		'includes/admin/connection.php|aafm_create_agent_user|1' => 'admin write guard: an empty role list is not agent-shaped and writes nothing',
 		'includes/admin/connection.php|aafm_backfill_agent_user_marker|1' => 'admin write guard: same shape',

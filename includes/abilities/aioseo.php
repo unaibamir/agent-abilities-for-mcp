@@ -613,11 +613,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		aafm_aioseo_write( $id, $data );
 	}
 
-	$after     = aafm_aioseo_read_fields( $id );
-	$url_field = array();
-	foreach ( aafm_aioseo_fields() as $field => $spec ) {
-		$url_field[ $field ] = (bool) $spec['url'];
-	}
+	$after = aafm_aioseo_read_fields( $id );
 	foreach ( $desired as $field => $value ) {
 		if ( is_bool( $value ) ) {
 			// Robots flags are stored verbatim; an exact bool check is right, and a genuine failure
@@ -632,7 +628,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		// a failure just because the stored form differs cosmetically. A real non-persist - the old or
 		// default value still sitting in the row - is not a normalized form of what we wrote, so it
 		// still fails.
-		if ( ! aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, $url_field[ $field ] ?? false ) ) {
+		if ( ! aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, ! empty( aafm_aioseo_fields()[ $field ]['url'] ) ) ) {
 			return aafm_generic_error();
 		}
 	}

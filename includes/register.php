@@ -981,7 +981,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// The call is refused, so start the next one on a fresh token rather than leaving this
 			// denial memoized for the rest of the request.
 			aafm_rate_limit_call_reset( $name );
-			$rate_detail = aafm_build_activity_detail( $name, $call_args );
+			$rate_detail = aafm_build_activity_detail( $name, $call_args, 'denied' );
 			// WP 7.1+: when this fire is core's internal re-check inside execute(), a 'started' row
 			// is already pending from aafm_log_ability_invocation() (wp_ability_invoked fires before
 			// ANY permission check). Resolve that same row instead of inserting a second one for the
@@ -1124,7 +1124,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// A crashed check records the throw site instead of the ability's mapped argument
 			// detail: the defect is what matters on this row, and the mapped detail is already on
 			// the ordinary-denial rows.
-			$denied_detail = null !== $crash_detail ? $crash_detail : aafm_build_activity_detail( $name, $call_args );
+			$denied_detail = null !== $crash_detail ? $crash_detail : aafm_build_activity_detail( $name, $call_args, 'denied' );
 			// WP 7.1+: when this fire is core's internal re-check inside execute(), a 'started' row
 			// is already pending from aafm_log_ability_invocation() (wp_ability_invoked fires before
 			// ANY permission check, including this one). Resolve that same row instead of inserting

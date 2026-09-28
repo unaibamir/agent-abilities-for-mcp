@@ -658,11 +658,15 @@ function aafm_activity_order_statuses(): array {
  * caller did not send (or sent in a shape that fails its type check) logs no detail rather than a
  * half-built string. Detail is observability, never control flow.
  *
+ * A row that records a refused or failed call gets the same text behind "Attempted:", so a denied
+ * write does not read as one that happened. The wrap lives here, once, for every mapped template.
+ *
  * @param string              $ability Ability name.
  * @param array<string,mixed> $args    The call's own arguments.
+ * @param string              $status  The row's status. 'denied' and 'error' mark the text as an attempt.
  * @return string|null
  */
-function aafm_build_activity_detail( string $ability, array $args ): ?string {
+function aafm_build_activity_detail( string $ability, array $args, string $status = 'started' ): ?string {
 	$entry = aafm_activity_detail_map()[ $ability ] ?? null;
 	if ( null === $entry || empty( $entry['args'] ) ) {
 		return null;
@@ -682,7 +686,13 @@ function aafm_build_activity_detail( string $ability, array $args ): ?string {
 		$values[] = $rendered;
 	}
 
-	return vsprintf( (string) $entry['template'], $values );
+	$detail = vsprintf( (string) $entry['template'], $values );
+	if ( in_array( $status, array( 'denied', 'error' ), true ) ) {
+		/* translators: %s: what the call tried to do, such as "Updated meta key `x` on post #5". */
+		return sprintf( __( 'Attempted: %s', 'agent-abilities-for-mcp' ), $detail );
+	}
+
+	return $detail;
 }
 
 /**

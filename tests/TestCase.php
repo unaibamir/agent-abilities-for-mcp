@@ -184,6 +184,22 @@ abstract class TestCase extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The same as mcp_spy_server(), with rest_api_init firing while WordPress is running
+	 * parse_request, the way core's rest_api_loaded() (a parse_request callback) builds the server
+	 * for a REST request.
+	 *
+	 * @return \Spy_REST_Server
+	 */
+	protected function mcp_spy_server_inside_parse_request(): \Spy_REST_Server {
+		$GLOBALS['wp_current_filter'][] = 'parse_request';
+		try {
+			return $this->mcp_spy_server();
+		} finally {
+			array_pop( $GLOBALS['wp_current_filter'] );
+		}
+	}
+
+	/**
 	 * Take this request off the MCP route under either suite setting: no parsed rest_route, no
 	 * REQUEST_URI, no parse_request counted and no REST routing flag.
 	 *

@@ -117,13 +117,10 @@ function aafm_quickconnect_site_looks_configured(): bool {
  * @return bool
  */
 function aafm_quickconnect_should_render(): bool {
-	if ( ! current_user_can( 'manage_options' ) ) {
-		return false;
-	}
-	if ( aafm_quickconnect_is_finished() || aafm_quickconnect_is_dismissed() ) {
-		return false;
-	}
-	return ! aafm_quickconnect_site_looks_configured();
+	return current_user_can( 'manage_options' )
+		&& ! aafm_quickconnect_is_finished()
+		&& ! aafm_quickconnect_is_dismissed()
+		&& ! aafm_quickconnect_site_looks_configured();
 }
 
 /**

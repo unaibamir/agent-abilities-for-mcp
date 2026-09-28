@@ -159,10 +159,8 @@ function aafm_ownership_filter_server_tools( array $enabled, array &$omitted = a
 function aafm_all_server_ability_names(): array {
 	$native  = function_exists( 'aafm_get_enabled_abilities' ) ? aafm_get_enabled_abilities() : array();
 	$bridged = array();
-	if ( function_exists( 'aafm_get_enabled_bridged_abilities' ) ) {
-		foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
-			$bridged[] = aafm_bridge_tool_name( $foreign_slug );
-		}
+	foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
+		$bridged[] = aafm_bridge_tool_name( $foreign_slug );
 	}
 	return array_values( array_unique( array_merge( $native, $bridged ) ) );
 }
@@ -1641,6 +1639,39 @@ function aafm_register_mcp_server( $adapter ): void {
 }
 
 /**
+ * The top-level JSON-RPC error code of a single MCP-route response.
+ *
+ * The route check runs first: rest_post_dispatch fires on every REST request the whole site
+ * serves, and aafm_is_mcp_route(), core's matcher, rules out all but the one MCP route before
+ * anything is read off $response.
+ *
+ * @param mixed $response The dispatch result (WP_REST_Response on the REST path).
+ * @param mixed $request  The originating request (WP_REST_Request on the REST path).
+ * @return int|null The error code, or null for another route, a non-REST response, a batch, or a
+ *                  response with no numeric top-level error code.
+ */
+function aafm_mcp_response_error_code( $response, $request ): ?int {
+	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+	if ( ! aafm_is_mcp_route( $route ) || ! $response instanceof WP_REST_Response ) {
+		return null;
+	}
+
+	// A batch response is a sequential list of per-message results, so it has no top-level 'error'
+	// key and the isset() below already excludes it; this states that intent explicitly. array_is_list()
+	// needs PHP 8.1 and the floor is 7.4, so the list check is built by hand.
+	$data = $response->get_data();
+	if ( ! is_array( $data ) || array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
+		return null;
+	}
+
+	if ( ! isset( $data['error']['code'] ) || ! is_numeric( $data['error']['code'] ) ) {
+		return null;
+	}
+
+	return (int) $data['error']['code'];
+}
+
+/**
  * Stop four specific JSON-RPC "not found" errors on the MCP route from claiming the
  * session died.
  *
@@ -1678,9 +1709,8 @@ function aafm_register_mcp_server( $adapter ): void {
  * does not already give. Any miss returns the response untouched.
  *
  * rest_post_dispatch fires on every REST request the whole site serves, not only ours, so
- * the guards are ordered cheapest-and-most-discriminating first: the route check runs
- * before anything is even read off $response, since it alone already rules out every
- * request except the one MCP route this filter cares about.
+ * the route check runs before anything is even read off $response, since it alone already
+ * rules out every request except the one MCP route this filter cares about.
  *
  * @param mixed           $response The dispatch result (WP_REST_Response on the REST path).
  * @param \WP_REST_Server $server   The REST server (unused).
@@ -1691,49 +1721,12 @@ function aafm_register_mcp_server( $adapter ): void {
 function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 	unset( $server );
 
-	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
-	if ( ! aafm_is_mcp_route( $route ) ) {
-		return $response;
-	}
-
-	if ( ! $response instanceof WP_REST_Response ) {
-		return $response;
-	}
-
-	if ( 404 !== (int) $response->get_status() ) {
-		return $response;
-	}
-
-	$data = $response->get_data();
-	if ( ! is_array( $data ) ) {
-		return $response;
-	}
-
-	// A batch response is always a sequential list of per-message results (integer keys
-	// starting at 0), so it has no top-level 'error' key and the isset() check just below
-	// already excludes it on its own - this guard adds no protection beyond that. It exists
-	// purely to state the intent explicitly, so a batch staying unrewritten does not depend
-	// on the accident of which check happens to run first.
-	// array_is_list() needs PHP 8.1; this plugin's floor is PHP 7.4, so build the check
-	// by hand.
-	if ( array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
-		return $response;
-	}
-
-	if ( ! isset( $data['error']['code'] ) || ! is_numeric( $data['error']['code'] ) ) {
-		return $response;
-	}
-
-	$code = (int) $data['error']['code'];
-
 	// Allowlist only: method not found, resource not found, tool not found, prompt not
 	// found. -32005 (session not found) is deliberately absent from this list.
 	$reportable_in_band = array( -32601, -32002, -32003, -32004 );
-	if ( ! in_array( $code, $reportable_in_band, true ) ) {
-		return $response;
+	if ( in_array( aafm_mcp_response_error_code( $response, $request ), $reportable_in_band, true ) && 404 === (int) $response->get_status() ) {
+		$response->set_status( 200 );
 	}
-
-	$response->set_status( 200 );
 
 	return $response;
 }
@@ -1789,10 +1782,6 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
  */
 function aafm_mcp_guard_unpersisted_session( $response, $server, $request ) {
 	unset( $server );
-
-	if ( ! function_exists( 'aafm_is_mcp_route' ) ) {
-		return $response;
-	}
 
 	// Route check first: rest_post_dispatch fires on every REST request the whole site serves,
 	// and this alone rules out all but the one MCP route. aafm_is_mcp_route(), core's matcher.
@@ -1961,10 +1950,6 @@ function aafm_mcp_transport_error_name( int $code ): ?string {
  * source IP per window through aafm_denial_log_within_cap(), on its own 'tx' bucket, so a client stuck
  * in a reconnect loop cannot grow the 30-day table without limit.
  *
- * The determine_current_user-timing function_exists guards mirror aafm_log_failed_application_password_auth():
- * rest_post_dispatch runs well after plugins_loaded so the helpers exist in practice, but this stays
- * defensive rather than assume load order.
- *
  * @param mixed $response The dispatch result (WP_REST_Response on the REST path).
  * @param mixed $server   The REST server (unused).
  * @param mixed $request  The originating request (WP_REST_Request on the REST path).
@@ -1973,39 +1958,8 @@ function aafm_mcp_transport_error_name( int $code ): ?string {
 function aafm_log_mcp_transport_outcome( $response, $server, $request ) {
 	unset( $server );
 
-	if ( ! function_exists( 'aafm_is_mcp_route' ) || ! function_exists( 'aafm_log_activity' ) || ! function_exists( 'aafm_denial_log_within_cap' ) ) {
-		return $response;
-	}
-
-	// Route check first: rest_post_dispatch fires on every REST request the whole site serves, and
-	// this alone rules out all but the one MCP route. aafm_is_mcp_route(), core's matcher.
-	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
-	if ( ! aafm_is_mcp_route( $route ) ) {
-		return $response;
-	}
-
-	if ( ! $response instanceof WP_REST_Response ) {
-		return $response;
-	}
-
-	$data = $response->get_data();
-	if ( ! is_array( $data ) ) {
-		return $response;
-	}
-
-	// A batch response is a sequential list of per-message results, so it has no top-level 'error'
-	// key and the isset() below already excludes it; this states that intent explicitly. array_is_list()
-	// needs PHP 8.1 and the floor is 7.4, so the list check is built by hand, mirroring the governed filter.
-	if ( array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
-		return $response;
-	}
-
-	if ( ! isset( $data['error']['code'] ) || ! is_numeric( $data['error']['code'] ) ) {
-		return $response;
-	}
-
-	$code = (int) $data['error']['code'];
-	$name = aafm_mcp_transport_error_name( $code );
+	$code = aafm_mcp_response_error_code( $response, $request );
+	$name = null === $code ? null : aafm_mcp_transport_error_name( $code );
 
 	// Allowlist gate: only log a code that is both known and actually reachable here (see
 	// aafm_mcp_transport_error_name() for what is dropped and why). An unmapped code - arbitrary junk,

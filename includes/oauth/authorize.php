@@ -498,19 +498,17 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 
 	// Audit the grant: an authorization code was issued to this client for this user. The raw code
 	// is never logged - only who approved, which client, and where the grant is sent.
-	if ( function_exists( 'aafm_oauth_log_event' ) ) {
-		$approver = wp_get_current_user();
-		aafm_oauth_log_event(
-			'authorize',
-			'success',
-			array(
-				'client_id'     => $valid['client_id'],
-				'redirect_host' => aafm_oauth_audit_host_from_uri( $valid['redirect_uri'] ),
-				'user_id'       => $user_id,
-				'user_login'    => $approver instanceof WP_User ? (string) $approver->user_login : '',
-			)
-		);
-	}
+	$approver = wp_get_current_user();
+	aafm_oauth_log_event(
+		'authorize',
+		'success',
+		array(
+			'client_id'     => $valid['client_id'],
+			'redirect_host' => aafm_oauth_audit_host_from_uri( $valid['redirect_uri'] ),
+			'user_id'       => $user_id,
+			'user_login'    => $approver instanceof WP_User ? (string) $approver->user_login : '',
+		)
+	);
 
 	// RFC 9207 §2 requires iss on every authorization response, single-sourced with the
 	// issuer the AS metadata publishes (aafm_oauth_issuer()) so the two can never drift.

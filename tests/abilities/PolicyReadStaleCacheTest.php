@@ -752,7 +752,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 	}
 
 	/**
-	 * PM round f (s14f-code-1): a WP-CLI process keeps no policy memo. The MCP adapter's STDIO
+	 * PM round f (s14f-code-1): a WP-CLI process that sets none of the batch terms, such as the
+	 * STDIO server, keeps no policy memo. The MCP adapter's STDIO
 	 * server is one WP-CLI process for a whole agent session, so its next read returns read-only
 	 * mode and a narrower allowlist saved by another process, as 9626307's reads did. This pins the
 	 * reader; the session registers its tools once, when it starts.
@@ -760,7 +761,7 @@ final class PolicyReadStaleCacheTest extends TestCase {
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
-	public function test_a_wp_cli_process_reads_each_policy_row_per_call(): void {
+	public function test_a_wp_cli_process_keeps_no_policy_memo(): void {
 		global $wpdb;
 		$this->assertTrue( $this->isInIsolation() );
 		$this->plant( 'aafm_read_only_mode', self::ABSENT );

@@ -607,9 +607,11 @@ function aafm_policy_options(): array {
  * Whether this request reads policy through the batched row: an admin or cron request, or a REST
  * request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own parsed
  * rest_route (the empty() test rest_api_loaded() applies). The request path is never read. The
- * batch lives only in a process that serves one request (HTTP, admin, cron). A WP-CLI process,
- * such as the MCP adapter's STDIO server, keeps no batch and no memo and reads policy as 9626307
- * did.
+ * batch lives only in a process that serves one request (HTTP, admin, cron). A WP-CLI command
+ * batches for the whole process only when it sets one of the terms named above (for example
+ * `wp cron event run` defines DOING_CRON, and `--context=admin` makes is_admin() true); the MCP
+ * adapter's STDIO server in the default context sets none, so it keeps no batch and no memo and
+ * reads policy as 9626307 did.
  *
  * A "no" is never kept, and a later read in the same request decides again. A read before
  * WordPress routes a REST request and a front-end page load read policy as 9626307 did (no

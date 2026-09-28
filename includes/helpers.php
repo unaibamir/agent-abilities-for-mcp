@@ -604,9 +604,11 @@ function aafm_policy_options(): array {
 }
 
 /**
- * Whether this request reads policy through the batched row: an admin, CLI or cron request, or a
- * REST request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own
- * parsed rest_route (the empty() test rest_api_loaded() applies). The request path is never read.
+ * Whether this request reads policy through the batched row: an admin or cron request, or a REST
+ * request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own parsed
+ * rest_route (the empty() test rest_api_loaded() applies). The request path is never read. The
+ * batch lives only in a process that serves one request (HTTP, admin, cron). A WP-CLI process,
+ * such as the MCP adapter's STDIO server, reads each policy row per call.
  *
  * A "no" is never kept, and a later read in the same request decides again. A read before
  * WordPress routes a REST request and a front-end page load read policy as 1.7.5 did, and so do the
@@ -624,7 +626,6 @@ function aafm_policy_batch_allowed(): bool {
 
 	$allowed = ( defined( 'REST_REQUEST' ) && REST_REQUEST )
 		|| is_admin()
-		|| ( defined( 'WP_CLI' ) && WP_CLI )
 		|| ( defined( 'DOING_CRON' ) && DOING_CRON ) // @phpstan-ignore-line The constant, not wp_doing_cron(): the decision fires no filter.
 		|| ( isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof WP && ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) );
 	if ( ! $allowed ) {

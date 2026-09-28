@@ -587,46 +587,37 @@ function aafm_exec_tec_update_event( array $input ) {
 		}
 		$args['post_status'] = $status;
 	}
-	if ( array() === $args ) {
-		// Nothing to change; no-op success.
-		if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+	$safety = array( 'warnings' => array() );
+	if ( array() !== $args ) {
+		// Codex final round 10 MEDIUM: round 9's content-safety fix wired this call into event
+		// create and both venue/organizer paths, but missed this one - the fifth-of-six call sites
+		// that got left out.
+		$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
+		if ( is_wp_error( $safety ) ) {
+			return $safety;
+		}
+
+		$result = aafm_tec_write( 'events', $args, $id )['returned'];
+		if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
 			return aafm_generic_error();
 		}
-		$response = aafm_with_checked_reads(
-			static fn(): array => array( 'event' => aafm_tec_event_shape( $id ) ),
-			aafm_generic_error()
-		);
-		return $response;
-	}
-
-	// Codex final round 10 MEDIUM: round 9's content-safety fix wired this call into event
-	// create and both venue/organizer paths, but missed this one - the fifth-of-six call sites
-	// that got left out.
-	$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
-	if ( is_wp_error( $safety ) ) {
-		return $safety;
-	}
-
-	$result = aafm_tec_write( 'events', $args, $id )['returned'];
-	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
-		return aafm_generic_error();
-	}
-	// The one event write outside the ORM: TEC's repository save (Repositories/Event.php) unsets
-	// a falsy all_day input rather than writing it, so an event that was already all-day stays
-	// all-day under a successful save(), and the repository offers no supported way to clear the
-	// key. The key is deleted through the metadata writer, after the ORM save and never in place of
-	// it; the delete is the inverse of the boolean cast this file's own read applies. The stub
-	// reproduces this TEC behaviour (TecStubStore.php's write_meta()).
-	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
-		// The delete reports what happened: the key gone, or never there, is success; a refused
-		// or unreadable delete leaves the event marked all-day and is this ability's error.
-		$cleared = aafm_meta_delete( 'post', $id, '_EventAllDay' );
-		if ( ! in_array( $cleared['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
-			return new WP_Error(
-				'aafm_tec_write_unconfirmed',
-				__( 'The event was updated, but its all-day flag could not be confirmed as cleared.', 'agent-abilities-for-mcp' ),
-				aafm_meta_write_error( $cleared['status'], 'delete', 'post', $id, '_EventAllDay' )->get_error_data()
-			);
+		// The one event write outside the ORM: TEC's repository save (Repositories/Event.php) unsets
+		// a falsy all_day input rather than writing it, so an event that was already all-day stays
+		// all-day under a successful save(), and the repository offers no supported way to clear the
+		// key. The key is deleted through the metadata writer, after the ORM save and never in place of
+		// it; the delete is the inverse of the boolean cast this file's own read applies. The stub
+		// reproduces this TEC behaviour (TecStubStore.php's write_meta()).
+		if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
+			// The delete reports what happened: the key gone, or never there, is success; a refused
+			// or unreadable delete leaves the event marked all-day and is this ability's error.
+			$cleared = aafm_meta_delete( 'post', $id, '_EventAllDay' );
+			if ( ! in_array( $cleared['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
+				return new WP_Error(
+					'aafm_tec_write_unconfirmed',
+					__( 'The event was updated, but its all-day flag could not be confirmed as cleared.', 'agent-abilities-for-mcp' ),
+					aafm_meta_write_error( $cleared['status'], 'delete', 'post', $id, '_EventAllDay' )->get_error_data()
+				);
+			}
 		}
 	}
 	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {

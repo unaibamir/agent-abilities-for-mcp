@@ -369,11 +369,10 @@ function aafm_exec_tec_create_venue( array $input ) {
 	if ( ! aafm_exact_object( 'post', $created_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$response = aafm_with_checked_reads(
+	return aafm_with_checked_reads(
 		static fn(): array => array( 'venue' => aafm_tec_venue_shape( $created_id ) ),
 		aafm_generic_error()
 	);
-	return $response;
 }
 
 /**

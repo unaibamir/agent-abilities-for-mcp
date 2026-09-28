@@ -66,7 +66,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
  */
 function aafm_revision_parent_editable( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -140,17 +140,21 @@ function aafm_perm_list_revisions( array $input ): bool {
  */
 function aafm_exec_list_revisions( array $input ) {
 	$id = absint( $input['post_id'] );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$all    = wp_get_post_revisions( $id, array( 'fields' => 'ids' ) );
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$slice  = array_slice( array_values( $all ), ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );
 	$rows   = array();
+	/**
+	 * With 'fields' => 'ids' the revisions are ids; the stub types them as WP_Post[].
+	 *
+	 * @var int[] $slice
+	 */
 	foreach ( $slice as $rid ) {
-		// $rid is a revision id ('fields' => 'ids'); get_post() resolves it without the
-		// pass-by-reference constraint of wp_get_post_revision() and stays analyzer-clean.
-		$rev = get_post( $rid );
+		// $rid is an int under 'fields' => 'ids', and each revision is loaded exactly by that id.
+		$rev = aafm_exact_object( 'post', $rid );
 		if ( $rev instanceof WP_Post && 'revision' === $rev->post_type ) {
 			$rows[] = aafm_redact_revision( $rev );
 		}
@@ -349,7 +353,7 @@ function aafm_exec_restore_revision( array $input ) {
 	// (WP_POST_REVISIONS false / the wp_revisions_to_keep filter returning 0) or the type
 	// dropped 'revisions' support. Restoring in that state would silently destroy the
 	// current state under a "reversible" promise, so refuse with an actionable error.
-	$parent = get_post( $post_id );
+	$parent = aafm_exact_object_chain( 'post', $post_id );
 	if ( ! $parent instanceof WP_Post
 		|| ! post_type_supports( $parent->post_type, 'revisions' )
 		|| ! wp_revisions_enabled( $parent ) ) {
@@ -432,7 +436,7 @@ function aafm_perm_delete_revision( array $input ): bool {
 		return false;
 	}
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post    = $post_id ? get_post( $post_id ) : null;
+	$post    = $post_id ? aafm_exact_object( 'post', $post_id ) : null;
 	if ( ! $post instanceof WP_Post || ! aafm_can_delete_post_object( $post ) ) {
 		return false;
 	}

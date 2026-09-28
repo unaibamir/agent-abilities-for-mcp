@@ -710,4 +710,671 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 			'The sweep must have walked real routes; an emptied map must not pass this quietly.'
 		);
 	}
+
+	/**
+	 * The database compares meta keys ignoring case, accents and trailing spaces, so the user-meta
+	 * hard block has to refuse an accented or mixed-case spelling of a blocked key too.
+	 */
+	public function test_the_user_meta_hard_block_refuses_accented_and_mixed_case_spellings(): void {
+		global $wpdb;
+		$per_blog = ucfirst( $wpdb->prefix ) . '2_Capabilitiés';
+
+		foreach ( array( 'two_factor_sécret', 'wp_capabilitiés', 'séssion_tokens', $per_blog ) as $key ) {
+			$this->assertTrue( aafm_hard_blocked_user_meta_key( $key ), $key . ' must be hard-blocked.' );
+			$this->assertWPError( aafm_validate_user_meta_key( $key ), $key . ' must not validate.' );
+		}
+	}
+
+	public function test_the_post_meta_hard_block_refuses_accented_page_builder_markers(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+
+		foreach ( array( 'ét_pb_use_builder', 'fusion_buildér_status' ) as $key ) {
+			$this->assertTrue( aafm_hard_blocked_meta_key( $key ), $key . ' must be hard-blocked.' );
+			$this->assertWPError( aafm_validate_meta_key( $key ), $key . ' must not validate under allow-star.' );
+		}
+	}
+
+	public function test_the_deny_list_refuses_case_and_accent_variants_of_a_denied_key(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		update_option( 'aafm_denied_meta_keys', array( 'secret', 'Café' ) );
+
+		foreach ( array( 'secret', 'SECRET', 'sécret', 'cafe' ) as $key ) {
+			$this->assertWPError( aafm_validate_meta_key( $key ), $key . ' must be denied.' );
+		}
+		$this->assertSame( 'secretary', aafm_validate_meta_key( 'secretary' ) );
+	}
+
+	public function test_the_allowlist_stays_byte_exact(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$this->assertSame( 'subtitle', aafm_validate_meta_key( 'subtitle' ) );
+		$this->assertWPError( aafm_validate_meta_key( 'Subtitle' ) );
+		$this->assertWPError( aafm_validate_meta_key( 'subtitlé' ) );
+	}
+
+	/**
+	 * Allow every key on the post, term and user scopes, so only the hard block and the deny list
+	 * can refuse one.
+	 */
+	private function allow_star_everywhere(): void {
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		update_option( 'aafm_exposed_term_meta_keys', array( '*' ) );
+		update_option( 'aafm_exposed_user_meta_keys', array( '*' ) );
+	}
+
+	/**
+	 * Assert a key is refused by both hard-block floors and by validate on both scopes.
+	 *
+	 * @param string $key     Requested key.
+	 * @param string $message Failure context.
+	 */
+	private function assert_refused_on_both_floors( string $key, string $message ): void {
+		$this->assertTrue( aafm_hard_blocked_meta_key( $key ), "post floor: $message" );
+		$this->assertTrue( aafm_hard_blocked_user_meta_key( $key ), "user floor: $message" );
+		$this->assertWPError( aafm_validate_meta_key( $key ), "post validate: $message" );
+		$this->assertWPError( aafm_validate_user_meta_key( $key ), "user validate: $message" );
+	}
+
+	/**
+	 * A filter-added entry spelled with a combining mark keeps its refusal for a request that
+	 * differs from it only by the case of an ASCII letter, with or without intl.
+	 */
+	public function test_a_filter_added_entry_with_a_combining_mark_refuses_its_case_variant(): void {
+		$this->allow_star_everywhere();
+		$entry = static function ( array $extra ): array {
+			$extra[] = "x\u{0307}secret";
+			return $extra;
+		};
+		add_filter( 'aafm_hard_blocked_meta_keys', $entry );
+		add_filter( 'aafm_hard_blocked_user_meta_keys', $entry );
+
+		$this->assert_refused_on_both_floors( "X\u{0307}secret", 'case variant of a filter-added entry' );
+
+		remove_filter( 'aafm_hard_blocked_meta_keys', $entry );
+		remove_filter( 'aafm_hard_blocked_user_meta_keys', $entry );
+	}
+
+	/**
+	 * The gate does not depend on the site locale: German and Danish accent maps turn these
+	 * letters into two-letter spellings, and the database does not.
+	 */
+	public function test_the_gate_refuses_umlaut_and_ring_spellings_under_german_and_danish_locales(): void {
+		$this->allow_star_everywhere();
+		update_option( 'aafm_denied_meta_keys', array( 'secret' ) );
+
+		foreach ( array( 'de_DE', 'da_DK' ) as $locale ) {
+			$force = static function () use ( $locale ): string {
+				return $locale;
+			};
+			add_filter( 'locale', $force );
+
+			$this->assertSame( $locale, get_locale() );
+			$this->assertTrue( aafm_hard_blocked_user_meta_key( 'session_tökens' ), "session_tökens under $locale" );
+			$this->assertTrue( aafm_hard_blocked_user_meta_key( 'wp_capåbilities' ), "wp_capåbilities under $locale" );
+			$this->assertWPError( aafm_validate_meta_key( 'sécret' ), "sécret with secret denied under $locale" );
+
+			remove_filter( 'locale', $force );
+		}
+	}
+
+	/**
+	 * Code points the collation ignores, and a decomposed accent, still name the blocked key.
+	 */
+	public function test_the_gate_refuses_ignorable_code_points_and_a_decomposed_accent(): void {
+		$this->allow_star_everywhere();
+
+		foreach ( array( "wp_capa\u{0001}bilities", "wp_capa\u{200B}bilities", 'wp_capabilit' . "i\u{0301}" . 'es' ) as $key ) {
+			$this->assert_refused_on_both_floors( $key, bin2hex( $key ) );
+		}
+	}
+
+	/**
+	 * A trailing no-break space: the ASCII reduction always brings it back to session_tokens, so
+	 * the gate refuses it on every database, including one whose collation matches it to the real
+	 * row.
+	 */
+	public function test_a_trailing_no_break_space_spelling_of_session_tokens_is_always_refused(): void {
+		global $wpdb;
+		$this->allow_star_everywhere();
+		$user_id = self::factory()->user->create();
+		update_user_meta( $user_id, 'session_tokens', array( 'x' => 1 ) );
+
+		$spelling = "session_tokens\u{00A0}";
+		$refused  = aafm_hard_blocked_user_meta_key( $spelling );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE user_id = %d AND meta_key = %s', $wpdb->usermeta, $user_id, $spelling ) );
+
+		if ( $count > 0 ) {
+			$this->assertTrue( $refused, 'the database matches the real row, so the gate must refuse' );
+		}
+		$this->assertTrue( $refused, 'the gate refuses this spelling whatever the database says' );
+		$this->assertWPError( aafm_validate_user_meta_key( $spelling ) );
+	}
+
+	/**
+	 * The list branch: a request the database equates with a filter-added entry, spelled with a
+	 * character the ASCII reduction drops instead of mapping, is refused with no row stored.
+	 */
+	public function test_the_list_branch_refuses_a_spelling_only_the_database_equates(): void {
+		global $wpdb;
+		$this->allow_star_everywhere();
+		$entry = static function ( array $extra ): array {
+			$extra[] = 'aafm_t_secret_zz';
+			return $extra;
+		};
+		add_filter( 'aafm_hard_blocked_meta_keys', $entry );
+		add_filter( 'aafm_hard_blocked_user_meta_keys', $entry );
+
+		$key = "aafm_t_\u{1D42C}ecret_zz";
+		$this->assertNotSame( 'aafm_t_secret_zz', preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ), 'premise: the ASCII reduction does not bring the request back to the entry' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$stored = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE meta_key = %s', $wpdb->usermeta, 'aafm_t_secret_zz' ) );
+		$this->assertSame( 0, $stored, 'premise: no row is stored under the entry' );
+
+		$this->assert_refused_on_both_floors( $key, 'list branch' );
+
+		remove_filter( 'aafm_hard_blocked_meta_keys', $entry );
+		remove_filter( 'aafm_hard_blocked_user_meta_keys', $entry );
+	}
+
+	/**
+	 * The row branch: with the real per-blog capabilities row and a planted variant stored, a
+	 * third spelling that neither the list nor the ASCII reduction catches is refused, because
+	 * the stored spellings come back distinct by bytes.
+	 */
+	public function test_the_row_branch_refuses_a_spelling_that_reaches_a_stored_per_blog_capabilities_row(): void {
+		global $wpdb;
+		$this->allow_star_everywhere();
+		$user_id = self::factory()->user->create();
+		$real    = $wpdb->prefix . '2_capabilities';
+		// The planted variant goes first, so a distinct read that collapsed spellings would return it.
+		add_user_meta( $user_id, $wpdb->prefix . '2_capabilitiés', 'planted' );
+		add_user_meta( $user_id, $real, array( 'subscriber' => true ) );
+
+		$key = $wpdb->prefix . "2_capabilitie\u{1D42C}";
+		$this->assertFalse( (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i', preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) ), 'premise: the ASCII reduction misses it' );
+
+		$this->assert_refused_on_both_floors( $key, 'row branch' );
+	}
+
+	/**
+	 * The gate query's own failure refuses a non-ASCII key on every scope, in both fault shapes,
+	 * and leaves an ASCII key alone.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_gate_fault_shapes(): iterable {
+		yield 'no-flush' => array( 'no-flush' );
+		yield 'real-error' => array( 'real-error' );
+	}
+
+	/**
+	 * One fault shape.
+	 *
+	 * @dataProvider data_gate_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_a_failed_gate_query_refuses_a_non_ascii_key_on_every_scope( string $shape ): void {
+		global $wpdb;
+		$this->allow_star_everywhere();
+
+		$run = static function (): array {
+			return array(
+				'post'  => aafm_validate_meta_key( 'plain_kéy' ),
+				'term'  => aafm_validate_term_meta_key( 'plain_kéy' ),
+				'user'  => aafm_validate_user_meta_key( 'plain_kéy' ),
+				'ascii' => aafm_validate_meta_key( 'plain_key-1' ),
+			);
+		};
+
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			$result = 'no-flush' === $shape
+				? \AAFM\Tests\Support\QueryFaultInjector::fail_query( 'aafm_gate_match', $run )
+				: \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error( 'aafm_gate_match', $run );
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertGreaterThan( 0, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertWPError( $result['post'] );
+		$this->assertWPError( $result['term'] );
+		$this->assertWPError( $result['user'] );
+		$this->assertSame( 'plain_key-1', $result['ascii'] );
+		$this->assertSame( 'plain_kéy', aafm_validate_meta_key( 'plain_kéy' ), 'with no fault the same key validates' );
+	}
+
+	public function test_the_gate_query_runs_only_for_a_non_ascii_key_and_once_per_check(): void {
+		global $wpdb;
+		$count   = 0;
+		$counter = static function ( string $query ) use ( &$count ): string {
+			if ( false !== strpos( $query, 'aafm_gate_match' ) ) {
+				++$count;
+			}
+			return $query;
+		};
+		add_filter( 'query', $counter );
+
+		aafm_hard_blocked_meta_key( 'plain_key-1' );
+		aafm_hard_blocked_user_meta_key( 'plain_key-1' );
+		$builtins = array( 'session_tokens', '_application_passwords', 'wp_capabilities', 'wp_user_level', 'two_factor_secret', 'et_pb_use_builder', $wpdb->prefix . 'capabilities' );
+		foreach ( $builtins as $key ) {
+			aafm_hard_blocked_meta_key( $key );
+			aafm_hard_blocked_user_meta_key( $key );
+		}
+		$ascii_queries = $count;
+
+		aafm_hard_blocked_meta_key( 'plain_kéy' );
+		$one_check = $count - $ascii_queries;
+
+		remove_filter( 'query', $counter );
+
+		$this->assertSame( 0, $ascii_queries, 'an ASCII key and every built-in cost no gate query' );
+		$this->assertSame( 1, $one_check, 'one non-ASCII hard-block check costs exactly one gate query' );
+	}
+
+	/**
+	 * The fast path's basis, checked against each meta table's own meta_key column: no character
+	 * of [A-Za-z0-9_-] is ignorable, and two of them compare equal only when strtolower() makes
+	 * them equal.
+	 */
+	public function test_the_ascii_fast_path_basis_holds_on_every_meta_table_column(): void {
+		global $wpdb;
+		$chars = array_merge( range( 'A', 'Z' ), range( 'a', 'z' ), range( '0', '9' ), array( '_', '-' ) );
+
+		foreach ( array( $wpdb->postmeta, $wpdb->termmeta, $wpdb->usermeta ) as $table ) {
+			// A union of the characters whose column takes the table's meta_key collation.
+			$union = "SELECT CONCAT( IFNULL( m.meta_key, '' ), %s ) AS c FROM ( SELECT 1 AS one ) AS d LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS m ON 1 = 1" . str_repeat( ' UNION ALL SELECT %s', count( $chars ) - 1 );
+			$args  = array_merge( array( $chars[0], $table ), array_slice( $chars, 1 ) );
+
+			$sql = "SELECT a.c FROM ( {$union} ) AS a WHERE CONCAT( 'x', a.c, 'y' ) = 'xy'";
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+			$ignorable = $wpdb->get_col( $wpdb->prepare( $sql, $args ) );
+			$this->assertSame( array(), $ignorable, "no ignorable character on $table" );
+
+			$sql = "SELECT a.c AS x, b.c AS y FROM ( {$union} ) AS a JOIN ( {$union} ) AS b ON a.c = b.c WHERE CAST( a.c AS BINARY ) <> CAST( b.c AS BINARY )";
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+			$pairs = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( $args, $args ) ), ARRAY_A );
+			$this->assertNotEmpty( $pairs, "premise: case folds on $table" );
+			foreach ( $pairs as $pair ) {
+				$this->assertSame( strtolower( $pair['x'] ), strtolower( $pair['y'] ), "only case variants compare equal on $table" );
+			}
+		}
+	}
+
+	/**
+	 * Run $run and count the queries that carry the gate's marker.
+	 *
+	 * @param callable $run Code to measure.
+	 * @return int
+	 */
+	private function gate_queries( callable $run ): int {
+		$count   = 0;
+		$counter = static function ( string $query ) use ( &$count ): string {
+			if ( false !== strpos( $query, 'aafm_gate_match' ) ) {
+				++$count;
+			}
+			return $query;
+		};
+		add_filter( 'query', $counter );
+		try {
+			$run();
+		} finally {
+			remove_filter( 'query', $counter );
+		}
+		return $count;
+	}
+
+	/**
+	 * Floor 3 reads the floored allowlist, and the floor after the filter checks the whole filtered
+	 * list in one query, so a non-ASCII entry elsewhere in the list costs an ASCII key one gate
+	 * query, not one per entry.
+	 */
+	public function test_validating_an_ascii_key_costs_one_gate_query_when_the_allowlist_holds_a_non_ascii_entry(): void {
+		$allow = static function (): array {
+			return array( 'plain_key-1', 'clé_publique' );
+		};
+		add_filter( 'aafm_allowed_meta_keys', $allow );
+		update_option( 'aafm_denied_meta_keys', array( 'secret' ) );
+
+		$result  = null;
+		$queries = $this->gate_queries(
+			static function () use ( &$result ): void {
+				$result = aafm_validate_meta_key( 'plain_key-1' );
+			}
+		);
+
+		remove_filter( 'aafm_allowed_meta_keys', $allow );
+
+		$this->assertSame( 'plain_key-1', $result );
+		$this->assertSame( 1, $queries );
+	}
+
+	/**
+	 * The rich-post meta loop validates every allowlisted key. Its gate queries grow with the
+	 * number of non-ASCII entries, not with its square.
+	 */
+	public function test_the_rich_post_meta_loop_costs_gate_queries_linear_in_the_allowlist(): void {
+		$this->acting_as( 'administrator' );
+		$post = get_post( self::factory()->post->create() );
+
+		$counts = array();
+		foreach ( array( 10, 20 ) as $n ) {
+			$keys = array();
+			for ( $i = 0; $i < $n; $i++ ) {
+				$keys[] = 0 === $i % 2 ? "plain_key_$i" : "clé_$i";
+			}
+			update_option( 'aafm_allowed_meta_keys', $keys );
+			$counts[ $n ] = $this->gate_queries(
+				static function () use ( $post ): void {
+					aafm_rich_post( $post, array( 'include_content' => false ) );
+				}
+			);
+		}
+
+		// The loop's own read of the allowlist costs two queries (one floor pass before its filter,
+		// one after). Validating each key reads the floored list again, two more, plus one for the
+		// key's own hard block when the key is non-ASCII: 2 + 2 per ASCII key + 3 per non-ASCII key.
+		$this->assertSame(
+			array(
+				10 => 27,
+				20 => 52,
+			),
+			$counts
+		);
+	}
+
+	/**
+	 * A hard-blocked allowlist entry is still refused (by floor 1) and still left out of the
+	 * allowlist the admin screen shows and exports.
+	 */
+	public function test_a_hard_blocked_allowlist_entry_is_refused_and_left_out_of_the_allowlist(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle', 'wp_capabilities', 'wp_capabilitiés' ) );
+
+		$this->assertWPError( aafm_validate_meta_key( 'wp_capabilities' ) );
+		$this->assertWPError( aafm_validate_meta_key( 'wp_capabilitiés' ) );
+		$this->assertSame( 'subtitle', aafm_validate_meta_key( 'subtitle' ) );
+		$this->assertSame( array( 'subtitle' ), aafm_allowed_meta_keys() );
+	}
+
+	/**
+	 * The allowlist getters the admin screen and the export read keep their output: the stored
+	 * option floored before and after the post filter, and unioned with the filter for term and
+	 * user meta, with blocked keys, empties, `*` and duplicates dropped.
+	 */
+	public function test_the_allowlist_getters_keep_their_output(): void {
+		global $wpdb;
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle', 'wp_capabilities', 'clé', '', '*', 'subtitle', 'ét_pb_use_builder' ) );
+		update_option( 'aafm_exposed_term_meta_keys', array( 'color', 'wp_capabilitiés', '*' ) );
+		update_option( 'aafm_exposed_user_meta_keys', array( 'nickname', 'séssion_tokens', $wpdb->prefix . 'capabilities' ) );
+
+		$seen_default = null;
+		$post_filter  = static function ( array $base ) use ( &$seen_default ): array {
+			$seen_default = $base;
+			return array_merge( $base, array( 'from_filter', 'session_tokens', '_edit_lock' ) );
+		};
+		$add_filter   = static function ( array $base ): array {
+			return array_merge( $base, array( 'from_filter', 'two_factor_secret' ) );
+		};
+		add_filter( 'aafm_allowed_meta_keys', $post_filter );
+		add_filter( 'aafm_allowed_term_meta_keys', $add_filter );
+		add_filter( 'aafm_allowed_user_meta_keys', $add_filter );
+
+		$post = aafm_allowed_meta_keys();
+		$term = aafm_allowed_term_meta_keys();
+		$user = aafm_allowed_user_meta_keys();
+
+		remove_filter( 'aafm_allowed_meta_keys', $post_filter );
+		remove_filter( 'aafm_allowed_term_meta_keys', $add_filter );
+		remove_filter( 'aafm_allowed_user_meta_keys', $add_filter );
+
+		$this->assertSame( array( 'subtitle', 'clé', '*', 'subtitle' ), $seen_default, 'the post filter gets the floored option as its default' );
+		$this->assertSame( array( 'subtitle', 'clé', 'from_filter' ), $post );
+		$this->assertSame( array( 'color', 'from_filter', 'two_factor_secret' ), $term, 'the term floor is the post-meta hard block, which does not list two_factor_secret' );
+		$this->assertSame( array( 'nickname', 'from_filter' ), $user );
+	}
+
+	/**
+	 * A post allowlist filter that returns the user allowlist gets that list floored, so a key the
+	 * user floor blocks never reaches the post allowlist.
+	 */
+	public function test_a_nested_allowlist_getter_stays_floored_inside_another_scopes_filter(): void {
+		update_option( 'aafm_exposed_user_meta_keys', array( 'two_factor_secret' ) );
+		$nested = null;
+		$filter = static function () use ( &$nested ): array {
+			$nested = aafm_allowed_user_meta_keys();
+			return $nested;
+		};
+		add_filter( 'aafm_allowed_meta_keys', $filter );
+
+		$result = aafm_validate_meta_key( 'two_factor_secret' );
+
+		remove_filter( 'aafm_allowed_meta_keys', $filter );
+
+		$this->assertWPError( $result );
+		$this->assertSame( array(), $nested );
+	}
+
+	/**
+	 * An allowlist filter that protects the requested key while it runs: the floor that follows
+	 * the filter sees the new state and refuses, on every scope.
+	 *
+	 * @return iterable<string,array{0:string,1:string,2:string,3:string}>
+	 */
+	public function data_scopes_with_an_arming_filter(): iterable {
+		yield 'post' => array( 'aafm_allowed_meta_keys', 'aafm_allowed_meta_keys', 'aafm_validate_meta_key', 'post' );
+		yield 'term' => array( 'aafm_exposed_term_meta_keys', 'aafm_allowed_term_meta_keys', 'aafm_validate_term_meta_key', 'term' );
+		yield 'user' => array( 'aafm_exposed_user_meta_keys', 'aafm_allowed_user_meta_keys', 'aafm_validate_user_meta_key', 'user' );
+	}
+
+	/**
+	 * One scope.
+	 *
+	 * @dataProvider data_scopes_with_an_arming_filter
+	 * @param string $option   Allowlist option.
+	 * @param string $tag      Allowlist filter tag.
+	 * @param string $validate Validate function.
+	 * @param string $scope    Scope label.
+	 */
+	public function test_a_key_an_allowlist_filter_protects_while_it_runs_is_refused( string $option, string $tag, string $validate, string $scope ): void {
+		update_option( $option, array( 'private_key' ) );
+		$armed   = false;
+		$protect = static function ( $is_protected, $meta_key ) use ( &$armed ) {
+			return ( $armed && 'private_key' === $meta_key ) ? true : $is_protected;
+		};
+		$arm     = static function ( array $keys ) use ( &$armed ): array {
+			$armed = true;
+			return $keys;
+		};
+		add_filter( 'is_protected_meta', $protect, 10, 2 );
+		add_filter( $tag, $arm );
+
+		$result = $validate( 'private_key' );
+
+		remove_filter( $tag, $arm );
+		remove_filter( 'is_protected_meta', $protect, 10 );
+
+		$this->assertWPError( $result, "$scope: the key is protected once the filter has run" );
+	}
+
+	/**
+	 * A post filter that branches on its default: validate answers exactly as membership in the
+	 * list the admin screen shows.
+	 */
+	public function test_validate_agrees_with_the_admin_allowlist_for_a_filter_that_branches_on_its_default(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'wp_capabilities' ) );
+		$filters = array(
+			'widens when the default is non-empty' => static function ( array $base ): array {
+				return array() !== $base ? array_merge( $base, array( 'seo_title' ) ) : $base;
+			},
+			'fills only an empty default'          => static function ( array $base ): array {
+				return array() === $base ? array( 'mirror_key' ) : $base;
+			},
+			'appends a key'                        => static function ( array $base ): array {
+				return array_merge( $base, array( 'plain_extra' ) );
+			},
+		);
+
+		foreach ( $filters as $label => $filter ) {
+			add_filter( 'aafm_allowed_meta_keys', $filter );
+			$listed = aafm_allowed_meta_keys();
+			foreach ( array( 'seo_title', 'mirror_key', 'plain_extra', 'wp_capabilities' ) as $key ) {
+				$this->assertSame( in_array( $key, $listed, true ), is_string( aafm_validate_meta_key( $key ) ), "$label: $key" );
+			}
+			if ( 'widens when the default is non-empty' === $label ) {
+				$this->assertWPError( aafm_validate_meta_key( 'seo_title' ) );
+			}
+			remove_filter( 'aafm_allowed_meta_keys', $filter );
+		}
+	}
+
+	/**
+	 * The list form of each scope's hard block gives the same answer per key as the single-key
+	 * hard block, and both match the literal expectation, for a batch that needs every check.
+	 */
+	public function test_the_list_form_hard_block_matches_the_single_key_answer_for_every_fixture(): void {
+		global $wpdb;
+		$user_id = self::factory()->user->create();
+		add_user_meta( $user_id, $wpdb->prefix . '2_capabilitiés', 'planted' );
+		add_user_meta( $user_id, $wpdb->prefix . '2_capabilities', array( 'subscriber' => true ) );
+		$entry = static function ( array $extra ): array {
+			$extra[] = 'aafm_t_secret_zz';
+			$extra[] = "x\u{0307}secret";
+			return $extra;
+		};
+		add_filter( 'aafm_hard_blocked_meta_keys', $entry );
+		add_filter( 'aafm_hard_blocked_user_meta_keys', $entry );
+		$force = static function (): string {
+			return 'de_DE';
+		};
+		add_filter( 'locale', $force );
+
+		$keys     = array(
+			'plain_key-1',
+			'session_tokens',
+			'Wp_Capabilities',
+			"X\u{0307}secret",
+			'session_tökens',
+			'wp_capåbilities',
+			"wp_capa\u{0001}bilities",
+			"wp_capa\u{200B}bilities",
+			'wp_capabilit' . "i\u{0301}" . 'es',
+			"session_tokens\u{00A0}",
+			"aafm_t_\u{1D42C}ecret_zz",
+			$wpdb->prefix . "2_capabilitie\u{1D42C}",
+			'plain_kéy',
+			'ét_pb_use_builder',
+			'',
+		);
+		$expected = array(
+			'post' => array( false, true, true, true, true, true, true, true, true, true, true, true, false, true, true ),
+			'user' => array( false, true, true, true, true, true, true, true, true, true, true, true, false, false, true ),
+		);
+
+		$single = array(
+			'post' => array_map( 'aafm_hard_blocked_meta_key', $keys ),
+			'user' => array_map( 'aafm_hard_blocked_user_meta_key', $keys ),
+		);
+		$batch  = array(
+			'post' => aafm_hard_blocked_meta_keys( $keys, 'post' ),
+			'user' => aafm_hard_blocked_meta_keys( $keys, 'user' ),
+		);
+
+		remove_filter( 'locale', $force );
+		remove_filter( 'aafm_hard_blocked_meta_keys', $entry );
+		remove_filter( 'aafm_hard_blocked_user_meta_keys', $entry );
+
+		$this->assertSame( $expected, $single, 'single-key answers' );
+		$this->assertSame( $expected, $batch, 'list-form answers' );
+	}
+
+	/**
+	 * Validating one key costs at most four gate queries whatever the allowlist length.
+	 */
+	public function test_validating_a_key_costs_at_most_four_gate_queries_whatever_the_allowlist_length(): void {
+		$counts = array();
+		foreach ( array( 10, 20 ) as $n ) {
+			$keys = array();
+			for ( $i = 0; $i < $n; $i++ ) {
+				$keys[] = 0 === $i % 2 ? "plain_key_$i" : "clé_$i";
+			}
+			update_option( 'aafm_allowed_meta_keys', $keys );
+			update_option( 'aafm_denied_meta_keys', array( 'secrét' ) );
+			$counts[ $n ] = array(
+				'ascii'     => $this->gate_queries(
+					static function (): void {
+						aafm_validate_meta_key( 'plain_key_0' );
+					}
+				),
+				'non_ascii' => $this->gate_queries(
+					static function (): void {
+						aafm_validate_meta_key( 'clé_1' );
+					}
+				),
+			);
+		}
+
+		$this->assertSame(
+			array(
+				10 => array(
+					'ascii'     => 3,
+					'non_ascii' => 4,
+				),
+				20 => array(
+					'ascii'     => 3,
+					'non_ascii' => 4,
+				),
+			),
+			$counts
+		);
+	}
+
+	/**
+	 * When the batched query fails, every entry that needed it is dropped and its key refused; an
+	 * all-ASCII list makes no query at all.
+	 *
+	 * @dataProvider data_gate_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_a_failed_batched_floor_query_drops_the_entries_that_needed_it( string $shape ): void {
+		global $wpdb;
+		update_option( 'aafm_allowed_meta_keys', array( 'plain_key-1', 'clé_1', 'plain_key-2', 'clé_2' ) );
+
+		$run = static function (): array {
+			return array(
+				'list'     => aafm_allowed_meta_keys(),
+				'validate' => aafm_validate_meta_key( 'clé_1' ),
+			);
+		};
+
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			$result = 'no-flush' === $shape
+				? \AAFM\Tests\Support\QueryFaultInjector::fail_query( 'aafm_gate_match', $run )
+				: \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error( 'aafm_gate_match', $run );
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertGreaterThan( 0, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertSame( array( 'plain_key-1', 'plain_key-2' ), $result['list'] );
+		$this->assertWPError( $result['validate'] );
+
+		update_option( 'aafm_allowed_meta_keys', array( 'plain_key-1', 'plain_key-2' ) );
+		$this->assertSame(
+			0,
+			$this->gate_queries(
+				static function (): void {
+					aafm_allowed_meta_keys();
+					aafm_validate_meta_key( 'plain_key-1' );
+				}
+			)
+		);
+	}
 }

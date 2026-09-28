@@ -415,4 +415,64 @@ final class CommentsWriteTest extends TestCase {
 		$this->assertSame( 'unapproved', wp_get_comment_status( $comment ), 'The hook must have actually reverted the status for this test to prove anything.' );
 		$this->assertInstanceOf( WP_Error::class, $out, 'A status the hook reverted away from what was requested must not be reported as a successful approval.' );
 	}
+
+	/**
+	 * A hook that reverts the status in the database without clearing the cache leaves a stale
+	 * cached comment claiming the requested status. The confirming read clears the cache first, so
+	 * it sees the reverted row.
+	 */
+	public function test_moderate_comment_errors_when_a_hook_reverts_the_status_behind_a_stale_cache(): void {
+		global $wpdb;
+
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '0',
+			)
+		);
+
+		$fired  = 0;
+		$revert = static function ( $comment_id ) use ( $wpdb, &$fired ) {
+			++$fired;
+			// A raw update that leaves the cached comment, which core has just refreshed with the
+			// approved status, in place.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update( $wpdb->comments, array( 'comment_approved' => '0' ), array( 'comment_ID' => $comment_id ) );
+		};
+		add_action( 'wp_set_comment_status', $revert );
+
+		try {
+			$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
+				array(
+					'comment_id' => $comment,
+					'action'     => 'approve',
+				)
+			);
+		} finally {
+			remove_action( 'wp_set_comment_status', $revert );
+		}
+
+		$this->assertSame( 1, $fired );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$this->assertSame( '0', $wpdb->get_var( $wpdb->prepare( 'SELECT comment_approved FROM %i WHERE comment_ID = %d', $wpdb->comments, $comment ) ) );
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	public function test_the_comment_read_back_returns_the_comment_only_when_its_id_matches(): void {
+		$post  = self::factory()->post->create();
+		$one   = self::factory()->comment->create( array( 'comment_post_ID' => $post ) );
+		$other = get_comment( self::factory()->comment->create( array( 'comment_post_ID' => $post ) ) );
+
+		$this->assertInstanceOf( WP_Comment::class, aafm_comment_readback( $one ) );
+		$this->assertSame( (string) $one, aafm_comment_readback( $one )->comment_ID );
+
+		$swap    = static fn() => $other;
+		add_filter( 'get_comment', $swap );
+		$swapped = aafm_comment_readback( $one );
+		remove_filter( 'get_comment', $swap );
+
+		$this->assertNull( $swapped );
+	}
 }

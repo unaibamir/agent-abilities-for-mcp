@@ -54,6 +54,8 @@ class HandshakeTest extends TestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		// The site uses pretty permalinks, so WordPress routes the /wp-json/ path at all.
+		$this->set_permalink_structure( '/%postname%/' );
 
 		// The REST dispatch path reports a production environment; relax the HTTPS
 		// requirement the documented agent-dev way so the token handler runs over the
@@ -138,6 +140,7 @@ class HandshakeTest extends TestCase {
 	 * Clean the auth header so a bearer set in one test never leaks into the next.
 	 */
 	public function tear_down(): void {
+		$this->set_permalink_structure( '' );
 		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
 		parent::tear_down();
 	}
@@ -367,6 +370,7 @@ class HandshakeTest extends TestCase {
 		$prev_uri                      = $_SERVER['REQUEST_URI'] ?? null;
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token;
 		$_SERVER['REQUEST_URI']        = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
+		$this->route_as_rest_request();
 		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ), 'the OAuth bearer must resolve to the approving user' );
 		if ( null === $prev_uri ) {
 			unset( $_SERVER['REQUEST_URI'] );
@@ -526,6 +530,7 @@ class HandshakeTest extends TestCase {
 			// Even a syntactically valid bearer resolves nothing while OAuth is off: the
 			// resolver returns the incoming value untouched.
 			$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer aafm_oat_' . str_repeat( 'a', 64 );
+			$this->route_as_rest_request();
 			$this->assertFalse(
 				aafm_oauth_resolve_current_user( false ),
 				'a disabled OAuth surface resolves no user from a bearer'
@@ -549,6 +554,7 @@ class HandshakeTest extends TestCase {
 	 */
 	public function test_non_oauth_bearer_passes_through_untouched(): void {
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer not-one-of-ours';
+		$this->route_as_rest_request();
 		$this->assertFalse(
 			aafm_oauth_resolve_current_user( false ),
 			'a foreign bearer leaves the incoming value untouched'
@@ -573,6 +579,7 @@ class HandshakeTest extends TestCase {
 	 */
 	public function test_invalid_oauth_token_does_not_break_unrelated_route(): void {
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer aafm_oat_deadbeef';
+		$this->route_as_rest_request();
 
 		// Our resolver must not invent a user from an unknown token.
 		$this->assertFalse(

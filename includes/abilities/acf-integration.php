@@ -1679,7 +1679,7 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// slashes; this ACF writer must too - without it the read-back verify below then reports the
 		// mangled persist as a failed write. The verify keeps comparing against the unslashed $clean,
 		// which is exactly what storage holds after the round trip.
-		update_field( (string) $field_key, wp_slash( $clean ), $selector );
+		aafm_acf_write_field( (string) $field_key, wp_slash( $clean ), $selector );
 
 		// Verify the write persisted. update_field()'s documented int|bool return is not the signal
 		// used here: for a container it reports the write as a whole, so it cannot say what storage
@@ -1788,7 +1788,7 @@ function aafm_acf_write_failed_error( array $persisted, array $failed ): WP_Erro
  */
 function aafm_perm_acf_post( array $input ): bool {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = $id > 0 ? get_post( $id ) : null;
+	$post = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
 	// Delegate to the shared content-edit gate (not a bare edit_post): it enforces the operator's
 	// post-type exposure allowlist AND the map_meta_cap===true fail-open guard, so ACF fields on a
 	// non-exposed or non-mapped type are refused exactly as the core content writes are.
@@ -1850,7 +1850,7 @@ function aafm_args_acf_get_post_fields(): array {
  */
 function aafm_exec_acf_get_post_fields( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	return array(
@@ -1925,7 +1925,7 @@ function aafm_args_acf_update_post_fields(): array {
  */
 function aafm_exec_acf_update_post_fields( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$fields = $input['fields'] ?? null;
@@ -1952,10 +1952,10 @@ function aafm_exec_acf_update_post_fields( array $input ) {
  */
 function aafm_perm_acf_term( array $input ): bool {
 	$id = absint( $input['term_id'] ?? 0 );
-	if ( $id < 1 || ! get_term( $id ) instanceof WP_Term ) {
+	if ( $id < 1 || ! aafm_exact_object( 'term', $id ) instanceof WP_Term ) {
 		return false;
 	}
-	return current_user_can( 'edit_term', $id );
+	return aafm_user_can_checked( 'edit_term', $id );
 }
 
 /**
@@ -2023,7 +2023,7 @@ function aafm_args_acf_get_term_fields(): array {
  */
 function aafm_exec_acf_get_term_fields( array $input ) {
 	$id = absint( $input['term_id'] ?? 0 );
-	if ( ! get_term( $id ) instanceof WP_Term ) {
+	if ( ! aafm_exact_object( 'term', $id ) instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
 	return array(
@@ -2092,7 +2092,7 @@ function aafm_args_acf_update_term_fields(): array {
  */
 function aafm_exec_acf_update_term_fields( array $input ) {
 	$id = absint( $input['term_id'] ?? 0 );
-	if ( ! get_term( $id ) instanceof WP_Term ) {
+	if ( ! aafm_exact_object( 'term', $id ) instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
 	$fields = $input['fields'] ?? null;
@@ -2119,14 +2119,16 @@ function aafm_exec_acf_update_term_fields( array $input ) {
  */
 function aafm_perm_acf_user( array $input ): bool {
 	$id = absint( $input['user_id'] ?? 0 );
-	if ( $id < 1 || ! get_userdata( $id ) instanceof WP_User ) {
-		return false;
-	}
 	// The object-independent edit_users floor comes first: edit_user($id) alone is true for every
 	// user against their own id (map_meta_cap self short-circuit), so without the floor a subscriber
 	// could read or write its own ACF user fields. Mirrors aafm_perm_update_user() and the
 	// user-meta family; matches the edit_users discovery floor in server.php.
-	return current_user_can( 'edit_users' ) && current_user_can( 'edit_user', $id );
+	if ( $id < 1 || ! current_user_can( 'edit_users' ) ) {
+		return false;
+	}
+	// The capability check loads the user inside its checked scope before anything else does. A
+	// missing user passes that check as before and is refused by the existence check after it.
+	return aafm_user_can_checked( 'edit_user', $id, 'user' ) && aafm_exact_object( 'user', $id ) instanceof WP_User;
 }
 
 /**
@@ -2198,7 +2200,7 @@ function aafm_args_acf_get_user_fields(): array {
  */
 function aafm_exec_acf_get_user_fields( array $input ) {
 	$id = absint( $input['user_id'] ?? 0 );
-	if ( ! get_userdata( $id ) instanceof WP_User ) {
+	if ( ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
 	return array(
@@ -2267,7 +2269,7 @@ function aafm_args_acf_update_user_fields(): array {
  */
 function aafm_exec_acf_update_user_fields( array $input ) {
 	$id = absint( $input['user_id'] ?? 0 );
-	if ( ! get_userdata( $id ) instanceof WP_User ) {
+	if ( ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
 	$fields = $input['fields'] ?? null;

@@ -21,10 +21,11 @@
  * behavior, so an operator who has never touched this feature sees no change.
  *
  * This is a SECOND, independent gate alongside the existing OAuth scope-to-capability mechanism
- * (aafm_oauth_apply_token_capability_scope(), includes/oauth/validator.php): that mechanism narrows
- * which WordPress capabilities an OAuth-authenticated request effectively has; this one narrows
- * which ability NAMES a scope/role/client may reach at all, evaluated before an ability's own
- * permission_callback runs. A call must clear both.
+ * (aafm_oauth_apply_token_capability_scope(), includes/oauth/validator.php): that mechanism, when a
+ * site registers its filter, replaces which WordPress capabilities an OAuth-authenticated request
+ * has, and can grant as well as deny; this one narrows which ability NAMES a scope/role/client may
+ * reach at all, evaluated before an ability's own permission_callback runs. A call must clear
+ * both.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -50,11 +51,11 @@ const AAFM_ALLOWLIST_MAX_ROWS = 200;
  * failed" both collapse to the same empty array, and an empty array here reads as unrestricted.
  * That collapse would fail OPEN on a transient read failure if used for authorization (see
  * aafm_ability_allowed_for_principal()'s own docblock for why it must fail the opposite way).
- * What remains here is a plain raw-read helper for callers that only need the stored rows as-is,
- * such as the test suite and aafm_allowlist_overrides_for_display() below (which adds the failure
- * signal this bare read discards). It still reads through aafm_read_option_views() rather than
- * get_option(), for the same stale-persistent-object-cache reason the 1.7.3 hotfix fixed for the
- * read-only-mode and high-risk switches.
+ * What remains here is a plain raw-read helper, kept for the test suite, which only needs the
+ * stored rows as-is. aafm_allowlist_overrides_for_display() below does not use it: it reads the
+ * views itself so it can report a failed or malformed row. It still reads through
+ * aafm_read_option_views() rather than get_option(), for the same stale-persistent-object-cache
+ * reason the 1.7.3 hotfix fixed for the read-only-mode and high-risk switches.
  *
  * @return array<int,array<string,mixed>>
  */
@@ -82,20 +83,25 @@ function aafm_allowlist_overrides(): array {
  * silently erases every existing restriction. The caller here must be told the read failed, not
  * handed an empty state that looks identical to a genuinely unrestricted site.
  *
- * @return array{ok: bool, rows: array<int,array<string,mixed>>}
+ * @return array{ok: bool, rows: array<int,array<string,mixed>>, malformed: bool}
  */
 function aafm_allowlist_overrides_for_display(): array {
 	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
-	if ( $views['db_error'] ) {
+	// A found row that is not a list denies every call (aafm_ability_allowed_for_principal()), so it
+	// is never shown as an unrestricted site. It is flagged apart from a failed read: a reload can
+	// clear a failed read, and only a save replaces a malformed row.
+	$malformed = ! $views['db_error'] && $views['db_found'] && ! is_array( $views['db_value'] );
+	if ( $views['db_error'] || $malformed ) {
 		return array(
-			'ok'   => false,
-			'rows' => array(),
+			'ok'        => false,
+			'rows'      => array(),
+			'malformed' => $malformed,
 		);
 	}
-	$rows = $views['db_found'] ? $views['db_value'] : array();
 	return array(
-		'ok'   => true,
-		'rows' => is_array( $rows ) ? $rows : array(),
+		'ok'        => true,
+		'rows'      => $views['db_found'] ? $views['db_value'] : array(),
+		'malformed' => false,
 	);
 }
 
@@ -178,21 +184,31 @@ function aafm_allowlist_set_permits( $set, string $ability_name ): bool {
  * @return bool
  */
 function aafm_ability_allowed_for_principal( string $ability_name, int $user_id, ?string $oauth_client_id ): bool {
-	$views = aafm_read_option_views( 'aafm_ability_allowlist_overrides' );
-	if ( $views['db_error'] ) {
-		return false; // Cannot certify the restriction state: deny rather than fail open.
+	$row = aafm_policy_row( 'aafm_ability_allowlist_overrides' );
+	if ( ! $row['ok'] || ( $row['found'] && ! is_array( $row['value'] ) ) ) {
+		return false; // Cannot certify the restriction state, or it is not a list of rows: deny rather than fail open.
 	}
-	$rows = is_array( $views['db_value'] ) ? $views['db_value'] : array();
+	$rows = $row['found'] ? $row['value'] : array();
 	if ( array() === $rows ) {
 		return true; // No override rows at all: identical to today's behavior.
 	}
 
+	// The current user's roles come from the object the capability check already used, so both
+	// decisions rest on one load. Any other user is loaded inside the checked-read scope, and a load
+	// that fails denies rather than reading as a user with no roles.
 	$roles = array();
-	if ( $user_id > 0 ) {
-		$user = get_userdata( $user_id );
-		if ( $user instanceof WP_User ) {
-			$roles = (array) $user->roles;
+	if ( $user_id > 0 && get_current_user_id() === $user_id ) {
+		$roles = (array) wp_get_current_user()->roles;
+	} elseif ( $user_id > 0 ) {
+		$loaded = aafm_with_checked_reads(
+			static fn(): array => array( 'user' => aafm_exact_object( 'user', $user_id ) ),
+			aafm_generic_error()
+		);
+		$user   = is_wp_error( $loaded ) ? null : $loaded['user'];
+		if ( ! $user instanceof WP_User ) {
+			return false;
 		}
+		$roles = (array) $user->roles;
 	}
 
 	$role_matched = false;

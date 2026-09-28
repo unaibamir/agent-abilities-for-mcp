@@ -33,7 +33,7 @@ function aafm_register_user_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-user-meta'] = array(
 		'label'        => __( 'Update user meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'users',
@@ -41,7 +41,7 @@ function aafm_register_user_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-user-meta'] = array(
 		'label'        => __( 'Delete user meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a user the agent can edit. Removes all values of that key. Auth and capability keys can never be touched.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a user the agent can edit. Removes all values of that key. Auth and capability keys can never be touched. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
@@ -65,7 +65,7 @@ function aafm_can_access_user_meta( array $input ): bool {
 	// user against their own id (map_meta_cap self short-circuit), so without the floor a subscriber
 	// could read or write its own user meta. Mirrors aafm_perm_update_user(); matches the edit_users
 	// discovery floor these abilities already use in server.php.
-	if ( $id < 1 || ! current_user_can( 'edit_users' ) || ! current_user_can( 'edit_user', $id ) ) {
+	if ( $id < 1 || ! current_user_can( 'edit_users' ) || ! aafm_user_can_checked( 'edit_user', $id, 'user' ) ) {
 		return false;
 	}
 	$key = isset( $input['key'] ) ? (string) $input['key'] : '';
@@ -155,12 +155,15 @@ function aafm_args_update_user_meta(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'user_id' => array( 'type' => 'integer' ),
-				'key'     => array( 'type' => 'string' ),
-				'value'   => array(
-					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+			'properties' => array_merge(
+				array(
+					'user_id' => array( 'type' => 'integer' ),
+					'key'     => array( 'type' => 'string' ),
+					'value'   => array(
+						'type' => array( 'string', 'number', 'boolean', 'integer' ),
+					),
 				),
+				aafm_meta_write_output_properties()
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_user_meta',
@@ -203,8 +206,11 @@ function aafm_args_delete_user_meta(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
+			'properties' => array_merge(
+				array(
+					'deleted' => array( 'type' => 'boolean' ),
+				),
+				aafm_meta_delete_output_properties()
 			),
 		),
 		'execute_callback'    => 'aafm_exec_delete_user_meta',
@@ -241,10 +247,10 @@ function aafm_perm_user_meta_access( array $input ): bool {
 function aafm_exec_get_user_meta( array $input ) {
 	$id  = absint( $input['user_id'] );
 	$key = aafm_validate_user_meta_key( isset( $input['key'] ) ? (string) $input['key'] : '' );
-	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
-	$value = get_user_meta( $id, $key, true );
+	$value = aafm_meta_get( 'user', $id, $key, true );
 	if ( '' !== $value && ! is_scalar( $value ) ) {
 		return aafm_generic_error(); // never dump arrays/serialized blobs.
 	}
@@ -269,7 +275,7 @@ function aafm_exec_get_user_meta( array $input ) {
 function aafm_exec_update_user_meta( array $input ) {
 	$id  = absint( $input['user_id'] );
 	$key = aafm_validate_user_meta_key( isset( $input['key'] ) ? (string) $input['key'] : '' );
-	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
 	// Codex round 7 R7-3: this used to omit the object subtype, defaulting to ''. get_userdata()
@@ -284,22 +290,19 @@ function aafm_exec_update_user_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	$old = get_user_meta( $id, $key, true );
-	update_user_meta( $id, $key, wp_slash( $value ) );
-	$stored = get_user_meta( $id, $key, true );
-	// Codex round 5 R5-2: update_user_meta()'s return value only catches an outright failure. A
-	// metadata filter that short-circuits update_user_metadata to a truthy value bypasses the
-	// write while reporting success, so checking only `false === update_user_meta(...)` never
-	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
-	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
-	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'user', $subtype ) ) {
-		return aafm_generic_error();
+	$result = aafm_meta_set( 'user', $id, $key, $value, $subtype );
+	if ( is_wp_error( $result ) ) {
+		return $result;
 	}
-	return array(
-		'user_id' => $id,
-		'key'     => $key,
-		'value'   => $stored,
+	return aafm_meta_update_response(
+		'user',
+		$id,
+		$key,
+		$result,
+		array(
+			'user_id' => $id,
+			'key'     => $key,
+		)
 	);
 }
 
@@ -316,14 +319,8 @@ function aafm_exec_update_user_meta( array $input ) {
 function aafm_exec_delete_user_meta( array $input ) {
 	$id  = absint( $input['user_id'] );
 	$key = aafm_validate_user_meta_key( isset( $input['key'] ) ? (string) $input['key'] : '' );
-	if ( is_wp_error( $key ) || ! get_userdata( $id ) instanceof WP_User ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
-	delete_user_meta( $id, $key );
-	// Report the real end state, not a hardcoded true: if the key is still present the delete did
-	// not take. Deleting an already-absent key is an idempotent success.
-	if ( metadata_exists( 'user', $id, $key ) ) {
-		return aafm_generic_error();
-	}
-	return array( 'deleted' => true );
+	return aafm_meta_delete_response( 'user', $id, $key, aafm_meta_delete( 'user', $id, $key ) );
 }

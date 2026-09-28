@@ -52,7 +52,10 @@ final class MenusTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/list-menus' )->execute( array() );
 		$this->assertArrayHasKey( 'menus', $res );
-		$this->assertSame( array( 'id', 'name', 'slug', 'count' ), array_keys( $res['menus'][0] ) );
+		$this->assertSame(
+			array( 'id', 'name', 'slug', 'count', 'attached_theme_locations', 'registered_theme_locations' ),
+			array_keys( $res['menus'][0] )
+		);
 	}
 
 	public function test_get_menu_and_list_items(): void {
@@ -83,6 +86,49 @@ final class MenusTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, wp_get_ability( 'aafm/get-menu' )->execute( array( 'menu_id' => 999999 ) ) );
 	}
 
+	/**
+	 * Codex round 1 (1.7.6), R1-7: get-menu advertised only id/name/slug/count while its executor
+	 * (aafm_redact_menu(), the same one list-menus/create-menu/update-menu already used) had long
+	 * since started returning attached_theme_locations and registered_theme_locations too. Assert
+	 * schema keys match the actual result keys for every one of the four menu endpoints that share
+	 * this shape, so a sibling drifting out of sync fails this test instead of silently
+	 * under-describing its result.
+	 */
+	public function test_menu_output_schema_matches_the_actual_result_shape_across_all_four_endpoints(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Schema Fidelity' );
+
+		$cases = array(
+			'aafm/get-menu'    => wp_get_ability( 'aafm/get-menu' )->execute( array( 'menu_id' => $menu_id ) ),
+			'aafm/create-menu' => wp_get_ability( 'aafm/create-menu' )->execute( array( 'name' => 'Schema Fidelity Created' ) ),
+			'aafm/update-menu' => wp_get_ability( 'aafm/update-menu' )->execute(
+				array(
+					'menu_id' => $menu_id,
+					'name'    => 'Schema Fidelity Renamed',
+				)
+			),
+		);
+
+		foreach ( $cases as $name => $result ) {
+			$this->assertIsArray( $result, $name . ' did not return an array.' );
+			$schema_keys = array_keys( wp_get_ability( $name )->get_output_schema()['properties'] );
+			$result_keys = array_keys( $result );
+			sort( $schema_keys );
+			sort( $result_keys );
+			$this->assertSame( $schema_keys, $result_keys, $name . ' output_schema properties must match its actual result keys exactly.' );
+		}
+
+		// list-menus wraps the same per-menu shape one level down, under 'menus'.
+		$list = wp_get_ability( 'aafm/list-menus' )->execute( array() );
+		$this->assertNotEmpty( $list['menus'], 'sanity: at least one menu must exist to compare shapes.' );
+		$list_schema_keys = array_keys( wp_get_ability( 'aafm/list-menus' )->get_output_schema()['properties']['menus']['items']['properties'] );
+		$list_result_keys = array_keys( $list['menus'][0] );
+		sort( $list_schema_keys );
+		sort( $list_result_keys );
+		$this->assertSame( $list_schema_keys, $list_result_keys, 'aafm/list-menus menu item schema must match its actual result keys exactly.' );
+	}
+
 	public function test_create_then_update_then_delete_menu(): void {
 		$this->register_menus();
 		$this->acting_as( 'administrator' );
@@ -102,6 +148,44 @@ final class MenusTest extends TestCase {
 		$deleted = wp_get_ability( 'aafm/delete-menu' )->execute( array( 'menu_id' => $menu_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $deleted );
 		$this->assertFalse( wp_get_nav_menu_object( $menu_id ), 'menu permanently removed.' );
+	}
+
+	/**
+	 * Register 1.5 (disclosure only): a freshly created menu is never auto-assigned to a theme
+	 * location, so create-menu must say so rather than reading as plain, silent success.
+	 */
+	public function test_create_menu_discloses_it_is_not_attached_to_any_location(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/create-menu' )->execute( array( 'name' => 'Unattached Menu' ) );
+
+		$this->assertArrayHasKey( 'attached_theme_locations', $created );
+		$this->assertSame( array(), $created['attached_theme_locations'], 'a brand-new menu is never auto-assigned to a location.' );
+		$this->assertArrayHasKey( 'registered_theme_locations', $created );
+	}
+
+	/**
+	 * Register 1.5: registered_theme_locations must name what the active theme actually
+	 * registered, and attached_theme_locations must reflect a REAL assignment
+	 * (get_nav_menu_locations(), a theme_mod), not a guess.
+	 */
+	public function test_menu_shape_reports_registered_and_attached_theme_locations(): void {
+		register_nav_menu( 'aafm-test-primary', 'Primary' );
+		$menu_id = $this->make_menu( 'Header Menu' );
+		set_theme_mod( 'nav_menu_locations', array( 'aafm-test-primary' => $menu_id ) );
+
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/get-menu' )->execute( array( 'menu_id' => $menu_id ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertContains( 'aafm-test-primary', $res['registered_theme_locations'] );
+		$this->assertSame( array( 'aafm-test-primary' ), $res['attached_theme_locations'] );
+
+		remove_theme_mod( 'nav_menu_locations' );
+		unregister_nav_menu( 'aafm-test-primary' );
 	}
 
 	public function test_menu_writes_deny_an_editor(): void {

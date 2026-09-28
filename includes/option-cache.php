@@ -73,6 +73,49 @@ function aafm_forget_option_caches( string $option ): bool {
 }
 
 /**
+ * Run one option-cache helper's unchanged body and emit its write outcome once, suppressing a
+ * nested emission when one helper calls another (aafm_persist_operator_switch()'s off branch
+ * calls aafm_delete_option_cache_safe(), one level deep).
+ *
+ * Sits outside every helper's own body rather than inside it, because a helper has more than one
+ * early-return exit and an emission placed at the end of the body would miss the early ones and,
+ * on the switch's off branch, double the delete helper's own emission. Wrapping the whole call
+ * instead means every return path, early exits included, ends in exactly one emission carrying
+ * the helper's final result. function_exists() guards the emission itself, so uninstall.php,
+ * which loads this file without includes/write-contract.php, never emits at all.
+ *
+ * @param string   $option    Option name.
+ * @param bool     $is_delete Whether $body's true result means the option is now certified absent
+ *                            (deleted) rather than certified stored (written).
+ * @param callable $body      The helper's own unchanged body.
+ * @return bool $body's own return value, unchanged.
+ */
+function aafm_option_write_observed( string $option, bool $is_delete, callable $body ): bool {
+	static $depth = 0;
+	++$depth;
+	try {
+		$result = $body();
+	} finally {
+		--$depth;
+	}
+
+	if ( 0 === $depth && function_exists( 'aafm_emit_write_outcome' ) ) {
+		$status = $result ? ( $is_delete ? AAFM_WRITE_DELETED : AAFM_WRITE_WRITTEN ) : AAFM_WRITE_UNCONFIRMED;
+		aafm_emit_write_outcome(
+			array( 'status' => $status ),
+			array(
+				'kind'      => 'option',
+				'entity'    => null,
+				'object_id' => null,
+				'key'       => $option,
+			)
+		);
+	}
+
+	return $result;
+}
+
+/**
  * Delete an option and make sure no cache entry keeps answering for it.
  *
  * `delete_option()` alone is enough when the cache agrees with the database. When a persistent
@@ -93,16 +136,22 @@ function aafm_forget_option_caches( string $option ): bool {
  *              or the row is still there.
  */
 function aafm_delete_option_cache_safe( string $option ): bool {
-	delete_option( $option );
-	$caches_ok = aafm_forget_option_caches( $option );
+	return aafm_option_write_observed(
+		$option,
+		true,
+		static function () use ( $option ): bool {
+			delete_option( $option );
+			$caches_ok = aafm_forget_option_caches( $option );
 
-	aafm_force_refresh_option_caches( $option );
+			aafm_force_refresh_option_caches( $option );
 
-	if ( ! $caches_ok ) {
-		return false;
-	}
+			if ( ! $caches_ok ) {
+				return false;
+			}
 
-	return aafm_option_write_certified( $option, null, true );
+			return aafm_option_write_certified( $option, null, true );
+		}
+	);
 }
 
 /**
@@ -319,15 +368,14 @@ function aafm_wpdb_col( string $sql ): array {
  *
  * The database view is a direct, uncached `$wpdb` read of the row for the current blog - the one
  * source `aafm_uninstall_should_delete_data()` already trusts over any cache for its own,
- * higher-stakes decision, for the same reason: a cache is not the ground truth. This is the only
- * function outside that one allowed to cost that extra query, because it exists specifically to
- * certify a write the plugin just made.
+ * higher-stakes decision, for the same reason: a cache is not the ground truth. It pays that extra
+ * query because it exists to certify a write the plugin just made.
  *
  * A query that errors (a broken table, a lost DB connection, anything short of a clean empty
  * result) and a query that simply finds no matching row both make `$wpdb->get_var()` return null -
  * `db_found` alone cannot tell "confirmed absent" from "could not check" apart (Codex round 9
  * re-check: this was the gap behind a failed configuration delete still certifying as a clean
- * reset - R9-3). `db_error` names that gap explicitly, from aafm_wpdb_scalar()'s own `ok` flag
+ * reset - R9-3). `db_error` names that gap explicitly, from aafm_wpdb_row()'s own `ok` flag
  * rather than `$wpdb->last_error` alone: last_error is not set on every failure path (Codex round
  * 10, R10-1 - see that function's docblock for the three it misses), so a caller that trusted it
  * alone could still certify an unreadable database as proof the row was gone.
@@ -365,13 +413,15 @@ function aafm_read_option_views( string $option ): array {
 	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache; certification must be checked against the row itself, mirroring aafm_uninstall_should_delete_data()'s reasoning.
-	$scalar   = aafm_wpdb_scalar( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
-	$db_error = ! $scalar['ok'];
-	$db_found = ! $db_error && null !== $scalar['value'];
+	// Read as a row, not a scalar: aafm_wpdb_scalar() turns a stored '' into no row, and a '' row is
+	// still a row (ledger s14hunta-1).
+	$row      = aafm_wpdb_row( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
+	$db_error = ! $row['ok'];
+	$db_found = $row['ok'] && null !== $row['value'];
 
 	return array(
 		'db_found'    => $db_found,
-		'db_value'    => $db_found ? maybe_unserialize( $scalar['value'] ) : false,
+		'db_value'    => $db_found ? maybe_unserialize( $row['value']['option_value'] ) : false,
 		'db_error'    => $db_error,
 		'cache_found' => $cache_found,
 		'cache_value' => $cache_value,
@@ -383,21 +433,45 @@ function aafm_read_option_views( string $option ): array {
  * store, mirroring how WordPress itself round-trips each type.
  *
  * An array or object round-trips through `serialize()`/`unserialize()` with its element types
- * intact, so a strict comparison there is exact. A scalar is not: WordPress never restores it to
- * the caller's original PHP type, only to whatever it actually stored - a passed-in int `0` reads
- * back as the string `'0'`, `true` as `'1'`, `false` as `''`. Comparing a scalar as WordPress
- * itself renders it, rather than against the caller's native type, is what keeps this from
- * reporting a perfectly persisted `0` or `false` as a mismatch.
+ * intact, so when either side is one, the two values are equal only when `serialize()` of both is
+ * identical. That compares by value and type, not by object instance, and skips the string cast,
+ * which throws on a stored object. A value `serialize()` refuses, such as a closure, equals
+ * nothing: the comparison returns false and never throws. A scalar does not round-trip that way:
+ * WordPress never restores it to the caller's original PHP type, only to whatever it actually
+ * stored - a passed-in int `0` reads back as the string `'0'`, `true` as `'1'`, `false` as `''`.
+ * Comparing a scalar as WordPress itself renders it, rather than against the caller's native type,
+ * is what keeps this from reporting a perfectly persisted `0` or `false` as a mismatch.
  *
  * @param mixed $stored   Value read back from a cache view or the database.
  * @param mixed $expected Value the caller intended to store.
  * @return bool
  */
 function aafm_option_value_matches( $stored, $expected ): bool {
-	if ( is_array( $expected ) || is_object( $expected ) ) {
-		return $stored === $expected;
+	if ( is_array( $stored ) || is_object( $stored ) || is_array( $expected ) || is_object( $expected ) ) {
+		try {
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a by-value comparison of two values already in memory; nothing is stored or unserialized.
+			return serialize( $stored ) === serialize( $expected );
+		} catch ( \Throwable $e ) {
+			unset( $e ); // A value serialize() refuses equals nothing.
+			return false;
+		}
 	}
 	return (string) $stored === (string) $expected;
+}
+
+/**
+ * Whether a stored value is exactly the object id a write asked for: the int itself, or exactly
+ * (string) $id, the string core stores for it, with no sign, space, leading zero or fraction.
+ *
+ * A cast is the wrong test. `(int)` reads '12.9', '12abc', ' 12', '012' and true as an id, so an
+ * old row a vetoing filter left behind would confirm a write that never happened.
+ *
+ * @param mixed $stored Value read back from the row.
+ * @param int   $id     The id the write asked for.
+ * @return bool
+ */
+function aafm_stored_id_matches( $stored, int $id ): bool {
+	return $stored === $id || ( is_string( $stored ) && (string) $id === $stored );
 }
 
 /**
@@ -535,30 +609,36 @@ function aafm_option_write_certified( string $option, $expected, bool $expect_ab
  * @return bool True when the option now certifies as $on.
  */
 function aafm_persist_operator_switch( string $option, bool $on ): bool {
-	if ( $on ) {
-		$forgot_before = aafm_forget_option_caches( $option );
-		update_option( $option, true );
-		$forgot_after = aafm_forget_option_caches( $option );
-		$caches_ok    = $forgot_before && $forgot_after;
-	} else {
-		$caches_ok = aafm_delete_option_cache_safe( $option );
-	}
+	return aafm_option_write_observed(
+		$option,
+		! $on,
+		static function () use ( $option, $on ): bool {
+			if ( $on ) {
+				$forgot_before = aafm_forget_option_caches( $option );
+				update_option( $option, true );
+				$forgot_after = aafm_forget_option_caches( $option );
+				$caches_ok    = $forgot_before && $forgot_after;
+			} else {
+				$caches_ok = aafm_delete_option_cache_safe( $option );
+			}
 
-	aafm_force_refresh_option_caches( $option );
+			aafm_force_refresh_option_caches( $option );
 
-	if ( ! $caches_ok ) {
-		return false;
-	}
+			if ( ! $caches_ok ) {
+				return false;
+			}
 
-	$certified = $on
-		? aafm_option_write_certified( $option, true )
-		: aafm_option_write_certified( $option, false, true );
+			$certified = $on
+				? aafm_option_write_certified( $option, true )
+				: aafm_option_write_certified( $option, false, true );
 
-	if ( $certified ) {
-		get_option( $option, false );
-	}
+			if ( $certified ) {
+				get_option( $option, false );
+			}
 
-	return $certified;
+			return $certified;
+		}
+	);
 }
 
 /**
@@ -611,24 +691,30 @@ function aafm_persist_operator_switch( string $option, bool $on ): bool {
  * @return bool True when the option now certifies as $value.
  */
 function aafm_update_option_verified( string $option, $value, ?bool $autoload = null ): bool {
-	$caches_ok = aafm_forget_option_caches( $option );
-	if ( null === $autoload ) {
-		update_option( $option, $value );
-	} else {
-		update_option( $option, $value, $autoload );
-	}
-	$caches_ok = aafm_forget_option_caches( $option ) && $caches_ok;
-	aafm_force_refresh_option_caches( $option );
+	return aafm_option_write_observed(
+		$option,
+		false,
+		static function () use ( $option, $value, $autoload ): bool {
+			$caches_ok = aafm_forget_option_caches( $option );
+			if ( null === $autoload ) {
+				update_option( $option, $value );
+			} else {
+				update_option( $option, $value, $autoload );
+			}
+			$caches_ok = aafm_forget_option_caches( $option ) && $caches_ok;
+			aafm_force_refresh_option_caches( $option );
 
-	if ( ! $caches_ok ) {
-		return false;
-	}
+			if ( ! $caches_ok ) {
+				return false;
+			}
 
-	$certified = aafm_option_write_certified( $option, $value );
+			$certified = aafm_option_write_certified( $option, $value );
 
-	if ( $certified ) {
-		get_option( $option );
-	}
+			if ( $certified ) {
+				get_option( $option );
+			}
 
-	return $certified;
+			return $certified;
+		}
+	);
 }

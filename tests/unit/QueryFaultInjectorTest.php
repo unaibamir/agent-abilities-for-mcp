@@ -16,6 +16,48 @@ use AAFM\Tests\TestCase;
 
 final class QueryFaultInjectorTest extends TestCase {
 
+	public function set_up(): void {
+		parent::set_up();
+		QueryFaultInjector::reset_fired_count();
+	}
+
+	/**
+	 * The fired counter must count exactly the queries an armed fault actually redirected, for
+	 * both failure shapes, and stay at zero when nothing matched.
+	 */
+	public function test_fired_count_tracks_actual_fault_activations(): void {
+		global $wpdb;
+
+		$this->assertSame( 0, QueryFaultInjector::fired_count(), 'precondition: no fault has fired yet.' );
+
+		QueryFaultInjector::fail_query(
+			'aafm_fault_injector_counter_probe',
+			static function () use ( $wpdb ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+				$wpdb->query( 'SELECT 1 AS aafm_fault_injector_counter_probe' );
+			}
+		);
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'one matching query must count as one fire.' );
+
+		QueryFaultInjector::break_query_with_real_error(
+			'aafm_fault_injector_counter_probe_two',
+			static function () use ( $wpdb ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+				$wpdb->query( 'SELECT 1 AS aafm_fault_injector_counter_probe_two' );
+			}
+		);
+		$this->assertSame( 2, QueryFaultInjector::fired_count(), 'the real-error shape must count too.' );
+
+		QueryFaultInjector::fail_query(
+			'aafm_needle_that_never_matches_anything',
+			static function () use ( $wpdb ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+				$wpdb->query( 'SELECT 1' );
+			}
+		);
+		$this->assertSame( 2, QueryFaultInjector::fired_count(), 'a query that never matches must not bump the counter.' );
+	}
+
 	/**
 	 * Fail_query() must make the matching query return false without flushing last_result - the
 	 * exact precondition the R7-2/R8-1/R8-3 defect class depends on.

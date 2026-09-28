@@ -356,4 +356,321 @@ final class UserMetaTest extends TestCase {
 		);
 		$this->assertSame( 'new value-normalized', $out['value'] );
 	}
+
+	/**
+	 * A user with `aafm_note` allowlisted, acting as a user who may edit its meta.
+	 *
+	 * @return int Object id.
+	 */
+	private function note_user(): int {
+		update_option( 'aafm_exposed_user_meta_keys', array( 'aafm_note' ) );
+		$this->acting_as( 'administrator' );
+		return self::factory()->user->create();
+	}
+
+	/**
+	 * Run update-user-meta for `aafm_note`.
+	 *
+	 * @param int   $id    Object id.
+	 * @param mixed $value Value.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function update_note( int $id, $value ) {
+		return aafm_exec_update_user_meta(
+			array(
+				'user_id' => $id,
+				'key'     => 'aafm_note',
+				'value'   => $value,
+			)
+		);
+	}
+
+	/**
+	 * Run delete-user-meta for `aafm_note`.
+	 *
+	 * @param int $id Object id.
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function delete_note( int $id ) {
+		return aafm_exec_delete_user_meta(
+			array(
+				'user_id' => $id,
+				'key'     => 'aafm_note',
+			)
+		);
+	}
+
+	/**
+	 * Assert an error with the ability's code, the status's message and identifier-only data.
+	 *
+	 * @param mixed  $out     The ability result.
+	 * @param string $status  Expected status.
+	 * @param string $message Expected message.
+	 * @param int    $id      Object id.
+	 */
+	private function assert_meta_error( $out, string $status, string $message, int $id ): void {
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( $message, $out->get_error_message() );
+		$this->assertSame(
+			array(
+				'status'    => $status,
+				'kind'      => 'user_meta',
+				'object_id' => $id,
+				'key'       => 'aafm_note',
+			),
+			$out->get_error_data()
+		);
+	}
+
+	public function test_update_user_meta_reports_written_with_the_previous_value(): void {
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+
+		$this->assertSame(
+			array(
+				'user_id'      => $id,
+				'key'          => 'aafm_note',
+				'value'        => 'new',
+				'status'       => 'written',
+				'previous'     => 'old',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => true,
+					'count'  => 1,
+				),
+			),
+			$this->update_note( $id, 'new' )
+		);
+	}
+
+	public function test_update_user_meta_under_a_veto_false_filter_returns_the_refused_error(): void {
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'update_user_metadata', '__return_false' );
+		$out = $this->update_note( $id, 'new' );
+		remove_filter( 'update_user_metadata', '__return_false' );
+
+		$this->assert_meta_error( $out, 'refused', 'The site refused or failed the write; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_user_meta( $id, 'aafm_note', true ) );
+	}
+
+	public function test_update_user_meta_under_a_veto_true_filter_returns_the_unconfirmed_error(): void {
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'update_user_metadata', '__return_true' );
+		$out = $this->update_note( $id, 'new' );
+		remove_filter( 'update_user_metadata', '__return_true' );
+
+		$this->assert_meta_error( $out, 'unconfirmed', 'The write could not be confirmed; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_user_meta( $id, 'aafm_note', true ) );
+	}
+
+	public function test_update_user_meta_with_a_failed_read_back_returns_the_unconfirmed_error(): void {
+		global $wpdb;
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+
+		$table      = $wpdb->usermeta;
+		$suppressed = $wpdb->suppress_errors( true );
+		$armed      = false;
+		$arm        = static function () use ( &$armed ): void {
+			$armed = true;
+		};
+		add_action( 'updated_user_meta', $arm );
+		$fail = static function ( string $query ) use ( &$armed, $table ): string {
+			return ( $armed && false !== strpos( $query, $table ) && 0 === stripos( ltrim( $query ), 'SELECT' ) ) ? '' : $query;
+		};
+		add_filter( 'query', $fail );
+		ob_start();
+		$out = $this->update_note( $id, 'new' );
+		ob_end_clean();
+		remove_filter( 'query', $fail );
+		remove_action( 'updated_user_meta', $arm );
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assert_meta_error( $out, 'unconfirmed', 'The write could not be confirmed; read the key to see its current state.', $id );
+		wp_cache_delete( $id, 'user_meta' );
+		$this->assertSame( 'new', get_user_meta( $id, 'aafm_note', true ), 'the write itself landed' );
+	}
+
+	public function test_delete_user_meta_reports_deleted_and_then_absent(): void {
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+
+		$this->assertSame(
+			array(
+				'deleted'      => true,
+				'status'       => 'deleted',
+				'previous'     => 'old',
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+			),
+			$this->delete_note( $id )
+		);
+		$this->assertSame(
+			array(
+				'deleted' => true,
+				'status'  => 'absent',
+			),
+			$this->delete_note( $id )
+		);
+	}
+
+	public function test_delete_user_meta_with_a_surviving_row_returns_the_refused_error(): void {
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+		add_filter( 'delete_user_metadata', '__return_true' );
+		$out = $this->delete_note( $id );
+		remove_filter( 'delete_user_metadata', '__return_true' );
+
+		$this->assert_meta_error( $out, 'refused', 'The site refused or failed the delete; read the key to see its current state.', $id );
+		$this->assertSame( 'old', get_user_meta( $id, 'aafm_note', true ) );
+	}
+
+	/**
+	 * Pinned to the front-end policy path: the no-flush fault hands core the last query's rows, which on the batched path are the policy batch's (PM build-5, s14a3-6).
+	 */
+	public function test_delete_user_meta_with_a_failed_baseline_read_returns_the_read_failed_error(): void {
+		$this->use_front_end_policy_path();
+		global $wpdb;
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$out = \AAFM\Tests\Support\QueryFaultInjector::fail_query(
+			$wpdb->usermeta,
+			function () use ( $id ) {
+				return $this->delete_note( $id );
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assert_meta_error( $out, 'read_failed', 'The current value could not be read, so nothing was deleted. Try again.', $id );
+		wp_cache_delete( $id, 'user_meta' );
+		$this->assertSame( 'old', get_user_meta( $id, 'aafm_note', true ) );
+	}
+
+	/**
+	 * `value` is read through core after the write, exactly as get_user_meta( ..., true )
+	 * reads it, so a read filter shapes it as it always has, on written and on unchanged.
+	 */
+	public function test_update_user_meta_value_is_read_through_core_with_its_filters(): void {
+		global $wpdb;
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', '7' );
+		$table  = $wpdb->usermeta;
+		$column = 'user_id';
+		$as_int = static function ( $value, $object_id, $meta_key, $single ) use ( $wpdb, $table, $column ) {
+			if ( 'aafm_note' !== $meta_key ) {
+				return $value;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$stored = $wpdb->get_var( $wpdb->prepare( 'SELECT meta_value FROM %i WHERE %i = %d AND meta_key = %s', $table, $column, $object_id, $meta_key ) );
+			if ( null === $stored ) {
+				return $value;
+			}
+			return $single ? (int) $stored : array( (int) $stored );
+		};
+		add_filter( 'get_user_metadata', $as_int, 10, 4 );
+
+		$unchanged = $this->update_note( $id, '7' );
+		$written   = $this->update_note( $id, '8' );
+		$core      = get_user_meta( $id, 'aafm_note', true );
+
+		remove_filter( 'get_user_metadata', $as_int, 10 );
+
+		$this->assertSame( 'unchanged', $unchanged['status'] );
+		$this->assertSame( 7, $unchanged['value'] );
+		$this->assertSame( 'written', $written['status'] );
+		$this->assertSame( 8, $written['value'] );
+		$this->assertSame( $core, $written['value'] );
+	}
+
+	/**
+	 * A failed load on that response read is an error, never a made-up value. Pinned to the front-end policy path: the no-flush fault hands core the last query's rows, which on the batched path are the policy batch's (PM build-5, s14a3-6).
+	 */
+	public function test_update_user_meta_with_its_response_read_faulted_returns_the_unconfirmed_error(): void {
+		$this->use_front_end_policy_path();
+		global $wpdb;
+		foreach ( array( 'no-flush', 'real-error' ) as $shape ) {
+			$id = $this->note_user();
+			update_user_meta( $id, 'aafm_note', 'old' );
+			$run        = function () use ( $id ) {
+				return $this->update_note( $id, 'old' );
+			};
+			$needle     = array( 'meta_key, meta_value FROM', $wpdb->usermeta, ' IN (' );
+			$suppressed = $wpdb->suppress_errors( true );
+			\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+			ob_start();
+			$out = 'no-flush' === $shape
+				? \AAFM\Tests\Support\QueryFaultInjector::fail_query( $needle, $run )
+				: \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error( $needle, $run );
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+
+			$this->assertGreaterThan( 0, \AAFM\Tests\Support\QueryFaultInjector::fired_count(), $shape );
+			$this->assert_meta_error( $out, 'unconfirmed', 'The write could not be confirmed; read the key to see its current state.', $id );
+		}
+	}
+
+	/**
+	 * Pinned to the front-end policy path: the no-flush fault hands core the last query's rows, which on the batched path are the policy batch's (PM build-5, s14a3-6).
+	 */
+	public function test_update_user_meta_with_a_failed_baseline_read_returns_the_read_failed_error(): void {
+		$this->use_front_end_policy_path();
+		global $wpdb;
+		$id = $this->note_user();
+		update_user_meta( $id, 'aafm_note', 'old' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$out = \AAFM\Tests\Support\QueryFaultInjector::fail_query(
+			$wpdb->usermeta,
+			function () use ( $id ) {
+				return $this->update_note( $id, 'new' );
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assert_meta_error( $out, 'read_failed', 'The current value could not be read, so nothing was written. Try again.', $id );
+		wp_cache_delete( $id, 'user_meta' );
+		$this->assertSame( 'old', get_user_meta( $id, 'aafm_note', true ) );
+	}
+
+	/**
+	 * A key that fails the activity-log key rule reaches error_data as null, still present, so an
+	 * agent-supplied string never lands in the error log.
+	 */
+	public function test_a_user_meta_error_for_a_malformed_key_carries_a_null_key(): void {
+		update_option( 'aafm_exposed_user_meta_keys', array( '*' ) );
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->user->create();
+		add_filter( 'update_user_metadata', '__return_false' );
+		$out = aafm_exec_update_user_meta(
+			array(
+				'user_id' => $id,
+				'key'     => 'bad key',
+				'value'   => 'x',
+			)
+		);
+		remove_filter( 'update_user_metadata', '__return_false' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame(
+			array(
+				'status'    => 'refused',
+				'kind'      => 'user_meta',
+				'object_id' => $id,
+				'key'       => null,
+			),
+			$out->get_error_data()
+		);
+	}
 }

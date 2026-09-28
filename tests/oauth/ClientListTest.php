@@ -206,4 +206,67 @@ final class ClientListTest extends TestCase {
 		$grants = aafm_oauth_list_grants();
 		$this->assertTrue( $grants[0]['is_high_privilege'], 'A capability that can administer the site must be flagged regardless of role name.' );
 	}
+
+	/**
+	 * A grant whose user does not load, while the user's row is still there, stays in the list by
+	 * its ids and reads as high privilege, so the operator can still see and revoke it.
+	 */
+	public function test_list_grants_keeps_a_grant_whose_user_does_not_load(): void {
+		global $wpdb;
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
+		$this->seed_consent( $user_id, 'client_abc' );
+		wp_cache_delete( $user_id, 'users' );
+
+		$filter     = \AAFM\Tests\Support\QueryFaultInjector::leak_row_filter(
+			array( 'SELECT * FROM', $wpdb->users, "WHERE ID = '{$user_id}' LIMIT" ),
+			$wpdb->prepare( 'SELECT * FROM %i WHERE 1 = 0', $wpdb->users ),
+			0
+		);
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+		ob_start();
+		try {
+			$grants = aafm_oauth_list_grants();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertCount( 1, $grants );
+		$this->assertSame( $user_id, $grants[0]['user_id'] );
+		$this->assertSame( 'client_abc', $grants[0]['client_id'] );
+		$this->assertSame( 'Claude', $grants[0]['client_name'] );
+		$this->assertSame( '', $grants[0]['user_display'] );
+		$this->assertSame( '', $grants[0]['user_login'] );
+		$this->assertSame( array(), $grants[0]['user_roles'] );
+		$this->assertTrue( $grants[0]['is_high_privilege'] );
+		$this->assertNotSame( '', $grants[0]['granted_at'] );
+	}
+
+	/**
+	 * W2-T5 (step 14, row D1): a grant whose user's caps load fails shows the fallback row (no
+	 * names, no roles, high privilege), not a real account read as holding no role.
+	 */
+	public function test_list_grants_shows_the_fallback_row_when_the_users_caps_load_fails(): void {
+		global $wpdb;
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
+		$this->seed_consent( $user_id, 'client_abc' );
+		wp_cache_delete( $user_id, 'user_meta' );
+
+		$grants = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->usermeta, "user_id IN ({$user_id})" ),
+			static fn(): array => aafm_oauth_list_grants()
+		);
+
+		$this->assertCount( 1, $grants );
+		$this->assertSame( $user_id, $grants[0]['user_id'] );
+		$this->assertSame( 'client_abc', $grants[0]['client_id'] );
+		$this->assertSame( '', $grants[0]['user_display'] );
+		$this->assertSame( '', $grants[0]['user_login'] );
+		$this->assertSame( array(), $grants[0]['user_roles'] );
+		$this->assertTrue( $grants[0]['is_high_privilege'] );
+	}
 }

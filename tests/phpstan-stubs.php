@@ -15,6 +15,19 @@
 declare( strict_types=1 );
 
 // phpcs:disable
+if ( ! class_exists( 'WC_Data_Store' ) ) {
+	/**
+	 * Minimal WooCommerce data-store signature for static analysis only.
+	 */
+	class WC_Data_Store {
+		/** @return WC_Data_Store */
+		public static function load( string $object_type ) {}
+		public function get_current_class_name(): string {
+			return '';
+		}
+	}
+}
+
 if ( ! class_exists( 'WC_Product' ) ) {
 	/**
 	 * Minimal WooCommerce product signature for static analysis only.
@@ -59,6 +72,9 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		}
 		public function get_manage_stock(): bool {
 			return false;
+		}
+		public function get_data_store(): WC_Data_Store {
+			return new WC_Data_Store();
 		}
 		public function get_featured(): bool {
 			return false;
@@ -210,6 +226,9 @@ if ( ! class_exists( 'WC_Product_Variation' ) ) {
 		/** @return bool|string */
 		public function get_manage_stock() {
 			return false;
+		}
+		public function get_data_store(): WC_Data_Store {
+			return new WC_Data_Store();
 		}
 		public function get_image_id(): int {
 			return 0;
@@ -750,6 +769,27 @@ if ( ! function_exists( 'wc_create_refund' ) ) {
 		return new \WP_Error();
 	}
 }
+if ( ! function_exists( 'wc_delete_order_item' ) ) {
+	/**
+	 * @param int $item_id
+	 * @return bool
+	 */
+	function wc_delete_order_item( $item_id ) {
+		return false;
+	}
+}
+if ( ! function_exists( 'wc_create_new_customer' ) ) {
+	/**
+	 * @param string              $email
+	 * @param string              $username
+	 * @param string              $password
+	 * @param array<string,mixed> $args
+	 * @return int|\WP_Error
+	 */
+	function wc_create_new_customer( $email, $username = '', $password = '', $args = array() ) {
+		return new \WP_Error();
+	}
+}
 if ( ! function_exists( 'wc_format_decimal' ) ) {
 	/**
 	 * @param string|float|int $number
@@ -1169,6 +1209,10 @@ if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 		public function get_option_key() { return ''; }
 		/** @return bool */
 		public function save() { return false; }
+		/** @return string */
+		public function get_title() { return $this->title; }
+		/** @return string */
+		public function get_description() { return $this->description; }
 	}
 }
 if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
@@ -1495,6 +1539,42 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 		 * @return void
 		 */
 		public static function line( $message = '' ) {}
+	}
+}
+if ( ! class_exists( 'WPSEO_Meta' ) ) {
+	/**
+	 * Minimal Yoast SEO WPSEO_Meta signature for static analysis only.
+	 */
+	class WPSEO_Meta {
+		/**
+		 * @var array<string,string>
+		 */
+		public static $defaults = array();
+
+		/**
+		 * @param mixed  $check      Short-circuit value.
+		 * @param int    $object_id  Post id.
+		 * @param string $meta_key   Meta key.
+		 * @param mixed  $meta_value Meta value.
+		 * @param mixed  $prev_value Previous value.
+		 * @return mixed
+		 */
+		public static function remove_meta_if_default( $check, $object_id, $meta_key, $meta_value, $prev_value = '' ) {
+			return $check;
+		}
+	}
+}
+if ( ! function_exists( 'update_field' ) ) {
+	/**
+	 * Minimal ACF update_field() signature for static analysis only.
+	 *
+	 * @param string $selector Field name or key.
+	 * @param mixed  $value    Value to save.
+	 * @param mixed  $post_id  ACF object selector.
+	 * @return int|bool
+	 */
+	function update_field( $selector, $value, $post_id = false ) {
+		return false;
 	}
 }
 // phpcs:enable

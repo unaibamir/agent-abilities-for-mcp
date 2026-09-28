@@ -1,0 +1,1815 @@
+<?php
+/**
+ * The write-and-confirm contract: readers, writer, delete, group writer, the checked-read scope,
+ * the option rule, the post-field wrapper, and the write-outcome log observer.
+ *
+ * This is the only file the caller-enumeration sweep (tests/MetaWriteSweepTest.php) permits to call
+ * a raw meta or option primitive. Every metadata write and delete in the plugin routes through the
+ * functions here so a write's outcome is decided once, the same way, everywhere.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+defined( 'ABSPATH' ) || exit;
+
+// Status constants. PHP 7.4 floor: string constants, not an enum.
+define( 'AAFM_WRITE_WRITTEN', 'written' );
+define( 'AAFM_WRITE_UNCHANGED', 'unchanged' );
+define( 'AAFM_WRITE_DELETED', 'deleted' );
+define( 'AAFM_WRITE_ABSENT', 'absent' );
+define( 'AAFM_WRITE_REFUSED', 'refused' );
+define( 'AAFM_WRITE_READ_FAILED', 'read_failed' );
+define( 'AAFM_WRITE_UNCONFIRMED', 'unconfirmed' );
+define( 'AAFM_WRITE_PARTIAL', 'partial' );
+define( 'AAFM_WRITE_ACCEPTED', 'accepted' );
+
+/**
+ * The plain map of write kind to its writer functions, built once with no filter.
+ *
+ * A writer a later migration step still has to build (the vendor kinds) is listed here from the
+ * start; that step is the one that makes function_exists() true for its name.
+ *
+ * @return array<string,string[]>
+ */
+function aafm_write_writers(): array {
+	$meta_writers = array( 'aafm_meta_set', 'aafm_meta_delete', 'aafm_meta_set_group' );
+
+	return array(
+		'post_meta'    => $meta_writers,
+		'term_meta'    => $meta_writers,
+		'user_meta'    => $meta_writers,
+		'option'       => array( 'aafm_option_write', 'aafm_update_option_verified', 'aafm_persist_operator_switch', 'aafm_delete_option_cache_safe' ),
+		'post_field'   => array( 'aafm_post_field_confirm_logged' ),
+		'acf'          => array( 'aafm_acf_write_field' ),
+		'aioseo'       => array( 'aafm_aioseo_write' ),
+		'geodirectory' => array( 'aafm_geodir_write' ),
+		'tec'          => array( 'aafm_tec_write' ),
+		'woocommerce'  => array( 'aafm_wc_write' ),
+	);
+}
+
+/**
+ * The metadata table id column and object id column for a meta type.
+ *
+ * @param string $type 'post', 'term', 'user' or 'comment'.
+ * @return array{id_column: string, object_id_column: string}
+ */
+function aafm_meta_columns( string $type ): array {
+	return array(
+		'id_column'        => 'user' === $type ? 'umeta_id' : 'meta_id',
+		'object_id_column' => $type . '_id',
+	);
+}
+
+/**
+ * Read every row of one meta key with a failure-aware query.
+ *
+ * The meta_key column compares under its collation, which on a stock install ignores case,
+ * accents and trailing spaces, so the query also returns rows stored under another spelling of the
+ * key. Core's update_metadata() and delete_metadata() would act on those rows too, while PHP and
+ * core's meta cache compare bytes. exists, count, value and values therefore cover only the rows
+ * whose stored meta_key is byte-identical to $key, and aliased counts the others. A writer refuses
+ * the request when aliased is above zero.
+ *
+ * Selects the meta id column first, then the object id column, meta_key and meta_value, ordered by
+ * meta id, so that under the no-flush fault shape a query left over in $wpdb->last_result by an
+ * earlier statement is read as real rows of the key rather than producing an undefined-index
+ * warning.
+ *
+ * @param string $type 'post', 'term' or 'user'.
+ * @param int    $id   Object id.
+ * @param string $key  Meta key.
+ * @return array{ok: bool, exists: bool, count: int, value: mixed, values: array<int, mixed>, aliased: int}
+ */
+function aafm_meta_row( string $type, int $id, string $key ): array {
+	global $wpdb;
+
+	$failed = array(
+		'ok'      => false,
+		'exists'  => false,
+		'count'   => 0,
+		'value'   => null,
+		'values'  => array(),
+		'aliased' => 0,
+	);
+
+	$table = _get_meta_table( $type );
+	if ( ! $table ) {
+		return $failed;
+	}
+
+	$cols             = aafm_meta_columns( $type );
+	$id_column        = $cols['id_column'];
+	$object_id_column = $cols['object_id_column'];
+
+	$sql = "SELECT {$id_column}, {$object_id_column}, meta_key, meta_value FROM %i WHERE {$object_id_column} = %d AND meta_key = %s ORDER BY {$id_column}";
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $id_column/$object_id_column are internal, computed from the fixed {post,term,user} set, never from caller input.
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $table, $id, $key ) );
+	if ( ! $view['ok'] ) {
+		return $failed;
+	}
+
+	$values  = array();
+	$aliased = 0;
+	foreach ( (array) $view['value'] as $row ) {
+		if ( (string) $row['meta_key'] === $key ) {
+			$values[] = maybe_unserialize( $row['meta_value'] );
+		} else {
+			++$aliased;
+		}
+	}
+
+	return array(
+		'ok'      => true,
+		'exists'  => array() !== $values,
+		'count'   => count( $values ),
+		'value'   => $values[0] ?? null,
+		'values'  => $values,
+		'aliased' => $aliased,
+	);
+}
+
+/**
+ * Read every row of several meta keys in one query: the multi-key preflight for a group write.
+ *
+ * Each key's entry follows aafm_meta_row(): exists, count, value and values cover only the rows
+ * stored under exactly that spelling, and aliased counts the rows the column's collation matched
+ * under another spelling. PHP cannot repeat that comparison, so one flag column per requested key
+ * has the database say which requested keys each row matched. A key requested twice with the same
+ * spelling is read once, and no row counts twice for one key.
+ *
+ * @param string   $type Object type.
+ * @param int      $id   Object id.
+ * @param string[] $keys Meta keys to read.
+ * @return array{ok: bool, by_key: array<string, array{exists: bool, count: int, value: mixed, values: array<int, mixed>, aliased: int}>}
+ */
+function aafm_meta_rows( string $type, int $id, array $keys ): array {
+	global $wpdb;
+
+	$keys   = array_values( array_unique( array_map( 'strval', $keys ), SORT_STRING ) );
+	$by_key = array();
+	foreach ( $keys as $key ) {
+		$by_key[ $key ] = array(
+			'exists'  => false,
+			'count'   => 0,
+			'value'   => null,
+			'values'  => array(),
+			'aliased' => 0,
+		);
+	}
+
+	$table = _get_meta_table( $type );
+	if ( ! $table || array() === $keys ) {
+		return array(
+			'ok'     => (bool) $table,
+			'by_key' => $by_key,
+		);
+	}
+
+	$cols             = aafm_meta_columns( $type );
+	$id_column        = $cols['id_column'];
+	$object_id_column = $cols['object_id_column'];
+
+	$flags = array();
+	foreach ( array_keys( $keys ) as $index ) {
+		$flags[] = "meta_key = %s AS aafm_match_{$index}";
+	}
+	$flag_columns = implode( ', ', $flags );
+	$placeholders = implode( ', ', array_fill( 0, count( $keys ), '%s' ) );
+	$sql          = "SELECT {$id_column}, {$object_id_column}, meta_key, meta_value, {$flag_columns} FROM %i WHERE {$object_id_column} = %d AND meta_key IN ({$placeholders}) ORDER BY {$id_column}";
+	$args         = array_merge( $keys, array( $table, $id ), $keys );
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- see aafm_meta_row(); $flag_columns holds only placeholders and aliases built from list indexes.
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $args ) );
+
+	if ( ! $view['ok'] ) {
+		return array(
+			'ok'     => false,
+			'by_key' => $by_key,
+		);
+	}
+
+	$values  = array_fill_keys( $keys, array() );
+	$aliased = array_fill_keys( $keys, 0 );
+	foreach ( (array) $view['value'] as $row ) {
+		foreach ( $keys as $index => $key ) {
+			if ( empty( $row[ "aafm_match_{$index}" ] ) ) {
+				continue;
+			}
+			if ( (string) $row['meta_key'] === $key ) {
+				$values[ $key ][] = maybe_unserialize( $row['meta_value'] );
+			} else {
+				++$aliased[ $key ];
+			}
+		}
+	}
+	foreach ( $keys as $key ) {
+		$by_key[ $key ] = array(
+			'exists'  => array() !== $values[ $key ],
+			'count'   => count( $values[ $key ] ),
+			'value'   => $values[ $key ][0] ?? null,
+			'values'  => $values[ $key ],
+			'aliased' => $aliased[ $key ],
+		);
+	}
+
+	return array(
+		'ok'     => true,
+		'by_key' => $by_key,
+	);
+}
+
+/**
+ * Whether two of the requested keys are one key to the database, compared under the meta_key
+ * column's own collation.
+ *
+ * The first branch of the union carries its key through CONCAT() with a meta_key value from an
+ * empty read of the meta table, so the whole union column takes that column's collation, not the
+ * connection's. COUNT( DISTINCT ) then counts the keys the way the column would, and fewer
+ * distinct values than keys means two of them collide. The LEFT JOIN on a one-row derived table
+ * keeps the result to one row when the meta table has no rows at all.
+ *
+ * @param string   $type 'post', 'term' or 'user'.
+ * @param string[] $keys Meta keys, each spelled differently.
+ * @return bool|null True when two keys collide, false when none do, null when the query failed.
+ */
+function aafm_meta_keys_collide( string $type, array $keys ): ?bool {
+	global $wpdb;
+
+	$keys = array_values( array_unique( array_map( 'strval', $keys ), SORT_STRING ) );
+	if ( count( $keys ) < 2 ) {
+		return false;
+	}
+	$table = _get_meta_table( $type );
+	if ( ! $table ) {
+		return null;
+	}
+
+	$union = "SELECT CONCAT( IFNULL( m.meta_key, '' ), %s ) AS k FROM ( SELECT 1 AS one ) AS d LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS m ON 1 = 1";
+	$args  = array( $keys[0], $table );
+	foreach ( array_slice( $keys, 1 ) as $key ) {
+		$union .= ' UNION ALL SELECT %s';
+		$args[] = $key;
+	}
+	$sql = "SELECT COUNT( DISTINCT u.k ) AS distinct_keys FROM ( {$union} ) AS u";
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $union holds only placeholders and fixed SQL.
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $args ) );
+	if ( ! $view['ok'] || ! isset( $view['value'][0]['distinct_keys'] ) ) {
+		return null;
+	}
+
+	return (int) $view['value'][0]['distinct_keys'] < count( $keys );
+}
+
+
+/**
+ * Read a key's state back through core after a write or delete. Through core, a failed query and
+ * "no meta" are the same answer, so this has no ok key.
+ *
+ * @param string $type Object type.
+ * @param int    $id   Object id.
+ * @param string $key  Meta key.
+ * @return array{exists: bool, count: int, values: array<int, mixed>}
+ */
+function aafm_meta_readback( string $type, int $id, string $key ): array {
+	wp_cache_delete( $id, $type . '_meta' );
+	$raw = get_metadata_raw( $type, $id, $key, false );
+	// Drop the set core just loaded, on both return paths: when its query failed, core cached an
+	// empty set, and a later read in this call or a persistent cache in a later request would trust
+	// it.
+	wp_cache_delete( $id, $type . '_meta' );
+	if ( ! is_array( $raw ) ) {
+		return array(
+			'exists' => false,
+			'count'  => 0,
+			'values' => array(),
+		);
+	}
+	// get_metadata_raw() has already run maybe_unserialize() over every row (wp-includes/meta.php).
+	// Decoding again would turn a stored string that merely looks serialized, such as 'a:0:{}', into
+	// an array it never was.
+	return array(
+		'exists' => count( $raw ) > 0,
+		'count'  => count( $raw ),
+		'values' => $raw,
+	);
+}
+
+/**
+ * The one sanctioned getter for a pure read: exactly core's own get_metadata(), defaults and
+ * filters included.
+ *
+ * @param string $type   Object type.
+ * @param int    $id     Object id.
+ * @param string $key    Meta key, or '' for every key.
+ * @param bool   $single Whether to return a single value.
+ * @return mixed
+ */
+function aafm_meta_get( string $type, int $id, string $key = '', bool $single = false ) {
+	return get_metadata( $type, $id, $key, $single );
+}
+
+/**
+ * Run $build with core's own metadata load made failure-aware, so a response field computed
+ * alongside a write fails the call instead of returning a made-up empty value.
+ *
+ * Hooks get_{post,term,user,comment}_metadata and update_{post,term,user,comment}_metadata_cache
+ * at the last priority for the life of $build. An incoming non-null value on either hook means
+ * another plugin already answered and is left untouched. An object that core's cache does not
+ * hold (core's own wp_cache_get() test, so an object cached with no meta counts as held) is
+ * loaded with a copy of core's own load query. Before it loads, a read runs the whole
+ * update_{type}_metadata_cache chain for its object with the scope's own handler inert, so a plugin
+ * that takes over the load there keeps it and core continues as it would without the scope; that
+ * plugin is called up to twice per read. A failed query marks the scope failed: the read gets an
+ * empty answer in core's shape and the primer gets false, so core runs no query of its own, and
+ * the build's result is discarded. A successful query is shaped exactly as core shapes it and
+ * stored with wp_cache_set_multiple() (never wp_cache_add_multiple(), so a scope suspended with
+ * wp_suspend_cache_addition() still installs the rows core's own query would have read).
+ *
+ * The rows are then read back with the same wp_cache_get_multiple() core runs. An object the
+ * cache did not keep (a Redis at maxmemory, or a cache that reports success and keeps nothing)
+ * is served from the scope's own rows for the rest of the build: a present key, every key, or
+ * every key for a single read. Only an absent key falls through to core, whose own query can then
+ * only confirm "absent". A metadata write through core's meta functions drops that object's
+ * served rows, so the next read loads it again.
+ *
+ * @param callable $build The response builder to run inside the scope.
+ * @param WP_Error $error The error to return in place of $build's result when a load failed.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_with_checked_reads( callable $build, WP_Error $error ) {
+	$failed  = false;
+	$probing = false;
+	$served  = array();
+	$types   = array( 'post', 'term', 'user', 'comment' );
+
+	// Loads $object_ids with the checked query and installs the rows. Ids the cache does not keep
+	// join $served. Returns false, and counts a failure, when the query fails.
+	$load = static function ( string $meta_type, array $object_ids ) use ( &$failed, &$served ): bool {
+		global $wpdb;
+		$table            = _get_meta_table( $meta_type );
+		$cache_key        = $meta_type . '_meta';
+		$cols             = aafm_meta_columns( $meta_type );
+		$id_column        = $cols['id_column'];
+		$object_id_column = $cols['object_id_column'];
+		$placeholders     = implode( ', ', array_fill( 0, count( $object_ids ), '%d' ) );
+		$sql              = "SELECT {$object_id_column}, meta_key, meta_value FROM %i WHERE {$object_id_column} IN ({$placeholders}) ORDER BY {$id_column} ASC";
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- identifiers are internal, computed from the fixed {post,term,user,comment} set.
+		$view = aafm_wpdb_results( $wpdb->prepare( $sql, array_merge( array( $table ), $object_ids ) ) );
+
+		if ( ! $view['ok'] ) {
+			$failed = true;
+			return false;
+		}
+
+		$shaped = array();
+		foreach ( $object_ids as $object_id ) {
+			$shaped[ $object_id ] = array();
+		}
+		foreach ( (array) $view['value'] as $row ) {
+			$object_id = (int) $row[ $object_id_column ];
+			$meta_key  = (string) $row['meta_key'];
+			if ( ! isset( $shaped[ $object_id ][ $meta_key ] ) ) {
+				$shaped[ $object_id ][ $meta_key ] = array();
+			}
+			$shaped[ $object_id ][ $meta_key ][] = $row['meta_value'];
+		}
+
+		wp_cache_set_multiple( $shaped, $cache_key );
+
+		foreach ( wp_cache_get_multiple( $object_ids, $cache_key ) as $object_id => $kept ) {
+			if ( false === $kept ) {
+				$served[ $meta_type ][ (int) $object_id ] = $shaped[ $object_id ];
+			}
+		}
+
+		return true;
+	};
+
+	// Answers a read of a served object in core's shape (get_metadata_raw(), wp-includes/meta.php):
+	// core takes [0] of an array for a single read, so a no-key single read is wrapped once. Core's
+	// no-key test is ! $meta_key, so key '0' is a no-key read too.
+	$serve = static function ( array $rows, string $meta_key, bool $single ) {
+		if ( ! $meta_key ) {
+			return $single ? array( $rows ) : $rows;
+		}
+		return isset( $rows[ $meta_key ] ) ? array_map( 'maybe_unserialize', $rows[ $meta_key ] ) : null;
+	};
+
+	// core's get_{type}_metadata filter does not always pass $meta_type (metadata_exists() does,
+	// get_metadata_raw() does), and update_{type}_metadata_cache never does, so each type gets its
+	// own closures.
+	$make_getter = static function ( string $meta_type ) use ( &$served, &$probing, $load, $serve ): callable {
+		return static function ( $check, $object_id, $meta_key = '', $single = false ) use ( $meta_type, &$served, &$probing, $load, $serve ) {
+			if ( null !== $check ) {
+				return $check;
+			}
+
+			$object_id = (int) $object_id;
+			$meta_key  = (string) $meta_key;
+			$single    = (bool) $single;
+
+			if ( ! isset( $served[ $meta_type ][ $object_id ] ) ) {
+				if ( false !== wp_cache_get( $object_id, $meta_type . '_meta' ) ) {
+					return null;
+				}
+				// A plugin that takes over core's load (a non-null answer from the chain) keeps it,
+				// and core continues as it would without the scope. The scope's own primer stays out
+				// of this call.
+				$was_probing = $probing;
+				$probing     = true;
+				try {
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's own metadata load filter.
+					$taken = apply_filters( "update_{$meta_type}_metadata_cache", null, array( $object_id ) );
+				} finally {
+					$probing = $was_probing;
+				}
+				if ( null !== $taken ) {
+					return null;
+				}
+				if ( ! $load( $meta_type, array( $object_id ) ) ) {
+					// An empty answer in core's shape; the scope already returns $error.
+					if ( ! $meta_key ) {
+						return $single ? array( array() ) : array();
+					}
+					return array( '' );
+				}
+				if ( ! isset( $served[ $meta_type ][ $object_id ] ) ) {
+					return null;
+				}
+			}
+
+			return $serve( $served[ $meta_type ][ $object_id ], $meta_key, $single );
+		};
+	};
+
+	$make_primer = static function ( string $meta_type ) use ( &$served, &$probing, $load ): callable {
+		return static function ( $check, $object_ids ) use ( $meta_type, &$served, &$probing, $load ) {
+			if ( null !== $check || $probing ) { // @phpstan-ignore-line booleanOr.rightAlwaysFalse ($probing is set by reference in the getter; phpstan analyses this closure body in isolation)
+				return $check;
+			}
+
+			$missing = array();
+			foreach ( wp_cache_get_multiple( $object_ids, $meta_type . '_meta' ) as $object_id => $cached ) {
+				if ( false === $cached && ! isset( $served[ $meta_type ][ (int) $object_id ] ) ) {
+					$missing[] = $object_id;
+				}
+			}
+			if ( array() === $missing ) {
+				return null;
+			}
+
+			return $load( $meta_type, $missing ) ? null : false;
+		};
+	};
+
+	$make_dropper = static function ( string $meta_type ) use ( &$served ): callable {
+		return static function ( $meta_ids, $object_id ) use ( $meta_type, &$served ): void {
+			unset( $served[ $meta_type ][ (int) $object_id ] );
+		};
+	};
+
+	$hooks = array();
+	foreach ( $types as $type ) {
+		$hooks[] = array( "get_{$type}_metadata", $make_getter( $type ), 4 );
+		$hooks[] = array( "update_{$type}_metadata_cache", $make_primer( $type ), 2 );
+		$dropper = $make_dropper( $type );
+		foreach ( array( 'added', 'updated', 'deleted' ) as $verb ) {
+			$hooks[] = array( "{$verb}_{$type}_meta", $dropper, 2 );
+		}
+	}
+	foreach ( $hooks as $hook ) {
+		add_filter( $hook[0], $hook[1], PHP_INT_MAX, $hook[2] );
+	}
+
+	try {
+		$built = $build();
+	} finally {
+		foreach ( $hooks as $hook ) {
+			remove_filter( $hook[0], $hook[1], PHP_INT_MAX );
+		}
+	}
+
+	return $failed ? $error : $built;
+}
+
+/**
+ * Whether two metadata values are equal, the one rule every comparison in the writer and delete
+ * uses: a baseline or read-back row against the canonical value, and a read-back row against the
+ * baseline row at the same position.
+ *
+ * Two scalars compare as strings, the way core's REST layer compares a stored value with a
+ * requested one. Any other pair, where either side is an array, an object or null, is equal only
+ * when serialize() of both values is identical. That compares by value and type, never by object
+ * instance, so a stored object equals a second decode of the same row, and null equals only null.
+ * A value serialize() refuses, such as a closure, a SimpleXMLElement or an anonymous-class
+ * instance, which only a filter can supply, equals no value, not even itself: the comparison
+ * returns false and never throws.
+ *
+ * @param mixed $canonical Canonical value, or the baseline row a read-back row is compared with.
+ * @param mixed $candidate Value read from storage.
+ * @return bool
+ */
+function aafm_meta_value_equals( $canonical, $candidate ): bool {
+	if ( is_scalar( $canonical ) && is_scalar( $candidate ) ) {
+		return (string) $candidate === (string) $canonical;
+	}
+	try {
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a by-value comparison of two values already in memory; nothing is stored or unserialized.
+		return serialize( $candidate ) === serialize( $canonical );
+	} catch ( \Throwable $e ) {
+		unset( $e ); // A value serialize() refuses equals nothing.
+		return false;
+	}
+}
+
+/**
+ * Write a metadata key and report what actually happened: written, unchanged, deleted, absent,
+ * refused, read_failed or unconfirmed.
+ *
+ * @param string $type        'post', 'term' or 'user'.
+ * @param int    $id          Object id.
+ * @param string $key         Meta key.
+ * @param mixed  $intended    The unslashed value to store.
+ * @param string $subtype     Object subtype (post type, taxonomy, or '' for user).
+ * @param bool   $scalar_only Whether a non-scalar canonical value is a validation error.
+ * @return array<string,mixed>|WP_Error
+ * @phpstan-return ($scalar_only is true ? array<string,mixed>|WP_Error : array<string,mixed>)
+ */
+function aafm_meta_set( string $type, int $id, string $key, $intended, string $subtype = '', bool $scalar_only = true ) {
+	$canonical = sanitize_meta( $key, $intended, $type, $subtype );
+
+	if ( $scalar_only && ( ! is_scalar( $intended ) || ! is_scalar( $canonical ) ) ) {
+		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
+	}
+
+	wp_cache_delete( $id, $type . '_meta' );
+	$baseline = aafm_meta_row( $type, $id, $key );
+	if ( ! $baseline['ok'] ) {
+		$result = array( 'status' => AAFM_WRITE_READ_FAILED );
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	if ( $baseline['aliased'] > 0 ) {
+		// The collation matched a row stored under another spelling: refuse before core can act on
+		// it, and return nothing read from it.
+		$result = array( 'status' => AAFM_WRITE_REFUSED );
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	$rows = $baseline['count'] > 1 ? $baseline['count'] : null;
+
+	if ( $baseline['exists'] ) {
+		$all_match = true;
+		foreach ( $baseline['values'] as $value ) {
+			if ( ! aafm_meta_value_equals( $canonical, $value ) ) {
+				$all_match = false;
+				break;
+			}
+		}
+		if ( $all_match ) {
+			$result = array(
+				'status'   => AAFM_WRITE_UNCHANGED,
+				'value'    => $baseline['value'],
+				'previous' => $baseline['value'],
+			);
+			if ( null !== $rows ) {
+				$result['rows'] = $rows;
+			}
+			aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+			return $result;
+		}
+	}
+
+	$acknowledged = (bool) update_metadata( $type, $id, wp_slash( $key ), wp_slash( $intended ) );
+
+	if ( ! $acknowledged ) {
+		// Core loaded the object's meta for its old-value check and returns before its own cache
+		// delete when the write fails, so that set is dropped here.
+		wp_cache_delete( $id, $type . '_meta' );
+		$result = array(
+			'status'       => AAFM_WRITE_REFUSED,
+			'acknowledged' => false,
+		);
+		if ( null !== $rows ) {
+			$result['rows'] = $rows;
+		}
+		if ( $baseline['exists'] ) {
+			$result['previous'] = $baseline['value'];
+		}
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	$readback = aafm_meta_readback( $type, $id, $key );
+
+	$result = array(
+		'acknowledged' => true,
+		'observed'     => array(
+			'exists' => $readback['exists'],
+			'count'  => $readback['count'],
+		),
+	);
+	if ( null !== $rows ) {
+		$result['rows'] = $rows;
+	}
+	if ( $baseline['exists'] ) {
+		$result['previous'] = $baseline['value'];
+	}
+
+	if ( ! $readback['exists'] ) {
+		$result['status'] = AAFM_WRITE_UNCONFIRMED;
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	$every_matches = true;
+	foreach ( $readback['values'] as $value ) {
+		if ( ! aafm_meta_value_equals( $canonical, $value ) ) {
+			$every_matches = false;
+			break;
+		}
+	}
+	if ( $every_matches ) {
+		$result['status'] = AAFM_WRITE_WRITTEN;
+		$result['value']  = $readback['values'][0];
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	// Nothing moved: the same number of rows, each observed row equal to the baseline row at the
+	// same position, both lists in meta id order.
+	$nothing_moved = count( $readback['values'] ) === count( $baseline['values'] );
+	if ( $nothing_moved ) {
+		foreach ( array_values( $readback['values'] ) as $position => $value ) {
+			if ( ! aafm_meta_value_equals( $baseline['values'][ $position ], $value ) ) {
+				$nothing_moved = false;
+				break;
+			}
+		}
+	}
+	if ( $nothing_moved ) {
+		$result['status'] = AAFM_WRITE_UNCONFIRMED;
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	$result['status']           = AAFM_WRITE_WRITTEN;
+	$result['value']            = $readback['values'][0];
+	$result['modified_by_site'] = true;
+	aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+	return $result;
+}
+
+/**
+ * The emitted target for a metadata writer or delete outcome: kind post_meta/term_meta/user_meta,
+ * no entity, the object id, the meta key.
+ *
+ * @param string $type Object type.
+ * @param int    $id   Object id.
+ * @param string $key  Meta key.
+ * @return array{kind: string, entity: null, object_id: int, key: string}
+ */
+function aafm_meta_write_target( string $type, int $id, string $key ): array {
+	return array(
+		'kind'      => $type . '_meta',
+		'entity'    => null,
+		'object_id' => $id,
+		'key'       => $key,
+	);
+}
+
+/**
+ * Delete every row of a metadata key and report what happened: deleted, absent, refused or
+ * read_failed.
+ *
+ * @param string $type 'post', 'term' or 'user'.
+ * @param int    $id   Object id.
+ * @param string $key  Meta key.
+ * @return array<string,mixed>
+ */
+function aafm_meta_delete( string $type, int $id, string $key ): array {
+	wp_cache_delete( $id, $type . '_meta' );
+	$baseline = aafm_meta_row( $type, $id, $key );
+	if ( ! $baseline['ok'] ) {
+		$result = array( 'status' => AAFM_WRITE_READ_FAILED );
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	if ( $baseline['aliased'] > 0 ) {
+		// The collation matched a row stored under another spelling: refuse before core can act on
+		// it, and return nothing read from it.
+		$result = array( 'status' => AAFM_WRITE_REFUSED );
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	$rows = $baseline['count'] > 1 ? $baseline['count'] : null;
+
+	if ( ! $baseline['exists'] ) {
+		$result = array( 'status' => AAFM_WRITE_ABSENT );
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	$acknowledged = (bool) delete_metadata( $type, $id, wp_slash( $key ) );
+
+	if ( ! $acknowledged ) {
+		$result = array(
+			'status'       => AAFM_WRITE_REFUSED,
+			'acknowledged' => false,
+			'previous'     => $baseline['value'],
+		);
+		if ( null !== $rows ) {
+			$result['rows'] = $rows;
+		}
+		aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+		return $result;
+	}
+
+	$readback = aafm_meta_readback( $type, $id, $key );
+
+	$result = array(
+		'acknowledged' => true,
+		'previous'     => $baseline['value'],
+		'observed'     => array(
+			'exists' => $readback['exists'],
+			'count'  => $readback['count'],
+		),
+	);
+	if ( null !== $rows ) {
+		$result['rows'] = $rows;
+	}
+
+	$result['status'] = ( 0 === $readback['count'] ) ? AAFM_WRITE_DELETED : AAFM_WRITE_REFUSED;
+	aafm_emit_write_outcome( $result, aafm_meta_write_target( $type, $id, $key ) );
+	return $result;
+}
+
+/**
+ * Write several metadata keys on one object, reusing a single preflight baseline.
+ *
+ * Every member's value is canonicalised and validated first; a validation failure on any member
+ * returns that member's WP_Error for the whole group before anything is read or written. When two
+ * requested keys are one key under the meta_key column's collation, every member is refused with
+ * nothing written, and when that comparison fails every member is read_failed. The object's meta
+ * cache is then cleared once and every baseline is read in one query; a failed preflight reports
+ * read_failed for every key with nothing written. Members are then written in order, continuing
+ * past a failed key so every key gets a status, and a member whose key matched a row stored under
+ * another spelling is refused as aafm_meta_set() refuses it.
+ *
+ * PHP stores a numeric-string array key such as '123' as an int, so each key, in $intended_by_key
+ * and in $array_keys, is cast back to a string before any check or call uses it. For the same
+ * reason the returned `keys` map can hold int keys: a caller that passes one on casts it with
+ * (string), and a caller that puts the map on the wire encodes it as a JSON object, never a list.
+ *
+ * @param string                 $type            'post', 'term' or 'user'.
+ * @param int                    $id              Object id.
+ * @param array<string,mixed>    $intended_by_key Meta key => intended value.
+ * @param string                 $subtype         Object subtype.
+ * @param array<int,string|int>  $array_keys      Members that may hold a non-scalar (array) value.
+ * @param array<array-key,mixed> $absent_defaults Meta key => the value the site stores as no row.
+ *                                               A member whose value equals its mapped value is
+ *                                               unchanged when no row exists, and written when
+ *                                               the row is gone after the write and a
+ *                                               failure-aware read confirms it.
+ * @return array{status: string, keys: array<array-key, array<string,mixed>>}|WP_Error
+ */
+function aafm_meta_set_group( string $type, int $id, array $intended_by_key, string $subtype = '', array $array_keys = array(), array $absent_defaults = array() ) {
+	$array_keys = array_map( 'strval', $array_keys );
+
+	$members = array();
+	foreach ( $intended_by_key as $key => $intended ) {
+		$key         = (string) $key;
+		$scalar_only = ! in_array( $key, $array_keys, true );
+		$canonical   = sanitize_meta( $key, $intended, $type, $subtype );
+		if ( $scalar_only && ( ! is_scalar( $intended ) || ! is_scalar( $canonical ) ) ) {
+			return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
+		}
+		$members[] = array(
+			'key'         => $key,
+			'intended'    => $intended,
+			'canonical'   => $canonical,
+			'scalar_only' => $scalar_only,
+		);
+	}
+
+	// Two keys the column's collation treats as one would have core act on the same rows twice
+	// from one stale baseline, so the whole group refuses before any read of the rows.
+	$collide = aafm_meta_keys_collide( $type, array_column( $members, 'key' ) );
+	if ( true === $collide ) {
+		$keys = array();
+		foreach ( $members as $member ) {
+			$entry                  = array( 'status' => AAFM_WRITE_REFUSED );
+			$keys[ $member['key'] ] = $entry;
+			aafm_emit_write_outcome( $entry, aafm_meta_write_target( $type, $id, $member['key'] ) );
+		}
+		return array(
+			'status' => AAFM_WRITE_REFUSED,
+			'keys'   => $keys,
+		);
+	}
+
+	wp_cache_delete( $id, $type . '_meta' );
+	$preflight = null === $collide ? null : aafm_meta_rows( $type, $id, array_column( $members, 'key' ) );
+	if ( null === $preflight || ! $preflight['ok'] ) {
+		$keys = array();
+		foreach ( $members as $member ) {
+			$entry                  = array( 'status' => AAFM_WRITE_READ_FAILED );
+			$keys[ $member['key'] ] = $entry;
+			aafm_emit_write_outcome( $entry, aafm_meta_write_target( $type, $id, $member['key'] ) );
+		}
+		return array(
+			'status' => AAFM_WRITE_READ_FAILED,
+			'keys'   => $keys,
+		);
+	}
+
+	$keys        = array();
+	$any_written = false;
+	$any_ok      = false;
+	$first_bad   = null;
+
+	foreach ( $members as $member ) {
+		$key      = $member['key'];
+		$baseline = $preflight['by_key'][ $key ];
+		$rows     = $baseline['count'] > 1 ? $baseline['count'] : null;
+
+		$entry = aafm_meta_set_group_member( $type, $id, $key, $member['intended'], $member['canonical'], $baseline, $rows, $member['scalar_only'], $absent_defaults );
+
+		$keys[ $key ] = $entry;
+		aafm_emit_write_outcome( $entry, aafm_meta_write_target( $type, $id, $key ) );
+
+		if ( in_array( $entry['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+			$any_ok = true;
+		}
+		if ( AAFM_WRITE_WRITTEN === $entry['status'] ) {
+			$any_written = true;
+		} elseif ( AAFM_WRITE_UNCHANGED !== $entry['status'] && null === $first_bad ) {
+			$first_bad = $entry['status'];
+		}
+	}
+
+	if ( $any_ok && null === $first_bad ) {
+		$status = $any_written ? AAFM_WRITE_WRITTEN : AAFM_WRITE_UNCHANGED;
+	} elseif ( $any_written ) {
+		$status = AAFM_WRITE_PARTIAL;
+	} else {
+		$status = $first_bad ?? AAFM_WRITE_UNCHANGED;
+	}
+
+	return array(
+		'status' => $status,
+		'keys'   => $keys,
+	);
+}
+
+/**
+ * One group member's write, reusing a baseline the preflight already read.
+ *
+ * @param string                 $type      Object type.
+ * @param int                    $id        Object id.
+ * @param string                 $key       Meta key.
+ * @param mixed                  $intended  Intended value.
+ * @param mixed                  $canonical Canonical form of the intended value.
+ * @param array<string,mixed>    $baseline  This key's preflight baseline.
+ * @param int|null               $rows      Baseline row count above 1, or null.
+ * @param bool                   $scalar_only Whether this member is scalar-only.
+ * @param array<array-key,mixed> $absent_defaults Meta key => the value the site stores as no row.
+ * @return array<string,mixed>
+ */
+function aafm_meta_set_group_member( string $type, int $id, string $key, $intended, $canonical, array $baseline, ?int $rows, bool $scalar_only, array $absent_defaults = array() ): array {
+	unset( $scalar_only );
+
+	if ( $baseline['aliased'] > 0 ) {
+		return array( 'status' => AAFM_WRITE_REFUSED );
+	}
+
+	// A site can store one value of a key as no row at all (Yoast SEO deletes a field set to its
+	// default). For such a value, no row is the answer the write asked for.
+	$declared = array_key_exists( $key, $absent_defaults ) && aafm_meta_value_equals( $absent_defaults[ $key ], $canonical );
+
+	if ( $declared && ! $baseline['exists'] ) {
+		return array(
+			'status' => AAFM_WRITE_UNCHANGED,
+			'value'  => $absent_defaults[ $key ],
+		);
+	}
+
+	if ( $baseline['exists'] ) {
+		$all_match = true;
+		foreach ( $baseline['values'] as $value ) {
+			if ( ! aafm_meta_value_equals( $canonical, $value ) ) {
+				$all_match = false;
+				break;
+			}
+		}
+		if ( $all_match ) {
+			$result = array(
+				'status'   => AAFM_WRITE_UNCHANGED,
+				'value'    => $baseline['value'],
+				'previous' => $baseline['value'],
+			);
+			if ( null !== $rows ) {
+				$result['rows'] = $rows;
+			}
+			return $result;
+		}
+	}
+
+	$acknowledged = (bool) update_metadata( $type, $id, wp_slash( $key ), wp_slash( $intended ) );
+
+	if ( ! $acknowledged ) {
+		// Core loaded the object's meta for its old-value check and returns before its own cache
+		// delete when the write fails, so that set is dropped here.
+		wp_cache_delete( $id, $type . '_meta' );
+		$result = array(
+			'status'       => AAFM_WRITE_REFUSED,
+			'acknowledged' => false,
+		);
+		if ( null !== $rows ) {
+			$result['rows'] = $rows;
+		}
+		if ( $baseline['exists'] ) {
+			$result['previous'] = $baseline['value'];
+		}
+		return $result;
+	}
+
+	$readback = aafm_meta_readback( $type, $id, $key );
+
+	$result = array(
+		'acknowledged' => true,
+		'observed'     => array(
+			'exists' => $readback['exists'],
+			'count'  => $readback['count'],
+		),
+	);
+	if ( null !== $rows ) {
+		$result['rows'] = $rows;
+	}
+	if ( $baseline['exists'] ) {
+		$result['previous'] = $baseline['value'];
+	}
+
+	if ( ! $readback['exists'] ) {
+		// Core cannot tell a failed read-back from no row, so a declared value is certified only
+		// when a failure-aware read also finds no row. A failed read never certifies it.
+		if ( $declared ) {
+			$confirm = aafm_meta_row( $type, $id, $key );
+			if ( $confirm['ok'] && ! $confirm['exists'] ) {
+				$result['status'] = AAFM_WRITE_WRITTEN;
+				$result['value']  = $absent_defaults[ $key ];
+				return $result;
+			}
+		}
+		$result['status'] = AAFM_WRITE_UNCONFIRMED;
+		return $result;
+	}
+
+	$every_matches = true;
+	foreach ( $readback['values'] as $value ) {
+		if ( ! aafm_meta_value_equals( $canonical, $value ) ) {
+			$every_matches = false;
+			break;
+		}
+	}
+	if ( $every_matches ) {
+		$result['status'] = AAFM_WRITE_WRITTEN;
+		$result['value']  = $readback['values'][0];
+		return $result;
+	}
+
+	// Nothing moved: the same number of rows, each observed row equal to the baseline row at the
+	// same position, both lists in meta id order.
+	$nothing_moved = count( $readback['values'] ) === count( $baseline['values'] );
+	if ( $nothing_moved ) {
+		foreach ( array_values( $readback['values'] ) as $position => $value ) {
+			if ( ! aafm_meta_value_equals( $baseline['values'][ $position ], $value ) ) {
+				$nothing_moved = false;
+				break;
+			}
+		}
+	}
+	if ( $nothing_moved ) {
+		$result['status'] = AAFM_WRITE_UNCONFIRMED;
+		return $result;
+	}
+
+	$result['status']           = AAFM_WRITE_WRITTEN;
+	$result['value']            = $readback['values'][0];
+	$result['modified_by_site'] = true;
+	return $result;
+}
+
+/**
+ * Write a core or foreign option and report what happened, by the option rule: true from
+ * update_option() is written; on false, the option's own database row (never get_option(), whose
+ * option_{name} filters can answer with something other than the row) decides unchanged, refused
+ * or unconfirmed.
+ *
+ * @param string              $option Option name.
+ * @param mixed               $value  Value to store.
+ * @param array<string,mixed> $target Optional override of the emitted target ({kind, entity, object_id, key}).
+ * @return array<string,mixed>
+ */
+function aafm_option_write( string $option, $value, array $target = array() ): array {
+	$written = update_option( $option, $value );
+
+	if ( $written ) {
+		$result = array(
+			'status'   => AAFM_WRITE_WRITTEN,
+			'returned' => true,
+		);
+	} else {
+		$views = aafm_read_option_views( $option );
+		if ( $views['db_error'] ) {
+			$result = array(
+				'status'   => AAFM_WRITE_UNCONFIRMED,
+				'returned' => false,
+			);
+		} else {
+			$canonical = sanitize_option( $option, $value );
+			$stored    = $views['db_found'] ? $views['db_value'] : false;
+			$result    = aafm_option_value_matches( $stored, $canonical )
+				? array(
+					'status'   => AAFM_WRITE_UNCHANGED,
+					'returned' => false,
+				)
+				: array(
+					'status'   => AAFM_WRITE_REFUSED,
+					'returned' => false,
+				);
+		}
+	}
+
+	$emit_target = array_merge(
+		array(
+			'kind'      => 'option',
+			'entity'    => null,
+			'object_id' => null,
+			'key'       => $option,
+		),
+		$target
+	);
+	aafm_emit_write_outcome( $result, $emit_target );
+
+	return $result;
+}
+
+/**
+ * Confirm a post-field write and emit its outcome, without changing anything about the
+ * confirmation itself: calls the untouched aafm_post_field_write_confirmed() with the same
+ * arguments and returns its bool unchanged.
+ *
+ * @param int      $post_id             Post id.
+ * @param string   $field               Post field name.
+ * @param string   $intended            The unslashed value the write attempted to persist.
+ * @param string   $old                 The field's value before the write ran.
+ * @param int|null $sanitize_context_id The id to recompute the canonical form with.
+ * @return bool
+ */
+function aafm_post_field_confirm_logged( int $post_id, string $field, string $intended, string $old, ?int $sanitize_context_id = null ): bool {
+	$confirmed = aafm_post_field_write_confirmed( $post_id, $field, $intended, $old, $sanitize_context_id );
+
+	aafm_emit_write_outcome(
+		array( 'status' => $confirmed ? AAFM_WRITE_WRITTEN : AAFM_WRITE_UNCONFIRMED ),
+		array(
+			'kind'      => 'post_field',
+			'entity'    => null,
+			'object_id' => $post_id,
+			'key'       => $field,
+		)
+	);
+
+	return $confirmed;
+}
+
+/**
+ * Read a comment back after a write: its cache entry is cleared first, so the read comes from the
+ * database, and the comment is returned only when the row read is the one asked for.
+ *
+ * @param int $comment_id Comment id.
+ * @return WP_Comment|null
+ */
+function aafm_comment_readback( int $comment_id ): ?WP_Comment {
+	clean_comment_cache( $comment_id );
+	$comment = get_comment( $comment_id );
+	if ( ! $comment instanceof WP_Comment || (int) $comment->comment_ID !== $comment_id ) {
+		return null;
+	}
+	return $comment;
+}
+
+/**
+ * Load a post, term, user or comment by id, and return it only when it is the object asked for.
+ *
+ * When a `query` filter empties the load's SELECT, core reads the previous query's row and wraps
+ * it as the requested type, so the class proves nothing. A term load also caches that row under the
+ * requested id, so on a term mismatch this function deletes that entry.
+ *
+ * @phpstan-impure
+ * @param string $type     'post', 'term', 'user' or 'comment'.
+ * @param int    $id       Object id.
+ * @param string $taxonomy Taxonomy for get_term(); unused for the other types.
+ * @return WP_Post|WP_Term|WP_User|WP_Comment|null
+ */
+function aafm_exact_object( string $type, int $id, string $taxonomy = '' ) {
+	switch ( $type ) {
+		case 'post':
+			$post = get_post( $id );
+			return $post instanceof WP_Post && (int) $post->ID === $id ? $post : null;
+		case 'term':
+			$term = get_term( $id, $taxonomy );
+			if ( ! $term instanceof WP_Term ) {
+				return null;
+			}
+			if ( (int) $term->term_id !== $id ) {
+				wp_cache_delete( $id, 'terms' );
+				return null;
+			}
+			return $term;
+		case 'user':
+			$user = get_userdata( $id );
+			return $user instanceof WP_User && (int) $user->ID === $id ? $user : null;
+		case 'comment':
+			$comment = get_comment( $id );
+			return $comment instanceof WP_Comment && (int) $comment->comment_ID === $id ? $comment : null;
+	}
+	return null;
+}
+
+/**
+ * Whether a post, term or user row is certainly not in the database: true only when a query that
+ * ran without error found no row.
+ *
+ * A term counts only when both its terms row and its term_taxonomy row exist, in $taxonomy, or in
+ * any taxonomy when $taxonomy is ''. Any other type, a failed query or a row found gives false.
+ *
+ * @phpstan-impure
+ * @param string $type     'post', 'term' or 'user'.
+ * @param int    $id       Object id.
+ * @param string $taxonomy Taxonomy for 'term'; unused for 'post'.
+ * @return bool
+ */
+function aafm_object_absent( string $type, int $id, string $taxonomy = '' ): bool {
+	global $wpdb;
+
+	if ( 'post' === $type ) {
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT ID FROM %i WHERE ID = %d', $wpdb->posts, $id ) );
+	} elseif ( 'term' === $type ) {
+		// Core loads a term through the same join (class-wp-term.php), so a term_taxonomy row
+		// without a terms row is missing to core too.
+		$view = '' === $taxonomy
+			? aafm_wpdb_scalar( $wpdb->prepare( 'SELECT term_id FROM %i AS tt INNER JOIN %i AS t USING ( term_id ) WHERE term_id = %d', $wpdb->term_taxonomy, $wpdb->terms, $id ) )
+			: aafm_wpdb_scalar( $wpdb->prepare( 'SELECT term_id FROM %i AS tt INNER JOIN %i AS t USING ( term_id ) WHERE term_id = %d AND taxonomy = %s', $wpdb->term_taxonomy, $wpdb->terms, $id, $taxonomy ) );
+	} elseif ( 'user' === $type ) {
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT ID FROM %i WHERE ID = %d', $wpdb->users, $id ) );
+	} else {
+		return false;
+	}
+
+	return $view['ok'] && null === $view['value'];
+}
+
+/**
+ * Load a post, term or comment by id together with the objects core follows from it, each one
+ * through aafm_exact_object(), and return the object asked for only when the whole chain loaded.
+ *
+ * For a post that is the post, then each post_parent; for a term, the term, then each parent in
+ * its taxonomy; for a comment, the comment, then its post (none when comment_post_ID is 0), then
+ * that post's parents. Core then reads every one of them from the cache, when cache additions are allowed, instead of running a query of its own.
+ *
+ * A parent that does not load ends the walk when aafm_object_absent() says its row is not there,
+ * which is how core reads a missing parent; otherwise the result is null. The first post of the
+ * walk (the post itself, or the comment's post) is the node map_meta_cap() checks: when it is a
+ * revision whose parent does not load, the result is null, since core denies that case
+ * (wp-includes/capabilities.php:216-219, :315-318). A parent id already seen ends the walk.
+ *
+ * @phpstan-impure
+ * @param string $type     'post', 'term' or 'comment'.
+ * @param int    $id       Object id.
+ * @param string $taxonomy Taxonomy for 'term'; unused otherwise.
+ * @return WP_Post|WP_Term|WP_Comment|null
+ */
+function aafm_exact_object_chain( string $type, int $id, string $taxonomy = '' ) {
+	$root = aafm_exact_object( $type, $id, $taxonomy );
+	if ( ! $root instanceof WP_Post && ! $root instanceof WP_Term && ! $root instanceof WP_Comment ) {
+		return null;
+	}
+
+	if ( $root instanceof WP_Term ) {
+		$seen = array( $id => true );
+		$node = $root;
+		while ( (int) $node->parent > 0 ) {
+			$parent_id = (int) $node->parent;
+			if ( isset( $seen[ $parent_id ] ) ) {
+				return $root;
+			}
+			$seen[ $parent_id ] = true;
+			$parent             = aafm_exact_object( 'term', $parent_id, $root->taxonomy );
+			if ( ! $parent instanceof WP_Term ) {
+				return aafm_object_absent( 'term', $parent_id, $root->taxonomy ) ? $root : null;
+			}
+			$node = $parent;
+		}
+		return $root;
+	}
+
+	$node = $root;
+	if ( $root instanceof WP_Comment ) {
+		$post_id = (int) $root->comment_post_ID;
+		if ( $post_id <= 0 ) {
+			return $root;
+		}
+		$node = aafm_exact_object( 'post', $post_id );
+		if ( ! $node instanceof WP_Post ) {
+			return aafm_object_absent( 'post', $post_id ) ? $root : null;
+		}
+	}
+	if ( ! $node instanceof WP_Post ) {
+		return null;
+	}
+
+	$seen  = array( (int) $node->ID => true );
+	$first = true;
+	while ( (int) $node->post_parent > 0 ) {
+		$parent_id = (int) $node->post_parent;
+		if ( isset( $seen[ $parent_id ] ) ) {
+			return $root;
+		}
+		$seen[ $parent_id ] = true;
+		$parent             = aafm_exact_object( 'post', $parent_id );
+		if ( ! $parent instanceof WP_Post ) {
+			if ( $first && 'revision' === $node->post_type ) {
+				return null;
+			}
+			return aafm_object_absent( 'post', $parent_id ) ? $root : null;
+		}
+		$node  = $parent;
+		$first = false;
+	}
+	return $root;
+}
+
+/**
+ * Write one ACF field through ACF's own update_field() and log its outcome.
+ *
+ * The return of update_field() is false for a same-value write as well as for a failure, so it is
+ * no failure signal: the write is accepted on return and ACF's own read-back, in the calling
+ * ability, decides the response. The log row names the object the selector points at.
+ *
+ * @param string $field_key ACF field key.
+ * @param mixed  $value     The value, already slashed for storage.
+ * @param mixed  $selector  ACF object selector: a post id, 'term_N', 'user_N', or 'option(s)'.
+ * @return array{status: string, returned: mixed}
+ */
+function aafm_acf_write_field( string $field_key, $value, $selector ): array {
+	$returned = update_field( $field_key, $value, $selector );
+
+	$entity    = null;
+	$object_id = null;
+	if ( is_int( $selector ) || ( is_string( $selector ) && ctype_digit( $selector ) ) ) {
+		$entity    = 'post';
+		$object_id = (int) $selector;
+	} elseif ( is_string( $selector ) && 1 === preg_match( '/^(term|user)_(\d+)$/', $selector, $matches ) ) {
+		$entity    = $matches[1];
+		$object_id = (int) $matches[2];
+	} elseif ( 'option' === $selector || 'options' === $selector ) {
+		$entity = 'option';
+	}
+
+	$result = array(
+		'status'   => AAFM_WRITE_ACCEPTED,
+		'returned' => $returned,
+	);
+	aafm_emit_write_outcome(
+		$result,
+		array(
+			'kind'      => 'acf',
+			'entity'    => $entity,
+			'object_id' => $object_id,
+			'key'       => $field_key,
+		)
+	);
+	return $result;
+}
+
+/**
+ * Save a post's AIOSEO fields through AIOSEO's own Post::savePost() and log its outcome.
+ *
+ * A patch key outside the keys the aioseo-update-post ability builds refuses the call before
+ * savePost() runs. savePost() returns nothing on success, false for empty data, and the database
+ * error string when its save failed, so only a null return is accepted. The ability's own
+ * read-back still decides its response.
+ *
+ * @param int                 $post_id Post id.
+ * @param array<string,mixed> $data    savePost() patch data.
+ * @return array<string,mixed>
+ */
+function aafm_aioseo_write( int $post_id, array $data ): array {
+	$target = array(
+		'kind'      => 'aioseo',
+		'entity'    => null,
+		'object_id' => $post_id,
+		'key'       => null,
+	);
+
+	if ( array() !== array_diff( array_map( 'strval', array_keys( $data ) ), aafm_aioseo_patch_keys() ) ) {
+		$result = array( 'status' => AAFM_WRITE_REFUSED );
+		aafm_emit_write_outcome( $result, $target );
+		return $result;
+	}
+
+	$class    = AAFM_AIOSEO_MODEL;
+	$returned = $class::savePost( $post_id, $data );
+	$result   = array(
+		'status'   => null === $returned ? AAFM_WRITE_ACCEPTED : AAFM_WRITE_REFUSED,
+		'returned' => $returned,
+	);
+	aafm_emit_write_outcome( $result, $target );
+	return $result;
+}
+
+/**
+ * Save GeoDirectory detail-table fields through geodir_save_post_meta(), one call and one logged
+ * outcome per field.
+ *
+ * A field outside the address fields, latitude and longitude refuses the whole call before any
+ * save. geodir_save_post_meta() concatenates its value into raw SQL, so every address value is
+ * sanitized and escaped here, and latitude and longitude are cast to floats. The function returns
+ * nothing on the write path whether its query succeeded or not, and false only for a missing
+ * column or table, so a field is accepted unless the call returned false. The ability's own
+ * read-back still decides its response.
+ *
+ * @param int                 $post_id Listing post id.
+ * @param array<string,mixed> $fields  Field => raw value, in write order.
+ * @return array<string,mixed> {status, keys}, keys holding each field's own result.
+ */
+function aafm_geodir_write( int $post_id, array $fields ): array {
+	$address = aafm_geodirectory_address_fields();
+	$allowed = array_merge( $address, array( 'latitude', 'longitude' ) );
+	$target  = array(
+		'kind'      => 'geodirectory',
+		'entity'    => null,
+		'object_id' => $post_id,
+		'key'       => null,
+	);
+
+	$keys = array();
+	if ( array() !== array_diff( array_map( 'strval', array_keys( $fields ) ), $allowed ) ) {
+		foreach ( array_keys( $fields ) as $field ) {
+			$entry                   = array( 'status' => AAFM_WRITE_REFUSED );
+			$keys[ (string) $field ] = $entry;
+			aafm_emit_write_outcome( $entry, array( 'key' => (string) $field ) + $target );
+		}
+		return array(
+			'status' => AAFM_WRITE_REFUSED,
+			'keys'   => $keys,
+		);
+	}
+
+	$any_accepted = false;
+	$first_bad    = null;
+	foreach ( $fields as $field => $value ) {
+		$field    = (string) $field;
+		$prepared = in_array( $field, $address, true ) ? esc_sql( aafm_sanitize_plain_text( (string) $value ) ) : (float) $value;
+		$returned = geodir_save_post_meta( $post_id, $field, $prepared );
+		$entry    = array(
+			'status'   => false === $returned ? AAFM_WRITE_REFUSED : AAFM_WRITE_ACCEPTED,
+			'returned' => $returned,
+		);
+
+		$keys[ $field ] = $entry;
+		aafm_emit_write_outcome( $entry, array( 'key' => $field ) + $target );
+
+		if ( AAFM_WRITE_ACCEPTED === $entry['status'] ) {
+			$any_accepted = true;
+		} elseif ( null === $first_bad ) {
+			$first_bad = $entry['status'];
+		}
+	}
+
+	if ( null === $first_bad ) {
+		$status = AAFM_WRITE_ACCEPTED;
+	} elseif ( $any_accepted ) {
+		$status = AAFM_WRITE_PARTIAL;
+	} else {
+		$status = $first_bad;
+	}
+
+	return array(
+		'status' => $status,
+		'keys'   => $keys,
+	);
+}
+
+/**
+ * Create or update an event, venue or organizer through The Events Calendar's own repository,
+ * and log its outcome.
+ *
+ * $id 0 creates: the repository's create() returns the new post, or false when it made nothing.
+ * Any other $id updates that post with the same where/set_args/save chain the abilities use,
+ * inside aafm_tec_force_sync_save() so the repository never queues the update for later. save()
+ * returns an array keyed by post id; the update is accepted when that post's entry is not empty
+ * and not a WP_Error. The calling ability applies the same test to `returned` and decides its
+ * response. The arguments come from the abilities' own args builders.
+ *
+ * @param string              $entity 'events', 'venues' or 'organizers'.
+ * @param array<string,mixed> $args   Repository arguments.
+ * @param int                 $id     Post id to update, or 0 to create.
+ * @return array<string,mixed>
+ */
+function aafm_tec_write( string $entity, array $args, int $id = 0 ): array {
+	switch ( $entity ) {
+		case 'events':
+			$logged = 'event';
+			break;
+		case 'venues':
+			$logged = 'venue';
+			break;
+		case 'organizers':
+			$logged = 'organizer';
+			break;
+		default:
+			$result = array( 'status' => AAFM_WRITE_REFUSED );
+			aafm_emit_write_outcome(
+				$result,
+				array(
+					'kind'      => 'tec',
+					'entity'    => null,
+					'object_id' => null,
+					'key'       => null,
+				)
+			);
+			return $result;
+	}
+
+	$repository = static function () use ( $entity ) {
+		if ( 'events' === $entity ) {
+			return tribe_events();
+		}
+		return 'venues' === $entity ? tribe_venues() : tribe_organizers();
+	};
+
+	if ( 0 === $id ) {
+		$returned  = $repository()->set_args( $args )->create();
+		$accepted  = $returned instanceof WP_Post;
+		$object_id = $accepted ? (int) $returned->ID : null;
+	} else {
+		$returned  = aafm_tec_force_sync_save(
+			$entity,
+			static fn() => $repository()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
+		);
+		$accepted  = ! empty( $returned[ $id ] ) && ! is_wp_error( $returned[ $id ] );
+		$object_id = $id;
+	}
+
+	$result = array(
+		'status'   => $accepted ? AAFM_WRITE_ACCEPTED : AAFM_WRITE_REFUSED,
+		'returned' => $returned,
+	);
+	aafm_emit_write_outcome(
+		$result,
+		array(
+			'kind'      => 'tec',
+			'entity'    => $logged,
+			'object_id' => $object_id,
+			'key'       => null,
+		)
+	);
+	return $result;
+}
+
+/**
+ * Make one WooCommerce write through WooCommerce's own call and log its outcome.
+ *
+ * Each operation makes exactly the call the ability made before, with the same receiver and
+ * arguments, and hands that call's return back in `returned` so the ability keeps deciding its
+ * response the way it did. The status comes from the call's own return: a call that can report
+ * failure is refused when it does, and a call that cannot report failure is accepted on return.
+ * `save` tells a new object from an existing one by its id before the call, as WC_Data::save()
+ * does: a new object is refused when it still has no id afterwards, and an existing one always
+ * returns its id. The two option operations report by the option rule instead: written when core
+ * saved, otherwise unchanged, refused or unconfirmed from the option's own database row. An
+ * exception from WooCommerce passes through untouched and logs nothing.
+ *
+ * $args holds the receiver under `object` for a method call, the call's own arguments under their
+ * parameter names, and `entity` for `save` and `delete`. The objects and arguments come from the
+ * abilities' own input functions, which remain the only key surface.
+ *
+ * @param string              $op   save, add_product, delete_item, delete, update_status, add_note,
+ *                                  refund, calculate_totals, add_shipping_method,
+ *                                  shipping_method_enabled, option, gateway_setting,
+ *                                  insert_tax_rate, update_tax_rate, create_tax_class,
+ *                                  create_attribute, update_attribute or create_customer.
+ * @param array<string,mixed> $args The call's receiver and arguments.
+ * @return array<string,mixed>
+ */
+function aafm_wc_write( string $op, array $args ): array {
+	global $wpdb;
+
+	$object    = $args['object'] ?? null;
+	$entity    = null;
+	$object_id = null;
+	$key       = null;
+	$status    = null;
+
+	switch ( $op ) {
+		case 'save':
+			$is_new    = (int) $object->get_id() < 1;
+			$returned  = $object->save();
+			$accepted  = ! $is_new || (int) $returned > 0;
+			$entity    = (string) ( $args['entity'] ?? '' );
+			$object_id = (int) $returned;
+			break;
+		case 'add_product':
+			$returned  = $object->add_product( $args['product'] ?? null, $args['qty'] ?? 1, $args['args'] ?? array() );
+			$accepted  = (int) $returned > 0;
+			$entity    = 'order_item';
+			$object_id = (int) $returned;
+			break;
+		case 'delete_item':
+			$object_id = (int) ( $args['item_id'] ?? 0 );
+			$returned  = wc_delete_order_item( $object_id );
+			$accepted  = true === $returned;
+			$entity    = 'order_item';
+			break;
+		case 'delete':
+			$object_id = (int) $object->get_id();
+			$returned  = $object->delete( $args['force_delete'] ?? false );
+			$accepted  = true === $returned;
+			$entity    = (string) ( $args['entity'] ?? '' );
+			break;
+		case 'update_status':
+			$returned  = $object->update_status( $args['new_status'] ?? '', $args['note'] ?? '', $args['manual'] ?? false );
+			$accepted  = true === $returned;
+			$entity    = 'order';
+			$object_id = (int) $object->get_id();
+			break;
+		case 'add_note':
+			$returned  = $object->add_order_note( $args['note'] ?? '', $args['is_customer_note'] ?? 0, $args['added_by_user'] ?? false );
+			$accepted  = (int) $returned > 0;
+			$entity    = 'order_note';
+			$object_id = (int) $returned;
+			break;
+		case 'refund':
+			$returned  = wc_create_refund( $args['args'] ?? array() );
+			$accepted  = $returned instanceof \WC_Order_Refund;
+			$entity    = 'order_refund';
+			$object_id = $accepted ? (int) $returned->get_id() : null;
+			break;
+		case 'calculate_totals':
+			$returned  = $object->calculate_totals( $args['and_taxes'] ?? true );
+			$accepted  = true;
+			$entity    = 'order';
+			$object_id = (int) $object->get_id();
+			break;
+		case 'add_shipping_method':
+			$returned  = $object->add_shipping_method( $args['type'] ?? '' );
+			$accepted  = (int) $returned > 0;
+			$entity    = 'shipping_method';
+			$object_id = (int) $returned;
+			break;
+		case 'shipping_method_enabled':
+			$where = (array) ( $args['where'] ?? array() );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- WooCommerce has no API for the is_enabled column; this is the same update WooCommerce's own REST controller runs.
+			$returned  = $wpdb->update( $wpdb->prefix . 'woocommerce_shipping_zone_methods', (array) ( $args['data'] ?? array() ), $where, $args['format'] ?? null, $args['where_format'] ?? null );
+			$accepted  = false !== $returned;
+			$entity    = 'shipping_method';
+			$object_id = (int) ( $where['instance_id'] ?? 0 );
+			break;
+		case 'option':
+			return aafm_option_write(
+				(string) ( $args['option'] ?? '' ),
+				$args['value'] ?? null,
+				array(
+					'kind'      => 'woocommerce',
+					'entity'    => $args['entity'] ?? null,
+					'object_id' => $args['object_id'] ?? null,
+				)
+			);
+		case 'gateway_setting':
+			// The gateway saves its whole settings array under its option key and returns core
+			// update_option()'s bool, so the option rule is applied to this setting's entry: the
+			// entry in the option's database row against the entry in sanitize_option() of the
+			// settings the gateway holds after the call.
+			$setting  = (string) ( $args['key'] ?? '' );
+			$returned = $object->update_option( $setting, $args['value'] ?? '' );
+			$entity   = 'payment_gateway';
+			$key      = (string) $object->get_option_key();
+			$status   = AAFM_WRITE_WRITTEN;
+			$accepted = true;
+			if ( ! $returned ) {
+				$views = aafm_read_option_views( $key );
+				if ( $views['db_error'] ) {
+					$status = AAFM_WRITE_UNCONFIRMED;
+				} else {
+					$row       = $views['db_found'] && is_array( $views['db_value'] ) ? $views['db_value'] : array();
+					$canonical = sanitize_option( $key, is_array( $object->settings ) ? $object->settings : array() );
+					$expected  = is_array( $canonical ) && array_key_exists( $setting, $canonical ) ? $canonical[ $setting ] : null;
+					$stored    = array_key_exists( $setting, $row ) ? $row[ $setting ] : null;
+					$status    = aafm_option_value_matches( $stored, $expected ) ? AAFM_WRITE_UNCHANGED : AAFM_WRITE_REFUSED;
+				}
+			}
+			break;
+		case 'insert_tax_rate':
+			$returned  = \WC_Tax::_insert_tax_rate( (array) ( $args['tax_rate'] ?? array() ) );
+			$accepted  = (int) $returned > 0;
+			$entity    = 'tax_rate';
+			$object_id = (int) $returned;
+			break;
+		case 'update_tax_rate':
+			$object_id = (int) ( $args['tax_rate_id'] ?? 0 );
+			\WC_Tax::_update_tax_rate( $object_id, (array) ( $args['tax_rate'] ?? array() ) );
+			$returned = null;
+			$accepted = true;
+			$entity   = 'tax_rate';
+			break;
+		case 'create_tax_class':
+			$returned = \WC_Tax::create_tax_class( (string) ( $args['name'] ?? '' ), (string) ( $args['slug'] ?? '' ) );
+			$accepted = is_array( $returned );
+			$entity   = 'tax_class';
+			break;
+		case 'create_attribute':
+			$returned  = wc_create_attribute( (array) ( $args['args'] ?? array() ) );
+			$accepted  = ! is_wp_error( $returned ) && (int) $returned > 0;
+			$entity    = 'attribute';
+			$object_id = $accepted ? (int) $returned : null;
+			break;
+		case 'update_attribute':
+			$object_id = (int) ( $args['id'] ?? 0 );
+			$returned  = wc_update_attribute( $object_id, (array) ( $args['args'] ?? array() ) );
+			$accepted  = ! is_wp_error( $returned ) && (bool) $returned;
+			$entity    = 'attribute';
+			break;
+		case 'create_customer':
+			$returned  = wc_create_new_customer( (string) ( $args['email'] ?? '' ), (string) ( $args['username'] ?? '' ), (string) ( $args['password'] ?? '' ), (array) ( $args['args'] ?? array() ) );
+			$accepted  = ! is_wp_error( $returned ) && (int) $returned > 0;
+			$entity    = 'customer';
+			$object_id = $accepted ? (int) $returned : null;
+			break;
+		default:
+			$returned = null;
+			$accepted = false;
+	}
+
+	if ( null === $status ) {
+		$status = $accepted ? AAFM_WRITE_ACCEPTED : AAFM_WRITE_REFUSED;
+	}
+	$result = array(
+		'status'   => $status,
+		'returned' => $returned,
+	);
+	aafm_emit_write_outcome(
+		$result,
+		array(
+			'kind'      => 'woocommerce',
+			'entity'    => '' === $entity ? null : $entity,
+			'object_id' => $object_id,
+			'key'       => $key,
+		)
+	);
+	return $result;
+}
+
+/**
+ * The one emission point every writer calls once its status is decided.
+ *
+ * Writes the WP_DEBUG diagnostic line and fires aafm_write_completed for every status, so the log
+ * observer and any other listener see one call per outcome, never more.
+ *
+ * @param array<string,mixed> $result The write's result: status, plus whichever of value, previous,
+ *                                    rows, acknowledged, observed, modified_by_site, keys and
+ *                                    returned apply to that status.
+ * @param array<string,mixed> $target {kind, entity, object_id, key}.
+ * @return void
+ */
+function aafm_emit_write_outcome( array $result, array $target ): void {
+	// Under WP_DEBUG alone: a verbose line for whoever is actively debugging, carrying identifiers
+	// only, never a value. The key goes through the same allowlist the log row uses, so a malformed
+	// key, including one that ends in a newline, prints as `-`.
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+		$key = aafm_activity_detail_field( 'key', $target['key'] ?? null );
+		error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- gated behind WP_DEBUG, identifiers only, never a value.
+			sprintf(
+				'aafm write_outcome status=%1$s kind=%2$s object_id=%3$s key=%4$s rows=%5$s',
+				(string) ( $result['status'] ?? '' ),
+				(string) ( $target['kind'] ?? '' ),
+				isset( $target['object_id'] ) ? (string) $target['object_id'] : '',
+				null !== $key ? $key : '-',
+				isset( $result['rows'] ) ? (string) $result['rows'] : ''
+			)
+		);
+	}
+
+	// Observers get a detached copy, so nothing they do to their arguments reaches the result the
+	// writer returns: each entry is round-tripped through serialize(), which copies nested objects
+	// too. An entry serialize() refuses, or whose round trip throws, reaches observers as null with
+	// its key kept. `returned` is not round-tripped, so a vendor object is never re-created: a
+	// scalar or null passes as is, and an array or object reaches observers as null.
+	$copy = array();
+	foreach ( $result as $name => $entry ) {
+		if ( 'returned' === $name ) {
+			$copy[ $name ] = ( null === $entry || is_scalar( $entry ) ) ? $entry : null;
+			continue;
+		}
+		try {
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize, WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a deep copy of a value already in memory, never input from outside this request.
+			$copy[ $name ] = unserialize( serialize( $entry ) );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+			$copy[ $name ] = null;
+		}
+	}
+
+	/**
+	 * Fires once a write's outcome is decided, for every status.
+	 *
+	 * @param array $result A detached copy of the write's result (see aafm_emit_write_outcome()'s own docblock).
+	 * @param array $target {kind, entity, object_id, key}.
+	 */
+	try {
+		do_action( 'aafm_write_completed', $copy, $target );
+	} catch ( \Throwable $e ) {
+		unset( $e ); // An observer's own failure must never change the write's already-decided result.
+	}
+}
+
+/**
+ * The write-outcome log observer: one activity-log row per emission, carrying identifiers only.
+ *
+ * Registered on aafm_write_completed when this file loads, at the earliest possible priority so a
+ * listener registered anywhere else that throws can never stop this row. Detached during uninstall
+ * teardown and by the test fixture (tests/TestCase.php), and nowhere else.
+ *
+ * @param array<string,mixed> $result The write's result (see aafm_emit_write_outcome()'s docblock).
+ * @param array<string,mixed> $target {kind, entity, object_id, key}.
+ * @return void
+ */
+function aafm_activity_log_write_outcome( array $result, array $target ): void {
+	// A one-time site migration on plugins_loaded (aafm_oauth_preserve_toggle_on_upgrade(),
+	// aafm_oauth_dcr_adopt_on_by_default()) can write an option before this plugin's own
+	// activation has ever run - the PHPUnit bootstrap hits this on its very first request, ahead
+	// of any test's own aafm_install_activity_log() call. On every real site the table already
+	// exists by then, because activation creates it before plugins_loaded ever fires again; this
+	// guard only protects the one bootstrap ordering that skips activation outright.
+	if ( ! aafm_activity_log_table_present( aafm_activity_log_table() ) ) {
+		return;
+	}
+
+	$status = (string) ( $result['status'] ?? '' );
+
+	$success_statuses = array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED, AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT, AAFM_WRITE_ACCEPTED );
+	$log_status       = in_array( $status, $success_statuses, true ) ? 'success' : 'error';
+
+	$kinds    = array_keys( aafm_write_writers() );
+	$entities = array( 'post', 'user', 'term', 'option', 'event', 'venue', 'organizer', 'product', 'variation', 'coupon', 'attribute', 'customer', 'shipping_zone', 'shipping_method', 'payment_gateway', 'tax_rate', 'tax_class', 'order', 'order_item', 'order_note', 'order_refund' );
+	$statuses = array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED, AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT, AAFM_WRITE_REFUSED, AAFM_WRITE_READ_FAILED, AAFM_WRITE_UNCONFIRMED, AAFM_WRITE_PARTIAL, AAFM_WRITE_ACCEPTED );
+
+	$key_field   = aafm_activity_detail_field( 'key', $target['key'] ?? null );
+	$key_omitted = ( isset( $target['key'] ) && null === $key_field );
+
+	$detail = array(
+		'kind'             => aafm_activity_detail_field( 'enum', $target['kind'] ?? null, $kinds ),
+		'entity'           => aafm_activity_detail_field( 'enum', $target['entity'] ?? null, $entities ),
+		'object_id'        => aafm_activity_detail_field( 'id', $target['object_id'] ?? null ),
+		'key'              => $key_field,
+		'status'           => aafm_activity_detail_field( 'enum', $status, $statuses ),
+		'rows'             => aafm_activity_detail_field( 'count', $result['rows'] ?? null ),
+		'modified_by_site' => ! empty( $result['modified_by_site'] ),
+		'key_omitted'      => $key_omitted,
+	);
+
+	// Resolving the current user before init has fired settles it ahead of core knowing whether this
+	// is even a REST request, and a request that authenticates by application password only checks
+	// for one from then on - so a write this early is logged as a system write, principal 0, rather
+	// than risk caching "nobody" for a request that has not been authenticated yet.
+	if ( did_action( 'init' ) ) {
+		$user              = wp_get_current_user();
+		$principal_user_id = (int) $user->ID;
+		$principal_login   = $user->user_login ? (string) $user->user_login : '';
+		$client_id         = function_exists( 'aafm_oauth_current_client_id' ) ? aafm_oauth_current_client_id() : '';
+	} else {
+		$principal_user_id = 0;
+		$principal_login   = '';
+		$client_id         = '';
+	}
+
+	aafm_log_activity(
+		array(
+			'ability'           => 'aafm/write-outcome',
+			'principal_user_id' => $principal_user_id,
+			'principal_login'   => $principal_login,
+			'status'            => $log_status,
+			'client_id'         => $client_id,
+			'event_type'        => 'write_outcome',
+			'detail'            => wp_json_encode( $detail ),
+		)
+	);
+}
+add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );

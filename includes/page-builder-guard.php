@@ -10,12 +10,6 @@
  * builder integration: it never edits builder-owned data, it only stops a write from landing
  * somewhere it will be silently ignored.
  *
- * OptimizePress is one of the four builders locked by the release spec, but it is a paid,
- * non-wordpress.org plugin whose post-meta ownership marker could not be verified against any
- * public source (no wordpress.org SVN checkout, no public developer docs found, no plugin copy
- * available in this repo) - see 228-plan-1-7-4-features.md Amendment 22. This is recorded as an
- * open scope gap below, not shipped as a guessed marker.
- *
  * Avada/Fusion Builder's marker WAS confirmed (2026-09-05) against a real installed copy (Avada
  * 7.16.1 theme, Fusion Builder 3.16.1 plugin): `fusion_builder_status` post meta set to 'active'
  * (inc/class-fusion-builder.php:1736, read back at :1751/:2723/:2732 to decide whether a page is
@@ -35,29 +29,76 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
+if ( ! defined( 'AAFM_BUILDER_OWNERSHIP_UNKNOWN' ) ) {
+	define( 'AAFM_BUILDER_OWNERSHIP_UNKNOWN', 'unknown' );
+}
+
 /**
  * Whether a post's content is owned by a detected foreign page builder.
  *
- * OptimizePress is NOT included: no public source (wordpress.org SVN, developer docs, or a
- * plugin copy) was available to verify its actual ownership marker, and shipping a guessed meta
- * key would be worse than shipping nothing - a wrong key would refuse ordinary writes on
- * uninvolved posts, or (if it happens to never match) give operators false confidence the guard
- * covers a builder it does not. Filterable via aafm_page_builder_markers so the operator, or a
- * future patch once a real marker is confirmed, can add it without a code change.
+ * A builder is only listed once its ownership marker has been confirmed against real source or a
+ * real installed copy. Shipping a guessed meta key would be worse than shipping nothing: a wrong
+ * key refuses ordinary writes on uninvolved posts, or, if it never matches, gives operators false
+ * confidence that the guard covers a builder it does not. The map is filterable via
+ * aafm_page_builder_markers, so an operator can add a marker without a code change.
  *
- * @param int $post_id Post id.
- * @return string|false The detected builder's short name, or false when none is detected.
+ * By default this is the guard every write consults. It reads every marker's stored rows in one
+ * query and also reads each marker through core, so a marker counts when either view holds it,
+ * including one only a read filter or a registered default supplies, and a stored row a read
+ * filter hides. A failed read, a marker row stored under another spelling that the column's
+ * collation matches, or markers of two different builders answer
+ * AAFM_BUILDER_OWNERSHIP_UNKNOWN, which every write treats as owned. With $pure_read true it reads
+ * through core only and the first marker in map order wins, for a flag a read reports and no write
+ * decides from.
+ *
+ * @param int  $post_id   Post id.
+ * @param bool $pure_read Read through core only, never answering unknown.
+ * @return string|false The detected builder's short name, AAFM_BUILDER_OWNERSHIP_UNKNOWN, or false
+ *                      when none is detected.
  */
-function aafm_post_has_foreign_builder_ownership( int $post_id ) {
-	foreach ( aafm_page_builder_markers() as $meta_key => $builder ) {
-		$value = get_post_meta( $post_id, (string) $meta_key, true );
-		if ( '' === $value || false === $value || null === $value || '0' === $value || 'off' === $value ) {
-			continue; // Present-but-falsy (e.g. Divi toggled off) is not current ownership.
+function aafm_post_has_foreign_builder_ownership( int $post_id, bool $pure_read = false ) {
+	$markers = aafm_page_builder_markers();
+
+	if ( $pure_read ) {
+		foreach ( $markers as $meta_key => $builder ) {
+			$value = aafm_meta_get( 'post', $post_id, (string) $meta_key, true );
+			if ( '' === $value || false === $value || null === $value || '0' === $value || 'off' === $value ) {
+				continue; // Present-but-falsy (e.g. Divi toggled off) is not current ownership.
+			}
+			return (string) $builder;
 		}
-		return (string) $builder;
+		return false;
 	}
 
-	return false;
+	$stored = aafm_meta_rows( 'post', $post_id, array_map( 'strval', array_keys( $markers ) ) );
+	if ( ! $stored['ok'] ) {
+		return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
+	}
+	foreach ( $stored['by_key'] as $rows ) {
+		if ( $rows['aliased'] > 0 ) {
+			return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
+		}
+	}
+
+	$owner = false;
+	foreach ( $markers as $meta_key => $builder ) {
+		$meta_key = (string) $meta_key;
+		$on       = false;
+		foreach ( array( $stored['by_key'][ $meta_key ]['value'] ?? null, aafm_meta_get( 'post', $post_id, $meta_key, true ) ) as $value ) {
+			if ( ! ( '' === $value || false === $value || null === $value || '0' === $value || 'off' === $value ) ) {
+				$on = true; // Either view holding a value that is not off counts.
+			}
+		}
+		if ( ! $on ) {
+			continue;
+		}
+		if ( false !== $owner && (string) $builder !== $owner ) {
+			return AAFM_BUILDER_OWNERSHIP_UNKNOWN;
+		}
+		$owner = (string) $builder;
+	}
+
+	return $owner;
 }
 
 /**
@@ -72,8 +113,16 @@ function aafm_post_has_foreign_builder_ownership( int $post_id ) {
  * ownership check pass on the very next call, writing through the guard entirely.
  * `_elementor_data`/`_fl_builder_data` were already covered by is_protected_meta()'s leading-
  * underscore rule; blocking the whole map here rather than only the two gap keys keeps this
- * automatically correct for any marker added later through the aafm_page_builder_markers filter,
- * including a future OptimizePress marker once one is confirmed.
+ * automatically correct for any marker added later through the aafm_page_builder_markers filter.
+ *
+ * `vcv-pageContent`'s marker was confirmed against the real plugin zip from wordpress.org (Visual
+ * Composer Website Builder, free edition, slug `visualcomposer`, stable 45.16.2): read at
+ * Helpers/PostType.php:67, written at Modules/Editors/DataAjax/Controller.php:399, non-empty JSON
+ * means the builder owns the post. This builder is a hybrid: it also writes rendered output into
+ * post_content on every editor save, so an unguarded write here would not simply be invisible -
+ * it desyncs from vcv-pageContent and is reverted the next time someone opens the builder and
+ * saves. The guard still refuses the write; the failure mode is just "the change disappears
+ * later" rather than "the change never appears".
  *
  * @return array<string,string> Meta key => builder short name.
  */
@@ -86,6 +135,7 @@ function aafm_page_builder_markers(): array {
 			'_fl_builder_data'         => 'beaver-builder',
 			'fusion_builder_status'    => 'avada',
 			'fusion_builder_converted' => 'avada',
+			'vcv-pageContent'          => 'visual-composer',
 		)
 	);
 }
@@ -99,10 +149,19 @@ function aafm_page_builder_markers(): array {
  * shortcodes), so an unguarded generic write there would alter or corrupt the shortcode tree
  * rather than silently do nothing - Codex final round 7 LOW.
  *
- * @param string $builder The detected builder's short name (from aafm_post_has_foreign_builder_ownership()).
+ * @param string $builder The detected builder's short name, or AAFM_BUILDER_OWNERSHIP_UNKNOWN (from
+ *                        aafm_post_has_foreign_builder_ownership()).
  * @return WP_Error
  */
 function aafm_page_builder_owned_error( string $builder ): WP_Error {
+	if ( AAFM_BUILDER_OWNERSHIP_UNKNOWN === $builder ) {
+		return new WP_Error(
+			'aafm_page_builder_owned',
+			__( 'This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	$label = ucwords( str_replace( '-', ' ', $builder ) );
 	return new WP_Error(
 		'aafm_page_builder_owned',

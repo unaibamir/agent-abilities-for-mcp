@@ -280,19 +280,7 @@ function aafm_exec_get_media( array $input ) {
 		);
 	};
 
-	$attachments = array();
-	$total       = 0;
-	if ( 'all' === $lang ) {
-		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$shaped      = $shape_language( $code );
-			$attachments = array_merge( $attachments, $shaped['rows'] );
-			$total      += $shaped['found'];
-		}
-	} else {
-		$shaped      = $shape_language( $lang );
-		$attachments = $shaped['rows'];
-		$total       = $shaped['found'];
-	}
+	list( $attachments, $total ) = aafm_collect_by_language( $lang, $shape_language );
 
 	return array(
 		'media'    => $attachments,
@@ -366,7 +354,7 @@ function aafm_exec_get_media_item( array $input ) {
 			? aafm_wpml_translated_id( $att_id, 'attachment', $lang )
 			: $att_id;
 	}
-	$attachment = $att_id ? get_post( $att_id ) : null;
+	$attachment = $att_id ? aafm_exact_object( 'post', $att_id ) : null;
 	if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type ) {
 		return aafm_generic_error();
 	}
@@ -615,7 +603,7 @@ function aafm_args_set_featured_image(): array {
  */
 function aafm_perm_set_featured_image( array $input ): bool {
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post    = $post_id ? get_post( $post_id ) : null;
+	$post    = $post_id ? aafm_exact_object( 'post', $post_id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -636,17 +624,24 @@ function aafm_exec_set_featured_image( array $input ) {
 	// Defense-in-depth: re-confirm the target exists AND its type is writable through the
 	// chokepoint, so a non-allowlisted / non-mapped type is refused even if the permission
 	// callback were ever bypassed.
-	$target = $post_id ? get_post( $post_id ) : null;
+	$target = $post_id ? aafm_exact_object( 'post', $post_id ) : null;
 	if ( ! $target instanceof WP_Post || ! aafm_can_edit_post_object( $target ) ) {
 		return aafm_generic_error();
 	}
 
 	// The id must be a real attachment AND a real image - not a PDF or a plain post.
-	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) || ! wp_attachment_is_image( $att_id ) ) {
+	$att = aafm_exact_object( 'post', $att_id );
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) || ! wp_attachment_is_image( $att_id ) ) {
 		return aafm_generic_error();
 	}
 
 	if ( ! set_post_thumbnail( $post_id, $att_id ) ) {
+		return aafm_generic_error();
+	}
+	// set_post_thumbnail() also returns true for a write a filter vetoed and for the delete it
+	// makes when the image cannot render, so the _thumbnail_id row read after the call decides.
+	$row = aafm_meta_row( 'post', $post_id, '_thumbnail_id' );
+	if ( ! $row['ok'] || ! $row['exists'] || ! aafm_stored_id_matches( $row['value'], $att_id ) ) {
 		return aafm_generic_error();
 	}
 
@@ -689,6 +684,10 @@ function aafm_args_upload_media(): array {
 			'properties' => array(
 				'attachment_id' => array( 'type' => 'integer' ),
 				'media'         => array( 'type' => 'object' ),
+				'alt_status'    => array(
+					'type' => 'string',
+					'enum' => array( 'written', 'unchanged' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_upload_media',
@@ -822,6 +821,7 @@ function aafm_exec_upload_media( array $input ) {
  * @param string      $requested_filename Caller-supplied filename hint; only the sanitized basename is kept.
  * @param string|null $alt                Alt text to set on the attachment, or null to leave it untouched.
  * @return array<string,mixed>|WP_Error
+ * @throws \Throwable Anything thrown after the attachment exists, rethrown once it is deleted.
  */
 function aafm_finish_media_upload( string $decoded, string $requested_filename, ?string $alt ) {
 	// Size cap from WordPress, enforced before anything is written. wp_handle_sideload() re-checks
@@ -899,91 +899,86 @@ function aafm_finish_media_upload( string $decoded, string $requested_filename, 
 		return aafm_generic_error();
 	}
 
-	// Security review finding 1 (fix round 1, 208): media_handle_sideload() -> wp_read_image_metadata()
-	// can populate post_content from the uploaded image's own IPTC/EXIF caption. Re-apply this
-	// plugin's own policy to whatever landed there, the same way aafm-update-media already runs its
-	// caller-supplied description through wp_kses_post() before writing the same column (:914) -
-	// this ability's guarantee must not depend on an upstream WP core implementation detail (verified
-	// as of WP 7.1, wp_read_image_metadata() already runs its whole return value through
-	// wp_kses_post_deep() before returning) that this plugin never signed a contract on and cannot
-	// verify holds on its stated 6.9 floor. get_post_field() with the 'raw' context reads storage
-	// directly, unaffected by any display filter, so this compares and rewrites the actual stored
-	// value rather than a filtered view of it.
-	$sideloaded_field   = get_post_field( 'post_content', $attachment_id, 'raw' );
-	$sideloaded_content = is_string( $sideloaded_field ) ? $sideloaded_field : '';
-	$sanitized_content  = wp_kses_post( $sideloaded_content );
-	if ( $sanitized_content !== $sideloaded_content ) {
-		$updated = wp_update_post(
-			wp_slash(
-				array(
-					'ID'           => $attachment_id,
-					'post_content' => $sanitized_content,
-				)
-			),
-			true
-		);
-		if ( is_wp_error( $updated ) ) {
-			// Codex hunt F9: media_handle_sideload() already committed the attachment and file
-			// to the media library above. Leaving it in place on this failure branch orphans it
-			// with its un-renormalized caption and no ID ever returned to the caller for
-			// cleanup, matching the temp-file cleanup discipline already applied a few lines up.
-			wp_delete_attachment( $attachment_id, true );
-			return aafm_generic_error();
-		}
-		// Codex round 5 R5-2: is_wp_error() alone does not catch a wp_insert_post_data filter that
-		// reverts this resave, which would leave the un-renormalized, IPTC/EXIF-sourced caption in
-		// storage - exactly the security gap this resave exists to close. Confirm the sanitized
-		// content actually landed before trusting it, same orphan-cleanup discipline as above.
-		// Codex round 5 R5-1: this used to be a raw stored/expected comparison, which cannot tell
-		// a legitimate save-time normalization (emoji/charset re-encoding, a registered
-		// content_save_pre callback) from a genuine veto - a successfully renormalized caption
-		// could fail this check and get its attachment permanently deleted. Route through the
-		// same shared confirmation helper every other post-field write in this codebase uses, so
-		// this sibling gets the identical normalization tolerance and veto detection.
-		if ( ! aafm_post_field_write_confirmed( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
-			wp_delete_attachment( $attachment_id, true );
-			return aafm_generic_error();
-		}
-	}
+	// From here the attachment exists, so every way out that is not a success deletes it: a
+	// returned error, and a throw, which is rethrown unchanged once the attachment is gone. Only
+	// the attachment this call created is ever deleted.
+	//
+	// The sideload can fill post_content from the image's own IPTC/EXIF caption, so that column is
+	// run through wp_kses_post(), the policy update-media applies to a description, and the
+	// sanitized value must be confirmed as stored. The caller's alt text then wins over any alt the
+	// sideload set from the image metadata. The response is built inside a checked-read scope, so a
+	// failed metadata read is an error, never an empty or null field.
+	$attachment_id = (int) $attachment_id;
+	try {
+		$response = ( static function () use ( $attachment_id, $alt ) {
+			// aafm_exact_object() loads the attachment's own row, so the comparison and the rewrite act
+			// on the stored post_content, unaffected by any display filter.
+			$sideloaded_post = aafm_exact_object( 'post', $attachment_id );
+			if ( ! $sideloaded_post instanceof WP_Post ) {
+				return aafm_generic_error();
+			}
+			$sideloaded_field   = $sideloaded_post->post_content;
+			$sideloaded_content = is_string( $sideloaded_field ) ? $sideloaded_field : '';
+			$sanitized_content  = wp_kses_post( $sideloaded_content );
+			if ( $sanitized_content !== $sideloaded_content ) {
+				$updated = wp_update_post(
+					wp_slash(
+						array(
+							'ID'           => $attachment_id,
+							'post_content' => $sanitized_content,
+						)
+					),
+					true
+				);
+				if ( is_wp_error( $updated ) || ! aafm_post_field_confirm_logged( $attachment_id, 'post_content', $sanitized_content, $sideloaded_content ) ) {
+					return aafm_generic_error();
+				}
+			}
 
-	// The caller's own alt text wins over whatever media_handle_sideload() may already have set
-	// from the image's own EXIF/IPTC metadata. update_post_meta() unslashes the value, so a
-	// backslash in the alt text is stripped unless it is slashed first, exactly like the sibling
-	// meta writers.
-	if ( null !== $alt ) {
-		// Read before the write: media_handle_sideload() may already have seeded this key from
-		// the image's own EXIF/IPTC metadata, so '' is not a safe assumption for $old here.
-		$alt_before = get_post_meta( $attachment_id, '_wp_attachment_image_alt', true );
-		$alt_clean  = aafm_sanitize_plain_text( $alt );
-		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $alt_clean ) );
-		// Codex round 5 R5-2: update_post_meta()'s return value was discarded outright, so a
-		// metadata filter vetoing the alt write would report success with the old alt text still
-		// in storage. Confirm it landed, same orphan-cleanup discipline as the branches above.
-		// Codex round 6 B6-3: compare against the CANONICAL sanitize_meta() form, not the pre-write
-		// intent, so a registered sanitize callback's legitimate normalization is not mistaken for
-		// a veto. Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same
-		// filterable call core itself makes at write time, rather than the literal 'attachment' -
-		// a get_object_subtype_post filter remapping the subtype is honoured here the same way it
-		// is at write time.
-		if ( ! aafm_meta_write_confirmed( $alt_before, get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $attachment_id ) ) ) {
-			wp_delete_attachment( $attachment_id, true );
-			return aafm_generic_error();
-		}
-	}
+			$alt_status = null;
+			if ( null !== $alt ) {
+				$alt_result = aafm_meta_set( 'post', $attachment_id, '_wp_attachment_image_alt', aafm_sanitize_plain_text( $alt ), (string) get_object_subtype( 'post', $attachment_id ) );
+				if ( is_wp_error( $alt_result ) || ! in_array( $alt_result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+					// An alt that did not land gets the generic error upload-media has always
+					// returned for it.
+					return aafm_generic_error();
+				}
+				$alt_status = $alt_result['status'];
+			}
 
-	$attachment = get_post( $attachment_id );
-	if ( ! $attachment instanceof WP_Post ) {
-		// Codex hunt F9: same orphan-cleanup discipline as the branch above, for this
-		// early return too.
+			$attachment = aafm_exact_object( 'post', $attachment_id );
+			if ( ! $attachment instanceof WP_Post ) {
+				return aafm_generic_error();
+			}
+
+			// The redacted media shape: public URL only, never an absolute path.
+			$response = aafm_with_checked_reads(
+				static function () use ( $attachment_id, $attachment ): array {
+					return array(
+						'attachment_id' => $attachment_id,
+						'media'         => aafm_redact_media( $attachment ),
+					);
+				},
+				aafm_media_write_unconfirmed_error()
+			);
+			if ( ! is_wp_error( $response ) && null !== $alt_status ) {
+				$response['alt_status'] = $alt_status;
+			}
+			return $response;
+		} )();
+	} catch ( \Throwable $e ) {
+		// A throw from the cleanup is dropped, so the caller gets the original.
+		try {
+			wp_delete_attachment( $attachment_id, true );
+		} catch ( \Throwable $cleanup_error ) {
+			unset( $cleanup_error );
+		}
+		throw $e;
+	}
+	if ( is_wp_error( $response ) ) {
 		wp_delete_attachment( $attachment_id, true );
-		return aafm_generic_error();
 	}
-
-	// Return the redacted media shape - public URL only, never an absolute path.
-	return array(
-		'attachment_id' => (int) $attachment_id,
-		'media'         => aafm_redact_media( $attachment ),
-	);
+	return $response;
 }
 
 /**
@@ -1022,6 +1017,10 @@ function aafm_args_upload_media_from_url(): array {
 			'properties' => array(
 				'attachment_id' => array( 'type' => 'integer' ),
 				'media'         => array( 'type' => 'object' ),
+				'alt_status'    => array(
+					'type' => 'string',
+					'enum' => array( 'written', 'unchanged' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_upload_media_from_url',
@@ -1584,7 +1583,11 @@ function aafm_args_update_media(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'media' => array( 'type' => 'object' ),
+				'media'      => array( 'type' => 'object' ),
+				'alt_status' => array(
+					'type' => 'string',
+					'enum' => array( 'written', 'unchanged' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_media',
@@ -1612,10 +1615,11 @@ function aafm_args_update_media(): array {
  */
 function aafm_perm_update_media( array $input ): bool {
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
-	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) ) {
+	$att    = aafm_exact_object( 'post', $att_id );
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) ) {
 		return false;
 	}
-	return current_user_can( 'edit_post', $att_id );
+	return aafm_user_can_checked( 'edit_post', $att_id );
 }
 
 /**
@@ -1629,9 +1633,9 @@ function aafm_perm_update_media( array $input ): bool {
  */
 function aafm_exec_update_media( array $input ) {
 	$att_id     = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
-	$attachment = $att_id ? get_post( $att_id ) : null;
+	$attachment = $att_id ? aafm_exact_object_chain( 'post', $att_id ) : null;
 	if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type
-		|| ! current_user_can( 'edit_post', $att_id ) ) {
+		|| ! aafm_user_can_checked( 'edit_post', $att_id ) ) {
 		return aafm_generic_error();
 	}
 
@@ -1664,19 +1668,16 @@ function aafm_exec_update_media( array $input ) {
 		}
 	}
 
-	$alt_clean  = null;
-	$alt_before = null;
+	$alt_result = null;
 	if ( $has_alt ) {
-		// Read before the write, so the confirmation below can tell a landed change from a
-		// silent veto rather than only replaying sanitize_meta().
-		$alt_before = get_post_meta( $att_id, '_wp_attachment_image_alt', true );
-		// update_post_meta() unslashes its value, so slash here too (matches
-		// aafm_exec_update_post_meta) to preserve literal backslashes in alt text.
-		$alt_clean = aafm_sanitize_plain_text( (string) $input['alt'] );
-		update_post_meta( $att_id, '_wp_attachment_image_alt', wp_slash( $alt_clean ) );
+		$alt_result = aafm_meta_set( 'post', $att_id, '_wp_attachment_image_alt', aafm_sanitize_plain_text( (string) $input['alt'] ), (string) get_object_subtype( 'post', $att_id ) );
+		if ( is_wp_error( $alt_result ) ) {
+			// The same code update-media returned for an alt it could not store before.
+			return aafm_media_write_unconfirmed_error();
+		}
 	}
 
-	$fresh = get_post( $att_id );
+	$fresh = aafm_exact_object( 'post', $att_id );
 	if ( ! $fresh instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1690,24 +1691,33 @@ function aafm_exec_update_media( array $input ) {
 	// unfiltered_html, the core `trim` on title) is not mistaken for a veto.
 	// $attachment was read before wp_update_post() ran, so its fields are each field's genuine
 	// pre-write value.
-	if ( $has_title && ! aafm_post_field_write_confirmed( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ), (string) $attachment->post_title ) ) {
+	if ( $has_title && ! aafm_post_field_confirm_logged( $att_id, 'post_title', (string) ( $postarr['post_title'] ?? '' ), (string) $attachment->post_title ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_caption && ! aafm_post_field_write_confirmed( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ), (string) $attachment->post_excerpt ) ) {
+	if ( $has_caption && ! aafm_post_field_confirm_logged( $att_id, 'post_excerpt', (string) ( $postarr['post_excerpt'] ?? '' ), (string) $attachment->post_excerpt ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	if ( $has_description && ! aafm_post_field_write_confirmed( $att_id, 'post_content', (string) $postarr['post_content'], (string) $attachment->post_content ) ) {
+	if ( $has_description && ! aafm_post_field_confirm_logged( $att_id, 'post_content', (string) $postarr['post_content'], (string) $attachment->post_content ) ) {
 		return aafm_media_write_unconfirmed_error();
 	}
-	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
-	// call core itself makes at write time, rather than the literal 'attachment' - a
-	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
-	// at write time.
-	if ( $has_alt && ! aafm_meta_write_confirmed( $alt_before, get_post_meta( $att_id, '_wp_attachment_image_alt', true ), $alt_clean, '_wp_attachment_image_alt', 'post', (string) get_object_subtype( 'post', $att_id ) ) ) {
-		return aafm_media_write_unconfirmed_error();
+	if ( null !== $alt_result && ! in_array( $alt_result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+		$error = aafm_meta_write_error( $alt_result['status'], 'write', 'post', $att_id, '_wp_attachment_image_alt' );
+		return new WP_Error( 'aafm_media_write_unconfirmed', $error->get_error_message(), $error->get_error_data() );
 	}
 
-	return array( 'media' => aafm_media_item_payload( $fresh ) );
+	$response = aafm_with_checked_reads(
+		static function () use ( $fresh ): array {
+			return array( 'media' => aafm_media_item_payload( $fresh ) );
+		},
+		aafm_media_write_unconfirmed_error()
+	);
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
+	if ( null !== $alt_result ) {
+		$response['alt_status'] = $alt_result['status'];
+	}
+	return $response;
 }
 
 /**
@@ -1777,10 +1787,11 @@ function aafm_args_delete_media(): array {
  */
 function aafm_perm_delete_media( array $input ): bool {
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
-	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) ) {
+	$att    = aafm_exact_object( 'post', $att_id );
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) ) {
 		return false;
 	}
-	return current_user_can( 'delete_post', $att_id );
+	return aafm_user_can_checked( 'delete_post', $att_id );
 }
 
 /**
@@ -1795,7 +1806,8 @@ function aafm_perm_delete_media( array $input ): bool {
  */
 function aafm_exec_delete_media( array $input ) {
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
-	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) || ! current_user_can( 'delete_post', $att_id ) ) {
+	$att    = aafm_exact_object( 'post', $att_id );
+	if ( $att_id <= 0 || 'attachment' !== ( $att instanceof WP_Post ? $att->post_type : false ) || ! aafm_user_can_checked( 'delete_post', $att_id ) ) {
 		return aafm_generic_error();
 	}
 

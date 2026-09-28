@@ -189,7 +189,8 @@ function aafm_wc_get_all_tax_rates(): array {
  */
 function aafm_wc_get_tax_rate_by_id( int $rate_id ): ?array {
 	$row = \WC_Tax::_get_tax_rate( $rate_id, ARRAY_A );
-	if ( ! is_array( $row ) ) {
+	// The row carries its own id, so a read that another rate's row answered is caught here.
+	if ( ! is_array( $row ) || (int) ( $row['tax_rate_id'] ?? 0 ) !== $rate_id ) {
 		return null;
 	}
 	return aafm_wc_tax_rate_shape( $row );
@@ -555,7 +556,7 @@ function aafm_exec_wc_create_tax_rate( array $input ) {
 	// single woocommerce_tax_rates row, but also invalidates the 'taxes' cache group and fires the
 	// woocommerce_tax_rate_added action. A direct insert leaves WC's cached rates stale, so checkout
 	// keeps charging the old rate until the cache happens to clear (mirrors shipping.php's fix).
-	$new_id = (int) \WC_Tax::_insert_tax_rate( $data );
+	$new_id = (int) aafm_wc_write( 'insert_tax_rate', array( 'tax_rate' => $data ) )['returned'];
 	if ( $new_id <= 0 ) {
 		return aafm_generic_error();
 	}
@@ -718,7 +719,13 @@ function aafm_exec_wc_update_tax_rate( array $input ) {
 		// Route through WC_Tax so the write invalidates the 'taxes' cache group and fires
 		// woocommerce_tax_rate_updated. A raw $wpdb->update would leave WC's cached rates stale,
 		// so checkout could keep charging the old rate (mirrors shipping.php's cache fix).
-		\WC_Tax::_update_tax_rate( $rate_id, $fields );
+		aafm_wc_write(
+			'update_tax_rate',
+			array(
+				'tax_rate_id' => $rate_id,
+				'tax_rate'    => $fields,
+			)
+		);
 	}
 
 	$updated = aafm_wc_get_tax_rate_by_id( $rate_id );
@@ -936,7 +943,13 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 		return $race_error;
 	}
 
-	$result = \WC_Tax::create_tax_class( $name, $slug );
+	$result = aafm_wc_write(
+		'create_tax_class',
+		array(
+			'name' => $name,
+			'slug' => $slug,
+		)
+	)['returned'];
 	if ( is_wp_error( $result ) ) {
 		return $result;
 	}

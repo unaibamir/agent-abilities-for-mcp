@@ -29,9 +29,8 @@ defined( 'ABSPATH' ) || exit;
  * (client_id, redirect host) rides in the argument-keys column, which the activity log
  * sanitises with sanitize_key(), so the host is normalised to a slug form there.
  *
- * No-op (returns silently) when the activity log is unavailable or the event name is
- * not one of the known lifecycle events, so a logging failure can never break an
- * OAuth response.
+ * No-op (returns silently) when the event name is not one of the known lifecycle
+ * events, so a logging failure can never break an OAuth response.
  *
  * @param string              $event  One of register|authorize|token|refresh|revoke|bearer.
  * @param string              $status One of success|error|denied.
@@ -46,10 +45,6 @@ defined( 'ABSPATH' ) || exit;
  * @return void
  */
 function aafm_oauth_log_event( string $event, string $status, array $ctx = array() ): void {
-	if ( ! function_exists( 'aafm_log_activity' ) ) {
-		return;
-	}
-
 	// 'bearer' covers a presented-but-invalid aafm_oat_ credential at the determine_current_user
 	// resolver: a real but expired token, a wrong audience, or a deactivated owning client. A bearer
 	// that matches no stored token at all is NOT logged (see aafm_oauth_access_token_row_exists) so an
@@ -69,10 +64,8 @@ function aafm_oauth_log_event( string $event, string $status, array $ctx = array
 	// window and bury the genuine audit rows an operator needs during an incident. Cap the row
 	// writes per source IP per window, the same bound the 'fa' (failed Application Password) and
 	// 'ipb' (IP-blocked transport) denial paths already use. The five grant-lifecycle events
-	// (register/authorize/token/refresh/revoke) are user-driven and always logged. The
-	// function_exists guard mirrors the resolver's: the cap helper lives beside aafm_log_activity,
-	// so if that exists (checked above) this does too, but stay defensive under early load order.
-	if ( 'bearer' === $event && function_exists( 'aafm_denial_log_within_cap' ) && ! aafm_denial_log_within_cap( 'br' ) ) {
+	// (register/authorize/token/refresh/revoke) are user-driven and always logged.
+	if ( 'bearer' === $event && ! aafm_denial_log_within_cap( 'br' ) ) {
 		return;
 	}
 

@@ -76,7 +76,7 @@ function aafm_wc_coupons_registry_definitions(): array {
 
 		'aafm/wc-create-coupon' => array(
 			'label'        => __( 'Create WooCommerce coupon', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce coupon from a code and discount type, with optional amount, usage limits, spend limits, product restrictions, and email restrictions. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Creates a WooCommerce coupon from a code and discount type, with optional amount, usage limits, spend limits, product restrictions, and email restrictions. Returns the full coupon shape. The coupon is published and usable immediately. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -108,6 +108,10 @@ function aafm_wc_coupons_registry_definitions(): array {
  */
 function aafm_wc_get_coupon_object( int $id ): ?\WC_Coupon {
 	if ( $id <= 0 || ! class_exists( 'WC_Coupon' ) ) {
+		return null;
+	}
+	// The core coupon store reads the coupon's post by id, so load that post exactly first.
+	if ( false !== aafm_wc_store_is_core( 'coupon' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return null;
 	}
 	$coupon = new \WC_Coupon( $id );
@@ -742,7 +746,13 @@ function aafm_exec_wc_create_coupon( array $input ) {
 		return $race_error;
 	}
 
-	$id = $coupon->save();
+	$id = aafm_wc_write(
+		'save',
+		array(
+			'object' => $coupon,
+			'entity' => 'coupon',
+		)
+	)['returned'];
 	if ( ! $id ) {
 		return aafm_generic_error();
 	}
@@ -831,7 +841,13 @@ function aafm_exec_wc_update_coupon( array $input ) {
 		}
 	}
 
-	$saved_id = (int) $coupon->save();
+	$saved_id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $coupon,
+			'entity' => 'coupon',
+		)
+	)['returned'];
 	if ( $saved_id < 1 ) {
 		return aafm_generic_error();
 	}

@@ -38,7 +38,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-post-meta']  = array(
 		'label'        => __( 'Update post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -46,7 +46,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-post-meta']  = array(
 		'label'        => __( 'Delete post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -64,7 +64,7 @@ function aafm_register_meta_definitions( array $registry ): array {
  */
 function aafm_can_access_post_meta( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
@@ -145,10 +145,10 @@ function aafm_perm_get_post_meta( array $input ): bool {
 function aafm_exec_get_post_meta( array $input ) {
 	$id  = absint( $input['post_id'] );
 	$key = aafm_validate_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
-	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$value = get_post_meta( $id, $key, true );
+	$value = aafm_meta_get( 'post', $id, $key, true );
 	if ( '' !== $value && ! is_scalar( $value ) ) {
 		return aafm_generic_error(); // never dump arrays/serialized blobs.
 	}
@@ -212,7 +212,7 @@ function aafm_args_get_all_post_meta(): array {
  */
 function aafm_perm_get_all_post_meta( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -233,7 +233,7 @@ function aafm_perm_get_all_post_meta( array $input ): bool {
  */
 function aafm_exec_get_all_post_meta( array $input ) {
 	$id = absint( $input['post_id'] );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
@@ -243,7 +243,7 @@ function aafm_exec_get_all_post_meta( array $input ) {
 	// chain (hard-block -> deny -> allow/`*`) via aafm_validate_meta_key(), so protected
 	// (`_`-prefixed), denied, and deny-`*` keys never slip through under the wildcard.
 	$candidate_keys = aafm_meta_allow_has_star()
-		? array_keys( get_post_meta( $id ) )
+		? array_keys( aafm_meta_get( 'post', $id ) )
 		: aafm_allowed_meta_keys();
 
 	$meta = array();
@@ -251,7 +251,7 @@ function aafm_exec_get_all_post_meta( array $input ) {
 		if ( ! is_string( aafm_validate_meta_key( (string) $key ) ) ) {
 			continue; // hard-blocked, denied, or not allowed.
 		}
-		$value = get_post_meta( $id, (string) $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- validated key, bounded loop.
+		$value = aafm_meta_get( 'post', $id, (string) $key, true );
 		// Deliberately SKIPS empty/missing keys (a bulk map omits absent keys),
 		// unlike the single get-post-meta reader which returns an empty value as-is.
 		// The opposite-looking phrasing is intentional; both keep a stored '0'.
@@ -300,12 +300,15 @@ function aafm_args_update_post_meta(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'post_id'  => array( 'type' => 'integer' ),
-				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
-				'value'    => array(
-					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+			'properties' => array_merge(
+				array(
+					'post_id'  => array( 'type' => 'integer' ),
+					'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+					'value'    => array(
+						'type' => array( 'string', 'number', 'boolean', 'integer' ),
+					),
 				),
+				aafm_meta_write_output_properties()
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_post_meta',
@@ -341,7 +344,7 @@ function aafm_perm_update_post_meta( array $input ): bool {
 function aafm_exec_update_post_meta( array $input ) {
 	$id  = absint( $input['post_id'] );
 	$key = aafm_validate_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
-	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	// Codex round 7 R7-3: pass the post's real type, not the default 'post', so a
@@ -354,22 +357,19 @@ function aafm_exec_update_post_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	$old = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- single-key read of the pre-write value, not a meta query.
-	update_post_meta( $id, $key, wp_slash( $value ) );
-	$stored = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- single-key read-back of the just-written value, not a meta query.
-	// Codex round 5 R5-2: update_post_meta()'s return value only catches an outright failure. A
-	// metadata filter that short-circuits update_post_metadata to a truthy value bypasses the
-	// write while reporting success, so checking only `false === update_post_meta(...)` never
-	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
-	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
-	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'post', $subtype ) ) {
-		return aafm_generic_error();
+	$result = aafm_meta_set( 'post', $id, $key, $value, $subtype );
+	if ( is_wp_error( $result ) ) {
+		return $result;
 	}
-	return array(
-		'post_id'  => $id,
-		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
-		'value'    => $stored,
+	return aafm_meta_update_response(
+		'post',
+		$id,
+		$key,
+		$result,
+		array(
+			'post_id'  => $id,
+			'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
+		)
 	);
 }
 
@@ -402,8 +402,11 @@ function aafm_args_delete_post_meta(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
+			'properties' => array_merge(
+				array(
+					'deleted' => array( 'type' => 'boolean' ),
+				),
+				aafm_meta_delete_output_properties()
 			),
 		),
 		'execute_callback'    => 'aafm_exec_delete_post_meta',
@@ -440,14 +443,158 @@ function aafm_perm_delete_post_meta( array $input ): bool {
 function aafm_exec_delete_post_meta( array $input ) {
 	$id  = absint( $input['post_id'] );
 	$key = aafm_validate_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
-	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
+	if ( is_wp_error( $key ) || ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	delete_post_meta( $id, $key );
-	// Report the real end state, not a hardcoded true: if the key is still present the delete did
-	// not take. Deleting an already-absent key is an idempotent success (the key is gone either way).
-	if ( metadata_exists( 'post', $id, $key ) ) {
-		return aafm_generic_error();
+	return aafm_meta_delete_response( 'post', $id, $key, aafm_meta_delete( 'post', $id, $key ) );
+}
+
+/**
+ * The response update-post-meta, update-term-meta and update-user-meta return.
+ *
+ * A write that did not land as `written` or `unchanged` is its error. Otherwise the response is
+ * the family's identity fields, then `value`, then the outcome fields. `value` is read after the
+ * helper returns, through core with `single` true, exactly as get_*_meta( ..., true ) reads it,
+ * so read filters shape it as they always have. That read runs inside a checked-read scope: a
+ * failed load is the `unconfirmed` error, never a made-up value. `status` still comes from the
+ * helper.
+ *
+ * @param string              $type     'post', 'term' or 'user'.
+ * @param int                 $id       Object id.
+ * @param string              $key      Meta key.
+ * @param array<string,mixed> $result   The aafm_meta_set() result.
+ * @param array<string,mixed> $identity The family's identity fields, in wire order.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_meta_update_response( string $type, int $id, string $key, array $result, array $identity ) {
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+		return aafm_meta_write_error( $result['status'], 'write', $type, $id, $key );
 	}
-	return array( 'deleted' => true );
+	return aafm_with_checked_reads(
+		static function () use ( $type, $id, $key, $result, $identity ): array {
+			$identity['value'] = aafm_meta_get( $type, $id, $key, true );
+			return array_merge( $identity, aafm_meta_write_response_fields( $result ) );
+		},
+		aafm_meta_write_error( AAFM_WRITE_UNCONFIRMED, 'write', $type, $id, $key )
+	);
+}
+
+/**
+ * The response delete-post-meta, delete-term-meta and delete-user-meta return: `deleted: true`
+ * for `deleted` and `absent`, since deleting an absent key is an idempotent success, then the
+ * outcome fields. Any other status is its error.
+ *
+ * @param string              $type   'post', 'term' or 'user'.
+ * @param int                 $id     Object id.
+ * @param string              $key    Meta key.
+ * @param array<string,mixed> $result The aafm_meta_delete() result.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_meta_delete_response( string $type, int $id, string $key, array $result ) {
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
+		return aafm_meta_write_error( $result['status'], 'delete', $type, $id, $key );
+	}
+	return array_merge( array( 'deleted' => true ), aafm_meta_write_response_fields( $result ) );
+}
+
+/**
+ * The outcome fields a meta write or delete adds to its response, each present exactly when the
+ * helper's own result carries it, in this order: status, previous, rows, acknowledged, observed
+ * and modified_by_site. `value` is not among them; aafm_meta_update_response() reads its own.
+ * `previous` goes out only when it is a scalar: get-meta never returns an array, object or null
+ * value to an agent, so an overwrite or delete does not hand one back either.
+ *
+ * @param array<string,mixed> $result The aafm_meta_set() or aafm_meta_delete() result.
+ * @return array<string,mixed>
+ */
+function aafm_meta_write_response_fields( array $result ): array {
+	$fields = array();
+	foreach ( array( 'status', 'previous', 'rows', 'acknowledged', 'observed', 'modified_by_site' ) as $name ) {
+		if ( array_key_exists( $name, $result ) && ( 'previous' !== $name || is_scalar( $result[ $name ] ) ) ) {
+			$fields[ $name ] = $result[ $name ];
+		}
+	}
+	return $fields;
+}
+
+/**
+ * Output-schema properties a meta write adds to its ability's response.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_meta_write_output_properties(): array {
+	return array(
+		'status'           => array(
+			'type' => 'string',
+			'enum' => array( 'written', 'unchanged' ),
+		),
+		'previous'         => array(
+			'type' => array( 'string', 'number', 'integer', 'boolean' ),
+		),
+		'rows'             => array( 'type' => 'integer' ),
+		'acknowledged'     => array( 'type' => 'boolean' ),
+		'observed'         => array(
+			'type'       => 'object',
+			'properties' => array(
+				'exists' => array( 'type' => 'boolean' ),
+				'count'  => array( 'type' => 'integer' ),
+			),
+		),
+		'modified_by_site' => array( 'type' => 'boolean' ),
+	);
+}
+
+/**
+ * Output-schema properties a meta delete adds to its ability's response.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_meta_delete_output_properties(): array {
+	$properties = aafm_meta_write_output_properties();
+	unset( $properties['modified_by_site'] );
+	$properties['status']['enum'] = array( 'deleted', 'absent' );
+	return $properties;
+}
+
+/**
+ * The error a meta write or delete returns when it did not succeed. The code is the one these
+ * abilities have always returned; the message says which status occurred, and the data carries
+ * identifiers only, never a value, because the adapter's error handler logs it.
+ *
+ * @param string $status    refused, read_failed or unconfirmed.
+ * @param string $operation 'write' or 'delete'.
+ * @param string $type      'post', 'term' or 'user'.
+ * @param int    $id        Object id.
+ * @param string $key       Meta key.
+ * @return WP_Error
+ */
+function aafm_meta_write_error( string $status, string $operation, string $type, int $id, string $key ): WP_Error {
+	$delete = 'delete' === $operation;
+	switch ( $status ) {
+		case AAFM_WRITE_READ_FAILED:
+			$message = $delete
+				? __( 'The current value could not be read, so nothing was deleted. Try again.', 'agent-abilities-for-mcp' )
+				: __( 'The current value could not be read, so nothing was written. Try again.', 'agent-abilities-for-mcp' );
+			break;
+		case AAFM_WRITE_UNCONFIRMED:
+			$message = __( 'The write could not be confirmed; read the key to see its current state.', 'agent-abilities-for-mcp' );
+			break;
+		default:
+			$message = $delete
+				? __( 'The site refused or failed the delete; read the key to see its current state.', 'agent-abilities-for-mcp' )
+				: __( 'The site refused or failed the write; read the key to see its current state.', 'agent-abilities-for-mcp' );
+	}
+	// The adapter's error handler writes error_data to error_log() whether or not WP_DEBUG is on,
+	// so the key goes through the activity-log key rule first and is null when it fails it.
+	$target = aafm_meta_write_target( $type, $id, $key );
+	return new WP_Error(
+		'aafm_error',
+		$message,
+		array(
+			'status'    => $status,
+			'kind'      => $target['kind'],
+			'object_id' => $target['object_id'],
+			'key'       => aafm_activity_detail_field( 'key', $target['key'] ),
+		)
+	);
 }

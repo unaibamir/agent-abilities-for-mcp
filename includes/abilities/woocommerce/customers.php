@@ -123,6 +123,10 @@ function aafm_wc_get_customer_object( int $id ): ?\WC_Customer {
 	if ( ! class_exists( 'WC_Customer' ) ) {
 		return null;
 	}
+	// The core customer store reads the user by id, so load that user exactly first.
+	if ( false !== aafm_wc_store_is_core( 'customer' ) && ! aafm_exact_object( 'user', $id ) instanceof WP_User ) {
+		return null;
+	}
 	// WooCommerce exposes no wc_get_customer() helper; instantiate WC_Customer directly. A
 	// non-existent id leaves the object empty, so get_id() returns 0 - treat that as "not found".
 	// WC_Customer's constructor already catches the data-store "Invalid customer" exception and
@@ -400,7 +404,7 @@ function aafm_perm_wc_update_customer( array $input ): bool {
 	return $id > 0
 		&& aafm_wc_perm()
 		&& current_user_can( 'edit_users' )
-		&& current_user_can( 'edit_user', $id );
+		&& aafm_user_can_checked( 'edit_user', $id, 'user' );
 }
 
 // aafm/wc-list-customers (R).
@@ -676,7 +680,14 @@ function aafm_exec_wc_create_customer( array $input ) {
 	// WC_Customer object. Treat any non-positive / WP_Error result as a failure so a real
 	// create error can't be misread as success (and a real success can't be misread as a
 	// failure after the account is already persisted).
-	$created = wc_create_new_customer( $email, $username, wp_generate_password() );
+	$created = aafm_wc_write(
+		'create_customer',
+		array(
+			'email'    => $email,
+			'username' => $username,
+			'password' => wp_generate_password(),
+		)
+	)['returned'];
 	if ( $created instanceof \WP_Error ) {
 		return aafm_generic_error();
 	}
@@ -691,7 +702,14 @@ function aafm_exec_wc_create_customer( array $input ) {
 		return aafm_generic_error();
 	}
 	aafm_wc_apply_customer_input( $customer, $input );
-	if ( (int) $customer->save() < 1 ) {
+	$saved_id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $customer,
+			'entity' => 'customer',
+		)
+	)['returned'];
+	if ( $saved_id < 1 ) {
 		return aafm_generic_error();
 	}
 
@@ -764,7 +782,13 @@ function aafm_exec_wc_update_customer( array $input ) {
 	}
 
 	aafm_wc_apply_customer_input( $customer, $input );
-	$saved_id = (int) $customer->save();
+	$saved_id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $customer,
+			'entity' => 'customer',
+		)
+	)['returned'];
 	if ( $saved_id < 1 ) {
 		return aafm_generic_error();
 	}

@@ -435,4 +435,98 @@ final class WooAttributesTest extends TestCase {
 			'the update executor must not seed $args from the resolved attribute\'s current has_archives value.'
 		);
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	public function test_attribute_create_and_update_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-product-attribute' )->execute( array( 'name' => 'Logged' ) );
+		$this->assertIsArray( $created );
+		$id = (int) $created['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-product-attribute' )->execute(
+			array(
+				'attribute_id' => $id,
+				'name'         => 'Logged Again',
+			)
+		);
+		$this->assertIsArray( $updated );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'attribute', $id, 'accepted' ),
+				$this->wc_row( 'attribute', $id, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_attribute_create_that_wc_refuses_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcAttributeStubStore::set_create_should_fail( true );
+		$res = wp_get_ability( 'aafm/wc-create-product-attribute' )->execute( array( 'name' => 'Refused' ) );
+		WcAttributeStubStore::set_create_should_fail( false );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'attribute', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_an_attribute_update_that_wc_refuses_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcAttributeStubStore::set_update_should_fail( true );
+		$res = wp_get_ability( 'aafm/wc-update-product-attribute' )->execute(
+			array(
+				'attribute_id' => 1,
+				'name'         => 'Refused',
+			)
+		);
+		WcAttributeStubStore::set_update_should_fail( false );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'attribute', 1, 'refused' ) ), $this->outcome_details() );
+	}
 }

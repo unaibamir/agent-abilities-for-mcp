@@ -153,7 +153,7 @@ function aafm_perm_get_comments( array $input ): bool {
 		return current_user_can( 'read' );
 	}
 
-	if ( ! get_post( $post_id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $post_id ) instanceof WP_Post ) {
 		// Default-deny on a missing post so the ability can't probe for ids.
 		return false;
 	}
@@ -249,10 +249,12 @@ function aafm_exec_get_comments( array $input ): array {
 		);
 	}
 
-	$scan_cap    = aafm_comments_sitewide_scan_cap();
-	$is_readable = static fn( $comment ): bool => $comment instanceof WP_Comment
+	$scan_cap        = aafm_comments_sitewide_scan_cap();
+	$is_readable     = static fn( $comment ): bool => $comment instanceof WP_Comment
 		&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID );
-	$scanned     = get_comments(
+	$may_be_readable = static fn( $comment ): bool => $comment instanceof WP_Comment
+		&& false !== aafm_comment_post_readable_state( (int) $comment->comment_post_ID );
+	$scanned         = get_comments(
 		array(
 			'status' => 'approve',
 			'number' => min( $raw_total, $scan_cap ),
@@ -279,13 +281,16 @@ function aafm_exec_get_comments( array $input ): array {
 	// comes back short of what was asked for (proving no more approved comments exist at all,
 	// resolving this false), or a small reserve of probe batches is exhausted without resolving
 	// either way - at which point, as with that same GeoDirectory probe, an unresolved state
-	// reports true rather than assert a "nothing more" the scan never actually confirmed.
+	// reports true rather than assert a "nothing more" the scan never actually confirmed. For the
+	// same reason a readability check that could not decide counts as readable in the probe only,
+	// while the list above still omits every comment it could not prove readable.
 	$truncated = false;
 	if ( count( (array) $scanned ) < $raw_total ) {
-		$excluded  = array_map(
+		$ids_of    = static fn( array $comments ): array => array_map(
 			static fn( $comment ): int => $comment instanceof WP_Comment ? (int) $comment->comment_ID : 0,
-			(array) $scanned
+			$comments
 		);
+		$excluded  = $ids_of( (array) $scanned );
 		$probe_cap = 2; // Small, fixed reserve - see the docblock above for why an unresolved probe defaults to true rather than growing without bound.
 		for ( $i = 0; $i < $probe_cap; $i++ ) {
 			$probe = get_comments(
@@ -295,20 +300,14 @@ function aafm_exec_get_comments( array $input ): array {
 					'comment__not_in' => $excluded,
 				)
 			);
-			if ( array() !== array_filter( (array) $probe, $is_readable ) ) {
+			if ( array() !== array_filter( (array) $probe, $may_be_readable ) ) {
 				$truncated = true;
 				break;
 			}
 			if ( count( (array) $probe ) < $scan_cap ) {
 				break; // A short batch proves no more approved comments exist at all: stays false.
 			}
-			$excluded = array_merge(
-				$excluded,
-				array_map(
-					static fn( $comment ): int => $comment instanceof WP_Comment ? (int) $comment->comment_ID : 0,
-					(array) $probe
-				)
-			);
+			$excluded = array_merge( $excluded, $ids_of( (array) $probe ) );
 			if ( $i === $probe_cap - 1 ) {
 				$truncated = true; // Reserve exhausted without resolving either way: unknown, so assume yes.
 			}
@@ -338,36 +337,65 @@ function aafm_exec_get_comments( array $input ): array {
  * @return bool
  */
 function aafm_comment_post_is_readable( int $post_id ): bool {
+	return true === aafm_comment_post_readable_state( $post_id );
+}
+
+/**
+ * Whether the current user may read the post a comment belongs to, as true, false, or null when
+ * the check could not decide.
+ *
+ * False means the post is certainly unreadable: an id of 0, a post whose row is certainly absent,
+ * a revision whose parent row is certainly absent (core denies that case), or a capability check
+ * that answered no. Null means a load or the checked-read scope failed, so nothing was proved.
+ *
+ * @param int $post_id Parent post id.
+ * @return bool|null
+ */
+function aafm_comment_post_readable_state( int $post_id ): ?bool {
 	if ( $post_id <= 0 ) {
 		return false;
 	}
 
-	$post = get_post( $post_id );
+	$post = aafm_exact_object_chain( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
-		return false;
+		if ( aafm_object_absent( 'post', $post_id ) ) {
+			return false;
+		}
+		$node = aafm_exact_object( 'post', $post_id );
+		if ( $node instanceof WP_Post && 'revision' === $node->post_type && aafm_object_absent( 'post', (int) $node->post_parent ) ) {
+			return false;
+		}
+		return null;
 	}
 
-	// R3-5 (1.7.5 deferred, round 3): a password-protected public post fell straight through to
-	// the read_post branch below, which maps to the ordinary 'read' capability - the password
-	// itself was never checked, so a Subscriber could read approved comments on a password-
-	// protected published post. Matches core's own REST comments controller
-	// (WP_REST_Comments_Controller::get_items_permissions_check()): a still-password-required
-	// post is gated on edit_post, not on merely being able to read the post record.
-	// post_password_required() itself already accounts for the caller having supplied the
-	// password (the post-password cookie), so this only tightens the case that cookie does not
-	// cover.
-	if ( post_password_required( $post ) ) {
-		return current_user_can( 'edit_post', $post_id );
-	}
+	$read = aafm_with_checked_reads(
+		static function () use ( $post, $post_id ): array {
+			// R3-5 (1.7.5 deferred, round 3): a password-protected public post fell straight through to
+			// the read_post branch below, which maps to the ordinary 'read' capability - the password
+			// itself was never checked, so a Subscriber could read approved comments on a password-
+			// protected published post. Matches core's own REST comments controller
+			// (WP_REST_Comments_Controller::get_items_permissions_check()): a still-password-required
+			// post is gated on edit_post, not on merely being able to read the post record.
+			// post_password_required() itself already accounts for the caller having supplied the
+			// password (the post-password cookie), so this only tightens the case that cookie does not
+			// cover.
+			if ( post_password_required( $post ) ) {
+				return array( 'readable' => current_user_can( 'edit_post', $post_id ) );
+			}
 
-	$status_object = get_post_status_object( (string) get_post_status( $post ) );
-	$is_public     = null !== $status_object && ! empty( $status_object->public );
+			$status_object = get_post_status_object( (string) get_post_status( $post ) );
+			$is_public     = null !== $status_object && ! empty( $status_object->public );
 
-	if ( $is_public ) {
-		return current_user_can( 'read' );
-	}
+			if ( $is_public ) {
+				return array( 'readable' => current_user_can( 'read' ) );
+			}
 
-	return current_user_can( 'read_post', $post_id );
+			return array( 'readable' => current_user_can( 'read_post', $post_id ) );
+		},
+		aafm_generic_error()
+	);
+
+	return is_wp_error( $read ) ? null : true === $read['readable'];
 }
 
 /**
@@ -451,7 +479,7 @@ function aafm_perm_get_comment( array $input ): bool {
 		return current_user_can( 'read' );
 	}
 
-	$comment = get_comment( $id );
+	$comment = aafm_exact_object_chain( 'comment', $id );
 	if ( ! $comment instanceof WP_Comment ) {
 		// Default-deny on a missing comment so the ability can't probe for ids -
 		// the same posture as aafm_perm_get_comments() for a missing target post.
@@ -468,7 +496,7 @@ function aafm_perm_get_comment( array $input ): bool {
 
 	// Non-approved (hold/spam/trash) or on a hidden post: require moderation rights
 	// on the specific comment.
-	return current_user_can( 'moderate_comments' ) && current_user_can( 'edit_comment', $id );
+	return current_user_can( 'moderate_comments' ) && aafm_user_can_checked( 'edit_comment', $id );
 }
 
 /**
@@ -479,7 +507,7 @@ function aafm_perm_get_comment( array $input ): bool {
  */
 function aafm_exec_get_comment( array $input ) {
 	$id      = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
-	$comment = get_comment( $id );
+	$comment = aafm_exact_object( 'comment', $id );
 	if ( ! $comment instanceof WP_Comment ) {
 		return aafm_generic_error();
 	}
@@ -596,14 +624,14 @@ function aafm_exec_create_comment( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$post = get_post( $post_id );
+	$post = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
 	// An optional parent must be a real comment on the SAME post - no cross-post threading.
 	if ( $parent > 0 ) {
-		$parent_comment = get_comment( $parent );
+		$parent_comment = aafm_exact_object( 'comment', $parent );
 		if ( ! $parent_comment instanceof WP_Comment || (int) $parent_comment->comment_post_ID !== $post_id ) {
 			return aafm_generic_error();
 		}
@@ -652,8 +680,8 @@ function aafm_exec_create_comment( array $input ) {
 	// contradicting the pending-queue guarantee this function exists to enforce. Read the actual
 	// stored status back and require it to be pending ('0', the literal value wp_set_comment_status()
 	// itself writes for 'hold' - wp-includes/comment.php) rather than trusting the call succeeded.
-	$created = get_comment( $comment_id );
-	if ( ! $created instanceof WP_Comment || '0' !== $created->comment_approved ) {
+	$created = aafm_comment_readback( (int) $comment_id );
+	if ( null === $created || '0' !== $created->comment_approved ) {
 		return aafm_generic_error();
 	}
 
@@ -809,7 +837,7 @@ function aafm_perm_moderate_comment_obj( array $input ): bool {
 		return false;
 	}
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
-	return $id > 0 && current_user_can( 'edit_comment', $id );
+	return $id > 0 && aafm_exact_object_chain( 'comment', $id ) instanceof WP_Comment && aafm_user_can_checked( 'edit_comment', $id );
 }
 
 /**
@@ -827,7 +855,7 @@ function aafm_exec_moderate_comment( array $input ) {
 	$id     = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 	$action = isset( $input['action'] ) ? sanitize_key( (string) $input['action'] ) : '';
 
-	if ( ! get_comment( $id ) instanceof WP_Comment ) {
+	if ( ! aafm_exact_object( 'comment', $id ) instanceof WP_Comment ) {
 		return aafm_generic_error();
 	}
 
@@ -869,8 +897,8 @@ function aafm_exec_moderate_comment( array $input ) {
 	// return value true while the actual stored status is something else entirely. The only signal
 	// this function can trust is a fresh read taken after every hook has already run, compared
 	// against what was actually requested - never a return value from mid-pipeline.
-	$comment = get_comment( $id );
-	if ( ! $comment instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue (a wp_set_comment_status hook can delete the row after the guard above)
+	$comment = aafm_comment_readback( $id );
+	if ( null === $comment ) {
 		return aafm_generic_error();
 	}
 
@@ -887,7 +915,7 @@ function aafm_exec_moderate_comment( array $input ) {
 	// 'status' => type:string, but wp_get_comment_status() falls through to boolean false whenever
 	// get_comment() can't resolve the id at read time - the 'post-trashed' value is one such case
 	// and is mapped by the helper.
-	return array( 'status' => aafm_comment_status_string( $id ) );
+	return array( 'status' => aafm_comment_status_string( $comment ) );
 }
 
 /**
@@ -962,7 +990,7 @@ function aafm_perm_edit_comment_obj( array $input ): bool {
 		return false;
 	}
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
-	return $id > 0 && current_user_can( 'edit_comment', $id );
+	return $id > 0 && aafm_exact_object_chain( 'comment', $id ) instanceof WP_Comment && aafm_user_can_checked( 'edit_comment', $id );
 }
 
 /**
@@ -975,7 +1003,7 @@ function aafm_exec_update_comment( array $input ) {
 	$id      = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
 
-	if ( ! get_comment( $id ) instanceof WP_Comment ) {
+	if ( ! aafm_exact_object( 'comment', $id ) instanceof WP_Comment ) {
 		return aafm_generic_error();
 	}
 	if ( '' === trim( $content ) ) {
@@ -1002,13 +1030,8 @@ function aafm_exec_update_comment( array $input ) {
 	// deleted the comment, or a cache race), aafm_redact_comment() falls back to array(), which
 	// encodes as [] against the declared object schema, not the {} an empty object needs -
 	// surface a generic error instead of redacting null into a schema-violating empty shape.
-	$saved = get_comment( $id );
-	// The wordpress-stubs conditional return type for get_comment() treats this call as
-	// referentially transparent with the WP_Comment check at the top of this function, for the
-	// same $id, so PHPStan reports the instanceof below as always true. That is a static-analysis
-	// artifact, not a runtime guarantee: wp_update_comment() ran in between, and a hook or cache
-	// race can still make this specific re-fetch return null - the guard stays.
-	if ( ! $saved instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue
+	$saved = aafm_comment_readback( $id );
+	if ( null === $saved ) {
 		return aafm_generic_error();
 	}
 
@@ -1085,7 +1108,7 @@ function aafm_args_delete_comment(): array {
 function aafm_exec_delete_comment( array $input ) {
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 
-	if ( ! get_comment( $id ) instanceof WP_Comment ) {
+	if ( ! aafm_exact_object( 'comment', $id ) instanceof WP_Comment ) {
 		return aafm_generic_error();
 	}
 

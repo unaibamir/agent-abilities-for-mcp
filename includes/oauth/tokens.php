@@ -93,15 +93,50 @@ function aafm_oauth_txn( string $sql ): bool {
  *     @type int    $refresh_parent_id The id of the refresh row this pair rotated from (0 for a fresh mint).
  * }
  * @return array{access_token:string,refresh_token:string,expires_in:int}|\WP_Error The token pair,
- *         or a WP_Error when the row could not be persisted (so callers never hand out phantom tokens).
+ *         or a WP_Error when a lifetime row could not be read or the token row could not be persisted
+ *         (so callers never hand out phantom tokens).
  */
 function aafm_oauth_mint_tokens( array $ctx ) {
 	// keep in sync with aafm_oauth_resolve_current_user()'s prefix (AAFM_OAUTH_ACCESS_TOKEN_PREFIX in validator.php, which loads after this file).
 	$access_raw  = 'aafm_oat_' . bin2hex( random_bytes( 32 ) );
 	$refresh_raw = bin2hex( random_bytes( 32 ) );
 
-	$access_ttl  = (int) get_option( 'aafm_oauth_access_ttl', AAFM_OAUTH_ACCESS_TTL );
-	$refresh_ttl = (int) get_option( 'aafm_oauth_refresh_ttl', AAFM_OAUTH_REFRESH_TTL );
+	$ttls = array(
+		'aafm_oauth_access_ttl'  => (int) AAFM_OAUTH_ACCESS_TTL,
+		'aafm_oauth_refresh_ttl' => (int) AAFM_OAUTH_REFRESH_TTL,
+	);
+	// An array or an object is not a stored lifetime, and is 0.
+	$lifetime = static function ( $stored ): int {
+		return is_array( $stored ) || is_object( $stored ) ? 0 : (int) $stored;
+	};
+	foreach ( $ttls as $option => $default ) {
+		$raw             = get_option( $option, $default );
+		$ttls[ $option ] = $lifetime( $raw );
+		// A cache copy that disagrees with the row takes the shorter lifetime; an unreadable row
+		// issues no token. The mint runs only from REST routes, after plugins_loaded; the
+		// function_exists() checks keep a test that loads tokens.php alone working.
+		$row = function_exists( 'aafm_policy_row_if_stale' ) ? aafm_policy_row_if_stale( $option ) : null;
+		if ( null !== $row ) {
+			if ( ! $row['ok'] ) {
+				return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'agent-abilities-for-mcp' ) );
+			}
+			$ttls[ $option ] = min( $ttls[ $option ], $row['found'] ? $lifetime( $row['value'] ) : $default );
+		}
+		if ( $raw !== $default ) {
+			continue;
+		}
+		// The constant may be a failed read's default: a shorter stored lifetime wins, and an
+		// unreadable row issues no token.
+		$row = function_exists( 'aafm_policy_row' ) ? aafm_policy_row( $option ) : aafm_option_row( $option );
+		if ( ! $row['ok'] ) {
+			return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'agent-abilities-for-mcp' ) );
+		}
+		if ( $row['found'] && $lifetime( $row['value'] ) < $ttls[ $option ] ) {
+			$ttls[ $option ] = $lifetime( $row['value'] );
+		}
+	}
+	$access_ttl  = $ttls['aafm_oauth_access_ttl'];
+	$refresh_ttl = $ttls['aafm_oauth_refresh_ttl'];
 
 	$now = time();
 

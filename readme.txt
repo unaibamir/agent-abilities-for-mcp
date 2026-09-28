@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.5
+Stable tag: 1.7.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -307,6 +307,14 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 == Changelog ==
 
+= 1.7.6 =
+
+* **Fix:** An OAuth token issued for the MCP endpoint also signed its holder in on other REST routes, admin-ajax.php, admin-post.php, the comment form, the OAuth authorize screen and discovery URLs. It now works on the MCP route only.
+* **Fix:** Meta, SEO, media, WooCommerce and The Events Calendar writes now check the database for what actually landed and report written, unchanged, refused or a failed read. The Activity Log records each outcome, identifiers only.
+* **Fix:** Read-only mode, the high-risk lock, ability switches and the allowlist are read from the database on every MCP request. A failed read keeps the stricter setting, so a stale object cache can't loosen them.
+* **Fix:** WP-CLI printed a pair of "called incorrectly" notices for each enabled bridge tool whose source plugin was inactive; those tools are now skipped quietly. Activity Log rows for denied calls now read "Attempted: ..." instead of looking like the change happened.
+* **Fix:** Under a persistent object cache, the review prompt wiped other plugins' cached "option doesn't exist" entries; it now clears only its own. Smaller fixes land in replace-sitewide, WooCommerce gateway ordering, the Rank Math and AIOSEO head previews, and several tool descriptions.
+
 = 1.7.5 =
 
 * **Feature:** The Connection tab swaps the allowlist textarea for a searchable checkbox picker and adds role and client selects, a Client ID copy control, paginated tables, and cross-tab abilities search.
@@ -499,9 +507,13 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 == Upgrade Notice ==
 
+= 1.7.6 =
+
+Security fix for sites with OAuth turned on: an MCP token could also act on other parts of the site. It now works on the MCP endpoint only. Meta, SEO, WooCommerce and event writes also report what actually saved.
+
 = 1.7.4 =
 
-Every new ability in this release, including The Events Calendar, Slim SEO, Avada, GeoDirectory, and URL-based media upload, stays off until you turn it on, so nothing changes automatically. If you use Elementor, Divi, Beaver Builder, or Avada, a write that would land on a page one of them owns is now refused instead of silently doing nothing.
+New abilities for The Events Calendar, Slim SEO, Avada, GeoDirectory and URL media upload stay off until you turn them on. On pages owned by Elementor, Divi, Beaver Builder or Avada, a write that would silently do nothing is now refused.
 
 = 1.7.3 =
 
@@ -509,11 +521,11 @@ If your site runs Redis, Memcached, or another persistent object cache and read-
 
 = 1.7.2 =
 
-Dynamic client registration is on after this update, including on sites that never touched the setting, so ChatGPT and Claude can connect without extra steps. You can turn it off again on the Settings tab. This release also fixes an OAuth redirect bug that blocked some connections, and adds transport logging to the Activity Log so you can tell a plugin problem apart from a CDN blocking the agent.
+Dynamic client registration is now on, including on sites that never touched it, so ChatGPT and Claude connect without extra steps; you can turn it off on the Settings tab. Also fixes an OAuth redirect bug and adds transport logging to the Activity Log.
 
 = 1.7.0 =
 
-Tested up to WordPress 7.1. On hosts without ImageMagick, an upload that would need more memory to decode than the site has now gets refused up front instead of risking a crash. The Abilities tab gained an "Enable all writes" bulk button beside "Enable all reads"; it only ticks the ordinary writes, so deletes and high risk abilities still need turning on by hand.
+Tested up to WordPress 7.1. Without ImageMagick, an upload too large to decode in memory is refused up front. The Abilities tab adds an Enable all writes button; deletes and high risk abilities still need turning on by hand.
 
 = 1.6.1 =
 

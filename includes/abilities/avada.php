@@ -85,7 +85,7 @@ function aafm_avada_registry_definitions(): array {
  */
 function aafm_perm_avada_post_object( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -141,7 +141,7 @@ function aafm_args_avada_get_page_content(): array {
  */
 function aafm_exec_avada_get_page_content( array $input ) {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -149,7 +149,7 @@ function aafm_exec_avada_get_page_content( array $input ) {
 	return array(
 		'post_id'        => $id,
 		'content'        => (string) $post->post_content,
-		'is_avada_owned' => 'avada' === aafm_post_has_foreign_builder_ownership( $id ),
+		'is_avada_owned' => 'avada' === aafm_post_has_foreign_builder_ownership( $id, true ),
 	);
 }
 
@@ -398,7 +398,7 @@ function aafm_fusion_shortcode_structure_preserved( string $before, string $afte
  */
 function aafm_exec_avada_replace_text( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = get_post( $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -453,7 +453,7 @@ function aafm_exec_avada_replace_text( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$fresh = get_post( $id );
+	$fresh = aafm_exact_object( 'post', $id );
 	// Codex hunt F4: $replacements was computed from the ORIGINAL content before
 	// wp_update_post() ever ran, and never re-validated against what actually landed in
 	// storage - a wp_insert_post_data (or similar) filter revising the content on save would
@@ -461,7 +461,7 @@ function aafm_exec_avada_replace_text( array $input ) {
 	// intended content actually landed before reporting success. Codex round 6 B6-3: compare
 	// against the CANONICAL sanitize_post_field() form, not $new itself, so a legitimate
 	// normalization is not mistaken for a veto.
-	if ( ! $fresh instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new, $content ) ) {
+	if ( ! $fresh instanceof WP_Post || ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $content ) ) {
 		return new WP_Error(
 			'aafm_avada_write_unconfirmed',
 			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )

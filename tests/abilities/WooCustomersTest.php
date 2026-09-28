@@ -1096,4 +1096,81 @@ final class WooCustomersTest extends TestCase {
 		$this->assertSame( array( 'type' => 'string' ), $billing['email'] );
 		$this->assertArrayNotHasKey( 'description', $billing['first_name'] );
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	public function test_customer_create_and_update_log_each_vendor_call_as_accepted(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-customer' )->execute( array( 'email' => 'logged@example.com' ) );
+		$this->assertIsArray( $created );
+		$id = (int) $created['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-customer' )->execute(
+			array(
+				'customer_id' => $id,
+				'first_name'  => 'Logged',
+			)
+		);
+		$this->assertIsArray( $updated );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'customer', $id, 'accepted' ),
+				$this->wc_row( 'customer', $id, 'accepted' ),
+				$this->wc_row( 'customer', $id, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_customer_create_wc_refuses_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcCustomerStubStore::$create_should_fail = true;
+		$res                                     = wp_get_ability( 'aafm/wc-create-customer' )->execute( array( 'email' => 'refused@example.com' ) );
+		WcCustomerStubStore::$create_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'customer', null, 'refused' ) ), $this->outcome_details() );
+	}
 }

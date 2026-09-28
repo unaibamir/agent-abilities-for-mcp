@@ -563,4 +563,164 @@ final class TecEventsTest extends TestCase {
 			)
 		);
 	}
+
+	public function test_update_event_all_day_clear_under_a_veto_returns_the_all_day_error(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+		update_post_meta( $event_id, '_EventAllDay', 'yes' );
+
+		$veto = static fn() => false;
+		add_filter( 'delete_post_metadata', $veto, 10, 0 );
+		$out  = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $event_id,
+				'all_day'  => false,
+			)
+		);
+		remove_filter( 'delete_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_tec_write_unconfirmed', $out->get_error_code() );
+		$this->assertSame( 'yes', get_post_meta( $event_id, '_EventAllDay', true ) );
+	}
+
+	public function test_update_event_all_day_clear_under_a_write_fault_returns_the_all_day_error(): void {
+		global $wpdb;
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+		update_post_meta( $event_id, '_EventAllDay', 'yes' );
+
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$suppressed = $wpdb->suppress_errors( true );
+		$out        = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'DELETE FROM ' . $wpdb->postmeta, 'meta_id' ),
+			static fn() => aafm_exec_tec_update_event(
+				array(
+					'event_id' => $event_id,
+					'all_day'  => false,
+				)
+			),
+			1
+		);
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertSame( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_tec_write_unconfirmed', $out->get_error_code() );
+	}
+
+	/**
+	 * The error_data an all-day clear's error carries for a writer status.
+	 *
+	 * @param string $status   Writer status.
+	 * @param int    $event_id Event id.
+	 * @return array<string,mixed>
+	 */
+	private function all_day_error_data( string $status, int $event_id ): array {
+		return array(
+			'status'    => $status,
+			'kind'      => 'post_meta',
+			'object_id' => $event_id,
+			'key'       => '_EventAllDay',
+		);
+	}
+
+	public function test_a_vetoed_all_day_clear_reports_refused_in_its_error_data(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+		update_post_meta( $event_id, '_EventAllDay', 'yes' );
+
+		$veto = static fn() => false;
+		add_filter( 'delete_post_metadata', $veto, 10, 0 );
+		$out  = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $event_id,
+				'all_day'  => false,
+			)
+		);
+		remove_filter( 'delete_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_tec_write_unconfirmed', $out->get_error_code() );
+		$this->assertSame( $this->all_day_error_data( 'refused', $event_id ), $out->get_error_data() );
+	}
+
+	public function test_an_all_day_clear_under_a_write_fault_reports_refused_in_its_error_data(): void {
+		global $wpdb;
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+		update_post_meta( $event_id, '_EventAllDay', 'yes' );
+
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$suppressed = $wpdb->suppress_errors( true );
+		$out        = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'DELETE FROM ' . $wpdb->postmeta, 'meta_id' ),
+			static fn() => aafm_exec_tec_update_event(
+				array(
+					'event_id' => $event_id,
+					'all_day'  => false,
+				)
+			),
+			1
+		);
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertSame( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_tec_write_unconfirmed', $out->get_error_code() );
+		$this->assertSame( $this->all_day_error_data( 'refused', $event_id ), $out->get_error_data() );
+	}
+
+	public function test_an_all_day_clear_whose_baseline_read_fails_reports_read_failed_in_its_error_data(): void {
+		global $wpdb;
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$event_id = $this->create_event();
+		update_post_meta( $event_id, '_EventAllDay', 'yes' );
+
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$suppressed = $wpdb->suppress_errors( true );
+		$out        = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'meta_key, meta_value FROM', $wpdb->postmeta, ' AND meta_key = ' ),
+			static fn() => aafm_exec_tec_update_event(
+				array(
+					'event_id' => $event_id,
+					'all_day'  => false,
+				)
+			),
+			1
+		);
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertSame( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_tec_write_unconfirmed', $out->get_error_code() );
+		$this->assertSame( $this->all_day_error_data( 'read_failed', $event_id ), $out->get_error_data() );
+		$this->assertSame( 'yes', get_post_meta( $event_id, '_EventAllDay', true ) );
+	}
+
+	public function test_an_unknown_tec_entity_is_refused_without_a_repository_call_and_logs_one_row(): void {
+		$seen    = array();
+		$observe = static function ( $result, $target ) use ( &$seen ): void {
+			$seen[] = array( $result, $target );
+		};
+		add_action( 'aafm_write_completed', $observe, 10, 2 );
+		$out = aafm_tec_write( 'bogus', array( 'title' => 'Never created' ) );
+		remove_action( 'aafm_write_completed', $observe, 10 );
+
+		$this->assertSame( array( 'status' => 'refused' ), $out, 'no repository call, so nothing returned' );
+		$this->assertSame(
+			array(
+				array(
+					array( 'status' => 'refused' ),
+					array(
+						'kind'      => 'tec',
+						'entity'    => null,
+						'object_id' => null,
+						'key'       => null,
+					),
+				),
+			),
+			$seen
+		);
+	}
 }

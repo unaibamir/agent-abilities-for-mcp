@@ -258,13 +258,14 @@ function aafm_exec_get_posts( array $input ) {
 	$build_query = static function () use ( $type, $status, $input, $paging ): WP_Query {
 		return new WP_Query(
 			array(
-				'post_type'        => $type,
-				'post_status'      => $status,
-				's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-				'posts_per_page'   => $paging['per_page'],
-				'paged'            => $paging['page'],
-				'no_found_rows'    => false,
-				'suppress_filters' => false,
+				'post_type'              => $type,
+				'post_status'            => $status,
+				's'                      => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+				'posts_per_page'         => $paging['per_page'],
+				'paged'                  => $paging['page'],
+				'no_found_rows'          => false,
+				'suppress_filters'       => false,
+				'update_post_meta_cache' => false,
 			)
 		);
 	};
@@ -298,6 +299,7 @@ function aafm_exec_get_posts( array $input ) {
 			$code,
 			static function () use ( $build_query, $options ): array {
 				$query = $build_query();
+				aafm_prime_post_meta_checked( wp_list_pluck( $query->posts, 'ID' ) );
 				return array(
 					'rows'  => array_map(
 						static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
@@ -309,25 +311,32 @@ function aafm_exec_get_posts( array $input ) {
 		);
 	};
 
-	$posts = array();
-	$total = 0;
-	if ( 'all' === $lang ) {
-		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$shaped = $shape_language( $code );
-			$posts  = array_merge( $posts, $shaped['rows'] );
-			$total += $shaped['found'];
-		}
-	} else {
-		$shaped = $shape_language( $lang );
-		$posts  = $shaped['rows'];
-		$total  = $shaped['found'];
-	}
+	list( $posts, $total ) = aafm_collect_by_language( $lang, $shape_language );
 
 	return array(
 		'posts'    => $posts,
 		'total'    => $total,
 		'language' => $lang,
 	);
+}
+
+/**
+ * Shape one language, or every WPML language when $lang is 'all', joining the rows in language
+ * order and summing each language's found count.
+ *
+ * @param string|null $lang           A resolved language code, 'all', or null.
+ * @param callable    $shape_language Maps one language code to an array of 'rows' (a list) and 'found' (an int).
+ * @return array<int,mixed> The joined rows at index 0 and the summed total at index 1.
+ */
+function aafm_collect_by_language( ?string $lang, callable $shape_language ): array {
+	$rows  = array();
+	$total = 0;
+	foreach ( 'all' === $lang ? aafm_wpml_all_language_codes_for_iteration() : array( $lang ) as $code ) {
+		$shaped = $shape_language( $code );
+		$rows   = array_merge( $rows, $shaped['rows'] );
+		$total += $shaped['found'];
+	}
+	return array( $rows, $total );
 }
 
 /**
@@ -520,7 +529,7 @@ function aafm_perm_get_post( array $input ): bool {
 	if ( $id ) {
 		$id = aafm_get_post_lang_resolved_id( $id, $input );
 	}
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post ) {
 		return false;
 	}
@@ -550,9 +559,11 @@ function aafm_get_post_lang_resolved_id( int $id, array $input ): int {
 	// type, so WPML fell back to the original id and the untranslated item was served
 	// silently (B47). pages.php pins 'page' because its ids are type-pinned to pages; this
 	// getter serves every allowlisted type, so the type comes from the post itself.
-	$post = get_post( $id );
-	$type = $post instanceof WP_Post ? (string) $post->post_type : 'post';
-	return aafm_wpml_translated_id( $id, $type, $lang );
+	$post = aafm_exact_object( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return 0;
+	}
+	return aafm_wpml_translated_id( $id, (string) $post->post_type, $lang );
 }
 
 /**
@@ -567,8 +578,8 @@ function aafm_exec_get_post( array $input ) {
 		return $lang;
 	}
 	$id   = aafm_get_post_lang_resolved_id( absint( $input['post_id'] ), $input );
-	$post = get_post( $id );
-	if ( ! $post instanceof WP_Post ) {
+	$post = aafm_exact_object( 'post', $id );
+	if ( ! $post instanceof WP_Post || ! aafm_can_read_post_object( $post ) ) {
 		return aafm_generic_error();
 	}
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
@@ -702,7 +713,10 @@ function aafm_args_create_draft(): array {
 		'input_schema'        => aafm_write_content_schema( true ),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_create_draft',
 		'permission_callback' => 'aafm_perm_create_draft',
@@ -845,6 +859,23 @@ function aafm_resolve_create_status( array $input, string $fallback_status, stri
 }
 
 /**
+ * Output schema of the `enrichment` field a create or update adds beside the post: per-field
+ * outcomes for the terms, featured image and meta the request carried.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_write_enrichment_output_schema(): array {
+	return array(
+		'type'       => 'object',
+		'properties' => array(
+			'terms'          => array( 'type' => 'object' ),
+			'featured_media' => array( 'type' => 'string' ),
+			'meta'           => array( 'type' => 'object' ),
+		),
+	);
+}
+
+/**
  * Insert a post with a forced/default status and type, returning the redacted post.
  *
  * Anti-escalation: post_author is never threaded from input - wp_insert_post
@@ -928,7 +959,7 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	if ( is_wp_error( $id ) ) {
 		return aafm_generic_error();
 	}
-	$created = get_post( $id );
+	$created = aafm_exact_object( 'post', $id );
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -966,17 +997,20 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 		// A CREATE: the field never existed before this row did, so its pre-write value is
 		// always ''. See aafm_post_field_write_confirmed()'s docblock for why the exact-replay
 		// check is no longer the only signal.
-		if ( ! aafm_post_field_write_confirmed( (int) $id, $field, $intended, '', 0 ) ) {
+		if ( ! aafm_post_field_confirm_logged( (int) $id, $field, $intended, '', 0 ) ) {
 			return aafm_generic_error();
 		}
 	}
 
 	// Apply the pre-validated enrichment now that the id exists.
-	aafm_apply_write_enrichment( (int) $id, $enrichment );
+	$enriched = aafm_apply_write_enrichment( (int) $id, $enrichment );
 
 	$response = array( 'post' => aafm_redact_post( $created ) );
 	if ( ! empty( $guard['warnings'] ) ) {
 		$response['content_warnings'] = $guard['warnings'];
+	}
+	if ( array() !== $enriched ) {
+		$response['enrichment'] = $enriched;
 	}
 	return $response;
 }
@@ -1005,7 +1039,10 @@ function aafm_args_create_post(): array {
 		'input_schema'        => aafm_write_content_schema( true ),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_create_post',
 		'permission_callback' => 'aafm_perm_publish_posts',
@@ -1042,7 +1079,10 @@ function aafm_args_create_cpt_item(): array {
 		'input_schema'        => aafm_write_cpt_content_schema( true ),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_create_cpt_item',
 		'permission_callback' => 'aafm_perm_create_cpt_item',
@@ -1148,7 +1188,10 @@ function aafm_args_update_post(): array {
 		'input_schema'        => $schema,
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_update_post',
 		'permission_callback' => 'aafm_perm_update_post',
@@ -1169,7 +1212,7 @@ function aafm_args_update_post(): array {
  */
 function aafm_perm_update_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
@@ -1193,7 +1236,7 @@ function aafm_perm_update_post( array $input ): bool {
  */
 function aafm_exec_update_post( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = get_post( $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1277,12 +1320,12 @@ function aafm_exec_update_post( array $input ) {
 	}
 
 	// Apply the pre-validated enrichment after the core fields land.
-	aafm_apply_write_enrichment( (int) $result, $enrichment );
+	$enriched = aafm_apply_write_enrichment( (int) $result, $enrichment );
 
 	// Re-fetch by the id wp_update_post() returned. A destructive save_post/post_updated
 	// hook (or a TOCTOU race) can delete the post during the update, so this can be null;
 	// guard it so the typed aafm_redact_post() degrades to a generic error, never a fatal.
-	$updated = get_post( (int) $result );
+	$updated = aafm_exact_object( 'post', (int) $result );
 	if ( ! $updated instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1306,7 +1349,7 @@ function aafm_exec_update_post( array $input ) {
 		if ( ! isset( $postarr[ $field ] ) ) {
 			continue;
 		}
-		if ( ! aafm_post_field_write_confirmed( $id, $field, (string) $postarr[ $field ], (string) $post->$field ) ) {
+		if ( ! aafm_post_field_confirm_logged( $id, $field, (string) $postarr[ $field ], (string) $post->$field ) ) {
 			return aafm_generic_error();
 		}
 	}
@@ -1314,6 +1357,9 @@ function aafm_exec_update_post( array $input ) {
 	$response = array( 'post' => aafm_redact_post( $updated ) );
 	if ( ! empty( $guard['warnings'] ) ) {
 		$response['content_warnings'] = $guard['warnings'];
+	}
+	if ( array() !== $enriched ) {
+		$response['enrichment'] = $enriched;
 	}
 	return $response;
 }
@@ -1377,7 +1423,7 @@ function aafm_args_replace_in_post(): array {
  */
 function aafm_perm_replace_in_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -1645,7 +1691,7 @@ function aafm_replacement_preserves_structure( string $before, string $after ): 
  */
 function aafm_exec_replace_in_post( array $input ) {
 	$id   = absint( $input['post_id'] );
-	$post = get_post( $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -1703,7 +1749,7 @@ function aafm_exec_replace_in_post( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$updated = get_post( (int) $result );
+	$updated = aafm_exact_object( 'post', (int) $result );
 	// Codex round 5 R5-2: only is_wp_error() was checked here, so a wp_insert_post_data filter
 	// that vetoed or reverted the content would report the pre-computed replacement count as
 	// though it had landed. Confirm the exact intended content actually made it to storage,
@@ -1711,7 +1757,7 @@ function aafm_exec_replace_in_post( array $input ) {
 	// CANONICAL sanitize_post_field() form, not $new itself, so a legitimate normalization (kses
 	// for a user without unfiltered_html re-running over the whole assembled document) is not
 	// mistaken for a veto.
-	if ( ! $updated instanceof WP_Post || ! aafm_post_field_write_confirmed( $id, 'post_content', $new, $content ) ) {
+	if ( ! $updated instanceof WP_Post || ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $content ) ) {
 		return new WP_Error(
 			'aafm_replace_write_unconfirmed',
 			__( 'The replacement could not be confirmed as saved.', 'agent-abilities-for-mcp' )
@@ -1910,20 +1956,46 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// non-builder-owned candidates only; a skipped post costs nothing against the cap) still
 		// applies to this bounded list, it just no longer needs an enormous unbounded one to work
 		// from.
-		$scan_query = new WP_Query(
-			array(
-				'post_type'         => $type,
-				'post_status'       => $status,
-				'fields'            => 'ids',
-				'posts_per_page'    => $max_scan,
-				'orderby'           => 'ID',
-				'order'             => 'ASC',
-				'no_found_rows'     => true,
-				'aafm_query_marker' => $query_marker,
-			)
-		);
+		// The scan's ids feed writes, and WP_Query's own get_col() hands back the previous query's
+		// rows when the SELECT fails without flushing. So the scan runs its built SQL through
+		// aafm_wpdb_col() and a failure refuses the request. Attached at PHP_INT_MAX around the scan
+		// only (never the count probe), and an earlier posts_pre_query answer is passed through
+		// untouched (ledger s14hunta-4).
+		$scan_failed = false;
+		$scan_filter = static function ( $posts, WP_Query $query ) use ( $query_marker, &$scan_failed ) {
+			if ( null !== $posts || $query_marker !== $query->get( 'aafm_query_marker' ) ) {
+				return $posts;
+			}
+			$ids = aafm_wpdb_col( $query->request );
+			if ( ! $ids['ok'] ) {
+				$scan_failed = true;
+				return array();
+			}
+			return array_map( 'intval', (array) $ids['value'] );
+		};
+		add_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX, 2 );
+		try {
+			$scan_query = new WP_Query(
+				array(
+					'post_type'         => $type,
+					'post_status'       => $status,
+					'fields'            => 'ids',
+					'posts_per_page'    => $max_scan,
+					'orderby'           => 'ID',
+					'order'             => 'ASC',
+					'no_found_rows'     => true,
+					'aafm_query_marker' => $query_marker,
+				)
+			);
+		} finally {
+			remove_filter( 'posts_pre_query', $scan_filter, PHP_INT_MAX );
+		}
 	} finally {
 		remove_filter( 'posts_where', $like_filter, 10 );
+	}
+
+	if ( $scan_failed ) {
+		return aafm_generic_error();
 	}
 
 	// Codex final round 2 MEDIUM: an SQL-side `LIMIT AAFM_REPLACE_SITEWIDE_MAX_POSTS` applied
@@ -1935,15 +2007,35 @@ function aafm_exec_replace_sitewide( array $input ) {
 	$candidates    = array();
 	$no_perm       = 0;
 	$builder_owned = 0;
-	foreach ( $scan_query->posts as $post_id ) {
+	$failed        = 0;
+	/**
+	 * With 'fields' => 'ids' the query returns ids; the WP_Query stub types ->posts as WP_Post[].
+	 *
+	 * @var int[] $post_ids
+	 */
+	$post_ids = $scan_query->posts;
+	foreach ( $post_ids as $post_id ) {
 		if ( count( $candidates ) >= AAFM_REPLACE_SITEWIDE_MAX_POSTS ) {
 			break;
 		}
-		$post = get_post( (int) $post_id ); // @phpstan-ignore-line cast.int (fields=>ids means $post_id is really an int; the WP_Query stub types ->posts as WP_Post[] unconditionally).
+		$post = aafm_exact_object_chain( 'post', $post_id );
 		if ( ! $post instanceof WP_Post ) {
+			// A post that does not load could not be updated, in a dry run as well.
+			++$failed;
 			continue;
 		}
-		if ( ! aafm_can_edit_post_object( $post ) ) {
+		if ( $type !== $post->post_type || $status !== $post->post_status ) {
+			// Outside the requested scope: a filtered scan answer, or a post changed since the scan.
+			++$failed;
+			continue;
+		}
+		$can_edit = aafm_can_edit_post_object_state( $post );
+		if ( null === $can_edit ) {
+			// The capability check could not load the post's metadata, so nothing was decided.
+			++$failed;
+			continue;
+		}
+		if ( ! $can_edit ) {
 			++$no_perm;
 			continue;
 		}
@@ -1957,7 +2049,6 @@ function aafm_exec_replace_sitewide( array $input ) {
 
 	$updated = 0;
 	$guarded = 0;
-	$failed  = 0;
 
 	foreach ( $candidates as $post ) {
 		// Guards run identically in dry-run and a real apply, so a preview's counters are an
@@ -1984,6 +2075,13 @@ function aafm_exec_replace_sitewide( array $input ) {
 		if ( $dry_run ) {
 			continue; // Counted in matched_posts below; nothing written.
 		}
+		// An earlier write in this loop drops its post from the cache, and that post can be this
+		// one's parent, so load the chain again right before core walks it.
+		$reloaded = aafm_exact_object_chain( 'post', (int) $post->ID );
+		if ( ! $reloaded instanceof WP_Post || $type !== $reloaded->post_type || $status !== $reloaded->post_status ) {
+			++$failed;
+			continue;
+		}
 
 		$result = wp_update_post(
 			wp_slash(
@@ -2004,8 +2102,8 @@ function aafm_exec_replace_sitewide( array $input ) {
 		// replace-text fix above. Codex round 6 B6-3: compare against the CANONICAL
 		// sanitize_post_field() form, not $new itself, so a legitimate normalization is not
 		// mistaken for a veto.
-		$after = get_post( (int) $result );
-		if ( ! $after instanceof WP_Post || ! aafm_post_field_write_confirmed( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
+		$after = aafm_exact_object( 'post', (int) $result );
+		if ( ! $after instanceof WP_Post || ! aafm_post_field_confirm_logged( $post->ID, 'post_content', $new, (string) $post->post_content ) ) {
 			++$failed;
 			continue;
 		}
@@ -2046,7 +2144,10 @@ function aafm_args_update_cpt_item(): array {
 		'input_schema'        => $schema,
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post'       => array( 'type' => 'object' ),
+				'enrichment' => aafm_write_enrichment_output_schema(),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_update_cpt_item',
 		'permission_callback' => 'aafm_perm_update_cpt_item',
@@ -2070,7 +2171,7 @@ function aafm_args_update_cpt_item(): array {
  */
 function aafm_perm_update_cpt_item( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
@@ -2095,7 +2196,7 @@ function aafm_perm_update_cpt_item( array $input ): bool {
  */
 function aafm_exec_update_cpt_item( array $input ) {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || is_wp_error( aafm_validate_post_type( $post->post_type ) ) ) {
 		return aafm_generic_error();
 	}
@@ -2149,7 +2250,7 @@ function aafm_args_trash_post(): array {
  */
 function aafm_perm_trash_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_delete_post_object( $post );
 }
 
@@ -2164,6 +2265,9 @@ function aafm_exec_trash_post( array $input ) {
 		return aafm_trash_disabled_error();
 	}
 	$id = absint( $input['post_id'] );
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 	$ok = wp_trash_post( $id );
 	if ( ! $ok ) {
 		return aafm_generic_error();
@@ -2216,7 +2320,7 @@ function aafm_args_delete_post(): array {
  */
 function aafm_perm_delete_post( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_delete_post_object( $post );
 }
 
@@ -2236,7 +2340,7 @@ function aafm_perm_delete_post( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_force_delete_post( int $id, string $expected_type = '' ) {
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

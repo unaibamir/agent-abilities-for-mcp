@@ -53,6 +53,34 @@ namespace AAFM\Tests\Support;
 final class QueryFaultInjector {
 
 	/**
+	 * How many times an armed fault has actually fired (a matching query was redirected), across
+	 * every call since the last reset. Lets a test assert a fault fired exactly once, or did not
+	 * fire at all, rather than only inferring it from the callback's return value.
+	 *
+	 * @var int
+	 */
+	private static int $fired = 0;
+
+	/**
+	 * The current fired count.
+	 *
+	 * @return int
+	 */
+	public static function fired_count(): int {
+		return self::$fired;
+	}
+
+	/**
+	 * Reset the fired count to zero. Tests call this in set_up() so counts never leak between
+	 * cases.
+	 *
+	 * @return void
+	 */
+	public static function reset_fired_count(): void {
+		self::$fired = 0;
+	}
+
+	/**
 	 * Run $callback with the $occurrence-th (1-based) query matching $needle made to fail via
 	 * the no-flush path (see class docblock). Every other query - including earlier/later
 	 * matches of $needle - passes through unmodified, which is what lets a test fail one read in
@@ -125,7 +153,11 @@ final class QueryFaultInjector {
 				return $query;
 			}
 			++$seen;
-			return ( 0 === $occurrence || $seen === $occurrence ) ? '' : $query;
+			if ( 0 === $occurrence || $seen === $occurrence ) {
+				++self::$fired;
+				return '';
+			}
+			return $query;
 		};
 	}
 
@@ -146,9 +178,39 @@ final class QueryFaultInjector {
 				return $query;
 			}
 			++$seen;
-			return ( 0 === $occurrence || $seen === $occurrence )
-				? 'SELECT * FROM aafm_missing_table_for_test'
-				: $query;
+			if ( 0 === $occurrence || $seen === $occurrence ) {
+				++self::$fired;
+				return 'SELECT * FROM aafm_missing_table_for_test';
+			}
+			return $query;
+		};
+	}
+
+	/**
+	 * Build, but do not register, a no-flush filter that first runs $leak_query, so the failed
+	 * query's caller reads that query's rows from `last_result`. This is the shape in which core's
+	 * object loaders hand back another object's row as the requested one.
+	 *
+	 * @param string|string[] $needle     Substring (or array of AND-matched substrings) to target.
+	 * @param string          $leak_query A complete query whose rows are left behind; it must not match $needle.
+	 * @param int             $occurrence 1-based index of the matching query to fail; 0 fails every match.
+	 * @param bool            $exact      Match $needle against the whole query string instead of a substring.
+	 * @return callable A `query` filter callback. The caller owns add_filter()/remove_filter().
+	 */
+	public static function leak_row_filter( $needle, string $leak_query, int $occurrence = 1, bool $exact = false ): callable {
+		$seen = 0;
+		return static function ( string $query ) use ( $needle, $leak_query, $occurrence, $exact, &$seen ): string {
+			if ( ! self::query_matches( $query, $needle, $exact ) ) {
+				return $query;
+			}
+			++$seen;
+			if ( 0 === $occurrence || $seen === $occurrence ) {
+				global $wpdb;
+				$wpdb->get_results( $leak_query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- a test's own prepared query.
+				++self::$fired;
+				return '';
+			}
+			return $query;
 		};
 	}
 

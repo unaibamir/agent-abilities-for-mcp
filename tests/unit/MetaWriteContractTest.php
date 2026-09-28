@@ -1,0 +1,2661 @@
+<?php
+/**
+ * The state-matrix table test for the write-and-confirm contract: 24 baseline/intent
+ * rows by 7 faults, run for post, term and user meta, plus a set of supplementary rows pinning
+ * cases the grid does not reach on its own. Every expected value is a string literal; none is
+ * computed by a production function or by the comparator under test.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+namespace AAFM\Tests\Unit;
+
+use AAFM\Tests\Support\QueryFaultInjector;
+use AAFM\Tests\TestCase;
+
+final class MetaWriteContractTest extends TestCase {
+
+	private const KEY = 'aafm_contract_key';
+
+	/**
+	 * The raw meta_value column of a row holding the object (object) array( 'k' => 'old' ).
+	 */
+	private const OBJECT_ROW = 'O:8:"stdClass":1:{s:1:"k";s:3:"old";}';
+
+	public function set_up(): void {
+		parent::set_up();
+		QueryFaultInjector::reset_fired_count();
+	}
+
+	public function tear_down(): void {
+		remove_all_filters( 'update_post_metadata' );
+		remove_all_filters( 'update_term_metadata' );
+		remove_all_filters( 'update_user_metadata' );
+		remove_all_filters( 'delete_post_metadata' );
+		remove_all_filters( 'delete_term_metadata' );
+		remove_all_filters( 'delete_user_metadata' );
+		remove_all_filters( 'sanitize_post_meta_' . self::KEY );
+		remove_all_filters( 'sanitize_term_meta_' . self::KEY );
+		remove_all_filters( 'sanitize_user_meta_' . self::KEY );
+		parent::tear_down();
+	}
+
+	/**
+	 * Every (type, baseline, intent, fault, shape) combination the state matrix names.
+	 *
+	 * @return iterable<string, array{0:string,1:string,2:string,3:string,4:?string}>
+	 */
+	public function data_grid(): iterable {
+		$baselines    = array( 'absent', 'present-empty', 'scalar', 'array', 'serialized-empty', 'duplicate' );
+		$intents      = array( 'no-op', 'change', 'clear', 'delete' );
+		$faults       = array( 'clean', 'veto-false', 'veto-true', 'transform', 'baseline-read-fault', 'write-fault', 'confirm-read-fault' );
+		$query_faults = array( 'baseline-read-fault', 'write-fault', 'confirm-read-fault' );
+
+		foreach ( array( 'post', 'term', 'user' ) as $type ) {
+			foreach ( $baselines as $baseline ) {
+				foreach ( $intents as $intent ) {
+					foreach ( $faults as $fault ) {
+						if ( in_array( $fault, $query_faults, true ) ) {
+							yield "$type/$baseline/$intent/$fault/no-flush" => array( $type, $baseline, $intent, $fault, 'no-flush' );
+							yield "$type/$baseline/$intent/$fault/real-error" => array( $type, $baseline, $intent, $fault, 'real-error' );
+						} else {
+							yield "$type/$baseline/$intent/$fault" => array( $type, $baseline, $intent, $fault, null );
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * One grid cell: seed the baseline, arm the fault, run the intent, assert the literal.
+	 *
+	 * @dataProvider data_grid
+	 * @param string      $type     'post', 'term' or 'user'.
+	 * @param string      $baseline Baseline shape.
+	 * @param string      $intent   Requested operation.
+	 * @param string      $fault    Fault column.
+	 * @param string|null $shape    Query-fault shape, or null for a non-query fault.
+	 */
+	public function test_grid_cell( string $type, string $baseline, string $intent, string $fault, ?string $shape ): void {
+		list( $expected_status, $expected_rows, $expected_end_state ) = self::GRID[ $baseline ][ $intent ][ $fault ];
+
+		$object_id = $this->make_object( $type );
+		$this->seed_baseline( $type, $object_id, $baseline );
+
+		$label = "type=$type baseline=$baseline intent=$intent fault=$fault shape=" . ( $shape ?? 'n/a' );
+
+		$this->assert_raw_rows( $type, $object_id, $this->baseline_values( $baseline ), "precondition: $label" );
+
+		if ( 'transform' === $fault ) {
+			$this->register_transform( $type );
+		}
+
+		$veto = null;
+		if ( 'veto-false' === $fault || 'veto-true' === $fault ) {
+			$veto = 'veto-true' === $fault;
+		}
+
+		QueryFaultInjector::reset_fired_count();
+		$veto_calls = 0;
+
+		$result = $this->run_case( $type, $object_id, $intent, $veto, $fault, $shape, $veto_calls );
+
+		$this->assertSame( $expected_status, $result['status'] ?? null, "status mismatch: $label" );
+
+		if ( null !== $expected_rows ) {
+			$this->assertSame( $expected_rows, $result['rows'] ?? null, "rows mismatch: $label" );
+		} else {
+			$this->assertArrayNotHasKey( 'rows', $result, "rows must be absent: $label" );
+		}
+
+		// The fired count, exactly: 0 when the literal is unchanged or absent, 1 otherwise. Veto
+		// columns count the test's own filter closure; the three query-fault columns count
+		// QueryFaultInjector. Clean and transform carry no counter.
+		$fires = ! in_array( $expected_status, array( 'unchanged', 'absent' ), true ) ? 1 : 0;
+		if ( in_array( $fault, array( 'veto-false', 'veto-true' ), true ) ) {
+			$this->assertSame( $fires, $veto_calls, "veto call count: $label" );
+		} elseif ( in_array( $fault, array( 'baseline-read-fault', 'write-fault', 'confirm-read-fault' ), true ) ) {
+			$this->assertSame( $fires, QueryFaultInjector::fired_count(), "fault fired count: $label" );
+		}
+
+		// Durable end state, read by a direct uncached query, against a literal never read from $result.
+		$this->assert_raw_rows( $type, $object_id, $expected_end_state, "end state: $label" );
+	}
+
+	/**
+	 * Supplementary rows: cases the 24x7 grid does not exercise on its own.
+	 */
+	public function test_s1_stateful_sanitizer_reports_modified_by_site(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+
+		$calls = 0;
+		add_filter(
+			'sanitize_post_meta_' . self::KEY,
+			static function ( $value ) use ( &$calls ) {
+				++$calls;
+				return $value . '-' . $calls;
+			},
+			10,
+			1
+		);
+
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertTrue( $result['modified_by_site'] ?? false );
+		// sanitize_meta() runs twice on this path (the helper's own canonical computation, then
+		// core's own call inside update_metadata()); the appending callback sees both, so the
+		// row core actually stores is the second invocation's value.
+		$this->assert_raw_rows( 'post', $post_id, array( 'new-2' ), 'end state' );
+	}
+
+	public function test_s2_duplicate_no_op_makes_no_write_call(): void {
+		$post_id = $this->make_object( 'post' );
+		$this->write_raw( 'post', $post_id, 'a' );
+		$this->write_raw_duplicate( 'post', $post_id, 'a' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'a', 'a' ), 'precondition' );
+
+		$fired = false;
+		add_filter(
+			'update_post_metadata',
+			static function ( $check ) use ( &$fired ) {
+				$fired = true;
+				return $check;
+			}
+		);
+
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, 'a', 'post', false );
+
+		$this->assertSame( 'unchanged', $result['status'] );
+		$this->assertSame( 2, $result['rows'] ?? null );
+		$this->assertFalse( $fired, 'a no-op must never call update_metadata' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'a', 'a' ), 'end state' );
+	}
+
+	public function test_s3_veto_true_plus_a_read_rewriting_filter_reports_modified_by_site(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+
+		add_filter( 'update_post_metadata', '__return_true' );
+		add_filter(
+			'get_post_metadata',
+			static function ( $value, $object_id, $meta_key ) {
+				if ( self::KEY === $meta_key ) {
+					return array( 'zzz' );
+				}
+				return $value;
+			},
+			10,
+			3
+		);
+
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+
+		remove_filter( 'update_post_metadata', '__return_true' );
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertTrue( $result['modified_by_site'] ?? false );
+		// The veto blocks core's own UPDATE, so the row on disk never moves; the read-back the
+		// helper certifies against is the read-rewriting filter's own value, not the database's.
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state' );
+	}
+
+	public function test_s4_veto_true_delete_plus_confirm_read_fault_no_flush_reports_refused(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+
+		$armed = false;
+		$table = $GLOBALS['wpdb']->postmeta;
+		$arm   = function () use ( &$armed, $table ) {
+			if ( $armed ) {
+				return;
+			}
+			$armed = true;
+			add_filter( 'query', QueryFaultInjector::no_flush_filter( $table, 1 ) );
+		};
+		add_filter(
+			'delete_post_metadata',
+			static function () use ( $arm ) {
+				$arm();
+				return true;
+			}
+		);
+
+		QueryFaultInjector::reset_fired_count();
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$result = aafm_meta_delete( 'post', $post_id, self::KEY );
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertSame( 'refused', $result['status'] );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the confirm-read fault must fire exactly once' );
+		// The veto skips the actual DELETE, so the row on disk survives untouched.
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state' );
+	}
+
+	public function test_s4_veto_true_delete_plus_confirm_read_fault_real_error_reports_deleted(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+
+		$armed = false;
+		$table = $GLOBALS['wpdb']->postmeta;
+		$arm   = function () use ( &$armed, $table ) {
+			if ( $armed ) {
+				return;
+			}
+			$armed = true;
+			add_filter( 'query', QueryFaultInjector::real_error_filter( $table, 1 ) );
+		};
+		add_filter(
+			'delete_post_metadata',
+			static function () use ( $arm ) {
+				$arm();
+				return true;
+			}
+		);
+
+		QueryFaultInjector::reset_fired_count();
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$result = aafm_meta_delete( 'post', $post_id, self::KEY );
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertSame( 'deleted', $result['status'] );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the confirm-read fault must fire exactly once' );
+		// The double-fault residual: the veto also skips the actual DELETE, so the row
+		// survives even though the acknowledged-delete-plus-failed-read-back rule reports deleted.
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state' );
+	}
+
+	public function test_s5_scalar_only_rejects_a_non_scalar_intent(): void {
+		$post_id = $this->make_object( 'post' );
+		$this->assert_raw_rows( 'post', $post_id, array(), 'precondition' );
+
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, array( 'x' ), 'post', true );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_meta_value_invalid', $result->get_error_code() );
+		$this->assert_raw_rows( 'post', $post_id, array(), 'end state' );
+	}
+
+	public function test_s6_group_second_key_baseline_read_fails_leaves_every_key_read_failed(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'kept' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'kept' ), 'precondition', 'aafm_g_one' );
+
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$result = QueryFaultInjector::fail_query(
+			$wpdb->postmeta,
+			static function () use ( $post_id ) {
+				return aafm_meta_set_group(
+					'post',
+					$post_id,
+					array(
+						'aafm_g_one' => 'new',
+						'aafm_g_two' => 'new',
+					),
+					'post'
+				); // phpcs:ignore WordPress.Arrays.MultipleStatementAlignment.DoubleArrowNotAligned
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertSame( 'read_failed', $result['status'] );
+		$this->assertSame( 'read_failed', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'read_failed', $result['keys']['aafm_g_two']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'kept' ), 'end state: aafm_g_one must stay unwritten', 'aafm_g_one' );
+	}
+
+	public function test_s7_group_second_key_invalid_leaves_first_key_unwritten(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'kept' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'kept' ), 'precondition', 'aafm_g_one' );
+
+		$queried_meta_table = false;
+		$query_counter      = static function ( string $query ) use ( &$queried_meta_table ): string {
+			if ( false !== stripos( $query, 'postmeta' ) ) {
+				$queried_meta_table = true;
+			}
+			return $query;
+		};
+		add_filter( 'query', $query_counter );
+
+		$veto_calls = 0;
+		$veto       = static function ( $check ) use ( &$veto_calls ) {
+			++$veto_calls;
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $veto );
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array(
+				'aafm_g_one' => 'new',
+				'aafm_g_two' => array( 'x' ),
+			),
+			'post'
+		);
+
+		remove_filter( 'query', $query_counter );
+		remove_filter( 'update_post_metadata', $veto );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_meta_value_invalid', $result->get_error_code() );
+		$this->assertFalse( $queried_meta_table, 'a validation failure on any group member must read nothing from the meta table.' );
+		$this->assertSame( 0, $veto_calls, 'a validation failure on any group member must write nothing.' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'kept' ), 'end state: aafm_g_one must stay unwritten', 'aafm_g_one' );
+	}
+
+	public function test_s8_a_serialized_looking_string_intent_is_stored_and_read_back_as_a_string(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, 'a:0:{}', 'post', false );
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertSame( 'a:0:{}', $result['value'] );
+		$this->assertArrayNotHasKey( 'modified_by_site', $result );
+		$this->assert_raw_rows( 'post', $post_id, array( 'a:0:{}' ), 'end state: the stored row must decode to the string, never an array.' );
+		$this->assert_raw_columns( 'post', $post_id, array( 's:6:"a:0:{}";' ), 'end state: core serializes a serialized-looking string a second time.' );
+	}
+
+	public function test_s9_a_veto_true_write_over_a_serialized_looking_baseline_reports_unconfirmed(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, self::KEY, 'a:0:{}' );
+		$this->assert_raw_columns( 'post', $post_id, array( 's:6:"a:0:{}";' ), 'precondition: the raw column stores the string serialized a second time.' );
+
+		add_filter( 'update_post_metadata', '__return_true' );
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+		remove_filter( 'update_post_metadata', '__return_true' );
+
+		$this->assertSame( 'unconfirmed', $result['status'] );
+		$this->assert_raw_columns( 'post', $post_id, array( 's:6:"a:0:{}";' ), 'end state: the baseline row must survive untouched.' );
+	}
+
+	public function test_s10_group_written_plus_unchanged_reports_aggregate_written(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		update_post_meta( $post_id, 'aafm_g_two', 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_two', 'aafm_g_two' );
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array(
+				'aafm_g_one' => 'new',
+				'aafm_g_two' => 'old',
+			),
+			'post'
+		);
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertSame( 'written', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'unchanged', $result['keys']['aafm_g_two']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_g_two', 'aafm_g_two' );
+	}
+
+	public function test_s11_group_unchanged_then_refused_reports_aggregate_refused(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		update_post_meta( $post_id, 'aafm_g_two', 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_two', 'aafm_g_two' );
+
+		add_filter(
+			'update_post_metadata',
+			static function ( $check, $object_id, $meta_key ) {
+				return 'aafm_g_two' === $meta_key ? false : $check;
+			},
+			10,
+			3
+		);
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array(
+				'aafm_g_one' => 'old',
+				'aafm_g_two' => 'new',
+			),
+			'post'
+		);
+
+		remove_all_filters( 'update_post_metadata' );
+
+		$this->assertSame( 'refused', $result['status'] );
+		$this->assertSame( 'unchanged', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'refused', $result['keys']['aafm_g_two']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_g_two', 'aafm_g_two' );
+	}
+
+	public function test_s12_group_written_then_refused_reports_aggregate_partial(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		update_post_meta( $post_id, 'aafm_g_two', 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_two', 'aafm_g_two' );
+
+		add_filter(
+			'update_post_metadata',
+			static function ( $check, $object_id, $meta_key ) {
+				return 'aafm_g_two' === $meta_key ? false : $check;
+			},
+			10,
+			3
+		);
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array(
+				'aafm_g_one' => 'new',
+				'aafm_g_two' => 'new',
+			),
+			'post'
+		);
+
+		remove_all_filters( 'update_post_metadata' );
+
+		$this->assertSame( 'partial', $result['status'] );
+		$this->assertSame( 'written', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'refused', $result['keys']['aafm_g_two']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_g_two', 'aafm_g_two' );
+	}
+
+	public function test_s13_group_both_unchanged_reports_aggregate_unchanged(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		update_post_meta( $post_id, 'aafm_g_two', 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_two', 'aafm_g_two' );
+
+		$fired = false;
+		add_filter(
+			'update_post_metadata',
+			static function ( $check ) use ( &$fired ) {
+				$fired = true;
+				return $check;
+			}
+		);
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array(
+				'aafm_g_one' => 'old',
+				'aafm_g_two' => 'old',
+			),
+			'post'
+		);
+
+		remove_all_filters( 'update_post_metadata' );
+
+		$this->assertSame( 'unchanged', $result['status'] );
+		$this->assertSame( 'unchanged', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'unchanged', $result['keys']['aafm_g_two']['status'] );
+		$this->assertFalse( $fired, 'no key needs a write call when both are already canonical.' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_g_two', 'aafm_g_two' );
+	}
+
+	public function test_s15a_single_writer_object_baseline_writes_the_scalar_cleanly(): void {
+		$post_id = $this->make_object( 'post' );
+		$this->write_raw( 'post', $post_id, (object) array( 'k' => 'old' ) );
+		$this->assert_raw_columns( 'post', $post_id, array( self::OBJECT_ROW ), 'precondition' );
+
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state' );
+	}
+
+	public function test_s15b_group_member_object_baseline_writes_the_scalar_cleanly(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		update_post_meta( $post_id, 'aafm_g_two', (object) array( 'k' => 'old' ) );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_columns( 'post', $post_id, array( self::OBJECT_ROW ), 'precondition: aafm_g_two', 'aafm_g_two' );
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array(
+				'aafm_g_one' => 'new',
+				'aafm_g_two' => 'new',
+			),
+			'post'
+		);
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertSame( 'written', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'written', $result['keys']['aafm_g_two']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_two', 'aafm_g_two' );
+	}
+
+	public function test_s15c_veto_true_plus_a_read_rewriting_filter_returning_an_object_row_reports_modified_by_site(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+
+		add_filter( 'update_post_metadata', '__return_true' );
+		add_filter(
+			'get_post_metadata',
+			static function ( $value, $object_id, $meta_key ) {
+				if ( self::KEY === $meta_key ) {
+					return array( (object) array( 'k' => 'old' ) );
+				}
+				return $value;
+			},
+			10,
+			3
+		);
+
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+
+		remove_filter( 'update_post_metadata', '__return_true' );
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertTrue( $result['modified_by_site'] ?? false );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state' );
+	}
+
+	public function test_s15d_single_writer_object_baseline_under_veto_true_reports_unconfirmed(): void {
+		$post_id = $this->make_object( 'post' );
+		$this->write_raw( 'post', $post_id, (object) array( 'k' => 'old' ) );
+		$this->assert_raw_columns( 'post', $post_id, array( self::OBJECT_ROW ), 'precondition' );
+
+		add_filter( 'update_post_metadata', '__return_true' );
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+		remove_filter( 'update_post_metadata', '__return_true' );
+
+		// The read-back decodes the untouched row into a second object instance; it still equals the
+		// baseline row by value, so nothing moved.
+		$this->assertSame( 'unconfirmed', $result['status'] );
+		$this->assert_raw_columns( 'post', $post_id, array( self::OBJECT_ROW ), 'end state: the object row must survive untouched.' );
+	}
+
+	public function test_s15d_group_member_object_baseline_under_veto_true_reports_unconfirmed(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		update_post_meta( $post_id, 'aafm_g_two', (object) array( 'k' => 'old' ) );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_columns( 'post', $post_id, array( self::OBJECT_ROW ), 'precondition: aafm_g_two', 'aafm_g_two' );
+
+		add_filter(
+			'update_post_metadata',
+			static function ( $check, $object_id, $meta_key ) {
+				return 'aafm_g_two' === $meta_key ? true : $check;
+			},
+			10,
+			3
+		);
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array(
+				'aafm_g_one' => 'new',
+				'aafm_g_two' => 'new',
+			),
+			'post'
+		);
+
+		remove_all_filters( 'update_post_metadata' );
+
+		$this->assertSame( 'partial', $result['status'] );
+		$this->assertSame( 'written', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'unconfirmed', $result['keys']['aafm_g_two']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_columns( 'post', $post_id, array( self::OBJECT_ROW ), 'end state: aafm_g_two', 'aafm_g_two' );
+	}
+
+	public function test_s15e_a_sql_null_row_is_not_equal_to_a_clear_and_is_written(): void {
+		global $wpdb;
+		$post_id = $this->make_object( 'post' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- planting a raw SQL NULL row core cannot write.
+		$wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post_id,
+				'meta_key'   => self::KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- an insert, not a query filter.
+				'meta_value' => null, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- an insert, not a query filter.
+			)
+		);
+		$this->assert_raw_columns( 'post', $post_id, array( null ), 'precondition: the meta_value column is SQL NULL.' );
+
+		$result = aafm_meta_set( 'post', $post_id, self::KEY, '', 'post', false );
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertArrayNotHasKey( 'modified_by_site', $result );
+		$this->assert_raw_columns( 'post', $post_id, array( '' ), 'end state' );
+	}
+
+	public function test_s15f_veto_true_plus_a_read_filter_returning_an_unserializable_row_reports_modified_by_site(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+
+		$emissions = array();
+		add_action(
+			'aafm_write_completed',
+			static function ( $result ) use ( &$emissions ) {
+				$emissions[] = $result;
+			}
+		);
+		$unserializable_row = static function ( $value, $object_id, $meta_key ) {
+			if ( self::KEY === $meta_key ) {
+				// serialize() refuses a SimpleXMLElement.
+				return array( new \SimpleXMLElement( '<a/>' ) );
+			}
+			return $value;
+		};
+		add_filter( 'update_post_metadata', '__return_true' );
+		add_filter( 'get_post_metadata', $unserializable_row, 10, 3 );
+
+		$thrown = '';
+		$result = array();
+		try {
+			$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+		} catch ( \Throwable $e ) {
+			$thrown = get_class( $e ) . ': ' . $e->getMessage();
+		}
+
+		remove_filter( 'update_post_metadata', '__return_true' );
+		remove_filter( 'get_post_metadata', $unserializable_row, 10 );
+
+		$this->assertSame( '', $thrown, 'a value serialize() refuses must equal nothing, never throw.' );
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertTrue( $result['modified_by_site'] ?? false );
+		$this->assertCount( 1, $emissions, 'the call must emit exactly once.' );
+		$this->assertSame( 'written', $emissions[0]['status'] );
+		$this->assertTrue( $emissions[0]['modified_by_site'] );
+		$this->assertSame( 'old', $emissions[0]['previous'] );
+		$this->assertSame(
+			array(
+				'exists' => true,
+				'count'  => 1,
+			),
+			$emissions[0]['observed']
+		);
+		$this->assertArrayHasKey( 'value', $emissions[0] );
+		$this->assertNull( $emissions[0]['value'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state' );
+	}
+
+	/**
+	 * PHP turns a numeric-string array key into an int, so a group keyed '123' hands the helper an
+	 * int key. It has to behave like any other key, not throw after the first member was written.
+	 */
+	public function test_group_numeric_string_key_as_the_second_member_returns_the_aggregate(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array(), 'precondition: 123', '123' );
+
+		try {
+			$result = aafm_meta_set_group(
+				'post',
+				$post_id,
+				array(
+					'aafm_g_one' => 'new',
+					'123'        => 'new',
+				),
+				'post'
+			);
+		} catch ( \TypeError $e ) {
+			$this->fail( 'a numeric-string key must not throw: ' . $e->getMessage() );
+		}
+
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertSame( 'written', $result['keys']['aafm_g_one']['status'] );
+		$this->assertSame( 'written', $result['keys']['123']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'new' ), 'end state: 123', '123' );
+	}
+
+	public function test_group_numeric_string_key_as_the_second_member_on_a_failed_preflight_returns_the_aggregate(): void {
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'old' );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_g_one', 'aafm_g_one' );
+
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		$thrown     = null;
+		ob_start();
+		try {
+			$result = QueryFaultInjector::fail_query(
+				$wpdb->postmeta,
+				static function () use ( $post_id ) {
+					return aafm_meta_set_group(
+						'post',
+						$post_id,
+						array(
+							'aafm_g_one' => 'new',
+							'123'        => 'new',
+						),
+						'post'
+					);
+				}
+			);
+		} catch ( \TypeError $e ) {
+			$thrown = $e;
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertNull( $thrown, 'a numeric-string key must not throw on a failed preflight.' );
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'read_failed', $result['status'] );
+		$this->assertSame( array( 'status' => 'read_failed' ), $result['keys']['aafm_g_one'] );
+		$this->assertSame( array( 'status' => 'read_failed' ), $result['keys']['123'] );
+		$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_g_one', 'aafm_g_one' );
+		$this->assert_raw_rows( 'post', $post_id, array(), 'end state: 123', '123' );
+	}
+
+	public function test_group_numeric_string_key_named_as_an_array_member_takes_an_array_value(): void {
+		$post_id = $this->make_object( 'post' );
+		$this->assert_raw_rows( 'post', $post_id, array(), 'precondition: 123', '123' );
+
+		try {
+			$result = aafm_meta_set_group(
+				'post',
+				$post_id,
+				array(
+					'aafm_g_one' => 'new',
+					'123'        => array( 'k' => 'b' ),
+				),
+				'post',
+				array( '123' )
+			);
+		} catch ( \TypeError $e ) {
+			$this->fail( 'a numeric-string key must not throw: ' . $e->getMessage() );
+		}
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'written', $result['status'] );
+		$this->assertSame( 'written', $result['keys']['123']['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( array( 'k' => 'b' ) ), 'end state: 123', '123' );
+	}
+
+	public function test_group_int_array_key_lets_its_numeric_string_member_take_an_array_value(): void {
+		$post_id = $this->make_object( 'post' );
+
+		$result = aafm_meta_set_group(
+			'post',
+			$post_id,
+			array( '123' => array( 'k' => 'b' ) ),
+			'post',
+			array( 123 )
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'written', $result['status'] );
+		$this->assert_raw_rows( 'post', $post_id, array( array( 'k' => 'b' ) ), 'end state: 123', '123' );
+	}
+
+	/**
+	 * S16: the meta_key column compares under its collation, which ignores case, accents and
+	 * trailing spaces, so core's write and delete would act on a row stored under another spelling.
+	 * A request that the database matches to such a row is refused with nothing written and nothing
+	 * from that row returned.
+	 *
+	 * @return iterable<string,array{0:string,1:string}>
+	 */
+	public function data_s16_cases(): iterable {
+		foreach ( array( 'post', 'term', 'user' ) as $type ) {
+			foreach ( array( 'a', 'b', 'c', 'd', 'e', 'f' ) as $case ) {
+				yield "$type/S16$case" => array( $type, $case );
+			}
+		}
+	}
+
+	/**
+	 * One S16 case for one meta type.
+	 *
+	 * @dataProvider data_s16_cases
+	 * @param string $type   'post', 'term' or 'user'.
+	 * @param string $letter S16 case letter.
+	 */
+	public function test_s16_a_differently_spelled_row_refuses_with_status_only( string $type, string $letter ): void {
+		$id    = $this->make_object( $type );
+		$seed  = array(
+			'a' => array( array( 'Foo', 'old' ) ),
+			'b' => array( array( 'Foo', 'old' ) ),
+			'c' => array( array( 'Foo', 'old' ) ),
+			'd' => array( array( 'et_key', 'old' ) ),
+			'e' => array( array( 'Foo', 'old' ) ),
+			'f' => array( array( 'foo', 'a' ), array( 'Foo', 'b' ) ),
+		);
+		$label = "type=$type case=$letter";
+		foreach ( $seed[ $letter ] as $row ) {
+			add_metadata( $type, $id, $row[0], $row[1] );
+		}
+		$names = array( 'foo', 'Foo', 'et_key', 'ét_key', 'bar' );
+		$this->assertSame( $seed[ $letter ], $this->exact_rows( $type, $id, $names ), "precondition: $label" );
+
+		// Every write or delete call core would make for the refused key is counted here and let
+		// through; a refusal must make none. Under (e) the same filter is also the veto-false.
+		$calls   = 0;
+		$refused = 'd' === $letter ? 'ét_key' : 'foo';
+		$counter = static function ( $check, $object_id, $meta_key ) use ( &$calls, $refused, $letter ) {
+			if ( $refused !== $meta_key ) {
+				return $check;
+			}
+			++$calls;
+			return 'e' === $letter ? false : $check;
+		};
+		foreach ( array( 'update', 'add', 'delete' ) as $verb ) {
+			add_filter( "{$verb}_{$type}_metadata", $counter, 10, 3 );
+		}
+
+		$status_only = array( 'status' => 'refused' );
+		switch ( $letter ) {
+			case 'a':
+				$this->assertSame( $status_only, aafm_meta_set( $type, $id, 'foo', 'new', '', false ), $label );
+				$expected_rows = $seed['a'];
+				break;
+			case 'b':
+				$this->assertSame( $status_only, aafm_meta_delete( $type, $id, 'foo' ), $label );
+				$expected_rows = $seed['b'];
+				break;
+			case 'c':
+				$group = aafm_meta_set_group(
+					$type,
+					$id,
+					array(
+						'foo' => 'new',
+						'bar' => 'x',
+					)
+				);
+				$this->assertSame( 'partial', $group['status'], $label );
+				$this->assertSame( $status_only, $group['keys']['foo'], $label );
+				$this->assertSame( 'written', $group['keys']['bar']['status'], $label );
+				$expected_rows = array( array( 'Foo', 'old' ), array( 'bar', 'x' ) );
+				break;
+			case 'd':
+				$this->assertSame( $status_only, aafm_meta_set( $type, $id, 'ét_key', 'new', '', false ), $label );
+				$expected_rows = $seed['d'];
+				break;
+			case 'e':
+				$single = aafm_meta_set( $type, $id, 'foo', 'new' );
+				$group  = aafm_meta_set_group(
+					$type,
+					$id,
+					array(
+						'aafm_g_one' => 'new',
+						'foo'        => 'new',
+					)
+				);
+				$this->assertSame( $status_only, $single, $label );
+				$this->assertSame( $status_only, $group['keys']['foo'], $label );
+				$expected_rows = $seed['e'];
+				break;
+			default: // f.
+				$this->assertSame( $status_only, aafm_meta_set( $type, $id, 'foo', 'new', '', false ), $label );
+				$expected_rows = $seed['f'];
+		}
+
+		foreach ( array( 'update', 'add', 'delete' ) as $verb ) {
+			remove_filter( "{$verb}_{$type}_metadata", $counter, 10 );
+		}
+
+		$this->assertSame( 0, $calls, "no write or delete call for the refused key: $label" );
+		$this->assertSame( $expected_rows, $this->exact_rows( $type, $id, $names ), "end state: $label" );
+	}
+
+	/**
+	 * S17: two requested keys the database treats as one key refuse the whole group, whether or
+	 * not a row exists.
+	 *
+	 * @return iterable<string,array{0:array<string,string>,1:array}>
+	 */
+	public function data_s17_cases(): iterable {
+		yield 'S17a stored foo' => array(
+			array(
+				'foo' => 'new',
+				'Foo' => 'old',
+			),
+			array( array( 'foo', 'old' ) ),
+		);
+		yield 'S17b nothing stored' => array(
+			array(
+				'Foo' => 'a',
+				'foo' => 'b',
+			),
+			array(),
+		);
+		yield 'S17c accent variants' => array(
+			array(
+				'ét' => 'a',
+				'et' => 'a',
+			),
+			array(),
+		);
+	}
+
+	/**
+	 * One S17 group.
+	 *
+	 * @dataProvider data_s17_cases
+	 * @param array<string,string> $group Requested keys and values.
+	 * @param array                $seed  Rows stored first, as [key, value] pairs.
+	 */
+	public function test_s17_colliding_group_keys_refuse_every_member( array $group, array $seed ): void {
+		$post_id = $this->make_object( 'post' );
+		foreach ( $seed as $row ) {
+			add_metadata( 'post', $post_id, $row[0], $row[1] );
+		}
+		$names = array( 'foo', 'Foo', 'ét', 'et' );
+		$this->assertSame( $seed, $this->exact_rows( 'post', $post_id, $names ), 'precondition' );
+
+		$calls   = 0;
+		$counter = static function ( $check ) use ( &$calls ) {
+			++$calls;
+			return $check;
+		};
+		foreach ( array( 'update', 'add', 'delete' ) as $verb ) {
+			add_filter( "{$verb}_post_metadata", $counter );
+		}
+		$result = aafm_meta_set_group( 'post', $post_id, $group, 'post' );
+		foreach ( array( 'update', 'add', 'delete' ) as $verb ) {
+			remove_filter( "{$verb}_post_metadata", $counter );
+		}
+
+		$keys = array();
+		foreach ( array_keys( $group ) as $key ) {
+			$keys[ $key ] = array( 'status' => 'refused' );
+		}
+		$this->assertSame(
+			array(
+				'status' => 'refused',
+				'keys'   => $keys,
+			),
+			$result
+		);
+		$this->assertSame( 0, $calls, 'no write call' );
+		$this->assertSame( $seed, $this->exact_rows( 'post', $post_id, $names ), 'end state: rows unchanged, none created' );
+	}
+
+	/**
+	 * S17d: the collision comparison itself fails, once per fault shape; every member is
+	 * read_failed and nothing is written.
+	 *
+	 * @return iterable<string,array{0:string}>
+	 */
+	public function data_fault_shapes(): iterable {
+		yield 'no-flush' => array( 'no-flush' );
+		yield 'real-error' => array( 'real-error' );
+	}
+
+	/**
+	 * S17d under one fault shape.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_s17d_a_failed_collision_comparison_reports_read_failed_for_every_member( string $shape ): void {
+		global $wpdb;
+		$post_id = $this->make_object( 'post' );
+		$run     = static function () use ( $post_id ) {
+			return aafm_meta_set_group(
+				'post',
+				$post_id,
+				array(
+					'Foo' => 'a',
+					'foo' => 'b',
+				),
+				'post'
+			);
+		};
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			$result = 'no-flush' === $shape
+				? QueryFaultInjector::fail_query( 'COUNT( DISTINCT', $run )
+				: QueryFaultInjector::break_query_with_real_error( 'COUNT( DISTINCT', $run );
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame(
+			array(
+				'status' => 'read_failed',
+				'keys'   => array(
+					'Foo' => array( 'status' => 'read_failed' ),
+					'foo' => array( 'status' => 'read_failed' ),
+				),
+			),
+			$result
+		);
+		$this->assertSame( array(), $this->exact_rows( 'post', $post_id, array( 'foo', 'Foo' ) ), 'end state: nothing written' );
+	}
+
+	/**
+	 * The collision comparison names the meta table too, so this faults only the preflight read
+	 * that follows it.
+	 */
+	public function test_a_failed_preflight_after_a_clean_collision_comparison_reports_read_failed_for_every_member(): void {
+		global $wpdb;
+		$post_id = $this->make_object( 'post' );
+		update_post_meta( $post_id, 'aafm_g_one', 'kept' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			$result = QueryFaultInjector::fail_query(
+				'aafm_match_',
+				static function () use ( $post_id ) {
+					return aafm_meta_set_group(
+						'post',
+						$post_id,
+						array(
+							'aafm_g_one' => 'new',
+							'aafm_g_two' => 'new',
+						),
+						'post'
+					);
+				}
+			);
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame(
+			array(
+				'status' => 'read_failed',
+				'keys'   => array(
+					'aafm_g_one' => array( 'status' => 'read_failed' ),
+					'aafm_g_two' => array( 'status' => 'read_failed' ),
+				),
+			),
+			$result
+		);
+		$this->assert_raw_rows( 'post', $post_id, array( 'kept' ), 'end state: aafm_g_one', 'aafm_g_one' );
+	}
+
+	public function test_the_multi_key_reader_reads_a_key_requested_twice_once(): void {
+		$post_id = $this->make_object( 'post' );
+		add_metadata( 'post', $post_id, 'foo', 'old' );
+
+		$rows = aafm_meta_rows( 'post', $post_id, array( 'foo', 'foo' ) );
+
+		$this->assertTrue( $rows['ok'] );
+		$this->assertCount( 1, $rows['by_key'] );
+		$this->assertSame( 1, $rows['by_key']['foo']['count'] );
+		$this->assertSame( array( 'old' ), $rows['by_key']['foo']['values'] );
+		$this->assertSame( 0, $rows['by_key']['foo']['aliased'] );
+	}
+
+	/**
+	 * The literal key set of every producer/status combination, the acknowledged value where one
+	 * is shown, and the durable end state a direct query must see.
+	 *
+	 * @return iterable<string,array{0:string,1:string[],2:?bool,3:array}>
+	 */
+	public function data_s14_cases(): iterable {
+		yield 'set written' => array( 'set_written', array( 'acknowledged', 'observed', 'previous', 'status', 'value' ), true, array( 'new' ) );
+		yield 'set written, no baseline row' => array( 'set_written_no_baseline', array( 'acknowledged', 'observed', 'status', 'value' ), true, array( 'new' ) );
+		yield 'set written, changed by the site' => array( 'set_written_modified_by_site', array( 'acknowledged', 'modified_by_site', 'observed', 'previous', 'status', 'value' ), true, array( 'new-2' ) );
+		yield 'set unchanged' => array( 'set_unchanged', array( 'previous', 'status', 'value' ), null, array( 'old' ) );
+		yield 'set refused' => array( 'set_refused', array( 'acknowledged', 'previous', 'status' ), false, array( 'old' ) );
+		yield 'set refused, no baseline row' => array( 'set_refused_no_baseline', array( 'acknowledged', 'status' ), false, array() );
+		yield 'set unconfirmed' => array( 'set_unconfirmed', array( 'acknowledged', 'observed', 'previous', 'status' ), true, array( 'old' ) );
+		yield 'set read_failed' => array( 'set_read_failed', array( 'status' ), null, array( 'old' ) );
+		yield 'delete deleted' => array( 'delete_deleted', array( 'acknowledged', 'observed', 'previous', 'status' ), true, array() );
+		yield 'delete absent' => array( 'delete_absent', array( 'status' ), null, array() );
+		yield 'delete refused by core' => array( 'delete_refused_veto_false', array( 'acknowledged', 'previous', 'status' ), false, array( 'old' ) );
+		yield 'delete refused, row survived' => array( 'delete_refused_veto_true', array( 'acknowledged', 'observed', 'previous', 'status' ), true, array( 'old' ) );
+		yield 'delete read_failed' => array( 'delete_read_failed', array( 'status' ), null, array( 'old' ) );
+		yield 'group member written' => array( 'group_key2_written', array( 'acknowledged', 'observed', 'previous', 'status', 'value' ), true, array( 'new' ) );
+		yield 'group member unchanged' => array( 'group_key2_unchanged', array( 'previous', 'status', 'value' ), null, array( 'old' ) );
+		yield 'group member refused' => array( 'group_key2_refused', array( 'acknowledged', 'previous', 'status' ), false, array( 'old' ) );
+		yield 'group member unconfirmed' => array( 'group_key2_unconfirmed', array( 'acknowledged', 'observed', 'previous', 'status' ), true, array( 'old' ) );
+		yield 'group read_failed' => array( 'group_read_failed', array( 'keys', 'status' ), null, array() );
+	}
+
+	/**
+	 * One key-presence case: the result's own key set, sorted, the acknowledged value where one is
+	 * shown, and the durable end state by a direct query.
+	 *
+	 * @dataProvider data_s14_cases
+	 * @param string    $scenario              Scenario name run_s14_scenario() understands.
+	 * @param string[]  $expected_keys         The result's own key set, sorted.
+	 * @param bool|null $expected_acknowledged The literal 'acknowledged' value, or null when absent.
+	 * @param array     $expected_end_state    The affected key's durable rows after the call.
+	 */
+	public function test_s14_key_presence( string $scenario, array $expected_keys, ?bool $expected_acknowledged, array $expected_end_state ): void {
+		list( $result, $post_id, $end_state_key ) = $this->run_s14_scenario( $scenario );
+
+		if ( 'group_read_failed' === $scenario ) {
+			$this->assertSame( $expected_keys, $this->sorted_keys( $result ) );
+			foreach ( $result['keys'] as $entry ) {
+				$this->assertSame( array( 'status' ), $this->sorted_keys( $entry ) );
+			}
+			$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_s14_one', 'aafm_s14_one' );
+			$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'end state: aafm_s14_two', 'aafm_s14_two' );
+			return;
+		}
+
+		$this->assertSame( $expected_keys, $this->sorted_keys( $result ) );
+		if ( null !== $expected_acknowledged ) {
+			$this->assertSame( $expected_acknowledged, $result['acknowledged'] );
+		}
+		$this->assert_raw_rows( 'post', $post_id, $expected_end_state, 'end state', $end_state_key );
+	}
+
+	/**
+	 * A result array's own keys, sorted, for a literal comparison.
+	 *
+	 * @param array $result The array to read keys from.
+	 * @return string[]
+	 */
+	private function sorted_keys( array $result ): array {
+		$keys = array_keys( $result );
+		sort( $keys );
+		return $keys;
+	}
+
+	/**
+	 * Run one named key-presence scenario and return the result whose key set the test asserts,
+	 * the post id, and the meta key a direct-query end-state check must read.
+	 *
+	 * @param string $scenario Scenario name.
+	 * @return array{0:array,1:int,2:string}
+	 */
+	private function run_s14_scenario( string $scenario ): array {
+		global $wpdb;
+		$post_id = $this->make_object( 'post' );
+
+		switch ( $scenario ) {
+			case 'set_written':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				return array( aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false ), $post_id, self::KEY );
+
+			case 'set_written_no_baseline':
+				$this->assert_raw_rows( 'post', $post_id, array(), 'precondition' );
+				return array( aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false ), $post_id, self::KEY );
+
+			case 'set_written_modified_by_site':
+				// The same appending, stateful sanitize callback the stateful-sanitizer test above
+				// uses: it drifts the read-back away from the canonical value core acknowledged writing.
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				add_filter(
+					'sanitize_post_meta_' . self::KEY,
+					static function ( $value ) {
+						static $calls = 0;
+						++$calls;
+						return $value . '-' . $calls;
+					},
+					10,
+					1
+				);
+				$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+				remove_all_filters( 'sanitize_post_meta_' . self::KEY );
+				return array( $result, $post_id, self::KEY );
+
+			case 'set_unchanged':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				return array( aafm_meta_set( 'post', $post_id, self::KEY, 'old', 'post', false ), $post_id, self::KEY );
+
+			case 'set_refused':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				add_filter( 'update_post_metadata', '__return_false' );
+				$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+				remove_filter( 'update_post_metadata', '__return_false' );
+				return array( $result, $post_id, self::KEY );
+
+			case 'set_refused_no_baseline':
+				$this->assert_raw_rows( 'post', $post_id, array(), 'precondition' );
+				add_filter( 'update_post_metadata', '__return_false' );
+				$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+				remove_filter( 'update_post_metadata', '__return_false' );
+				return array( $result, $post_id, self::KEY );
+
+			case 'set_unconfirmed':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				add_filter( 'update_post_metadata', '__return_true' );
+				$result = aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+				remove_filter( 'update_post_metadata', '__return_true' );
+				return array( $result, $post_id, self::KEY );
+
+			case 'set_read_failed':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				$suppressed = $wpdb->suppress_errors( true );
+				ob_start();
+				$result = QueryFaultInjector::fail_query(
+					$wpdb->postmeta,
+					static function () use ( $post_id ) {
+						return aafm_meta_set( 'post', $post_id, self::KEY, 'new', 'post', false );
+					}
+				);
+				ob_end_clean();
+				$wpdb->suppress_errors( $suppressed );
+				return array( $result, $post_id, self::KEY );
+
+			case 'delete_deleted':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				return array( aafm_meta_delete( 'post', $post_id, self::KEY ), $post_id, self::KEY );
+
+			case 'delete_absent':
+				$this->assert_raw_rows( 'post', $post_id, array(), 'precondition' );
+				return array( aafm_meta_delete( 'post', $post_id, self::KEY ), $post_id, self::KEY );
+
+			case 'delete_refused_veto_false':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				add_filter( 'delete_post_metadata', '__return_false' );
+				$result = aafm_meta_delete( 'post', $post_id, self::KEY );
+				remove_filter( 'delete_post_metadata', '__return_false' );
+				return array( $result, $post_id, self::KEY );
+
+			case 'delete_refused_veto_true':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				add_filter( 'delete_post_metadata', '__return_true' );
+				$result = aafm_meta_delete( 'post', $post_id, self::KEY );
+				remove_filter( 'delete_post_metadata', '__return_true' );
+				return array( $result, $post_id, self::KEY );
+
+			case 'delete_read_failed':
+				update_post_meta( $post_id, self::KEY, 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition' );
+				$suppressed = $wpdb->suppress_errors( true );
+				ob_start();
+				$result = QueryFaultInjector::fail_query(
+					$wpdb->postmeta,
+					static function () use ( $post_id ) {
+						return aafm_meta_delete( 'post', $post_id, self::KEY );
+					}
+				);
+				ob_end_clean();
+				$wpdb->suppress_errors( $suppressed );
+				return array( $result, $post_id, self::KEY );
+
+			case 'group_key2_written':
+				update_post_meta( $post_id, 'aafm_s14_one', 'old' );
+				update_post_meta( $post_id, 'aafm_s14_two', 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_one', 'aafm_s14_one' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_two', 'aafm_s14_two' );
+				$result = aafm_meta_set_group(
+					'post',
+					$post_id,
+					array(
+						'aafm_s14_one' => 'new',
+						'aafm_s14_two' => 'new',
+					),
+					'post'
+				);
+				return array( $result['keys']['aafm_s14_two'], $post_id, 'aafm_s14_two' );
+
+			case 'group_key2_unchanged':
+				update_post_meta( $post_id, 'aafm_s14_one', 'old' );
+				update_post_meta( $post_id, 'aafm_s14_two', 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_one', 'aafm_s14_one' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_two', 'aafm_s14_two' );
+				$result = aafm_meta_set_group(
+					'post',
+					$post_id,
+					array(
+						'aafm_s14_one' => 'new',
+						'aafm_s14_two' => 'old',
+					),
+					'post'
+				);
+				return array( $result['keys']['aafm_s14_two'], $post_id, 'aafm_s14_two' );
+
+			case 'group_key2_refused':
+				update_post_meta( $post_id, 'aafm_s14_one', 'old' );
+				update_post_meta( $post_id, 'aafm_s14_two', 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_one', 'aafm_s14_one' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_two', 'aafm_s14_two' );
+				add_filter(
+					'update_post_metadata',
+					static function ( $check, $object_id, $meta_key ) {
+						return 'aafm_s14_two' === $meta_key ? false : $check;
+					},
+					10,
+					3
+				);
+				$result = aafm_meta_set_group(
+					'post',
+					$post_id,
+					array(
+						'aafm_s14_one' => 'new',
+						'aafm_s14_two' => 'new',
+					),
+					'post'
+				);
+				remove_all_filters( 'update_post_metadata' );
+				return array( $result['keys']['aafm_s14_two'], $post_id, 'aafm_s14_two' );
+
+			case 'group_key2_unconfirmed':
+				update_post_meta( $post_id, 'aafm_s14_one', 'old' );
+				update_post_meta( $post_id, 'aafm_s14_two', 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_one', 'aafm_s14_one' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_two', 'aafm_s14_two' );
+				add_filter(
+					'update_post_metadata',
+					static function ( $check, $object_id, $meta_key ) {
+						return 'aafm_s14_two' === $meta_key ? true : $check;
+					},
+					10,
+					3
+				);
+				$result = aafm_meta_set_group(
+					'post',
+					$post_id,
+					array(
+						'aafm_s14_one' => 'new',
+						'aafm_s14_two' => 'new',
+					),
+					'post'
+				);
+				remove_all_filters( 'update_post_metadata' );
+				return array( $result['keys']['aafm_s14_two'], $post_id, 'aafm_s14_two' );
+
+			case 'group_read_failed':
+				update_post_meta( $post_id, 'aafm_s14_one', 'old' );
+				update_post_meta( $post_id, 'aafm_s14_two', 'old' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_one', 'aafm_s14_one' );
+				$this->assert_raw_rows( 'post', $post_id, array( 'old' ), 'precondition: aafm_s14_two', 'aafm_s14_two' );
+				$suppressed = $wpdb->suppress_errors( true );
+				ob_start();
+				$result = QueryFaultInjector::fail_query(
+					$wpdb->postmeta,
+					static function () use ( $post_id ) {
+						return aafm_meta_set_group(
+							'post',
+							$post_id,
+							array(
+								'aafm_s14_one' => 'new',
+								'aafm_s14_two' => 'new',
+							),
+							'post'
+						);
+					}
+				);
+				ob_end_clean();
+				$wpdb->suppress_errors( $suppressed );
+				return array( $result, $post_id, '' );
+
+			default:
+				$this->fail( 'unknown key-presence scenario: ' . $scenario );
+		}
+	}
+
+	public function test_write_writers_map_matches_the_literal_map_in_order(): void {
+		$writers = aafm_write_writers();
+
+		$this->assertSame(
+			array( 'post_meta', 'term_meta', 'user_meta', 'option', 'post_field', 'acf', 'aioseo', 'geodirectory', 'tec', 'woocommerce' ),
+			array_keys( $writers )
+		);
+
+		$meta_writers = array( 'aafm_meta_set', 'aafm_meta_delete', 'aafm_meta_set_group' );
+		$this->assertSame( $meta_writers, $writers['post_meta'] );
+		$this->assertSame( $meta_writers, $writers['term_meta'] );
+		$this->assertSame( $meta_writers, $writers['user_meta'] );
+		$this->assertSame( array( 'aafm_option_write', 'aafm_update_option_verified', 'aafm_persist_operator_switch', 'aafm_delete_option_cache_safe' ), $writers['option'] );
+		$this->assertSame( array( 'aafm_post_field_confirm_logged' ), $writers['post_field'] );
+		$this->assertSame( array( 'aafm_acf_write_field' ), $writers['acf'] );
+		$this->assertSame( array( 'aafm_aioseo_write' ), $writers['aioseo'] );
+		$this->assertSame( array( 'aafm_geodir_write' ), $writers['geodirectory'] );
+		$this->assertSame( array( 'aafm_tec_write' ), $writers['tec'] );
+		$this->assertSame( array( 'aafm_wc_write' ), $writers['woocommerce'] );
+
+		foreach ( array( 'post_meta', 'term_meta', 'user_meta', 'option', 'post_field' ) as $kind ) {
+			foreach ( $writers[ $kind ] as $function_name ) {
+				$this->assertTrue( function_exists( $function_name ), "$function_name must exist for the $kind writer kind." );
+			}
+		}
+	}
+
+	/**
+	 * Create a fresh object of the given type (fixtures below this point).
+	 *
+	 * @param string $type 'post', 'term' or 'user'.
+	 * @return int
+	 */
+	private function make_object( string $type ): int {
+		if ( 'post' === $type ) {
+			return self::factory()->post->create();
+		}
+		if ( 'term' === $type ) {
+			return (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		}
+		return self::factory()->user->create();
+	}
+
+	/**
+	 * Write the rows a baseline shape needs, and remember it for apply_intent()'s own use.
+	 *
+	 * @param string $type     Object type.
+	 * @param int    $id       Object id.
+	 * @param string $baseline Baseline shape.
+	 */
+	private function seed_baseline( string $type, int $id, string $baseline ): void {
+		$this->last_baseline = $baseline;
+		switch ( $baseline ) {
+			case 'absent':
+				return;
+			case 'present-empty':
+				$this->write_raw( $type, $id, '' );
+				return;
+			case 'scalar':
+				$this->write_raw( $type, $id, 'old' );
+				return;
+			case 'array':
+				$this->write_raw( $type, $id, array( 'k' => 'a' ) );
+				return;
+			case 'serialized-empty':
+				$this->write_raw( $type, $id, array() );
+				return;
+			case 'duplicate':
+				$this->write_raw( $type, $id, 'a' );
+				$this->write_raw_duplicate( $type, $id, 'b' );
+				return;
+		}
+	}
+
+	private function write_raw( string $type, int $id, $value ): void {
+		if ( 'post' === $type ) {
+			update_post_meta( $id, self::KEY, $value );
+		} elseif ( 'term' === $type ) {
+			update_term_meta( $id, self::KEY, $value );
+		} else {
+			update_user_meta( $id, self::KEY, $value );
+		}
+	}
+
+	private function write_raw_duplicate( string $type, int $id, $value ): void {
+		if ( 'post' === $type ) {
+			add_post_meta( $id, self::KEY, $value, false );
+		} elseif ( 'term' === $type ) {
+			add_term_meta( $id, self::KEY, $value, false );
+		} else {
+			add_user_meta( $id, self::KEY, $value, false );
+		}
+	}
+
+	private function intended_value( string $baseline, string $intent ) {
+		if ( 'clear' === $intent ) {
+			return '';
+		}
+		if ( 'no-op' === $intent ) {
+			switch ( $baseline ) {
+				case 'present-empty':
+					return '';
+				case 'scalar':
+					return 'old';
+				case 'array':
+					return array( 'k' => 'a' );
+				case 'serialized-empty':
+					return array();
+				case 'duplicate':
+					return 'a';
+				default:
+					return null; // absent: handled as a delete call by the caller.
+			}
+		}
+		// change: array-shaped for both array baselines, 'c' for duplicate, 'new' for the rest.
+		switch ( $baseline ) {
+			case 'array':
+			case 'serialized-empty':
+				return array( 'k' => 'b' );
+			case 'duplicate':
+				return 'c';
+			default:
+				return 'new';
+		}
+	}
+
+	private function register_transform( string $type ): void {
+		$uppercase = static function ( $value ) {
+			if ( is_string( $value ) ) {
+				return strtoupper( $value );
+			}
+			if ( is_array( $value ) ) {
+				return array_map(
+					static function ( $member ) {
+						return is_string( $member ) ? strtoupper( $member ) : $member;
+					},
+					$value
+				);
+			}
+			return $value;
+		};
+		add_filter( 'sanitize_' . $type . '_meta_' . self::KEY, $uppercase );
+	}
+
+	/**
+	 * Run one grid cell's operation, arming veto and query faults as the cell requires.
+	 *
+	 * @param string      $type       Object type.
+	 * @param int         $object_id  Object id.
+	 * @param string      $intent     Requested operation.
+	 * @param bool|null   $veto       True/false to arm a veto filter, null for no veto.
+	 * @param string      $fault      Fault column.
+	 * @param string|null $shape      Query-fault shape, or null.
+	 * @param int         $veto_calls By reference: incremented once per veto filter invocation.
+	 * @return array
+	 */
+	private function run_case( string $type, int $object_id, string $intent, ?bool $veto, string $fault, ?string $shape, int &$veto_calls = 0 ) {
+		$update_hook = 'update_' . $type . '_metadata';
+		$delete_hook = 'delete_' . $type . '_metadata';
+
+		if ( null !== $veto ) {
+			$veto_value = $veto;
+			$counted    = static function () use ( $veto_value, &$veto_calls ) {
+				++$veto_calls;
+				return $veto_value;
+			};
+			add_filter( $update_hook, $counted );
+			add_filter( $delete_hook, $counted );
+		}
+
+		$do = function () use ( $type, $object_id, $intent ) {
+			return $this->apply_intent( $type, $object_id, $intent );
+		};
+
+		if ( 'baseline-read-fault' === $fault ) {
+			$needle = $this->meta_table( $type );
+			$result = 'no-flush' === $shape
+				? QueryFaultInjector::fail_nth_query( $needle, 1, $do )
+				: QueryFaultInjector::break_query_with_real_error( $needle, $do, 1 );
+		} elseif ( 'write-fault' === $fault ) {
+			$needle     = $this->meta_table( $type );
+			$occurrence = 'delete' === $intent ? 3 : 4;
+			$result     = 'no-flush' === $shape
+				? QueryFaultInjector::fail_nth_query( $needle, $occurrence, $do )
+				: QueryFaultInjector::break_query_with_real_error( $needle, $do, $occurrence );
+		} elseif ( 'confirm-read-fault' === $fault ) {
+			$result = $this->run_with_confirm_read_fault( $type, $do, $shape, null !== $veto );
+		} else {
+			global $wpdb;
+			$suppressed = $wpdb->suppress_errors( true );
+			ob_start();
+			$result = $do();
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		return is_array( $result ) ? $result : array( 'status' => null );
+	}
+
+	/**
+	 * Arm the confirm-read fault only after core's own write call has finished: from
+	 * the added_/updated_/deleted_{type}_meta action for a real write, or (when $after_veto) it must
+	 * already be armed before $run runs because a veto-true write never fires those actions.
+	 *
+	 * @param string      $type      Object type.
+	 * @param callable    $run       The operation to run with the fault armed.
+	 * @param string|null $shape     Query-fault shape.
+	 * @param bool        $after_veto Whether a veto-true pairing is in play.
+	 * @return mixed
+	 */
+	private function run_with_confirm_read_fault( string $type, callable $run, ?string $shape, bool $after_veto ) {
+		$table = $this->meta_table( $type );
+		$armed = false;
+		$arm   = function () use ( &$armed, $table, $shape ) {
+			if ( $armed ) {
+				return;
+			}
+			$armed = true;
+			if ( 'no-flush' === $shape ) {
+				add_filter( 'query', QueryFaultInjector::no_flush_filter( $table, 1 ) );
+			} else {
+				add_filter( 'query', QueryFaultInjector::real_error_filter( $table, 1 ) );
+			}
+		};
+
+		$actions = array( "added_{$type}_meta", "updated_{$type}_meta", "deleted_{$type}_meta" );
+		foreach ( $actions as $action ) {
+			add_action( $action, $arm, 10, 0 );
+		}
+		if ( $after_veto ) {
+			// A veto short-circuit never fires those actions; arm from inside the veto filter itself.
+			$update_hook = 'update_' . $type . '_metadata';
+			$delete_hook = 'delete_' . $type . '_metadata';
+			add_filter(
+				$update_hook,
+				function ( $check ) use ( $arm ) {
+					$arm();
+					return $check;
+				},
+				20
+			);
+			add_filter(
+				$delete_hook,
+				function ( $check ) use ( $arm ) {
+					$arm();
+					return $check;
+				},
+				20
+			);
+		}
+
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		$result = $run();
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+
+		foreach ( $actions as $action ) {
+			remove_action( $action, $arm, 10 );
+		}
+
+		return $result;
+	}
+
+	private function apply_intent( string $type, int $object_id, string $intent ) {
+		if ( 'delete' === $intent || ( 'no-op' === $intent && 'absent' === $this->last_baseline ) ) {
+			return aafm_meta_delete( $type, $object_id, self::KEY );
+		}
+		$intended = $this->intended_value( $this->last_baseline, $intent );
+		$subtype  = 'user' === $type ? '' : ( 'post' === $type ? 'post' : 'category' );
+		return aafm_meta_set( $type, $object_id, self::KEY, $intended, $subtype, false );
+	}
+
+	/**
+	 * The baseline shape seed_baseline() last set up, so apply_intent() knows what a no-op means.
+	 *
+	 * @var string
+	 */
+	private $last_baseline = 'absent';
+
+	private function meta_table( string $type ): string {
+		global $wpdb;
+		if ( 'post' === $type ) {
+			return $wpdb->postmeta;
+		}
+		if ( 'term' === $type ) {
+			return $wpdb->termmeta;
+		}
+		return $wpdb->usermeta;
+	}
+
+	/**
+	 * Every row of an object whose stored key is one of $names, as [stored key, decoded value]
+	 * pairs in meta id order. The IN list compares under the column collation, so it returns every
+	 * spelling; the stored key is then compared byte for byte by assertSame().
+	 *
+	 * @param string   $type  Object type.
+	 * @param int      $id    Object id.
+	 * @param string[] $names Key spellings to read.
+	 * @return array<int,array{0:string,1:mixed}>
+	 */
+	private function exact_rows( string $type, int $id, array $names ): array {
+		global $wpdb;
+		$table        = $this->meta_table( $type );
+		$column       = $type . '_id';
+		$id_column    = 'user' === $type ? 'umeta_id' : 'meta_id';
+		$placeholders = implode( ', ', array_fill( 0, count( $names ), '%s' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT meta_key, meta_value FROM {$table} WHERE {$column} = %d AND meta_key IN ({$placeholders}) ORDER BY {$id_column}", array_merge( array( $id ), $names ) ), ARRAY_A );
+		$out  = array();
+		foreach ( $rows as $row ) {
+			$out[] = array( (string) $row['meta_key'], maybe_unserialize( $row['meta_value'] ) );
+		}
+		return $out;
+	}
+
+	private function read_raw_rows( string $type, int $id, string $key = self::KEY ): array {
+		global $wpdb;
+		$table     = $this->meta_table( $type );
+		$column    = $type . '_id';
+		$id_column = 'user' === $type ? 'umeta_id' : 'meta_id';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT meta_value FROM {$table} WHERE {$column} = %d AND meta_key = %s ORDER BY {$id_column}", $id, $key ), ARRAY_A );
+	}
+
+	/**
+	 * Assert the raw meta_value column of every row of one key, undecoded, read by a direct
+	 * uncached query, against a literal list. Used where a decoded comparison cannot hold: an object
+	 * row, which decodes to a new instance on every read, a SQL NULL, and a serialized-looking string.
+	 *
+	 * @param string $type     Object type.
+	 * @param int    $id       Object id.
+	 * @param array  $expected Expected raw column values, in meta-id order.
+	 * @param string $message  Failure message.
+	 * @param string $key      Meta key.
+	 */
+	private function assert_raw_columns( string $type, int $id, array $expected, string $message, string $key = self::KEY ): void {
+		$this->assertSame( $expected, array_column( $this->read_raw_rows( $type, $id, $key ), 'meta_value' ), $message );
+	}
+
+	/**
+	 * Assert the durable, decoded state of every row of one key, read by a direct uncached
+	 * query, against a literal list of values.
+	 *
+	 * @param string $type     Object type.
+	 * @param int    $id       Object id.
+	 * @param array  $expected Expected decoded values, in meta-id order.
+	 * @param string $message  Failure message.
+	 * @param string $key      Meta key.
+	 */
+	private function assert_raw_rows( string $type, int $id, array $expected, string $message, string $key = self::KEY ): void {
+		$actual = array_map(
+			static function ( array $row ) {
+				return maybe_unserialize( $row['meta_value'] );
+			},
+			$this->read_raw_rows( $type, $id, $key )
+		);
+		$this->assertSame( $expected, $actual, $message );
+	}
+
+	/**
+	 * The literal decoded rows a baseline shape writes, in meta-id order.
+	 *
+	 * @param string $baseline Baseline shape.
+	 * @return array
+	 */
+	private function baseline_values( string $baseline ): array {
+		switch ( $baseline ) {
+			case 'present-empty':
+				return array( '' );
+			case 'scalar':
+				return array( 'old' );
+			case 'array':
+				return array( array( 'k' => 'a' ) );
+			case 'serialized-empty':
+				return array( array() );
+			case 'duplicate':
+				return array( 'a', 'b' );
+			default: // absent.
+				return array();
+		}
+	}
+
+	/**
+	 * The state matrix's own literal expectations, keyed by baseline, intent and fault: [status,
+	 * rows-or-null, end-state]. Every value is a string, int or array literal (never a production
+	 * status constant, never computed from the baseline/intent/fault by a helper function), so a
+	 * production or comparator regression cannot silently follow the expected side.
+	 */
+	private const GRID = array(
+		'absent'           => array(
+			'no-op'  => array(
+				'clean'               => array( 'absent', null, array() ),
+				'veto-false'          => array( 'absent', null, array() ),
+				'veto-true'           => array( 'absent', null, array() ),
+				'transform'           => array( 'absent', null, array() ),
+				'baseline-read-fault' => array( 'read_failed', null, array() ),
+				'write-fault'         => array( 'absent', null, array() ),
+				'confirm-read-fault'  => array( 'absent', null, array() ),
+			),
+			'change' => array(
+				'clean'               => array( 'written', null, array( 'new' ) ),
+				'veto-false'          => array( 'refused', null, array() ),
+				'veto-true'           => array( 'unconfirmed', null, array() ),
+				'transform'           => array( 'written', null, array( 'NEW' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array() ),
+				'write-fault'         => array( 'refused', null, array() ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( 'new' ) ),
+			),
+			'clear'  => array(
+				'clean'               => array( 'written', null, array( '' ) ),
+				'veto-false'          => array( 'refused', null, array() ),
+				'veto-true'           => array( 'unconfirmed', null, array() ),
+				'transform'           => array( 'written', null, array( '' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array() ),
+				'write-fault'         => array( 'refused', null, array() ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( '' ) ),
+			),
+			'delete' => array(
+				'clean'               => array( 'absent', null, array() ),
+				'veto-false'          => array( 'absent', null, array() ),
+				'veto-true'           => array( 'absent', null, array() ),
+				'transform'           => array( 'absent', null, array() ),
+				'baseline-read-fault' => array( 'read_failed', null, array() ),
+				'write-fault'         => array( 'absent', null, array() ),
+				'confirm-read-fault'  => array( 'absent', null, array() ),
+			),
+		),
+		'present-empty'    => array(
+			'no-op'  => array(
+				'clean'               => array( 'unchanged', null, array( '' ) ),
+				'veto-false'          => array( 'unchanged', null, array( '' ) ),
+				'veto-true'           => array( 'unchanged', null, array( '' ) ),
+				'transform'           => array( 'unchanged', null, array( '' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( '' ) ),
+				'write-fault'         => array( 'unchanged', null, array( '' ) ),
+				'confirm-read-fault'  => array( 'unchanged', null, array( '' ) ),
+			),
+			'change' => array(
+				'clean'               => array( 'written', null, array( 'new' ) ),
+				'veto-false'          => array( 'refused', null, array( '' ) ),
+				'veto-true'           => array( 'unconfirmed', null, array( '' ) ),
+				'transform'           => array( 'written', null, array( 'NEW' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( '' ) ),
+				'write-fault'         => array( 'refused', null, array( '' ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( 'new' ) ),
+			),
+			'clear'  => array(
+				'clean'               => array( 'unchanged', null, array( '' ) ),
+				'veto-false'          => array( 'unchanged', null, array( '' ) ),
+				'veto-true'           => array( 'unchanged', null, array( '' ) ),
+				'transform'           => array( 'unchanged', null, array( '' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( '' ) ),
+				'write-fault'         => array( 'unchanged', null, array( '' ) ),
+				'confirm-read-fault'  => array( 'unchanged', null, array( '' ) ),
+			),
+			'delete' => array(
+				'clean'               => array( 'deleted', null, array() ),
+				'veto-false'          => array( 'refused', null, array( '' ) ),
+				'veto-true'           => array( 'refused', null, array( '' ) ),
+				'transform'           => array( 'deleted', null, array() ),
+				'baseline-read-fault' => array( 'read_failed', null, array( '' ) ),
+				'write-fault'         => array( 'refused', null, array( '' ) ),
+				'confirm-read-fault'  => array( 'deleted', null, array() ),
+			),
+		),
+		'scalar'           => array(
+			'no-op'  => array(
+				'clean'               => array( 'unchanged', null, array( 'old' ) ),
+				'veto-false'          => array( 'unchanged', null, array( 'old' ) ),
+				'veto-true'           => array( 'unchanged', null, array( 'old' ) ),
+				'transform'           => array( 'written', null, array( 'OLD' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( 'old' ) ),
+				'write-fault'         => array( 'unchanged', null, array( 'old' ) ),
+				'confirm-read-fault'  => array( 'unchanged', null, array( 'old' ) ),
+			),
+			'change' => array(
+				'clean'               => array( 'written', null, array( 'new' ) ),
+				'veto-false'          => array( 'refused', null, array( 'old' ) ),
+				'veto-true'           => array( 'unconfirmed', null, array( 'old' ) ),
+				'transform'           => array( 'written', null, array( 'NEW' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( 'old' ) ),
+				'write-fault'         => array( 'refused', null, array( 'old' ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( 'new' ) ),
+			),
+			'clear'  => array(
+				'clean'               => array( 'written', null, array( '' ) ),
+				'veto-false'          => array( 'refused', null, array( 'old' ) ),
+				'veto-true'           => array( 'unconfirmed', null, array( 'old' ) ),
+				'transform'           => array( 'written', null, array( '' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( 'old' ) ),
+				'write-fault'         => array( 'refused', null, array( 'old' ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( '' ) ),
+			),
+			'delete' => array(
+				'clean'               => array( 'deleted', null, array() ),
+				'veto-false'          => array( 'refused', null, array( 'old' ) ),
+				'veto-true'           => array( 'refused', null, array( 'old' ) ),
+				'transform'           => array( 'deleted', null, array() ),
+				'baseline-read-fault' => array( 'read_failed', null, array( 'old' ) ),
+				'write-fault'         => array( 'refused', null, array( 'old' ) ),
+				'confirm-read-fault'  => array( 'deleted', null, array() ),
+			),
+		),
+		'array'            => array(
+			'no-op'  => array(
+				'clean'               => array( 'unchanged', null, array( array( 'k' => 'a' ) ) ),
+				'veto-false'          => array( 'unchanged', null, array( array( 'k' => 'a' ) ) ),
+				'veto-true'           => array( 'unchanged', null, array( array( 'k' => 'a' ) ) ),
+				'transform'           => array( 'written', null, array( array( 'k' => 'A' ) ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( array( 'k' => 'a' ) ) ),
+				'write-fault'         => array( 'unchanged', null, array( array( 'k' => 'a' ) ) ),
+				'confirm-read-fault'  => array( 'unchanged', null, array( array( 'k' => 'a' ) ) ),
+			),
+			'change' => array(
+				'clean'               => array( 'written', null, array( array( 'k' => 'b' ) ) ),
+				'veto-false'          => array( 'refused', null, array( array( 'k' => 'a' ) ) ),
+				'veto-true'           => array( 'unconfirmed', null, array( array( 'k' => 'a' ) ) ),
+				'transform'           => array( 'written', null, array( array( 'k' => 'B' ) ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( array( 'k' => 'a' ) ) ),
+				'write-fault'         => array( 'refused', null, array( array( 'k' => 'a' ) ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( array( 'k' => 'b' ) ) ),
+			),
+			'clear'  => array(
+				'clean'               => array( 'written', null, array( '' ) ),
+				'veto-false'          => array( 'refused', null, array( array( 'k' => 'a' ) ) ),
+				'veto-true'           => array( 'unconfirmed', null, array( array( 'k' => 'a' ) ) ),
+				'transform'           => array( 'written', null, array( '' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( array( 'k' => 'a' ) ) ),
+				'write-fault'         => array( 'refused', null, array( array( 'k' => 'a' ) ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( '' ) ),
+			),
+			'delete' => array(
+				'clean'               => array( 'deleted', null, array() ),
+				'veto-false'          => array( 'refused', null, array( array( 'k' => 'a' ) ) ),
+				'veto-true'           => array( 'refused', null, array( array( 'k' => 'a' ) ) ),
+				'transform'           => array( 'deleted', null, array() ),
+				'baseline-read-fault' => array( 'read_failed', null, array( array( 'k' => 'a' ) ) ),
+				'write-fault'         => array( 'refused', null, array( array( 'k' => 'a' ) ) ),
+				'confirm-read-fault'  => array( 'deleted', null, array() ),
+			),
+		),
+		'serialized-empty' => array(
+			'no-op'  => array(
+				'clean'               => array( 'unchanged', null, array( array() ) ),
+				'veto-false'          => array( 'unchanged', null, array( array() ) ),
+				'veto-true'           => array( 'unchanged', null, array( array() ) ),
+				'transform'           => array( 'unchanged', null, array( array() ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( array() ) ),
+				'write-fault'         => array( 'unchanged', null, array( array() ) ),
+				'confirm-read-fault'  => array( 'unchanged', null, array( array() ) ),
+			),
+			'change' => array(
+				'clean'               => array( 'written', null, array( array( 'k' => 'b' ) ) ),
+				'veto-false'          => array( 'refused', null, array( array() ) ),
+				'veto-true'           => array( 'unconfirmed', null, array( array() ) ),
+				'transform'           => array( 'written', null, array( array( 'k' => 'B' ) ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( array() ) ),
+				'write-fault'         => array( 'refused', null, array( array() ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( array( 'k' => 'b' ) ) ),
+			),
+			'clear'  => array(
+				'clean'               => array( 'written', null, array( '' ) ),
+				'veto-false'          => array( 'refused', null, array( array() ) ),
+				'veto-true'           => array( 'unconfirmed', null, array( array() ) ),
+				'transform'           => array( 'written', null, array( '' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( array() ) ),
+				'write-fault'         => array( 'refused', null, array( array() ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', null, array( '' ) ),
+			),
+			'delete' => array(
+				'clean'               => array( 'deleted', null, array() ),
+				'veto-false'          => array( 'refused', null, array( array() ) ),
+				'veto-true'           => array( 'refused', null, array( array() ) ),
+				'transform'           => array( 'deleted', null, array() ),
+				'baseline-read-fault' => array( 'read_failed', null, array( array() ) ),
+				'write-fault'         => array( 'refused', null, array( array() ) ),
+				'confirm-read-fault'  => array( 'deleted', null, array() ),
+			),
+		),
+		'duplicate'        => array(
+			'no-op'  => array(
+				'clean'               => array( 'written', 2, array( 'a', 'a' ) ),
+				'veto-false'          => array( 'refused', 2, array( 'a', 'b' ) ),
+				'veto-true'           => array( 'unconfirmed', 2, array( 'a', 'b' ) ),
+				'transform'           => array( 'written', 2, array( 'A', 'A' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( 'a', 'b' ) ),
+				'write-fault'         => array( 'refused', 2, array( 'a', 'b' ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', 2, array( 'a', 'a' ) ),
+			),
+			'change' => array(
+				'clean'               => array( 'written', 2, array( 'c', 'c' ) ),
+				'veto-false'          => array( 'refused', 2, array( 'a', 'b' ) ),
+				'veto-true'           => array( 'unconfirmed', 2, array( 'a', 'b' ) ),
+				'transform'           => array( 'written', 2, array( 'C', 'C' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( 'a', 'b' ) ),
+				'write-fault'         => array( 'refused', 2, array( 'a', 'b' ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', 2, array( 'c', 'c' ) ),
+			),
+			'clear'  => array(
+				'clean'               => array( 'written', 2, array( '', '' ) ),
+				'veto-false'          => array( 'refused', 2, array( 'a', 'b' ) ),
+				'veto-true'           => array( 'unconfirmed', 2, array( 'a', 'b' ) ),
+				'transform'           => array( 'written', 2, array( '', '' ) ),
+				'baseline-read-fault' => array( 'read_failed', null, array( 'a', 'b' ) ),
+				'write-fault'         => array( 'refused', 2, array( 'a', 'b' ) ),
+				'confirm-read-fault'  => array( 'unconfirmed', 2, array( '', '' ) ),
+			),
+			'delete' => array(
+				'clean'               => array( 'deleted', 2, array() ),
+				'veto-false'          => array( 'refused', 2, array( 'a', 'b' ) ),
+				'veto-true'           => array( 'refused', 2, array( 'a', 'b' ) ),
+				'transform'           => array( 'deleted', 2, array() ),
+				'baseline-read-fault' => array( 'read_failed', null, array( 'a', 'b' ) ),
+				'write-fault'         => array( 'refused', 2, array( 'a', 'b' ) ),
+				'confirm-read-fault'  => array( 'deleted', 2, array() ),
+			),
+		),
+	);
+
+	/**
+	 * Attach a filter that does what Yoast SEO does with a value it stores as no row: when the
+	 * value is the mapped default, delete the row and report the write as done.
+	 *
+	 * @param string        $type     Object type.
+	 * @param array         $defaults Meta key => the value stored as no row.
+	 * @param callable|null $after    Run after the delete, before the filter returns.
+	 */
+	private function attach_absent_default_filter( string $type, array $defaults, ?callable $after = null ): void {
+		add_filter(
+			'update_' . $type . '_metadata',
+			static function ( $check, $object_id, $meta_key, $meta_value ) use ( $type, $defaults, $after ) {
+				if ( array_key_exists( $meta_key, $defaults ) && $meta_value === $defaults[ $meta_key ] ) {
+					delete_metadata( $type, (int) $object_id, $meta_key );
+					if ( null !== $after ) {
+						$after();
+					}
+					return true;
+				}
+				return $check;
+			},
+			10,
+			4
+		);
+	}
+
+	/**
+	 * Attach a filter that deletes the row whatever value is written, and reports the write done.
+	 *
+	 * @param string $type Object type.
+	 */
+	private function attach_deleting_filter( string $type ): void {
+		add_filter(
+			'update_' . $type . '_metadata',
+			static function ( $check, $object_id, $meta_key ) use ( $type ) {
+				if ( self::KEY !== $meta_key ) {
+					return $check;
+				}
+				delete_metadata( $type, (int) $object_id, $meta_key );
+				return true;
+			},
+			10,
+			3
+		);
+	}
+
+	/**
+	 * The query needle for core's own metadata load: the read-back's load after a write, and the
+	 * checked scope's load.
+	 *
+	 * @param string $type Object type.
+	 * @return string[]
+	 */
+	private function core_load_needle( string $type ): array {
+		return array( 'meta_key, meta_value FROM', $this->meta_table( $type ), ' IN (' );
+	}
+
+	/**
+	 * The query needle for the failure-aware single-key reader, aafm_meta_row().
+	 *
+	 * @param string $type Object type.
+	 * @return string[]
+	 */
+	private function confirm_read_needle( string $type ): array {
+		return array( 'meta_key, meta_value FROM', $this->meta_table( $type ), ' AND meta_key = ' );
+	}
+
+	/**
+	 * Count the queries matching a needle while $run runs.
+	 *
+	 * @param string[] $needle AND-matched substrings.
+	 * @param callable $run    The work to run.
+	 * @param mixed    $result By reference: $run's return value.
+	 * @return int
+	 */
+	private function count_matching_queries( array $needle, callable $run, &$result ): int {
+		$count   = 0;
+		$counter = static function ( string $query ) use ( $needle, &$count ): string {
+			foreach ( $needle as $part ) {
+				if ( false === strpos( $query, $part ) ) {
+					return $query;
+				}
+			}
+			++$count;
+			return $query;
+		};
+		add_filter( 'query', $counter );
+		$result = $run();
+		remove_filter( 'query', $counter );
+		return $count;
+	}
+
+	/**
+	 * Add a query fault, in the given shape, for the $occurrence-th query matching $needle.
+	 *
+	 * @param string   $shape      'no-flush' or 'real-error'.
+	 * @param string[] $needle     AND-matched substrings.
+	 * @param int      $occurrence 1-based match to fail; 0 fails every match.
+	 * @return callable The filter, to remove afterwards.
+	 */
+	private function add_fault( string $shape, array $needle, int $occurrence ): callable {
+		$filter = 'no-flush' === $shape
+			? QueryFaultInjector::no_flush_filter( $needle, $occurrence )
+			: QueryFaultInjector::real_error_filter( $needle, $occurrence );
+		add_filter( 'query', $filter );
+		return $filter;
+	}
+
+	/**
+	 * Run $run with wpdb's error output suppressed and any output buffered.
+	 *
+	 * @param callable $run The work to run.
+	 * @return mixed
+	 */
+	private function run_quietly( callable $run ) {
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * Every write_outcome row's detail status, in insert order.
+	 *
+	 * @return string[]
+	 */
+	private function outcome_row_statuses(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		$out  = array();
+		foreach ( $rows as $detail ) {
+			$decoded = json_decode( (string) $detail, true );
+			$out[]   = is_array( $decoded ) ? (string) $decoded['status'] : '';
+		}
+		return $out;
+	}
+
+	/**
+	 * The one-member group call the S18 and S19 cases make.
+	 *
+	 * @param int                 $post_id         Post id.
+	 * @param mixed               $intended        Intended value.
+	 * @param array<string,mixed> $absent_defaults The absent-default map.
+	 * @return array<string,mixed>
+	 */
+	private function group_of_one( int $post_id, $intended, array $absent_defaults ): array {
+		$result = aafm_meta_set_group( 'post', $post_id, array( self::KEY => $intended ), 'post', array(), $absent_defaults );
+		$this->assertIsArray( $result );
+		return $result;
+	}
+
+	/**
+	 * S18(a): a clear to the mapped default, which the site stores as no row, is written.
+	 */
+	public function test_s18a_a_clear_the_site_stores_as_no_row_is_written(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_absent_default_filter( 'post', array( self::KEY => '' ) );
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+
+		$this->assertSame( 'written', $result['status'] );
+		$member = $result['keys'][ self::KEY ];
+		$this->assertSame( 'written', $member['status'] );
+		$this->assertSame( '', $member['value'] );
+		$this->assertSame( 'old', $member['previous'] );
+		$this->assertTrue( $member['acknowledged'] );
+		$this->assertSame(
+			array(
+				'exists' => false,
+				'count'  => 0,
+			),
+			$member['observed']
+		);
+		$this->assertSame( array( 'written' ), $this->outcome_row_statuses() );
+		$this->assertSame( array(), $this->read_raw_rows( 'post', $post_id ) );
+	}
+
+	/**
+	 * S18(b): the mapped default with no row stored is unchanged, and no write call is made.
+	 */
+	public function test_s18b_the_mapped_default_with_no_row_is_unchanged_with_no_write_call(): void {
+		$post_id = self::factory()->post->create();
+		$calls   = 0;
+		add_filter(
+			'update_post_metadata',
+			static function ( $check ) use ( &$calls ) {
+				++$calls;
+				return $check;
+			}
+		);
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+
+		$this->assertSame( 'unchanged', $result['status'] );
+		$this->assertSame(
+			array(
+				'status' => 'unchanged',
+				'value'  => '',
+			),
+			$result['keys'][ self::KEY ]
+		);
+		$this->assertSame( 0, $calls );
+	}
+
+	/**
+	 * S18(c): a veto-true that deletes nothing keeps the row and stays unconfirmed.
+	 */
+	public function test_s18c_a_veto_true_that_keeps_the_row_is_unconfirmed(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		add_filter( 'update_post_metadata', '__return_true' );
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+	}
+
+	/**
+	 * S18(d): a value other than the mapped one whose row goes missing stays unconfirmed.
+	 */
+	public function test_s18d_a_value_other_than_the_mapped_one_whose_row_goes_missing_is_unconfirmed(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_deleting_filter( 'post' );
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => 'new' ) );
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+	}
+
+	/**
+	 * S18(e): with no map, a clear whose row the site removes stays unconfirmed.
+	 */
+	public function test_s18e_with_no_map_a_clear_whose_row_goes_missing_is_unconfirmed(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_absent_default_filter( 'post', array( self::KEY => '' ) );
+
+		$result = $this->group_of_one( $post_id, '', array() );
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+	}
+
+	/**
+	 * S18(f1): when both the read-back and the failure-aware confirm read fail, the clear is not
+	 * certified.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_s18f1_a_failed_confirm_read_leaves_the_clear_unconfirmed( string $shape ): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$fault = null;
+		$this->attach_absent_default_filter(
+			'post',
+			array( self::KEY => '' ),
+			function () use ( &$fault, $shape ) {
+				$fault = $this->add_fault( $shape, array( 'meta_key, meta_value FROM', $this->meta_table( 'post' ) ), 0 );
+			}
+		);
+
+		$result = $this->run_quietly(
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+			}
+		);
+		remove_filter( 'query', $fault );
+
+		$this->assertSame( 2, QueryFaultInjector::fired_count(), 'both the read-back and the confirm read were faulted' );
+		$this->assertSame(
+			array(
+				'acknowledged' => true,
+				'observed'     => array(
+					'exists' => false,
+					'count'  => 0,
+				),
+				'previous'     => 'old',
+				'status'       => 'unconfirmed',
+			),
+			$result['keys'][ self::KEY ]
+		);
+		$this->assertSame( array( 'unconfirmed' ), $this->outcome_row_statuses() );
+	}
+
+	/**
+	 * S18(f2): a veto-true that keeps the row, with only the read-back failing, stays unconfirmed:
+	 * the confirm read finds the surviving row.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_s18f2_a_surviving_row_behind_a_failed_read_back_is_unconfirmed( string $shape ): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$fault = null;
+		add_filter(
+			'update_post_metadata',
+			function () use ( &$fault, $shape ) {
+				$fault = $this->add_fault( $shape, $this->core_load_needle( 'post' ), 1 );
+				return true;
+			}
+		);
+
+		$result = $this->run_quietly(
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+			}
+		);
+		remove_filter( 'query', $fault );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+		$this->assertArrayNotHasKey( 'value', $result['keys'][ self::KEY ] );
+		$this->assertSame( array( 'old' ), array_column( $this->read_raw_rows( 'post', $post_id ), 'meta_value' ) );
+	}
+
+	/**
+	 * S18(f3): when only the read-back fails and the confirm read finds no row, the clear is
+	 * written, and the failed load leaves nothing cached.
+	 *
+	 * @dataProvider data_fault_shapes
+	 * @param string $shape Fault shape.
+	 */
+	public function test_s18f3_a_confirmed_clear_behind_a_failed_read_back_is_written_and_leaves_nothing_cached( string $shape ): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$fault = null;
+		$this->attach_absent_default_filter(
+			'post',
+			array( self::KEY => '' ),
+			function () use ( &$fault, $shape ) {
+				$fault = $this->add_fault( $shape, $this->core_load_needle( 'post' ), 1 );
+			}
+		);
+
+		$result = $this->run_quietly(
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+			}
+		);
+		remove_filter( 'query', $fault );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'written', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( '', $result['keys'][ self::KEY ]['value'] );
+		$this->assertFalse( wp_cache_get( $post_id, 'post_meta' ) );
+	}
+
+	/**
+	 * The absent-default map is consulted only for members of the group: a mapped key that is not
+	 * requested changes nothing, and no confirm read is made.
+	 */
+	public function test_an_absent_default_for_a_key_outside_the_group_changes_nothing(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_deleting_filter( 'post' );
+
+		$result  = null;
+		$confirm = $this->count_matching_queries(
+			$this->confirm_read_needle( 'post' ),
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( 'aafm_contract_other' => '' ) );
+			},
+			$result
+		);
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 0, $confirm );
+	}
+
+	/**
+	 * A mapped value that is not equal to the written value under the comparison rule is not a
+	 * declared default: null and an empty array against a cleared string stay unconfirmed, with no
+	 * confirm read.
+	 *
+	 * @return iterable<string,array{0:mixed}>
+	 */
+	public function data_unequal_mapped_values(): iterable {
+		yield 'null' => array( null );
+		yield 'empty array' => array( array() );
+	}
+
+	/**
+	 * One unequal mapped value.
+	 *
+	 * @dataProvider data_unequal_mapped_values
+	 * @param mixed $mapped The mapped value.
+	 */
+	public function test_an_unequal_mapped_value_is_not_a_declared_default( $mapped ): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_deleting_filter( 'post' );
+
+		$result  = null;
+		$confirm = $this->count_matching_queries(
+			$this->confirm_read_needle( 'post' ),
+			function () use ( $post_id, $mapped ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => $mapped ) );
+			},
+			$result
+		);
+
+		$this->assertSame( 'unconfirmed', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 0, $confirm );
+	}
+
+	/**
+	 * A mapped int 0 equals a written '0' under the comparison rule, and the result carries the
+	 * mapped value.
+	 */
+	public function test_a_mapped_int_zero_matches_a_written_string_zero(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, '1' );
+		$this->attach_deleting_filter( 'post' );
+
+		$result = $this->group_of_one( $post_id, '0', array( self::KEY => 0 ) );
+
+		$this->assertSame( 'written', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 0, $result['keys'][ self::KEY ]['value'] );
+	}
+
+	/**
+	 * A member whose key matches a row stored under another spelling is refused, status only, even
+	 * when it has a declared default.
+	 */
+	public function test_an_aliased_member_with_a_declared_default_is_refused_status_only(): void {
+		$post_id = self::factory()->post->create();
+		add_metadata( 'post', $post_id, 'Foo', 'old' );
+
+		$result = aafm_meta_set_group( 'post', $post_id, array( 'foo' => '' ), 'post', array(), array( 'foo' => '' ) );
+
+		$this->assertSame( array( 'status' => 'refused' ), $result['keys']['foo'] );
+	}
+
+	/**
+	 * A declared clear over two rows that the site removes reports the baseline row count.
+	 */
+	public function test_a_declared_clear_over_two_rows_reports_the_row_count(): void {
+		$post_id = self::factory()->post->create();
+		add_post_meta( $post_id, self::KEY, 'old' );
+		add_post_meta( $post_id, self::KEY, 'old2' );
+		$this->attach_absent_default_filter( 'post', array( self::KEY => '' ) );
+
+		$result = $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+
+		$this->assertSame( 'written', $result['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 2, $result['keys'][ self::KEY ]['rows'] );
+		$this->assertSame( 'old', $result['keys'][ self::KEY ]['previous'] );
+	}
+
+	/**
+	 * The confirm read runs once for a declared clear and never for a write with no map.
+	 */
+	public function test_the_confirm_read_runs_only_for_a_declared_clear(): void {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$this->attach_absent_default_filter( 'post', array( self::KEY => '' ) );
+
+		$declared = null;
+		$once     = $this->count_matching_queries(
+			$this->confirm_read_needle( 'post' ),
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, '', array( self::KEY => '' ) );
+			},
+			$declared
+		);
+
+		update_post_meta( $post_id, self::KEY, 'old' );
+		$plain = null;
+		$none  = $this->count_matching_queries(
+			$this->confirm_read_needle( 'post' ),
+			function () use ( $post_id ) {
+				return $this->group_of_one( $post_id, 'new', array() );
+			},
+			$plain
+		);
+
+		$this->assertSame( 'written', $declared['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 1, $once );
+		$this->assertSame( 'written', $plain['keys'][ self::KEY ]['status'] );
+		$this->assertSame( 0, $none );
+	}
+
+	/**
+	 * S19 (a) to (c): every write, delete and group write leaves nothing cached for the object,
+	 * whether its read-back load failed or not.
+	 *
+	 * @return iterable<string,array{0:string,1:string,2:?string}>
+	 */
+	public function data_s19_cases(): iterable {
+		foreach ( array( 'a', 'b', 'c' ) as $case ) {
+			$types = 'c' === $case ? array( 'post' ) : array( 'post', 'term', 'user' );
+			foreach ( $types as $type ) {
+				foreach ( array( 'no-flush', 'real-error', null ) as $shape ) {
+					yield 'S19' . $case . '/' . $type . '/' . ( $shape ?? 'healthy' ) => array( $case, $type, $shape );
+				}
+			}
+		}
+	}
+
+	/**
+	 * One S19 case.
+	 *
+	 * @dataProvider data_s19_cases
+	 * @param string      $letter Case letter.
+	 * @param string      $type   Object type.
+	 * @param string|null $shape  Fault shape, or null for a healthy run.
+	 */
+	public function test_s19_a_read_back_leaves_nothing_cached( string $letter, string $type, ?string $shape ): void {
+		$id = $this->make_object( $type );
+		$this->write_raw( $type, $id, 'old' );
+		$subtype = 'user' === $type ? '' : ( 'post' === $type ? 'post' : 'category' );
+
+		$fault   = null;
+		$actions = 'b' === $letter ? array( "deleted_{$type}_meta" ) : array( "added_{$type}_meta", "updated_{$type}_meta", "deleted_{$type}_meta" );
+		$arm     = function () use ( &$fault, $shape, $type ) {
+			if ( null === $shape || null !== $fault ) {
+				return;
+			}
+			$fault = $this->add_fault( $shape, $this->core_load_needle( $type ), 1 );
+		};
+		foreach ( $actions as $action ) {
+			add_action( $action, $arm, 10, 0 );
+		}
+
+		$result = $this->run_quietly(
+			function () use ( $letter, $type, $id, $subtype ) {
+				if ( 'a' === $letter ) {
+					return aafm_meta_set( $type, $id, self::KEY, 'new', $subtype, false );
+				}
+				if ( 'b' === $letter ) {
+					return aafm_meta_delete( $type, $id, self::KEY );
+				}
+				return aafm_meta_set_group( $type, $id, array( self::KEY => 'new' ), $subtype );
+			}
+		);
+		foreach ( $actions as $action ) {
+			remove_action( $action, $arm, 10 );
+		}
+		if ( null !== $fault ) {
+			remove_filter( 'query', $fault );
+		}
+
+		$status = 'c' === $letter ? $result['keys'][ self::KEY ] : $result;
+		if ( 'b' === $letter ) {
+			$expected = 'deleted';
+			$exists   = false;
+		} elseif ( null === $shape ) {
+			$expected = 'written';
+			$exists   = true;
+		} else {
+			$expected = 'unconfirmed';
+			$exists   = false;
+		}
+		$label = "case=$letter type=$type shape=" . ( $shape ?? 'healthy' );
+		$this->assertSame( null === $shape ? 0 : 1, QueryFaultInjector::fired_count(), $label );
+		$this->assertSame( $expected, $status['status'], $label );
+		$this->assertSame( $exists, $status['observed']['exists'], $label );
+		$this->assertFalse( wp_cache_get( $id, $type . '_meta' ), $label );
+	}
+
+	/**
+	 * S19(d) is S18(f3); S19(e): a write refused because its UPDATE failed leaves nothing cached
+	 * either, although it made no read-back.
+	 *
+	 * @return iterable<string,array{0:string,1:string,2:string}>
+	 */
+	public function data_s19e_cases(): iterable {
+		foreach ( array( 'no-flush', 'real-error' ) as $shape ) {
+			foreach ( array( 'post', 'term', 'user' ) as $type ) {
+				yield "S19e1/$type/$shape" => array( 'e1', $type, $shape );
+			}
+			yield "S19e2/post/$shape" => array( 'e2', 'post', $shape );
+		}
+	}
+
+	/**
+	 * One S19(e) case.
+	 *
+	 * @dataProvider data_s19e_cases
+	 * @param string $letter 'e1' (single writer) or 'e2' (one-member group).
+	 * @param string $type   Object type.
+	 * @param string $shape  Fault shape.
+	 */
+	public function test_s19e_a_refused_write_leaves_nothing_cached( string $letter, string $type, string $shape ): void {
+		$id = $this->make_object( $type );
+		$this->write_raw( $type, $id, 'old' );
+		$subtype = 'user' === $type ? '' : ( 'post' === $type ? 'post' : 'category' );
+
+		$fault  = $this->add_fault( $shape, array( 'UPDATE ', $this->meta_table( $type ) ), 1 );
+		$result = $this->run_quietly(
+			static function () use ( $letter, $type, $id, $subtype ) {
+				if ( 'e1' === $letter ) {
+					return aafm_meta_set( $type, $id, self::KEY, 'new', $subtype, false );
+				}
+				return aafm_meta_set_group( $type, $id, array( self::KEY => 'new' ), $subtype );
+			}
+		);
+		remove_filter( 'query', $fault );
+
+		$label = "case=$letter type=$type shape=$shape";
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), $label );
+		if ( 'e2' === $letter ) {
+			$this->assertSame( 'refused', $result['status'], $label );
+			$result = $result['keys'][ self::KEY ];
+		}
+		$this->assertSame( 'refused', $result['status'], $label );
+		$this->assertFalse( wp_cache_get( $id, $type . '_meta' ), $label );
+	}
+}

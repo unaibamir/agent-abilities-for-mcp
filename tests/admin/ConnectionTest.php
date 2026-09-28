@@ -770,4 +770,153 @@ final class ConnectionTest extends TestCase {
 			)
 		);
 	}
+
+	/**
+	 * Veto every write of one user meta key, as a site filter can.
+	 *
+	 * @param string $key Meta key to veto.
+	 * @return callable The filter, for removal.
+	 */
+	private function veto_user_meta_write( string $key ): callable {
+		$veto = static function ( $check, $object_id, $meta_key ) use ( $key ) {
+			return $key === $meta_key ? false : $check;
+		};
+		add_filter( 'update_user_metadata', $veto, 10, 3 );
+		return $veto;
+	}
+
+	/**
+	 * Run the create-agent-user AJAX handler as a capable admin and return its decoded JSON body.
+	 *
+	 * @param string $login Login to create.
+	 * @return array<string,mixed>
+	 */
+	private function create_agent_user_over_ajax( string $login ): array {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$_POST['login']    = $login;
+
+		ob_start();
+		try {
+			aafm_ajax_create_agent_user();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		} finally {
+			$body = (string) ob_get_clean();
+			remove_all_filters( 'wp_die_ajax_handler' );
+			remove_all_filters( 'wp_die_handler' );
+			remove_filter( 'wp_doing_ajax', '__return_true' );
+			unset( $_POST['nonce'], $_POST['login'], $_REQUEST['nonce'] );
+		}
+
+		$decoded = json_decode( $body, true );
+		return is_array( $decoded ) ? $decoded : array();
+	}
+
+	/**
+	 * A vetoed marker write on a new agent user is reported as a failure over AJAX, never as a
+	 * created user, and the account the insert made is kept.
+	 */
+	public function test_a_vetoed_marker_write_is_reported_not_certified(): void {
+		$this->acting_as( 'administrator' );
+		$veto = $this->veto_user_meta_write( aafm_agent_user_marker_meta_key() );
+		try {
+			$body = $this->create_agent_user_over_ajax( 'vetoed-agent' );
+		} finally {
+			remove_filter( 'update_user_metadata', $veto, 10 );
+		}
+
+		$this->assertFalse( $body['success'] ?? null );
+		$this->assertSame( 'The request could not be completed.', $body['data']['message'] ?? null );
+		$this->assertArrayNotHasKey( 'user_id', (array) ( $body['data'] ?? array() ) );
+		$user_id = (int) username_exists( 'vetoed-agent' );
+		$this->assertGreaterThan( 0, $user_id, 'The inserted account is kept.' );
+		$this->assertSame( '', (string) get_user_meta( $user_id, aafm_agent_user_marker_meta_key(), true ) );
+	}
+
+	/**
+	 * A vetoed creation stamp fails the create the same way.
+	 */
+	public function test_a_vetoed_creation_stamp_is_reported_not_certified(): void {
+		$this->acting_as( 'administrator' );
+		$veto = $this->veto_user_meta_write( 'aafm_agent_user_created' );
+		try {
+			$result = aafm_create_agent_user( 'stampless-agent' );
+		} finally {
+			remove_filter( 'update_user_metadata', $veto, 10 );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_error', $result->get_error_code() );
+		$this->assertSame( 'The request could not be completed.', $result->get_error_message() );
+	}
+
+	/**
+	 * A healthy create still answers success over AJAX with the new user's id and login.
+	 */
+	public function test_a_healthy_create_answers_success_over_ajax(): void {
+		$this->acting_as( 'administrator' );
+
+		$body = $this->create_agent_user_over_ajax( 'healthy-agent' );
+
+		$this->assertTrue( $body['success'] ?? null );
+		$this->assertSame( 'healthy-agent', $body['data']['login'] ?? null );
+		$this->assertSame( (int) username_exists( 'healthy-agent' ), (int) ( $body['data']['user_id'] ?? 0 ) );
+		$this->assertSame( '1', (string) get_user_meta( (int) $body['data']['user_id'], aafm_agent_user_marker_meta_key(), true ) );
+	}
+
+	/**
+	 * The self-heal branch still answers "already exists" when its marker write is vetoed.
+	 */
+	public function test_self_heal_with_a_vetoed_marker_write_still_answers_user_exists(): void {
+		$this->acting_as( 'administrator' );
+		$existing = self::factory()->user->create(
+			array(
+				'role'       => 'subscriber',
+				'user_login' => 'veto-heal-agent',
+			)
+		);
+		$veto     = $this->veto_user_meta_write( aafm_agent_user_marker_meta_key() );
+		try {
+			$result = aafm_create_agent_user( 'veto-heal-agent' );
+		} finally {
+			remove_filter( 'update_user_metadata', $veto, 10 );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_user_exists', $result->get_error_code() );
+		$this->assertSame( '', (string) get_user_meta( $existing, aafm_agent_user_marker_meta_key(), true ) );
+	}
+
+	/**
+	 * The backfill keeps its run-once flag when a marker write is vetoed, as it did before.
+	 */
+	public function test_backfill_sets_its_flag_when_the_marker_write_is_vetoed(): void {
+		$uid = self::factory()->user->create(
+			array(
+				'role'       => 'subscriber',
+				'user_login' => 'mcp-agent',
+			)
+		);
+		WP_Application_Passwords::create_new_application_password( $uid, array( 'name' => 'agent' ) );
+		delete_option( 'aafm_agent_user_marker_backfilled' );
+
+		$veto = $this->veto_user_meta_write( aafm_agent_user_marker_meta_key() );
+		try {
+			aafm_backfill_agent_user_marker();
+		} finally {
+			remove_filter( 'update_user_metadata', $veto, 10 );
+		}
+
+		$this->assertSame( '', (string) get_user_meta( $uid, aafm_agent_user_marker_meta_key(), true ) );
+		$this->assertSame( '1', get_option( 'aafm_agent_user_marker_backfilled' ) );
+	}
 }

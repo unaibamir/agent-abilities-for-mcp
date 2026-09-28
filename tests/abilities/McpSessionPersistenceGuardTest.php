@@ -239,6 +239,21 @@ final class McpSessionPersistenceGuardTest extends TestCase {
 	}
 
 	/**
+	 * Core dispatches a route with one trailing newline to the MCP handler, so an unpersisted session
+	 * on that spelling is failed exactly as on the plain route.
+	 */
+	public function test_an_unpersisted_session_on_the_newline_route_is_failed_too(): void {
+		$this->login_user();
+		$request = $this->mcp_request();
+		$request->set_route( aafm_mcp_rest_route() . "\n" );
+
+		$out = $this->guard( $this->session_response( self::SESSION_ID, 7 ), $request );
+
+		$this->assertSame( '', $this->header_value( $out ) );
+		$this->assertSame( 500, $out->get_status() );
+	}
+
+	/**
 	 * (c) A response with no Mcp-Session-Id header (every non-initialize call, and errors) is left
 	 * untouched - there is no session to verify.
 	 */

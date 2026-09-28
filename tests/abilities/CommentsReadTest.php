@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class CommentsReadTest extends TestCase {
@@ -568,5 +569,176 @@ final class CommentsReadTest extends TestCase {
 
 		$this->assertSame( $before['comments'], $after['comments'], 'The caller\'s own visible results must be unaffected by the insertion.' );
 		$this->assertTrue( $after['truncated'], 'D is still readable and still beyond the window - truncated must stay true, not flip false because of where a hidden comment landed.' );
+	}
+
+	/**
+	 * A readability check that could not decide is not proof the comment is hidden, so the probe
+	 * behind `truncated` counts it as possibly readable. Comment B sits past the scan cap on a public
+	 * post whose load fails inside the check; the list still omits nothing it never scanned, and
+	 * `truncated` is true because B may be readable.
+	 */
+	public function test_get_comments_sitewide_probe_counts_an_undecided_readability_check_as_readable(): void {
+		global $wpdb;
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 1 );
+
+		$post_a = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_b = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post_b,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-01-01 00:00:00',
+				'comment_date_gmt' => '2020-01-01 00:00:00',
+			)
+		);
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post_a,
+				'comment_approved' => '1',
+				'comment_date'     => '2021-01-01 00:00:00',
+				'comment_date_gmt' => '2021-01-01 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		wp_cache_delete( $post_b, 'posts' );
+		QueryFaultInjector::reset_fired_count();
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->posts, "WHERE ID = {$post_b}" ),
+			static fn() => wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) ),
+			1
+		);
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 1, $out['total'] );
+		$this->assertTrue( $out['truncated'] );
+	}
+
+	/**
+	 * P-8 healthy pin: a comment whose post is certainly gone is unreadable, not undecided, so the
+	 * probe leaves `truncated` false.
+	 */
+	public function test_get_comments_sitewide_probe_keeps_truncated_false_for_an_orphan_comment(): void {
+		global $wpdb;
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 1 );
+
+		$post_a = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$gone   = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $gone,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-01-01 00:00:00',
+				'comment_date_gmt' => '2020-01-01 00:00:00',
+			)
+		);
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post_a,
+				'comment_approved' => '1',
+				'comment_date'     => '2021-01-01 00:00:00',
+				'comment_date_gmt' => '2021-01-01 00:00:00',
+			)
+		);
+		// Remove the post row only, so its comment stays behind as an orphan.
+		$wpdb->delete( $wpdb->posts, array( 'ID' => $gone ) );
+		clean_post_cache( $gone );
+
+		$this->acting_as( 'subscriber' );
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( 1, $out['total'] );
+		$this->assertFalse( $out['truncated'] );
+	}
+
+	/**
+	 * P-8 healthy pin: a comment on a revision whose parent is certainly gone is unreadable (core
+	 * denies a revision without its parent), not undecided, so `truncated` stays false.
+	 */
+	public function test_get_comments_sitewide_probe_keeps_truncated_false_for_a_comment_on_an_orphaned_revision(): void {
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 1 );
+
+		$post_a   = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$revision = self::factory()->post->create(
+			array(
+				'post_type'   => 'revision',
+				'post_status' => 'inherit',
+				'post_parent' => 999999,
+			)
+		);
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $revision,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-01-01 00:00:00',
+				'comment_date_gmt' => '2020-01-01 00:00:00',
+			)
+		);
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post_a,
+				'comment_approved' => '1',
+				'comment_date'     => '2021-01-01 00:00:00',
+				'comment_date_gmt' => '2021-01-01 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) );
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( 1, $out['total'] );
+		$this->assertFalse( $out['truncated'] );
+	}
+
+	/**
+	 * The list half of the undecided-check rule: a comment whose readability check could not decide
+	 * stays out of the list. Comment B sits inside the scanned set on a private post the caller
+	 * cannot read, and its post load fails inside the check, so only the list's own filter keeps
+	 * it out; the probe never runs, because the scan covers every approved comment.
+	 */
+	public function test_get_comments_sitewide_list_omits_a_comment_whose_readability_check_could_not_decide(): void {
+		global $wpdb;
+		add_filter( 'aafm_comments_sitewide_scan_cap', static fn() => 2 );
+
+		$post_a = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_b = self::factory()->post->create( array( 'post_status' => 'private' ) );
+		self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post_b,
+				'comment_approved' => '1',
+				'comment_date'     => '2020-01-01 00:00:00',
+				'comment_date_gmt' => '2020-01-01 00:00:00',
+			)
+		);
+		$comment_a = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post_a,
+				'comment_approved' => '1',
+				'comment_date'     => '2021-01-01 00:00:00',
+				'comment_date_gmt' => '2021-01-01 00:00:00',
+			)
+		);
+
+		$this->acting_as( 'subscriber' );
+		wp_cache_delete( $post_b, 'posts' );
+		QueryFaultInjector::reset_fired_count();
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->posts, "WHERE ID = {$post_b}" ),
+			static fn() => wp_get_ability( 'aafm/get-comments' )->execute( array( 'per_page' => 50 ) ),
+			1
+		);
+
+		remove_all_filters( 'aafm_comments_sitewide_scan_cap' );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( array( $comment_a ), array_map( static fn( $comment ): int => (int) $comment['id'], $out['comments'] ) );
+		$this->assertSame( 1, $out['total'] );
+		$this->assertFalse( $out['truncated'] );
 	}
 }

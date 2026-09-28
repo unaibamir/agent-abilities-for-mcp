@@ -16,6 +16,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 
@@ -337,5 +338,874 @@ final class SiteSettingsTest extends TestCase {
 
 		$this->assertIsArray( $res );
 		$this->assertSame( 'Europe/Berlin', get_option( 'timezone_string' ) );
+	}
+
+	/**
+	 * Write-outcome logging; every case attaches the observer itself.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function write_outcome_rows(): array {
+		global $wpdb;
+		$table = aafm_activity_log_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (array) $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i WHERE event_type = %s ORDER BY id', $table, 'write_outcome' ), ARRAY_A );
+	}
+
+	public function test_update_site_settings_logs_one_written_row_per_key(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'       => 'New Name',
+					'posts_per_page' => 7,
+				),
+			)
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertIsArray( $res );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 2, $rows, 'one row per submitted key.' );
+		foreach ( $rows as $row ) {
+			$this->assertSame( 'written', json_decode( (string) $row['detail'], true )['status'] );
+		}
+	}
+
+	public function test_resubmitting_posts_per_page_as_the_same_int_logs_unchanged_and_the_response_is_unchanged(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'posts_per_page', 10 );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'posts_per_page' => 10 ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertIsArray( $res, 'the response body must stay byte-identical to 1.7.5.' );
+		$this->assertSame( '10', $res['settings']['posts_per_page'], 'get_option() reports the stored form, same as 1.7.5.' );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'unchanged', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	public function test_resubmitting_bobs_store_logs_unchanged_and_the_response_is_unchanged(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', "Bob's Store" );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => "Bob's Store" ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertIsArray( $res, 'the response body must stay byte-identical to 1.7.5.' );
+		$this->assertSame( 'Bob&#039;s Store', $res['settings']['blogname'] );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'unchanged', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	public function test_a_pre_update_option_blogname_filter_that_keeps_the_old_value_logs_refused(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		add_filter(
+			'pre_update_option_blogname',
+			static function () {
+				return 'Old Name';
+			}
+		);
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+		remove_all_filters( 'pre_update_option_blogname' );
+
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'refused', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	public function test_a_faulted_read_after_a_false_update_option_logs_unconfirmed(): void {
+		update_option( 'blogname', 'Old Name' );
+		add_filter(
+			'pre_update_option_blogname',
+			static function () {
+				return 'Old Name';
+			}
+		);
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		// Direct at the execute callback (not through wp_get_ability()->execute()), so the fault
+		// targets only the option-cache read this case is about, not every $wpdb->options touch a
+		// full permission-checked dispatch would also make.
+		global $wpdb;
+		$suppressed = $wpdb->suppress_errors( true );
+		ob_start();
+		QueryFaultInjector::reset_fired_count();
+		QueryFaultInjector::fail_nth_query(
+			array( $wpdb->options, "option_name = 'blogname'" ),
+			2,
+			static function () {
+				return aafm_exec_update_site_settings( array( 'settings' => array( 'blogname' => 'New Name' ) ) );
+			}
+		);
+		ob_end_clean();
+		$wpdb->suppress_errors( $suppressed );
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+		remove_all_filters( 'pre_update_option_blogname' );
+
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'unconfirmed', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	/**
+	 * Point an autoloaded option's cache view at $value while its row keeps what it holds, the state
+	 * a stale persistent object cache leaves behind.
+	 *
+	 * @param string $option Autoloaded option name.
+	 * @param string $value  The stale cached value.
+	 */
+	private function plant_stale_alloptions( string $option, string $value ): void {
+		wp_cache_delete( $option, 'options' );
+		$all            = wp_load_alloptions();
+		$all[ $option ] = $value;
+		wp_cache_set( 'alloptions', $all, 'options' );
+	}
+
+	/**
+	 * The raw row of an option, read past every cache and filter.
+	 *
+	 * @param string $option Option name.
+	 */
+	private function option_row( string $option ): ?string {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return $wpdb->get_var( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, $option ) );
+	}
+
+	/**
+	 * A filter veto with agreeing cache and row views keeps 1.7.5's success body, the WPML shape:
+	 * the write is refused by the filter, the row keeps the old name, the log says `refused`, and
+	 * the response reports what the option layer answers (here a translation).
+	 */
+	public function test_a_filter_veto_with_agreeing_views_keeps_the_success_body(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		add_filter( 'pre_update_option_blogname', static fn() => 'Old Name' );
+		add_filter( 'option_blogname', static fn() => 'Translated Name' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+		remove_all_filters( 'pre_update_option_blogname' );
+		remove_all_filters( 'option_blogname' );
+
+		$this->assertSame( array( 'settings' => array( 'blogname' => 'Translated Name' ) ), $res );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'refused', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	/**
+	 * A cache view holding the requested value while the row holds another would make
+	 * update_option() skip the write and report success. The request refuses before any write,
+	 * and the planted cache entry is left as it was.
+	 */
+	public function test_a_stale_cached_site_setting_returns_the_generic_error_and_writes_nothing(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		$this->plant_stale_alloptions( 'blogname', 'New Name' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'The request could not be completed.', $res->get_error_message() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+		$this->assertSame( 'New Name', wp_cache_get( 'alloptions', 'options' )['blogname'] );
+	}
+
+	/**
+	 * A stale second key refuses the whole request before the first key is written.
+	 */
+	public function test_a_stale_second_key_refuses_the_whole_request_before_any_write(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		update_option( 'blogdescription', 'Old tagline' );
+		$this->plant_stale_alloptions( 'blogdescription', 'New tagline' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'        => 'New Name',
+					'blogdescription' => 'New tagline',
+				),
+			)
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertSame( 'Old tagline', $this->option_row( 'blogdescription' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * A row that cannot be read before the write refuses the request: nothing is written and
+	 * nothing is logged. The needle names `SELECT option_value`, so core's own `SELECT autoload`
+	 * inside update_option() is not the query it breaks.
+	 */
+	public function test_a_failed_views_read_refuses_the_request_before_any_write(): void {
+		global $wpdb;
+		update_option( 'blogname', 'Old Name' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->options, 'SELECT option_value', "option_name = 'blogname'" ),
+			static fn() => aafm_exec_update_site_settings( array( 'settings' => array( 'blogname' => 'New Name' ) ) ),
+			1
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * P-8 healthy pin: an empty tagline row and its empty cache agree, so the write lands.
+	 */
+	public function test_an_empty_tagline_row_agrees_with_its_cache_and_the_write_lands(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogdescription', '' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogdescription' => 'A tagline' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'A tagline' ) ), $res );
+		$this->assertSame( 'A tagline', $this->option_row( 'blogdescription' ) );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	/**
+	 * The failed-read twin on a key with no cache entry at all, with every read of the row failing:
+	 * core's own read before the check leaves only a notoptions entry, so the check finds nothing
+	 * cached to disagree with, and only the failed read itself can refuse the request.
+	 */
+	public function test_a_failed_views_read_of_an_uncached_key_refuses_the_request_before_any_write(): void {
+		global $wpdb;
+		update_option( 'blogname', 'Old Name' );
+		wp_cache_delete( 'blogname', 'options' );
+		$all = wp_load_alloptions();
+		unset( $all['blogname'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->options, 'SELECT option_value', "option_name = 'blogname'" ),
+			static fn() => aafm_exec_update_site_settings( array( 'settings' => array( 'blogname' => 'New Name' ) ) ),
+			0
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( 2, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * The per-option cache entry agrees with the row while the alloptions entry holds the
+	 * requested value. get_option(), and so update_option()'s old-value compare, answers from
+	 * alloptions first, so the write would be skipped and reported as done. The request refuses
+	 * before any write.
+	 */
+	public function test_a_stale_alloptions_entry_beside_an_agreeing_per_option_entry_refuses_the_request(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		$this->plant_stale_alloptions( 'blogname', 'New Name' );
+		wp_cache_set( 'blogname', 'Old Name', 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * A key with no alloptions entry and no notoptions entry is answered from its per-option cache
+	 * entry, by get_option() and by update_option()'s old-value compare alike. A stale per-option
+	 * entry holding the requested value refuses the request before any write.
+	 */
+	public function test_a_stale_per_option_entry_of_a_key_missing_from_alloptions_refuses_the_request(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'Old Name' );
+		$all = wp_load_alloptions();
+		unset( $all['blogname'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		wp_cache_set( 'blogname', 'New Name', 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'Old Name', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * An empty alloptions entry over a missing row: get_option() answers '', so update_option() runs
+	 * an UPDATE that matches no row and the response would echo the stale ''. A cached value over no
+	 * row refuses the request before any write.
+	 */
+	public function test_an_empty_alloptions_entry_over_a_missing_row_refuses_the_request(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		delete_option( 'blogname' );
+		$this->plant_stale_alloptions( 'blogname', '' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogname' => 'New Name' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertNull( $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * A notoptions entry over an existing row makes get_option() answer the registered default (10
+	 * for posts_per_page), so a request for 10 is skipped by update_option()'s same-value check while
+	 * the row keeps 5. A notoptions entry over a row refuses the request before any write.
+	 */
+	public function test_a_notoptions_entry_over_an_existing_row_refuses_the_request(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'posts_per_page', 5 );
+		wp_cache_delete( 'posts_per_page', 'options' );
+		$all = wp_load_alloptions();
+		unset( $all['posts_per_page'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$not                   = (array) wp_cache_get( 'notoptions', 'options' );
+		$not['posts_per_page'] = true;
+		wp_cache_set( 'notoptions', $not, 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'posts_per_page' => 10 ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( '5', $this->option_row( 'posts_per_page' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * P-8 healthy pin: with no row and nothing cached, the dry-run's own read leaves a notoptions
+	 * entry, which agrees with the missing row, so the write lands as it did before the check.
+	 */
+	public function test_a_missing_row_with_nothing_cached_still_takes_the_write(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		delete_option( 'blogdescription' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogdescription' => 'A tagline' ) )
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'A tagline' ) ), $res );
+		$this->assertSame( 'A tagline', $this->option_row( 'blogdescription' ) );
+		$rows = $this->write_outcome_rows();
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'written', json_decode( (string) $rows[0]['detail'], true )['status'] );
+	}
+
+	/**
+	 * Run $callback with every forced wp_cache_get() missing while unforced reads still answer from
+	 * the request's copy: the state a Redis drop-in is in after a Redis error, when a forced get
+	 * returns false and the internal copy get_option() reads is still loaded. The real cache object
+	 * is put back afterwards.
+	 *
+	 * @param callable $callback Code to run.
+	 * @return mixed $callback()'s return value.
+	 */
+	private function with_forced_cache_reads_missing( callable $callback ) {
+		global $wp_object_cache;
+		$real = $wp_object_cache;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double, restored in finally.
+		$wp_object_cache = new class( $real ) {
+			/**
+			 * The cache every call but a forced get goes to.
+			 *
+			 * @var object
+			 */
+			private $real;
+
+			/**
+			 * Wrap the real cache object.
+			 *
+			 * @param object $real The real cache object.
+			 */
+			public function __construct( $real ) {
+				$this->real = $real;
+			}
+
+			/**
+			 * A forced get misses; an unforced one answers from the real cache.
+			 *
+			 * @param int|string $key   Key.
+			 * @param string     $group Group.
+			 * @param bool       $force Whether the read is forced.
+			 * @param bool|null  $found Whether the key was found.
+			 * @return mixed
+			 */
+			public function get( $key, $group = 'default', $force = false, &$found = null ) {
+				if ( $force ) {
+					$found = false;
+					return false;
+				}
+				return $this->real->get( $key, $group, false, $found );
+			}
+
+			/**
+			 * Forward every other cache call to the real cache object.
+			 *
+			 * @param string       $name Method.
+			 * @param array<mixed> $args Arguments.
+			 * @return mixed
+			 */
+			public function __call( $name, $args ) {
+				return $this->real->$name( ...$args );
+			}
+		};
+		try {
+			return $callback();
+		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the real cache object.
+			$wp_object_cache = $real;
+		}
+	}
+
+	/**
+	 * Ledger b5c1r3-security-1: the row holds 'New' while the request's own alloptions copy still says 'Old'
+	 * and every forced read misses (a Redis drop-in after a Redis error). update_option() decides from
+	 * that runtime copy and would skip a request for 'Old' as a no-op, so the check reads the runtime
+	 * copies too and refuses before any write.
+	 */
+	public function test_a_stale_runtime_alloptions_copy_refuses_when_the_forced_read_misses(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogname', 'New' );
+		$this->plant_stale_alloptions( 'blogname', 'Old' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = $this->with_forced_cache_reads_missing(
+			static function () {
+				return wp_get_ability( 'aafm/update-site-settings' )->execute(
+					array( 'settings' => array( 'blogname' => 'Old' ) )
+				);
+			}
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'New', $this->option_row( 'blogname' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * Row 23 (b5c2r2-table-1): the request's own notoptions copy holds posts_per_page over a row of 5
+	 * while every forced read misses. get_option() answers the registered default 10 from that copy,
+	 * so a request for 10 would be skipped with the row still at 5. The runtime notoptions read
+	 * refuses it.
+	 */
+	public function test_a_stale_runtime_notoptions_entry_refuses_when_the_forced_read_misses(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'posts_per_page', 5 );
+		wp_cache_delete( 'posts_per_page', 'options' );
+		$all = wp_load_alloptions();
+		unset( $all['posts_per_page'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$not                   = (array) wp_cache_get( 'notoptions', 'options' );
+		$not['posts_per_page'] = true;
+		wp_cache_set( 'notoptions', $not, 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		$res = $this->with_forced_cache_reads_missing(
+			static function () {
+				return wp_get_ability( 'aafm/update-site-settings' )->execute(
+					array( 'settings' => array( 'posts_per_page' => 10 ) )
+				);
+			}
+		);
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( '5', $this->option_row( 'posts_per_page' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
+	}
+
+	/**
+	 * Ledger b5c1r3-codex-1, healthy pin: core's own update_option( $name, false ) stores '' in the row and
+	 * caches false, so a cached false over a stored '' agrees and the write lands (262 s12).
+	 */
+	public function test_a_cached_false_over_a_stored_empty_tagline_still_takes_the_write(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		update_option( 'blogdescription', '' );
+		wp_cache_delete( 'blogdescription', 'options' );
+		$all                    = wp_load_alloptions();
+		$all['blogdescription'] = false;
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$this->assertSame(
+			array(
+				'ok'    => true,
+				'found' => true,
+				'value' => '',
+			),
+			aafm_option_row( 'blogdescription' ),
+			'Guard: the row holds an empty string.'
+		);
+		$this->assertFalse( get_option( 'blogdescription' ), 'Guard: the cache answers false.' );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array( 'settings' => array( 'blogdescription' => 'Shop' ) )
+		);
+
+		$this->assertSame( array( 'settings' => array( 'blogdescription' => 'Shop' ) ), $res );
+		$this->assertSame( 'Shop', $this->option_row( 'blogdescription' ) );
+	}
+
+	/**
+	 * Plant one U-S table state for the probe option: the row (null for none) and the runtime cache
+	 * copies. 'A' is the alloptions entry, 'P' the per-option entry, 'N' a notoptions entry; each
+	 * holds the raw value a cache would hold.
+	 *
+	 * @param string       $option Probe option name.
+	 * @param mixed        $row    Stored value, or null for no row.
+	 * @param array<mixed> $cache  Cache copies to plant.
+	 */
+	private function plant_table_state( string $option, $row, array $cache ): void {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- planting the raw row under test.
+		$wpdb->delete( $wpdb->options, array( 'option_name' => $option ) );
+		if ( null !== $row ) {
+			$wpdb->insert(
+				$wpdb->options,
+				array(
+					'option_name'  => $option,
+					'option_value' => maybe_serialize( $row ),
+					'autoload'     => 'no',
+				)
+			);
+		}
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+
+		wp_cache_delete( $option, 'options' );
+		$all = wp_load_alloptions();
+		unset( $all[ $option ] );
+		if ( array_key_exists( 'A', $cache ) ) {
+			$all[ $option ] = $cache['A'];
+		}
+		wp_cache_set( 'alloptions', $all, 'options' );
+		$not = wp_cache_get( 'notoptions', 'options' );
+		$not = is_array( $not ) ? $not : array();
+		unset( $not[ $option ] );
+		if ( ! empty( $cache['N'] ) ) {
+			$not[ $option ] = true;
+		}
+		wp_cache_set( 'notoptions', $not, 'options' );
+		if ( array_key_exists( 'P', $cache ) ) {
+			wp_cache_set( $option, $cache['P'], 'options' );
+		}
+	}
+
+	/**
+	 * The three runtime cache entries core answers an option from, as bytes.
+	 *
+	 * @param string $option Option name.
+	 */
+	private function option_cache_bytes( string $option ): string {
+		$found  = false;
+		$single = wp_cache_get( $option, 'options', false, $found );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a byte snapshot for comparison, never stored.
+		return serialize( array( $found, $single, wp_cache_get( 'alloptions', 'options' ), wp_cache_get( 'notoptions', 'options' ) ) );
+	}
+
+	/**
+	 * The U-S fault-state table (design part 1, 1.3), one row per state, keyed by its table id.
+	 * 'row' is the stored value (null: no row); 'cache' the planted copies; 'forced_miss' runs the
+	 * check with every forced cache read missing; 'fault' fails the row read.
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	public function cache_agreement_table(): array {
+		$found = static fn( $value ): array => array(
+			'ok'    => true,
+			'found' => true,
+			'value' => $value,
+		);
+		$none  = array(
+			'ok'    => true,
+			'found' => false,
+			'value' => false,
+		);
+		$v     = array( 'a' => 'Row' );
+		$x     = array( 'a' => 'Stale' );
+		// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the bytes core caches for an array option.
+		return array(
+			'S1'   => array( 'Row', array(), false, null, $found( 'Row' ) ),
+			'S2'   => array( 'Row', array( 'A' => 'Row' ), false, null, $found( 'Row' ) ),
+			'S3'   => array( 'Row', array( 'A' => 'Stale' ), false, null, null ),
+			'S4'   => array(
+				'Row',
+				array(
+					'A' => 'Row',
+					'P' => 'Stale',
+				),
+				false,
+				null,
+				null,
+			),
+			'S5'   => array(
+				'Row',
+				array(
+					'A' => 'Stale',
+					'P' => 'Row',
+				),
+				false,
+				null,
+				null,
+			),
+			'S6'   => array( 'Row', array( 'P' => 'Stale' ), false, null, null ),
+			'S7'   => array( 'Row', array( 'N' => true ), false, null, null ),
+			'S8'   => array(
+				'Row',
+				array(
+					'N' => true,
+					'P' => 'Row',
+				),
+				false,
+				null,
+				null,
+			),
+			'S9'   => array(
+				'Row',
+				array(
+					'A' => 'Row',
+					'N' => true,
+				),
+				false,
+				null,
+				null,
+			),
+			'S10'  => array( '', array( 'A' => '' ), false, null, $found( '' ) ),
+			'S11'  => array( '', array(), false, null, $found( '' ) ),
+			'S12'  => array( '', array( 'A' => 'Stale' ), false, null, null ),
+			'S13'  => array( '', array( 'N' => true ), false, null, null ),
+			'S14'  => array( null, array(), false, null, $none ),
+			'S15'  => array( null, array( 'N' => true ), false, null, $none ),
+			'S16'  => array( null, array( 'A' => '' ), false, null, null ),
+			'S17'  => array( null, array( 'A' => 'Stale' ), false, null, null ),
+			'S18'  => array( null, array( 'P' => 'Stale' ), false, null, null ),
+			'S19'  => array(
+				null,
+				array(
+					'N' => true,
+					'P' => 'Stale',
+				),
+				false,
+				null,
+				null,
+			),
+			'S20a' => array( 'Row', array(), false, 'real', null ),
+			'S20b' => array( 'Row', array(), false, 'no_flush', null ),
+			'S21'  => array( 'Row', array( 'A' => 'Stale' ), true, null, null ),
+			'S22'  => array( 'Row', array( 'P' => 'Stale' ), true, null, null ),
+			'S23'  => array( 'Row', array( 'N' => true ), true, null, null ),
+			'S24'  => array( '', array( 'A' => false ), false, null, $found( '' ) ),
+			'S25'  => array( '', array( 'P' => false ), false, null, $found( '' ) ),
+			'S26'  => array( 'Row', array( 'P' => false ), false, null, null ),
+			'S27'  => array( '5', array( 'A' => 5 ), false, null, $found( '5' ) ),
+			'S28'  => array( $v, array( 'A' => serialize( $v ) ), false, null, $found( $v ) ),
+			'S29'  => array( $v, array( 'A' => serialize( $x ) ), false, null, null ),
+		);
+		// phpcs:enable WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+	}
+
+	/**
+	 * U-S-T1 (ledger s14-US): the pre-check's predicate gives the literal answer for every state in
+	 * the table and writes nothing to any cache.
+	 *
+	 * @dataProvider cache_agreement_table
+	 *
+	 * @param mixed        $row         Stored value, or null for no row.
+	 * @param array<mixed> $cache       Cache copies to plant.
+	 * @param bool         $forced_miss Whether every forced cache read misses.
+	 * @param string|null  $fault       'real' or 'no_flush' to fail the row read, else null.
+	 * @param array|null   $expected    The literal answer.
+	 */
+	public function test_the_cache_agreement_predicate_answers_every_table_state( $row, array $cache, bool $forced_miss, ?string $fault, ?array $expected ): void {
+		global $wpdb;
+		$option = 'aafm_s14_table_probe';
+		$this->plant_table_state( $option, $row, $cache );
+		$before = $this->option_cache_bytes( $option );
+
+		$check = static fn() => aafm_option_row_if_cache_agrees( $option );
+		if ( $forced_miss ) {
+			$answer = $this->with_forced_cache_reads_missing( $check );
+		} elseif ( null !== $fault ) {
+			$needle = array( $wpdb->options, 'SELECT option_value', "option_name = '{$option}' LIMIT 1" );
+			QueryFaultInjector::reset_fired_count();
+			if ( 'real' === $fault ) {
+				$answer = QueryFaultInjector::break_query_with_real_error( $needle, $check, 1 );
+			} else {
+				// The no-flush shape: the failed read leaves the previous query's row, here the probe's
+				// own row read without LIMIT, in last_result.
+				$answer = QueryFaultInjector::fail_nth_query(
+					$needle,
+					1,
+					static function () use ( $wpdb, $option, $check ) {
+						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+						$wpdb->get_results( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, $option ) );
+						return $check();
+					}
+				);
+			}
+			$this->assertSame( 1, QueryFaultInjector::fired_count(), 'The row read fault must fire.' );
+		} else {
+			$answer = $check();
+		}
+
+		$this->assertSame( $expected, $answer );
+		$this->assertSame( $before, $this->option_cache_bytes( $option ), 'The check writes nothing to any cache.' );
+	}
+
+	/**
+	 * U-S-T2 (ledger s14-US): the pre-check runs after the dry-run's reads, so the notoptions entry a
+	 * failed dry-run read leaves over a real row is refused. Before it, a request for the registered
+	 * default (posts_per_page 10) would be skipped by update_option() and read back as success.
+	 */
+	public function test_a_failed_dry_run_read_is_refused_by_the_pre_check(): void {
+		global $wpdb;
+		update_option( 'posts_per_page', 5 );
+		wp_cache_delete( 'posts_per_page', 'options' );
+		$all = wp_load_alloptions();
+		unset( $all['posts_per_page'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+
+		// The fault targets the first read get_option() makes, not the check's own read of the same
+		// statement, so moving the check above the dry-run lets the request through.
+		QueryFaultInjector::reset_fired_count();
+		$fault      = QueryFaultInjector::real_error_filter( array( $wpdb->options, 'SELECT option_value', "option_name = 'posts_per_page'" ), 1 );
+		$faulted    = array();
+		$core_read  = static function ( string $query ) use ( $fault, &$faulted ): string {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- scoping a test fault to its caller.
+			$callers = array_column( debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS ), 'function' );
+			if ( ! in_array( 'get_option', $callers, true ) ) {
+				return $query;
+			}
+			$result = $fault( $query );
+			if ( $result !== $query ) {
+				$faulted[] = $callers;
+			}
+			return $result;
+		};
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $core_read );
+		ob_start();
+		try {
+			$res = aafm_exec_update_site_settings( array( 'settings' => array( 'posts_per_page' => 10 ) ) );
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $core_read );
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertCount( 1, $faulted );
+		$this->assertSame( array(), array_intersect( array( 'aafm_option_row', 'aafm_wpdb_row' ), $faulted[0] ), 'The fault must never hit the pre-check\'s own read.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( '5', $this->option_row( 'posts_per_page' ) );
+		$this->assertCount( 0, $this->write_outcome_rows() );
 	}
 }

@@ -167,6 +167,9 @@ function aafm_wc_get_order_object( int $id ): ?\WC_Order {
 	if ( $id < 1 || ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
+	if ( false !== aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return null;
+	}
 	$order = wc_get_order( $id );
 	return $order instanceof \WC_Order ? $order : null;
 }
@@ -446,54 +449,7 @@ function aafm_args_wc_get_order(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'            => array( 'type' => 'integer' ),
-				'number'        => array( 'type' => 'string' ),
-				'status'        => array( 'type' => 'string' ),
-				'currency'      => array( 'type' => 'string' ),
-				'date_created'  => array( 'type' => array( 'string', 'null' ) ),
-				'date_paid'     => array( 'type' => array( 'string', 'null' ) ),
-				'customer_id'   => array( 'type' => 'integer' ),
-				'customer_note' => array( 'type' => 'string' ),
-				'line_items'    => array(
-					'type'  => 'array',
-					'items' => array(
-						'type'                 => 'object',
-						'properties'           => array(
-							'id'         => array(
-								'type'        => 'integer',
-								'description' => __( "The order's own line item id - the value wc-create-order-refund's line_items[].line_item_id expects. Not a product id.", 'agent-abilities-for-mcp' ),
-							),
-							'name'       => array( 'type' => 'string' ),
-							'product_id' => array( 'type' => 'integer' ),
-							'quantity'   => array( 'type' => 'integer' ),
-							'subtotal'   => array( 'type' => 'string' ),
-							'total'      => array( 'type' => 'string' ),
-						),
-						'additionalProperties' => false,
-					),
-				),
-				'totals'        => array(
-					'type'                 => 'object',
-					'properties'           => array(
-						'total'    => array( 'type' => 'string' ),
-						'subtotal' => array( 'type' => 'string' ),
-						'tax'      => array( 'type' => 'string' ),
-						'shipping' => array( 'type' => 'string' ),
-					),
-					'additionalProperties' => false,
-				),
-				'billing'       => array(
-					'type'                 => 'object',
-					'properties'           => aafm_wc_address_schema_props( 'billing', false ),
-					'additionalProperties' => false,
-				),
-				'shipping'      => array(
-					'type'                 => 'object',
-					'properties'           => aafm_wc_address_schema_props( 'shipping', false ),
-					'additionalProperties' => false,
-				),
-			),
+			'properties' => aafm_wc_order_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_order',
 		'permission_callback' => 'aafm_wc_perm',
@@ -764,9 +720,10 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$adde
 		if ( ! is_array( $item ) ) {
 			continue;
 		}
+		// A product whose post does not load exactly stays unresolved, like an unknown id.
 		$pid     = absint( $item['product_id'] ?? 0 );
 		$qty     = max( 1, absint( $item['quantity'] ?? 1 ) );
-		$product = ( $pid > 0 && function_exists( 'wc_get_product' ) ) ? wc_get_product( $pid ) : false;
+		$product = ( $pid > 0 && function_exists( 'wc_get_product' ) && ( false === aafm_wc_store_is_core( 'product' ) || aafm_exact_object( 'post', $pid ) instanceof WP_Post ) ) ? wc_get_product( $pid ) : false;
 		if ( $product instanceof \WC_Product ) {
 			$resolved[] = array(
 				'product' => $product,
@@ -792,7 +749,14 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$adde
 	// thing that can fail after these rows exist -- see aafm_exec_wc_update_order()'s recalculation.
 	try {
 		foreach ( $resolved as $to_add ) {
-			$added_item_ids[] = (int) $order->add_product( $to_add['product'], $to_add['qty'] );
+			$added_item_ids[] = (int) aafm_wc_write(
+				'add_product',
+				array(
+					'object'  => $order,
+					'product' => $to_add['product'],
+					'qty'     => $to_add['qty'],
+				)
+			)['returned'];
 		}
 	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 		return aafm_wc_rollback_added_order_items( $added_item_ids );
@@ -895,7 +859,7 @@ function aafm_wc_delete_added_order_items( array $item_ids ): array {
 		// cleanup has had its turn.
 		$deleted = false;
 		try {
-			$deleted = function_exists( 'wc_delete_order_item' ) ? wc_delete_order_item( $item_id ) : false;
+			$deleted = function_exists( 'wc_delete_order_item' ) ? aafm_wc_write( 'delete_item', array( 'item_id' => $item_id ) )['returned'] : false;
 		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 			$deleted = false;
 		}
@@ -1174,7 +1138,13 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 				$item->set_subtotal( $row['subtotal'] );
 			}
 			$item->set_taxes( $row['taxes'] );
-			$item->save();
+			aafm_wc_write(
+				'save',
+				array(
+					'object' => $item,
+					'entity' => 'order_item',
+				)
+			);
 		}
 
 		$seen_rates = array();
@@ -1196,7 +1166,13 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 			// started with. Recreated rows below get the same treatment, for the same reason.
 			$row = $snapshot['taxes'][ $rate_id ];
 			aafm_wc_apply_tax_row_snapshot( $tax_item, $row );
-			$tax_item->save();
+			aafm_wc_write(
+				'save',
+				array(
+					'object' => $tax_item,
+					'entity' => 'order_item',
+				)
+			);
 			$seen_rates[ $rate_id ] = true;
 		}
 
@@ -1218,7 +1194,13 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 		$order->set_cart_tax( $snapshot['order']['cart_tax'] );
 		$order->set_shipping_tax( $snapshot['order']['shipping_tax'] );
 		$order->set_total( $snapshot['order']['total'] );
-		$order->save();
+		aafm_wc_write(
+			'save',
+			array(
+				'object' => $order,
+				'entity' => 'order',
+			)
+		);
 
 		return true;
 	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
@@ -1267,6 +1249,9 @@ function aafm_wc_apply_tax_row_snapshot( \WC_Order_Item_Tax $tax_item, array $ro
  */
 function aafm_wc_load_order_or_null( int $order_id ): ?\WC_Order {
 	if ( $order_id <= 0 || ! function_exists( 'wc_get_order' ) ) {
+		return null;
+	}
+	if ( false !== aafm_wc_store_is_core( 'order' ) && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
 		return null;
 	}
 	try {
@@ -1361,7 +1346,9 @@ function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, ar
  *
  * A lookup that throws is reported as "still exists": over-reporting a leftover the caller can go
  * and check is recoverable, while claiming a clean rollback that did not happen is exactly the
- * false promise this code exists to stop making.
+ * false promise this code exists to stop making. For the same reason the order counts as gone only
+ * when a failure-aware query finds its row absent: the posts table while the order store is
+ * exactly WC_Order_Data_Store_CPT, the orders table while it is exactly WooCommerce's HPOS store.
  *
  * @param int $order_id Order id.
  * @return bool
@@ -1369,6 +1356,22 @@ function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, ar
 function aafm_wc_order_still_exists( int $order_id ): bool {
 	if ( $order_id < 1 || ! function_exists( 'wc_get_order' ) ) {
 		return false;
+	}
+	// A store the registry cannot name certifies nothing. A post that does not load exactly is gone
+	// only when a failure-aware query says the row is.
+	$core = aafm_wc_store_is_core( 'order' );
+	if ( null === $core ) {
+		return true;
+	}
+	if ( $core && ! aafm_exact_object( 'post', $order_id ) instanceof WP_Post ) {
+		return ! aafm_object_absent( 'post', $order_id );
+	}
+	// The class_exists() check only narrows the type for static analysis: WooCommerce's registry
+	// throws for a store class it cannot load (class-wc-data-store.php:99-101).
+	if ( 'automattic\woocommerce\internal\datastores\orders\orderstabledatastore' === aafm_wc_store_class( 'order' ) && class_exists( '\Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore' ) ) {
+		global $wpdb;
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', \Automattic\WooCommerce\Internal\DataStores\Orders\OrdersTableDataStore::get_orders_table_name(), $order_id ) );
+		return ! ( $view['ok'] && null === $view['value'] );
 	}
 	try {
 		return wc_get_order( $order_id ) instanceof \WC_Order;
@@ -1410,7 +1413,14 @@ function aafm_wc_rollback_created_order( \WC_Order $order, array $item_ids ): \W
 
 	if ( $order_id > 0 ) {
 		try {
-			$order->delete( true );
+			aafm_wc_write(
+				'delete',
+				array(
+					'object'       => $order,
+					'force_delete' => true,
+					'entity'       => 'order',
+				)
+			);
 		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a throw here is answered by the existence check below, which is the authority.
 			unset( $e );
 		}
@@ -1605,11 +1615,17 @@ function aafm_exec_wc_create_order( array $input ) {
 	// signature archetype. The rollback differs from the update path's because a create has no
 	// earlier state to restore -- see aafm_wc_rollback_created_order().
 	try {
-		$order->calculate_totals();
+		aafm_wc_write( 'calculate_totals', array( 'object' => $order ) );
 	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 		return aafm_wc_rollback_created_order( $order, $added_item_ids );
 	}
-	$id = (int) $order->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $order,
+			'entity' => 'order',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_order_object( $id );
 	if ( null === $saved ) {
@@ -1786,12 +1802,24 @@ function aafm_exec_wc_update_order( array $input ) {
 	// and say so honestly when it cannot. See aafm_wc_rollback_recalculated_order().
 	if ( $adds_line_items ) {
 		try {
-			$order->calculate_totals( true );
+			aafm_wc_write(
+				'calculate_totals',
+				array(
+					'object'    => $order,
+					'and_taxes' => true,
+				)
+			);
 		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 			return aafm_wc_rollback_recalculated_order( (int) $order->get_id(), $added_item_ids, $money_snapshot );
 		}
 	}
-	$order->save();
+	aafm_wc_write(
+		'save',
+		array(
+			'object' => $order,
+			'entity' => 'order',
+		)
+	);
 
 	$saved = aafm_wc_get_order_object( $order->get_id() );
 	if ( null === $saved ) {
@@ -1879,7 +1907,14 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	// failed transition (class-wc-order.php:402-426), so ignoring the return turned a failed
 	// transition into a success payload carrying the old status. Check it, and verify the
 	// re-read order actually carries the requested status before reporting success.
-	if ( true !== $order->update_status( $short ) ) {
+	$status_changed = aafm_wc_write(
+		'update_status',
+		array(
+			'object'     => $order,
+			'new_status' => $short,
+		)
+	)['returned'];
+	if ( true !== $status_changed ) {
 		return new \WP_Error(
 			'aafm_wc_status_update_failed',
 			sprintf(
@@ -1891,7 +1926,13 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	}
 	// save() is technically redundant on real WC (update_status() persists internally), but
 	// is required here so the stub's save() flushes the in-memory data back to WcOrderStubStore.
-	$order->save();
+	aafm_wc_write(
+		'save',
+		array(
+			'object' => $order,
+			'entity' => 'order',
+		)
+	);
 
 	$saved = aafm_wc_get_order_object( $order->get_id() );
 	if ( null === $saved ) {
@@ -1940,6 +1981,12 @@ function aafm_exec_wc_update_order_status( array $input ) {
  * @return object|null stdClass note object or null.
  */
 function aafm_wc_get_order_note( int $order_id, int $note_id ): ?object {
+	// A note is a core comment on its order, so load it exactly first: a faulted notes query can
+	// hand back another order's notes, and one of those can carry the requested id.
+	$comment = aafm_exact_object( 'comment', $note_id );
+	if ( ! $comment instanceof WP_Comment || (int) $comment->comment_post_ID !== $order_id ) {
+		return null;
+	}
 	$notes = wc_get_order_notes( array( 'order_id' => $order_id ) );
 	foreach ( $notes as $note ) {
 		// wc_get_order_notes() returns normalized objects whose id lives in ->id (not ->comment_ID).
@@ -2153,7 +2200,15 @@ function aafm_exec_wc_create_order_note( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$note_id = $order->add_order_note( $note_text, $customer_note, true );
+	$note_id = aafm_wc_write(
+		'add_note',
+		array(
+			'object'           => $order,
+			'note'             => $note_text,
+			'is_customer_note' => $customer_note,
+			'added_by_user'    => true,
+		)
+	)['returned'];
 	if ( ! $note_id ) {
 		return aafm_generic_error();
 	}
@@ -2191,6 +2246,9 @@ function aafm_exec_wc_create_order_note( array $input ) {
  */
 function aafm_wc_get_refund_object( int $refund_id ): ?\WC_Order_Refund {
 	if ( ! function_exists( 'wc_get_order' ) ) {
+		return null;
+	}
+	if ( ( false !== aafm_wc_store_is_core( 'order' ) || false !== aafm_wc_store_is_core( 'order-refund' ) ) && ! aafm_exact_object( 'post', $refund_id ) instanceof WP_Post ) {
 		return null;
 	}
 	$refund = wc_get_order( $refund_id );
@@ -2599,7 +2657,7 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 	// $order->get_remaining_refund_amount(). Adding that reconciliation here would make this
 	// plugin stricter than WooCommerce's own admin UI and REST API - the exact anti-pattern the
 	// delegation audit exists to stop. KEEP, DOCUMENTED: no reconciliation check is added.
-	$refund = wc_create_refund( $refund_args );
+	$refund = aafm_wc_write( 'refund', array( 'args' => $refund_args ) )['returned'];
 
 	if ( is_wp_error( $refund ) || ! ( $refund instanceof \WC_Order_Refund ) ) {
 		return aafm_generic_error();

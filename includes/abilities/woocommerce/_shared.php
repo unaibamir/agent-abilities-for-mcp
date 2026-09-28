@@ -29,6 +29,65 @@ function aafm_wc_perm(): bool {
 }
 
 /**
+ * The class name WooCommerce's data store registry reports for a store key, lower-cased and with
+ * any leading backslash removed, or null without WooCommerce or when the registry throws.
+ *
+ * A `woocommerce_{$store}_data_store` filter can hand the registry any string or object, and the
+ * registry keeps a string exactly as given, so case and a leading backslash vary. Anything thrown
+ * while the registry loads the store, an Error included, gives null.
+ *
+ * @param string $store Data store key.
+ * @return string|null
+ */
+function aafm_wc_store_class( string $store ): ?string {
+	if ( ! class_exists( 'WC_Data_Store' ) ) {
+		return null;
+	}
+	try {
+		$name = \WC_Data_Store::load( $store )->get_current_class_name();
+	} catch ( \Throwable $e ) {
+		return null;
+	}
+	return strtolower( ltrim( (string) $name, '\\' ) );
+}
+
+/**
+ * Whether WooCommerce keeps this object type in exactly its own core data store.
+ *
+ * The core stores read the object's post or user row through core's loaders, so a reader can
+ * load that row exactly first and WooCommerce then reads it from core's cache. Other stores,
+ * such as the orders table under HPOS, load no post, so the reader skips the exact load. A store
+ * that extends a core store is not a core store here, since it may read another table.
+ *
+ * A store that cannot be named is held to the core store's exact load and certifies nothing: a
+ * registry that throws gives null, and callers treat null as core for a load and as unknown for a
+ * delete or rollback check.
+ *
+ * @param string $store Data store key: 'product', 'product-variation', 'order', 'order-refund',
+ *                      'coupon' or 'customer'.
+ * @return bool|null False for an unknown key (without asking the registry), without WooCommerce, or
+ *                   for another store; null when WooCommerce's registry throws.
+ */
+function aafm_wc_store_is_core( string $store ): ?bool {
+	$core = array(
+		'product'           => 'wc_product_data_store_cpt',
+		'product-variation' => 'wc_product_variation_data_store_cpt',
+		'order'             => 'wc_order_data_store_cpt',
+		'order-refund'      => 'wc_order_refund_data_store_cpt',
+		'coupon'            => 'wc_coupon_data_store_cpt',
+		'customer'          => 'wc_customer_data_store',
+	);
+	if ( ! isset( $core[ $store ] ) ) {
+		return false;
+	}
+	$class = aafm_wc_store_class( $store );
+	if ( null === $class ) {
+		return class_exists( 'WC_Data_Store' ) ? null : false;
+	}
+	return $class === $core[ $store ];
+}
+
+/**
  * Reject a non-empty billing email that is not a valid address, before any write happens.
  *
  * The sanitize_email() call turns an invalid address ("not-an-email") into '', which silently ERASES the
@@ -240,7 +299,7 @@ function aafm_wc_date_string( $date ): ?string {
  */
 function aafm_wc_find_attribute_term( $option, string $taxonomy ): ?\WP_Term {
 	if ( is_int( $option ) || ( is_string( $option ) && '' !== $option && ctype_digit( $option ) ) ) {
-		$term = get_term_by( 'id', (int) $option, $taxonomy );
+		$term = aafm_exact_object( 'term', (int) $option, $taxonomy );
 		return $term instanceof \WP_Term ? $term : null;
 	}
 

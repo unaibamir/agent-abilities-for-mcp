@@ -120,4 +120,46 @@ class HttpTest extends TestCase {
 			$this->assertSame( $expected, $result );
 		}
 	}
+
+	/**
+	 * RC-T3 (T3, ledger s14w1-code-4): get_transient()'s read of an OAuth counter fails while its
+	 * row holds 5. The counter reads 6, not 1, and the row is not reset.
+	 */
+	public function test_a_failed_counter_read_counts_the_stored_row(): void {
+		$transient = 'aafm_oauth_rl_rc_t3';
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		set_transient( $transient, 5, 60 );
+		wp_cache_delete( '_transient_' . $transient, 'options' );
+		wp_cache_delete( '_transient_timeout_' . $transient, 'options' );
+
+		$count = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT', "'_transient_" . $transient . "'" ),
+			static fn() => aafm_oauth_bump_counter( 'rl_rc_t3', 60 ),
+			1
+		);
+
+		$this->assertGreaterThan( 0, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertSame( 6, $count );
+	}
+
+	/**
+	 * RC-T4 (T4): the counter's read and re-read both fail. The counter reads over every limit, so
+	 * the limiter refuses, and nothing is written over the stored count.
+	 */
+	public function test_a_counter_that_cannot_be_read_refuses(): void {
+		$transient = 'aafm_oauth_rl_rc_t4';
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		set_transient( $transient, 2, 60 );
+		wp_cache_delete( '_transient_' . $transient, 'options' );
+		wp_cache_delete( '_transient_timeout_' . $transient, 'options' );
+
+		$count = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT', "'_transient_" . $transient . "'" ),
+			static fn() => aafm_oauth_bump_counter( 'rl_rc_t4', 60 )
+		);
+
+		$this->assertGreaterThan( 0, \AAFM\Tests\Support\QueryFaultInjector::fired_count() );
+		$this->assertSame( PHP_INT_MAX, $count );
+		$this->assertSame( '2', aafm_option_row( '_transient_' . $transient )['value'] );
+	}
 }

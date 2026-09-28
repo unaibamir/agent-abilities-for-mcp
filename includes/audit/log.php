@@ -56,12 +56,14 @@ function aafm_activity_statuses( bool $include_started = true ): array {
  * are not agent calls), and an ability the registration-time preflight left OUT of the server
  * because its schema breached the measurement bounds or the enabled set exceeded the tool cap
  * (aafm_reconcile_omitted_abilities() in includes/server.php - also a real ability name, again
- * distinguishable only by type). Mirrors aafm_activity_statuses().
+ * distinguishable only by type). The ninth, write_outcome, is the write-and-confirm contract's own
+ * row (includes/write-contract.php): one per write or delete outcome, carrying identifiers only,
+ * never the ability that triggered it. Mirrors aafm_activity_statuses().
  *
  * @return string[] The allowed event_type values.
  */
 function aafm_activity_event_types(): array {
-	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted' );
+	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome' );
 }
 
 /**
@@ -398,7 +400,8 @@ function aafm_denial_log_within_cap( string $bucket ): bool {
  * reason: this action can fire during determine_current_user before this plugin's own
  * plugins_loaded callback has required every file it depends on, if another active plugin
  * resolves the current user earlier in the load order. aafm_oauth_request_targets_mcp_route()
- * itself calls aafm_mcp_rest_route() (bootstrap.php) with no internal guard, so that dependency
+ * itself calls aafm_is_mcp_route() (bootstrap.php, which also defines aafm_mcp_rest_route()) with
+ * no internal guard, so that dependency
  * is checked here too, exactly as aafm_oauth_resolve_current_user() checks it before calling the
  * same route helper. When either is missing this simply skips logging rather than fatal on an
  * undefined function.

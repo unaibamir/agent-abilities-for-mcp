@@ -29,6 +29,14 @@ spl_autoload_register(
 
 $_tests_dir = getenv( 'WP_TESTS_DIR' ) ?: '/tmp/wordpress-tests-lib';
 
+// The WP test library defines WP_DEBUG true, so every write outcome the suite produces writes a
+// diagnostic line (includes/write-contract.php). Pointed at a throwaway file for the whole run
+// instead of wherever this host's php.ini would otherwise send it, so the line never reaches test
+// output. wp_debug_mode() (wp-includes/load.php) only moves error_log again under WP_DEBUG_LOG,
+// which the suite leaves false, so this redirect holds for the whole run.
+define( 'AAFM_TEST_ERROR_LOG', (string) tempnam( sys_get_temp_dir(), 'aafm-test-error-log' ) );
+ini_set( 'error_log', AAFM_TEST_ERROR_LOG ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- a throwaway, test-only redirect of the whole run's error_log destination, set once before WordPress boots.
+
 require_once $_tests_dir . '/includes/functions.php';
 
 tests_add_filter(

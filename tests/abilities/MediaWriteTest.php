@@ -15,6 +15,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_Error;
 use WP_Post;
@@ -41,6 +42,20 @@ final class MediaWriteTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/set-featured-image', 'aafm/upload-media', 'aafm/update-media', 'aafm/delete-media' ) );
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+
+		// Record every file core's upload handler writes, before any attachment row exists. A test
+		// whose attachment row is deleted, or never gets its file path, would otherwise leave the
+		// file behind, because track_attachment_files() reads the path from the row.
+		add_filter(
+			'wp_handle_upload',
+			function ( $upload ) {
+				if ( is_array( $upload ) && isset( $upload['file'] ) && is_string( $upload['file'] ) && '' !== $upload['file'] ) {
+					$this->written_files[] = $upload['file'];
+				}
+				return $upload;
+			},
+			PHP_INT_MAX
+		);
 	}
 
 	public function tear_down(): void {
@@ -150,6 +165,76 @@ final class MediaWriteTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $out2 );
 		$this->assertFalse( has_post_thumbnail( $post ) );
+	}
+
+	/**
+	 * A veto-true update_post_metadata filter makes set_post_thumbnail() return true while nothing
+	 * is written; the row decides, so the ability returns the generic error.
+	 */
+	public function test_set_featured_image_vetoed_true_returns_the_generic_error(): void {
+		$this->acting_as( 'editor' );
+		$post  = self::factory()->post->create();
+		$image = $this->image_attachment( null );
+		$veto  = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$out   = wp_get_ability( 'aafm/set-featured-image' )->execute(
+			array(
+				'post_id'       => $post,
+				'attachment_id' => $image,
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertFalse( has_post_thumbnail( $post ) );
+	}
+
+	/**
+	 * A row read after the call that fails returns the generic error. The counting run uses a twin
+	 * post and image in the same starting state.
+	 */
+	public function test_set_featured_image_with_a_failed_read_after_the_call_returns_the_generic_error(): void {
+		global $wpdb;
+		$this->acting_as( 'editor' );
+		$twin       = self::factory()->post->create();
+		$twin_image = $this->image_attachment( null );
+		$post       = self::factory()->post->create();
+		$image      = $this->image_attachment( null );
+
+		$reads = 0;
+		$count = static function ( $query ) use ( $twin, &$reads ) {
+			if ( false !== strpos( (string) $query, 'SELECT' ) && false !== strpos( (string) $query, "meta_key = '_thumbnail_id'" ) && false !== strpos( (string) $query, "post_id = {$twin}" ) ) {
+				++$reads;
+			}
+			return $query;
+		};
+		add_filter( 'query', $count );
+		$healthy = aafm_exec_set_featured_image(
+			array(
+				'post_id'       => $twin,
+				'attachment_id' => $twin_image,
+			)
+		);
+		remove_filter( 'query', $count );
+		$this->assertSame( array( 'set' => true ), $healthy );
+		$this->assertSame( 2, $reads, 'core existence check, then the row read after the call.' );
+
+		QueryFaultInjector::reset_fired_count();
+		$out = QueryFaultInjector::break_query_with_real_error(
+			array( $wpdb->postmeta, 'SELECT', "meta_key = '_thumbnail_id'", "post_id = {$post}" ),
+			static fn() => aafm_exec_set_featured_image(
+				array(
+					'post_id'       => $post,
+					'attachment_id' => $image,
+				)
+			),
+			$reads
+		);
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
 	}
 
 	public function test_set_featured_image_sets_an_image_attachment(): void {
@@ -860,5 +945,677 @@ final class MediaWriteTest extends TestCase {
 			}
 		}
 		return $count;
+	}
+
+	/**
+	 * An image attachment with image metadata, and optionally an alt row.
+	 *
+	 * @param string|null $alt Alt text to store, or null for no alt row.
+	 * @return int Attachment id.
+	 */
+	private function image_attachment( ?string $alt ): int {
+		$id = self::factory()->attachment->create_object(
+			'fixture.png',
+			0,
+			array(
+				'post_mime_type' => 'image/png',
+				'post_type'      => 'attachment',
+				'post_title'     => 'Fixture',
+			)
+		);
+		wp_update_attachment_metadata(
+			$id,
+			array(
+				'width'  => 10,
+				'height' => 20,
+				'file'   => 'fixture.png',
+			)
+		);
+		if ( null !== $alt ) {
+			update_post_meta( $id, '_wp_attachment_image_alt', $alt );
+		}
+		return $id;
+	}
+
+	/**
+	 * Run $run with every post meta load query failed once $armed is true, in the given shape.
+	 *
+	 * @param string   $shape 'no-flush' or 'real-error'.
+	 * @param bool     $armed By reference: the switch a hook flips.
+	 * @param callable $run   Code to run.
+	 * @param int      $fired By reference: how many queries were failed.
+	 * @return mixed
+	 */
+	private function with_meta_load_fault( string $shape, bool &$armed, callable $run, int &$fired ) {
+		global $wpdb;
+		$fault      = static function ( string $query ) use ( $shape, &$armed, &$fired, $wpdb ): string {
+			if ( ! $armed || false === strpos( $query, 'meta_key, meta_value FROM' ) || false === strpos( $query, $wpdb->postmeta ) ) {
+				return $query;
+			}
+			++$fired;
+			return 'no-flush' === $shape ? '' : str_replace( $wpdb->postmeta, $wpdb->postmeta . '_aafm_missing', $query );
+		};
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $fault );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $fault );
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * Both fault shapes, with and without an alt row, with and without cache addition suspended.
+	 *
+	 * @return iterable<string,array{0:string,1:?string,2:bool}>
+	 */
+	public function data_update_media_load_faults(): iterable {
+		foreach ( array( 'no-flush', 'real-error' ) as $shape ) {
+			yield "$shape, alt row" => array( $shape, 'kept', false );
+			yield "$shape, no alt row" => array( $shape, null, false );
+			yield "$shape, no alt row, cache addition suspended" => array( $shape, null, true );
+		}
+	}
+
+	/**
+	 * An update that omits alt, whose attachment metadata load fails while the response is built,
+	 * returns the error instead of a payload with null or empty fields.
+	 *
+	 * @dataProvider data_update_media_load_faults
+	 * @param string      $shape    Fault shape.
+	 * @param string|null $alt      Stored alt, or null for none.
+	 * @param bool        $suspend  Whether wp_suspend_cache_addition( true ) is set.
+	 */
+	public function test_update_media_with_its_metadata_load_faulted_returns_the_unconfirmed_error( string $shape, ?string $alt, bool $suspend ): void {
+		$this->acting_as( 'editor' );
+		$id    = $this->image_attachment( $alt );
+		$armed = false;
+		$fired = 0;
+		$arm   = static function ( int $post_id ) use ( &$armed, $id ): void {
+			if ( $post_id === $id ) {
+				wp_cache_delete( $id, 'post_meta' );
+				$armed = true;
+			}
+		};
+		add_action( 'attachment_updated', $arm, PHP_INT_MAX );
+		if ( $suspend ) {
+			wp_suspend_cache_addition( true );
+		}
+		$result = $this->with_meta_load_fault(
+			$shape,
+			$armed,
+			static function () use ( $id ) {
+				return aafm_exec_update_media(
+					array(
+						'attachment_id' => $id,
+						'title'         => 'Renamed',
+					)
+				);
+			},
+			$fired
+		);
+		if ( $suspend ) {
+			wp_suspend_cache_addition( false );
+		}
+		remove_action( 'attachment_updated', $arm, PHP_INT_MAX );
+
+		$this->assertGreaterThan( 0, $fired );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_media_write_unconfirmed', $result->get_error_code() );
+	}
+
+	public function test_update_media_alt_reports_alt_status(): void {
+		$this->acting_as( 'editor' );
+		$id = $this->image_attachment( 'old' );
+
+		$with_alt = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'alt'           => 'new',
+			)
+		);
+		$this->assertIsArray( $with_alt );
+		$this->assertArrayHasKey( 'alt_status', $with_alt );
+		$this->assertSame( 'written', $with_alt['alt_status'] );
+		$this->assertSame( 'new', $with_alt['media']['alt'] );
+
+		$again = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'alt'           => 'new',
+			)
+		);
+		$this->assertSame( 'unchanged', $again['alt_status'] );
+
+		$no_alt = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'title'         => 'Other',
+			)
+		);
+		$this->assertArrayNotHasKey( 'alt_status', $no_alt );
+	}
+
+	public function test_update_media_with_a_vetoed_alt_write_returns_the_unconfirmed_error(): void {
+		$this->acting_as( 'editor' );
+		$id   = $this->image_attachment( 'old' );
+		$veto = static function ( $check, $object_id, $meta_key ) {
+			return '_wp_attachment_image_alt' === $meta_key ? false : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$result = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'alt'           => 'new',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_media_write_unconfirmed', $result->get_error_code() );
+		$this->assertSame( 'The site refused or failed the write; read the key to see its current state.', $result->get_error_message() );
+		$this->assertSame( 'old', get_post_meta( $id, '_wp_attachment_image_alt', true ) );
+	}
+
+	/**
+	 * An upload whose response read fails removes the attachment it created: the attachment
+	 * count is the same before and after.
+	 */
+	public function test_an_upload_whose_response_read_fails_deletes_the_attachment_it_created(): void {
+		global $wpdb;
+		$this->acting_as( 'author' );
+		$count   = static function () use ( $wpdb ): int {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE post_type = %s', $wpdb->posts, 'attachment' ) );
+		};
+		$before  = $count();
+		$armed   = false;
+		$fired   = 0;
+		$created = 0;
+		$arm     = static function ( int $post_id ) use ( &$armed, &$created ): void {
+			$created = $post_id;
+			wp_cache_delete( $post_id, 'post_meta' );
+			$armed = true;
+		};
+		// The last write of the upload tail is the alt; arm once its outcome is decided, so only
+		// the response read fails.
+		$on_outcome = static function ( $outcome, $target ) use ( $arm ): void {
+			if ( '_wp_attachment_image_alt' === ( $target['key'] ?? '' ) ) {
+				$arm( (int) $target['object_id'] );
+			}
+		};
+		add_action( 'aafm_write_completed', $on_outcome, 10, 2 );
+		$result = $this->with_meta_load_fault(
+			'real-error',
+			$armed,
+			static function () {
+				return wp_get_ability( 'aafm/upload-media' )->execute(
+					array(
+						'filename'    => 'pixel.png',
+						'data_base64' => self::PNG_B64,
+						'alt'         => 'a pixel',
+					)
+				);
+			},
+			$fired
+		);
+		remove_action( 'aafm_write_completed', $on_outcome, 10 );
+
+		$this->assertGreaterThan( 0, $created, 'the upload created an attachment' );
+		$this->assertGreaterThan( 0, $fired, 'the response read was faulted' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $before, $count(), 'the attachment the upload created is gone' );
+	}
+
+	public function test_an_upload_with_alt_reports_alt_status(): void {
+		$this->acting_as( 'author' );
+		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 'pixel.png',
+				'data_base64' => self::PNG_B64,
+				'alt'         => 'a pixel',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->track_attachment_files( (int) $out['attachment_id'] );
+		$this->assertArrayHasKey( 'alt_status', $out );
+		$this->assertSame( 'written', $out['alt_status'] );
+	}
+
+	/**
+	 * Count attachments by a direct query.
+	 *
+	 * @return int
+	 */
+	private function attachment_count(): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE post_type = %s', $wpdb->posts, 'attachment' ) );
+	}
+
+	/**
+	 * Record the id of the next attachment media_handle_sideload() creates.
+	 *
+	 * @param int $created By reference: the created attachment id.
+	 * @return callable The listener, to remove afterwards.
+	 */
+	private function capture_created_attachment( int &$created ): callable {
+		$listener = static function ( int $post_id ) use ( &$created ): void {
+			$created = $post_id;
+		};
+		add_action( 'add_attachment', $listener );
+		return $listener;
+	}
+
+	/**
+	 * An upload whose response read fails deletes exactly the attachment it created, and returns
+	 * the media error.
+	 */
+	public function test_a_failed_upload_deletes_only_the_attachment_it_created(): void {
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$before    = $this->attachment_count();
+		$created   = 0;
+		$capture   = $this->capture_created_attachment( $created );
+		$armed     = false;
+		$fired     = 0;
+		$arm       = static function ( $outcome, $target ) use ( &$armed ): void {
+			if ( '_wp_attachment_image_alt' === ( $target['key'] ?? '' ) ) {
+				wp_cache_delete( (int) $target['object_id'], 'post_meta' );
+				$armed = true;
+			}
+		};
+		add_action( 'aafm_write_completed', $arm, 10, 2 );
+		$result = $this->with_meta_load_fault(
+			'real-error',
+			$armed,
+			static function () {
+				return aafm_exec_upload_media(
+					array(
+						'filename'    => 'pixel.png',
+						'data_base64' => self::PNG_B64,
+						'alt'         => 'a pixel',
+					)
+				);
+			},
+			$fired
+		);
+		remove_action( 'aafm_write_completed', $arm, 10 );
+		remove_action( 'add_attachment', $capture );
+
+		$this->assertGreaterThan( 0, $created );
+		$this->assertGreaterThan( 0, $fired );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_media_write_unconfirmed', $result->get_error_code() );
+		$this->assertNull( get_post( $created ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+		$this->assertSame( $before, $this->attachment_count() );
+	}
+
+	/**
+	 * A throw after the attachment exists deletes it and reaches the caller unchanged.
+	 */
+	public function test_a_throw_after_the_sideload_deletes_the_attachment_and_is_rethrown(): void {
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$before    = $this->attachment_count();
+		$created   = 0;
+		$capture   = $this->capture_created_attachment( $created );
+		$throw     = static function () {
+			throw new \RuntimeException( 'sanitizer exploded' );
+		};
+		add_filter( 'sanitize_post_meta__wp_attachment_image_alt', $throw );
+
+		$thrown = null;
+		try {
+			aafm_exec_upload_media(
+				array(
+					'filename'    => 'pixel.png',
+					'data_base64' => self::PNG_B64,
+					'alt'         => 'a pixel',
+				)
+			);
+		} catch ( \RuntimeException $e ) {
+			$thrown = $e;
+		} finally {
+			remove_filter( 'sanitize_post_meta__wp_attachment_image_alt', $throw );
+			remove_action( 'add_attachment', $capture );
+		}
+
+		$this->assertInstanceOf( \RuntimeException::class, $thrown );
+		$this->assertSame( 'sanitizer exploded', $thrown->getMessage() );
+		$this->assertGreaterThan( 0, $created );
+		$this->assertNull( get_post( $created ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+		$this->assertSame( $before, $this->attachment_count() );
+	}
+
+	/**
+	 * An alt value the site's sanitizer turns into an array fails validation in the helper. Each
+	 * ability keeps the code it returned for that case before: upload-media aafm_error with its
+	 * attachment deleted, update-media aafm_media_write_unconfirmed.
+	 */
+	public function test_an_alt_the_site_turns_into_an_array_keeps_each_abilitys_error_code(): void {
+		$this->acting_as( 'editor' );
+		$to_array = static function ( $value ) {
+			return array( $value );
+		};
+		add_filter( 'sanitize_post_meta__wp_attachment_image_alt', $to_array );
+
+		$id     = $this->image_attachment( 'old' );
+		$update = aafm_exec_update_media(
+			array(
+				'attachment_id' => $id,
+				'alt'           => 'new',
+			)
+		);
+
+		$before  = $this->attachment_count();
+		$created = 0;
+		$capture = $this->capture_created_attachment( $created );
+		$upload  = aafm_exec_upload_media(
+			array(
+				'filename'    => 'pixel.png',
+				'data_base64' => self::PNG_B64,
+				'alt'         => 'a pixel',
+			)
+		);
+		remove_action( 'add_attachment', $capture );
+		remove_filter( 'sanitize_post_meta__wp_attachment_image_alt', $to_array );
+
+		$this->assertInstanceOf( \WP_Error::class, $update );
+		$this->assertSame( 'aafm_media_write_unconfirmed', $update->get_error_code() );
+		$this->assertInstanceOf( \WP_Error::class, $upload );
+		$this->assertSame( 'aafm_error', $upload->get_error_code() );
+		$this->assertNull( get_post( $created ) );
+		$this->assertSame( $before, $this->attachment_count() );
+	}
+
+	/**
+	 * An upload whose alt write the site refuses returns exactly the generic error, with no
+	 * status in its data, and deletes the attachment it created.
+	 */
+	public function test_an_upload_whose_alt_write_is_refused_returns_the_generic_error(): void {
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$before    = $this->attachment_count();
+		$created   = 0;
+		$capture   = $this->capture_created_attachment( $created );
+		$veto      = static function ( $check, $object_id, $meta_key ) {
+			return '_wp_attachment_image_alt' === $meta_key ? false : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$result = aafm_exec_upload_media(
+			array(
+				'filename'    => 'pixel.png',
+				'data_base64' => self::PNG_B64,
+				'alt'         => 'a pixel',
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+		remove_action( 'add_attachment', $capture );
+
+		$generic = aafm_generic_error();
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $generic->get_error_code(), $result->get_error_code() );
+		$this->assertSame( $generic->get_error_message(), $result->get_error_message() );
+		$this->assertSame( $generic->get_error_data(), $result->get_error_data() );
+		$this->assertGreaterThan( 0, $created );
+		$this->assertNull( get_post( $created ) );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+		$this->assertSame( $before, $this->attachment_count() );
+	}
+
+	/**
+	 * When the cleanup itself throws, the caller still gets the original throw, the same instance.
+	 */
+	public function test_a_throw_from_the_cleanup_does_not_replace_the_original_throw(): void {
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$created   = 0;
+		$capture   = $this->capture_created_attachment( $created );
+		$original  = new \RuntimeException( 'sanitizer exploded' );
+		$throw     = static function () use ( $original ) {
+			throw $original;
+		};
+		$cleanup   = static function ( int $post_id ) use ( &$created ): void {
+			if ( $post_id === $created ) {
+				throw new \LogicException( 'cleanup exploded' );
+			}
+		};
+		add_filter( 'sanitize_post_meta__wp_attachment_image_alt', $throw );
+		add_action( 'delete_attachment', $cleanup );
+
+		$thrown = null;
+		try {
+			aafm_exec_upload_media(
+				array(
+					'filename'    => 'pixel.png',
+					'data_base64' => self::PNG_B64,
+					'alt'         => 'a pixel',
+				)
+			);
+		} catch ( \Throwable $e ) {
+			$thrown = $e;
+		} finally {
+			remove_filter( 'sanitize_post_meta__wp_attachment_image_alt', $throw );
+			remove_action( 'delete_attachment', $cleanup );
+			remove_action( 'add_attachment', $capture );
+		}
+
+		$this->assertGreaterThan( 0, $created );
+		$this->assertSame( $original, $thrown );
+		$this->assertInstanceOf( \WP_Post::class, get_post( $bystander ) );
+	}
+
+	/**
+	 * When the upload's first load of its own attachment reads another row, the upload returns
+	 * the generic error, writes nothing to the attachment, and deletes the attachment row and
+	 * its file.
+	 */
+	public function test_an_upload_whose_attachment_load_reads_another_row_deletes_the_attachment(): void {
+		global $wpdb;
+		$this->acting_as( 'author' );
+		$bystander = $this->image_attachment( 'bystander' );
+		$before    = $this->attachment_count();
+		$created   = 0;
+		$file      = '';
+		$updates   = 0;
+		$stage     = array();
+		$armed     = null;
+		$suspended = null;
+		QueryFaultInjector::reset_fired_count();
+		// Arm once core writes the new attachment's metadata. Cache additions are suspended from
+		// there, so every load is a query, and the first load of the attachment after the sideload
+		// has returned (the upload's own) reads the bystander's row.
+		$arm = static function ( $data, $attachment_id ) use ( $wpdb, $bystander, &$created, &$file, &$updates, &$stage, &$armed, &$suspended ) {
+			if ( null !== $armed || (int) $attachment_id === $bystander ) {
+				return $data;
+			}
+			$created   = (int) $attachment_id;
+			$file      = (string) get_attached_file( $created );
+			$updates   = did_action( 'pre_post_update' );
+			$suspended = wp_suspend_cache_addition();
+			wp_suspend_cache_addition( true );
+			wp_cache_delete( $created, 'posts' );
+			$needle = sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $created );
+			$inner  = QueryFaultInjector::leak_row_filter(
+				$needle,
+				sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $bystander ),
+				1,
+				true
+			);
+			$armed  = static function ( string $query ) use ( $needle, $inner, &$stage ): string {
+				if ( $needle !== $query ) {
+					return $query;
+				}
+				$trace = array_column( ( new \Exception() )->getTrace(), 'function' );
+				if ( in_array( 'media_handle_sideload', $trace, true ) ) {
+					return $query;
+				}
+				$fired = QueryFaultInjector::fired_count();
+				$out   = $inner( $query );
+				if ( QueryFaultInjector::fired_count() > $fired ) {
+					$stage = $trace;
+				}
+				return $out;
+			};
+			add_filter( 'query', $armed );
+			return $data;
+		};
+		add_filter( 'wp_update_attachment_metadata', $arm, 10, 2 );
+		ob_start();
+		try {
+			$result = aafm_exec_upload_media(
+				array(
+					'filename'    => 'pixel.png',
+					'data_base64' => self::PNG_B64,
+				)
+			);
+		} finally {
+			ob_end_clean();
+			remove_filter( 'wp_update_attachment_metadata', $arm, 10 );
+			if ( null !== $armed ) {
+				remove_filter( 'query', $armed );
+			}
+			if ( null !== $suspended ) {
+				wp_suspend_cache_addition( $suspended );
+			}
+		}
+
+		$this->assertGreaterThan( 0, $created, 'the upload created an attachment' );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'the first load of the attachment was faulted once' );
+		$this->assertContains( 'aafm_exact_object', $stage, 'the faulted load ran inside aafm_exact_object()' );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_error', $result->get_error_code() );
+		$this->assertSame( $updates, did_action( 'pre_post_update' ), 'no sanitize write reached the attachment' );
+		wp_cache_delete( $created, 'posts' );
+		$this->assertNull( get_post( $created ), 'the attachment row is gone' );
+		$this->assertNotSame( '', $file );
+		$this->assertFalse( file_exists( $file ), 'the attachment file is gone' );
+		$this->assertSame( $before, $this->attachment_count() );
+		$this->assertInstanceOf( WP_Post::class, get_post( $bystander ) );
+	}
+
+	/**
+	 * Stored values against the id asked for, each with its literal answer (pm-plan item 2).
+	 *
+	 * @return array<string, array{0: mixed, 1: int, 2: bool}>
+	 */
+	public function stored_id_cases(): array {
+		return array(
+			'int 3'         => array( 3, 3, true ),
+			"'3'"           => array( '3', 3, true ),
+			"'03'"          => array( '03', 3, false ),
+			"'3.0'"         => array( '3.0', 3, false ),
+			"' 3'"          => array( ' 3', 3, false ),
+			"'3 '"          => array( '3 ', 3, false ),
+			'trailing "\n"' => array( "3\n", 3, false ),
+			"'+3'"          => array( '+3', 3, false ),
+			'float 3.0'     => array( 3.0, 3, false ),
+			'NAN'           => array( NAN, 3, false ),
+			'true for 1'    => array( true, 1, false ),
+			"'' for 0"      => array( '', 0, false ),
+			'null for 0'    => array( null, 0, false ),
+			'array( 3 )'    => array( array( 3 ), 3, false ),
+			"'012' for 12"  => array( '012', 12, false ),
+		);
+	}
+
+	/**
+	 * The shared id comparator accepts only the int itself or its decimal string.
+	 *
+	 * @dataProvider stored_id_cases
+	 *
+	 * @param mixed $stored   Stored value.
+	 * @param int   $id       Id asked for.
+	 * @param bool  $expected Literal answer.
+	 */
+	public function test_the_stored_id_comparator_accepts_only_the_exact_id( $stored, int $id, bool $expected ): void {
+		$this->assertSame( $expected, aafm_stored_id_matches( $stored, $id ) );
+	}
+
+	/**
+	 * Old _thumbnail_id rows that only a lossy cast reads as the requested image. '%d' is the
+	 * image's id; 'id_one' asks the image to be created as id 1 for the serialized true row.
+	 *
+	 * @return array<string, array{0: string, 1: bool}>
+	 */
+	public function lossy_thumbnail_rows(): array {
+		return array(
+			"'12.9'"  => array( '%d.9', false ),
+			"'12abc'" => array( '%dabc', false ),
+			"' 12'"   => array( ' %d', false ),
+			"'012'"   => array( '0%d', false ),
+			'true'    => array( 'b:1;', true ),
+		);
+	}
+
+	/**
+	 * UG-T4 (ledger s14w1-code-3): under a filter that vetoes the write, an old row that a lossy
+	 * cast would read as the requested image does not confirm it; the read-back returns the
+	 * generic error.
+	 *
+	 * @dataProvider lossy_thumbnail_rows
+	 *
+	 * @param string $raw    Raw meta_value planted for the old row.
+	 * @param bool   $id_one Whether the image must be attachment 1.
+	 */
+	public function test_a_vetoed_featured_image_over_a_lossy_old_row_returns_the_generic_error( string $raw, bool $id_one ): void {
+		global $wpdb;
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create();
+		if ( $id_one ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$this->assertNull( $wpdb->get_var( "SELECT ID FROM {$wpdb->posts} WHERE ID = 1" ), 'Guard: post id 1 is free.' );
+			$image = self::factory()->attachment->create_object(
+				'fixture.png',
+				0,
+				array(
+					'post_mime_type' => 'image/png',
+					'post_type'      => 'attachment',
+					'post_title'     => 'Fixture',
+					'import_id'      => 1,
+				)
+			);
+			wp_update_attachment_metadata(
+				$image,
+				array(
+					'width'  => 10,
+					'height' => 20,
+					'file'   => 'fixture.png',
+				)
+			);
+			$this->assertSame( 1, $image, 'Guard: the image is attachment 1.' );
+		} else {
+			$image = $this->image_attachment( null );
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- planting the raw old row under test.
+		$wpdb->insert(
+			$wpdb->postmeta,
+			array(
+				'post_id'    => $post,
+				'meta_key'   => '_thumbnail_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value' => sprintf( $raw, $image ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		wp_cache_delete( $post, 'post_meta' );
+
+		$veto = static fn( $check, $object_id, $meta_key ) => '_thumbnail_id' === $meta_key ? true : $check;
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$out  = wp_get_ability( 'aafm/set-featured-image' )->execute(
+			array(
+				'post_id'       => $post,
+				'attachment_id' => $image,
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
 	}
 }

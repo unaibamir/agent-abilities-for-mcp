@@ -681,7 +681,7 @@ final class HelpersTest extends TestCase {
 	/**
 	 * Codex round 7, R7-4: aafm_post_field_write_confirmed()'s "nothing asked" branch used to be
 	 * judged from the raw values alone ($intended === $old), blind to whether $old was already in
-	 * the field's own canonical (sanitized) form - the same defect aafm_meta_write_confirmed()'s
+	 * the field's own canonical (sanitized) form - the same defect the retired meta confirmer's
 	 * round 6, R6-4 fix (2781422) closed for meta. Resubmitting a non-canonical $old is a real
 	 * ask, since the write is still expected to land on the canonical form a genuinely different
 	 * value would have to reach; a persistence veto that instead leaves storage at the old,

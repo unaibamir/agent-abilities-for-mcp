@@ -68,7 +68,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-term-meta'] = array(
 		'label'        => __( 'Update term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
@@ -76,7 +76,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-term-meta'] = array(
 		'label'        => __( 'Delete term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'taxonomies',
@@ -298,7 +298,7 @@ function aafm_exec_get_term( array $input ) {
 		? aafm_wpml_translated_id( $term_id, $taxonomy, $lang )
 		: $term_id;
 
-	$term = get_term( $term_id, $taxonomy );
+	$term = aafm_exact_object( 'term', $term_id, $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -376,7 +376,7 @@ function aafm_args_add_post_terms(): array {
  */
 function aafm_perm_add_post_terms( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
@@ -394,7 +394,7 @@ function aafm_perm_add_post_terms( array $input ): bool {
  */
 function aafm_exec_add_post_terms( array $input ) {
 	$post_id = absint( $input['post_id'] );
-	$post    = get_post( $post_id );
+	$post    = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -440,7 +440,7 @@ function aafm_perm_can_edit_term_meta( array $input ): bool {
 		return false;
 	}
 	$term_id = absint( $input['term_id'] );
-	return current_user_can( 'edit_term', $term_id );
+	return aafm_user_can_checked( 'edit_term', $term_id );
 }
 
 /**
@@ -520,13 +520,13 @@ function aafm_perm_get_term_meta( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
-	if ( is_wp_error( $taxonomy ) ) {
-		return $taxonomy;
+	$request = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $request ) ) {
+		return $request;
 	}
 	$term_id = absint( $input['term_id'] );
-	$key     = (string) $input['meta_key'];
-	$value   = get_term_meta( $term_id, $key, true );
+	$key     = $request['key'];
+	$value   = aafm_meta_get( 'term', $term_id, $key, true );
 	if ( '' !== $value && ! is_scalar( $value ) ) {
 		return aafm_generic_error();
 	}
@@ -575,12 +575,15 @@ function aafm_args_update_term_meta(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'term_id'  => array( 'type' => 'integer' ),
-				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
-				'value'    => array(
-					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+			'properties' => array_merge(
+				array(
+					'term_id'  => array( 'type' => 'integer' ),
+					'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+					'value'    => array(
+						'type' => array( 'string', 'number', 'boolean', 'integer' ),
+					),
 				),
+				aafm_meta_write_output_properties()
 			),
 		),
 		'execute_callback'    => 'aafm_exec_update_term_meta',
@@ -614,12 +617,12 @@ function aafm_perm_update_term_meta( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_update_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
-	if ( is_wp_error( $taxonomy ) ) {
-		return $taxonomy;
+	$request = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $request ) ) {
+		return $request;
 	}
 	$term_id = absint( $input['term_id'] );
-	$key     = (string) $input['meta_key'];
+	$key     = $request['key'];
 	// Codex round 7 R7-3: pass the term's real taxonomy, not the empty default, so a
 	// sanitize_callback registered via register_term_meta() for that taxonomy is not invisible
 	// to the probe. Codex round 8 R8-2: resolve it through get_object_subtype(), the same
@@ -631,22 +634,19 @@ function aafm_exec_update_term_meta( array $input ) {
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
-	$old = get_term_meta( $term_id, $key, true );
-	update_term_meta( $term_id, $key, wp_slash( $value ) );
-	$stored = get_term_meta( $term_id, $key, true );
-	// Codex round 5 R5-2: update_term_meta()'s return value only catches an outright failure. A
-	// metadata filter that short-circuits update_term_metadata to a truthy value bypasses the
-	// write while reporting success, so checking only `false === update_term_meta(...)` never
-	// caught it. Confirm what actually landed unconditionally instead. Codex round 6 B6-3: compare
-	// against the CANONICAL sanitize_meta() form, not the pre-write intent, so a registered
-	// sanitize callback's legitimate normalization is not mistaken for a veto.
-	if ( ! aafm_meta_write_confirmed( $old, $stored, $value, $key, 'term', $subtype ) ) {
-		return aafm_generic_error();
+	$result = aafm_meta_set( 'term', $term_id, $key, $value, $subtype );
+	if ( is_wp_error( $result ) ) {
+		return $result;
 	}
-	return array(
-		'term_id'  => $term_id,
-		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
-		'value'    => $stored,
+	return aafm_meta_update_response(
+		'term',
+		$term_id,
+		$key,
+		$result,
+		array(
+			'term_id'  => $term_id,
+			'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
+		)
 	);
 }
 
@@ -684,8 +684,11 @@ function aafm_args_delete_term_meta(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
+			'properties' => array_merge(
+				array(
+					'deleted' => array( 'type' => 'boolean' ),
+				),
+				aafm_meta_delete_output_properties()
 			),
 		),
 		'execute_callback'    => 'aafm_exec_delete_term_meta',
@@ -720,19 +723,13 @@ function aafm_perm_delete_term_meta( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_delete_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
-	if ( is_wp_error( $taxonomy ) ) {
-		return $taxonomy;
+	$request = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $request ) ) {
+		return $request;
 	}
 	$term_id = absint( $input['term_id'] );
-	$key     = (string) $input['meta_key'];
-	delete_term_meta( $term_id, $key );
-	// Report the real end state, not a hardcoded true: if the key is still present the delete did
-	// not take. Deleting an already-absent key is an idempotent success.
-	if ( metadata_exists( 'term', $term_id, $key ) ) {
-		return aafm_generic_error();
-	}
-	return array( 'deleted' => true );
+	$key     = $request['key'];
+	return aafm_meta_delete_response( 'term', $term_id, $key, aafm_meta_delete( 'term', $term_id, $key ) );
 }
 
 /**
@@ -849,7 +846,7 @@ function aafm_validate_term_parent( int $parent_id, string $taxonomy ) {
 	if ( ! is_taxonomy_hierarchical( $taxonomy ) ) {
 		return new WP_Error( 'aafm_invalid_term_parent', __( 'This taxonomy does not support a parent term.', 'agent-abilities-for-mcp' ) );
 	}
-	if ( ! get_term( $parent_id, $taxonomy ) instanceof WP_Term ) {
+	if ( ! aafm_exact_object_chain( 'term', $parent_id, $taxonomy ) instanceof WP_Term ) {
 		return new WP_Error( 'aafm_invalid_term_parent', __( 'The parent term does not belong to this taxonomy.', 'agent-abilities-for-mcp' ) );
 	}
 	return $parent_id;
@@ -891,7 +888,7 @@ function aafm_exec_create_term( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$term = get_term( (int) $result['term_id'], $taxonomy );
+	$term = aafm_exact_object( 'term', (int) $result['term_id'], $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -975,7 +972,7 @@ function aafm_exec_update_term( array $input ) {
 	}
 
 	$term_id = absint( $input['term_id'] );
-	$term    = get_term( $term_id, $taxonomy );
+	$term    = aafm_exact_object_chain( 'term', $term_id, $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -1008,7 +1005,7 @@ function aafm_exec_update_term( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$updated = get_term( $term_id, $taxonomy );
+	$updated = aafm_exact_object( 'term', $term_id, $taxonomy );
 	if ( ! $updated instanceof WP_Term ) {
 		return aafm_generic_error();
 	}

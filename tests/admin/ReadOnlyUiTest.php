@@ -791,4 +791,96 @@ final class ReadOnlyUiTest extends TestCase {
 
 		$this->assertStringContainsString( 'aafm-enable-reads', $html );
 	}
+
+	/**
+	 * Whether the rendered read-only switch is checked.
+	 *
+	 * @param string $html Settings tab markup.
+	 * @return bool
+	 */
+	private function read_only_switch_checked( string $html ): bool {
+		$this->assertSame( 1, preg_match( '/<input[^>]*name="aafm_read_only_mode"[^>]*>/', $html, $m ) );
+		return false !== strpos( $m[0], 'checked' );
+	}
+
+	/**
+	 * Store read-only mode on and take it out of the runtime alloptions and per-option copies, so
+	 * the render's get_option() reads the row itself.
+	 */
+	private function store_read_only_on_uncached(): void {
+		update_option( 'aafm_read_only_mode', '1' );
+		$all = wp_load_alloptions();
+		unset( $all['aafm_read_only_mode'] );
+		wp_cache_set( 'alloptions', $all, 'options' );
+		wp_cache_delete( 'aafm_read_only_mode', 'options' );
+		aafm_policy_reset_request_state();
+	}
+
+	/**
+	 * RP-T1 (RO3, ledger s14w1-code-1): stored on, and the render's own read fails. The switch
+	 * renders checked, so a save cannot post it off and delete the row.
+	 */
+	public function test_the_switch_stays_checked_when_its_read_fails(): void {
+		$this->store_read_only_on_uncached();
+		$html = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			"option_name = 'aafm_read_only_mode'",
+			fn() => $this->render_settings_tab(),
+			1
+		);
+		$this->assertTrue( $this->read_only_switch_checked( $html ) );
+	}
+
+	/**
+	 * RP-T2 (RO4): stored on, and every read of the row fails. Unreadable means on.
+	 */
+	public function test_the_switch_stays_checked_when_every_read_fails(): void {
+		$this->store_read_only_on_uncached();
+		$html = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT', "'aafm_read_only_mode'" ),
+			fn() => $this->render_settings_tab()
+		);
+		$this->assertTrue( $this->read_only_switch_checked( $html ) );
+	}
+
+	/**
+	 * RP-T3 (RO5): a forced mode with no stored row renders unchecked, so the forced value is never
+	 * saved as the stored one.
+	 */
+	public function test_a_forced_mode_is_not_rendered_as_stored(): void {
+		delete_option( 'aafm_read_only_mode' );
+		add_filter( 'aafm_force_read_only_mode', '__return_true' );
+		$html = $this->render_settings_tab();
+		remove_filter( 'aafm_force_read_only_mode', '__return_true' );
+		$this->assertFalse( $this->read_only_switch_checked( $html ) );
+	}
+
+	/**
+	 * RO6 rows: a filter's answer over a stored '1', and whether the switch renders checked.
+	 *
+	 * @return array<string,array{0:mixed,1:bool}>
+	 */
+	public function hiding_filter_provider(): array {
+		return array(
+			'filter answers exactly false' => array( false, true ),
+			"filter answers '0'"           => array( '0', false ),
+		);
+	}
+
+	/**
+	 * RP-T6 (RO6): a filter that hides a stored '1' behind exactly false renders checked, as the
+	 * getter answers; one that answers '0' renders unchecked, as in 1.7.5.
+	 *
+	 * @dataProvider hiding_filter_provider
+	 *
+	 * @param mixed $answer  The filter's answer.
+	 * @param bool  $checked Whether the switch renders checked.
+	 */
+	public function test_a_hiding_filter_renders_as_the_getter_answers( $answer, bool $checked ): void {
+		update_option( 'aafm_read_only_mode', '1' );
+		$filter = static fn() => $answer;
+		add_filter( 'option_aafm_read_only_mode', $filter );
+		$html   = $this->render_settings_tab();
+		remove_filter( 'option_aafm_read_only_mode', $filter );
+		$this->assertSame( $checked, $this->read_only_switch_checked( $html ) );
+	}
 }

@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * @return bool
  */
 function aafm_read_only_mode(): bool {
-	$on = (bool) get_option( 'aafm_read_only_mode', false );
+	$on = aafm_read_only_mode_stored();
 
 	/**
 	 * Force read-only mode on regardless of the settings-screen value.
@@ -40,6 +40,35 @@ function aafm_read_only_mode(): bool {
 	 */
 	if ( (bool) apply_filters( 'aafm_force_read_only_mode', false ) ) {
 		return true;
+	}
+
+	return $on;
+}
+
+/**
+ * Whether read-only mode is stored on, before the force filter: what the settings screen shows
+ * and saves.
+ *
+ * @return bool
+ */
+function aafm_read_only_mode_stored(): bool {
+	// An array or an object is not a stored switch, and reads as on.
+	$is_on = static function ( $stored ): bool {
+		return is_array( $stored ) || is_object( $stored ) || (bool) $stored;
+	};
+
+	$raw = get_option( 'aafm_read_only_mode', false );
+	$on  = $is_on( $raw );
+	if ( false === $raw ) {
+		// Off may be a failed read's default: the row decides, and an unreadable row means on.
+		$row = aafm_policy_row( 'aafm_read_only_mode' );
+		$on  = ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
+	}
+
+	// A cache copy that disagrees with the row reads on when either does; an unreadable row means on.
+	$row = aafm_policy_row_if_stale( 'aafm_read_only_mode' );
+	if ( null !== $row ) {
+		$on = $on || ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
 	}
 
 	return $on;

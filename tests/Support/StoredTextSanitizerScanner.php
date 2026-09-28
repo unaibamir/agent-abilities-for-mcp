@@ -850,7 +850,7 @@ final class StoredTextSanitizerScanner {
 				continue;
 			}
 			// A by-reference return (`function &foo()`) puts an ampersand before the name.
-			if ( '&' === $token ) {
+			if ( '&' === $token || ( is_array( $token ) && '&' === $token[1] ) ) {
 				continue;
 			}
 			if ( is_array( $token ) && T_STRING === $token[0] ) {

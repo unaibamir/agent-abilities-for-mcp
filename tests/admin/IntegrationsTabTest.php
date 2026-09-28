@@ -457,9 +457,7 @@ final class IntegrationsTabTest extends TestCase {
 	 */
 	public function test_tec_card_shows_its_own_below_floor_reason_not_woocommerces(): void {
 		$this->acting_as( 'administrator' );
-		if ( ! class_exists( 'Tribe__Events__Main' ) ) {
-			eval( 'class Tribe__Events__Main {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- class-only marker stub for the floor test, never shipped.
-		}
+		aafm_tec_stub_define_globals();
 		add_filter(
 			'aafm_tec_version',
 			static function () {

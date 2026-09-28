@@ -61,7 +61,7 @@ function aafm_register_menus_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-menu']      = array(
 		'label'        => __( 'Create menu', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Creates a navigation menu by name. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Creates a navigation menu by name. The menu is not attached to any theme location; wiring it in is a manual step. On a block theme it stays invisible on the front end until a human adds it to a template, since the core/navigation block reads from a separate mechanism this ability does not touch. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -201,12 +201,12 @@ function aafm_args_get_menu(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'    => array( 'type' => 'integer' ),
-				'name'  => array( 'type' => 'string' ),
-				'slug'  => array( 'type' => 'string' ),
-				'count' => array( 'type' => 'integer' ),
-			),
+			// Codex round 1 (1.7.6), R1-7: this used to list only id/name/slug/count by hand,
+			// while the executor below (aafm_redact_menu()) already returns the same
+			// attached/registered theme-location fields list-menus/create-menu/update-menu
+			// advertise through this shared helper. Use it here too, so all four menu endpoints
+			// describe the identical result shape they actually return.
+			'properties' => aafm_menu_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_get_menu',
 		'permission_callback' => 'aafm_perm_edit_theme_options',
@@ -230,6 +230,9 @@ function aafm_args_get_menu(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_menu( array $input ) {
+	if ( ! aafm_exact_object( 'term', (int) $input['menu_id'], 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
 	$menu = wp_get_nav_menu_object( (int) $input['menu_id'] );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
@@ -323,7 +326,7 @@ function aafm_exec_list_menu_items( array $input ): array {
 
 	$decorated = array();
 	foreach ( $object_ids as $object_id ) {
-		$post = get_post( (int) $object_id );
+		$post = aafm_exact_object( 'post', (int) $object_id );
 		if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 			continue;
 		}
@@ -432,6 +435,9 @@ function aafm_exec_create_menu( array $input ) {
 	if ( is_wp_error( $id ) || 0 === (int) $id ) {
 		return aafm_generic_error();
 	}
+	if ( ! aafm_exact_object( 'term', (int) $id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
 	$menu = wp_get_nav_menu_object( (int) $id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
@@ -493,13 +499,19 @@ function aafm_args_update_menu(): array {
  */
 function aafm_exec_update_menu( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
-	$menu    = wp_get_nav_menu_object( $menu_id );
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
 	$name   = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$result = wp_update_nav_menu_object( $menu_id, array( 'menu-name' => $name ) );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
 	$updated = wp_get_nav_menu_object( $menu_id );
@@ -564,7 +576,10 @@ function aafm_args_delete_menu(): array {
  */
 function aafm_exec_delete_menu( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
-	$menu    = wp_get_nav_menu_object( $menu_id );
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -654,7 +669,10 @@ function aafm_args_create_menu_item(): array {
  */
 function aafm_exec_create_menu_item( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
-	$menu    = wp_get_nav_menu_object( $menu_id );
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
@@ -690,6 +708,9 @@ function aafm_exec_create_menu_item( array $input ) {
 	}
 	if ( '' !== $object ) {
 		$args['menu-item-object'] = $object;
+	}
+	if ( ! aafm_menu_item_target_checked( $type, $object, $object_id ) ) {
+		return aafm_generic_error();
 	}
 
 	$item_id = wp_update_nav_menu_item( $menu_id, 0, $args );
@@ -767,7 +788,8 @@ function aafm_resolve_menu_item_object( string $type, int $object_id, string $re
 	}
 
 	if ( 'post_type' === $type ) {
-		$post_type = get_post_type( $object_id );
+		$post      = aafm_exact_object( 'post', $object_id );
+		$post_type = $post instanceof WP_Post ? $post->post_type : false;
 		if ( ! is_string( $post_type ) || '' === $post_type ) {
 			return new WP_Error(
 				'aafm_menu_item_object_required',
@@ -778,7 +800,7 @@ function aafm_resolve_menu_item_object( string $type, int $object_id, string $re
 		return $post_type;
 	}
 
-	$term = get_term( $object_id );
+	$term = aafm_exact_object( 'term', $object_id );
 	if ( ! $term instanceof WP_Term ) {
 		return new WP_Error(
 			'aafm_menu_item_object_required',
@@ -787,6 +809,82 @@ function aafm_resolve_menu_item_object( string $type, int $object_id, string $re
 		);
 	}
 	return (string) $term->taxonomy;
+}
+
+/**
+ * Whether a menu item's target, and the post id core will write as the item's parent, load by id.
+ *
+ * Core's wp_update_nav_menu_item() writes the target's parent as the item's post_parent: a post
+ * target's post_parent, or a term target's parent term id read as a post id
+ * (wp-includes/nav-menu.php:496, :530). On update, its final wp_update_post() walks the posts
+ * above that id. So a post target is chain-loaded, and a term target is loaded by id and the post
+ * its parent id names is chain-loaded. A load that does not come back exact passes only when
+ * aafm_object_absent() finds no row, which is how core already treats a deleted target. Other
+ * item types have no target to load.
+ *
+ * A term target also passes, with nothing loaded, when its taxonomy is not registered in this
+ * request, or when core's terms cache holds this id's own row but a site filter hid the term.
+ * Either way core's get_term() inside the write gets no term, so the write reads nothing from the
+ * target (wp-includes/nav-menu.php:492-498). The post a cached row's parent id names is still
+ * checked, the same as for a loaded term.
+ *
+ * An item stored with an empty taxonomy name follows core's get_term( $id, '' )
+ * (wp-includes/class-wp-term.php:124-174). If the load does not return the term and the cache
+ * does not hold its row, one query reads the id's taxonomies. The check refuses when that query
+ * fails, or when exactly one of those taxonomies is registered, the only case where core would read
+ * a term. No row, only unregistered taxonomies, or a term shared by several registered taxonomies
+ * gives core no term, so the check passes.
+ *
+ * @param string $type        Menu item type.
+ * @param string $object_name Post type or taxonomy name.
+ * @param int    $object_id   Target id.
+ * @return bool
+ */
+function aafm_menu_item_target_checked( string $type, string $object_name, int $object_id ): bool {
+	global $wpdb;
+
+	if ( $object_id <= 0 ) {
+		return true;
+	}
+	if ( 'post_type' === $type ) {
+		return aafm_exact_object_chain( 'post', $object_id ) instanceof WP_Post || aafm_object_absent( 'post', $object_id );
+	}
+	if ( 'taxonomy' !== $type ) {
+		return true;
+	}
+	if ( '' !== $object_name && ! taxonomy_exists( $object_name ) ) {
+		return true;
+	}
+
+	$term = aafm_exact_object( 'term', $object_id, $object_name );
+	if ( $term instanceof WP_Term ) {
+		$parent_id = (int) $term->parent;
+	} else {
+		// Core caches the raw row, whose term_id is a string.
+		$cached = wp_cache_get( $object_id, 'terms' );
+		if ( is_object( $cached ) && isset( $cached->term_id, $cached->taxonomy ) && (int) $cached->term_id === $object_id && ( '' === $object_name || (string) $cached->taxonomy === $object_name ) ) {
+			$parent_id = (int) ( $cached->parent ?? 0 );
+		} elseif ( '' !== $object_name ) {
+			return aafm_object_absent( 'term', $object_id, $object_name );
+		} else {
+			$rows = aafm_wpdb_results( $wpdb->prepare( 'SELECT tt.taxonomy FROM %i AS t INNER JOIN %i AS tt ON t.term_id = tt.term_id WHERE t.term_id = %d', $wpdb->terms, $wpdb->term_taxonomy, $object_id ) );
+			if ( ! $rows['ok'] ) {
+				return false;
+			}
+			$registered = 0;
+			foreach ( (array) $rows['value'] as $row ) {
+				if ( taxonomy_exists( (string) $row['taxonomy'] ) ) {
+					++$registered;
+				}
+			}
+			return 1 !== $registered;
+		}
+	}
+
+	if ( $parent_id <= 0 ) {
+		return true;
+	}
+	return aafm_exact_object_chain( 'post', $parent_id ) instanceof WP_Post || aafm_object_absent( 'post', $parent_id );
 }
 
 /**
@@ -854,12 +952,14 @@ function aafm_exec_update_menu_item( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
 	$item_id = (int) ( $input['item_id'] ?? 0 );
 
+	if ( ! aafm_exact_object( 'term', $menu_id, 'nav_menu' ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
 	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
-	$existing = aafm_menu_item_by_id( $menu_id, $item_id );
-	if ( null === $existing ) {
+	if ( ! aafm_menu_item_post( $menu_id, $item_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
@@ -867,34 +967,50 @@ function aafm_exec_update_menu_item( array $input ) {
 	// from core defaults (type -> 'custom', blank url/object/object-id/parent/classes/xfn/target and
 	// a reset order/position) and then persisted. Sending only the changed keys therefore corrupts a
 	// page/post_type item into a broken custom link. So we seed the full field set from the item's
-	// current stored values and layer the requested edit on top, leaving every unspecified field
-	// exactly as it was. Values are read from the same decorated item shape the read path uses; the
-	// slashed text fields (title/description/attr-title, per the core contract) are re-slashed.
-	// Position is read straight from the stored post row so the item keeps its exact saved
-	// menu_order. $existing is now decorated from a directly-loaded post (via aafm_menu_item_by_id())
-	// so its menu_order is the stored value too, but reading the row keeps the source unambiguous.
-	$stored_post    = get_post( $item_id );
-	$original_order = $stored_post instanceof WP_Post ? (int) $stored_post->menu_order : 0;
-	$args           = array(
-		'menu-item-object-id'   => isset( $existing->object_id ) ? (int) $existing->object_id : 0,
-		'menu-item-object'      => isset( $existing->object ) ? (string) $existing->object : '',
-		'menu-item-parent-id'   => isset( $existing->menu_item_parent ) ? (int) $existing->menu_item_parent : 0,
-		'menu-item-position'    => $original_order,
-		'menu-item-type'        => isset( $existing->type ) ? (string) $existing->type : 'custom',
-		'menu-item-title'       => isset( $existing->post_title ) ? wp_slash( (string) $existing->post_title ) : '',
-		'menu-item-url'         => isset( $existing->url ) ? (string) $existing->url : '',
-		'menu-item-description' => isset( $existing->post_content ) ? wp_slash( (string) $existing->post_content ) : '',
-		'menu-item-attr-title'  => isset( $existing->post_excerpt ) ? wp_slash( (string) $existing->post_excerpt ) : '',
-		'menu-item-target'      => isset( $existing->target ) ? (string) $existing->target : '',
-		'menu-item-classes'     => isset( $existing->classes ) ? implode( ' ', (array) $existing->classes ) : '',
-		'menu-item-xfn'         => isset( $existing->xfn ) ? (string) $existing->xfn : '',
-		'menu-item-status'      => isset( $existing->post_status ) ? (string) $existing->post_status : 'publish',
+	// stored values and layer the requested edit on top, leaving every unspecified field exactly as
+	// it was. The values come from the item's own post row and meta, read with the same calls and
+	// casts wp_setup_nav_menu_item() makes, but nothing decorates the item first: decoration loads
+	// the target and runs display filters, and neither may feed the write or run before the target
+	// check below. The meta is read inside aafm_with_checked_reads(), so a load that fails refuses
+	// instead of writing blank fields. Core blanks the url of a non-custom item itself before
+	// it stores anything. The slashed text fields (title/description/attr-title, per the
+	// core contract) are re-slashed. Position is the stored menu_order.
+	$stored_post = aafm_exact_object_chain( 'post', $item_id );
+	if ( ! $stored_post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$original_order = (int) $stored_post->menu_order;
+	$args           = aafm_with_checked_reads(
+		static function () use ( $item_id, $stored_post, $original_order ): array {
+			return array(
+				'menu-item-object-id'   => (int) aafm_meta_get( 'post', $item_id, '_menu_item_object_id', true ),
+				'menu-item-object'      => (string) aafm_meta_get( 'post', $item_id, '_menu_item_object', true ),
+				'menu-item-parent-id'   => (int) aafm_meta_get( 'post', $item_id, '_menu_item_menu_item_parent', true ),
+				'menu-item-position'    => $original_order,
+				'menu-item-type'        => (string) aafm_meta_get( 'post', $item_id, '_menu_item_type', true ),
+				'menu-item-title'       => wp_slash( (string) $stored_post->post_title ),
+				'menu-item-url'         => (string) aafm_meta_get( 'post', $item_id, '_menu_item_url', true ),
+				'menu-item-description' => wp_slash( (string) $stored_post->post_content ),
+				'menu-item-attr-title'  => wp_slash( (string) $stored_post->post_excerpt ),
+				'menu-item-target'      => (string) aafm_meta_get( 'post', $item_id, '_menu_item_target', true ),
+				'menu-item-classes'     => implode( ' ', (array) aafm_meta_get( 'post', $item_id, '_menu_item_classes', true ) ),
+				'menu-item-xfn'         => (string) aafm_meta_get( 'post', $item_id, '_menu_item_xfn', true ),
+				'menu-item-status'      => (string) $stored_post->post_status,
+			);
+		},
+		aafm_generic_error()
 	);
+	if ( is_wp_error( $args ) ) {
+		return $args;
+	}
 	if ( isset( $input['title'] ) ) {
 		$args['menu-item-title'] = wp_slash( aafm_sanitize_plain_text( (string) $input['title'] ) );
 	}
 	if ( isset( $input['url'] ) ) {
 		$args['menu-item-url'] = esc_url_raw( (string) $input['url'] );
+	}
+	if ( ! aafm_menu_item_target_checked( $args['menu-item-type'], $args['menu-item-object'], $args['menu-item-object-id'] ) ) {
+		return aafm_generic_error();
 	}
 
 	$result = wp_update_nav_menu_item( $menu_id, $item_id, $args );
@@ -908,8 +1024,11 @@ function aafm_exec_update_menu_item( array $input ) {
 	// because core does. So a title-only edit of the first item silently moved it last, which is
 	// the opposite of what this ability promises. Put the saved order back when core changed it.
 	if ( 0 === $original_order ) {
-		$after = get_post( $item_id );
-		if ( $after instanceof WP_Post && $original_order !== (int) $after->menu_order ) {
+		$after = aafm_exact_object( 'post', $item_id );
+		if ( ! $after instanceof WP_Post ) {
+			return aafm_generic_error();
+		}
+		if ( $original_order !== (int) $after->menu_order ) {
 			wp_update_post(
 				array(
 					'ID'         => $item_id,
@@ -984,12 +1103,14 @@ function aafm_args_delete_menu_item(): array {
  */
 function aafm_exec_delete_menu_item( array $input ) {
 	$item_id = (int) ( $input['item_id'] ?? 0 );
-	$post    = get_post( $item_id );
+	$post    = aafm_exact_object( 'post', $item_id );
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
 	wp_delete_post( $item_id );
-	if ( null !== get_post( $item_id ) ) {
+	// A re-read that does not load exactly proves nothing: the item is gone only when a
+	// failure-aware query finds no row, so a delete that a hook vetoed still reports an error.
+	if ( aafm_exact_object( 'post', $item_id ) instanceof WP_Post || ! aafm_object_absent( 'post', $item_id ) ) {
 		return aafm_generic_error();
 	}
 	return array(
@@ -1025,6 +1146,10 @@ function aafm_exec_delete_menu_item( array $input ) {
  * Reads post meta rather than a decorated item on purpose, since the entire point is to answer
  * before wp_setup_nav_menu_item() has run.
  *
+ * The target counts as gone only when a failure-aware query finds no row for it. A target load
+ * that fails or comes back as another row keeps the item. On 6.9 that item can then hit the
+ * get_post_states() warnings above, but only when the target's load itself failed.
+ *
  * Not used by aafm_menu_item_by_id() below, and that is deliberate rather than an oversight.
  * Skipping there would make a dangling item unreadable, and update-menu-item would then refuse
  * to touch it on BOTH 6.9 and 7.0 - which removes the only way to repoint a broken item at a
@@ -1035,7 +1160,7 @@ function aafm_exec_delete_menu_item( array $input ) {
  * @return bool True when this is a post_type item whose target post is gone.
  */
 function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
-	if ( 'post_type' !== get_post_meta( $item_post->ID, '_menu_item_type', true ) ) {
+	if ( 'post_type' !== aafm_meta_get( 'post', $item_post->ID, '_menu_item_type', true ) ) {
 		return false;
 	}
 	// A missing or zero object id is deliberately NOT treated as "fine". An item can carry
@@ -1043,8 +1168,8 @@ function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
 	// exactly like a deleted target - so excusing it here would hand core the very input that
 	// breaks it. Calling it gone is also the verdict core reaches by another route: an item
 	// pointing at nothing renders nothing.
-	$object_id = (int) get_post_meta( $item_post->ID, '_menu_item_object_id', true );
-	return ! ( get_post( $object_id ) instanceof WP_Post );
+	$object_id = (int) aafm_meta_get( 'post', $item_post->ID, '_menu_item_object_id', true );
+	return ! ( aafm_exact_object( 'post', $object_id ) instanceof WP_Post || ! aafm_object_absent( 'post', $object_id ) );
 }
 
 /**
@@ -1065,16 +1190,33 @@ function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
  * @return object|null The decorated nav menu item object, or null.
  */
 function aafm_menu_item_by_id( int $menu_id, int $item_id ) {
+	$post = aafm_menu_item_post( $menu_id, $item_id );
+	return $post instanceof WP_Post ? wp_setup_nav_menu_item( $post ) : null;
+}
+
+/**
+ * Load one nav menu item of a given menu by its id, undecorated.
+ *
+ * The item's post is loaded exactly and its menu membership is read with a failure-aware query,
+ * as aafm_menu_item_by_id() describes. Nothing about the item's target is loaded.
+ *
+ * @param int $menu_id Menu (nav_menu term) id.
+ * @param int $item_id Menu item (nav_menu_item post) id.
+ * @return WP_Post|null The item's post, or null.
+ */
+function aafm_menu_item_post( int $menu_id, int $item_id ): ?WP_Post {
+	global $wpdb;
+
 	// Deliberately NOT status-filtered: create/update/delete re-read the item they just wrote, which
 	// can be a draft (e.g. it points at an unpublished object), so a just-saved draft item must stay
 	// resolvable. This is intentionally more capable than the old publish-only reader.
-	$post = get_post( $item_id );
+	$post = aafm_exact_object( 'post', $item_id );
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return null;
 	}
-	$belongs = is_object_in_term( $item_id, 'nav_menu', $menu_id );
-	if ( is_wp_error( $belongs ) || ! $belongs ) {
+	$belongs = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT tr.object_id FROM %i AS tr INNER JOIN %i AS tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tr.object_id = %d AND tt.taxonomy = %s AND tt.term_id = %d LIMIT 1', $wpdb->term_relationships, $wpdb->term_taxonomy, $item_id, 'nav_menu', $menu_id ) );
+	if ( ! $belongs['ok'] || null === $belongs['value'] ) {
 		return null;
 	}
-	return wp_setup_nav_menu_item( $post );
+	return $post;
 }

@@ -1721,4 +1721,150 @@ final class WooVariationsTest extends TestCase {
 			'a term that exists but was never assigned to this product must not be treated as a resolvable option.'
 		);
 	}
+
+	/**
+	 * A variation delete that left its backing post in place reports an error even when the
+	 * post's re-read loads another row: the post counts as deleted only when a failure-aware
+	 * query finds it absent.
+	 */
+	public function test_delete_variation_reports_an_error_when_a_vetoed_delete_is_reread_under_a_fault(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$id    = (int) self::factory()->post->create( array( 'post_type' => 'product_variation' ) );
+		$other = (int) self::factory()->post->create();
+		WcStubStore::seed(
+			$id,
+			array(
+				'id'        => $id,
+				'name'      => 'Kept variation',
+				'type'      => 'variation',
+				'parent_id' => 500,
+				'status'    => 'publish',
+			)
+		);
+		// The stub delete removes the store row and zeroes the id but leaves the post, as a
+		// delete whose wp_delete_post() was vetoed would. The re-read then reads another row.
+		$needle = sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $id );
+		$leak   = sprintf( 'SELECT * FROM %1$s WHERE ID = %2$d LIMIT 1', $wpdb->posts, $other );
+		\AAFM\Tests\Support\QueryFaultInjector::reset_fired_count();
+		$filter     = \AAFM\Tests\Support\QueryFaultInjector::leak_row_filter( $needle, $leak, 1, true );
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+		ob_start();
+		try {
+			$out = aafm_exec_wc_delete_product_variation( array( 'variation_id' => $id ) );
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $suppressed );
+		}
+
+		$this->assertSame( 1, \AAFM\Tests\Support\QueryFaultInjector::fired_count(), 'the re-read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	public function test_variation_create_update_and_delete_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'sku'        => 'VAR-LOGGED',
+			)
+		);
+		$this->assertIsArray( $created );
+		$id = (int) $created['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => $id,
+				'sku'          => 'VAR-LOGGED-2',
+			)
+		);
+		$this->assertSame( 'VAR-LOGGED-2', $updated['sku'] );
+
+		$deleted = wp_get_ability( 'aafm/wc-delete-product-variation' )->execute( array( 'variation_id' => $id ) );
+		$this->assertTrue( $deleted['deleted'] );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'variation', $id, 'accepted' ),
+				$this->wc_row( 'variation', $id, 'accepted' ),
+				$this->wc_row( 'variation', $id, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_variation_create_that_does_not_persist_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcStubStore::$create_should_fail = true;
+		$res                             = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'sku'        => 'VAR-NEVER',
+			)
+		);
+		WcStubStore::$create_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'variation', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_variation_delete_a_pre_delete_filter_refuses_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		add_filter( 'woocommerce_pre_delete_product', '__return_false' );
+		$res = wp_get_ability( 'aafm/wc-delete-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		remove_filter( 'woocommerce_pre_delete_product', '__return_false' );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertTrue( WcStubStore::exists( 601 ) );
+		$this->assertSame( array( $this->wc_row( 'variation', 601, 'refused' ) ), $this->outcome_details() );
+	}
 }

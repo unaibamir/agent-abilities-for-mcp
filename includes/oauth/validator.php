@@ -31,11 +31,13 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
 /**
  * Remember (or read) the OAuth client_id a bearer token resolved for the current request.
  *
- * Read-only observability for M16: this store has no bearing on authentication or capability
- * decisions - aafm_oauth_resolve_current_user() writes to it only AFTER a token has already fully
- * resolved a user, purely so the activity-log wrapper in register.php can attribute the resulting
- * ability call to the OAuth client that made it. Mirrors the aafm_remember_raw_permission() static
- * store in register.php. A non-OAuth (Application Password/cookie) request never writes it.
+ * Only aafm_oauth_resolve_current_user() writes it, and only AFTER a token has already fully resolved
+ * a user. It never grants anything, but it has three kinds of reader: the activity-log rows for
+ * ability calls, discovery denials, transport outcomes and write outcomes record it as the calling
+ * connection; the allowlist keys its per-connection scope on it as the principal's client; and
+ * aafm_oauth_confine_bearer_to_mcp_handler() reads a non-empty value as the marker that the current
+ * user came from our bearer. Mirrors the aafm_remember_raw_permission() static store in
+ * register.php. A non-OAuth (Application Password/cookie) request never writes it.
  *
  * The store has to be per request, and a bare function static is not that on its own. On php-fpm and
  * mod_php the process ends with the request, so the two are the same. Under a persistent worker SAPI
@@ -120,14 +122,14 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		return $user_id;
 	}
 
-	// 3. Re-entrancy guard. Everything below can build site URLs (aafm_oauth_request_targets_mcp_route()
-	// at step 5, aafm_endpoint_url() at step 8), which fire the site-wide home_url/rest_url filter
-	// chains DURING user resolution. WordPress's _wp_get_current_user() has no re-entrancy lock, so a
-	// third-party filter on those URLs that calls a current-user function would re-enter this callback
-	// and recurse until memory is exhausted (a white-screen). Once we are already resolving, a nested
-	// call resolves no OAuth user. The bearer read above stays outside the guard so bearer-less
-	// traffic is unaffected. This CANNOT deadlock a legitimate token: only a nested (re-entrant) call
-	// sees the flag set; the outer call always resets it in the finally below.
+	// 3. Re-entrancy guard. Everything below can build site URLs (aafm_endpoint_url() at step 9),
+	// which fires the site-wide home_url/rest_url filter chains DURING user resolution. WordPress's
+	// _wp_get_current_user() has no re-entrancy lock, so a third-party filter on those URLs that
+	// calls a current-user function would re-enter this callback and recurse until memory is
+	// exhausted (a white-screen). Once we are already resolving, a nested call resolves no OAuth
+	// user. The bearer read above stays outside the guard so bearer-less traffic is unaffected. This
+	// CANNOT deadlock a legitimate token: only a nested (re-entrant) call sees the flag set; the
+	// outer call always resets it in the finally below.
 	static $resolving = false;
 	if ( $resolving ) {
 		return $user_id;
@@ -142,10 +144,11 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 
 		// 5. Bail until the plugin is fully loaded. The MCP-route match (step 6) and the audience
 		// binding (step 9) call functions defined only when aafm_bootstrap() runs on `plugins_loaded`
-		// - aafm_mcp_rest_route() (includes/bootstrap.php) and aafm_endpoint_url() (the connection
-		// module). This filter is registered at plugin-include time, so it can fire BEFORE our
-		// bootstrap when another active plugin resolves the current user during `plugins_loaded` (e.g.
-		// The Events Calendar calls wp_create_nonce() there). A fatal in a determine_current_user
+		// - aafm_is_mcp_route() (includes/bootstrap.php, the file that defines aafm_mcp_rest_route(),
+		// the name checked below) and aafm_endpoint_url() (the connection module). This filter is
+		// registered at plugin-include time, so it can fire BEFORE our bootstrap when another active
+		// plugin resolves the current user during `plugins_loaded` (e.g. The Events Calendar calls
+		// wp_create_nonce() there). A fatal in a determine_current_user
 		// callback white-screens the request, so we fail closed and resolve no OAuth user until the
 		// helpers exist; the genuine MCP auth check runs later, during REST dispatch.
 		if ( ! function_exists( 'aafm_mcp_rest_route' ) || ! function_exists( 'aafm_endpoint_url' ) ) {
@@ -156,8 +159,8 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		// for the MCP endpoint, not a site-wide WP REST bearer. Resolving it on any
 		// other route would turn an MCP token into a general credential for every route
 		// that trusts is_user_logged_in()/current_user_can(). Off the MCP route we leave
-		// current_user untouched, exactly as Application Passwords are. determine_current_user
-		// fires before REST routing, so the target is read from the request URI.
+		// current_user untouched, exactly as Application Passwords are. The answer is the
+		// route core parsed; before the parse it is false and serve_request() asks again.
 		if ( ! aafm_oauth_request_targets_mcp_route() ) {
 			return $user_id;
 		}
@@ -230,18 +233,22 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			return $user_id;
 		}
 
-		// 11. Capability-narrowing seam. The token resolves to the approver's FULL account by
-		// default (unchanged behaviour); this offers operators/future code a hook to cap what a
-		// token may do based on the requested scope, without altering the resolved identity.
+		// 11. Token capability map. The token resolves to the approver's FULL account by default
+		// (unchanged behaviour). A site that registers aafm_oauth_token_capabilities replaces the
+		// token's capabilities for the rest of this MCP request: each listed capability is set
+		// outright, a capability the approver lacks included, and every other capability is denied,
+		// in every user_has_cap check the request makes. The resolved identity is unchanged.
 		aafm_oauth_apply_token_capability_scope(
 			(int) $row['wp_user_id'],
 			isset( $row['scope'] ) ? (string) $row['scope'] : '',
 			(string) $row['client_id']
 		);
 
-		// 12. M16: record the resolved client_id purely for activity-log attribution. Read-only -
-		// this happens only after the token has fully resolved a user through every guard above, so
-		// it can never influence the auth decision itself, only observability of its outcome.
+		// 12. M16: record the resolved client_id. The activity-log rows attribute calls by it, the
+		// allowlist keys its per-connection scopes on it (aafm_ability_allowed_for_principal()), and
+		// aafm_oauth_confine_bearer_to_mcp_handler() reads it as the marker that the current user came
+		// from our bearer. It is written only after the token has resolved a user through every guard
+		// above, so it cannot change this resolution.
 		aafm_oauth_current_client_id( (string) $row['client_id'] );
 
 		return (int) $row['wp_user_id'];
@@ -251,20 +258,20 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 }
 
 /**
- * Optionally narrow the capabilities an OAuth token may exercise for this request.
+ * Optionally replace the capabilities an OAuth token may exercise for this request.
  *
  * The identity a token resolves to is never changed here: the token always acts AS the
- * approving WordPress user. What this offers is a seam to cap what that identity may DO on
+ * approving WordPress user. What this offers is a hook that sets the capabilities checked on
  * the current MCP request, keyed on the scope the grant was minted with.
  *
  * By default it does nothing - the `aafm_oauth_token_capabilities` filter returns null, so no
  * restriction is applied and existing "acts with the approver's full caps" behaviour is
  * preserved (non-breaking; live tokens are never silently reduced). A hook that returns a
- * capability => bool allow-map instead installs a request-scoped `user_has_cap` filter that
- * grants only the listed capabilities and denies the rest, so an operator (or future
- * scope-mapping code) can bind a token to least privilege. The map is applied only for the
- * remainder of THIS request, which only reaches here on the MCP route with a valid OAuth
- * bearer, so it can never leak into an unrelated context.
+ * capability => bool map instead installs a request-scoped `user_has_cap` filter that sets
+ * each listed capability outright, a capability the approver lacks included, and denies every
+ * capability not in the map. That filter applies to every user_has_cap check for the remainder
+ * of THIS request, whichever user it is for. The request only reaches here on the MCP route
+ * with a valid OAuth bearer, so the map never reaches an unrelated request.
  *
  * @param int    $user_id   The resolved approver (unchanged; passed for hook context).
  * @param string $scope     The scope the token was minted with (may be '').
@@ -276,9 +283,10 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
 	 * Filter the capabilities an OAuth-authenticated request may exercise.
 	 *
 	 * Return null (the default) to apply NO restriction - the token acts with the approving
-	 * user's full capabilities, exactly as before. Return an array of capability => bool to cap the
-	 * token to that allow-list for the current request; any capability not present in the map is
-	 * denied.
+	 * user's full capabilities, exactly as before. Return an array of capability => bool to replace
+	 * the capabilities for the rest of this MCP request: each listed capability is granted or denied
+	 * outright, a capability the approver lacks included, and any capability not in the map is
+	 * denied. The map applies to every user_has_cap check in that request, whichever user it is for.
 	 *
 	 * @param array<string,bool>|null $caps      Capability allow-map, or null for no restriction.
 	 * @param string                  $scope     The scope the token was minted with (may be '').
@@ -318,81 +326,141 @@ function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, s
 }
 
 /**
- * Whether the current request targets the MCP REST route.
+ * Remember (or read) whether REST routing began after WordPress parsed this request.
  *
- * The determine_current_user filter runs before REST routing resolves $request->get_route(),
- * so the target is derived from the raw request: the URI path (pretty permalinks give
- * /wp-json/agent-abilities-for-mcp/mcp) and the rest_route query var (plain permalinks give
- * ?rest_route=/agent-abilities-for-mcp/mcp). The MCP rest path is taken from the registered
- * endpoint so it tracks any future rename.
+ * Set by aafm_oauth_forget_anonymous_user_on_mcp_route() when rest_api_init fires while WordPress is
+ * running parse_request with core's rest_api_loaded() still hooked, as it does inside
+ * rest_api_loaded(). rest_api_init fires once per process, on the first rest_get_server() from any
+ * caller, so a count of it alone cannot tell this request's REST routing from a REST server some
+ * plugin built earlier; this flag can. Cleared on `shutdown`, like the client id store, so a
+ * persistent worker starts each request without it.
  *
- * @return bool True only when the request is for the MCP endpoint.
+ * @param bool|null $began True to record, false to forget, null to read.
+ * @return bool
+ */
+function aafm_oauth_rest_routing_began( ?bool $began = null ): bool {
+	static $flag = false;
+	if ( null !== $began ) {
+		$flag = $began;
+	}
+	return $flag;
+}
+
+/**
+ * Forget the REST routing flag at the end of the request.
+ *
+ * @return void
+ */
+function aafm_oauth_forget_rest_routing(): void {
+	aafm_oauth_rest_routing_began( false );
+}
+add_action( 'shutdown', 'aafm_oauth_forget_rest_routing' );
+
+/**
+ * Whether WordPress routed this request to the MCP REST route.
+ *
+ * The answer is core's own: the rest_route WordPress::parse_request() settled on, untrailingslashed
+ * as rest_api_loaded() does, matched by aafm_is_mcp_route() as core's router matches it. It is
+ * false until WordPress has parsed the request and is serving it as REST: REST_REQUEST is defined
+ * (core defines it in rest_api_loaded(), the same signal core's Application Passwords wait for), or
+ * rest_api_init fired inside core's REST dispatch during parse_request
+ * (aafm_oauth_rest_routing_began()). That is safe for a healthy MCP call:
+ * WP_REST_Server::serve_request() forgets a cached anonymous user before dispatch, so the bearer
+ * resolves then. Entry points that never parse (wp-admin, admin-ajax, admin-post, wp-comments-post,
+ * cron, CLI) and requests answered during parse_request (the discovery documents) never match, even
+ * on a site where a plugin built the REST server before the parse. What is left is code that builds
+ * the REST server inside an early parse_request callback on a non-REST request, and, as for core's
+ * Application Passwords, code that defines REST_REQUEST itself on a request core does not serve as
+ * REST.
+ *
+ * @return bool True only when core routed the request to the MCP endpoint.
  */
 function aafm_oauth_request_targets_mcp_route(): bool {
-	// Single-sourced in bootstrap.php (leading-slash form).
-	$mcp_route = aafm_mcp_rest_route();
-
-	// Plain-permalink form: ?rest_route=/agent-abilities-for-mcp/mcp. When the rest_route query var
-	// is present it is AUTHORITATIVE and we must decide solely from it, never falling through to the
-	// path check below. WordPress's WP::parse_request() gives the $_GET['rest_route'] value
-	// precedence over the URL-path-derived route, so that is the route the request is actually
-	// dispatched to. If we instead fell through and matched the URL path, a request whose path is the
-	// MCP route but whose ?rest_route= points elsewhere (e.g. ?rest_route=/wp/v2/users/me) would be
-	// misclassified as MCP-targeted while WordPress dispatches it to /wp/v2/users/me - turning an
-	// audience-bound aafm_oat_ MCP token into a general credential for that unrelated REST route.
-	if ( isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check, no state change.
-		$rest_route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		// Case-insensitive, matching how core itself matches REST routes (the route regex in
-		// class-wp-rest-server.php is built with the `i` modifier) and the same comparison the
-		// swept siblings use (aafm_mcp_filter_governed_error_status(),
-		// aafm_oauth_filter_malformed_json()). A case-sensitive compare fails closed - the bearer
-		// never resolves - but it disagrees with where WordPress actually dispatches the request.
-		return 0 === strcasecmp( rtrim( $rest_route, '/' ), $mcp_route );
-	}
-
-	// Pretty-permalink form: compare the request path against the MCP endpoint's path. Derive the
-	// expected path from rest_url() so a site installed under a path prefix (e.g.
-	// https://example.com/blog) keeps that prefix (/blog/wp-json/...) in the comparison - a
-	// hardcoded /wp-json/... literal never matches there.
-	$request_uri = isset( $_SERVER['REQUEST_URI'] )
-		? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) )
-		: '';
-	$path        = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
-	if ( '' === $path ) {
+	$wp = $GLOBALS['wp'] ?? null;
+	if ( ! did_action( 'parse_request' ) || ! $wp instanceof WP ) {
 		return false;
 	}
-
-	// rest_url() -> get_rest_url() dereferences the global $wp_rewrite. The determine_current_user
-	// filter can fire before WordPress instantiates $wp_rewrite (e.g. Query Monitor calling
-	// current_user_can() that early), so calling rest_url() then fatals on a null $wp_rewrite. Only
-	// use rest_url() once $wp_rewrite exists; otherwise leave the path empty so the home_url() +
-	// rest_get_url_prefix() reconstruction below (neither touches $wp_rewrite) produces the route.
-	$rest_url_path = '';
-	if ( isset( $GLOBALS['wp_rewrite'] ) && $GLOBALS['wp_rewrite'] instanceof \WP_Rewrite ) {
-		$rest_url_path = (string) wp_parse_url( rest_url( ltrim( $mcp_route, '/' ) ), PHP_URL_PATH );
+	if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) && ! aafm_oauth_rest_routing_began() ) {
+		return false;
 	}
+	$route = $wp->query_vars['rest_route'] ?? null;
+	return is_string( $route ) && aafm_is_mcp_route( untrailingslashit( $route ) );
+}
 
-	// When pretty permalinks are off, rest_url() returns the plain ?rest_route= form, whose path
-	// component collapses to .../index.php and carries no route - that case is the rest_route branch
-	// above. Only treat the rest_url() path as the pretty target when it actually ends with the MCP
-	// route. Otherwise reconstruct the expected pretty path from the install's home-path prefix so a
-	// subdirectory install still matches even with plain permalinks pretty-routing through.
-	if ( substr( rtrim( $rest_url_path, '/' ), -strlen( $mcp_route ) ) === $mcp_route ) {
-		$mcp_rest_path = $rest_url_path;
-	} else {
-		$home_path     = (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH );
-		$segments      = array_filter(
-			array( trim( $home_path, '/' ), trim( rest_get_url_prefix(), '/' ) ),
-			static function ( string $segment ): bool {
-				return '' !== $segment;
-			}
-		);
-		$mcp_rest_path = '/' . implode( '/', $segments ) . $mcp_route;
+/**
+ * Forget a cached anonymous user when an MCP-routed request carries our bearer.
+ *
+ * Runs first on rest_api_init, and does anything only while WordPress is still running
+ * parse_request: core serves a parsed rest_route from rest_api_loaded(), a parse_request callback,
+ * which defines REST_REQUEST and then obtains the REST server, initializing it (and firing
+ * rest_api_init) only if none exists. A server built later (during a page render on a site that
+ * unhooked rest_api_loaded()) or earlier (a plugin at plugins_loaded) is outside it, and this does
+ * nothing. Inside it, with rest_api_loaded() still hooked, it records that REST routing began after
+ * the parse (aafm_oauth_rest_routing_began()). WP::init() looks the user up before WordPress parses
+ * the request, when the bearer cannot resolve yet, and caches "nobody". Once core has defined
+ * REST_REQUEST, this makes the same clear core's WP_REST_Server::serve_request() makes, one step
+ * earlier, so in the normal routing order the tool registry built on rest_api_init sees the
+ * approver. A server some parse_request callback builds before core's dispatch clears nothing. On a
+ * site where code built the REST server before the parse, rest_api_init has already run and
+ * registration sees whoever was resolved then. It only ever forgets a cached user that does not
+ * exist, and only with an aafm_oat_ bearer on a request core routed to the MCP endpoint.
+ *
+ * @return void
+ */
+function aafm_oauth_forget_anonymous_user_on_mcp_route(): void {
+	global $current_user;
+	if ( ! doing_action( 'parse_request' ) ) {
+		return;
 	}
+	if ( false !== has_action( 'parse_request', 'rest_api_loaded' ) ) {
+		aafm_oauth_rest_routing_began( true );
+	}
+	if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ! $current_user instanceof WP_User || $current_user->exists() || ! function_exists( 'aafm_is_mcp_route' ) ) {
+		return;
+	}
+	$credential = aafm_oauth_read_bearer_token();
+	if ( null === $credential || 0 !== strncmp( $credential, AAFM_OAUTH_ACCESS_TOKEN_PREFIX, strlen( AAFM_OAUTH_ACCESS_TOKEN_PREFIX ) ) ) {
+		return;
+	}
+	if ( aafm_oauth_request_targets_mcp_route() ) {
+		$current_user = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the same clear core makes in WP_REST_Server::serve_request().
+	}
+}
 
-	// Case-insensitive for the same reason as the rest_route branch above: core dispatches the
-	// odd-cased path to the MCP endpoint anyway.
-	return 0 === strcasecmp( rtrim( $path, '/' ), rtrim( $mcp_rest_path, '/' ) );
+/**
+ * Refuse a user resolved from our bearer at any handler on the MCP path but an MCP transport's.
+ *
+ * Core runs the first handler whose route matches, so a route another plugin registers inside our
+ * namespace could run ahead of the adapter's on the MCP path. Runs on rest_request_before_callbacks,
+ * after core matched the handler and before the dispatch runs its permission_callback and callback
+ * (core's Allow-header pass still calls that permission_callback afterwards; see Limits). When the
+ * request is the MCP route and the current user came from an aafm_oat_ bearer, any handler whose
+ * callback is not an HttpTransport method gets the same 401 an unauthenticated MCP call gets.
+ *
+ * Limits (named residuals U-1b and U-1c): a second HttpTransport server registered at a route
+ * matching ours is let through; a foreign handler's argument validate and sanitize callbacks, core's
+ * Allow-header pass over its permission_callback, and any rest_request_before_callbacks filter that
+ * runs before this one still run with the bearer's user; and a filter another plugin adds at the same
+ * last priority after this one can undo the refusal.
+ *
+ * @param mixed $response The response so far (WP_Error, a short-circuit value, or null).
+ * @param mixed $handler  The matched route handler.
+ * @param mixed $request  The request.
+ * @return mixed $response unchanged, or a 401 WP_Error.
+ */
+function aafm_oauth_confine_bearer_to_mcp_handler( $response, $handler, $request ) {
+	if ( is_wp_error( $response ) || ! $request instanceof WP_REST_Request || ! function_exists( 'aafm_is_mcp_route' ) || ! aafm_is_mcp_route( $request->get_route() ) ) {
+		return $response;
+	}
+	get_current_user_id();
+	if ( '' === aafm_oauth_current_client_id() ) {
+		return $response;
+	}
+	$callback = is_array( $handler ) ? ( $handler['callback'] ?? null ) : null;
+	if ( is_array( $callback ) && isset( $callback[0] ) && $callback[0] instanceof \WP\MCP\Transport\HttpTransport ) {
+		return $response;
+	}
+	return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), array( 'status' => 401 ) );
 }
 
 /**

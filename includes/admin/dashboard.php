@@ -44,14 +44,33 @@ function aafm_agent_user_candidates(): array {
 			continue;
 		}
 
-		$wp_user = get_userdata( $user_id );
-		$roles   = ( $wp_user instanceof WP_User ) ? array_values( $wp_user->roles ) : array();
+		// Roles and the admin flag are read inside the checked-read scope. A caps load that fails
+		// there shows no roles and flags the account as an administrator, the cautious reading. The
+		// application-passwords read above loads the same usermeta first, outside the scope, so that
+		// row appears only when the cache did not keep that load; a load that fails above drops the
+		// user from this list instead.
+		$read = aafm_with_checked_reads(
+			static function () use ( $user_id ): array {
+				$wp_user = aafm_exact_object( 'user', $user_id );
+				return array(
+					'roles'    => ( $wp_user instanceof WP_User ) ? array_values( $wp_user->roles ) : array(),
+					'is_admin' => user_can( $user_id, 'manage_options' ),
+				);
+			},
+			aafm_generic_error()
+		);
+		if ( is_wp_error( $read ) ) {
+			$read = array(
+				'roles'    => array(),
+				'is_admin' => true,
+			);
+		}
 
 		$candidates[] = array(
 			'id'       => $user_id,
 			'login'    => (string) $user->user_login,
-			'roles'    => array_map( 'strval', $roles ),
-			'is_admin' => user_can( $user_id, 'manage_options' ),
+			'roles'    => array_map( 'strval', $read['roles'] ),
+			'is_admin' => $read['is_admin'],
 		);
 	}
 
@@ -169,7 +188,15 @@ function aafm_recent_agent_count(): int {
 
 	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
 	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
-	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s', $table, $cutoff ) );
+	//
+	// event_type <> 'write_outcome' excludes the write-and-confirm contract's own rows: a
+	// write_outcome row carries the same principal as the ability_call row for the same request,
+	// so excluding it drops no agent from the count, and including it would inflate this number
+	// for an admin save (a write_outcome row with the admin's own principal) exactly as it already
+	// would for the schema-stamp row's principal 0 (audit/log.php:136). 'ability_call' is not
+	// excluded here: unlike aafm_agent_call_count(), this count already includes admin-only event
+	// types such as setting_changed in 1.7.5, and narrowing it further would change today's number.
+	$view = aafm_wpdb_scalar( $wpdb->prepare( "SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s AND event_type <> 'write_outcome'", $table, $cutoff ) );
 
 	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
@@ -177,13 +204,12 @@ function aafm_recent_agent_count(): int {
 /**
  * Whether any user has approved an OAuth connection (a live grant exists).
  *
- * Read-only; returns false when OAuth is disabled or nobody has approved yet so
- * callers never need to guard around the OAuth functions existing.
+ * Read-only; returns false when OAuth is disabled or nobody has approved yet.
  *
  * @return bool
  */
 function aafm_has_oauth_grant(): bool {
-	return function_exists( 'aafm_oauth_list_grants' ) && ! empty( aafm_oauth_list_grants() );
+	return ! empty( aafm_oauth_list_grants() );
 }
 
 /**
@@ -385,13 +411,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<div class="aafm-stat-grid">';
 
 	// Enabled abilities.
-	echo '<div class="aafm-stat aafm-stat-abilities">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Enabled abilities', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'bolt' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-abilities', __( 'Enabled abilities', 'agent-abilities-for-mcp' ), 'bolt' );
 	printf(
 		'<div class="stat-value">%1$s <small>%2$s</small></div>',
 		esc_html( number_format_i18n( $enabled ) ),
@@ -421,25 +441,13 @@ function aafm_render_dashboard_tab(): void {
 	echo '</div>';
 
 	// Recent agents (24h).
-	echo '<div class="aafm-stat aafm-stat-recent">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Recent agents (24h)', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'recent' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-recent', __( 'Recent agents (24h)', 'agent-abilities-for-mcp' ), 'recent' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $recent ) ) );
 	echo '<div class="stat-sub">' . esc_html__( 'Separate agent users seen in the activity log in the last 24 hours. This is recent activity from the log, not a count of live connections.', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '</div>';
 
 	// Audit log.
-	echo '<div class="aafm-stat aafm-stat-audit">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Audit log', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'audit' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-audit', __( 'Audit log', 'agent-abilities-for-mcp' ), 'audit' );
 	printf(
 		'<div class="stat-value">%1$s <small>%2$s</small></div>',
 		esc_html( number_format_i18n( $log_rows ) ),
@@ -468,13 +476,7 @@ function aafm_render_dashboard_tab(): void {
 	// security heads-up computed from the broad candidate set, worded so it does not imply those
 	// admins are agent users.
 	$created_count = count( $created_agents );
-	echo '<div class="aafm-stat aafm-stat-agent-users">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Agent users', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'groups' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-agent-users', __( 'Agent users', 'agent-abilities-for-mcp' ), 'groups' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $created_count ) ) );
 	if ( 0 === $created_count ) {
 		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet', 'agent-abilities-for-mcp' ) . '</div>';

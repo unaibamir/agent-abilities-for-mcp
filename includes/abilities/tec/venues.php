@@ -92,18 +92,18 @@ function aafm_tec_venues_registry_definitions(): array {
  * @return array<string,mixed>
  */
 function aafm_tec_venue_shape( int $id ): array {
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	return array(
 		'id'      => $id,
 		'title'   => $post instanceof WP_Post ? get_the_title( $post ) : '',
 		'status'  => $post instanceof WP_Post ? (string) $post->post_status : '',
-		'address' => (string) get_post_meta( $id, '_VenueAddress', true ),
-		'city'    => (string) get_post_meta( $id, '_VenueCity', true ),
-		'state'   => (string) get_post_meta( $id, '_VenueStateProvince', true ),
-		'zip'     => (string) get_post_meta( $id, '_VenueZip', true ),
-		'country' => (string) get_post_meta( $id, '_VenueCountry', true ),
-		'phone'   => (string) get_post_meta( $id, '_VenuePhone', true ),
-		'website' => (string) get_post_meta( $id, '_VenueURL', true ),
+		'address' => (string) aafm_meta_get( 'post', $id, '_VenueAddress', true ),
+		'city'    => (string) aafm_meta_get( 'post', $id, '_VenueCity', true ),
+		'state'   => (string) aafm_meta_get( 'post', $id, '_VenueStateProvince', true ),
+		'zip'     => (string) aafm_meta_get( 'post', $id, '_VenueZip', true ),
+		'country' => (string) aafm_meta_get( 'post', $id, '_VenueCountry', true ),
+		'phone'   => (string) aafm_meta_get( 'post', $id, '_VenuePhone', true ),
+		'website' => (string) aafm_meta_get( 'post', $id, '_VenueURL', true ),
 	);
 }
 
@@ -304,7 +304,7 @@ function aafm_args_tec_get_venue(): array {
  */
 function aafm_exec_tec_get_venue( array $input ) {
 	$id   = absint( $input['venue_id'] ?? 0 );
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || Tribe__Events__Venue::POSTTYPE !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -361,11 +361,18 @@ function aafm_exec_tec_create_venue( array $input ) {
 		return $safety;
 	}
 
-	$created = tribe_venues()->set_args( $args )->create();
+	$created = aafm_tec_write( 'venues', $args )['returned'];
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return array( 'venue' => aafm_tec_venue_shape( (int) $created->ID ) );
+	$created_id = (int) $created->ID;
+	if ( ! aafm_exact_object( 'post', $created_id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	return aafm_with_checked_reads(
+		static fn(): array => array( 'venue' => aafm_tec_venue_shape( $created_id ) ),
+		aafm_generic_error()
+	);
 }
 
 /**
@@ -417,7 +424,10 @@ function aafm_args_tec_update_venue(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_tec_update_venue( array $input ) {
-	$id   = absint( $input['venue_id'] ?? 0 );
+	$id = absint( $input['venue_id'] ?? 0 );
+	if ( $id < 1 ) {
+		return aafm_generic_error();
+	}
 	$args = aafm_tec_venue_orm_args( $input );
 	if ( isset( $input['status'] ) ) {
 		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_venue_publish_cap() );
@@ -426,19 +436,21 @@ function aafm_exec_tec_update_venue( array $input ) {
 		}
 		$args['post_status'] = $status;
 	}
-	if ( array() === $args ) {
-		return array( 'venue' => aafm_tec_venue_shape( $id ) );
+	if ( array() !== $args ) {
+		$safety = aafm_tec_enforce_content_safety( $args, 'venue' );
+		if ( is_wp_error( $safety ) ) {
+			return $safety;
+		}
+		$result = aafm_tec_write( 'venues', $args, $id )['returned'];
+		if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
+			return aafm_generic_error();
+		}
 	}
-	$safety = aafm_tec_enforce_content_safety( $args, 'venue' );
-	if ( is_wp_error( $safety ) ) {
-		return $safety;
-	}
-	$result = aafm_tec_force_sync_save(
-		'venues',
-		static fn() => tribe_venues()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
-	);
-	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return array( 'venue' => aafm_tec_venue_shape( $id ) );
+	return aafm_with_checked_reads(
+		static fn(): array => array( 'venue' => aafm_tec_venue_shape( $id ) ),
+		aafm_generic_error()
+	);
 }

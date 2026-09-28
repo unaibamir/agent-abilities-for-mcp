@@ -261,13 +261,6 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The Authorization header in its two server spellings, parsed for a bearer token that is then hashed and compared against stored tokens. The header text itself is never stored.',
 		),
-		'includes/oauth/validator.php::aafm_oauth_request_targets_mcp_route::sanitize_text_field' => array(
-			'calls'  => array(
-				'sanitize_text_field( wp_unslash( $_GET[\'rest_route\'] ) )',
-				'sanitize_text_field( wp_unslash( $_SERVER[\'REQUEST_URI\'] ) )',
-			),
-			'reason' => 'rest_route and REQUEST_URI, both used to decide whether this request is aimed at the MCP endpoint. Routing only, never written.',
-		),
 		'includes/text.php::aafm_sanitize_multiline_text::sanitize_textarea_field' => array(
 			'calls'  => array(
 				'sanitize_textarea_field( $value )',
@@ -1003,5 +996,25 @@ function aafm_probe_four( $object, $value ) {
 PHP;
 
 		$this->assertSame( array(), StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+	}
+
+	/**
+	 * A call inside a by-reference function, `function &b(`, belongs to b. PHP 8.1 tokenizes that
+	 * ampersand as an array token rather than the plain string PHP 7.4 gives, so a check for the
+	 * string alone attributed the call to the function declared before it.
+	 */
+	public function test_a_call_inside_a_by_reference_function_is_attributed_to_it(): void {
+		$source = <<<'PHP'
+<?php
+function a() {}
+function &b( $x ) {
+	return sanitize_text_field( $x );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame( 'b', $records[0]['function'] );
 	}
 }

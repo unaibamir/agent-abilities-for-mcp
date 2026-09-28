@@ -102,6 +102,11 @@ namespace {
 				// Captured BEFORE the write below runs, so a test can inspect exactly what this
 				// plugin's own code handed to the function - independent of how storage happens.
 				aafm_geodir_stub_last_call( (int) $post_id, (string) $postmeta, $meta_value );
+				// A test can make this field's column missing: the real function then returns false and
+				// writes nothing (geodirectory 2.8.181, includes/post-functions.php:141-142).
+				if ( apply_filters( 'aafm_geodir_stub_simulate_missing_column', false, $postmeta ) ) {
+					return false;
+				}
 				// A test can force this ONE field to silently fail to persist, mirroring the real
 				// function's own documented failure mode: its $wpdb->query() result is discarded,
 				// so a genuine write failure returns nothing rather than false - proving that
@@ -130,7 +135,9 @@ namespace {
 					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- deliberately mirrors the real vendor function's own raw concatenation; see the comment above.
 					$wpdb->query( $wpdb->prepare( "INSERT INTO {$table} SET post_id = %d, `{$column}` = '{$meta_value}'", $post_id ) );
 				}
-				return true;
+				// The real function returns nothing on the write path, whether its query succeeded or
+				// not (includes/post-functions.php:113-139).
+				return null;
 			}
 		}
 

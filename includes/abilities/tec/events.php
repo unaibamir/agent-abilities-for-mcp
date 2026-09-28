@@ -112,12 +112,26 @@ function aafm_tec_events_registry_definitions(): array {
  * @return array<string,mixed>
  */
 function aafm_tec_event_shape( int $id ): array {
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		// The values The Events Calendar's readers return for a missing event, without calling them.
+		return array(
+			'id'            => $id,
+			'title'         => '',
+			'status'        => '',
+			'link'          => '',
+			'start_date'    => '',
+			'end_date'      => '',
+			'all_day'       => false,
+			'venue_id'      => 0,
+			'organizer_ids' => array(),
+		);
+	}
 	return array(
 		'id'            => $id,
-		'title'         => $post instanceof WP_Post ? get_the_title( $post ) : '',
-		'status'        => $post instanceof WP_Post ? (string) $post->post_status : '',
-		'link'          => $post instanceof WP_Post ? (string) get_permalink( $post ) : '',
+		'title'         => get_the_title( $post ),
+		'status'        => (string) $post->post_status,
+		'link'          => (string) get_permalink( $post ),
 		'start_date'    => (string) tribe_get_start_date( $id, false, 'Y-m-d H:i:s' ),
 		'end_date'      => (string) tribe_get_end_date( $id, false, 'Y-m-d H:i:s' ),
 		'all_day'       => (bool) tribe_event_is_all_day( $id ),
@@ -277,7 +291,7 @@ function aafm_args_tec_get_event(): array {
  */
 function aafm_exec_tec_get_event( array $input ) {
 	$id   = absint( $input['event_id'] ?? 0 );
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || Tribe__Events__Main::POSTTYPE !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -353,7 +367,8 @@ function aafm_tec_event_orm_args( array $input ): array {
 function aafm_tec_validate_venue_organizer_ids( array $input ) {
 	if ( ! empty( $input['venue_id'] ) ) {
 		$venue_id = absint( $input['venue_id'] );
-		if ( 'tribe_venue' !== get_post_type( $venue_id ) ) {
+		$venue    = aafm_exact_object( 'post', $venue_id );
+		if ( 'tribe_venue' !== ( $venue instanceof WP_Post ? $venue->post_type : false ) ) {
 			return new WP_Error(
 				'aafm_tec_invalid_venue',
 				sprintf(
@@ -367,7 +382,8 @@ function aafm_tec_validate_venue_organizer_ids( array $input ) {
 	if ( array_key_exists( 'organizer_ids', $input ) && is_array( $input['organizer_ids'] ) ) {
 		foreach ( $input['organizer_ids'] as $organizer_id ) {
 			$organizer_id = absint( $organizer_id );
-			if ( 'tribe_organizer' !== get_post_type( $organizer_id ) ) {
+			$organizer    = aafm_exact_object( 'post', $organizer_id );
+			if ( 'tribe_organizer' !== ( $organizer instanceof WP_Post ? $organizer->post_type : false ) ) {
 				return new WP_Error(
 					'aafm_tec_invalid_organizer',
 					sprintf(
@@ -477,11 +493,21 @@ function aafm_exec_tec_create_event( array $input ) {
 		return $safety;
 	}
 
-	$created = tribe_events()->set_args( $args )->create();
+	$created = aafm_tec_write( 'events', $args )['returned'];
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	$response = array( 'event' => aafm_tec_event_shape( (int) $created->ID ) );
+	$created_id = (int) $created->ID;
+	if ( ! aafm_exact_object( 'post', $created_id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_with_checked_reads(
+		static fn(): array => array( 'event' => aafm_tec_event_shape( $created_id ) ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
 	if ( ! empty( $safety['warnings'] ) ) {
 		$response['content_warnings'] = $safety['warnings'];
 	}
@@ -539,6 +565,9 @@ function aafm_args_tec_update_event(): array {
  */
 function aafm_exec_tec_update_event( array $input ) {
 	$id = absint( $input['event_id'] ?? 0 );
+	if ( $id < 1 ) {
+		return aafm_generic_error();
+	}
 
 	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
 	if ( false !== $owning_builder ) {
@@ -558,51 +587,49 @@ function aafm_exec_tec_update_event( array $input ) {
 		}
 		$args['post_status'] = $status;
 	}
-	if ( array() === $args ) {
-		return array( 'event' => aafm_tec_event_shape( $id ) ); // Nothing to change; no-op success.
-	}
+	$safety = array( 'warnings' => array() );
+	if ( array() !== $args ) {
+		// Codex final round 10 MEDIUM: round 9's content-safety fix wired this call into event
+		// create and both venue/organizer paths, but missed this one - the fifth-of-six call sites
+		// that got left out.
+		$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
+		if ( is_wp_error( $safety ) ) {
+			return $safety;
+		}
 
-	// Codex final round 10 MEDIUM: round 9's content-safety fix wired this call into event
-	// create and both venue/organizer paths, but missed this one - the fifth-of-six call sites
-	// that got left out.
-	$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
-	if ( is_wp_error( $safety ) ) {
-		return $safety;
-	}
-
-	$result = aafm_tec_force_sync_save(
-		'events',
-		static fn() => tribe_events()->where( 'id', $id )->where( 'post_status', 'any' )->set_args( $args )->save( false )
-	);
-	if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
-		return aafm_generic_error();
-	}
-	// Documented contract exception to "every event write goes through the ORM" (Codex final
-	// round MEDIUM, re-verified against the installed plugin): TEC's own repository save step
-	// (Repositories/Event.php) unsets the all-day meta input rather than writing a falsy value
-	// whenever the requested all_day is falsy, so the ORM's own update never touches the existing
-	// meta row - a real event that was already all-day stays all-day, silently, under a
-	// successful save() response. TEC's repository offers no supported way to clear this key
-	// (confirmed by reading the actual save path, not assumed), so this direct delete_post_meta()
-	// call - core's own meta API, not a raw query, so cache invalidation is unaffected - is the
-	// only mechanism that exists, runs strictly AFTER the ORM save above (never interleaved with
-	// or in place of it), and is the confirmed inverse of the boolean cast this file's own read
-	// applies when shaping an event for the wire. Proven against a stub that reproduces this exact
-	// TEC quirk (see TecStubStore.php's write_meta()), not one that would pass regardless.
-	if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
-		delete_post_meta( $id, '_EventAllDay' );
-		// Codex hunt F4: delete_post_meta()'s bool return was discarded here, so a
-		// delete_post_metadata filter vetoing the delete would leave the event still marked
-		// all-day while this ability reported an ordinary success. Confirm the key is
-		// actually gone rather than trusting the call didn't error.
-		if ( metadata_exists( 'post', $id, '_EventAllDay' ) ) {
-			return new WP_Error(
-				'aafm_tec_write_unconfirmed',
-				__( 'The event was updated, but its all-day flag could not be confirmed as cleared.', 'agent-abilities-for-mcp' )
-			);
+		$result = aafm_tec_write( 'events', $args, $id )['returned'];
+		if ( empty( $result[ $id ] ) || is_wp_error( $result[ $id ] ) ) {
+			return aafm_generic_error();
+		}
+		// The one event write outside the ORM: TEC's repository save (Repositories/Event.php) unsets
+		// a falsy all_day input rather than writing it, so an event that was already all-day stays
+		// all-day under a successful save(), and the repository offers no supported way to clear the
+		// key. The key is deleted through the metadata writer, after the ORM save and never in place of
+		// it; the delete is the inverse of the boolean cast this file's own read applies. The stub
+		// reproduces this TEC behaviour (TecStubStore.php's write_meta()).
+		if ( array_key_exists( 'all_day', $input ) && ! $input['all_day'] ) {
+			// The delete reports what happened: the key gone, or never there, is success; a refused
+			// or unreadable delete leaves the event marked all-day and is this ability's error.
+			$cleared = aafm_meta_delete( 'post', $id, '_EventAllDay' );
+			if ( ! in_array( $cleared['status'], array( AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT ), true ) ) {
+				return new WP_Error(
+					'aafm_tec_write_unconfirmed',
+					__( 'The event was updated, but its all-day flag could not be confirmed as cleared.', 'agent-abilities-for-mcp' ),
+					aafm_meta_write_error( $cleared['status'], 'delete', 'post', $id, '_EventAllDay' )->get_error_data()
+				);
+			}
 		}
 	}
-	$response = array( 'event' => aafm_tec_event_shape( $id ) );
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$response = aafm_with_checked_reads(
+		static fn(): array => array( 'event' => aafm_tec_event_shape( $id ) ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $response ) ) {
+		return $response;
+	}
 	if ( ! empty( $safety['warnings'] ) ) {
 		$response['content_warnings'] = $safety['warnings'];
 	}
@@ -671,6 +698,9 @@ function aafm_exec_tec_delete_event( array $input ) {
 		return aafm_trash_disabled_error();
 	}
 	$id = absint( $input['event_id'] ?? 0 );
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 	if ( ! wp_trash_post( $id ) ) {
 		return aafm_generic_error();
 	}

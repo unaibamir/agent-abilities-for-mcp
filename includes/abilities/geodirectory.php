@@ -122,6 +122,10 @@ function aafm_geodirectory_address_fields(): array {
  * @return array<string,mixed>
  */
 function aafm_geodirectory_read_fields( int $post_id ): array {
+	// GeoDirectory picks its table from the post's type, so load the post exactly first.
+	if ( ! aafm_exact_object( 'post', $post_id ) instanceof WP_Post ) {
+		return aafm_geodirectory_shape_row( null );
+	}
 	return aafm_geodirectory_shape_row( geodir_get_post_info( $post_id, false ) );
 }
 
@@ -196,9 +200,9 @@ function aafm_geodirectory_shape_row( $info ): array {
 }
 
 /**
- * Write the documented address/lat/lng subset through geodir_save_post_meta(), escaping every
- * value first - that function concatenates $meta_value directly into raw SQL rather than
- * preparing it (see this file's own docblock), so this plugin must never hand it a raw string.
+ * Write the documented address/lat/lng subset through aafm_geodir_write(), which escapes every
+ * value before geodir_save_post_meta() concatenates it into raw SQL (see this file's own
+ * docblock), so this plugin never hands that function a raw string.
  *
  * Codex final round MEDIUM: geodir_save_post_meta() returns false only when the detail table or
  * column is missing; on the actual write path it runs $wpdb->query() and returns nothing at all,
@@ -212,21 +216,17 @@ function aafm_geodirectory_shape_row( $info ): array {
  * @return bool True when every field the caller supplied reads back with the value written.
  */
 function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
-	$supplied_any_field = false;
-	foreach ( aafm_geodirectory_address_fields() as $field ) {
-		if ( ! array_key_exists( $field, $input ) ) {
-			continue;
+	// The supplied fields in write order: the address fields, then latitude, then longitude. The
+	// writer sanitizes, escapes and casts each one.
+	$fields = array();
+	foreach ( array_merge( aafm_geodirectory_address_fields(), array( 'latitude', 'longitude' ) ) as $field ) {
+		if ( array_key_exists( $field, $input ) ) {
+			$fields[ $field ] = $input[ $field ];
 		}
-		$supplied_any_field = true;
-		geodir_save_post_meta( $post_id, $field, esc_sql( aafm_sanitize_plain_text( (string) $input[ $field ] ) ) );
 	}
-	if ( array_key_exists( 'latitude', $input ) ) {
-		$supplied_any_field = true;
-		geodir_save_post_meta( $post_id, 'latitude', (float) $input['latitude'] );
-	}
-	if ( array_key_exists( 'longitude', $input ) ) {
-		$supplied_any_field = true;
-		geodir_save_post_meta( $post_id, 'longitude', (float) $input['longitude'] );
+	$supplied_any_field = array() !== $fields;
+	if ( $supplied_any_field ) {
+		aafm_geodir_write( $post_id, $fields );
 	}
 
 	// Nothing to confirm - skip the read rather than run it needlessly, and (R6-6) so a read
@@ -239,7 +239,7 @@ function aafm_geodirectory_write_fields( int $post_id, array $input ): bool {
 	if ( ! $read['ok'] ) {
 		// R6-6: a failed SELECT or a still-missing detail row cannot certify anything the caller
 		// just wrote - fail the same direction aafm_post_field_write_confirmed() and
-		// aafm_meta_write_confirmed() already fail when their own confirmation read comes back
+		// aafm_meta_set() already fail when their own confirmation read comes back
 		// unusable, rather than falling through to defaults that can coincidentally match.
 		return false;
 	}
@@ -303,7 +303,7 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 		return false;
 	}
 	$id   = isset( $input['listing_id'] ) ? absint( $input['listing_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return false;
 	}
@@ -313,7 +313,7 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 	// - a still-password-required post is gated on edit_post before the public-status shortcut
 	// ever runs.
 	if ( post_password_required( $post ) ) {
-		return current_user_can( 'edit_post', $post->ID );
+		return aafm_user_can_checked( 'edit_post', $post->ID );
 	}
 	// Codex round C finding 4: the object-independent edit_posts floor alone let an Author read
 	// another user's draft/private listing (raw content and coordinates included). Mirrors
@@ -321,7 +321,7 @@ function aafm_perm_geodirectory_get( array $input ): bool {
 	if ( in_array( $post->post_status, get_post_stati( array( 'public' => true ) ), true ) ) {
 		return true;
 	}
-	return current_user_can( 'edit_post', $post->ID );
+	return aafm_user_can_checked( 'edit_post', $post->ID );
 }
 
 /**
@@ -350,8 +350,8 @@ function aafm_perm_geodirectory_create( array $input ): bool {
  */
 function aafm_perm_geodirectory_update( array $input ): bool {
 	$id   = isset( $input['listing_id'] ) ? absint( $input['listing_id'] ) : 0;
-	$post = $id ? get_post( $id ) : null;
-	return $post instanceof WP_Post && 'gd_place' === $post->post_type && current_user_can( 'edit_post', $post->ID );
+	$post = $id ? aafm_exact_object( 'post', $id ) : null;
+	return $post instanceof WP_Post && 'gd_place' === $post->post_type && aafm_user_can_checked( 'edit_post', $post->ID );
 }
 
 /**
@@ -423,8 +423,8 @@ function aafm_geodirectory_listing_batch_cap(): int {
 
 /**
  * Whether a candidate listing is visible under this ability's own rule: public status, or the
- * current user can edit it. Shared by the enumeration loop and the truncation lookahead probe
- * below so the two can never disagree about what counts as visible.
+ * current user can edit it. The enumeration loop below uses it; the truncation probe applies the
+ * same rule on a healthy database and reads a failed capability check as visible.
  *
  * Codex round 5, R5-7: the probe used to rely only on WP_Query's 'perm' => 'readable', which (per
  * this file's own note above) does not exclude 'draft'/'pending' rows the caller cannot edit -
@@ -436,7 +436,7 @@ function aafm_geodirectory_listing_batch_cap(): int {
  * @return bool
  */
 function aafm_geodirectory_listing_is_visible( WP_Post $post, array $public_stati ): bool {
-	return in_array( $post->post_status, $public_stati, true ) || current_user_can( 'edit_post', $post->ID );
+	return in_array( $post->post_status, $public_stati, true ) || aafm_user_can_checked( 'edit_post', $post->ID );
 }
 
 /**
@@ -528,9 +528,11 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 				// question than the enumeration asks - it could see a trailing draft/pending row
 				// the caller cannot edit and report `truncated` even though the visible set was
 				// already complete. Fetch a full extra batch of real posts (not just ids) and
-				// run each one through the SAME aafm_geodirectory_listing_is_visible() predicate
-				// the enumeration uses below, so a probe never disagrees with what the loop itself
-				// would have kept.
+				// run each one through the rule aafm_geodirectory_listing_is_visible() applies in
+				// the enumeration below. The two agree on a healthy database. When a row's
+				// capability check fails, the probe counts that row as visible, so `truncated`
+				// never claims "nothing more" that the scan did not confirm; the loop below still
+				// leaves the row out.
 				//
 				// Codex round 6, B6-5: a single probe batch answered a different question again - if
 				// EVERY row in that one batch is invisible, a later visible row past it was still
@@ -582,18 +584,20 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 						$truncated = true;
 						break;
 					}
-					$probe         = new WP_Query(
+					$probe = new WP_Query(
 						array(
-							'post_type'         => 'gd_place',
-							'post_status'       => 'any',
-							'perm'              => 'readable',
-							'posts_per_page'    => $batch_size,
-							'orderby'           => 'ID',
-							'order'             => 'ASC',
-							'no_found_rows'     => true,
-							'aafm_query_marker' => $query_marker,
+							'post_type'              => 'gd_place',
+							'post_status'            => 'any',
+							'perm'                   => 'readable',
+							'posts_per_page'         => $batch_size,
+							'orderby'                => 'ID',
+							'order'                  => 'ASC',
+							'no_found_rows'          => true,
+							'aafm_query_marker'      => $query_marker,
+							'update_post_meta_cache' => false,
 						)
 					);
+					aafm_prime_post_meta_checked( wp_list_pluck( $probe->posts, 'ID' ) );
 					$probe_fetched = count( $probe->posts );
 					foreach ( $probe->posts as $probe_post ) {
 						if ( ! $probe_post instanceof WP_Post ) {
@@ -602,7 +606,7 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 						if ( $probe_post->ID > $last_id ) {
 							$last_id = $probe_post->ID;
 						}
-						if ( aafm_geodirectory_listing_is_visible( $probe_post, $public_stati ) ) {
+						if ( in_array( $probe_post->post_status, $public_stati, true ) || false !== aafm_user_can_checked_state( 'edit_post', $probe_post->ID ) ) {
 							$truncated = true;
 							break 2;
 						}
@@ -612,26 +616,29 @@ function aafm_exec_geodirectory_get_listings( array $input ) {
 			}
 			$query = new WP_Query(
 				array(
-					'post_type'         => 'gd_place',
-					'post_status'       => 'any',
+					'post_type'              => 'gd_place',
+					'post_status'            => 'any',
 					// 'readable' narrows the SQL for the 'private' status specifically -
 					// WP_Query's own 'perm' handling (wp-includes/class-wp-query.php) only ever
 					// special-cases 'private', never 'draft'/'pending', so it alone is not
 					// sufficient (see the PHP-level filter below, which covers every non-public
 					// status uniformly).
-					'perm'              => 'readable',
-					'posts_per_page'    => $batch_size,
-					'orderby'           => 'ID',
-					'order'             => 'ASC',
-					'no_found_rows'     => true,
-					'aafm_query_marker' => $query_marker,
+					'perm'                   => 'readable',
+					'posts_per_page'         => $batch_size,
+					'orderby'                => 'ID',
+					'order'                  => 'ASC',
+					'no_found_rows'          => true,
+					'aafm_query_marker'      => $query_marker,
+					'update_post_meta_cache' => false,
 				)
 			);
+			aafm_prime_post_meta_checked( wp_list_pluck( $query->posts, 'ID' ) );
 			// Codex round C finding 4: 'perm' => 'readable' does not cover 'draft'/'pending' at
 			// all (only 'private'), so an Author could still see another user's draft listing
 			// through the SQL layer alone. Filter every result through the SAME
 			// public-status-or-per-object-edit rule aafm_perm_geodirectory_get() already uses (now
-			// aafm_geodirectory_listing_is_visible(), shared with the cap-lookahead probe above),
+			// aafm_geodirectory_listing_is_visible(); the probe above agrees with it on a healthy
+			// database and reads a failed check as visible),
 			// so no non-public listing the caller cannot edit ever reaches the response regardless
 			// of which status 'perm' missed.
 			foreach ( $query->posts as $post ) {
@@ -716,7 +723,7 @@ function aafm_args_geodirectory_get_listing(): array {
  */
 function aafm_exec_geodirectory_get_listing( array $input ) {
 	$id   = absint( $input['listing_id'] ?? 0 );
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -870,10 +877,10 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 	// create path for why status/slug confirmation was dropped batch-wide rather than
 	// replicated a fourth time: title/content have no such core-side transition and stay
 	// confirmed below.
-	$after = get_post( $post_id );
+	$after = aafm_exact_object( 'post', $post_id );
 	if ( ! $after instanceof WP_Post
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_title', $title, '', 0 )
-		|| ! aafm_post_field_write_confirmed( (int) $post_id, 'post_content', $content, '', 0 )
+		|| ! aafm_post_field_confirm_logged( (int) $post_id, 'post_title', $title, '', 0 )
+		|| ! aafm_post_field_confirm_logged( (int) $post_id, 'post_content', $content, '', 0 )
 	) {
 		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its title or content could not be confirmed as saved', 'agent-abilities-for-mcp' ) );
 	}
@@ -885,7 +892,7 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 		return aafm_geodirectory_rollback_unconfirmed_create( (int) $post_id, __( 'its address or location fields did not save', 'agent-abilities-for-mcp' ) );
 	}
 
-	$post = get_post( $post_id );
+	$post = aafm_exact_object( 'post', $post_id );
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -954,7 +961,7 @@ function aafm_args_geodirectory_update_listing(): array {
  */
 function aafm_exec_geodirectory_update_listing( array $input ) {
 	$id   = absint( $input['listing_id'] ?? 0 );
-	$post = get_post( $id );
+	$post = aafm_exact_object_chain( 'post', $id );
 	if ( ! $post instanceof WP_Post || 'gd_place' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
@@ -1001,10 +1008,10 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		// pre-write intent, so a legitimate normalization is not mistaken for a veto.
 		// $post was read before wp_update_post() ran, so its fields are each field's genuine
 		// pre-write value.
-		$after = get_post( $id );
+		$after = aafm_exact_object( 'post', $id );
 		if ( ! $after instanceof WP_Post
-			|| ( array_key_exists( 'post_title', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_title', $update['post_title'], (string) $post->post_title ) )
-			|| ( array_key_exists( 'post_content', $update ) && ! aafm_post_field_write_confirmed( $id, 'post_content', $update['post_content'], (string) $post->post_content ) )
+			|| ( array_key_exists( 'post_title', $update ) && ! aafm_post_field_confirm_logged( $id, 'post_title', $update['post_title'], (string) $post->post_title ) )
+			|| ( array_key_exists( 'post_content', $update ) && ! aafm_post_field_confirm_logged( $id, 'post_content', $update['post_content'], (string) $post->post_content ) )
 		) {
 			return new WP_Error(
 				'aafm_geodirectory_write_unconfirmed',
@@ -1020,7 +1027,7 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		);
 	}
 
-	$fresh = get_post( $id );
+	$fresh = aafm_exact_object( 'post', $id );
 	if ( ! $fresh instanceof WP_Post ) {
 		return aafm_generic_error();
 	}

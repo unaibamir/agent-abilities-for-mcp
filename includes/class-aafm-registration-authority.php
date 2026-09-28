@@ -106,9 +106,8 @@ final class AAFM_Registration_Authority {
 		// R12-1: force our own trusted ability class, discarding whatever $args carried. This is
 		// the only place that actually calls wp_register_ability(), so overriding here closes the
 		// class-substitution route for every caller of this method - see the class docblock.
-		if ( class_exists( 'AAFM_Rate_Limited_Ability' ) ) {
-			$args['ability_class'] = AAFM_Rate_Limited_Ability::class;
-		}
+		$args['ability_class'] = AAFM_Rate_Limited_Ability::class;
+
 		$registered = wp_register_ability( $name, $args );
 		if ( $registered instanceof WP_Ability ) {
 			self::$store[ $name ] = WeakReference::create( $registered );

@@ -247,8 +247,19 @@ function aafm_enqueue_admin_assets( string $hook ): void {
  * @return array<int,string>
  */
 function aafm_get_stored_enabled_abilities_raw(): array {
+	$normalize = static function ( $value ): array {
+		return is_array( $value ) ? array_values( array_filter( array_map( 'strval', $value ) ) ) : array();
+	};
+
+	// This list is carried forward into the next save, so when a cache copy disagrees with the row
+	// the row is the truth. get_option() reads first, so a failed read's notoptions entry is seen.
+	// A save refuses outright when the row cannot be read (aafm_set_enabled_abilities()).
 	$stored = get_option( 'aafm_enabled_abilities', array() );
-	return is_array( $stored ) ? array_values( array_filter( array_map( 'strval', $stored ) ) ) : array();
+	$row    = aafm_policy_row_if_stale( 'aafm_enabled_abilities' );
+	if ( null !== $row ) {
+		return $row['ok'] ? $normalize( $row['value'] ) : array();
+	}
+	return $normalize( $stored );
 }
 
 /**
@@ -293,6 +304,13 @@ function aafm_get_stored_enabled_abilities_raw(): array {
  * @return array<int,string> The names actually written (newly attempted locked names removed).
  */
 function aafm_set_enabled_abilities( array $enabled, ?bool &$persisted = null ): array {
+	// The stored list cannot be read this request, so the carry-forward is unknown: write nothing.
+	$row = aafm_policy_row_if_stale( 'aafm_enabled_abilities' );
+	if ( null !== $row && ! $row['ok'] ) {
+		$persisted = false;
+		return $enabled;
+	}
+
 	$before = aafm_get_stored_enabled_abilities_raw();
 
 	$locked  = array_values( array_filter( $enabled, 'aafm_ability_is_locked' ) );
@@ -1603,22 +1621,10 @@ function aafm_render_abilities_tab(): void {
 	$ability_total   = aafm_available_ability_count();
 	$ability_enabled = aafm_enabled_ability_count();
 	echo '<div class="aafm-stat-grid aafm-abilities-stats">';
-	echo '<div class="aafm-stat aafm-stat-abilities">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Total abilities', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'abilities' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-abilities', __( 'Total abilities', 'agent-abilities-for-mcp' ), 'abilities' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $ability_total ) ) );
 	echo '</div>';
-	echo '<div class="aafm-stat aafm-stat-enabled">';
-	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Enabled', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic">';
-	echo wp_kses( aafm_icon( 'bolt' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '</div>';
+	aafm_render_stat_head( 'aafm-stat-enabled', __( 'Enabled', 'agent-abilities-for-mcp' ), 'bolt' );
 	// This stat aggregates core abilities plus every integration's total, so unlike the section
 	// counts below it cannot be recomputed from this tab's own checkboxes after a save (the
 	// integration abilities live on a different page load entirely). It carries its own class
@@ -2701,12 +2707,13 @@ function aafm_activity_detail_link( string $ability, string $detail_raw ): ?arra
 			$url = get_edit_user_link( $id );
 			break;
 		case 'term':
-			$url = get_edit_term_link( $id );
+			$url = aafm_exact_object( 'term', $id ) instanceof WP_Term ? get_edit_term_link( $id ) : null;
 			break;
 		case 'order':
 			// Never hand-build this URL. Under HPOS a WooCommerce order's edit screen is not
 			// post.php?post=N, and order rows are exactly where that assumption is likeliest.
-			$order = function_exists( 'wc_get_order' ) ? wc_get_order( $id ) : null;
+			// An order post that does not load exactly gets no link.
+			$order = ( function_exists( 'wc_get_order' ) && ( false === aafm_wc_store_is_core( 'order' ) || aafm_exact_object( 'post', $id ) instanceof WP_Post ) ) ? wc_get_order( $id ) : null;
 			$url   = ( $order && method_exists( $order, 'get_edit_order_url' ) ) ? $order->get_edit_order_url() : null;
 			break;
 		default:

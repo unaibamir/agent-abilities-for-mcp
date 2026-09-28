@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 
 final class QuickConnectPointerTest extends TestCase {
@@ -99,5 +100,52 @@ final class QuickConnectPointerTest extends TestCase {
 			aafm_quickconnect_pointer_id(),
 			(string) get_user_meta( $user_id, 'dismissed_wp_pointers', true )
 		);
+	}
+
+	/**
+	 * A failed read of the dismissal list writes nothing, so the pointers this user already
+	 * dismissed stay dismissed.
+	 */
+	public function test_a_failed_dismissal_read_leaves_other_dismissals_intact(): void {
+		$user_id = $this->acting_as( 'administrator' );
+		update_user_meta( $user_id, 'dismissed_wp_pointers', 'wp390_widgets,theme_editor_notice' );
+		wp_cache_delete( $user_id, 'user_meta' );
+		QueryFaultInjector::reset_fired_count();
+
+		QueryFaultInjector::break_query_with_real_error(
+			array( 'user_id, meta_key, meta_value FROM', 'usermeta' ),
+			static function (): void {
+				aafm_quickconnect_mark_pointer_dismissed_for_user();
+			},
+			1
+		);
+		wp_cache_delete( $user_id, 'user_meta' );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertSame( 'wp390_widgets,theme_editor_notice', (string) get_user_meta( $user_id, 'dismissed_wp_pointers', true ) );
+	}
+
+	/**
+	 * With no stored list yet, the dismissal writes the pointer id alone.
+	 */
+	public function test_dismissal_with_no_stored_list_writes_the_pointer_id(): void {
+		$user_id = $this->acting_as( 'administrator' );
+		delete_user_meta( $user_id, 'dismissed_wp_pointers' );
+
+		aafm_quickconnect_mark_pointer_dismissed_for_user();
+
+		$this->assertSame( aafm_quickconnect_pointer_id(), (string) get_user_meta( $user_id, 'dismissed_wp_pointers', true ) );
+	}
+
+	/**
+	 * The dismissal appends to the stored list and keeps every earlier entry.
+	 */
+	public function test_dismissal_appends_to_the_stored_list(): void {
+		$user_id = $this->acting_as( 'administrator' );
+		update_user_meta( $user_id, 'dismissed_wp_pointers', 'wp390_widgets' );
+
+		aafm_quickconnect_mark_pointer_dismissed_for_user();
+
+		$this->assertSame( 'wp390_widgets,' . aafm_quickconnect_pointer_id(), (string) get_user_meta( $user_id, 'dismissed_wp_pointers', true ) );
 	}
 }

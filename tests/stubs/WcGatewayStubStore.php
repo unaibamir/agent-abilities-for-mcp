@@ -16,15 +16,16 @@ namespace AAFM\Tests;
 /**
  * Process-wide backing store for the WooCommerce payment gateway stubs.
  *
- * Doc 214, finding 6: this store deliberately applies no WooCommerce filters, checked and
- * confirmed rather than assumed. aafm_wc_gateway_shape() (gateways.php) reads $gateway->id,
- * ->title, ->description, ->enabled, and ->settings as PLAIN PUBLIC PROPERTIES, never through a
- * getter method. Real WC_Payment_Gateway (abstract-wc-payment-gateway.php) extends
- * WC_Settings_API, not WC_Data, so those properties carry no get_prop()-style filter at all; only
- * the METHODS get_title() and get_description() apply filters ('woocommerce_gateway_title',
- * 'woocommerce_gateway_description'), and this plugin never calls either. So the stub's plain
- * property access already matches real WooCommerce's unfiltered behavior for the fields this
- * plugin actually reads - there is nothing to wire.
+ * Doc 214, finding 6 originally noted that aafm_wc_gateway_shape() (gateways.php) read
+ * $gateway->title and ->description as plain public properties rather than through
+ * get_title()/get_description(), so this store applied no WooCommerce filters to match. Register
+ * 1.7 reversed that: get_title() and get_description() apply the 'woocommerce_gateway_title' and
+ * 'woocommerce_gateway_description' filters that translation and white-label plugins hook, and the
+ * plain properties never see them, so a filtered store was silently reporting the wrong name.
+ * gateways.php now reads the store through those getters, and WC_Payment_Gateway's stub class
+ * (IntegrationStubs::aafm_wc_payment_gateway_class_source()) applies the same two filters those
+ * getters do in real WooCommerce. $id, ->enabled, and ->settings stay plain properties: real
+ * WC_Payment_Gateway carries no filtered getter for any of those.
  */
 class WcGatewayStubStore {
 
@@ -168,10 +169,10 @@ class WcGatewayStubStore {
 		// exposes, so production can verify the write against the DB-persisted value rather than the
 		// gateway's in-memory copy. Idempotent, so the unchanged-value case (nothing changed, but the
 		// option must still reflect the current settings) reads back as a match rather than a false miss.
-		update_option( 'woocommerce_' . $gateway_id . '_settings', self::$gateways[ $gateway_id ]['settings'] );
-		// WordPress update_option() returns false when the value was unchanged (no write needed) - NOT
-		// only on failure. Mirror that: the return signals whether THIS setting changed.
-		return $changed;
+		$saved = update_option( 'woocommerce_' . $gateway_id . '_settings', self::$gateways[ $gateway_id ]['settings'] );
+		// WC_Settings_API::update_option() returns core update_option()'s bool for the whole settings
+		// row, which is false both when nothing changed and when the write was refused.
+		return $saved;
 	}
 
 	/**

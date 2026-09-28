@@ -47,12 +47,11 @@ add_filter( 'aafm_seo_rendered_head', 'aafm_aioseo_rendered_head', 10, 3 );
  * Produce AIOSEO's rendered SEO head markup for a post.
  *
  * AIOSEO exposes no string-returning per-post head API: its head is emitted on wp_head via
- * aioseo()->head->output(), which echoes against the queried object. So this renders inside a
- * controlled, fully restored singular query for the post - snapshot the main-query globals, build a
- * throwaway singular WP_Query for the post, buffer output(), then restore the originals (including
- * the global $post) exactly. Honors $source (passthrough unless 'aioseo') and guards the API
- * defensively: a missing aioseo()->head, an error, or empty output all fall back to the passed
- * head rather than fataling.
+ * aioseo()->head->output(), which echoes against the queried object. So this renders through
+ * aafm_with_seo_render_scope(), which buffers output() inside a throwaway singular query for the
+ * post and restores every global it touched exactly, including the global $post. Honors $source
+ * (passthrough unless 'aioseo') and guards the API defensively: a missing aioseo()->head, an
+ * error, or empty output all fall back to the passed head rather than fataling.
  *
  * @param string $head   Head markup accumulated so far (passthrough default).
  * @param int    $post_id Post id.
@@ -69,60 +68,14 @@ function aafm_aioseo_rendered_head( string $head, int $post_id, string $source )
 		return $head; // AIOSEO present but no head renderer (e.g. older/newer shape): best-effort.
 	}
 
-	$post = get_post( $post_id );
-	if ( ! $post instanceof WP_Post ) {
-		return $head;
-	}
-
-	// Snapshot the query globals AIOSEO reads, so the throwaway query never leaks out of this call.
-	$saved_wp_query     = $GLOBALS['wp_query'] ?? null;
-	$saved_wp_the_query = $GLOBALS['wp_the_query'] ?? null;
-	$saved_post         = $GLOBALS['post'] ?? null;
-
-	$rendered = '';
-	try {
-		$temp_query = new WP_Query(
-			array(
-				'p'                      => $post_id,
-				'post_type'              => $post->post_type,
-				'posts_per_page'         => 1,
-				'no_found_rows'          => true,
-				'update_post_meta_cache' => true,
-				'update_post_term_cache' => false,
-			)
-		);
-		// Point the main-query globals at our singular query so is_singular()/get_queried_object()
-		// resolve to this post while AIOSEO builds the head. Both originals are snapshotted above and
-		// restored in the finally block, so this swap never leaks past this call.
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
-		$GLOBALS['wp_query'] = $temp_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
-		$GLOBALS['wp_the_query'] = $temp_query;
-		if ( $temp_query->have_posts() ) {
-			$temp_query->the_post();
-		}
-
-		ob_start();
-		$aioseo->head->output();
-		$rendered = (string) ob_get_clean();
-	} catch ( \Throwable $e ) {
-		// Make sure a half-open buffer from a throw inside output() is closed before we bail.
-		if ( ob_get_level() > 0 ) {
-			ob_end_clean();
-		}
-		$rendered = '';
-	} finally {
-		// Restore the originals exactly (order matters: globals first, then reset postdata).
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['wp_query'] = $saved_wp_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['wp_the_query'] = $saved_wp_the_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['post'] = $saved_post;
-		wp_reset_postdata();
-	}
-
-	$rendered = trim( $rendered );
+	$rendered = trim(
+		aafm_with_seo_render_scope(
+			$post_id,
+			static function () use ( $aioseo ): void {
+				$aioseo->head->output();
+			}
+		)
+	);
 	return '' !== $rendered ? $rendered : $head;
 }
 
@@ -275,6 +228,25 @@ function aafm_aioseo_robots_save_data_keys(): array {
 }
 
 /**
+ * Every Post::savePost() patch key aioseo-update-post builds: each field's column and image-type
+ * column, the robots patch keys, twitter_use_og and default. Each is a key of AIOSEO's own
+ * savePost() field map (all-in-one-seo-pack 5.0.1.1, app/Common/Models/Post.php
+ * getSanitizeFieldMap(); canonical_url is handled on its own in sanitizeAndSetDefaults()).
+ *
+ * @return string[]
+ */
+function aafm_aioseo_patch_keys(): array {
+	$keys = array( 'twitter_use_og', 'default' );
+	foreach ( aafm_aioseo_fields() as $spec ) {
+		$keys[] = $spec['prop'];
+		if ( isset( $spec['type_prop'] ) ) {
+			$keys[] = $spec['type_prop'];
+		}
+	}
+	return array_merge( $keys, array_values( aafm_aioseo_robots_save_data_keys() ) );
+}
+
+/**
  * Whether the write carries a non-empty Twitter-specific field. AIOSEO's Twitter renderer returns
  * the Facebook/OpenGraph value whenever twitter_use_og is truthy (its default), so a written
  * twitter title/description/image only renders once that fallback is turned off - and only when a
@@ -424,7 +396,7 @@ function aafm_args_aioseo_get_post(): array {
  */
 function aafm_exec_aioseo_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
 		return aafm_generic_error();
 	}
 	return aafm_aioseo_read_fields( $id );
@@ -528,7 +500,7 @@ function aafm_args_aioseo_update_post(): array {
  */
 function aafm_exec_aioseo_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
 		return aafm_generic_error();
 	}
 
@@ -638,14 +610,10 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		// test_aioseo_model_save_returns_void_not_bool()). Verify persistence a different way: force
 		// a fresh read of the model and diff it against what we just asked to be written, field by
 		// field. A real write failure still surfaces as a read-back mismatch.
-		$class::savePost( $id, $data );
+		aafm_aioseo_write( $id, $data );
 	}
 
-	$after     = aafm_aioseo_read_fields( $id );
-	$url_field = array();
-	foreach ( aafm_aioseo_fields() as $field => $spec ) {
-		$url_field[ $field ] = (bool) $spec['url'];
-	}
+	$after = aafm_aioseo_read_fields( $id );
 	foreach ( $desired as $field => $value ) {
 		if ( is_bool( $value ) ) {
 			// Robots flags are stored verbatim; an exact bool check is right, and a genuine failure
@@ -660,7 +628,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		// a failure just because the stored form differs cosmetically. A real non-persist - the old or
 		// default value still sitting in the row - is not a normalized form of what we wrote, so it
 		// still fails.
-		if ( ! aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, $url_field[ $field ] ?? false ) ) {
+		if ( ! aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, ! empty( aafm_aioseo_fields()[ $field ]['url'] ) ) ) {
 			return aafm_generic_error();
 		}
 	}
@@ -718,7 +686,7 @@ function aafm_args_aioseo_get_head(): array {
  */
 function aafm_exec_aioseo_get_head( array $input ) {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = $id > 0 ? get_post( $id ) : null;
+	$post = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
 	// Use the shared content-edit gate, not a bare edit_post: it enforces the operator's post-type
 	// exposure allowlist, so a get-head read is refused on a non-exposed post type exactly as the
 	// -get-meta sibling is. A bare edit_post would leak a non-allowlisted CPT's rendered SEO head.

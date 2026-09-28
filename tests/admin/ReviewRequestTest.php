@@ -413,7 +413,8 @@ final class ReviewRequestTest extends TestCase {
 	/**
 	 * The re-read has to reach the database, and dropping the option's own cache key is not
 	 * enough to make it. get_option() checks the 'notoptions' blob first, and this request's own
-	 * opening read put the key in there when it found no row, so without the second cache drop
+	 * opening read put the key in there when it found no row, so unless the
+	 * aafm_forget_option_caches() call before the re-read also takes the key out of notoptions,
 	 * the re-read answers 'pending' defaults from memory and the save writes over whatever
 	 * another tab stored in the meantime. The row is inserted here with a raw query on purpose:
 	 * going through add_option() would clear notoptions itself and hide the defect.
@@ -447,6 +448,22 @@ final class ReviewRequestTest extends TestCase {
 
 		$this->assertFalse( aafm_review_request_eligible() );
 		$this->assertSame( 'dismissed', aafm_review_request_state()['status'] );
+	}
+
+	/**
+	 * The cache drop before that re-read removes this plugin's option only. Another plugin's "no
+	 * such option" entry in the notoptions blob is still cached after the stamp is written.
+	 */
+	public function test_the_stamp_leaves_other_plugins_notoptions_entries_alone(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 1 );
+		$this->assertFalse( get_option( 'another_plugin_absent_option', false ) );
+		$this->assertArrayHasKey( 'another_plugin_absent_option', (array) wp_cache_get( 'notoptions', 'options' ) );
+
+		aafm_review_request_eligible();
+
+		$this->assertGreaterThan( 0, aafm_review_request_state()['first_success_seen_at'], 'The stamp was written.' );
+		$this->assertArrayHasKey( 'another_plugin_absent_option', (array) wp_cache_get( 'notoptions', 'options' ) );
 	}
 
 	/**

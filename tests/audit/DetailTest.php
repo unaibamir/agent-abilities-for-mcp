@@ -422,7 +422,7 @@ final class DetailTest extends TestCase {
 
 		$row = $this->latest_row();
 		$this->assertSame( 'denied', $row['status'] );
-		$this->assertSame( "Updated meta key `subtitle` on post #{$post_id}", $row['detail'] );
+		$this->assertSame( "Attempted: Updated meta key `subtitle` on post #{$post_id}", $row['detail'] );
 		$this->assertStringContainsString( 'value', (string) $row['arg_keys'] );
 		$this->assertRowIsFreeOfTheValue( $row );
 		$this->assertSame( '', get_post_meta( $post_id, 'subtitle', true ), 'The denied write must not have happened.' );
@@ -1221,8 +1221,44 @@ final class DetailTest extends TestCase {
 
 		$row = $this->latest_row();
 		$this->assertSame( 'denied', $row['status'], 'A refused write must never read as a successful one.' );
-		$this->assertSame( "Updated meta key `session_tokens` on user #{$user_id}", $row['detail'] );
+		$this->assertSame( "Attempted: Updated meta key `session_tokens` on user #{$user_id}", $row['detail'] );
 		$this->assertRowIsFreeOfTheValue( $row );
+	}
+
+	/**
+	 * A denied or failed row must not read as the action having happened. The wrap is applied once,
+	 * where the template is rendered, so it covers every mapped ability alike.
+	 */
+	public function test_a_denied_or_error_row_reads_as_an_attempt_for_every_template(): void {
+		$args = array(
+			'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- ability-input array key, not a meta query.
+			'post_id'  => 7,
+		);
+		$this->assertSame( 'Deleted meta key `subtitle` on post #7', aafm_build_activity_detail( 'aafm/delete-post-meta', $args ) );
+		$this->assertSame( 'Deleted meta key `subtitle` on post #7', aafm_build_activity_detail( 'aafm/delete-post-meta', $args, 'started' ) );
+		$this->assertSame( 'Attempted: Deleted meta key `subtitle` on post #7', aafm_build_activity_detail( 'aafm/delete-post-meta', $args, 'denied' ) );
+		$this->assertSame( 'Attempted: Deleted meta key `subtitle` on post #7', aafm_build_activity_detail( 'aafm/delete-post-meta', $args, 'error' ) );
+		$this->assertNull( aafm_build_activity_detail( 'aafm/delete-post-meta', array(), 'denied' ), 'A hole in the arguments still logs no detail.' );
+	}
+
+	public function test_a_denied_delete_meta_call_is_recorded_as_an_attempt(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$post_id = self::factory()->post->create();
+		$this->register_enabled( array( 'aafm/delete-post-meta' ) );
+		$this->acting_as( 'subscriber' );
+		aafm_clear_activity_log();
+
+		$result = wp_get_ability( 'aafm/delete-post-meta' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- ability-input array key, not a meta query.
+			)
+		);
+		$this->assertWPError( $result );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'denied', $row['status'] );
+		$this->assertSame( "Attempted: Deleted meta key `subtitle` on post #{$post_id}", $row['detail'] );
 	}
 
 	public function test_wc_delete_product_detail_renders_the_template(): void {
@@ -1440,6 +1476,25 @@ final class DetailTest extends TestCase {
 			aafm_build_activity_detail_from_result( 'aafm/create-post', $foreign ),
 			'Guard on the guard: this code does clear the key check, so the exclusion above is what dropped it.'
 		);
+	}
+
+	/**
+	 * A regex ending in `$` also matches just before one final newline, so each anchored rule has to
+	 * reject a value that ends in one.
+	 */
+	public function test_a_key_ending_in_a_newline_is_rejected(): void {
+		$this->assertSame( 'abc', aafm_activity_detail_field( 'key', 'abc' ) );
+		$this->assertNull( aafm_activity_detail_field( 'key', "abc\n" ) );
+	}
+
+	public function test_a_slug_ending_in_a_newline_is_rejected(): void {
+		$this->assertSame( 'a/b', aafm_activity_detail_field( 'slug', 'a/b' ) );
+		$this->assertNull( aafm_activity_detail_field( 'slug', "a/b\n" ) );
+	}
+
+	public function test_a_key_list_name_ending_in_a_newline_is_rejected(): void {
+		$this->assertSame( 'abc', aafm_activity_detail_field( 'keys', array( 'abc' => 1 ), array( 'abc' ) ) );
+		$this->assertNull( aafm_activity_detail_field( 'keys', array( "abc\n" => 1 ), array( "abc\n" ) ) );
 	}
 
 	/**

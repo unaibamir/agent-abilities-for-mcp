@@ -556,4 +556,42 @@ final class SettingsSaveTest extends TestCase {
 			);
 		}
 	}
+
+	/**
+	 * RP-T5 rows (W-3 site P21): the stored row, the runtime alloptions copy, and whether the
+	 * delete-on-uninstall switch renders checked.
+	 *
+	 * @return array<string,array{0:string,1:string,2:bool}>
+	 */
+	public function stale_delete_switch_provider(): array {
+		return array(
+			'P21 stale delete over a keep-data row' => array( '0', '1', false ),
+			'P21 healthy delete'                    => array( '1', '1', true ),
+		);
+	}
+
+	/**
+	 * RP-T5 (P21): on the settings screen, a stale cached "delete data" over a keep-data row
+	 * renders the switch unchecked; a healthy stored on renders checked, as in 1.7.5.
+	 *
+	 * @dataProvider stale_delete_switch_provider
+	 *
+	 * @param string $row     Stored row.
+	 * @param string $cached  Runtime alloptions copy.
+	 * @param bool   $checked Whether the switch renders checked.
+	 */
+	public function test_the_delete_switch_renders_from_the_row_under_a_stale_cache( string $row, string $cached, bool $checked ): void {
+		set_current_screen( 'toplevel_page_agent-abilities-for-mcp' );
+		update_option( 'aafm_delete_data_on_uninstall', $row );
+		$all                                  = wp_load_alloptions();
+		$all['aafm_delete_data_on_uninstall'] = $cached;
+		wp_cache_set( 'alloptions', $all, 'options' );
+		aafm_policy_reset_request_state();
+
+		ob_start();
+		aafm_render_settings_tab();
+		$html = (string) ob_get_clean();
+		$this->assertSame( 1, preg_match( '/<input[^>]*name="aafm_delete_data_on_uninstall"[^>]*>/', $html, $m ) );
+		$this->assertSame( $checked, str_contains( $m[0], 'checked' ) );
+	}
 }

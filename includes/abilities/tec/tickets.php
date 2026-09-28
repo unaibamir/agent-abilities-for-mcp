@@ -187,7 +187,7 @@ function aafm_args_tec_get_tickets(): array {
  */
 function aafm_exec_tec_get_tickets( array $input ) {
 	$event_id = absint( $input['event_id'] ?? 0 );
-	if ( ! get_post( $event_id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $event_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$tickets = Tribe__Tickets__Tickets::get_all_event_tickets( $event_id );
@@ -249,6 +249,10 @@ function aafm_args_tec_get_ticket(): array {
  * @return Tribe__Tickets__Ticket_Object|null
  */
 function aafm_tec_load_ticket( int $ticket_id ): ?Tribe__Tickets__Ticket_Object {
+	// Event Tickets loads the ticket's post by id, so load that post exactly first.
+	if ( ! aafm_exact_object( 'post', $ticket_id ) instanceof WP_Post ) {
+		return null;
+	}
 	$ticket = Tribe__Tickets__Tickets::load_ticket_object( $ticket_id );
 	return $ticket instanceof Tribe__Tickets__Ticket_Object ? $ticket : null;
 }
@@ -272,7 +276,7 @@ function aafm_tec_perm_get_ticket( array $input ): bool {
 	$event = $ticket->get_event();
 	return $event instanceof WP_Post
 		&& Tribe__Events__Main::POSTTYPE === $event->post_type
-		&& current_user_can( 'edit_tribe_event', $event->ID );
+		&& aafm_user_can_checked( 'edit_tribe_event', $event->ID );
 }
 
 /**
@@ -340,7 +344,7 @@ function aafm_args_tec_get_attendees(): array {
  */
 function aafm_exec_tec_get_attendees( array $input ) {
 	$event_id = absint( $input['event_id'] ?? 0 );
-	if ( ! get_post( $event_id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $event_id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$attendees = Tribe__Tickets__Tickets::get_event_attendees( $event_id );

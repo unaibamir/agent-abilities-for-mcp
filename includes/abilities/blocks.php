@@ -103,7 +103,7 @@ function aafm_perm_blocks_create(): bool {
 function aafm_perm_block_object( array $input ): bool {
 	$id    = absint( $input['block_id'] ?? 0 );
 	$block = aafm_get_block_object( $id );
-	return null !== $block && current_user_can( 'edit_post', $id );
+	return null !== $block && aafm_user_can_checked( 'edit_post', $id );
 }
 
 /**
@@ -115,7 +115,7 @@ function aafm_perm_block_object( array $input ): bool {
 function aafm_perm_block_delete_object( array $input ): bool {
 	$id    = absint( $input['block_id'] ?? 0 );
 	$block = aafm_get_block_object( $id );
-	return null !== $block && current_user_can( 'delete_post', $id );
+	return null !== $block && aafm_user_can_checked( 'delete_post', $id );
 }
 
 /**
@@ -174,11 +174,12 @@ function aafm_exec_list_blocks( array $input ): array {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
 
 	$query_args = array(
-		'post_type'      => 'wp_block',
-		'post_status'    => array( 'publish', 'draft' ),
-		'posts_per_page' => $per_page,
-		'paged'          => isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1,
-		'no_found_rows'  => false,
+		'post_type'              => 'wp_block',
+		'post_status'            => array( 'publish', 'draft' ),
+		'posts_per_page'         => $per_page,
+		'paged'                  => isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1,
+		'no_found_rows'          => false,
+		'update_post_meta_cache' => false,
 	);
 	// Only pass a search term when one was actually given: an empty 's' makes WP_Query run a
 	// pointless LIKE on every row, so omit it entirely when no search is requested (B6).
@@ -187,14 +188,15 @@ function aafm_exec_list_blocks( array $input ): array {
 		$query_args['s'] = $search;
 	}
 
-	$query  = new WP_Query( $query_args );
+	$query = new WP_Query( $query_args );
+	aafm_prime_post_meta_checked( wp_list_pluck( $query->posts, 'ID' ) );
 	$blocks = array();
 	foreach ( $query->posts as $block ) {
 		// Scope to blocks the caller can actually edit: the discovery floor (edit_posts) lets a
 		// contributor reach this list, but they must not enumerate id/title/slug of OTHER
 		// authors' blocks they lack edit_post on. Filtering here keeps the lean rows aligned
 		// with the per-object get/update gates.
-		if ( $block instanceof WP_Post && current_user_can( 'edit_post', $block->ID ) ) {
+		if ( $block instanceof WP_Post && aafm_user_can_checked( 'edit_post', $block->ID ) ) {
 			$blocks[] = aafm_redact_block( $block );
 		}
 	}
@@ -345,7 +347,7 @@ function aafm_exec_create_block( array $input ) {
 	// which encodes as [] against the seven-property object the output schema declares - so
 	// surface a generic error instead of redacting null into a schema-violating empty shape
 	// (same guard as the menu-item writes, menus.php:669).
-	$saved = get_post( (int) $id );
+	$saved = aafm_exact_object( 'post', (int) $id );
 	if ( ! $saved instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -354,8 +356,8 @@ function aafm_exec_create_block( array $input ) {
 	// vetoing or normalizing a field would still report success on the caller's stale intent.
 	// $sanitize_context_id is 0, not (int) $id: core's own sanitize_post( $postarr, 'db' ) inside
 	// wp_insert_post() ran BEFORE this row existed, with ID defaulted to 0 (R7-4).
-	if ( ! aafm_post_field_write_confirmed( (int) $id, 'post_title', $title, '', 0 )
-		|| ! aafm_post_field_write_confirmed( (int) $id, 'post_content', $content, '', 0 )
+	if ( ! aafm_post_field_confirm_logged( (int) $id, 'post_title', $title, '', 0 )
+		|| ! aafm_post_field_confirm_logged( (int) $id, 'post_content', $content, '', 0 )
 	) {
 		return aafm_generic_error();
 	}
@@ -438,6 +440,9 @@ function aafm_exec_update_block( array $input ) {
 	if ( null === $block ) {
 		return aafm_generic_error();
 	}
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 	$guard  = array(
 		'warnings' => array(),
 		'error'    => null,
@@ -459,7 +464,7 @@ function aafm_exec_update_block( array $input ) {
 	}
 	// Same null-reread guard as create-block above: aafm_rich_block() falls back to array()
 	// for a non-WP_Post, which would violate the object output schema.
-	$saved = get_post( (int) $result );
+	$saved = aafm_exact_object( 'post', (int) $result );
 	if ( ! $saved instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
@@ -473,7 +478,7 @@ function aafm_exec_update_block( array $input ) {
 		if ( ! isset( $update[ $field ] ) ) {
 			continue;
 		}
-		if ( ! aafm_post_field_write_confirmed( $id, $field, (string) $update[ $field ], (string) $block->$field ) ) {
+		if ( ! aafm_post_field_confirm_logged( $id, $field, (string) $update[ $field ], (string) $block->$field ) ) {
 			return aafm_generic_error();
 		}
 	}
@@ -539,6 +544,9 @@ function aafm_exec_delete_block( array $input ) {
 		// The same actionable refusal trash-post/trash-page return, so the agent learns WHY
 		// the delete was refused instead of getting the generic error (B43).
 		return aafm_trash_disabled_error();
+	}
+	if ( ! aafm_exact_object_chain( 'post', $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
 	}
 	$result = wp_trash_post( $id );
 	if ( ! $result instanceof WP_Post ) {

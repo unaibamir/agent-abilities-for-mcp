@@ -79,6 +79,21 @@ function aafm_mcp_rest_route(): string {
 }
 
 /**
+ * Whether a REST route is the MCP route, decided the way core's router decides it.
+ *
+ * WP_REST_Server::match_request_to_handler() tests `preg_match( '@^' . $route . '$@i', $path )`
+ * against the raw WP_REST_Request::get_route(), so this does the same: case-insensitive, no
+ * trimming, and `$` also matches before one final newline. Every "is this the MCP route" check
+ * in the plugin goes through here so none of them can disagree with where core dispatches.
+ *
+ * @param mixed $route A route as WP_REST_Request::get_route() returns it.
+ * @return bool
+ */
+function aafm_is_mcp_route( $route ): bool {
+	return is_string( $route ) && 1 === preg_match( '@^' . preg_quote( aafm_mcp_rest_route(), '@' ) . '$@i', $route );
+}
+
+/**
  * Upper bound (exclusive) for a compatible MCP adapter version.
  *
  * The plugin is built against the adapter's 0.6.x contract (create_server() signature,
@@ -346,8 +361,8 @@ function aafm_bound_mcp_initialize_params( $result, $server = null, $request = n
 	if ( null !== $result || ! $request instanceof \WP_REST_Request || 'POST' !== $request->get_method() ) {
 		return $result;
 	}
-	// Case-insensitive, matching core's own route matching and the sibling checks in server.php.
-	if ( 0 !== strcasecmp( rtrim( (string) $request->get_route(), '/' ), rtrim( aafm_mcp_rest_route(), '/' ) ) ) {
+	// aafm_is_mcp_route(), core's matcher, so this bound applies wherever core dispatches MCP.
+	if ( ! aafm_is_mcp_route( $request->get_route() ) ) {
 		return $result;
 	}
 

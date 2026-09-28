@@ -8,13 +8,15 @@
 # Local (DDEV):  ddev exec tests/bin/install-vendors.sh
 # CI:            tests/bin/install-vendors.sh   (WP_CORE_DIR exported by the workflow)
 #
-# Pins are the declared integration floors / behavioural cliffs. Bump deliberately: the point of
+# Pins are the declared integration floors / behavioural cliffs (WooCommerce tracks the clone). Bump deliberately: the point of
 # pinning is that "green" means "this exact contract", so a version change is a contract change.
 set -euo pipefail
 
 WP_CORE_DIR="${WP_CORE_DIR:-/tmp/wordpress}"
 PLUGINS_DIR="${WP_CORE_DIR%/}/wp-content/plugins"
 FORCE="${FORCE:-0}"
+# The contract matrix runs two WooCommerce legs: the declared 9.1.0 floor and the clone's 11.1.2.
+WOOCOMMERCE_VERSION="${WOOCOMMERCE_VERSION:-11.1.2}"
 
 # Guard: never install into the avia bench. The bench lives under the repo root at wp/; the test
 # core must be an out-of-tree throwaway. Abort if the target resolves inside the repo.
@@ -35,7 +37,7 @@ fi
 
 # slug<TAB>version — one line per vendor. Versions are the contract pins (see plan doc 131 §work item 3).
 VENDORS="
-woocommerce	9.1.0
+woocommerce	${WOOCOMMERCE_VERSION}
 advanced-custom-fields	6.3.6
 wordpress-seo	24.0
 all-in-one-seo-pack	4.7.0
@@ -46,8 +48,10 @@ install_one() {
 	local slug="$1" version="$2"
 	local dest="${PLUGINS_DIR}/${slug}"
 
-	if [ -d "$dest" ] && [ "$FORCE" != "1" ]; then
-		echo "  ${slug}: present, skipping (FORCE=1 to reinstall)"
+	# A present plugin is kept only when it was installed at this exact pin, so switching a pin
+	# locally reinstalls instead of silently keeping the old version.
+	if [ -d "$dest" ] && [ "$FORCE" != "1" ] && [ "$(cat "${dest}/.aafm-pin" 2>/dev/null)" = "$version" ]; then
+		echo "  ${slug} ${version}: present, skipping (FORCE=1 to reinstall)"
 		return 0
 	fi
 
@@ -63,6 +67,7 @@ install_one() {
 		echo "REFUSING: expected ${dest} after unzip of ${slug}; the zip layout changed." >&2
 		exit 1
 	fi
+	printf '%s' "$version" > "${dest}/.aafm-pin"
 }
 
 echo "Installing pinned vendor plugins into ${PLUGINS_DIR}"
@@ -70,4 +75,5 @@ printf '%s\n' "$VENDORS" | while IFS=$'\t' read -r slug version; do
 	[ -z "$slug" ] && continue
 	install_one "$slug" "$version"
 done
+echo "Installed WooCommerce $(grep -m1 'Version:' "${PLUGINS_DIR}/woocommerce/woocommerce.php")"
 echo "Vendor plugins ready."

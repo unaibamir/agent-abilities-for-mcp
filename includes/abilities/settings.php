@@ -257,10 +257,23 @@ function aafm_exec_update_site_settings( array $input ) {
 		}
 	}
 
+	// A stale persistent cache can make update_option() skip or misdirect a write, because it decides
+	// from get_option()'s answer, which comes from a cache copy before the row. So before anything is
+	// written, every cache copy of each key has to agree with its row (see
+	// aafm_option_row_if_cache_agrees() for the rules). A refusal on any key refuses the whole request
+	// before the first write. The check runs after the dry-run's reads on purpose, so a notoptions
+	// entry that a failed read there leaves is refused; it must stay the last read before the first
+	// write.
+	foreach ( array_keys( $settings ) as $key ) {
+		if ( null === aafm_option_row_if_cache_agrees( (string) $key ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	$updated = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
-		update_option( $key, aafm_sanitize_site_setting( $key, $value ) );
+		aafm_option_write( $key, aafm_sanitize_site_setting( $key, $value ) );
 		// Report the value the option layer gives back right after the write, rather than echoing
 		// the submission. That is what makes the clamp, the sanitize, and core's own escaping of a
 		// stored value visible to the agent, which is why the read-back is here.

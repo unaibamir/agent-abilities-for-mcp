@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission controls, off by default, and a full audit log.
- * Version:           1.7.5
+ * Version:           1.7.6
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.7.5' );
+define( 'AAFM_VERSION', '1.7.6' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -56,6 +56,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/text.php';
 require_once AAFM_PLUGIN_DIR . 'includes/option-cache.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/detail.php';
+// The write-and-confirm contract: readers, writer, delete, the checked-read scope, the option
+// rule, the post-field wrapper, and the write-outcome log observer it registers on load. Required
+// here, after the option-cache, audit-log and detail files it calls and before any hook,
+// migration or activation callback runs, since activation runs without plugins_loaded.
+require_once AAFM_PLUGIN_DIR . 'includes/write-contract.php';
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin
 // screens and the registration walk read it, and neither should have to care which ran first.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';
@@ -281,6 +286,8 @@ add_filter( 'rest_allowed_cors_headers', 'aafm_oauth_filter_allowed_cors_headers
 // OAuth REST endpoints: dynamic client registration, token, and revocation.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/rest.php';
 add_action( 'rest_api_init', 'aafm_oauth_register_rest_routes' );
+// The same discovery documents under /wp-json, for hosts that never pass /.well-known/ to WordPress.
+add_action( 'rest_api_init', 'aafm_oauth_register_discovery_routes' );
 
 // Re-shape core's malformed-JSON rejection into RFC 6749 on the three OAuth routes only;
 // every other route's rest_invalid_json response passes through untouched.
@@ -297,6 +304,13 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/validator.php';
 // surfaced only through this resolver returning no user, never by attaching a
 // filter that could turn "no user resolved" into a hard failure on unrelated routes.
 add_filter( 'determine_current_user', 'aafm_oauth_resolve_current_user', 20 );
+// In the normal routing order (the REST server built after the parse), registration on an MCP request
+// sees the approver (the same clear serve_request() makes, earlier). A handler other than the
+// adapter's own MCP handler that core matches on the MCP path is refused before its callback runs,
+// within the limits named at aafm_oauth_confine_bearer_to_mcp_handler(). The last priority keeps a
+// normal-priority rest_request_before_callbacks filter from undoing the refusal.
+add_action( 'rest_api_init', 'aafm_oauth_forget_anonymous_user_on_mcp_route', PHP_INT_MIN );
+add_filter( 'rest_request_before_callbacks', 'aafm_oauth_confine_bearer_to_mcp_handler', PHP_INT_MAX, 3 );
 
 // wp_kses allowlist helpers - loaded unconditionally so they are available to the
 // OAuth consent page (rendered on the front end, before aafm_bootstrap()).
@@ -335,7 +349,7 @@ function aafm_bootstrap() {
 	// governance-disabled tool reads as an in-band error an agent can correct from, not as
 	// the MCP session-terminated signal. -32005 (session not found) is deliberately left
 	// out and keeps its 404. Registered after bootstrap.php, which is where
-	// aafm_mcp_rest_route() - the first thing this filter calls - is defined.
+	// aafm_is_mcp_route() - the first thing this filter calls - is defined.
 	add_filter( 'rest_post_dispatch', 'aafm_mcp_filter_governed_error_status', 10, 3 );
 
 	// Session-persistence guard: the adapter's SessionManager::create_session() returns a session id

@@ -18,6 +18,7 @@ namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\WcGatewayStubStore;
 use WP_Error;
 
@@ -798,6 +799,61 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * Register 1.7: title and description must go through get_title()/get_description(), which
+	 * apply the 'woocommerce_gateway_title' and 'woocommerce_gateway_description' filters that
+	 * translation and white-label plugins hook. Reading the raw $title/$description properties
+	 * skips those filters and reports the wrong name.
+	 */
+	public function test_get_payment_gateway_title_and_description_are_filtered(): void {
+		add_filter(
+			'woocommerce_gateway_title',
+			static function ( $title, $gateway_id ) {
+				return 'paypal' === $gateway_id ? 'PayPal (translated)' : $title;
+			},
+			10,
+			2
+		);
+		add_filter(
+			'woocommerce_gateway_description',
+			static function ( $description, $gateway_id ) {
+				return 'paypal' === $gateway_id ? 'Translated description.' : $description;
+			},
+			10,
+			2
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'PayPal (translated)', $res['title'], 'The filtered title must be reported, not the raw property.' );
+		$this->assertSame( 'Translated description.', $res['description'], 'The filtered description must be reported, not the raw property.' );
+	}
+
+	/**
+	 * The list endpoint reads its own title separately from the single-gateway shape, so it needs
+	 * its own pin. A fix applied only to aafm_wc_gateway_shape() leaves this sibling reporting the
+	 * raw, unfiltered name.
+	 */
+	public function test_list_payment_gateways_titles_are_filtered(): void {
+		add_filter(
+			'woocommerce_gateway_title',
+			static function ( $title, $gateway_id ) {
+				return 'paypal' === $gateway_id ? 'PayPal (translated)' : $title;
+			},
+			10,
+			2
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_list_payment_gateways( array() );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$titles = wp_list_pluck( $res['gateways'], 'title', 'id' );
+		$this->assertSame( 'PayPal (translated)', $titles['paypal'], 'The list endpoint must report the filtered title, not the raw property.' );
+	}
+
+	/**
 	 * Get gateway strips stripe_secret from stripe gateway.
 	 */
 	public function test_get_payment_gateway_redacts_stripe_secret(): void {
@@ -1313,5 +1369,1025 @@ final class WooReportsTest extends TestCase {
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( array(), $captured, 'an order-only update must not fire the settings-save hook.' );
+	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce option-operation row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $option Option name.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_option_row( string $entity, ?int $id, string $option, string $status ): array {
+		$row        = $this->wc_row( $entity, $id, $status );
+		$row['key'] = $option;
+		return $row;
+	}
+
+	/**
+	 * Keep an option's stored value whatever a write asks for.
+	 *
+	 * @param mixed $value     The new value.
+	 * @param mixed $old_value The stored value.
+	 * @return mixed
+	 */
+	public static function keep_old_value( $value, $old_value ) {
+		unset( $value );
+		return $old_value;
+	}
+
+	public function test_a_gateway_setting_logs_written_then_unchanged_then_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$input = array(
+			'gateway_id' => 'paypal',
+			'title'      => 'PayPal Logged',
+		);
+
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		$input['title'] = 'PayPal Kept Out';
+		$refused        = aafm_exec_wc_update_payment_gateway( $input );
+		remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame(
+			array(
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'written' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'unchanged' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_the_gateway_order_option_logs_written_then_unchanged_then_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$input = array(
+			'gateway_id' => 'paypal',
+			'order'      => 7,
+		);
+
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
+		$input['order'] = 8;
+		$refused        = aafm_exec_wc_update_payment_gateway( $input );
+		remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame(
+			array(
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_gateway_order', 'written' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_gateway_order', 'unchanged' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_gateway_order', 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_gateway_setting_whose_row_cannot_be_read_back_logs_unconfirmed(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$input = array(
+			'gateway_id' => 'paypal',
+			'title'      => 'PayPal Logged',
+		);
+		$this->assertIsArray( aafm_exec_wc_update_payment_gateway( $input ) );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		$input['title'] = 'PayPal Kept Out';
+		QueryFaultInjector::reset_fired_count();
+		$result = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT option_value FROM', "option_name = 'woocommerce_paypal_settings'" ),
+			static function () use ( $input ) {
+				return aafm_exec_wc_update_payment_gateway( $input );
+			}
+		);
+		remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame(
+			array(
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'written' ),
+				$this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'unconfirmed' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_gateway_setting_with_no_stored_row_logs_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_paypal_settings' );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		$result = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'title'      => 'PayPal Kept Out',
+			)
+		);
+		remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertFalse( get_option( 'woocommerce_paypal_settings' ) );
+		$this->assertSame(
+			array( $this->wc_option_row( 'payment_gateway', null, 'woocommerce_paypal_settings', 'refused' ) ),
+			$this->outcome_details()
+		);
+	}
+
+	/**
+	 * The md5 of an option's row as the database holds it, or null when there is no row.
+	 *
+	 * @param string $option Option name.
+	 * @return string|null
+	 */
+	private function option_row_md5( string $option ): ?string {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- the test's own view of the row, past every cache.
+		$md5 = $wpdb->get_var( $wpdb->prepare( "SELECT MD5(option_value) FROM $wpdb->options WHERE option_name = %s", $option ) );
+		return null === $md5 ? null : (string) $md5;
+	}
+
+	/**
+	 * Both object cache views of an option: its per-option entry and its alloptions entry.
+	 *
+	 * @param string $option Option name.
+	 * @return array<string,mixed>
+	 */
+	private function option_cache_views( string $option ): array {
+		$found     = false;
+		$per_entry = wp_cache_get( $option, 'options', true, $found );
+		$all       = wp_cache_get( 'alloptions', 'options', true );
+		return array(
+			'per_option' => $found ? $per_entry : '(absent)',
+			'alloptions' => is_array( $all ) && array_key_exists( $option, $all ) ? $all[ $option ] : '(absent)',
+		);
+	}
+
+	/**
+	 * Store the gateway ordering as a row, then leave a different copy in one cache view: the
+	 * per-option entry for a row that is not autoloaded, the alloptions entry for one that is.
+	 *
+	 * @param array<string,int> $row    The ordering the database holds.
+	 * @param array<string,int> $cached The stale ordering the cache holds.
+	 * @param bool              $in_all Whether the row is autoloaded, so the stale copy sits in alloptions.
+	 */
+	private function plant_stale_gateway_order( array $row, array $cached, bool $in_all ): void {
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', $row, '', $in_all );
+		if ( $in_all ) {
+			wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+			$all                              = wp_load_alloptions( true );
+			$all['woocommerce_gateway_order'] = maybe_serialize( $cached );
+			wp_cache_set( 'alloptions', $all, 'options' );
+		} else {
+			wp_cache_set( 'woocommerce_gateway_order', maybe_serialize( $cached ), 'options' );
+		}
+	}
+
+	/**
+	 * Doc 250's scenario (R1-4): the row says paypal is at 1, a stale cache says 5. The request
+	 * asks for 5 with a title, so a write judged from the cache would be skipped as a no-op and
+	 * read back as done. The ordering views disagree, so nothing is written at all: not the
+	 * ordering, not the title, not a cache entry, and no outcome row.
+	 *
+	 * @param bool $in_all Whether the stale copy sits in alloptions rather than the per-option entry.
+	 */
+	private function assert_a_stale_cached_order_refuses_with_nothing_written( bool $in_all ): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$this->plant_stale_gateway_order( array( 'paypal' => 1 ), array( 'paypal' => 5 ), $in_all );
+
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+		$order_views  = $this->option_cache_views( 'woocommerce_gateway_order' );
+		$this->assertSame( maybe_serialize( array( 'paypal' => 5 ) ), $in_all ? $order_views['alloptions'] : $order_views['per_option'], 'Guard: the stale copy is planted.' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 5,
+				'title'      => 'Never Written',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_gateway_write_failed', $res->get_error_code() );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ), 'the ordering row must be untouched.' );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ), 'no gateway setting may be written.' );
+		$this->assertSame( 'PayPal', WcGatewayStubStore::get( 'paypal' )['settings']['title'], 'no gateway setting may be written.' );
+		$this->assertSame( $order_views, $this->option_cache_views( 'woocommerce_gateway_order' ), 'no cache entry of the WooCommerce option may change.' );
+		$this->assertSame( array(), $this->outcome_details(), 'a refusal before any write logs no write outcome.' );
+	}
+
+	public function test_gateway_order_refuses_when_the_per_option_cache_disagrees_with_the_row(): void {
+		$this->assert_a_stale_cached_order_refuses_with_nothing_written( false );
+	}
+
+	public function test_gateway_order_refuses_when_the_alloptions_cache_disagrees_with_the_row(): void {
+		$this->assert_a_stale_cached_order_refuses_with_nothing_written( true );
+	}
+
+	/**
+	 * With no cached copy of the ordering at all there is nothing to disagree with, so the row
+	 * decides: the write goes ahead, merges into the row's other entries, and certifies from it.
+	 */
+	public function test_gateway_order_with_no_cached_copy_writes_and_certifies_against_the_row(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option(
+			'woocommerce_gateway_order',
+			array(
+				'paypal' => 1,
+				'stripe' => 0,
+			),
+			'',
+			false
+		);
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$this->assertSame(
+			array(
+				'per_option' => '(absent)',
+				'alloptions' => '(absent)',
+			),
+			$this->option_cache_views( 'woocommerce_gateway_order' ),
+			'Guard: no cache view holds the ordering.'
+		);
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 3,
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 3, $res['order'] );
+		$this->assertSame(
+			md5(
+				maybe_serialize(
+					array(
+						'paypal' => 3,
+						'stripe' => 0,
+					)
+				)
+			),
+			$this->option_row_md5( 'woocommerce_gateway_order' )
+		);
+	}
+
+	/**
+	 * A failed read of the ordering row cannot tell a stale cache from a healthy one, so the
+	 * request refuses before anything is written.
+	 */
+	public function test_gateway_order_refuses_when_the_row_cannot_be_read(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 1 ), '', false );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		QueryFaultInjector::reset_fired_count();
+		ob_start();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT option_value FROM', "option_name = 'woocommerce_gateway_order'" ),
+			static function () {
+				return aafm_exec_wc_update_payment_gateway(
+					array(
+						'gateway_id' => 'paypal',
+						'order'      => 4,
+						'title'      => 'Never Written',
+					)
+				);
+			}
+		);
+		ob_end_clean();
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_gateway_write_failed', $res->get_error_code() );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+		$this->assertSame( array(), $this->outcome_details() );
+	}
+
+	/**
+	 * The merged ordering is built from the row, not from get_option(), whose option_{name}
+	 * filters can answer with entries the row does not hold.
+	 */
+	public function test_gateway_order_is_merged_into_the_row_not_a_filtered_read(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'stripe' => 0 ), '', false );
+		$ghost = static function ( $value ) {
+			$value          = is_array( $value ) ? $value : array();
+			$value['ghost'] = 9;
+			return $value;
+		};
+		add_filter( 'option_woocommerce_gateway_order', $ghost );
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 2,
+			)
+		);
+		remove_filter( 'option_woocommerce_gateway_order', $ghost );
+
+		$this->assertIsArray( $res );
+		$this->assertSame(
+			md5(
+				maybe_serialize(
+					array(
+						'stripe' => 0,
+						'paypal' => 2,
+					)
+				)
+			),
+			$this->option_row_md5( 'woocommerce_gateway_order' )
+		);
+	}
+
+	/**
+	 * A cache backend that primes its copy with the new ordering while the row write itself is
+	 * refused: get_option() then shows the requested order, the row does not, and the row decides.
+	 */
+	public function test_gateway_order_certifies_against_the_row_when_the_cache_is_primed_by_a_refused_write(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 1 ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5 = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$prime     = static function ( $value, $old_value ) {
+			wp_cache_set( 'woocommerce_gateway_order', maybe_serialize( $value ), 'options' );
+			return $old_value;
+		};
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $prime, 10, 2 );
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 6,
+			)
+		);
+		remove_filter( 'pre_update_option_woocommerce_gateway_order', $prime, 10 );
+
+		$this->assertSame( array( 'paypal' => 6 ), get_option( 'woocommerce_gateway_order' ), 'Guard: the cache shows the refused order.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+	}
+
+	/**
+	 * The gateway settings check reads the row (W0 b5w0-code-1, gateway half). A stale cache that
+	 * already holds the requested title makes core's update_option() skip the write as a no-op, so
+	 * a get_option() read-back shows the title the row never received.
+	 */
+	public function test_gateway_setting_certifies_against_the_row_not_a_stale_cached_copy(): void {
+		$this->acting_as( 'administrator' );
+		$row = WcGatewayStubStore::get( 'paypal' )['settings'];
+		delete_option( 'woocommerce_paypal_settings' );
+		add_option( 'woocommerce_paypal_settings', $row, '', false );
+		$settings_md5   = $this->option_row_md5( 'woocommerce_paypal_settings' );
+		$stale          = $row;
+		$stale['title'] = 'Cached Title';
+		wp_cache_set( 'woocommerce_paypal_settings', maybe_serialize( $stale ), 'options' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'title'      => 'Cached Title',
+			)
+		);
+
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ), 'Guard: the row never received the title.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_gateway_write_failed', $res->get_error_code() );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'title' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * The settings read-back gives the restrictive answer when it cannot read the row. The settings
+	 * INSERT and every read of that row fail, and the requested value is '', which an unread row
+	 * must not confirm (ledger b5c2r1-fixsurface-1, b5huntb-1).
+	 */
+	public function test_gateway_setting_with_a_failed_write_and_an_unreadable_row_reports_the_key_failed(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_paypal_settings' );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( 'INSERT INTO', $wpdb->options, 'woocommerce_paypal_settings' ),
+			static function () {
+				return QueryFaultInjector::break_query_with_real_error(
+					array( 'SELECT option_value FROM', "option_name = 'woocommerce_paypal_settings'" ),
+					static function () {
+						return aafm_exec_wc_update_payment_gateway(
+							array(
+								'gateway_id'  => 'paypal',
+								'description' => '',
+							)
+						);
+					}
+				);
+			}
+		);
+
+		$this->assertGreaterThanOrEqual( 2, QueryFaultInjector::fired_count(), 'Guard: the mutation and its confirming read both fail.' );
+		$this->assertNull( $this->option_row_md5( 'woocommerce_paypal_settings' ), 'Guard: no row landed.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_gateway_write_failed', $res->get_error_code() );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'description' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * A pre_update_option filter that keeps the old value leaves no settings row, so the requested
+	 * '' title was never stored: the key is reported failed, not matched against a missing entry
+	 * (262 s12, ledger b5c2r1-fixsurface-1, b5hunta-2).
+	 */
+	public function test_gateway_setting_absent_from_a_vetoed_row_reports_the_key_failed(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_paypal_settings' );
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'title'      => '',
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+		}
+
+		$this->assertNull( $this->option_row_md5( 'woocommerce_paypal_settings' ), 'Guard: the veto kept the row absent.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'title' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * A stored false is not a stored ''. The row holds false for the title, a veto keeps that row,
+	 * and the requested '' title is reported failed rather than matched by its string form (ledger
+	 * b5c2r2-codex-1).
+	 */
+	public function test_gateway_setting_stored_as_false_does_not_confirm_a_requested_empty_string(): void {
+		$this->acting_as( 'administrator' );
+		$row          = WcGatewayStubStore::get( 'paypal' )['settings'];
+		$row['title'] = false;
+		delete_option( 'woocommerce_paypal_settings' );
+		add_option( 'woocommerce_paypal_settings', $row, '', false );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+		$filter       = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'title'      => '',
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+		}
+
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ), 'Guard: the veto kept the row.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'title' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * A stored position that is not numeric is not position 0. The ordering row holds 'abc' for the
+	 * gateway, a veto keeps that row, and the requested order 0 is reported failed rather than
+	 * matched through (int) 'abc' (ledger b5c2r2-codex-1).
+	 */
+	public function test_gateway_order_stored_as_a_non_numeric_string_does_not_confirm_position_zero(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 'abc' ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5 = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$filter    = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'order'      => 0,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
+		}
+
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ), 'Guard: the veto kept the row.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * WooCommerce can store a position as a numeric string, and that still confirms the order it
+	 * equals: a vetoed write over a row holding '3' reports order 3 persisted.
+	 */
+	public function test_gateway_order_stored_as_a_numeric_string_confirms_the_equal_position(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => '3' ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'order'      => 3,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
+		}
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 3, $res['order'] );
+	}
+
+	/**
+	 * Stored positions that are not the requested integer or its decimal string, one row each
+	 * (design 3.3 rows G-d to G-l).
+	 *
+	 * @return array<string,array{0:mixed,1:int}>
+	 */
+	public function non_canonical_positions(): array {
+		return array(
+			'G-d float'               => array( 3.9, 3 ),
+			'G-e decimal string'      => array( '3.9', 3 ),
+			'G-f exponent string'     => array( '3e0', 3 ),
+			'G-g leading space'       => array( ' 3', 3 ),
+			'G-h nan'                 => array( NAN, 0 ),
+			'G-i leading zero'        => array( '03', 3 ),
+			'G-j whole float'         => array( 3.0, 3 ),
+			'G-l decimal zero string' => array( '3.0', 3 ),
+		);
+	}
+
+	/**
+	 * Under a veto that keeps the old ordering row, only the requested integer or its decimal
+	 * string confirms the order; any other stored position reports it failed.
+	 *
+	 * @dataProvider non_canonical_positions
+	 *
+	 * @param mixed $stored  The position the kept row holds.
+	 * @param int   $request The requested order.
+	 */
+	public function test_gateway_order_confirms_only_the_requested_integer_under_a_veto( $stored, int $request ): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => $stored ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5 = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$filter    = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10, 2 );
+		try {
+			$res = aafm_exec_wc_update_payment_gateway(
+				array(
+					'gateway_id' => 'paypal',
+					'order'      => $request,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_update_option_woocommerce_gateway_order', $filter, 10 );
+		}
+
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ), 'Guard: the veto kept the row.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * A gateway setting stored as a number still confirms the equal text: a vetoed title write
+	 * over a row holding int 5 or float 5.0 reports the title persisted for a request of '5'.
+	 */
+	public function test_gateway_setting_stored_as_a_number_confirms_the_equal_text(): void {
+		$this->acting_as( 'administrator' );
+		$filter = array( self::class, 'keep_old_value' );
+		foreach ( array(
+			'int'   => 5,
+			'float' => 5.0,
+		) as $label => $stored ) {
+			delete_option( 'woocommerce_paypal_settings' );
+			add_option( 'woocommerce_paypal_settings', array( 'title' => $stored ), '', false );
+			wp_cache_delete( 'woocommerce_paypal_settings', 'options' );
+			add_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10, 2 );
+			try {
+				$res = aafm_exec_wc_update_payment_gateway(
+					array(
+						'gateway_id' => 'paypal',
+						'title'      => '5',
+					)
+				);
+			} finally {
+				remove_filter( 'pre_update_option_woocommerce_paypal_settings', $filter, 10 );
+			}
+
+			$this->assertIsArray( $res, $label );
+		}
+	}
+
+	/**
+	 * The ordering read-back gives the restrictive answer when it cannot read the row. The UPDATE
+	 * of the ordering fails, and every read of its row after the write fails too.
+	 */
+	public function test_gateway_order_with_a_failed_write_and_an_unreadable_row_reports_order_failed(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 1 ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5 = $this->option_row_md5( 'woocommerce_gateway_order' );
+
+		$read_fault = QueryFaultInjector::real_error_filter( array( 'SELECT option_value FROM', "option_name = 'woocommerce_gateway_order'" ) );
+		$arm        = static function () use ( $read_fault ): void {
+			if ( ! has_filter( 'query', $read_fault ) ) {
+				add_filter( 'query', $read_fault );
+			}
+		};
+		add_action( 'aafm_write_completed', $arm );
+		QueryFaultInjector::reset_fired_count();
+		try {
+			$res = QueryFaultInjector::break_query_with_real_error(
+				array( 'UPDATE', "'woocommerce_gateway_order'" ),
+				static function () {
+					return aafm_exec_wc_update_payment_gateway(
+						array(
+							'gateway_id' => 'paypal',
+							'order'      => 4,
+						)
+					);
+				}
+			);
+		} finally {
+			remove_action( 'aafm_write_completed', $arm );
+			remove_filter( 'query', $read_fault );
+		}
+
+		$this->assertGreaterThanOrEqual( 2, QueryFaultInjector::fired_count(), 'Guard: the mutation and its confirming read both fail.' );
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ), 'Guard: the ordering row is unchanged.' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+	}
+
+	/**
+	 * Run $callback with every forced wp_cache_get() missing while unforced reads still answer from
+	 * the request's copy: the state a Redis drop-in is in after a Redis error, when a forced get
+	 * returns false and the internal copy get_option() reads is still loaded. The real cache object
+	 * is put back afterwards.
+	 *
+	 * @param callable $callback Code to run.
+	 * @return mixed $callback()'s return value.
+	 */
+	private function with_forced_cache_reads_missing( callable $callback ) {
+		global $wp_object_cache;
+		$real = $wp_object_cache;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double, restored in finally.
+		$wp_object_cache = new class( $real ) {
+			/**
+			 * The cache every call but a forced get goes to.
+			 *
+			 * @var object
+			 */
+			private $real;
+
+			/**
+			 * Wrap the real cache object.
+			 *
+			 * @param object $real The real cache object.
+			 */
+			public function __construct( $real ) {
+				$this->real = $real;
+			}
+
+			/**
+			 * A forced get misses; an unforced one answers from the real cache.
+			 *
+			 * @param int|string $key   Key.
+			 * @param string     $group Group.
+			 * @param bool       $force Whether the read is forced.
+			 * @param bool|null  $found Whether the key was found.
+			 * @return mixed
+			 */
+			public function get( $key, $group = 'default', $force = false, &$found = null ) {
+				if ( $force ) {
+					$found = false;
+					return false;
+				}
+				return $this->real->get( $key, $group, false, $found );
+			}
+
+			/**
+			 * Forward every other cache call to the real cache object.
+			 *
+			 * @param string       $name Method.
+			 * @param array<mixed> $args Arguments.
+			 * @return mixed
+			 */
+			public function __call( $name, $args ) {
+				return $this->real->$name( ...$args );
+			}
+		};
+		try {
+			return $callback();
+		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the real cache object.
+			$wp_object_cache = $real;
+		}
+	}
+
+	/**
+	 * Ledger b5hunta-1: the row and the per-option entry say paypal is at 1 while the alloptions entry says
+	 * 5. get_option() answers from alloptions first, so a request for 5 would be skipped as a no-op.
+	 * Every cache copy is checked against the row, so the request refuses before the title is written.
+	 */
+	public function test_gateway_order_refuses_when_alloptions_disagrees_beside_an_agreeing_per_option_entry(): void {
+		$this->acting_as( 'administrator' );
+		$this->plant_stale_gateway_order( array( 'paypal' => 1 ), array( 'paypal' => 5 ), true );
+		wp_cache_set( 'woocommerce_gateway_order', maybe_serialize( array( 'paypal' => 1 ) ), 'options' );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+		$views        = $this->option_cache_views( 'woocommerce_gateway_order' );
+		$this->assertNotSame( $views['per_option'], $views['alloptions'], 'Guard: the two cache copies disagree.' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 5,
+				'title'      => 'Never Written',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+		$this->assertSame( $views, $this->option_cache_views( 'woocommerce_gateway_order' ) );
+	}
+
+	/**
+	 * G7 (262 step 11 decision table): a notoptions entry over an existing ordering row refuses,
+	 * with nothing written and no cache entry of the WooCommerce option changed.
+	 */
+	public function test_gateway_order_refuses_when_notoptions_sits_over_the_row(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 1 ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$not                              = (array) wp_cache_get( 'notoptions', 'options' );
+		$not['woocommerce_gateway_order'] = true;
+		wp_cache_set( 'notoptions', $not, 'options' );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 5,
+				'title'      => 'Never Written',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+		$this->assertArrayHasKey( 'woocommerce_gateway_order', (array) wp_cache_get( 'notoptions', 'options' ) );
+	}
+
+	/**
+	 * Ledger b5c2r1-codex-2: a cached '' over a missing ordering row. get_option() answers '', so the
+	 * ordering UPDATE would hit no row after the title was written. The check refuses first.
+	 */
+	public function test_gateway_order_refuses_a_cached_empty_string_over_a_missing_row(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		wp_cache_set( 'woocommerce_gateway_order', '', 'options' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'order'      => 5,
+				'title'      => 'Never Written',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertNull( $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+	}
+
+	/**
+	 * Ledger b5c2r1-fixsurface-2: the unreadable-row refusal with no cache entry at all, so only the failed
+	 * read itself can refuse (the existing twin also has a per-option entry that disagrees with the
+	 * failed read's false).
+	 */
+	public function test_gateway_order_refuses_an_unreadable_row_with_no_cache_entry(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'woocommerce_gateway_order' );
+		add_option( 'woocommerce_gateway_order', array( 'paypal' => 1 ), '', false );
+		wp_cache_delete( 'woocommerce_gateway_order', 'options' );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			array( 'SELECT option_value FROM', "option_name = 'woocommerce_gateway_order'" ),
+			static function () {
+				return aafm_exec_wc_update_payment_gateway(
+					array(
+						'gateway_id' => 'paypal',
+						'order'      => 4,
+						'title'      => 'Never Written',
+					)
+				);
+			}
+		);
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
+	}
+
+	/**
+	 * Ledger b5c1r3-security-1 on the gateway caller: the request's own per-option copy says 5 over a row of
+	 * 1 while every forced read misses. update_option() would take 5 as the old value and skip the
+	 * write, so the runtime copy is checked too and the request refuses before the title is written.
+	 */
+	public function test_gateway_order_refuses_a_stale_runtime_per_option_copy_when_the_forced_read_misses(): void {
+		$this->acting_as( 'administrator' );
+		$this->plant_stale_gateway_order( array( 'paypal' => 1 ), array( 'paypal' => 5 ), false );
+		$order_md5    = $this->option_row_md5( 'woocommerce_gateway_order' );
+		$settings_md5 = $this->option_row_md5( 'woocommerce_paypal_settings' );
+
+		$res = $this->with_forced_cache_reads_missing(
+			static function () {
+				return aafm_exec_wc_update_payment_gateway(
+					array(
+						'gateway_id' => 'paypal',
+						'order'      => 5,
+						'title'      => 'Never Written',
+					)
+				);
+			}
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array(
+				'persisted' => array(),
+				'failed'    => array( 'order' ),
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( $order_md5, $this->option_row_md5( 'woocommerce_gateway_order' ) );
+		$this->assertSame( $settings_md5, $this->option_row_md5( 'woocommerce_paypal_settings' ) );
 	}
 }

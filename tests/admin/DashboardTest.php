@@ -438,4 +438,88 @@ final class DashboardTest extends TestCase {
 		$this->assertStringContainsString( 'nav-tab-active', $html );
 		$this->assertStringContainsString( 'tab=dashboard', $html );
 	}
+
+	/**
+	 * Write_outcome rows from an admin save must not inflate "agents active in 24h" - the same
+	 * admin principal already counts once, from their own ability_call/setting_changed row.
+	 */
+	public function test_write_outcome_rows_do_not_raise_the_recent_agent_count(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		aafm_log_activity(
+			array(
+				'ability'           => 'aafm/write-outcome',
+				'principal_user_id' => $admin,
+				'principal_login'   => 'admin',
+				'status'            => 'success',
+				'event_type'        => 'write_outcome',
+				'detail'            => '{"kind":"option"}',
+			)
+		);
+
+		$this->assertSame( 0, aafm_recent_agent_count(), 'a write_outcome row alone must not count as an active agent.' );
+	}
+
+	/**
+	 * The companion half: an ability_call row from the same window still counts, so the exclusion
+	 * narrows only write_outcome and nothing else.
+	 */
+	public function test_ability_call_rows_still_raise_the_recent_agent_count(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		aafm_log_activity(
+			array(
+				'ability'           => 'aafm/get-posts',
+				'principal_user_id' => $admin,
+				'principal_login'   => 'admin',
+				'status'            => 'success',
+				'event_type'        => 'ability_call',
+			)
+		);
+
+		$this->assertSame( 1, aafm_recent_agent_count() );
+	}
+
+	/**
+	 * W2-T6 (step 14, row D2): a candidate whose caps load fails shows no roles and reads as an
+	 * administrator. The application-password read is answered by a filter, so the user's meta is
+	 * not cached before the roles load and that load is the one that fails.
+	 */
+	public function test_agent_user_candidates_flag_a_user_whose_caps_load_fails_as_admin(): void {
+		global $wpdb;
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		WP_Application_Passwords::create_new_application_password( $user_id, array( 'name' => 'mcp-a' ) );
+		wp_cache_delete( $user_id, 'user_meta' );
+
+		$answer = static function ( $value, $object_id, $meta_key ) use ( $user_id ) {
+			if ( $user_id === (int) $object_id && WP_Application_Passwords::USERMETA_KEY_APPLICATION_PASSWORDS === $meta_key ) {
+				return array(
+					array(
+						array(
+							'uuid' => 'w2-t6',
+							'name' => 'mcp-a',
+						),
+					),
+				);
+			}
+			return $value;
+		};
+		add_filter( 'get_user_metadata', $answer, 10, 3 );
+		try {
+			$cands = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+				array( $wpdb->usermeta, "user_id IN ({$user_id})" ),
+				static fn(): array => aafm_agent_user_candidates()
+			);
+		} finally {
+			remove_filter( 'get_user_metadata', $answer, 10 );
+		}
+
+		$row = current( array_filter( $cands, static fn( $c ) => $c['id'] === $user_id ) );
+		$this->assertIsArray( $row, 'the candidate must still be listed.' );
+		$this->assertSame( get_userdata( $user_id )->user_login, $row['login'] );
+		$this->assertSame( array(), $row['roles'] );
+		$this->assertTrue( $row['is_admin'] );
+	}
 }

@@ -85,12 +85,31 @@ function aafm_block_guard_core_whitelist(): array {
  * @return bool
  */
 function aafm_block_guard_is_strict(): bool {
+	// An array or an object is not a stored switch, and reads as on.
+	$is_on = static function ( $stored ): bool {
+		return is_array( $stored ) || is_object( $stored ) || (bool) $stored;
+	};
+
+	$raw = get_option( 'aafm_block_guard_strict', false );
+	$on  = $is_on( $raw );
+	if ( false === $raw ) {
+		// Off may be a failed read's default: the row decides, and an unreadable row means on.
+		$row = aafm_policy_row( 'aafm_block_guard_strict' );
+		$on  = ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
+	}
+
+	// A cache copy that disagrees with the row reads on when either does; an unreadable row means on.
+	$row = aafm_policy_row_if_stale( 'aafm_block_guard_strict' );
+	if ( null !== $row ) {
+		$on = $on || ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
+	}
+
 	/**
 	 * Filters whether invalid block content is rejected (strict) rather than allowed with a warning.
 	 *
 	 * @param bool $strict True to reject writes whose block markup fails the guard.
 	 */
-	return (bool) apply_filters( 'aafm_block_guard_strict', (bool) get_option( 'aafm_block_guard_strict', false ) );
+	return (bool) apply_filters( 'aafm_block_guard_strict', $on );
 }
 
 /**

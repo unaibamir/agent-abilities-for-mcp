@@ -51,6 +51,20 @@ final class AbilityEdgeCasesTest extends TestCase {
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+
+		// Record every file core's upload handler writes, before any attachment row exists. A test
+		// whose attachment row is deleted, or never gets its file path, would otherwise leave the
+		// file behind, because track_attachment_files() reads the path from the row.
+		add_filter(
+			'wp_handle_upload',
+			function ( $upload ) {
+				if ( is_array( $upload ) && isset( $upload['file'] ) && is_string( $upload['file'] ) && '' !== $upload['file'] ) {
+					$this->written_files[] = $upload['file'];
+				}
+				return $upload;
+			},
+			PHP_INT_MAX
+		);
 	}
 
 	public function tear_down(): void {
@@ -72,6 +86,15 @@ final class AbilityEdgeCasesTest extends TestCase {
 		$file = get_attached_file( $attachment_id );
 		if ( is_string( $file ) && '' !== $file ) {
 			$this->written_files[] = $file;
+		}
+		// Core also writes a resized copy for each registered image size, next to the original.
+		$meta = wp_get_attachment_metadata( $attachment_id );
+		if ( is_string( $file ) && '' !== $file && is_array( $meta ) && ! empty( $meta['sizes'] ) && is_array( $meta['sizes'] ) ) {
+			foreach ( $meta['sizes'] as $size ) {
+				if ( is_array( $size ) && ! empty( $size['file'] ) ) {
+					$this->written_files[] = path_join( dirname( $file ), (string) $size['file'] );
+				}
+			}
 		}
 	}
 

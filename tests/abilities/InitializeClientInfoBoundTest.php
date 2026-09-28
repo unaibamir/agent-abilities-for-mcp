@@ -39,6 +39,26 @@ final class InitializeClientInfoBoundTest extends TestCase {
 	}
 
 	/**
+	 * Core dispatches a route with one trailing newline to the MCP handler, so the initialize bound
+	 * applies to that spelling as well.
+	 */
+	public function test_the_bound_applies_on_the_newline_route_core_dispatches_to_mcp(): void {
+		$request = $this->initialize_request(
+			array(
+				'protocolVersion' => '2025-06-18',
+				'clientInfo'      => array( 'name' => 'probe' ),
+				'padding'         => str_repeat( 'B', 2000000 ),
+			)
+		);
+		$request->set_route( aafm_mcp_rest_route() . "\n" );
+
+		$result = aafm_bound_mcp_initialize_params( null, null, $request );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 400, $result->get_error_data()['status'] ?? 0 );
+	}
+
+	/**
 	 * The reproduction. A subscriber POSTed a 2,000,000-character clientInfo.name and grew their
 	 * own usermeta row to 64 MB, because create_session() stores the whole params array.
 	 */

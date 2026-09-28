@@ -435,11 +435,15 @@ function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway, int $order ): arra
 	$settings = (array) $report['settings'];
 	return array(
 		'id'              => $gateway->id,
-		// WC_Payment_Gateway declares $title and $description with no default; a gateway that
-		// never assigns them (a third-party gateway that skips the usual __construct wiring) reads
-		// back as null, which would violate the declared string schema. Cast defensively.
-		'title'           => (string) $gateway->title,
-		'description'     => (string) $gateway->description,
+		// get_title()/get_description() apply the woocommerce_gateway_title /
+		// woocommerce_gateway_description filters that the raw $title/$description properties skip
+		// - translation and white-label plugins both hook these, so reading the properties directly
+		// reported the untranslated, unbranded name to the caller. WC_Payment_Gateway declares
+		// neither property with a default; a gateway that never assigns them (a third-party gateway
+		// that skips the usual __construct wiring) reads back as null through the getters too, which
+		// would violate the declared string schema. Cast defensively.
+		'title'           => (string) $gateway->get_title(),
+		'description'     => (string) $gateway->get_description(),
 		'enabled'         => 'yes' === $gateway->enabled,
 		'order'           => $order,
 		// A gateway that never calls init_settings() (again, a non-conforming third-party
@@ -508,10 +512,7 @@ function aafm_args_wc_list_payment_gateways(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_list_payment_gateways( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( 'WC_Payment_Gateways' ) ) {
 		return aafm_generic_error();
 	}
 	$gateways = \WC_Payment_Gateways::instance()->payment_gateways();
@@ -519,10 +520,12 @@ function aafm_exec_wc_list_payment_gateways( array $input ) { // phpcs:ignore Ge
 	foreach ( $gateways as $gateway ) {
 		$items[] = array(
 			'id'      => $gateway->id,
-			// Same missing-default risk as aafm_wc_gateway_shape(): WC_Payment_Gateway declares
-			// no default for $title, so an unassigned one would read back as null against the
+			// get_title() applies the woocommerce_gateway_title filter, so this reports the name
+			// checkout actually shows rather than the raw stored value. The cast covers the same
+			// missing-default risk as aafm_wc_gateway_shape(): WC_Payment_Gateway declares no
+			// default for $title, so an unassigned one would read back as null against the
 			// declared string schema.
-			'title'   => (string) $gateway->title,
+			'title'   => (string) $gateway->get_title(),
 			'enabled' => 'yes' === $gateway->enabled,
 		);
 	}
@@ -585,10 +588,7 @@ function aafm_args_wc_get_payment_gateway(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_get_payment_gateway( array $input ) {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( 'WC_Payment_Gateways' ) ) {
 		return aafm_generic_error();
 	}
 	$gateway_id = sanitize_text_field( (string) ( $input['gateway_id'] ?? '' ) );
@@ -717,10 +717,7 @@ function aafm_wc_gateway_write_failed_error( array $persisted, array $failed ): 
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_update_payment_gateway( array $input ) {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( 'WC_Payment_Gateways' ) ) {
 		return aafm_generic_error();
 	}
 	$gateway_id = sanitize_text_field( (string) ( $input['gateway_id'] ?? '' ) );
@@ -751,6 +748,20 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$desired['description'] = aafm_sanitize_multiline_text( (string) $input['description'] );
 	}
 
+	// R1-4: the display order lives in woocommerce_gateway_order, which a persistent object cache
+	// can hold a stale copy of. Core's update_option() judges "nothing changed" against that copy,
+	// so a stale entry equal to the request skips the write while get_option() shows it done. Before
+	// anything is written, refuse unless the row is readable and every cache copy agrees with it
+	// (aafm_option_row_if_cache_agrees(), the same check site settings use), so a refusal leaves
+	// every field as it was. No cache entry of this WooCommerce option is deleted or rewritten here.
+	$order_row = null;
+	if ( isset( $input['order'] ) ) {
+		$order_row = aafm_option_row_if_cache_agrees( 'woocommerce_gateway_order' );
+		if ( null === $order_row ) {
+			return aafm_wc_gateway_write_failed_error( array(), array( 'order' ) );
+		}
+	}
+
 	foreach ( $desired as $key => $value ) {
 		if ( 'enabled' === $key ) {
 			$gateway->enabled = $value;
@@ -759,7 +770,14 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		} else {
 			$gateway->description = $value;
 		}
-		$gateway->update_option( $key, $value );
+		aafm_wc_write(
+			'gateway_setting',
+			array(
+				'object' => $gateway,
+				'key'    => $key,
+				'value'  => $value,
+			)
+		);
 	}
 
 	// FIX-3 item 4 (sweep finding, B4 batch, the one live gap in this dispatch): WC_Settings_API::
@@ -780,31 +798,43 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	}
 
 	$order_val = null;
-	if ( isset( $input['order'] ) ) {
+	if ( null !== $order_row ) {
 		// Display order is not a per-gateway setting, and WC_Payment_Gateway has no `order` property
 		// to set (M13) - WooCommerce keeps order in the woocommerce_gateway_order option (a
-		// gateway_id => position map). Persist it there so the change survives the next request.
+		// gateway_id => position map). Persist it there so the change survives the next request,
+		// merged into the row read above rather than get_option(), whose filters can add entries.
 		$order_val               = (int) $input['order'];
-		$ordering                = get_option( 'woocommerce_gateway_order', array() );
-		$ordering                = is_array( $ordering ) ? $ordering : array();
+		$ordering                = is_array( $order_row['value'] ) ? $order_row['value'] : array();
 		$ordering[ $gateway_id ] = $order_val;
-		update_option( 'woocommerce_gateway_order', $ordering );
+		aafm_wc_write(
+			'option',
+			array(
+				'option' => 'woocommerce_gateway_order',
+				'value'  => $ordering,
+				'entity' => 'payment_gateway',
+			)
+		);
 	}
 
 	// Verify the persisted state matches what we asked for, reading the values WooCommerce actually
-	// wrote to the database - NOT the gateway's in-memory copy. WC_Settings_API::update_option() sets
-	// $this->settings[$key] in memory BEFORE the DB write, and get_option() reads that in-memory copy,
-	// so a failed write (or a sanitize filter that altered the value on the way to disk) would still
-	// read back as a match through $gateway->get_option() and report a false success. Re-read the
-	// persisted settings row (get_option_key()) so only a genuinely persisted value counts as success.
+	// wrote to the database row - NOT the gateway's in-memory copy, and not get_option(), which a
+	// stale object cache can answer with a value the row never received. WC_Settings_API::
+	// update_option() sets $this->settings[$key] in memory BEFORE the DB write, and the gateway's
+	// get_option() reads that in-memory copy, so a failed write (or a sanitize filter that altered
+	// the value on the way to disk) would still read back as a match through $gateway->get_option()
+	// and report a false success. Re-read the persisted settings row (get_option_key()) so only a
+	// genuinely persisted value counts as success. A row that cannot be read, or a row with no entry
+	// for a requested key (a pre_update_option filter can keep an old row that lacks it), counts as
+	// not persisted: a missing value is never matched against a requested ''. Only a stored string or
+	// number is compared, so a stored false, null or array never passes for '' by its string form.
 	$persisted_keys = array();
 	$failed_keys    = array();
 	if ( ! empty( $desired ) ) {
-		$persisted = get_option( $gateway->get_option_key(), array() );
-		$persisted = is_array( $persisted ) ? $persisted : array();
+		$settings  = aafm_read_option_views( $gateway->get_option_key() );
+		$persisted = ! $settings['db_error'] && is_array( $settings['db_value'] ) ? $settings['db_value'] : array();
 		foreach ( $desired as $key => $value ) {
-			$stored = array_key_exists( $key, $persisted ) ? (string) $persisted[ $key ] : '';
-			if ( $stored === (string) $value ) {
+			$stored = $persisted[ $key ] ?? null;
+			if ( ( is_string( $stored ) || is_int( $stored ) || is_float( $stored ) ) && (string) $stored === (string) $value ) {
 				$persisted_keys[] = $key;
 			} else {
 				$failed_keys[] = $key;
@@ -812,8 +842,11 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		}
 	}
 	if ( null !== $order_val ) {
-		$saved_order = get_option( 'woocommerce_gateway_order', array() );
-		if ( is_array( $saved_order ) && (int) ( $saved_order[ $gateway_id ] ?? -1 ) === $order_val ) {
+		// Only the requested integer or its string form counts: a stored 3.9, '3e0' or ' 3' is not
+		// position 3, and 'abc' is not position 0.
+		$saved_order = aafm_option_row( 'woocommerce_gateway_order' );
+		$saved_pos   = $saved_order['found'] && is_array( $saved_order['value'] ) ? ( $saved_order['value'][ $gateway_id ] ?? null ) : null;
+		if ( aafm_stored_id_matches( $saved_pos, $order_val ) ) {
 			$persisted_keys[] = 'order';
 		} else {
 			$failed_keys[] = 'order';

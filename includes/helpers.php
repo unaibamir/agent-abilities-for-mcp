@@ -81,6 +81,12 @@ function aafm_eligible_post_types(): array {
 function aafm_allowed_post_types(): array {
 	$stored = get_option( 'aafm_allowed_post_types', array() );
 	$stored = is_array( $stored ) ? array_map( 'sanitize_key', $stored ) : array();
+	// A cache copy that disagrees with the row exposes only what both hold; an unreadable row
+	// exposes no opt-in type.
+	$row = aafm_policy_row_if_stale( 'aafm_allowed_post_types' );
+	if ( null !== $row ) {
+		$stored = $row['ok'] && is_array( $row['value'] ) ? array_values( array_intersect( $stored, array_map( 'sanitize_key', $row['value'] ) ) ) : array();
+	}
 
 	$allowed = array_merge( array( 'post', 'page' ), $stored );
 	$allowed = array_values( array_unique( array_filter( $allowed, 'aafm_post_type_is_eligible' ) ) );
@@ -113,6 +119,192 @@ function aafm_resolve_search_post_types( array $requested ): array {
 }
 
 /**
+ * For each requested key, every listed entry and every stored meta_key spelling that the database
+ * treats as the same key, compared under the meta_key column collation of the post, term and user
+ * meta tables.
+ *
+ * One query for the whole batch. Per table, the requested keys and the listed entries are each
+ * carried through CONCAT() with a meta_key value from an empty read of that table, so both take
+ * the column's collation, not the connection's. The list branch joins the keys with the entries,
+ * and the row branch joins the keys with the stored rows, distinct by bytes: a plain DISTINCT
+ * would collapse the spellings under the collation and could hand back only a harmless one. Every
+ * value comes back as bytes, so tables with different collations still union.
+ *
+ * ponytail: no memo. One call costs one query, whatever the batch size, and only a key or list
+ * outside [A-Za-z0-9_-] makes one. Validating a key makes at most four (hard block, deny list, and
+ * the allowlist's two floors), so the allowlist loops cost O(N) per post. Add a request memo on
+ * the list branch only if a profile shows it. The row branch reads stored rows and must never be
+ * memoised across a write.
+ *
+ * @param string[] $keys    The trimmed meta keys.
+ * @param string[] $entries The listed keys to compare with them.
+ * @return array<int, string[]>|null The matches per key, in the order of $keys, or null when the
+ *                                   query failed.
+ */
+function aafm_meta_key_collation_matches( array $keys, array $entries ): ?array {
+	global $wpdb;
+
+	$keys    = array_values( array_map( 'strval', $keys ) );
+	$entries = array_values( array_map( 'strval', $entries ) );
+	$out     = array_fill( 0, count( $keys ), array() );
+	if ( array() === $keys ) {
+		return $out;
+	}
+
+	$parts = array();
+	$args  = array();
+	foreach ( array( $wpdb->postmeta, $wpdb->termmeta, $wpdb->usermeta ) as $table ) {
+		$requested      = "SELECT 0 AS i, CONCAT( IFNULL( mk.meta_key, '' ), %s ) AS k FROM ( SELECT 1 AS one ) AS dk LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS mk ON 1 = 1" . str_repeat( ' UNION ALL SELECT %d, %s', count( $keys ) - 1 );
+		$requested_args = array( $keys[0], $table );
+		foreach ( array_slice( $keys, 1, null, true ) as $index => $key ) {
+			$requested_args[] = $index;
+			$requested_args[] = $key;
+		}
+
+		if ( array() !== $entries ) {
+			$listed  = "SELECT CONCAT( IFNULL( me.meta_key, '' ), %s ) AS k FROM ( SELECT 1 AS one ) AS de LEFT JOIN ( SELECT meta_key FROM %i LIMIT 0 ) AS me ON 1 = 1" . str_repeat( ' UNION ALL SELECT %s', count( $entries ) - 1 );
+			$parts[] = "( SELECT q.i AS i, CAST( e.k AS BINARY ) AS aafm_gate_match FROM ( {$requested} ) AS q JOIN ( {$listed} ) AS e ON e.k = q.k )";
+			$args    = array_merge( $args, $requested_args, array( $entries[0], $table ), array_slice( $entries, 1 ) );
+		}
+		$parts[] = "( SELECT DISTINCT q.i AS i, CAST( m.meta_key AS BINARY ) AS aafm_gate_match FROM ( {$requested} ) AS q JOIN %i AS m ON m.meta_key = q.k )";
+		$args    = array_merge( $args, $requested_args, array( $table ) );
+	}
+
+	$sql = implode( ' UNION ALL ', $parts );
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql holds only placeholders and fixed SQL.
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $args ) );
+	if ( ! $view['ok'] ) {
+		return null;
+	}
+	foreach ( (array) $view['value'] as $row ) {
+		$out[ (int) $row['i'] ][] = (string) $row['aafm_gate_match'];
+	}
+	return $out;
+}
+
+/**
+ * The hard block for a whole list of keys at once: for each key, whether it is permanently blocked
+ * from agent access in the post floor (post and term meta) or the user floor.
+ *
+ * Three checks, and any one refuses. (a) The trimmed key against the list after strtolower(),
+ * is_protected_meta(), and the capabilities pattern (plus user_level for users),
+ * case-insensitive. (b) The meta_key column compares under a collation that also ignores accents,
+ * trailing spaces and some invisible characters, so every key that holds anything outside
+ * [A-Za-z0-9_-], or every key once a listed entry does, goes into one query that says which
+ * entries and which stored spellings the database treats as that key, and (a) runs on each of
+ * them. A failed query refuses every key it covered. (c) For those same keys, (a) also runs on the
+ * key reduced to [A-Za-z0-9_-] after remove_accents() with the en_US map, for a per-blog key no row
+ * carries yet; that reduction is best effort. A key and a list of only [A-Za-z0-9_-] skip (b) and
+ * (c): the collations WordPress installs equate no two such strings strtolower() keeps apart.
+ *
+ * @param string[] $keys  Meta keys.
+ * @param string   $scope 'post' for the post and term meta floor, 'user' for the user meta floor.
+ * @return bool[] Whether each key is blocked, in the order of $keys.
+ */
+function aafm_hard_blocked_meta_keys( array $keys, string $scope = 'post' ): array {
+	global $wpdb;
+
+	if ( 'user' === $scope ) {
+		$builtin = array(
+			'session_tokens',
+			'_application_passwords',
+			'wp_capabilities',
+			'wp_user_level',
+			'default_password_nonce',
+			'_password_reset_key',
+			'_password_reset_time',
+			'two_factor_enabled',
+			'_two_factor_provider',
+			'_two_factor_totp_key',
+			'two_factor_secret',
+			'_two_factor_backup_codes',
+			'webauthn_credentials',
+			$wpdb->prefix . 'capabilities',
+			$wpdb->prefix . 'user_level',
+		);
+		/**
+		 * Filters EXTRA user-meta keys to hard-block. Built-ins are re-merged after, so this
+		 * can only add blocks, never remove them.
+		 *
+		 * @param list<string> $extra Extra keys to block.
+		 */
+		$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
+		$subtype = 'user';
+		$pattern = '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i';
+	} else {
+		$builtin = array_merge(
+			array(
+				'session_tokens',
+				'_application_passwords',
+				'wp_capabilities',
+				'wp_user_level',
+				'wp_user-settings',
+				'wp_user-settings-time',
+				'default_password_nonce',
+				'_password_reset_key',
+				'community-events-location',
+				'_new_email',
+				$wpdb->prefix . 'capabilities',
+				$wpdb->prefix . 'user_level',
+			),
+			// Every page-builder ownership marker (includes/page-builder-guard.php) is blocked
+			// outright from the generic meta abilities, not merely left off the operator's
+			// allowlist: a caller who cleared a marker through update-post-meta or
+			// delete-post-meta would otherwise pass aafm_exec_update_post()'s ownership check on
+			// the next call. `_elementor_data` and `_fl_builder_data` are already protected by
+			// their leading underscore; `et_pb_use_builder`, `fusion_builder_status` and
+			// `fusion_builder_converted` are not. The whole marker map comes in, which is harmless
+			// for term meta, and keeps any marker added through aafm_page_builder_markers covered.
+			array_keys( aafm_page_builder_markers() )
+		);
+		/**
+		 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this
+		 * can only add blocks, never remove them.
+		 *
+		 * @param list<string> $extra Extra keys to block.
+		 */
+		$extra   = (array) apply_filters( 'aafm_hard_blocked_meta_keys', array() );
+		$subtype = 'post';
+		$pattern = '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/i';
+	}
+	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
+	$lower   = array_map( 'strtolower', $blocked );
+
+	// Check (a).
+	$blocks = static function ( string $candidate ) use ( $lower, $subtype, $pattern ): bool {
+		return is_protected_meta( $candidate, $subtype )
+			|| in_array( strtolower( $candidate ), $lower, true )
+			|| (bool) preg_match( $pattern, $candidate );
+	};
+
+	$plain_list = 1 === preg_match( '/^[A-Za-z0-9_-]*\z/', implode( '', $blocked ) );
+	$result     = array();
+	$slow       = array();
+	foreach ( array_values( $keys ) as $index => $raw ) {
+		$key              = trim( (string) $raw );
+		$result[ $index ] = '' === $key || $blocks( $key );
+		if ( ! $result[ $index ] && ( ! $plain_list || 1 !== preg_match( '/^[A-Za-z0-9_-]*\z/', $key ) ) ) {
+			$slow[ $index ] = $key;
+		}
+	}
+	if ( array() === $slow ) {
+		return $result;
+	}
+
+	// Checks (b) and (c), one query for every key that needs them.
+	$matches  = aafm_meta_key_collation_matches( array_values( $slow ), $blocked );
+	$position = 0;
+	foreach ( $slow as $index => $key ) {
+		$hits             = null === $matches ? null : $matches[ $position ];
+		$result[ $index ] = null === $hits
+			|| array() !== array_filter( $hits, $blocks )
+			|| $blocks( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) );
+		++$position;
+	}
+	return $result;
+}
+
+/**
  * Whether a meta key is permanently blocked from agent access (even if allowlisted).
  *
  * Blocks protected (`_`-prefixed) meta, the auth-sensitive denylist stolen from
@@ -124,68 +316,7 @@ function aafm_resolve_search_post_types( array $requested ): array {
  * @return bool
  */
 function aafm_hard_blocked_meta_key( string $key ): bool {
-	global $wpdb;
-	$key = (string) $key;
-	if ( '' === trim( $key ) ) {
-		return true;
-	}
-	// Every check below is byte-exact or end-anchored; MySQL's meta_key comparison is neither.
-	// Under the PAD SPACE, case-insensitive collation WordPress gives that column, update_metadata's
-	// `WHERE meta_key = %s` treats 'wp_capabilities ' and 'wp_capabilities' as the same row, so a
-	// candidate carrying trailing whitespace missed every check here and still landed on the real
-	// capability row. Candidates are derived from a field DEFINITION rather than from caller input,
-	// so this needs a site-side field named with stray whitespace, which is why it is not remotely
-	// reachable. Comparing on the trimmed copy is one-directional by construction: the blank case
-	// has already returned above, is_protected_meta() reads a LEADING underscore that trimming can
-	// only expose, and both the membership test and the anchored regex can only gain matches. No
-	// key that is blocked today becomes allowed.
-	$key = trim( $key );
-	if ( is_protected_meta( $key, 'post' ) ) {
-		return true;
-	}
-	$builtin = array_merge(
-		array(
-			'session_tokens',
-			'_application_passwords',
-			'wp_capabilities',
-			'wp_user_level',
-			'wp_user-settings',
-			'wp_user-settings-time',
-			'default_password_nonce',
-			'_password_reset_key',
-			'community-events-location',
-			'_new_email',
-			$wpdb->prefix . 'capabilities',
-			$wpdb->prefix . 'user_level',
-		),
-		// Codex final round 7 HIGH: every page-builder ownership marker (includes/page-
-		// builder-guard.php) must be absolutely blocked from the generic meta abilities, not
-		// merely left off the operator's allowlist - a caller who cleared a marker via
-		// update-post-meta/delete-post-meta made aafm_exec_update_post()'s ownership check pass
-		// on the next call, writing straight through the refusal guard. `_elementor_data` and
-		// `_fl_builder_data` were already covered by is_protected_meta()'s leading-underscore
-		// rule above; `et_pb_use_builder`, `fusion_builder_status`, and `fusion_builder_converted`
-		// were not, and neither list is scoped to post meta only, so pulling the whole marker map
-		// in here (harmless for term/user meta, where these names never legitimately occur) keeps
-		// this correct for any marker added later through the aafm_page_builder_markers filter.
-		array_keys( aafm_page_builder_markers() )
-	);
-	/**
-	 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this
-	 * can only add blocks, never remove them.
-	 *
-	 * @param list<string> $extra Extra keys to block.
-	 */
-	$extra   = (array) apply_filters( 'aafm_hard_blocked_meta_keys', array() );
-	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	// Case-insensitive compare (defense in depth): a mixed-case variant of a protected key
-	// (e.g. wp_Capabilities) must be blocked just like its canonical lowercase spelling.
-	if ( in_array( strtolower( $key ), array_map( 'strtolower', $blocked ), true ) ) {
-		return true;
-	}
-	// Any prefix*capabilities form, including multisite per-blog keys (wp_2_capabilities). The `i`
-	// modifier keeps a mixed-case spelling from slipping past.
-	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/i', $key );
+	return aafm_hard_blocked_meta_keys( array( $key ), 'post' )[0];
 }
 
 /**
@@ -198,7 +329,9 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
  *   filter as the filter's own default (so a filter reading its $default argument never sees a
  *   blocked key); term-meta and user-meta skip this pre-floor and pass the raw option straight
  *   through, because their filter result is unioned with the option afterward anyway (see next
- *   point), making a pre-floor on the base redundant rather than protective for them.
+ *   point), making a pre-floor on the base redundant rather than protective for them. The floor
+ *   is the full hard block, so the default can also lose an entry only checks (b) and (c) block,
+ *   such as an accented spelling of a blocked key, which 1.7.5 passed on.
  * - $filter_replaces: post-meta's filter result REPLACES the base outright, so a legacy or
  *   rogue filter that returns an unrelated array (or empty) can shrink or clear the whole
  *   allowlist. Term-meta and user-meta instead UNION the filter result with the option base
@@ -219,18 +352,38 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
  * @return list<string>
  */
 function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag, callable $hard_block, bool $pre_filter_floor, bool $filter_replaces ): array {
+	// Both floors check the whole list at once through the scope's list-form hard block, so a
+	// floor pass costs at most one query however long the list is. Any other checker is asked
+	// once per entry.
+	$scopes    = array(
+		'aafm_hard_blocked_meta_key'      => 'post',
+		'aafm_hard_blocked_user_meta_key' => 'user',
+	);
+	$unblocked = static function ( array $keys ) use ( $hard_block, $scopes ): array {
+		$keys    = array_values( $keys );
+		$blocked = is_string( $hard_block ) && isset( $scopes[ $hard_block ] )
+			? aafm_hard_blocked_meta_keys( $keys, $scopes[ $hard_block ] )
+			: array_map( $hard_block, $keys );
+		$kept    = array();
+		foreach ( $keys as $index => $key ) {
+			if ( ! $blocked[ $index ] ) {
+				$kept[] = $key;
+			}
+		}
+		return $kept;
+	};
+
 	$stored = get_option( $option_name, array() );
 	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+	// A cache copy that disagrees with the row allows only what both hold; an unreadable row allows
+	// nothing.
+	$row = aafm_policy_row_if_stale( $option_name );
+	if ( null !== $row ) {
+		$stored = $row['ok'] && is_array( $row['value'] ) ? array_values( array_intersect( $stored, array_map( 'strval', $row['value'] ) ) ) : array();
+	}
 
 	if ( $pre_filter_floor ) {
-		$stored = array_values(
-			array_filter(
-				$stored,
-				static function ( string $k ) use ( $hard_block ): bool {
-					return ! $hard_block( $k );
-				}
-			)
-		);
+		$stored = $unblocked( $stored );
 	}
 
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- $filter_tag is always one of the three fixed, already-prefixed, already-documented tags each caller below passes literally (aafm_allowed_meta_keys, aafm_allowed_term_meta_keys, aafm_allowed_user_meta_keys); this is parameterization across three known call sites, not a genuinely dynamic hook name.
@@ -239,16 +392,13 @@ function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag,
 
 	$merged = $filter_replaces ? $filtered : array_merge( $stored, $filtered );
 
-	return array_values(
-		array_unique(
-			array_filter(
-				array_map( 'strval', $merged ),
-				static function ( string $k ) use ( $hard_block ): bool {
-					return '' !== $k && '*' !== $k && ! $hard_block( $k );
-				}
-			)
-		)
+	$candidates = array_filter(
+		array_map( 'strval', $merged ),
+		static function ( string $k ): bool {
+			return '' !== $k && '*' !== $k;
+		}
 	);
+	return array_values( array_unique( $unblocked( $candidates ) ) );
 }
 
 /**
@@ -262,8 +412,12 @@ function aafm_scoped_allowed_meta_keys( string $option_name, string $filter_tag,
  * @return list<string>
  */
 function aafm_scoped_denied_meta_keys( string $option_name ): array {
-	$stored = get_option( $option_name, array() );
-	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+	$stored = aafm_scoped_deny_option_raw( $option_name );
+	if ( null === $stored ) {
+		// The deny list could not be read: `*` refuses every key (aafm_validate_scoped_meta_key()).
+		return array( '*' );
+	}
+	$stored = array_map( 'strval', $stored );
 
 	return array_values(
 		array_unique(
@@ -278,6 +432,361 @@ function aafm_scoped_denied_meta_keys( string $option_name ): array {
 }
 
 /**
+ * A deny option's raw value, read so a failed read can never answer "nothing denied".
+ *
+ * A non-empty array from get_option() is returned as it is, and any other answer except the exact
+ * default gives the empty list. That default, array(), is what a missing row and a failed read both
+ * produce, so the row is read from the database: an unreadable row gives null, a stored array is
+ * returned, anything else is the empty list.
+ *
+ * @param string $option_name The denied-keys option name for a scope.
+ * @return array<mixed>|null Null when the row could not be read.
+ */
+function aafm_scoped_deny_option_raw( string $option_name ): ?array {
+	// An array is a stored deny list and a scalar reads as empty, as in 1.7.5; an object denies
+	// every key.
+	$shaped = static function ( $value ): array {
+		return is_array( $value ) ? $value : ( is_object( $value ) ? array( '*' ) : array() );
+	};
+
+	$stored = get_option( $option_name, array() );
+	if ( array() !== $stored ) {
+		$stored = $shaped( $stored );
+	} else {
+		$row = aafm_policy_row( $option_name );
+		if ( ! $row['ok'] ) {
+			return null;
+		}
+		$stored = $row['found'] ? $shaped( $row['value'] ) : array();
+	}
+
+	// A cache copy that disagrees with the row denies what either holds; an unreadable row denies
+	// every key.
+	$row = aafm_policy_row_if_stale( $option_name );
+	if ( null !== $row ) {
+		if ( ! $row['ok'] ) {
+			return null;
+		}
+		$stored = array_merge( $stored, $row['found'] ? $shaped( $row['value'] ) : array() );
+	}
+
+	return $stored;
+}
+
+/**
+ * Shared engine behind the three *_deny_has_star() functions: whether a deny option's raw value
+ * carries the `*` deny-all sentinel. An unreadable deny option counts as deny-all.
+ *
+ * @param string $option_name The denied-keys option name for a scope.
+ * @return bool
+ */
+function aafm_scoped_deny_has_star( string $option_name ): bool {
+	$raw = aafm_scoped_deny_option_raw( $option_name );
+	return null === $raw || in_array( '*', array_map( 'strval', $raw ), true );
+}
+
+/**
+ * One option's row read straight from the database: no object cache read or write, no option
+ * filter, no memo.
+ *
+ * The policy switches call it when get_option() gave their permissive default, because a failed
+ * per-option SELECT gives that same default and leaves a notoptions entry that a persistent object
+ * cache keeps. `found` is true for any row, a stored empty string included.
+ *
+ * @param string $option Option name.
+ * @return array{ok:bool,found:bool,value:mixed} ok is false when the query failed; value is the
+ *                                               unserialized option_value, or false with no row.
+ */
+function aafm_option_row( string $option ): array {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- deliberately bypassing the object cache: the question is what the row holds.
+	$row   = aafm_wpdb_row( $wpdb->prepare( "SELECT option_value FROM $wpdb->options WHERE option_name = %s LIMIT 1", $option ) );
+	$found = $row['ok'] && null !== $row['value'];
+
+	return array(
+		'ok'    => $row['ok'],
+		'found' => $found,
+		'value' => $found ? maybe_unserialize( $row['value']['option_value'] ) : false,
+	);
+}
+
+/**
+ * One option's row, returned only when every cache copy core could answer the option from agrees
+ * with it. The option pre-checks call it before their first write, because update_option() decides
+ * "nothing changed" from get_option(), which answers from a cache copy before the row.
+ *
+ * Reads the row through aafm_option_row(), then the per-option entry, the alloptions entry and
+ * notoptions, first forced and then unforced. Under a persistent cache a forced read goes to the
+ * backend and an unforced one answers from the request's own copy, which get_option() reads and
+ * which a failed backend leaves in place. The unforced reads come last, because a forced hit
+ * refreshes that copy. Nothing is written to any cache.
+ *
+ * A row that cannot be read refuses. With no row, any cached value refuses and a notoptions entry
+ * agrees. With a row, a notoptions entry refuses, and so does any cached value that
+ * aafm_option_value_matches() says differs from it. A cached false still matches a stored '',
+ * because core's own update_option( $name, false ) leaves exactly that.
+ *
+ * @param string $option Option name.
+ * @return array{ok:bool,found:bool,value:mixed}|null The row, or null to refuse.
+ */
+function aafm_option_row_if_cache_agrees( string $option ): ?array {
+	$row = aafm_option_row( $option );
+	if ( ! $row['ok'] ) {
+		return null;
+	}
+
+	$cached = array();
+	$not    = false;
+	foreach ( array( true, false ) as $force ) {
+		// Reset before every read: the Redis drop-in returns false on an exception without setting
+		// $found, so a flag left over from an earlier read would count a failed read as a cached false.
+		$found  = false;
+		$single = wp_cache_get( $option, 'options', $force, $found );
+		if ( $found ) {
+			$cached[] = maybe_unserialize( $single );
+		}
+		$all = wp_cache_get( 'alloptions', 'options', $force );
+		if ( is_array( $all ) && array_key_exists( $option, $all ) ) {
+			$cached[] = maybe_unserialize( $all[ $option ] );
+		}
+		$notoptions = wp_cache_get( 'notoptions', 'options', $force );
+		$not        = $not || ( is_array( $notoptions ) && isset( $notoptions[ $option ] ) );
+	}
+
+	if ( ! $row['found'] ) {
+		return array() === $cached ? $row : null;
+	}
+	if ( $not ) {
+		return null;
+	}
+	foreach ( $cached as $value ) {
+		if ( ! aafm_option_value_matches( $value, $row['value'] ) ) {
+			return null;
+		}
+	}
+	return $row;
+}
+
+/**
+ * The policy options: every option a policy read decides from. aafm_policy_row() reads them all
+ * in one query.
+ *
+ * @return list<string>
+ */
+function aafm_policy_options(): array {
+	return array(
+		'aafm_enabled_abilities',
+		'aafm_enabled_bridged_abilities',
+		'aafm_high_risk_abilities_unlocked',
+		'aafm_oauth_enabled',
+		'aafm_oauth_dcr_enabled',
+		'aafm_allowed_post_types',
+		'aafm_allowed_meta_keys',
+		'aafm_exposed_term_meta_keys',
+		'aafm_exposed_user_meta_keys',
+		'aafm_denied_meta_keys',
+		'aafm_denied_term_meta_keys',
+		'aafm_denied_user_meta_keys',
+		'aafm_read_only_mode',
+		'aafm_block_guard_strict',
+		'aafm_rate_limit_per_min',
+		'aafm_ip_allowlist',
+		'aafm_force_draft',
+		'aafm_max_title_len',
+		'aafm_log_retention_days',
+		'aafm_oauth_access_ttl',
+		'aafm_oauth_refresh_ttl',
+		'default_role',
+		'aafm_ability_allowlist_overrides',
+		'aafm_delete_data_on_uninstall',
+	);
+}
+
+/**
+ * Whether this request reads policy through the batched row: an admin or cron request, or a REST
+ * request (MCP included) once WordPress has routed it as REST, by REST_REQUEST or core's own parsed
+ * rest_route (the empty() test rest_api_loaded() applies). The request path is never read. The
+ * batch lives only in a process that serves one request (HTTP, admin, cron). A WP-CLI command
+ * batches for the whole process only when it sets one of the terms named above (for example
+ * `wp cron event run` defines DOING_CRON, and `--context=admin` makes is_admin() true); the MCP
+ * adapter's STDIO server in the default context sets none, so it keeps no batch and no memo and
+ * reads policy as 9626307 did.
+ *
+ * A "no" is never kept, and a later read in the same request decides again. A read before
+ * WordPress routes a REST request and a front-end page load read policy as 9626307 did (no
+ * stale-copy check), and so do the OAuth authorize request and the root /.well-known/ documents,
+ * which are not REST-routed; their /wp-json/ copies are REST routes and batch. A "yes" is kept for
+ * the request and registers the memo's hooks.
+ *
+ * @return bool
+ */
+function aafm_policy_batch_allowed(): bool {
+	global $aafm_policy_state;
+	if ( ! empty( $aafm_policy_state['batch_allowed'] ) ) {
+		return true;
+	}
+
+	$allowed = ( defined( 'REST_REQUEST' ) && REST_REQUEST )
+		|| is_admin()
+		|| ( defined( 'DOING_CRON' ) && DOING_CRON ) // @phpstan-ignore-line The constant, not wp_doing_cron(): the decision fires no filter.
+		|| ( isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof WP && ! empty( $GLOBALS['wp']->query_vars['rest_route'] ) );
+	if ( ! $allowed ) {
+		return false;
+	}
+
+	$aafm_policy_state['batch_allowed'] = true;
+	if ( ! has_action( 'shutdown', 'aafm_policy_reset_request_state' ) ) {
+		add_action( 'added_option', 'aafm_policy_forget_row' );
+		add_action( 'updated_option', 'aafm_policy_forget_row' );
+		add_action( 'deleted_option', 'aafm_policy_forget_row' );
+		add_action( 'shutdown', 'aafm_policy_reset_request_state' );
+	}
+	return true;
+}
+
+/**
+ * One policy option's row. On a batched request the first call reads every policy option in one
+ * failure-aware query and keeps the rows for the rest of the request; a failed query is kept too,
+ * so every later policy read in the request fails closed. A write to a policy option drops its
+ * entry, and the next read of it reads the row alone. Any other option, or any other request, is
+ * aafm_option_row().
+ *
+ * @param string $option Option name.
+ * @return array{ok:bool,found:bool,value:mixed}
+ */
+function aafm_policy_row( string $option ): array {
+	global $aafm_policy_state, $wpdb;
+	$options = aafm_policy_options();
+	if ( ! in_array( $option, $options, true ) || ! aafm_policy_batch_allowed() ) {
+		return aafm_option_row( $option );
+	}
+
+	// A failed batch fails every later policy read closed for the rest of the request, on any blog.
+	if ( ! empty( $aafm_policy_state['failed'] ) ) {
+		return array(
+			'ok'    => false,
+			'found' => false,
+			'value' => false,
+		);
+	}
+
+	// Rows are kept per blog, so a switch_to_blog() never serves one site's row to another.
+	$blog = get_current_blog_id();
+	if ( isset( $aafm_policy_state['rows'][ $blog ][ $option ] ) ) {
+		return $aafm_policy_state['rows'][ $blog ][ $option ];
+	}
+	if ( isset( $aafm_policy_state['batched'][ $blog ] ) ) {
+		$aafm_policy_state['rows'][ $blog ][ $option ] = aafm_option_row( $option );
+		return $aafm_policy_state['rows'][ $blog ][ $option ];
+	}
+
+	$aafm_policy_state['batched'][ $blog ] = true;
+
+	$placeholders = implode( ', ', array_fill( 0, count( $options ), '%s' ) );
+	$sql          = "SELECT option_name, option_value FROM $wpdb->options WHERE option_name IN ({$placeholders})";
+	// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql holds only the table name and generated %s placeholders; the object cache is bypassed on purpose, the question is what the rows hold.
+	$view = aafm_wpdb_results( $wpdb->prepare( $sql, $options ) );
+
+	$aafm_policy_state['failed'] = ! $view['ok'];
+
+	$stored = array();
+	foreach ( $view['ok'] ? (array) $view['value'] : array() as $row ) {
+		$stored[ (string) $row['option_name'] ] = $row['option_value'];
+	}
+	foreach ( $options as $name ) {
+		$found = $view['ok'] && array_key_exists( $name, $stored );
+
+		$aafm_policy_state['rows'][ $blog ][ $name ] = array(
+			'ok'    => $view['ok'],
+			'found' => $found,
+			'value' => $found ? maybe_unserialize( $stored[ $name ] ) : false,
+		);
+	}
+
+	return $aafm_policy_state['rows'][ $blog ][ $option ];
+}
+
+/**
+ * A policy option's row when the cache copy core's get_option() answered from disagrees with it,
+ * or when the row could not be read; null when they agree, or when this request does not batch.
+ *
+ * The copy is found in core's order with runtime reads only (no forced fetch): the alloptions
+ * entry, then the notoptions entry, then the per-option entry. No copy means get_option() read the
+ * row itself, which agrees. A notoptions entry agrees only with no row; a value copy agrees only
+ * with a found row that aafm_option_value_matches() says is equal.
+ *
+ * @param string $option Option name.
+ * @return array{ok:bool,found:bool,value:mixed}|null
+ */
+function aafm_policy_row_if_stale( string $option ): ?array {
+	if ( ! aafm_policy_batch_allowed() ) {
+		return null;
+	}
+	$row = aafm_policy_row( $option );
+	if ( ! $row['ok'] ) {
+		return $row;
+	}
+
+	$alloptions = wp_cache_get( 'alloptions', 'options' );
+	if ( is_array( $alloptions ) && isset( $alloptions[ $option ] ) ) {
+		$agrees = $row['found'] && aafm_option_value_matches( maybe_unserialize( $alloptions[ $option ] ), $row['value'] );
+		return $agrees ? null : $row;
+	}
+	$notoptions = wp_cache_get( 'notoptions', 'options' );
+	if ( is_array( $notoptions ) && isset( $notoptions[ $option ] ) ) {
+		return $row['found'] ? $row : null;
+	}
+	$single = wp_cache_get( $option, 'options' );
+	$agrees = false === $single || ( $row['found'] && aafm_option_value_matches( maybe_unserialize( $single ), $row['value'] ) );
+
+	return $agrees ? null : $row;
+}
+
+/**
+ * Forget this request's policy rows and whether it batches. Hooked on shutdown once a request
+ * batches, so a persistent worker starts each request cold.
+ *
+ * @return void
+ */
+function aafm_policy_reset_request_state(): void {
+	global $aafm_policy_state;
+	$aafm_policy_state = array();
+}
+
+/**
+ * Drop one policy option's row when core writes the option, so a save and a read in one request
+ * agree. Hooked on core's option write actions once a request batches.
+ *
+ * @param string $option Option name.
+ * @return void
+ */
+function aafm_policy_forget_row( $option ): void {
+	global $aafm_policy_state;
+	unset( $aafm_policy_state['rows'][ get_current_blog_id() ][ (string) $option ] );
+}
+
+/**
+ * A transient counter's value. With no external object cache, a failed read never restarts the
+ * count: a transient get_transient() did not answer is read from its row, where an unreadable row
+ * gives null and no row gives 0. With one, a miss and a failed backend both read 0.
+ *
+ * @param string $transient Transient name.
+ * @return int|null Null when the count cannot be read.
+ */
+function aafm_transient_count( string $transient ): ?int {
+	$raw = get_transient( $transient );
+	if ( false !== $raw || wp_using_ext_object_cache() ) {
+		return (int) $raw;
+	}
+	$row = aafm_option_row( '_transient_' . $transient );
+	if ( ! $row['ok'] ) {
+		return null;
+	}
+	return $row['found'] ? (int) $row['value'] : 0;
+}
+
+/**
  * Shared engine behind the three *_allow_has_star() functions: whether an option's RAW value
  * (not the filtered getter, which strips the sentinel) carries the `*` wildcard.
  *
@@ -285,8 +794,17 @@ function aafm_scoped_denied_meta_keys( string $option_name ): array {
  * @return bool
  */
 function aafm_scoped_meta_has_star( string $option_name ): bool {
-	$raw = get_option( $option_name, array() );
-	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	$has_star = static function ( $raw ): bool {
+		return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+	};
+
+	// A cache copy that disagrees with the row carries the wildcard only when the row does too.
+	$star = $has_star( get_option( $option_name, array() ) );
+	$row  = aafm_policy_row_if_stale( $option_name );
+	if ( null !== $row ) {
+		$star = $star && $row['ok'] && $has_star( $row['value'] );
+	}
+	return $star;
 }
 
 /**
@@ -307,16 +825,39 @@ function aafm_scoped_meta_has_star( string $option_name ): bool {
  * @return string|WP_Error
  */
 function aafm_validate_scoped_meta_key( string $key, callable $hard_block, callable $deny_has_star, callable $denied_keys, callable $allow_has_star, callable $allowed_keys, string $error_code, string $error_message ) {
-	$key     = trim( (string) $key );
-	$exposed = '' !== $key
-		&& '*' !== $key                             // floor 1: the sentinel is never addressable.
-		&& ! $hard_block( $key )                    // floor 1 (absolute).
-		&& ! $deny_has_star()                       // floor 2: deny-all kill switch.
-		&& ! in_array( $key, $denied_keys(), true ) // floor 2: explicit deny.
-		&& ( $allow_has_star() || in_array( $key, $allowed_keys(), true ) ); // floor 3.
+	$key   = trim( (string) $key );
+	$error = new WP_Error( $error_code, $error_message );
+	if ( '' === $key
+		|| '*' === $key         // floor 1: the sentinel is never addressable.
+		|| $hard_block( $key )  // floor 1 (absolute).
+		|| $deny_has_star()     // floor 2: deny-all kill switch.
+	) {
+		return $error;
+	}
 
-	if ( ! $exposed ) {
-		return new WP_Error( $error_code, $error_message );
+	// Floor 2, explicit deny, with the hard block's three checks: (a) strtolower() membership; for
+	// a key or entry outside [A-Za-z0-9_-], (b) every entry and stored spelling the database treats
+	// as this key, with a failed query refusing, and (c) the en_US ASCII reduction.
+	$denied = array_values( array_map( 'strval', $denied_keys() ) );
+	if ( in_array( '*', $denied, true ) ) { // The getter strips a stored `*`, so this is a deny list that could not be read.
+		return $error;
+	}
+	$lower  = array_map( 'strtolower', $denied );
+	$denies = static function ( string $candidate ) use ( $lower ): bool {
+		return in_array( strtolower( $candidate ), $lower, true );
+	};
+	if ( $denies( $key ) ) {
+		return $error;
+	}
+	if ( array() !== $denied && 1 !== preg_match( '/^[A-Za-z0-9_-]*\z/', $key . implode( '', $denied ) ) ) {
+		$matches = aafm_meta_key_collation_matches( array( $key ), $denied );
+		if ( null === $matches || array() !== array_filter( $matches[0], $denies ) || $denies( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', remove_accents( $key, 'en_US' ) ) ) ) {
+			return $error;
+		}
+	}
+
+	if ( ! $allow_has_star() && ! in_array( $key, $allowed_keys(), true ) ) { // floor 3, byte-exact.
+		return $error;
 	}
 	return $key;
 }
@@ -365,7 +906,7 @@ function aafm_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_meta_deny_has_star(): bool {
-	return aafm_scoped_meta_has_star( 'aafm_denied_meta_keys' );
+	return aafm_scoped_deny_has_star( 'aafm_denied_meta_keys' );
 }
 
 /**
@@ -656,7 +1197,7 @@ function aafm_delete_guarantee(): array {
  * 'post', $subtype ) on the value again at write time - that write-time call is the only one
  * whose output is ever stored, so a cumulative or non-idempotent callback still runs exactly
  * once against the stored value. Running the probe re-invokes the callback an extra time but
- * cannot double-apply it to what gets written. aafm_meta_write_confirmed() independently
+ * cannot double-apply it to what gets written. aafm_meta_set() (write-contract.php) independently
  * recomputes the same canonical form afterward to confirm the write landed.
  *
  * Codex round 7 R7-3: the probe used to pass the literal string 'post' as the object subtype
@@ -745,7 +1286,7 @@ function aafm_term_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_term_meta_deny_has_star(): bool {
-	return aafm_scoped_meta_has_star( 'aafm_denied_term_meta_keys' );
+	return aafm_scoped_deny_has_star( 'aafm_denied_term_meta_keys' );
 }
 
 /**
@@ -830,58 +1371,7 @@ function aafm_sanitize_term_meta_value( string $key, $value, string $taxonomy = 
  * @return bool
  */
 function aafm_hard_blocked_user_meta_key( string $key ): bool {
-	global $wpdb;
-	$key = (string) $key;
-	if ( '' === trim( $key ) ) {
-		return true;
-	}
-	// Every check below is byte-exact or end-anchored; MySQL's meta_key comparison is neither.
-	// Under the PAD SPACE, case-insensitive collation WordPress gives that column, update_metadata's
-	// `WHERE meta_key = %s` treats 'wp_capabilities ' and 'wp_capabilities' as the same row, so a
-	// candidate carrying trailing whitespace missed every check here and still landed on the real
-	// capability row. Candidates are derived from a field DEFINITION rather than from caller input,
-	// so this needs a site-side field named with stray whitespace, which is why it is not remotely
-	// reachable. Comparing on the trimmed copy is one-directional by construction: the blank case
-	// has already returned above, is_protected_meta() reads a LEADING underscore that trimming can
-	// only expose, and both the membership test and the anchored regex can only gain matches. No
-	// key that is blocked today becomes allowed.
-	$key = trim( $key );
-	if ( is_protected_meta( $key, 'user' ) ) {
-		return true;
-	}
-	$builtin = array(
-		'session_tokens',
-		'_application_passwords',
-		'wp_capabilities',
-		'wp_user_level',
-		'default_password_nonce',
-		'_password_reset_key',
-		'_password_reset_time',
-		'two_factor_enabled',
-		'_two_factor_provider',
-		'_two_factor_totp_key',
-		'two_factor_secret',
-		'_two_factor_backup_codes',
-		'webauthn_credentials',
-		$wpdb->prefix . 'capabilities',
-		$wpdb->prefix . 'user_level',
-	);
-	/**
-	 * Filters EXTRA user-meta keys to hard-block. Built-ins are re-merged after, so this
-	 * can only add blocks, never remove them.
-	 *
-	 * @param list<string> $extra Extra keys to block.
-	 */
-	$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
-	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	// Case-insensitive compare (defense in depth): a mixed-case variant of a protected key
-	// (e.g. wp_Capabilities) must be blocked just like its canonical lowercase spelling.
-	if ( in_array( strtolower( $key ), array_map( 'strtolower', $blocked ), true ) ) {
-		return true;
-	}
-	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities). The
-	// `i` modifier keeps a mixed-case spelling from slipping past.
-	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i', $key );
+	return aafm_hard_blocked_meta_keys( array( $key ), 'user' )[0];
 }
 
 /**
@@ -933,7 +1423,7 @@ function aafm_user_meta_allow_has_star(): bool {
  * @return bool
  */
 function aafm_user_meta_deny_has_star(): bool {
-	return aafm_scoped_meta_has_star( 'aafm_denied_user_meta_keys' );
+	return aafm_scoped_deny_has_star( 'aafm_denied_user_meta_keys' );
 }
 
 /**
@@ -1039,9 +1529,10 @@ function aafm_sanitize_user_meta_value( string $key, $value, string $object_subt
  * Shared term-meta gate: the term must be readable (exists in a public-allowlisted
  * taxonomy) AND the key must clear the hard-block + allowlist. Write/delete callbacks add
  * the per-object edit_term check on top of this (see the ability permission callbacks).
+ * Callers act on the returned key, the one the gate validated, never the raw input.
  *
  * @param array<string,mixed> $input Ability input.
- * @return string|WP_Error The validated taxonomy on success (callers also need it), or error.
+ * @return array{taxonomy: string, key: string}|WP_Error The validated taxonomy and key, or error.
  */
 function aafm_validate_term_meta_request( array $input ) {
 	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
@@ -1049,14 +1540,17 @@ function aafm_validate_term_meta_request( array $input ) {
 		return $taxonomy;
 	}
 	$term_id = isset( $input['term_id'] ) ? absint( $input['term_id'] ) : 0;
-	if ( $term_id < 1 || ! get_term( $term_id, $taxonomy ) instanceof WP_Term ) {
+	if ( $term_id < 1 || ! aafm_exact_object( 'term', $term_id, $taxonomy ) instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
 	$key = aafm_validate_term_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
 	if ( is_wp_error( $key ) ) {
 		return $key;
 	}
-	return $taxonomy;
+	return array(
+		'taxonomy' => $taxonomy,
+		'key'      => $key,
+	);
 }
 
 /**
@@ -1099,7 +1593,20 @@ function aafm_can_read_post_object( WP_Post $post ): bool {
 	if ( ! $caps['mapped'] || ! $caps['object'] instanceof WP_Post_Type ) {
 		return false;
 	}
-	return current_user_can( (string) $caps['object']->cap->edit_post, $post->ID );
+	return aafm_user_can_checked( (string) $caps['object']->cap->edit_post, $post->ID );
+}
+
+/**
+ * Whether the current user may EDIT a single object through the content abilities: true or
+ * false, or null when a metadata load in the capability check failed. The same rule as
+ * aafm_can_edit_post_object(), for a caller that counts a failed check apart from a denial.
+ *
+ * @param WP_Post $post Target object.
+ * @return bool|null
+ */
+function aafm_can_edit_post_object_state( WP_Post $post ): ?bool {
+	$caps = aafm_writable_type_caps( $post );
+	return null === $caps ? false : aafm_user_can_checked_state( (string) $caps->cap->edit_post, $post->ID );
 }
 
 /**
@@ -1108,14 +1615,14 @@ function aafm_can_read_post_object( WP_Post $post ): bool {
  * Type must clear the floor AND the allowlist AND be map_meta_cap===true (Q5 write-safety).
  * For a non-mapped type the write is refused outright rather than trusting a degraded
  * per-object cap that can fail OPEN. For post/page (mapped) this resolves to today's
- * current_user_can( 'edit_post'/'edit_page', $id ) - zero behaviour change.
+ * current_user_can( 'edit_post'/'edit_page', $id ) - zero behaviour change. False when a
+ * metadata load in the check failed; see aafm_can_edit_post_object_state().
  *
  * @param WP_Post $post Target object.
  * @return bool
  */
 function aafm_can_edit_post_object( WP_Post $post ): bool {
-	$caps = aafm_writable_type_caps( $post );
-	return null !== $caps && current_user_can( (string) $caps->cap->edit_post, $post->ID );
+	return true === aafm_can_edit_post_object_state( $post );
 }
 
 /**
@@ -1131,7 +1638,78 @@ function aafm_can_edit_post_object( WP_Post $post ): bool {
  */
 function aafm_can_delete_post_object( WP_Post $post ): bool {
 	$caps = aafm_writable_type_caps( $post );
-	return null !== $caps && current_user_can( (string) $caps->cap->delete_post, $post->ID );
+	return null !== $caps && aafm_user_can_checked( (string) $caps->cap->delete_post, $post->ID );
+}
+
+/**
+ * Whether the current user has a capability on one object, with the metadata map_meta_cap()
+ * reads for it loaded failure-aware: true or false, or null when a load failed.
+ *
+ * Core's map_meta_cap() decides some post capabilities from metadata: a trashed post's own
+ * `_wp_trash_meta_status`, and an attachment parent's through get_post_status(). A map_meta_cap
+ * filter can decide a user or term capability from that object's metadata too; WooCommerce reads
+ * a target user's roles. Core reads an empty value when such a load fails, which can grant more
+ * than the stored data allows. This runs current_user_can() inside aafm_with_checked_reads() and
+ * returns null when a load failed. On a healthy database the answer is the one current_user_can()
+ * gives.
+ *
+ * With $object_type 'user', the user is first loaded exactly inside the same scope, because
+ * building a WP_User loads its metadata. A user that does not load gives null unless a query finds
+ * its row absent; a user whose row is certainly absent is checked as before.
+ *
+ * Never call inside an aafm_with_checked_reads() build: scopes do not nest.
+ *
+ * @param string $cap         Capability.
+ * @param int    $object_id   Post, comment, user or term id the capability is checked on.
+ * @param string $object_type 'user' when $object_id is a user; '' otherwise.
+ * @return bool|null
+ */
+function aafm_user_can_checked_state( string $cap, int $object_id, string $object_type = '' ): ?bool {
+	$result = aafm_with_checked_reads(
+		static function () use ( $cap, $object_id, $object_type ): array {
+			if ( 'user' === $object_type && ! aafm_exact_object( 'user', $object_id ) instanceof WP_User && ! aafm_object_absent( 'user', $object_id ) ) {
+				return array( 'can' => null );
+			}
+			return array( 'can' => current_user_can( $cap, $object_id ) );
+		},
+		aafm_generic_error()
+	);
+	return is_wp_error( $result ) ? null : $result['can'];
+}
+
+/**
+ * Whether the current user has a capability on one object, false when a metadata load failed.
+ * See aafm_user_can_checked_state().
+ *
+ * Never call inside an aafm_with_checked_reads() build: scopes do not nest.
+ *
+ * @param string $cap         Capability.
+ * @param int    $object_id   Post, comment, user or term id the capability is checked on.
+ * @param string $object_type 'user' when $object_id is a user; '' otherwise.
+ * @return bool
+ */
+function aafm_user_can_checked( string $cap, int $object_id, string $object_type = '' ): bool {
+	return true === aafm_user_can_checked_state( $cap, $object_id, $object_type );
+}
+
+/**
+ * Load the metadata of a list of posts into the cache inside a checked-read scope: the one query
+ * WP_Query runs with update_post_meta_cache on, for a list whose rows are then checked one by one.
+ * When the query fails nothing is cached, and each later capability check loads its own post's
+ * metadata in its own scope.
+ *
+ * Never call inside an aafm_with_checked_reads() build: scopes do not nest.
+ *
+ * @param int[] $post_ids Post ids.
+ */
+function aafm_prime_post_meta_checked( array $post_ids ): void {
+	aafm_with_checked_reads(
+		static function () use ( $post_ids ): array {
+			update_postmeta_cache( $post_ids );
+			return array();
+		},
+		aafm_generic_error()
+	);
 }
 
 /**
@@ -1198,7 +1776,7 @@ function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids 
 		if ( $id < 1 ) {
 			return aafm_generic_error();
 		}
-		$term = get_term( $id, $tax );
+		$term = aafm_exact_object( 'term', $id, $tax );
 		if ( ! $term instanceof WP_Term ) {
 			return aafm_generic_error();
 		}
@@ -1221,7 +1799,7 @@ function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids 
  */
 function aafm_validate_featured_attachment_id( $attachment_id ) {
 	$id  = absint( $attachment_id );
-	$att = $id ? get_post( $id ) : null;
+	$att = $id ? aafm_exact_object( 'post', $id ) : null;
 	// Must be a real attachment AND an image - the dedicated set-featured-image ability
 	// also requires wp_attachment_is_image(), so this enrichment path agrees with it and
 	// rejects non-image attachments (PDFs, audio, video, etc.).
@@ -1329,33 +1907,58 @@ function aafm_validate_write_enrichment( array $input, string $post_type = 'post
  * deletes a just-validated term), and when it does the post row stays written: the create/
  * update has already committed the core fields before this runs.
  *
- * DELIBERATE CHOICE - term-assignment WP_Errors are accepted, not surfaced. wp_set_post_terms()
- * can return a WP_Error (e.g. a concurrent term-insert race). The lean-write contract treats
- * the post as already saved and the enrichment as recoverable by simply re-calling the write,
- * so this function ignores that return value rather than failing the whole call after the row
- * is committed. set_post_thumbnail()/update_post_meta() likewise are not re-checked here.
+ * A failed enrichment write does not fail the call: the post is already saved, so each field
+ * reports its own outcome instead, and re-calling the write retries it. Terms report the
+ * wp_set_post_terms() result per taxonomy, the featured image the _thumbnail_id row read after
+ * set_post_thumbnail(), and meta goes through aafm_meta_set_group(), one status per key.
  *
  * @param int                                                                              $post_id Target post id.
  * @param array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>} $bundle  Validated bundle.
- * @return null Always null - enrichment outcomes are not surfaced (see DELIBERATE CHOICE above).
+ * @return array<string,mixed> {terms?: {taxonomy: status}, featured_media?: status, meta?: {key: status}},
+ *                             holding only the parts the bundle carried; empty when it carried none.
  */
-function aafm_apply_write_enrichment( int $post_id, array $bundle ) {
-	foreach ( $bundle['terms'] as $taxonomy => $ids ) {
-		// Replace, not append ($append=false): the documented contract is that `terms`
-		// REPLACES existing terms for that taxonomy. A WP_Error return (term-insert race)
-		// is intentionally not surfaced - see the DELIBERATE CHOICE note above.
-		wp_set_post_terms( $post_id, $ids, $taxonomy );
+function aafm_apply_write_enrichment( int $post_id, array $bundle ): array {
+	$outcome = array();
+
+	if ( array() !== $bundle['terms'] ) {
+		$terms = array();
+		foreach ( $bundle['terms'] as $taxonomy => $ids ) {
+			// Replace, not append ($append=false): the documented contract is that `terms`
+			// REPLACES existing terms for that taxonomy.
+			$set                         = wp_set_post_terms( $post_id, $ids, $taxonomy );
+			$terms[ (string) $taxonomy ] = ( is_wp_error( $set ) || false === $set ) ? AAFM_WRITE_REFUSED : AAFM_WRITE_WRITTEN;
+		}
+		$outcome['terms'] = (object) $terms;
 	}
 
 	if ( $bundle['featured_media'] > 0 ) {
-		set_post_thumbnail( $post_id, $bundle['featured_media'] );
+		// set_post_thumbnail() returns false both for a failure and for the image already being
+		// the thumbnail, and true both for a write a filter vetoed and for the delete it makes when
+		// the image cannot render. So the status comes from the _thumbnail_id row read after the
+		// call: a failed read is unconfirmed, a row that does not hold the id is refused.
+		$set = set_post_thumbnail( $post_id, $bundle['featured_media'] );
+		$row = aafm_meta_row( 'post', $post_id, '_thumbnail_id' );
+		if ( ! $row['ok'] ) {
+			$outcome['featured_media'] = AAFM_WRITE_UNCONFIRMED;
+		} elseif ( ! $row['exists'] || ! aafm_stored_id_matches( $row['value'], $bundle['featured_media'] ) ) {
+			$outcome['featured_media'] = AAFM_WRITE_REFUSED;
+		} else {
+			$outcome['featured_media'] = false !== $set ? AAFM_WRITE_WRITTEN : AAFM_WRITE_UNCHANGED;
+		}
 	}
 
-	foreach ( $bundle['meta'] as $key => $value ) {
-		update_post_meta( $post_id, $key, wp_slash( $value ) );
+	if ( array() !== $bundle['meta'] ) {
+		$group = aafm_meta_set_group( 'post', $post_id, $bundle['meta'], (string) get_object_subtype( 'post', $post_id ) );
+		$meta  = array();
+		foreach ( array_keys( $bundle['meta'] ) as $key ) {
+			$key          = (string) $key;
+			$meta[ $key ] = is_wp_error( $group ) ? AAFM_WRITE_REFUSED : $group['keys'][ $key ]['status'];
+		}
+		// An object, so a map keyed '0' or '1' encodes as a JSON object, never a list.
+		$outcome['meta'] = (object) $meta;
 	}
 
-	return null;
+	return $outcome;
 }
 
 /**
@@ -1576,7 +2179,11 @@ function aafm_rich_post_output_properties(): array {
  * @return array<string,mixed>
  */
 function aafm_rich_post( WP_Post $post, array $options = array() ): array {
-	$shape = aafm_redact_post( $post );
+	// Checked before anything below reads the post's metadata, so any metadata the capability
+	// decision reads is loaded failure-aware. The meta values shaped below are read as in 1.7.5,
+	// as pure reads.
+	$can_edit_meta = aafm_can_edit_post_object( $post );
+	$shape         = aafm_redact_post( $post );
 
 	$format          = isset( $options['content_format'] ) && 'raw' === $options['content_format'] ? 'raw' : 'rendered';
 	$include_content = ! array_key_exists( 'include_content', $options ) || (bool) $options['include_content'];
@@ -1641,7 +2248,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	$grouped        = aafm_post_terms_grouped( $post );
 	$shape['terms'] = array() === $grouped ? (object) array() : $grouped;
 
-	$author          = get_userdata( (int) $post->post_author );
+	$author          = aafm_exact_object( 'user', (int) $post->post_author );
 	$shape['author'] = $author instanceof WP_User
 		? array(
 			'id'           => (int) $author->ID,
@@ -1649,12 +2256,12 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 		)
 		: null;
 
-	$thumb_id                = get_post_thumbnail_id( $post );
+	$thumb_id                = aafm_exact_object( 'post', $post->ID ) instanceof WP_Post ? get_post_thumbnail_id( $post->ID ) : false;
 	$shape['featured_image'] = $thumb_id
 		? array(
 			'id'  => (int) $thumb_id,
 			'url' => (string) wp_get_attachment_url( $thumb_id ),
-			'alt' => (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true ),
+			'alt' => (string) aafm_meta_get( 'post', $thumb_id, '_wp_attachment_image_alt', true ),
 		)
 		: null;
 
@@ -1674,12 +2281,12 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// chokepoint the bulk reader (aafm_exec_get_all_post_meta(), meta.php) already uses,
 	// so hard-block/deny/deny-`*` are honoured here exactly as they are everywhere else.
 	$meta = array();
-	if ( aafm_can_edit_post_object( $post ) ) {
+	if ( $can_edit_meta ) {
 		foreach ( aafm_allowed_meta_keys() as $meta_key ) {
 			if ( ! is_string( aafm_validate_meta_key( (string) $meta_key ) ) ) {
 				continue; // hard-blocked, denied, or deny-`*`: never surfaced here either.
 			}
-			$value = get_post_meta( $post->ID, $meta_key, true );
+			$value = aafm_meta_get( 'post', $post->ID, (string) $meta_key, true );
 			// Skip empty strings (absent keys) and never expose non-scalar blobs.
 			if ( is_scalar( $value ) && '' !== $value ) {
 				$meta[ $meta_key ] = $value;
@@ -1761,7 +2368,7 @@ function aafm_rich_user( $user, ?int $post_count = null ) {
 	 */
 	$base               = aafm_redact_user( $user, $post_count );
 	$base['registered'] = $user->user_registered;
-	$base['bio']        = (string) get_user_meta( $user->ID, 'description', true );
+	$base['bio']        = (string) aafm_meta_get( 'user', $user->ID, 'description', true );
 	return $base;
 }
 
@@ -1810,7 +2417,7 @@ function aafm_comment_status_string( $comment ): string {
 		return (string) $status;
 	}
 
-	$comment_object = $comment instanceof WP_Comment ? $comment : get_comment( $comment );
+	$comment_object = $comment instanceof WP_Comment ? $comment : aafm_exact_object( 'comment', (int) $comment );
 	if ( $comment_object instanceof WP_Comment && 'post-trashed' === $comment_object->comment_approved ) {
 		return 'post-trashed';
 	}
@@ -1855,7 +2462,7 @@ function aafm_redact_media( WP_Post $attachment ): array {
 		'title'     => get_the_title( $attachment ),
 		'mime_type' => $attachment->post_mime_type,
 		'url'       => (string) wp_get_attachment_url( $attachment->ID ),
-		'alt'       => (string) get_post_meta( $attachment->ID, '_wp_attachment_image_alt', true ),
+		'alt'       => (string) aafm_meta_get( 'post', $attachment->ID, '_wp_attachment_image_alt', true ),
 		'width'     => isset( $meta['width'] ) ? (int) $meta['width'] : null,
 		'height'    => isset( $meta['height'] ) ? (int) $meta['height'] : null,
 	);
@@ -1966,8 +2573,8 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
 	// password-protected post must not expose its body/excerpt (rendered or raw) or a
 	// body-revealing diff. The edit_post gate does not inspect post_password, so this is
 	// the chokepoint.
-	$parent       = get_post( (int) $revision->post_parent );
-	$is_protected = $parent instanceof WP_Post && '' !== (string) $parent->post_password;
+	$parent       = aafm_exact_object( 'post', (int) $revision->post_parent );
+	$is_protected = ! $parent instanceof WP_Post || '' !== (string) $parent->post_password;
 
 	if ( $is_protected ) {
 		$content = '';
@@ -1986,8 +2593,7 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
 		if ( ! function_exists( 'wp_text_diff' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/revision.php';
 		}
-		$current         = get_post( (int) $revision->post_parent );
-		$current_content = $current instanceof WP_Post ? (string) $current->post_content : '';
+		$current_content = $parent instanceof WP_Post ? (string) $parent->post_content : '';
 		// wp_text_diff returns '' when there is no difference; we surface that empty string
 		// (a string, not null) so the agent can tell "no change" from "not requested".
 		$payload['diff'] = (string) wp_text_diff( $raw, $current_content );
@@ -2004,7 +2610,7 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
  * @return WP_Post|WP_Error The revision, or a generic error if it is not a revision of $post_id.
  */
 function aafm_validate_revision( int $revision_id, int $post_id ) {
-	$revision = $revision_id ? wp_get_post_revision( $revision_id ) : null;
+	$revision = $revision_id && aafm_exact_object( 'post', $revision_id ) instanceof WP_Post ? wp_get_post_revision( $revision_id ) : null;
 	if ( ! $revision instanceof WP_Post || (int) $revision->post_parent !== $post_id ) {
 		return aafm_generic_error();
 	}
@@ -2122,122 +2728,7 @@ function aafm_generic_error(): WP_Error {
 }
 
 /**
- * Whether a scalar meta write actually landed as requested, judged against the value's CANONICAL
- * stored form rather than the plugin's own pre-write intent.
- *
- * Core's own update_metadata() (the shared engine behind update_post_meta()/update_term_meta()/
- * update_user_meta(), wp-includes/meta.php) unslashes the incoming $meta_value and THEN runs the
- * unslashed result through sanitize_meta( $meta_key, $meta_value, $object_type, $object_subtype )
- * before it ever reaches storage - verified by reading update_metadata() itself, not assumed. A
- * vendor or core filter registered on that meta key's sanitize_{type}_meta_{key} hook
- * (register_meta()'s sanitize_callback lands here) can legitimately trim, cast, or otherwise
- * normalize the value on the way in. Comparing a fresh read against the plugin's pre-write intent
- * instead of that canonical form reports a false error on a write that landed exactly as the
- * site's own registered sanitizer defines "landed" - Codex round 6 B6-3. Running the same
- * sanitize_meta() call here keeps a genuine veto caught: a filter that reverts to the OLD value,
- * or an update_*_metadata short-circuit that never wrote at all, still differs from the sanitized
- * NEW value.
- *
- * Codex round 8 R8-1: every call site passes wp_slash( $value ) to update_post_meta()/
- * update_term_meta()/update_user_meta() so that core's own internal wp_unslash() is a no-op
- * round trip back to $value - core's sanitize_meta() call therefore sees exactly the unslashed
- * $intended this function receives, never a slashed form of it. This function used to run
- * sanitize_meta() against wp_slash( $intended ) and then unslash the sanitizer's OUTPUT, which
- * feeds a slash-sensitive registered sanitizer a different input than core's own call ever sees
- * and can misjudge its output. Passing $intended straight through matches core's pipeline
- * exactly: no slashing in, no unslashing out. A scalar meta value round-trips through a longtext
- * column, so the stored value reads back as a string; comparing stringified forms also avoids a
- * false mismatch on a genuine no-op (re-sending an int or bool unchanged). An array-valued meta
- * key (a serialized token list, for example) is compared by exact array equality instead, since
- * casting an array to string is a PHP warning, not a comparison.
- *
- * 1.7.5 round 4, R4-1: replaying sanitize_meta() in-process cannot always reproduce what the
- * REAL write actually stored, because not every registered sanitizer is a pure function of its
- * input. A sanitizer keyed on invocation count, current time, or existing storage (an
- * incrementing counter, for example) can legitimately return a different value on replay than it
- * did during the real write, and this helper has no way to tell that apart from a genuine veto by
- * comparing replayed output alone. So the canonical-replay comparison above is now the FIRST
- * check, not the only one: when it matches, that is the strongest evidence and this returns true
- * immediately. When it disagrees, this falls back to change detection against $old, the value
- * read back BEFORE the write ran. If the requested $intended is identical to $old, nothing was
- * actually asked to change, so there is nothing to verify a veto against (a no-op resubmission of
- * the current value never has to survive a non-deterministic sanitizer's replay). Otherwise, a
- * real change was requested: if $stored differs from $old, something genuinely landed - accepted
- * even when it does not equal the replayed $expected form, since a non-deterministic or
- * charset-dependent normalization is not distinguishable from any other legitimate landing this
- * way. If $stored still equals $old, nothing moved: that is what a silent veto (a filter reverting
- * to the OLD value, or an update_*_metadata short-circuit that never wrote at all) looks like, and
- * it is still reported as unconfirmed.
- *
- * What this cannot detect: a veto that rewrites the value to some THIRD value (neither $old nor
- * $intended) reads as a landed write, because state genuinely changed. That is an accepted,
- * documented residual - the machinery here exists to catch "nothing happened", not "something
- * unexpected happened instead"; the latter is caller-application-specific and out of scope for a
- * shared, general-purpose confirmation helper. This fallback is safe here specifically because a
- * meta veto has only one real shape: a sanitize_{type}_meta_{key} filter reverting the value, or
- * an update_*_metadata short-circuit, both of which BLOCK the write outright and leave $stored at
- * $old - neither can redirect the write to an attacker/filter-chosen replacement value the way a
- * post field's wp_insert_post_data filter can (aafm_post_field_write_confirmed() does not carry
- * this same fallback for exactly that reason - see its own docblock).
- *
- * Codex round 6, R6-4: the "nothing asked" branch above used to compare $intended against $old
- * directly (their raw forms), which cannot tell "$old is already canonical, so resubmitting it is
- * a genuine no-op" apart from "$old is NOT canonical, so resubmitting it should still trigger the
- * same canonicalization a changed value would" - both look identical as raw values. The second
- * shape let a veto that blocks canonicalization (keeping a non-canonical $old in place) read as a
- * confirmed no-op purely because the caller's literal input matched what was already stored. See
- * $old_is_canonical below.
- *
- * @param mixed  $old            The value read back from storage BEFORE the write ran.
- * @param mixed  $stored         The value read back from storage after the write.
- * @param mixed  $intended       The unslashed value the write attempted to store.
- * @param string $meta_key       Meta key.
- * @param string $object_type    'post', 'term', or 'user'.
- * @param string $object_subtype The post type / taxonomy the meta key is registered under. For
- *                                user meta this is the literal string 'user' (core's own
- *                                get_object_subtype( 'user', $id ), wp-includes/meta.php, resolves
- *                                to 'user' for any user that exists - never ''; verified against
- *                                core, not assumed). '' only matches a generic, non-subtype
- *                                sanitizer.
- * @return bool
- */
-function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, string $object_type, string $object_subtype = '' ): bool {
-	$expected = sanitize_meta( $meta_key, $intended, $object_type, $object_subtype );
-	// Any array-valued meta key (a serialized token list, e.g. Slim SEO's schema array) is
-	// compared by exact array equality throughout; casting an array to string is a PHP warning,
-	// not a comparison. A single is_array() check covers all four values consistently, since they
-	// all describe the same meta key and therefore share its shape.
-	$is_arr = is_array( $old ) || is_array( $stored ) || is_array( $intended ) || is_array( $expected );
-	if ( $is_arr ? $stored === $expected : (string) $stored === (string) $expected ) {
-		return true;
-	}
-
-	// Codex round 6, R6-4: "nothing was asked to change" used to be judged purely from the raw
-	// values - $intended === $old - which is blind to the site's OWN sanitizer. When $old was not
-	// already in its canonical form (sanitize_meta() would legitimately transform it if resaved),
-	// resubmitting that same raw value is NOT actually a no-op: the real write is still expected to
-	// land on $expected, the same canonical form a genuinely different intended value would have to
-	// reach. A persistence veto that instead leaves storage at the old, non-canonical value used to
-	// read as a confirmed no-op purely because the raw input matched $old, silently accepting a
-	// blocked canonicalization as success. Recomputing whether $old itself survives a resave
-	// through the same sanitizer closes that: the common case (a value already stored in its
-	// canonical form) is completely unaffected, since re-sanitizing an already-canonical value
-	// through an idempotent sanitizer reproduces it exactly.
-	$expected_old     = sanitize_meta( $meta_key, $old, $object_type, $object_subtype );
-	$old_is_canonical = $is_arr ? $old === $expected_old : (string) $old === (string) $expected_old;
-
-	$nothing_asked = $old_is_canonical && ( $is_arr ? $intended === $old : (string) $intended === (string) $old );
-	$unchanged     = $is_arr ? $stored === $old : (string) $stored === (string) $old;
-	// Codex round 5 R5-2: a no-op resubmission used to short-circuit to true purely because
-	// nothing was asked to change, without checking that storage actually stayed put. That let a
-	// filter that redirects an unchanged resubmission to some THIRD value (never $old, never
-	// $intended) report as confirmed. Requiring $unchanged too closes that: a genuine no-op still
-	// confirms, but a redirect on a no-op is caught the same way a redirect on a real change is.
-	return $nothing_asked ? $unchanged : ! $unchanged;
-}
-
-/**
- * The post-field sibling of aafm_meta_write_confirmed(): whether a post-field write (post_title,
+ * The post-field sibling of aafm_meta_set()'s canonical check: whether a post-field write (post_title,
  * post_content, post_excerpt, post_status, and so on) landed as intended, judged against the
  * field's CANONICAL stored form rather than the plugin's own pre-write intent.
  *
@@ -2286,13 +2777,13 @@ function aafm_meta_write_confirmed( $old, $stored, $intended, string $meta_key, 
  * stateful sanitizer, and exactly the shape of veto this function exists to catch for a post field
  * (unlike a meta write's update_*_metadata short-circuit, which can only block a write outright,
  * never redirect it to an attacker/filter-chosen replacement value - see
- * aafm_meta_write_confirmed()'s own change-detection fallback, which is safe for that reason).
+ * the retired meta confirmer's own change-detection fallback, which was safe for that reason).
  * Accepted, undressed residual: a genuinely non-deterministic save-time sanitizer registered by
  * some other plugin could still misreport here. No concrete instance of one exists in this
  * codebase's own write paths, and weakening detection to accommodate a hypothetical one would
  * reopen the exact veto class this function is relied on to catch.
  *
- * Codex round 7, R7-4: mirrors aafm_meta_write_confirmed()'s own round 6, R6-4 fix - the
+ * Codex round 7, R7-4: mirrors the retired meta confirmer's own round 6, R6-4 fix - the
  * "nothing asked" branch below used to compare $intended against $old directly (their raw forms),
  * which cannot tell "$old is already canonical, so resubmitting it is a genuine no-op" apart from
  * "$old is NOT canonical, so resubmitting it should still trigger the same canonicalization a
@@ -2435,7 +2926,7 @@ function aafm_trash_disabled_error(): WP_Error {
  * @return WP_Post|null
  */
 function aafm_get_block_object( int $id ): ?WP_Post {
-	$post = get_post( $id );
+	$post = aafm_exact_object( 'post', $id );
 	return ( $post instanceof WP_Post && 'wp_block' === $post->post_type ) ? $post : null;
 }
 
@@ -2500,8 +2991,18 @@ function aafm_rich_block_output_properties(): array {
 /**
  * Safe shape for a nav menu (a wp_term in the nav_menu taxonomy).
  *
- * Returns only id, name, slug, and the item count - the same metadata the admin Menus
- * screen shows in its dropdown. No taxonomy internals (term_taxonomy_id, parent, …) leak.
+ * Returns id, name, slug, the item count - the same metadata the admin Menus screen shows in
+ * its dropdown - plus two disclosure fields (register 1.5): this taxonomy-backed menu API can
+ * only ever touch the CLASSIC theme-location mechanism (nav_menu_locations), never a block
+ * theme's core/navigation block, which reads from the separate wp_navigation post type instead.
+ * A menu this API creates or edits is real and correct, but on a block theme it is invisible on
+ * the front end until a human wires it into a template - and even on a classic theme, a freshly
+ * created menu is never auto-assigned anywhere. attached_theme_locations names the location
+ * slugs (if any) currently pointing at this menu id (get_nav_menu_locations(), a theme_mod read,
+ * not a query); registered_theme_locations lists every location slug the active theme has
+ * declared (get_registered_nav_menus()) - empty on a theme that registers none, itself a signal
+ * that classic locations do not apply here. Neither call writes anything; this is disclosure
+ * only, not the wiring itself. No taxonomy internals (term_taxonomy_id, parent, …) leak.
  *
  * @param mixed $menu A WP_Term in the nav_menu taxonomy (as returned by the nav-menu API).
  * @return array<string,mixed>
@@ -2510,11 +3011,20 @@ function aafm_redact_menu( $menu ): array {
 	if ( ! $menu instanceof WP_Term ) {
 		return array();
 	}
+	$locations = get_nav_menu_locations();
+	$attached  = array();
+	foreach ( $locations as $location => $menu_id ) {
+		if ( (int) $menu_id === (int) $menu->term_id ) {
+			$attached[] = (string) $location;
+		}
+	}
 	return array(
-		'id'    => (int) $menu->term_id,
-		'name'  => $menu->name,
-		'slug'  => $menu->slug,
-		'count' => (int) $menu->count,
+		'id'                         => (int) $menu->term_id,
+		'name'                       => $menu->name,
+		'slug'                       => $menu->slug,
+		'count'                      => (int) $menu->count,
+		'attached_theme_locations'   => $attached,
+		'registered_theme_locations' => array_keys( get_registered_nav_menus() ),
 	);
 }
 
@@ -2527,10 +3037,18 @@ function aafm_redact_menu( $menu ): array {
  */
 function aafm_menu_output_properties(): array {
 	return array(
-		'id'    => array( 'type' => 'integer' ),
-		'name'  => array( 'type' => 'string' ),
-		'slug'  => array( 'type' => 'string' ),
-		'count' => array( 'type' => 'integer' ),
+		'id'                         => array( 'type' => 'integer' ),
+		'name'                       => array( 'type' => 'string' ),
+		'slug'                       => array( 'type' => 'string' ),
+		'count'                      => array( 'type' => 'integer' ),
+		'attached_theme_locations'   => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'string' ),
+		),
+		'registered_theme_locations' => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'string' ),
+		),
 	);
 }
 
@@ -2664,4 +3182,104 @@ function aafm_mixed_write_partial_failure_message( string $saved_label, string $
 		$saved_label,
 		$failed_label
 	);
+}
+
+/**
+ * Render SEO head markup for a post inside a throwaway singular query, then put every global the
+ * render touched back exactly as it was.
+ *
+ * Rank Math and AIOSEO only emit their head by echoing against the queried object, so this points
+ * both main-query globals at a singular query for the post, runs the_post() on it, and buffers
+ * $render. Before that it snapshots, in locals, whether each query and post-data global existed and
+ * what it held, and afterwards it restores exactly that: a global that was absent is unset again,
+ * and the global $post goes back to what it was, never to a state rebuilt from the main query.
+ * wp_reset_postdata() would rebuild it, and so clobber the $post of a secondary loop in progress.
+ *
+ * The buffer unwind closes only buffers opened after entry, on success and on a throw, and stops
+ * at the first one it cannot close: a hook can open a buffer without the removable flag, and
+ * ob_end_clean() then returns false without lowering the level, so looping on it would never end.
+ * The result is decided by buffer level: every buffer above the entry level is returned, joined in
+ * the order opened, so a render that leaves a buffer open returns all of its output, and one that
+ * closes the scope's own buffer and opens another returns that buffer's output. Past a missing post
+ * or a throw, it is '' only when the level ends at or below entry, or a buffer above it cannot be
+ * closed.
+ *
+ * @param int      $post_id Post to render against.
+ * @param callable $render  Zero-arg callback that echoes the head.
+ * @return string The output of every buffer left above the entry level; '' when the post does not
+ *                exist, the render threw, the level ends at or below entry, or a buffer cannot be
+ *                closed.
+ */
+function aafm_with_seo_render_scope( int $post_id, callable $render ): string {
+	$post = aafm_exact_object( 'post', $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return '';
+	}
+
+	// The two main-query globals, plus every global WP_Query::the_post() and setup_postdata() write.
+	$names = array( 'wp_query', 'wp_the_query', 'post', 'id', 'authordata', 'currentday', 'currentmonth', 'page', 'pages', 'multipage', 'more', 'numpages' );
+	$saved = array();
+	foreach ( $names as $name ) {
+		if ( array_key_exists( $name, $GLOBALS ) ) {
+			$saved[ $name ] = $GLOBALS[ $name ];
+		}
+	}
+
+	// The buffer depth on entry, so the catch below never closes a buffer the caller already had open.
+	$saved_ob_level = ob_get_level();
+
+	$rendered = '';
+	try {
+		$temp_query = new WP_Query(
+			array(
+				'p'                      => $post_id,
+				'post_type'              => $post->post_type,
+				'posts_per_page'         => 1,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => true,
+				'update_post_term_cache' => false,
+			)
+		);
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
+		$GLOBALS['wp_query'] = $temp_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
+		$GLOBALS['wp_the_query'] = $temp_query;
+		if ( $temp_query->have_posts() ) {
+			$temp_query->the_post();
+		}
+
+		ob_start();
+		$render();
+
+		// A head hook can leave a buffer open or close one too many. Collect and close every buffer
+		// above the entry level, innermost first, and join them in the order they were opened. At or
+		// below the entry level the scope's own buffer is gone, so there is nothing of the head to
+		// return and the caller's buffers are not ours to read.
+		$parts = array();
+		while ( ob_get_level() > $saved_ob_level ) {
+			$parts[] = (string) ob_get_contents();
+			if ( ! ob_end_clean() ) {
+				break;
+			}
+		}
+		$rendered = ob_get_level() > $saved_ob_level ? '' : implode( '', array_reverse( $parts ) );
+	} catch ( \Throwable $e ) {
+		while ( ob_get_level() > $saved_ob_level ) {
+			if ( ! ob_end_clean() ) {
+				break;
+			}
+		}
+		$rendered = '';
+	} finally {
+		foreach ( $names as $name ) {
+			if ( array_key_exists( $name, $saved ) ) {
+				// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- restoring a core global's snapshot.
+				$GLOBALS[ $name ] = $saved[ $name ];
+			} else {
+				unset( $GLOBALS[ $name ] );
+			}
+		}
+	}
+
+	return $rendered;
 }

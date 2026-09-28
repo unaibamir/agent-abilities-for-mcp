@@ -757,4 +757,140 @@ final class RankMathTest extends TestCase {
 		$this->assertArrayNotHasKey( 'aafm/rankmath-get-post', $registry );
 		$this->assertArrayNotHasKey( 'aafm/rankmath-update-schema', $registry );
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	public function test_rankmath_update_schema_over_a_stored_scalar_under_a_veto_returns_the_schema_error(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		update_post_meta( $post_id, 'rank_math_schema_Article', 'a scalar' );
+
+		$veto = static fn() => true;
+		add_filter( 'update_post_metadata', $veto, 10, 0 );
+		$res  = wp_get_ability( 'aafm/rankmath-update-schema' )->execute(
+			array(
+				'post_id' => $post_id,
+				'type'    => 'Article',
+				'schema'  => array( 'headline' => 'H' ),
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_rankmath_schema_write_failed', $res->get_error_code() );
+		$this->assertSame(
+			array(
+				'status'    => 'unconfirmed',
+				'kind'      => 'post_meta',
+				'object_id' => $post_id,
+				'key'       => 'rank_math_schema_Article',
+			),
+			$res->get_error_data()
+		);
+		$this->assertSame( 'a scalar', get_post_meta( $post_id, 'rank_math_schema_Article', true ) );
+	}
+
+	public function test_rankmath_update_post_a_vetoed_companion_is_reported_under_its_own_storage_key(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		$fb_att   = (int) self::factory()->attachment->create_object( 'rm-og.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+
+		$veto = static function ( $check, $object_id, $meta_key ) {
+			return 'rank_math_facebook_image_id' === $meta_key ? false : $check;
+		};
+		add_filter( 'update_post_metadata', $veto, 10, 3 );
+		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'og_image' => (string) wp_get_attachment_url( $fb_att ),
+			)
+		);
+		remove_filter( 'update_post_metadata', $veto, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_rankmath_write_unconfirmed', $res->get_error_code() );
+		$this->assertSame( 'Some of the SEO fields were saved and some were not; read the post to see its current state.', $res->get_error_message() );
+		$this->assertSame(
+			array(
+				'status'    => 'partial',
+				'kind'      => 'post_meta',
+				'object_id' => $post_id,
+				'key'       => 'rank_math_facebook_image_id',
+			),
+			$res->get_error_data()
+		);
+	}
+
+	public function test_rankmath_write_meta_refuses_a_key_outside_the_vendor_list_and_writes_nothing(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = (int) self::factory()->post->create();
+
+		$result = aafm_rankmath_write_meta(
+			$post_id,
+			array(
+				'rank_math_title' => 'New',
+				'aafm_not_a_rm'   => 'x',
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'status' => 'refused',
+				'keys'   => array(
+					'rank_math_title' => array( 'status' => 'refused' ),
+					'aafm_not_a_rm'   => array( 'status' => 'refused' ),
+				),
+			),
+			$result
+		);
+		$this->assertFalse( metadata_exists( 'post', $post_id, 'rank_math_title' ) );
+		$details = $this->outcome_details();
+		$this->assertCount( 2, $details );
+		foreach ( $details as $detail ) {
+			$this->assertSame( array( 'kind', 'entity', 'object_id', 'key', 'status', 'rows', 'modified_by_site', 'key_omitted' ), array_keys( $detail ) );
+			$this->assertSame( 'refused', $detail['status'] );
+		}
+	}
+
+	public function test_rankmath_vendor_key_list_equals_the_keys_the_field_maps_build(): void {
+		$built  = array_merge( array_values( aafm_rankmath_fields() ), array_values( aafm_rankmath_image_id_fields() ), array( 'rank_math_twitter_use_facebook', 'rank_math_robots' ) );
+		$listed = aafm_rankmath_meta_keys();
+		sort( $built );
+		sort( $listed );
+		$this->assertSame( $built, $listed );
+	}
+
+	public function test_rankmath_update_post_a_value_the_site_sanitizes_into_an_array_is_refused_with_no_key(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		$to_array = static fn() => array( 'x' );
+		add_filter( 'sanitize_post_meta_rank_math_title', $to_array );
+		$res      = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'New',
+			)
+		);
+		remove_filter( 'sanitize_post_meta_rank_math_title', $to_array );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_rankmath_write_unconfirmed', $res->get_error_code() );
+		$this->assertSame( 'refused', $res->get_error_data()['status'] );
+		$this->assertNull( $res->get_error_data()['key'] );
+	}
 }

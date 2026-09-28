@@ -1,0 +1,3 @@
+includes/abilities/menus.php|aafm_exec_create_menu_item|wp_delete_post|1
+includes/abilities/menus.php|aafm_exec_delete_menu_item|wp_delete_post|1
+includes/abilities/media.php|aafm_finish_media_upload|wp_update_post|1

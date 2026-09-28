@@ -15,7 +15,26 @@ defined( 'ABSPATH' ) || exit;
  * @return int Clamped to >= 0.
  */
 function aafm_rate_limit_per_min(): int {
-	$stored = max( 0, (int) get_option( 'aafm_rate_limit_per_min', 0 ) );
+	// An array or an object is not a stored limit, and limits to 1.
+	$limit = static function ( $stored ): int {
+		return is_array( $stored ) || is_object( $stored ) ? 1 : max( 0, (int) $stored );
+	};
+
+	$raw    = get_option( 'aafm_rate_limit_per_min', 0 );
+	$stored = $limit( $raw );
+	if ( 0 === $raw ) {
+		// No limit may be a failed read's default: the row decides, and an unreadable row limits to 1.
+		$row    = aafm_policy_row( 'aafm_rate_limit_per_min' );
+		$stored = ! $row['ok'] ? 1 : ( $row['found'] ? $limit( $row['value'] ) : 0 );
+	}
+
+	// A cache copy that disagrees with the row takes the lower positive limit (off only when both
+	// are); an unreadable row limits to 1.
+	$row = aafm_policy_row_if_stale( 'aafm_rate_limit_per_min' );
+	if ( null !== $row ) {
+		$other  = ! $row['ok'] ? 1 : ( $row['found'] ? $limit( $row['value'] ) : 0 );
+		$stored = 0 === $stored || 0 === $other ? max( $stored, $other ) : min( $stored, $other );
+	}
 
 	/**
 	 * Filters the requests-per-minute rate limit. 0 means no limit.
@@ -66,8 +85,8 @@ function aafm_rate_limit_consume( int $user_id ): bool {
 		return true; // Off, or no authenticated principal to limit.
 	}
 	$key   = 'aafm_rl_' . $user_id . '_' . gmdate( 'YmdHi' );
-	$count = (int) get_transient( $key );
-	if ( $count >= $limit ) {
+	$count = aafm_transient_count( $key );
+	if ( null === $count || $count >= $limit ) {
 		return false;
 	}
 	set_transient( $key, $count + 1, 2 * MINUTE_IN_SECONDS );
@@ -86,7 +105,20 @@ function aafm_ip_allowlist(): array {
 		)
 	);
 
-	$stored = $normalize( get_option( 'aafm_ip_allowlist', array() ) );
+	// One entry that is not an address matches nothing, so every IP is refused. It stands for an
+	// unreadable row, a stored object, and a cache copy that disagrees with the row.
+	$refuse_all = array( 'aafm-allowlist-read-failed' );
+
+	$raw    = get_option( 'aafm_ip_allowlist', array() );
+	$stored = is_object( $raw ) ? $refuse_all : $normalize( $raw );
+	if ( array() === $raw ) {
+		// An empty list may be a failed read's default: the row decides.
+		$row    = aafm_policy_row( 'aafm_ip_allowlist' );
+		$stored = ! $row['ok'] ? $refuse_all : ( $row['found'] ? ( is_object( $row['value'] ) ? $refuse_all : $normalize( $row['value'] ) ) : array() );
+	}
+	if ( null !== aafm_policy_row_if_stale( 'aafm_ip_allowlist' ) ) {
+		$stored = $refuse_all;
+	}
 
 	/**
 	 * Filters the IP/CIDR allowlist for the MCP endpoint.
@@ -262,12 +294,31 @@ function aafm_ip_is_allowed( string $ip ): bool {
  * @return bool
  */
 function aafm_force_draft(): bool {
+	// An array or an object is not a stored switch, and reads as on.
+	$is_on = static function ( $stored ): bool {
+		return is_array( $stored ) || is_object( $stored ) || (bool) $stored;
+	};
+
+	$raw = get_option( 'aafm_force_draft', false );
+	$on  = $is_on( $raw );
+	if ( false === $raw ) {
+		// Off may be a failed read's default: the row decides, and an unreadable row means on.
+		$row = aafm_policy_row( 'aafm_force_draft' );
+		$on  = ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
+	}
+
+	// A cache copy that disagrees with the row reads on when either does; an unreadable row means on.
+	$row = aafm_policy_row_if_stale( 'aafm_force_draft' );
+	if ( null !== $row ) {
+		$on = $on || ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
+	}
+
 	/**
 	 * Filters whether agent-created content is forced to draft.
 	 *
 	 * @param bool $force True to force draft status.
 	 */
-	return (bool) apply_filters( 'aafm_force_draft', (bool) get_option( 'aafm_force_draft', false ) );
+	return (bool) apply_filters( 'aafm_force_draft', $on );
 }
 
 /**
@@ -276,7 +327,26 @@ function aafm_force_draft(): bool {
  * @return int Clamped to >= 0.
  */
 function aafm_max_title_len(): int {
-	$stored = max( 0, (int) get_option( 'aafm_max_title_len', 0 ) );
+	// An array or an object is not a stored cap, and caps at 1.
+	$cap = static function ( $stored ): int {
+		return is_array( $stored ) || is_object( $stored ) ? 1 : max( 0, (int) $stored );
+	};
+
+	$raw    = get_option( 'aafm_max_title_len', 0 );
+	$stored = $cap( $raw );
+	if ( 0 === $raw ) {
+		// No cap may be a failed read's default: the row decides, and an unreadable row caps at 1.
+		$row    = aafm_policy_row( 'aafm_max_title_len' );
+		$stored = ! $row['ok'] ? 1 : ( $row['found'] ? $cap( $row['value'] ) : 0 );
+	}
+
+	// A cache copy that disagrees with the row takes the lower positive cap (off only when both
+	// are); an unreadable row caps at 1.
+	$row = aafm_policy_row_if_stale( 'aafm_max_title_len' );
+	if ( null !== $row ) {
+		$other  = ! $row['ok'] ? 1 : ( $row['found'] ? $cap( $row['value'] ) : 0 );
+		$stored = 0 === $stored || 0 === $other ? max( $stored, $other ) : min( $stored, $other );
+	}
 
 	/**
 	 * Filters the maximum allowed title length. 0 means no cap.
@@ -308,8 +378,38 @@ function aafm_max_title_len(): int {
  * @return int Retention window in days, clamped to [0, 3650]. Default 30.
  */
 function aafm_log_retention_days(): int {
-	$raw = (int) get_option( 'aafm_log_retention_days', 30 );
-	return max( 0, min( 3650, $raw ) );
+	// An array or an object is not a stored window, and keeps every entry (0).
+	$window = static function ( $stored ): int {
+		return is_array( $stored ) || is_object( $stored ) ? 0 : max( 0, min( 3650, (int) $stored ) );
+	};
+	// The prune deletes rows, so of two windows the one that keeps more wins: 0 (keep forever), or
+	// the longer.
+	$keeps_more = static function ( int $days, int $stored ): int {
+		return 0 === $stored || 0 === $days ? 0 : max( $days, $stored );
+	};
+
+	$raw  = get_option( 'aafm_log_retention_days', 30 );
+	$days = $window( $raw );
+	if ( 30 === $raw ) {
+		// 30 may be a failed read's default: the row decides when it keeps more, and an unreadable
+		// row prunes nothing.
+		$row = aafm_policy_row( 'aafm_log_retention_days' );
+		if ( ! $row['ok'] ) {
+			return 0;
+		}
+		$days = $keeps_more( $days, $row['found'] ? $window( $row['value'] ) : $days );
+	}
+
+	// A cache copy that disagrees with the row keeps what either keeps; an unreadable row prunes
+	// nothing.
+	$row = aafm_policy_row_if_stale( 'aafm_log_retention_days' );
+	if ( null !== $row ) {
+		if ( ! $row['ok'] ) {
+			return 0;
+		}
+		$days = $keeps_more( $days, $row['found'] ? $window( $row['value'] ) : 30 );
+	}
+	return $days;
 }
 
 /**

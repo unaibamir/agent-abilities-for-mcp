@@ -309,7 +309,7 @@ function aafm_exec_wc_create_product_attribute( array $input ) {
 		'order_by'     => $order,
 		'has_archives' => $arch,
 	);
-	$result = wc_create_attribute( $args );
+	$result = aafm_wc_write( 'create_attribute', array( 'args' => $args ) )['returned'];
 	if ( is_wp_error( $result ) || ! $result ) {
 		return aafm_generic_error();
 	}
@@ -431,7 +431,13 @@ function aafm_exec_wc_update_product_attribute( array $input ) {
 	}
 
 	if ( $changed ) {
-		$result = wc_update_attribute( $id, $args );
+		$result = aafm_wc_write(
+			'update_attribute',
+			array(
+				'id'   => $id,
+				'args' => $args,
+			)
+		)['returned'];
 		if ( is_wp_error( $result ) || ! $result ) {
 			return aafm_generic_error();
 		}

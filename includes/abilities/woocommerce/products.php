@@ -112,6 +112,9 @@ function aafm_wc_get_product( int $id ): ?\WC_Product {
 	if ( $id < 1 || ! function_exists( 'wc_get_product' ) ) {
 		return null;
 	}
+	if ( false !== aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return null;
+	}
 	$product = wc_get_product( $id );
 	return $product instanceof \WC_Product ? $product : null;
 }
@@ -1158,7 +1161,13 @@ function aafm_exec_wc_create_product( array $input ) {
 	if ( aafm_force_draft() && ! array_key_exists( 'status', $input ) ) {
 		$product->set_status( 'draft' );
 	}
-	$id = (int) $product->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $product,
+			'entity' => 'product',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_product( $id );
 	if ( null === $saved ) {
@@ -1262,7 +1271,13 @@ function aafm_exec_wc_update_product( array $input ) {
 	if ( null !== $error ) {
 		return $error;
 	}
-	$id = (int) $product->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $product,
+			'entity' => 'product',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_product( $id );
 	if ( null === $saved ) {
@@ -1352,16 +1367,24 @@ function aafm_wc_can_delete_product_object( WP_Post $product ): bool {
 	if ( ! $type instanceof WP_Post_Type || ! $type->map_meta_cap ) {
 		return false;
 	}
-	return current_user_can( $type->cap->delete_post, $product->ID );
+	return aafm_user_can_checked( $type->cap->delete_post, $product->ID );
 }
 
 /**
  * Permission for aafm/wc-delete-product: the capability floor (manage_woocommerce) AND
  * the caller's own relationship to the specific product, not the floor alone.
  *
- * A nonexistent id, or a product with no real backing WP_Post to gate on, falls back to
- * the floor already checked: there is nothing more specific to authorize against, and the
- * WC data store (not a missing capability) is what reports "not found" from execute().
+ * A nonexistent id keeps the floor already checked, and execute() reports "not found". While the
+ * product store is exactly WC_Product_Data_Store_CPT, a product whose post does not load exactly
+ * keeps the floor only when a failure-aware query finds its row absent, and is refused otherwise.
+ * An id whose post loads but is not a product keeps the floor, as in 1.7.5.
+ *
+ * Under any store the product is read through WooCommerce inside a checked-read scope, and a
+ * failed metadata load there refuses. WooCommerce's read loads the product's post meta, and core
+ * decides whether a trashed product may be deleted from its `_wp_trash_meta_status` row.
+ *
+ * When the product loads but its backing post does not, the post store refuses; any other store
+ * keeps the capability floor, since it has no post to authorize against.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
@@ -1370,14 +1393,24 @@ function aafm_perm_wc_delete_product( array $input ): bool {
 	if ( ! aafm_wc_perm() ) {
 		return false;
 	}
-	$id      = isset( $input['product_id'] ) ? absint( $input['product_id'] ) : 0;
-	$product = $id ? aafm_wc_get_product( $id ) : null;
-	if ( null === $product ) {
+	$id = isset( $input['product_id'] ) ? absint( $input['product_id'] ) : 0;
+	if ( $id && false !== aafm_wc_store_is_core( 'product' ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return aafm_object_absent( 'post', $id );
+	}
+	$read = aafm_with_checked_reads(
+		static fn(): array => array( 'product' => $id ? aafm_wc_get_product( $id ) : null ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $read ) ) {
+		return false;
+	}
+	$product = $read['product'] ?? null;
+	if ( ! $product instanceof \WC_Product ) {
 		return true;
 	}
-	$post = get_post( $product->get_id() );
+	$post = aafm_exact_object( 'post', $product->get_id() );
 	if ( ! $post instanceof WP_Post ) {
-		return true;
+		return ! is_a( (string) $product->get_data_store()->get_current_class_name(), 'WC_Product_Data_Store_CPT', true );
 	}
 	return aafm_wc_can_delete_product_object( $post );
 }
@@ -1399,26 +1432,33 @@ function aafm_exec_wc_delete_product( array $input ) {
 	if ( null === $product ) {
 		return aafm_generic_error();
 	}
-	$product->delete( true );
+	aafm_wc_write(
+		'delete',
+		array(
+			'object'       => $product,
+			'force_delete' => true,
+			'entity'       => 'product',
+		)
+	);
 	// WC_Data::delete() returns true whenever a data store exists, and a loaded product always has
-	// one, so its return never signals a store-level failure. Verify the row is actually gone by
-	// re-reading rather than trusting the return.
+	// one, so its return never signals a store-level failure. Check that the row is really gone.
 	//
-	// Sweep flagged an asymmetry with its sibling wc-delete-product-variation: that ability does NOT
-	// trust a re-read here at all, because WC_Product_Data_Store_CPT::delete() (shared by both post
-	// types, confirmed at class-wc-product-data-store-cpt.php:406-431) never calls clear_caches(), so
-	// a stale product-instance-cache read is possible in principle. Live-probed rather than assumed
-	// either way (208 FIX-2 item 0, .scratch/wc-delete-product-cache-probe.php, throwaway product
-	// created and deleted, nothing else touched): on this WooCommerce install (11.0.1) the re-read
-	// after delete() correctly returns nothing, twice in a row. The reason the plain re-read is safe
-	// here even though the raw data-store gap is real: WooCommerce's own
-	// Automattic\WooCommerce\Internal\Caches\ProductCacheController hooks core's clean_post_cache
-	// action (fired unconditionally by the wp_delete_post() call inside delete()) and invalidates the
-	// product-instance cache from there, independently of clear_caches(). That hook is a newer,
-	// version-dependent internal, not a documented guarantee, so this is OBSERVED ONLY on 11.0.1 - if
-	// re-probing after a WooCommerce upgrade ever finds a stale read, switch to the variation
-	// sibling's clean_post_cache()-plus-existence-check pattern rather than assuming this is still safe.
-	if ( null !== aafm_wc_get_product( $id ) ) {
+	// Under WooCommerce's own product store the row is the product's post, which wp_delete_post()
+	// inside delete() removes and clears from the cache. A re-read that does not load exactly proves
+	// nothing, so the row counts as deleted only when a failure-aware query finds it absent.
+	//
+	// Any other store is asked through WooCommerce again. WC_Product_Data_Store_CPT::delete() never
+	// calls clear_caches(), so a stale product-instance-cache read is possible in principle. On
+	// WooCommerce 11.0.1 it does not happen: ProductCacheController hooks core's clean_post_cache
+	// action and drops the product-instance cache there (live-probed, twice, on a throwaway product).
+	// That hook is a version-dependent internal, not a documented guarantee, so if a later
+	// WooCommerce ever serves a stale read here, switch this branch to the post-row check above.
+	// A store the registry cannot name certifies nothing.
+	$core = aafm_wc_store_is_core( 'product' );
+	if ( null === $core ) {
+		return aafm_generic_error();
+	}
+	if ( $core ? ( aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_object_absent( 'post', $id ) ) : null !== aafm_wc_get_product( $id ) ) {
 		return aafm_generic_error();
 	}
 

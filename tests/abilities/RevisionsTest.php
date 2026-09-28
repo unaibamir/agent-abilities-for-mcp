@@ -165,8 +165,15 @@ final class RevisionsTest extends TestCase {
 				'post_content' => 'v2',
 			)
 		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'v3',
+			)
+		);
 		$revs   = wp_get_post_revisions( $pid );
 		$oldest = end( $revs );
+		$this->assertSame( 'v2', $oldest->post_content, 'the restore target differs from the current content' );
 		update_post_meta( $pid, '_elementor_data', '[]' );
 
 		$out = aafm_exec_restore_revision(
@@ -175,10 +182,10 @@ final class RevisionsTest extends TestCase {
 				'revision_id' => (int) $oldest->ID,
 			)
 		);
+		$this->assertSame( 'v3', get_post( $pid )->post_content, 'The builder-owned post must be left untouched.' );
 
 		$this->assertInstanceOf( \WP_Error::class, $out );
 		$this->assertSame( 'aafm_page_builder_owned', $out->get_error_code() );
-		$this->assertSame( 'v2', get_post( $pid )->post_content, 'The builder-owned post must be left untouched.' );
 	}
 
 	/**
@@ -212,9 +219,16 @@ final class RevisionsTest extends TestCase {
 				'post_content' => 'v2',
 			)
 		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'v3',
+			)
+		);
 		$revs   = wp_get_post_revisions( $pid );
 		$oldest = end( $revs );
 		$this->assertInstanceOf( \WP_Post::class, $oldest, 'a genuine revision must exist before revisions are disabled.' );
+		$this->assertSame( 'v2', $oldest->post_content, 'the restore target differs from the current content' );
 
 		// Disable revisions AFTER the history exists - the WP_POST_REVISIONS=false site shape.
 		add_filter( 'wp_revisions_to_keep', '__return_zero' );
@@ -225,12 +239,12 @@ final class RevisionsTest extends TestCase {
 				'revision_id' => (int) $oldest->ID,
 			)
 		);
+		$this->assertSame( 'v3', get_post( $pid )->post_content, 'the post must be left untouched by the refusal.' );
 
 		remove_filter( 'wp_revisions_to_keep', '__return_zero' );
 
 		$this->assertInstanceOf( \WP_Error::class, $out );
 		$this->assertSame( 'aafm_restore_irreversible', $out->get_error_code(), 'an irreversible restore must be refused with the named error.' );
-		$this->assertSame( 'v2', get_post( $pid )->post_content, 'the post must be left untouched by the refusal.' );
 	}
 
 	public function test_restore_failure_returns_error_not_false_success(): void {

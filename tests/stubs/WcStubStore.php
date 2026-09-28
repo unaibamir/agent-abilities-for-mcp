@@ -63,6 +63,16 @@ class WcStubStore {
 	public static bool $delete_returns_true_but_keeps = false;
 
 	/**
+	 * When true, saving a product that has no id yet persists nothing and returns 0, the way
+	 * WC_Product_Data_Store_CPT::create() leaves the id unset when wp_insert_post() fails and
+	 * WC_Product::save() then returns that id. Saving an existing product is unaffected, because
+	 * WooCommerce returns its id whatever the store's update did.
+	 *
+	 * @var bool
+	 */
+	public static bool $create_should_fail = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -72,6 +82,7 @@ class WcStubStore {
 		self::$next_id                       = 1000;
 		self::$delete_should_fail            = false;
 		self::$delete_returns_true_but_keeps = false;
+		self::$create_should_fail            = false;
 	}
 
 	/**
@@ -119,6 +130,9 @@ class WcStubStore {
 	 */
 	public static function save( array $data ): int {
 		$id = (int) ( $data['id'] ?? 0 );
+		if ( $id <= 0 && self::$create_should_fail ) {
+			return 0;
+		}
 		if ( $id <= 0 ) {
 			$id = self::$next_id;
 			++self::$next_id;

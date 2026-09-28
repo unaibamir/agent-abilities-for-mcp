@@ -21,6 +21,17 @@ abstract class TestCase extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		// Policy reads are memoised per request; each test is a fresh request. With
+		// AAFM_TEST_POLICY_PATH=batched every test runs as an MCP REST request that WordPress has
+		// already routed, so policy reads take the batched path; unset, they take the front-end path.
+		aafm_policy_reset_request_state();
+		aafm_oauth_rest_routing_began( false );
+		$this->policy_request_uri = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- snapshot, restored as it was.
+		$this->policy_query_vars  = isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof \WP ? $GLOBALS['wp']->query_vars : null;
+		if ( 'batched' === getenv( 'AAFM_TEST_POLICY_PATH' ) ) {
+			$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+			$this->route_as_rest_request();
+		}
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is invoked.
 		aafm_install_activity_log();
@@ -42,7 +53,24 @@ abstract class TestCase extends WP_UnitTestCase {
 		if ( function_exists( 'aafm_flush_registry_cache' ) ) {
 			aafm_flush_registry_cache();
 		}
+		// The write-outcome log observer is attached in production from the moment
+		// includes/write-contract.php loads, at the earliest possible priority. Recorded here,
+		// before the detach, so a test can assert the production priority directly instead of
+		// trusting that this fixture's own remove_action() call names the right one.
+		// Detached here so the existing suites that count activity-log rows keep counting exactly
+		// what 1.7.5 wrote; a case that asserts a write_outcome row attaches the observer itself.
+		$this->write_outcome_observer_priority = has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' );
+		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
 	}
+
+	/**
+	 * The write-outcome log observer's priority as production had it attached, captured in
+	 * set_up() before this fixture detaches it. False when the observer was not attached
+	 * at all.
+	 *
+	 * @var int|false
+	 */
+	protected $write_outcome_observer_priority = false;
 
 	/**
 	 * Tear down plugin state after each test.
@@ -73,7 +101,140 @@ abstract class TestCase extends WP_UnitTestCase {
 		if ( function_exists( 'aafm_oauth_current_client_id' ) ) {
 			aafm_oauth_current_client_id( '' );
 		}
+		if ( null === $this->policy_request_uri ) {
+			unset( $_SERVER['REQUEST_URI'] );
+		} else {
+			$_SERVER['REQUEST_URI'] = $this->policy_request_uri;
+		}
+		if ( null !== $this->policy_query_vars && isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof \WP ) {
+			$GLOBALS['wp']->query_vars = $this->policy_query_vars;
+		}
+		aafm_policy_reset_request_state();
+		if ( $this->rest_server_swapped ) {
+			$GLOBALS['wp_rest_server'] = $this->saved_rest_server;
+			$this->rest_server_swapped = false;
+		}
 		parent::tear_down();
+	}
+
+	/**
+	 * Whether mcp_spy_server() replaced the global REST server, restored in tear_down().
+	 *
+	 * @var bool
+	 */
+	private $rest_server_swapped = false;
+
+	/**
+	 * The global REST server mcp_spy_server() replaced.
+	 *
+	 * @var mixed
+	 */
+	private $saved_rest_server = null;
+
+	/**
+	 * A fresh Spy_REST_Server installed as the global server, with rest_api_init fired on it and the
+	 * adapter's MCP route registered, so serve_request() runs the real HTTP path. The adapter creates
+	 * its servers once per process, so when its own rest_api_init hook is no longer attached the MCP
+	 * route is registered from our server's transport context, the way HttpTransport does it.
+	 *
+	 * @return \Spy_REST_Server
+	 */
+	protected function mcp_spy_server(): \Spy_REST_Server {
+		if ( ! $this->rest_server_swapped ) {
+			$this->saved_rest_server   = $GLOBALS['wp_rest_server'] ?? null;
+			$this->rest_server_swapped = true;
+		}
+		$server                    = new \Spy_REST_Server();
+		$GLOBALS['wp_rest_server'] = $server;
+		do_action( 'rest_api_init', $server ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, fired on the test's own server.
+		if ( ! isset( $server->get_routes()[ aafm_mcp_rest_route() ] ) ) {
+			$mcp = \WP\MCP\Core\McpAdapter::instance()->get_server( 'aafm-server' );
+			$this->assertNotNull( $mcp, 'The plugin registers its MCP server with the adapter.' );
+			( new \WP\MCP\Transport\HttpTransport( $mcp->create_transport_context() ) )->register_routes();
+		}
+		return $server;
+	}
+
+	/**
+	 * REQUEST_URI as set_up() found it, restored in tear_down().
+	 *
+	 * @var string|null
+	 */
+	private $policy_request_uri = null;
+
+	/**
+	 * WordPress's parsed query vars as set_up() found them, restored in tear_down().
+	 *
+	 * @var array<string,mixed>|null
+	 */
+	private $policy_query_vars = null;
+
+	/**
+	 * Make this request one WordPress has routed as REST (core's parsed rest_route, the test
+	 * rest_api_loaded() applies), so policy reads take the batched path. Routing implies the parse
+	 * and REST routing after it, so parse_request is counted and the REST routing flag is set too.
+	 *
+	 * @return void
+	 */
+	protected function route_as_rest_request(): void {
+		$GLOBALS['wp']->query_vars['rest_route'] = aafm_mcp_rest_route();
+		$GLOBALS['wp_actions']['parse_request']  = max( 1, (int) did_action( 'parse_request' ) );
+		aafm_oauth_rest_routing_began( true );
+		aafm_policy_reset_request_state();
+	}
+
+	/**
+	 * The same as mcp_spy_server(), with rest_api_init firing while WordPress is running
+	 * parse_request, the way core's rest_api_loaded() (a parse_request callback) builds the server
+	 * for a REST request.
+	 *
+	 * @return \Spy_REST_Server
+	 */
+	protected function mcp_spy_server_inside_parse_request(): \Spy_REST_Server {
+		$GLOBALS['wp_current_filter'][] = 'parse_request';
+		try {
+			return $this->mcp_spy_server();
+		} finally {
+			array_pop( $GLOBALS['wp_current_filter'] );
+		}
+	}
+
+	/**
+	 * Take this request off the MCP route under either suite setting: no parsed rest_route, no
+	 * REQUEST_URI, no parse_request counted and no REST routing flag.
+	 *
+	 * @return void
+	 */
+	protected function route_off_mcp(): void {
+		$this->use_front_end_policy_path();
+		unset( $GLOBALS['wp_actions']['parse_request'] );
+		aafm_oauth_rest_routing_began( false );
+	}
+
+	/**
+	 * The MCP endpoint's pretty REST path.
+	 *
+	 * @return string
+	 */
+	protected static function mcp_rest_path(): string {
+		$segments = array_filter(
+			array( trim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' ), trim( rest_get_url_prefix(), '/' ) ),
+			static function ( string $segment ): bool {
+				return '' !== $segment;
+			}
+		);
+		return '/' . implode( '/', $segments ) . aafm_mcp_rest_route();
+	}
+
+	/**
+	 * Run this test on the front-end policy path (no batched read) under either suite setting.
+	 * Only a named front-end pin calls it.
+	 *
+	 * @return void
+	 */
+	protected function use_front_end_policy_path(): void {
+		unset( $_SERVER['REQUEST_URI'], $GLOBALS['wp']->query_vars['rest_route'] );
+		aafm_policy_reset_request_state();
 	}
 
 	/**

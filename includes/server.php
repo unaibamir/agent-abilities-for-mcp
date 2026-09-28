@@ -69,10 +69,12 @@ function aafm_mcp_tool_name( string $ability_name ): string {
 function aafm_build_server_tools( array $enabled, array &$omitted = array() ): array {
 	$tools = array();
 	foreach ( aafm_ownership_filter_server_tools( $enabled, $omitted ) as $name ) {
-		// If a user is already resolved (e.g. unit tests, or a transport that resolves auth
-		// before rest_api_init), drop abilities this user cannot call. On the live HTTP path
-		// the user is anonymous here, so this is a no-op and the request-time filter does the
-		// real work - belt and suspenders, never advertising more than the catalog.
+		// If a user is resolved, drop abilities this user cannot call. That is whoever is resolved at
+		// rest_api_init: in the normal routing order, the approver on an MCP request with an OAuth
+		// bearer (aafm_oauth_forget_anonymous_user_on_mcp_route() runs first on rest_api_init); a
+		// cookie user; or nobody, including on a site where code built the REST server before the
+		// parse. The request-time filter does the real work - belt and suspenders, never
+		// advertising more than the catalog.
 		if ( is_user_logged_in() && ! aafm_user_can_discover_ability( $name ) ) {
 			continue;
 		}
@@ -124,7 +126,9 @@ function aafm_build_server_tools( array $enabled, array &$omitted = array() ): a
 function aafm_ownership_filter_server_tools( array $enabled, array &$omitted = array() ): array {
 	$owned = array();
 	foreach ( $enabled as $name ) {
-		$ability = wp_get_ability( $name );
+		// wp_has_ability() first: an enabled name with nothing registered (a bridge wrapper whose host
+		// plugin is inactive) is ordinary, and wp_get_ability() raises _doing_it_wrong for it.
+		$ability = wp_has_ability( $name ) ? wp_get_ability( $name ) : null;
 		if ( ! $ability instanceof WP_Ability ) {
 			continue;
 		}
@@ -157,10 +161,8 @@ function aafm_ownership_filter_server_tools( array $enabled, array &$omitted = a
 function aafm_all_server_ability_names(): array {
 	$native  = function_exists( 'aafm_get_enabled_abilities' ) ? aafm_get_enabled_abilities() : array();
 	$bridged = array();
-	if ( function_exists( 'aafm_get_enabled_bridged_abilities' ) ) {
-		foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
-			$bridged[] = aafm_bridge_tool_name( $foreign_slug );
-		}
+	foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
+		$bridged[] = aafm_bridge_tool_name( $foreign_slug );
 	}
 	return array_values( array_unique( array_merge( $native, $bridged ) ) );
 }
@@ -933,7 +935,7 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
 	$enabled_by_tool_name = array();
 	foreach ( aafm_all_server_ability_names() as $ability_name ) {
 		$tool_name = aafm_mcp_tool_name( $ability_name );
-		$ability   = function_exists( 'wp_get_ability' ) ? wp_get_ability( $ability_name ) : null;
+		$ability   = function_exists( 'wp_get_ability' ) && wp_has_ability( $ability_name ) ? wp_get_ability( $ability_name ) : null;
 		if ( $ability instanceof WP_Ability ) {
 			/** This filter is defined by the MCP adapter (RegisterAbilityAsMcpTool::resolve_tool_name). */
 			$filtered = apply_filters( 'mcp_adapter_tool_name', $tool_name, $ability ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook; we apply it to match its tool-name derivation.
@@ -1029,12 +1031,10 @@ function aafm_reject_scalar_mcp_body( $result, $server, $request ) {
 	if ( 'POST' !== $request->get_method() ) {
 		return $result;
 	}
-	// Case-insensitive, like core's own route matching (the regex in class-wp-rest-server.php is
-	// compiled with the `i` modifier) and the sibling checks in aafm_mcp_filter_governed_error_status()
-	// and aafm_oauth_request_targets_mcp_route(). Unlike those, a miss here fails OPEN: an odd-cased
-	// route that core still dispatches to the MCP endpoint would skip this guard and reach the
-	// transport's ?array-typed context, which is the exact crash the guard exists to close.
-	if ( 0 !== strcasecmp( rtrim( (string) $request->get_route(), '/' ), rtrim( aafm_mcp_rest_route(), '/' ) ) ) {
+	// aafm_is_mcp_route(), core's matcher. A miss here fails OPEN: a route spelling that core still
+	// dispatches to the MCP endpoint would skip this guard and reach the transport's ?array-typed
+	// context, which is the exact crash the guard exists to close.
+	if ( ! aafm_is_mcp_route( $request->get_route() ) ) {
 		return $result;
 	}
 
@@ -1232,7 +1232,7 @@ function aafm_schema_bounds_walk( $value, int $depth, int &$nodes ): ?string {
  *                     when within bounds.
  */
 function aafm_schema_bounds_violation( string $ability_name ): ?string {
-	$ability = function_exists( 'wp_get_ability' ) ? wp_get_ability( $ability_name ) : null;
+	$ability = function_exists( 'wp_get_ability' ) && wp_has_ability( $ability_name ) ? wp_get_ability( $ability_name ) : null;
 	if ( ! $ability instanceof WP_Ability ) {
 		return null;
 	}
@@ -1588,8 +1588,9 @@ function aafm_register_mcp_server( $adapter ): void {
 	$bounded = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
 	$tools   = aafm_build_server_tools( $bounded );
 
-	// Per-connection capability gate at request time (the user is anonymous here; see
-	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.
+	// Per-connection capability gate at request time (the user resolved at registration may be the
+	// bearer's approver, a cookie user or nobody; see aafm_build_server_tools()). Priority 5 so it
+	// runs before any consumer reordering.
 	//
 	// Codex hunt F11: a separate plugin's own later-priority mcp_adapter_tools_list callback
 	// could still re-add a tool DTO this filter already removed - discovery narrowing here is
@@ -1640,6 +1641,39 @@ function aafm_register_mcp_server( $adapter ): void {
 }
 
 /**
+ * The top-level JSON-RPC error code of a single MCP-route response.
+ *
+ * The route check runs first: rest_post_dispatch fires on every REST request the whole site
+ * serves, and aafm_is_mcp_route(), core's matcher, rules out all but the one MCP route before
+ * anything is read off $response.
+ *
+ * @param mixed $response The dispatch result (WP_REST_Response on the REST path).
+ * @param mixed $request  The originating request (WP_REST_Request on the REST path).
+ * @return int|null The error code, or null for another route, a non-REST response, a batch, or a
+ *                  response with no numeric top-level error code.
+ */
+function aafm_mcp_response_error_code( $response, $request ): ?int {
+	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+	if ( ! aafm_is_mcp_route( $route ) || ! $response instanceof WP_REST_Response ) {
+		return null;
+	}
+
+	// A batch response is a sequential list of per-message results, so it has no top-level 'error'
+	// key and the isset() below already excludes it; this states that intent explicitly. array_is_list()
+	// needs PHP 8.1 and the floor is 7.4, so the list check is built by hand.
+	$data = $response->get_data();
+	if ( ! is_array( $data ) || array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
+		return null;
+	}
+
+	if ( ! isset( $data['error']['code'] ) || ! is_numeric( $data['error']['code'] ) ) {
+		return null;
+	}
+
+	return (int) $data['error']['code'];
+}
+
+/**
  * Stop four specific JSON-RPC "not found" errors on the MCP route from claiming the
  * session died.
  *
@@ -1668,20 +1702,17 @@ function aafm_register_mcp_server( $adapter ): void {
  *
  * Scoped narrowly: the MCP route only, read from the request rather than a global, a 404
  * status, and a single (non-batch) JSON-RPC error response. The route comparison is
- * case-insensitive (`strcasecmp()`), matching how core itself matches REST routes
- * (`class-wp-rest-server.php`'s route regex is built with the `i` modifier) and the same
- * fix aafm_oauth_filter_malformed_json() already needed for the same reason - without it,
- * a request to e.g. `/agent-abilities-for-mcp/MCP` would still reach the adapter and
- * produce the same governed 404, but a case-sensitive comparison here would miss it. A
+ * aafm_is_mcp_route(), core's matcher - without it, a request to e.g.
+ * `/agent-abilities-for-mcp/MCP` would still reach the adapter and produce the same
+ * governed 404, but a stricter comparison here would miss it. A
  * batch response is always a plain list of per-message results, so it has no top-level
  * 'error' key and the code check further down already excludes it on its own; the batch
  * check states that intent explicitly rather than providing protection the next check
  * does not already give. Any miss returns the response untouched.
  *
  * rest_post_dispatch fires on every REST request the whole site serves, not only ours, so
- * the guards are ordered cheapest-and-most-discriminating first: the route check runs
- * before anything is even read off $response, since it alone already rules out every
- * request except the one MCP route this filter cares about.
+ * the route check runs before anything is even read off $response, since it alone already
+ * rules out every request except the one MCP route this filter cares about.
  *
  * @param mixed           $response The dispatch result (WP_REST_Response on the REST path).
  * @param \WP_REST_Server $server   The REST server (unused).
@@ -1692,49 +1723,12 @@ function aafm_register_mcp_server( $adapter ): void {
 function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 	unset( $server );
 
-	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
-	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
-		return $response;
-	}
-
-	if ( ! $response instanceof WP_REST_Response ) {
-		return $response;
-	}
-
-	if ( 404 !== (int) $response->get_status() ) {
-		return $response;
-	}
-
-	$data = $response->get_data();
-	if ( ! is_array( $data ) ) {
-		return $response;
-	}
-
-	// A batch response is always a sequential list of per-message results (integer keys
-	// starting at 0), so it has no top-level 'error' key and the isset() check just below
-	// already excludes it on its own - this guard adds no protection beyond that. It exists
-	// purely to state the intent explicitly, so a batch staying unrewritten does not depend
-	// on the accident of which check happens to run first.
-	// array_is_list() needs PHP 8.1; this plugin's floor is PHP 7.4, so build the check
-	// by hand.
-	if ( array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
-		return $response;
-	}
-
-	if ( ! isset( $data['error']['code'] ) || ! is_numeric( $data['error']['code'] ) ) {
-		return $response;
-	}
-
-	$code = (int) $data['error']['code'];
-
 	// Allowlist only: method not found, resource not found, tool not found, prompt not
 	// found. -32005 (session not found) is deliberately absent from this list.
 	$reportable_in_band = array( -32601, -32002, -32003, -32004 );
-	if ( ! in_array( $code, $reportable_in_band, true ) ) {
-		return $response;
+	if ( in_array( aafm_mcp_response_error_code( $response, $request ), $reportable_in_band, true ) && 404 === (int) $response->get_status() ) {
+		$response->set_status( 200 );
 	}
-
-	$response->set_status( 200 );
 
 	return $response;
 }
@@ -1791,15 +1785,10 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 function aafm_mcp_guard_unpersisted_session( $response, $server, $request ) {
 	unset( $server );
 
-	if ( ! function_exists( 'aafm_mcp_rest_route' ) ) {
-		return $response;
-	}
-
 	// Route check first: rest_post_dispatch fires on every REST request the whole site serves,
-	// and this alone rules out all but the one MCP route. Case-insensitive, matching the sibling
-	// filters and core's own route regex (built with the `i` modifier).
+	// and this alone rules out all but the one MCP route. aafm_is_mcp_route(), core's matcher.
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
-	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
+	if ( ! aafm_is_mcp_route( $route ) ) {
 		return $response;
 	}
 
@@ -1860,7 +1849,7 @@ function aafm_mcp_guard_unpersisted_session( $response, $server, $request ) {
 			$session_meta_key .= '_' . $current_blog_id;
 		}
 	}
-	$sessions = get_user_meta( $user_id, $session_meta_key, true );
+	$sessions = aafm_meta_get( 'user', $user_id, $session_meta_key, true );
 	if ( is_array( $sessions ) && isset( $sessions[ $session_id ] ) ) {
 		return $response; // Persisted: the normal path. Byte-identical pass-through.
 	}
@@ -1963,10 +1952,6 @@ function aafm_mcp_transport_error_name( int $code ): ?string {
  * source IP per window through aafm_denial_log_within_cap(), on its own 'tx' bucket, so a client stuck
  * in a reconnect loop cannot grow the 30-day table without limit.
  *
- * The determine_current_user-timing function_exists guards mirror aafm_log_failed_application_password_auth():
- * rest_post_dispatch runs well after plugins_loaded so the helpers exist in practice, but this stays
- * defensive rather than assume load order.
- *
  * @param mixed $response The dispatch result (WP_REST_Response on the REST path).
  * @param mixed $server   The REST server (unused).
  * @param mixed $request  The originating request (WP_REST_Request on the REST path).
@@ -1975,40 +1960,8 @@ function aafm_mcp_transport_error_name( int $code ): ?string {
 function aafm_log_mcp_transport_outcome( $response, $server, $request ) {
 	unset( $server );
 
-	if ( ! function_exists( 'aafm_mcp_rest_route' ) || ! function_exists( 'aafm_log_activity' ) || ! function_exists( 'aafm_denial_log_within_cap' ) ) {
-		return $response;
-	}
-
-	// Route check first: rest_post_dispatch fires on every REST request the whole site serves, and
-	// this alone rules out all but the one MCP route. Case-insensitive, like the sibling filter and
-	// core's own route matching.
-	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
-	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
-		return $response;
-	}
-
-	if ( ! $response instanceof WP_REST_Response ) {
-		return $response;
-	}
-
-	$data = $response->get_data();
-	if ( ! is_array( $data ) ) {
-		return $response;
-	}
-
-	// A batch response is a sequential list of per-message results, so it has no top-level 'error'
-	// key and the isset() below already excludes it; this states that intent explicitly. array_is_list()
-	// needs PHP 8.1 and the floor is 7.4, so the list check is built by hand, mirroring the governed filter.
-	if ( array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
-		return $response;
-	}
-
-	if ( ! isset( $data['error']['code'] ) || ! is_numeric( $data['error']['code'] ) ) {
-		return $response;
-	}
-
-	$code = (int) $data['error']['code'];
-	$name = aafm_mcp_transport_error_name( $code );
+	$code = aafm_mcp_response_error_code( $response, $request );
+	$name = null === $code ? null : aafm_mcp_transport_error_name( $code );
 
 	// Allowlist gate: only log a code that is both known and actually reachable here (see
 	// aafm_mcp_transport_error_name() for what is dropped and why). An unmapped code - arbitrary junk,

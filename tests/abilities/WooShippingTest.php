@@ -16,6 +16,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\WcShippingStubStore;
@@ -827,6 +828,262 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * Point an autoloaded option's cache view at $value while its row keeps what it holds, the state
+	 * a stale persistent object cache leaves behind.
+	 *
+	 * @param string $option Autoloaded option name.
+	 * @param mixed  $value  The stale cached value.
+	 */
+	private function plant_stale_alloptions( string $option, $value ): void {
+		wp_cache_delete( $option, 'options' );
+		$all            = wp_load_alloptions();
+		$all[ $option ] = maybe_serialize( $value );
+		wp_cache_set( 'alloptions', $all, 'options' );
+	}
+
+	/**
+	 * The raw row of an option, read past every cache and filter.
+	 *
+	 * @param string $option Option name.
+	 */
+	private function option_row( string $option ): ?string {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return $wpdb->get_var( $wpdb->prepare( 'SELECT option_value FROM %i WHERE option_name = %s', $wpdb->options, $option ) );
+	}
+
+	/**
+	 * A cache view holding the requested title while the row holds another makes update_option()
+	 * skip the write. The title is confirmed from the row, so the ability reports the title
+	 * failure, and the planted cache entry is left as it was.
+	 */
+	public function test_a_stale_cached_instance_title_reports_the_title_write_failure(): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => 'Title A' ) );
+		$this->assertArrayHasKey( $option_key, wp_load_alloptions(), 'precondition: the instance row is autoloaded.' );
+		$row = $this->option_row( $option_key );
+		$this->plant_stale_alloptions( $option_key, array( 'title' => 'Title B' ) );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'method_title' => 'Title B',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $res->get_error_code() );
+		$this->assertSame( 'The method title could not be saved. Nothing on the shipping method was changed.', $res->get_error_message() );
+		$this->assertSame( $row, $this->option_row( $option_key ) );
+		$this->assertSame( maybe_serialize( array( 'title' => 'Title B' ) ), wp_cache_get( 'alloptions', 'options' )[ $option_key ] );
+		$this->assertFalse( wp_cache_get( $option_key, 'options' ) );
+	}
+
+	/**
+	 * A title confirmation read that fails reports the title failure. The counting run uses a twin
+	 * method (zone 2, instance 3, the same starting settings), so the faulted run starts from an
+	 * untouched row, and asserts how many title reads a healthy request makes before the fault
+	 * targets the last one.
+	 */
+	public function test_a_failed_instance_title_read_reports_the_title_write_failure(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		update_option( 'woocommerce_flat_rate_1_settings', array( 'title' => 'Original Title' ) );
+		update_option( 'woocommerce_flat_rate_3_settings', array( 'title' => 'Original Title' ) );
+
+		$reads  = 0;
+		$needle = static fn( string $key ): array => array( $wpdb->options, 'SELECT option_value', "option_name = '{$key}'" );
+		$count  = static function ( $query ) use ( &$reads ) {
+			if ( false !== strpos( (string) $query, 'SELECT option_value' ) && false !== strpos( (string) $query, "option_name = 'woocommerce_flat_rate_3_settings'" ) ) {
+				++$reads;
+			}
+			return $query;
+		};
+		add_filter( 'query', $count );
+		$twin = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 2,
+				'instance_id'  => 3,
+				'method_title' => 'New Title',
+			)
+		);
+		remove_filter( 'query', $count );
+		$this->assertNotInstanceOf( WP_Error::class, $twin );
+		$this->assertSame( 1, $reads, 'a new title on the autoloaded row is confirmed by one row read.' );
+
+		QueryFaultInjector::reset_fired_count();
+		$res = QueryFaultInjector::break_query_with_real_error(
+			$needle( 'woocommerce_flat_rate_1_settings' ),
+			static fn() => wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+				array(
+					'zone_id'      => 1,
+					'instance_id'  => 1,
+					'method_title' => 'New Title',
+				)
+			),
+			$reads
+		);
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $res->get_error_code() );
+	}
+
+	/**
+	 * The title comparator compares an object title from the instance-settings filter by value and
+	 * never casts it to a string. This pins the comparator only. The option_ filter reads the stored
+	 * title back as text, so the response is built from a string; without it the response shaper
+	 * (aafm_rich_wc_shipping_method()) still casts an object title and throws after the write, the
+	 * residual 262 s12 names.
+	 */
+	public function test_the_title_comparator_compares_an_object_title_without_throwing(): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => 'Original Title' ) );
+		$object        = new \stdClass();
+		$object->label = 'Object Title';
+		$to_object     = static function ( $settings ) use ( $object ) {
+			$settings['title'] = $object;
+			return $settings;
+		};
+		$as_text       = static function ( $value ) {
+			if ( is_array( $value ) && isset( $value['title'] ) && $value['title'] instanceof \stdClass ) {
+				$value['title'] = (string) $value['title']->label;
+			}
+			return $value;
+		};
+		add_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_object );
+		add_filter( 'option_' . $option_key, $as_text );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'method_title' => 'Requested Title',
+			)
+		);
+
+		remove_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_object );
+		remove_filter( 'option_' . $option_key, $as_text );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Object Title', $res['method_title'] );
+		$this->assertEquals( $object, maybe_unserialize( $this->option_row( $option_key ) )['title'] );
+	}
+
+	/**
+	 * Vetoed title writes where a bool or null meets '' by its string form (UG-T5): the kept row
+	 * is not the requested title, so each reports the title failure.
+	 *
+	 * @return array<string,array{0:mixed,1:mixed}>
+	 */
+	public function vetoed_bool_or_null_titles(): array {
+		return array(
+			'stored false, requested empty'         => array( false, null ),
+			'stored null, requested empty'          => array( null, null ),
+			'stored empty, filter sets title false' => array( '', false ),
+		);
+	}
+
+	/**
+	 * A vetoing filter keeps the old row. A bool or null on either side is compared by identity, so
+	 * a kept false or null never confirms a requested '', and a kept '' never confirms a filtered
+	 * false (UG-T5).
+	 *
+	 * @dataProvider vetoed_bool_or_null_titles
+	 *
+	 * @param mixed $stored   The title the kept row holds.
+	 * @param mixed $filtered The title the instance-settings filter hands to the write, or null to leave the requested ''.
+	 */
+	public function test_a_vetoed_bool_or_null_title_reports_the_title_write_failure( $stored, $filtered ): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => $stored ) );
+		$to_filtered = static function ( $settings ) use ( $filtered ) {
+			$settings['title'] = $filtered;
+			return $settings;
+		};
+		$veto        = array( self::class, 'keep_old_value' );
+		if ( null !== $filtered ) {
+			add_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_filtered );
+		}
+		add_filter( 'pre_update_option_' . $option_key, $veto, 10, 2 );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'method_title' => '',
+			)
+		);
+
+		remove_filter( 'pre_update_option_' . $option_key, $veto, 10 );
+		remove_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_filtered );
+
+		$this->assertSame( array( 'title' => $stored ), maybe_unserialize( $this->option_row( $option_key ) ), 'precondition: the veto kept the row' );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $res->get_error_code() );
+	}
+
+	/**
+	 * A filter that sets the title to null or false, with no veto, stores exactly that value, and
+	 * the write reports success (UG-T5b).
+	 */
+	public function test_a_filtered_null_or_false_title_that_lands_is_saved(): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		update_option( $option_key, array( 'title' => 'Original Title' ) );
+
+		foreach ( array( null, false ) as $title ) {
+			$to_title = static function ( $settings ) use ( $title ) {
+				$settings['title'] = $title;
+				return $settings;
+			};
+			add_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_title );
+			$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+				array(
+					'zone_id'      => 1,
+					'instance_id'  => 1,
+					'method_title' => 'Requested Title',
+				)
+			);
+			remove_filter( 'woocommerce_shipping_flat_rate_instance_settings_values', $to_title );
+
+			$label = var_export( $title, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- assertion label.
+			$this->assertNotInstanceOf( WP_Error::class, $res, $label );
+			$this->assertSame( $title, maybe_unserialize( $this->option_row( $option_key ) )['title'], $label );
+		}
+	}
+
+	/**
+	 * A vetoed title write over a row holding int 5 or float 5.0 still confirms a request of '5',
+	 * the number's own text (UG-T6).
+	 */
+	public function test_a_vetoed_numeric_title_confirms_the_equal_text(): void {
+		$this->acting_as( 'administrator' );
+		$option_key = 'woocommerce_flat_rate_1_settings';
+		$veto       = array( self::class, 'keep_old_value' );
+
+		foreach ( array( 5, 5.0 ) as $stored ) {
+			update_option( $option_key, array( 'title' => $stored ) );
+			add_filter( 'pre_update_option_' . $option_key, $veto, 10, 2 );
+			$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+				array(
+					'zone_id'      => 1,
+					'instance_id'  => 1,
+					'method_title' => '5',
+				)
+			);
+			remove_filter( 'pre_update_option_' . $option_key, $veto, 10 );
+
+			$this->assertSame( $stored, maybe_unserialize( $this->option_row( $option_key ) )['title'], gettype( $stored ) . ': precondition, the veto kept the row' );
+			$this->assertNotInstanceOf( WP_Error::class, $res, gettype( $stored ) );
+		}
+	}
+
+	/**
 	 * Audit: a successful execute is recorded under the calling ability.
 	 *
 	 * @dataProvider provide_success_audit_cases
@@ -1006,6 +1263,209 @@ final class WooShippingTest extends TestCase {
 			'new \WC_Shipping_Zone(',
 			$matches[0] ?? '',
 			'the zone resolver\'s own function body must not hand-instantiate WC_Shipping_Zone directly any more (a different function, wc-create-shipping-zone, legitimately still does).'
+		);
+	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce option-operation row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $option Option name.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_option_row( string $entity, ?int $id, string $option, string $status ): array {
+		$row        = $this->wc_row( $entity, $id, $status );
+		$row['key'] = $option;
+		return $row;
+	}
+
+	/**
+	 * Keep an option's stored value whatever a write asks for.
+	 *
+	 * @param mixed $value     The new value.
+	 * @param mixed $old_value The stored value.
+	 * @return mixed
+	 */
+	public static function keep_old_value( $value, $old_value ) {
+		unset( $value );
+		return $old_value;
+	}
+
+	public function test_zone_create_and_update_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute( array( 'zone_name' => 'Logged' ) );
+		$this->assertIsArray( $created );
+		$id = (int) $created['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-shipping-zone' )->execute(
+			array(
+				'zone_id'   => 1,
+				'zone_name' => 'Europe (Logged)',
+			)
+		);
+		$this->assertIsArray( $updated );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'shipping_zone', $id, 'accepted' ),
+				$this->wc_row( 'shipping_zone', 1, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_zone_create_that_does_not_persist_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcShippingStubStore::$force_save_failure = true;
+		$res                                     = wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute( array( 'zone_name' => 'Never' ) );
+		WcShippingStubStore::$force_save_failure = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'shipping_zone', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_method_add_logs_accepted_and_one_wc_refuses_logs_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$added = wp_get_ability( 'aafm/wc-create-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'method_type' => 'free_shipping',
+			)
+		);
+		$this->assertIsArray( $added );
+		$instance_id = (int) $added['instance_id'];
+
+		WcShippingStubStore::$force_save_failure = true;
+		$refused                                 = wp_get_ability( 'aafm/wc-create-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'method_type' => 'free_shipping',
+			)
+		);
+		WcShippingStubStore::$force_save_failure = false;
+
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_error', $refused->get_error_code() );
+		$this->assertSame(
+			array(
+				$this->wc_row( 'shipping_method', $instance_id, 'accepted' ),
+				$this->wc_row( 'shipping_method', null, 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_an_enabled_toggle_logs_accepted_and_a_failed_update_logs_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$toggled = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+				'enabled'     => 'no',
+			)
+		);
+		$this->assertIsArray( $toggled );
+
+		$refused = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'UPDATE', 'woocommerce_shipping_zone_methods' ),
+			static function () {
+				return aafm_exec_wc_update_shipping_method(
+					array(
+						'zone_id'     => 1,
+						'instance_id' => 1,
+						'enabled'     => 'yes',
+					)
+				);
+			}
+		);
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_wc_enabled_write_failed', $refused->get_error_code() );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'shipping_method', 1, 'accepted' ),
+				$this->wc_row( 'shipping_method', 1, 'refused' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_the_method_title_option_logs_written_then_unchanged_then_refused(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+		$input = array(
+			'zone_id'      => 1,
+			'instance_id'  => 1,
+			'method_title' => 'Logged rate',
+		);
+
+		$this->assertIsArray( wp_get_ability( 'aafm/wc-update-shipping-method' )->execute( $input ) );
+		$this->assertIsArray( wp_get_ability( 'aafm/wc-update-shipping-method' )->execute( $input ) );
+
+		$filter = array( self::class, 'keep_old_value' );
+		add_filter( 'pre_update_option_woocommerce_flat_rate_1_settings', $filter, 10, 2 );
+		$input['method_title'] = 'Kept out';
+		$refused               = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute( $input );
+		remove_filter( 'pre_update_option_woocommerce_flat_rate_1_settings', $filter, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $refused );
+		$this->assertSame( 'aafm_wc_shipping_title_write_failed', $refused->get_error_code() );
+		$this->assertSame(
+			array(
+				$this->wc_option_row( 'shipping_method', 1, 'woocommerce_flat_rate_1_settings', 'written' ),
+				$this->wc_option_row( 'shipping_method', 1, 'woocommerce_flat_rate_1_settings', 'unchanged' ),
+				$this->wc_option_row( 'shipping_method', 1, 'woocommerce_flat_rate_1_settings', 'refused' ),
+			),
+			$this->outcome_details()
 		);
 	}
 }

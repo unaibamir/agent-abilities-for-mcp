@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   contract:
-    name: Vendor contracts (PHP ${{ matrix.php }} · WP ${{ matrix.wp }})
+    name: Vendor contracts (PHP ${{ matrix.php }} · WP ${{ matrix.wp }} · WooCommerce ${{ matrix.woocommerce }})
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -34,6 +34,7 @@ jobs:
       matrix:
         php: ['8.3']
         wp: ['latest']
+        woocommerce: ['9.1.0', '11.1.2']
     services:
       mysql:
         image: mysql:8.0
@@ -138,6 +139,8 @@ jobs:
         run: mysqladmin create "$WP_CONTRACT_DB" -uroot -proot -h127.0.0.1 -P3306 || true
 
       - name: Install real vendor plugins
+        env:
+          WOOCOMMERCE_VERSION: ${{ matrix.woocommerce }}
         run: tests/bin/install-vendors.sh
 
       # WPML (WpmlContractTest) is not provisioned here: it is a licensed plugin with no free

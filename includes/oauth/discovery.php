@@ -43,9 +43,32 @@ defined( 'ABSPATH' ) || exit;
 function aafm_oauth_option_is_on( string $key, string $fallback = '0' ): bool {
 	$value = get_option( $key, $fallback );
 
-	$off = array( false, 0, '0', '', 'false', 'no', 'off' );
+	// Only a scalar is a stored switch; any other shape reads as off.
+	$is_on = static function ( $stored ): bool {
+		return is_scalar( $stored ) && ! in_array( $stored, array( false, 0, '0', '', 'false', 'no', 'off' ), true ) && (bool) $stored;
+	};
 
-	return ! in_array( $value, $off, true ) && (bool) $value;
+	$on = $is_on( $value );
+	if ( '1' === $fallback && $fallback === $value ) {
+		// On may be a failed read's default: the row decides when it is off, and an unreadable row
+		// means off.
+		$row = aafm_policy_row( $key );
+		if ( ! $row['ok'] ) {
+			return false;
+		}
+		if ( $row['found'] ) {
+			$on = $is_on( $row['value'] );
+		}
+	}
+
+	// A cache copy that disagrees with the row reads on only when the row does too. The check waits
+	// for helpers.php (plugins_loaded): determine_current_user can reach this earlier.
+	$row = function_exists( 'aafm_policy_row_if_stale' ) ? aafm_policy_row_if_stale( $key ) : null;
+	if ( null !== $row ) {
+		$on = $on && $row['ok'] && ( $row['found'] ? $is_on( $row['value'] ) : '1' === $fallback );
+	}
+
+	return $on;
 }
 
 /**
@@ -119,10 +142,12 @@ function aafm_oauth_dcr_enabled(): bool {
 function aafm_oauth_seed_default_options(): void {
 	// Both toggles are read on requests that touch the OAuth surface: aafm_oauth_enabled() gates
 	// the CORS filters at bootstrap and the .well-known handler on parse_request, and
-	// aafm_oauth_request_targets_mcp_route() consults it on determine_current_user;
+	// aafm_oauth_resolve_current_user() consults it on determine_current_user;
 	// aafm_oauth_dcr_enabled() is read by the register route and the discovery metadata. They must
-	// stay autoloaded ('yes', the add_option default) so those hot-path reads never trigger a
-	// separate query - switching either to autoload 'no' would be a per-request regression.
+	// stay autoloaded ('yes', the add_option default) so get_option() answers those hot-path reads
+	// without a query of its own - switching either to autoload 'no' would be a per-request
+	// regression. DCR's seeded '1' is also its permissive default, so while DCR is on each of its
+	// reads also reads the row from the database once (aafm_oauth_option_is_on()).
 	add_option( 'aafm_oauth_enabled', '0', '', true );
 	add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
 }
@@ -441,23 +466,20 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 		return $response;
 	}
 
-	// aafm_mcp_rest_route() is defined in bootstrap.php, which loads inside aafm_bootstrap() on
+	// aafm_is_mcp_route() is defined in bootstrap.php, which loads inside aafm_bootstrap() on
 	// `plugins_loaded`. This filter is registered at plugin-include time, so it can fire earlier:
 	// another active plugin that issues a rest_do_request() during `plugins_loaded` (before our
-	// bootstrap) and gets a 401 would reach the aafm_mcp_rest_route() call below before it exists,
+	// bootstrap) and gets a 401 would reach the aafm_is_mcp_route() call below before it exists,
 	// fataling inside a REST dispatch filter. Bail until the helper is loaded; the genuine MCP 401
 	// challenge is added later, during normal REST dispatch, once the plugin is fully loaded.
-	if ( ! function_exists( 'aafm_mcp_rest_route' ) ) {
+	if ( ! function_exists( 'aafm_is_mcp_route' ) ) {
 		return $response;
 	}
 
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
 
-	// The MCP route the adapter registers (single-sourced in bootstrap.php), matched
-	// case-insensitively like core itself matches REST routes (class-wp-rest-server.php
-	// builds its route regex with the `i` modifier) and like the sibling
-	// aafm_oauth_filter_malformed_json() already matches its own route family.
-	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
+	// The MCP route the adapter registers, matched by aafm_is_mcp_route(), core's matcher.
+	if ( ! aafm_is_mcp_route( $route ) ) {
 		return $response;
 	}
 
@@ -595,4 +617,74 @@ function aafm_oauth_maybe_serve_well_known(): void {
 	// values; wp_json_encode() is the correct safe serializer for this context.
 	echo wp_json_encode( $metadata );
 	exit;
+}
+
+/**
+ * Register the /wp-json fallback for the two discovery documents.
+ *
+ * Hooked on `rest_api_init`. Some hosts never pass a /.well-known/ request to WordPress, so the
+ * documents aafm_oauth_maybe_serve_well_known() serves at the root are also served under this
+ * plugin's OAuth namespace:
+ *
+ *   /protected-resource                  - RFC 9728 protected-resource metadata.
+ *   /protected-resource/<resource path>  - the same document at the RFC 9728 3.1 path-suffixed
+ *                                          form, registered only when the resource URL has a path.
+ *   /authorization-server                - RFC 8414 authorization-server metadata.
+ *
+ * The paths carry no dot segment because the stock nginx dotfile rule answers 403 to any
+ * /wp-json/.../.well-known/... path. The routes apply the root handler's two gates in its order:
+ * nothing is registered while OAuth is off, so REST answers rest_no_route, and a plain-HTTP
+ * request where HTTPS is required gets a bare 403 with no Cache-Control header, as the root's
+ * does. A 200 carries Cache-Control: no-store, as the root's does.
+ *
+ * `permission_callback` is `__return_true` for all three: discovery metadata is public by design
+ * (RFC 8414 section 3, RFC 9728 section 3), since a client fetches it before it holds any
+ * credential, and the documents carry no user data.
+ *
+ * @return void
+ */
+function aafm_oauth_register_discovery_routes(): void {
+	if ( ! aafm_oauth_enabled() ) {
+		return;
+	}
+
+	$routes = array(
+		'/protected-resource'   => 'protected-resource',
+		'/authorization-server' => 'authorization-server',
+	);
+
+	// The same resource path aafm_oauth_match_well_known() accepts after the well-known segment.
+	// The REST index publishes a route's key as its self link, so '-' and '.' stay unescaped:
+	// preg_quote() turns them into '\-' and '\.', which breaks the advertised link on plain,
+	// PATHINFO and dotted-subdirectory installs. An unescaped '.' matches any one character, an
+	// accepted over-match for a public document. Every other metacharacter stays escaped.
+	$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
+	if ( '' !== $resource_path ) {
+		$routes[ '/protected-resource/' . str_replace( array( '\\-', '\\.' ), array( '-', '.' ), preg_quote( $resource_path, '@' ) ) ] = 'protected-resource';
+	}
+
+	foreach ( $routes as $route => $which ) {
+		register_rest_route(
+			aafm_oauth_rest_namespace(),
+			$route,
+			array(
+				'methods'             => 'GET',
+				'callback'            => static function () use ( $which ): WP_REST_Response {
+					if ( aafm_oauth_https_required() && ! is_ssl() ) {
+						return new WP_REST_Response( null, 403 );
+					}
+
+					$metadata = 'protected-resource' === $which
+						? aafm_oauth_protected_resource_metadata()
+						: aafm_oauth_authorization_server_metadata();
+
+					$response = new WP_REST_Response( $metadata, 200 );
+					$response->header( 'Cache-Control', 'no-store' );
+					return $response;
+				},
+				// Public discovery document (RFC 8414 / RFC 9728); read before any credential exists.
+				'permission_callback' => '__return_true',
+			)
+		);
+	}
 }

@@ -95,7 +95,14 @@ function aafm_set_high_risk_unlocked( bool $unlocked ): bool {
  * @return bool
  */
 function aafm_high_risk_unlocked(): bool {
-	$unlocked = (bool) get_option( 'aafm_high_risk_abilities_unlocked', false );
+	// Only a scalar is a stored switch; any other shape reads as locked.
+	$unlocked = get_option( 'aafm_high_risk_abilities_unlocked', false );
+	$unlocked = is_scalar( $unlocked ) && (bool) $unlocked;
+	// A cache copy that disagrees with the row unlocks only when the row does too.
+	$row = aafm_policy_row_if_stale( 'aafm_high_risk_abilities_unlocked' );
+	if ( null !== $row ) {
+		$unlocked = $unlocked && $row['ok'] && $row['found'] && is_scalar( $row['value'] ) && (bool) $row['value'];
+	}
 
 	/**
 	 * Force the high-risk floor shut regardless of the settings-screen value.

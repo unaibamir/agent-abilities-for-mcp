@@ -9,7 +9,10 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
+use WP_Error;
+use WP_Query;
 
 final class ReplaceSitewideTest extends TestCase {
 
@@ -354,5 +357,309 @@ final class ReplaceSitewideTest extends TestCase {
 		$this->assertSame( $content, get_post( $post->ID )->post_content, 'precondition: the veto filter must have kept the content unwritten.' );
 		$this->assertSame( 0, $out['updated_posts'], 'A vetoed write must not be counted as updated.' );
 		$this->assertSame( 1, $out['failed_updates'], 'A vetoed write must be counted as a failed update.' );
+	}
+
+	/**
+	 * The candidate scan's SELECT, told apart from the count probe by its ID order.
+	 */
+	private const SCAN_NEEDLE = array( 'LIKE BINARY', '.ID ASC' );
+
+	/**
+	 * A post (or page) holding the needle, with an editor acting.
+	 *
+	 * @param string $type    Post type.
+	 * @param string $content Post content.
+	 */
+	private function needle_post( string $type = 'post', string $content = 's14-needle' ): \WP_Post {
+		return self::factory()->post->create_and_get(
+			array(
+				'post_type'    => $type,
+				'post_content' => $content,
+			)
+		);
+	}
+
+	/**
+	 * Run a real replace for s14-needle, scoped to posts.
+	 *
+	 * @return array<string,mixed>|WP_Error
+	 */
+	private function replace_needle_in_posts() {
+		return aafm_exec_replace_sitewide(
+			array(
+				'search'    => 's14-needle',
+				'replace'   => 's14-done',
+				'post_type' => 'post',
+				'dry_run'   => false,
+			)
+		);
+	}
+
+	/**
+	 * Answer the scan from an earlier posts_pre_query callback with $ids.
+	 *
+	 * @param int[] $ids Ids the callback hands WP_Query.
+	 * @return callable The callback, already added at priority 10.
+	 */
+	private function answer_the_scan_with( array $ids ): callable {
+		$callback = static function ( $posts, WP_Query $query ) use ( $ids ) {
+			if ( 0 === strpos( (string) $query->get( 'aafm_query_marker' ), 'aafm_replace_sitewide_' ) && 'ID' === $query->get( 'orderby' ) ) {
+				return $ids;
+			}
+			return $posts;
+		};
+		add_filter( 'posts_pre_query', $callback, 10, 2 );
+		return $callback;
+	}
+
+	/**
+	 * W4-T1 (ledger s14hunta-4, row W4-b): a scan SELECT that fails with a real error returns the
+	 * generic error and writes nothing, instead of reporting zero matches as a success.
+	 */
+	public function test_a_failed_scan_returns_the_generic_error_and_writes_nothing(): void {
+		$post = $this->needle_post();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		QueryFaultInjector::reset_fired_count();
+		$out = QueryFaultInjector::break_query_with_real_error( self::SCAN_NEEDLE, fn() => $this->replace_needle_in_posts() );
+
+		$this->assertGreaterThan( 0, QueryFaultInjector::fired_count(), 'The scan fault must fire.' );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( 's14-needle', get_post( $post->ID )->post_content );
+	}
+
+	/**
+	 * W4-T2 (the hunt probe, row W4-c): a scan that fails without flushing hands back the previous
+	 * query's ids, here a page, in a request scoped to posts. The failure is seen and nothing is
+	 * written.
+	 */
+	public function test_a_scan_that_leaks_another_types_id_returns_the_generic_error(): void {
+		global $wpdb;
+		$post = $this->needle_post();
+		$page = $this->needle_post( 'page' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		QueryFaultInjector::reset_fired_count();
+		$filter = QueryFaultInjector::leak_row_filter( self::SCAN_NEEDLE, $wpdb->prepare( 'SELECT ID FROM %i WHERE ID = %d', $wpdb->posts, $page->ID ), 1 );
+		add_filter( 'query', $filter );
+		try {
+			$out = $this->replace_needle_in_posts();
+		} finally {
+			remove_filter( 'query', $filter );
+		}
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( 's14-needle', get_post( $page->ID )->post_content, 'A page must never be written by a request scoped to posts.' );
+		$this->assertSame( 's14-needle', get_post( $post->ID )->post_content );
+	}
+
+	/**
+	 * States for W4-T3: when the second candidate changes, and into what.
+	 *
+	 * @return array<string, array{0: string, 1: array<string,string>}>
+	 */
+	public function changed_candidate_cases(): array {
+		return array(
+			'type, before the load'    => array( 'map_meta_cap', array( 'post_type' => 'page' ) ),
+			'status, before the load'  => array( 'map_meta_cap', array( 'post_status' => 'draft' ) ),
+			'type, before the write'   => array( 'save_post', array( 'post_type' => 'page' ) ),
+			'status, before the write' => array( 'save_post', array( 'post_status' => 'draft' ) ),
+		);
+	}
+
+	/**
+	 * W4-T3 (row W4-d): a scanned post whose type or status changes before it is loaded, or before
+	 * it is written, counts in failed_updates and is not written; the rest of the batch proceeds.
+	 *
+	 * @dataProvider changed_candidate_cases
+	 *
+	 * @param string               $hook   Hook that changes the second post, once.
+	 * @param array<string,string> $change Columns to change.
+	 */
+	public function test_a_candidate_that_changed_type_or_status_is_counted_failed_and_not_written( string $hook, array $change ): void {
+		global $wpdb;
+		$first  = $this->needle_post();
+		$second = $this->needle_post();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		// Fire once, while the first post is checked (map_meta_cap for edit_post) or saved.
+		$done = false;
+		$flip = static function ( ...$args ) use ( &$done, $wpdb, $first, $second, $change ) {
+			$is_first = 'save_post' === current_filter()
+				? (int) $args[0] === $first->ID
+				: 'edit_post' === $args[1] && (int) ( $args[3][0] ?? 0 ) === $first->ID;
+			if ( ! $done && $is_first ) {
+				$done = true;
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- another request changing the post mid-run.
+				$wpdb->update( $wpdb->posts, $change, array( 'ID' => $second->ID ) );
+				clean_post_cache( $second->ID );
+			}
+			return $args[0];
+		};
+		add_filter( $hook, $flip, 10, 4 );
+		try {
+			$out = $this->replace_needle_in_posts();
+		} finally {
+			remove_filter( $hook, $flip );
+		}
+
+		$this->assertTrue( $done, 'The change must happen.' );
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['updated_posts'] );
+		$this->assertSame( 1, $out['failed_updates'] );
+		$this->assertSame( 's14-done', get_post( $first->ID )->post_content );
+		$this->assertSame( 's14-needle', get_post( $second->ID )->post_content );
+	}
+
+	/**
+	 * W4-T5 pin (row W4-e, NC-W4-1): a failed count probe still reads total_matches 0 and
+	 * truncated false, and the scan and its writes run as before; the failure-aware scan is not
+	 * attached to the probe.
+	 */
+	public function test_a_failed_count_probe_leaves_the_scan_and_its_writes_alone(): void {
+		$post = $this->needle_post();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		QueryFaultInjector::reset_fired_count();
+		$out = QueryFaultInjector::break_query_with_real_error( array( 'SQL_CALC_FOUND_ROWS', 'LIKE BINARY' ), fn() => $this->replace_needle_in_posts() );
+
+		$this->assertSame( 1, QueryFaultInjector::fired_count() );
+		$this->assertIsArray( $out );
+		$this->assertSame( 0, $out['total_matches'] );
+		$this->assertFalse( $out['truncated'] );
+		$this->assertSame( 1, $out['updated_posts'] );
+		$this->assertSame( 's14-done', get_post( $post->ID )->post_content );
+	}
+
+	/**
+	 * W4-T6 (row W4-f): an earlier posts_pre_query callback's answer is used untouched and is not a
+	 * failed scan. An empty answer matches nothing; a shorter one is all that gets written.
+	 */
+	public function test_an_earlier_posts_pre_query_answer_is_used_untouched(): void {
+		$first  = $this->needle_post();
+		$second = $this->needle_post();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$callback = $this->answer_the_scan_with( array() );
+		try {
+			$empty = $this->replace_needle_in_posts();
+		} finally {
+			remove_filter( 'posts_pre_query', $callback, 10 );
+		}
+		$this->assertIsArray( $empty );
+		$this->assertSame( 0, $empty['matched_posts'] );
+		$this->assertSame( 0, $empty['failed_updates'] );
+		$this->assertSame( 's14-needle', get_post( $first->ID )->post_content );
+
+		$callback = $this->answer_the_scan_with( array( $second->ID ) );
+		try {
+			$one = $this->replace_needle_in_posts();
+		} finally {
+			remove_filter( 'posts_pre_query', $callback, 10 );
+		}
+		$this->assertIsArray( $one );
+		$this->assertSame( 1, $one['updated_posts'] );
+		$this->assertSame( 0, $one['failed_updates'] );
+		$this->assertSame( 's14-needle', get_post( $first->ID )->post_content );
+		$this->assertSame( 's14-done', get_post( $second->ID )->post_content );
+	}
+
+	/**
+	 * W4-T7 (row W4-g, ruling B): an earlier answer that holds a page in a request scoped to posts
+	 * does not write the page; it counts in failed_updates and the post is still written.
+	 */
+	public function test_a_filtered_scan_answer_of_another_type_is_not_written(): void {
+		$page = $this->needle_post( 'page' );
+		$post = $this->needle_post();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$callback = $this->answer_the_scan_with( array( $page->ID, $post->ID ) );
+		try {
+			// A dry run has no pre-write reload, so the scope check at the load decides alone.
+			$preview = aafm_exec_replace_sitewide(
+				array(
+					'search'    => 's14-needle',
+					'replace'   => 's14-done',
+					'post_type' => 'post',
+				)
+			);
+			$out     = $this->replace_needle_in_posts();
+		} finally {
+			remove_filter( 'posts_pre_query', $callback, 10 );
+		}
+
+		$this->assertIsArray( $preview );
+		$this->assertSame( 1, $preview['matched_posts'] );
+		$this->assertSame( 1, $preview['failed_updates'] );
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['updated_posts'] );
+		$this->assertSame( 1, $out['failed_updates'] );
+		$this->assertSame( 's14-needle', get_post( $page->ID )->post_content );
+		$this->assertSame( 's14-done', get_post( $post->ID )->post_content );
+	}
+
+	/**
+	 * W4-T7 pre_get_posts row (ledger s14c1r1-code-2, ruling B widened to any filter that widens
+	 * the scan): a pre_get_posts callback that widens a posts-only scan to pages does not write the
+	 * page; it counts in failed_updates and the post is still written.
+	 */
+	public function test_a_pre_get_posts_widened_scan_does_not_write_another_type(): void {
+		$page = $this->needle_post( 'page' );
+		$post = $this->needle_post();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$widen = static function ( \WP_Query $query ): void {
+			if ( 'post' === $query->get( 'post_type' ) ) {
+				$query->set( 'post_type', array( 'post', 'page' ) );
+			}
+		};
+		add_action( 'pre_get_posts', $widen );
+		try {
+			$preview = aafm_exec_replace_sitewide(
+				array(
+					'search'    => 's14-needle',
+					'replace'   => 's14-done',
+					'post_type' => 'post',
+				)
+			);
+			$out     = $this->replace_needle_in_posts();
+		} finally {
+			remove_action( 'pre_get_posts', $widen );
+		}
+
+		$this->assertIsArray( $preview );
+		$this->assertSame( 1, $preview['matched_posts'] );
+		$this->assertSame( 1, $preview['failed_updates'] );
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['updated_posts'] );
+		$this->assertSame( 1, $out['failed_updates'] );
+		$this->assertSame( 's14-needle', get_post( $page->ID )->post_content );
+		$this->assertSame( 's14-done', get_post( $post->ID )->post_content );
+	}
+
+	/**
+	 * W4-T8 pin (row W4-h): an earlier answer with a right-type post that lacks the needle, the
+	 * shape a search plugin's posts_pre_query gives, is not written and counts in
+	 * skipped_structure_guard, not failed_updates.
+	 */
+	public function test_a_filtered_scan_answer_without_the_needle_is_skipped_by_the_structure_guard(): void {
+		$other = $this->needle_post( 'post', 'nothing to replace here' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
+
+		$callback = $this->answer_the_scan_with( array( $other->ID ) );
+		try {
+			$out = $this->replace_needle_in_posts();
+		} finally {
+			remove_filter( 'posts_pre_query', $callback, 10 );
+		}
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 0, $out['updated_posts'] );
+		$this->assertSame( 1, $out['skipped_structure_guard'] );
+		$this->assertSame( 0, $out['failed_updates'] );
+		$this->assertSame( 'nothing to replace here', get_post( $other->ID )->post_content );
 	}
 }

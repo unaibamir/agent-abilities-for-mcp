@@ -260,7 +260,8 @@ function aafm_ajax_save_allowlist(): void {
  */
 function aafm_render_allowlist_section(): void {
 	$read          = aafm_allowlist_overrides_for_display();
-	$read_failed   = ! $read['ok'];
+	$malformed     = $read['malformed'];
+	$read_failed   = ! $read['ok'] && ! $malformed;
 	$rows          = $read['rows'];
 	$roles         = wp_roles()->get_names();
 	$registry_full = aafm_get_abilities_registry_full();
@@ -288,10 +289,19 @@ function aafm_render_allowlist_section(): void {
 	if ( $read_failed ) {
 		echo '<div class="notice notice-error inline"><p>' . esc_html__( 'The current allowlist could not be read, so it is not safe to show or edit here. Reload this page once the underlying issue clears before adding or saving a scope - saving now could silently erase the existing restrictions.', 'agent-abilities-for-mcp' ) . '</p></div>';
 	}
+	// A malformed stored row denies every call and a reload never clears it, so Add and Save stay
+	// available: saving is the only way to replace it.
+	if ( $malformed ) {
+		echo '<div class="notice notice-error inline" id="aafm-allowlist-malformed"><p>' . esc_html__( 'The stored allowlist is not in the expected format, so every call is denied. Saving replaces it with the scopes listed below; saving with no scopes lets every role and connection reach everything enabled above.', 'agent-abilities-for-mcp' ) . '</p></div>';
+	}
 
-	if ( empty( $rows ) && ! $read_failed ) {
+	if ( empty( $rows ) && $read['ok'] ) {
 		echo '<p class="aafm-empty-state" id="aafm-allowlist-empty">' . esc_html__( 'No scopes narrowed yet. Every role and connection can reach everything enabled above.', 'agent-abilities-for-mcp' ) . '</p>';
 	} else {
+		// Hidden until a save replaces a malformed row with no scopes; admin.js reveals it then.
+		if ( $malformed ) {
+			echo '<p class="aafm-empty-state" id="aafm-allowlist-empty" hidden>' . esc_html__( 'No scopes narrowed yet. Every role and connection can reach everything enabled above.', 'agent-abilities-for-mcp' ) . '</p>';
+		}
 		echo '<div class="aafm-table-wrap" id="aafm-allowlist-table-wrap">';
 		echo '<table class="widefat striped aafm-oauth-table aafm-allowlist-table" id="aafm-allowlist-table">';
 		echo '<thead><tr>';

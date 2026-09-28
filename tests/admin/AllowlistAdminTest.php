@@ -406,6 +406,173 @@ final class AllowlistAdminTest extends TestCase {
 	}
 
 	/**
+	 * Store an overrides row that is not a list, the malformed state.
+	 *
+	 * @return void
+	 */
+	private function plant_malformed_row(): void {
+		global $wpdb;
+		$wpdb->replace(
+			$wpdb->options,
+			array(
+				'option_name'  => 'aafm_ability_allowlist_overrides',
+				'option_value' => serialize( new \stdClass() ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- test fixture: the malformed row shape.
+				'autoload'     => 'off',
+			)
+		);
+		wp_cache_delete( 'aafm_ability_allowlist_overrides', 'options' );
+	}
+
+	/**
+	 * The allowlist card's HTML as the current user sees it.
+	 *
+	 * @return string
+	 */
+	private function render_card(): string {
+		ob_start();
+		aafm_render_allowlist_section();
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Submit $rows to the save handler as an administrator and return its JSON.
+	 *
+	 * @param array<int,array<string,mixed>> $rows The rows to save.
+	 * @return array<string,mixed>
+	 */
+	private function save_rows( array $rows ): array {
+		$nonce                   = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']          = $nonce;
+		$_REQUEST['nonce']       = $nonce;
+		$_POST['allowlist_json'] = wp_json_encode( $rows );
+		$this->intercept_die();
+		return $this->run_handler();
+	}
+
+	/**
+	 * A stored overrides row that is not a list denies every call and stays that way on a reload,
+	 * so the card says so, says where a save moves the policy, and keeps Save enabled: saving is the
+	 * only way to replace the row. The empty-state line is present but hidden until such a save.
+	 */
+	public function test_a_malformed_row_names_itself_and_keeps_save_available(): void {
+		$this->plant_malformed_row();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$html = $this->render_card();
+
+		$this->assertStringNotContainsString( 'could not be read', $html );
+		$this->assertStringContainsString( 'id="aafm-allowlist-malformed"', $html );
+		$this->assertStringContainsString( 'not in the expected format, so every call is denied', $html );
+		$this->assertStringContainsString( 'saving with no scopes lets every role and connection reach everything enabled above', $html );
+		$this->assertMatchesRegularExpression( '/<p class="aafm-empty-state" id="aafm-allowlist-empty" hidden>/', $html, 'The empty-state line waits, hidden, for a save with no scopes.' );
+		$this->assertStringNotContainsString( '<p class="aafm-empty-state" id="aafm-allowlist-empty">', $html, 'A malformed row never shows as an unrestricted site.' );
+		$this->assertDoesNotMatchRegularExpression( '/id="aafm-allowlist-save"[^>]*\bdisabled\b/', $html, 'Save replaces the malformed row, so it stays available.' );
+		$this->assertDoesNotMatchRegularExpression( '/id="aafm-allowlist-add-row"[^>]*\bdisabled\b/', $html, 'Scopes can be added to the replacement before saving.' );
+	}
+
+	/**
+	 * No stored row: the visible empty-state line, no table, no notice.
+	 */
+	public function test_an_empty_allowlist_renders_the_empty_state(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$html = $this->render_card();
+
+		$this->assertStringContainsString( '<p class="aafm-empty-state" id="aafm-allowlist-empty">', $html );
+		$this->assertStringNotContainsString( 'id="aafm-allowlist-table"', $html );
+		$this->assertStringNotContainsString( 'notice-error', $html );
+	}
+
+	/**
+	 * Stored rows: the table, no empty-state line, no notice.
+	 */
+	public function test_stored_rows_render_the_table(): void {
+		update_option(
+			'aafm_ability_allowlist_overrides',
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'editor',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$html = $this->render_card();
+
+		$this->assertStringContainsString( 'id="aafm-allowlist-table"', $html );
+		$this->assertStringNotContainsString( 'aafm-allowlist-empty', $html );
+		$this->assertStringNotContainsString( 'notice-error', $html );
+	}
+
+	/**
+	 * Saving no scopes over a malformed row stores an empty list: the allowlist no longer restricts
+	 * anyone, and the card renders the empty state.
+	 */
+	public function test_saving_no_scopes_over_a_malformed_row_lifts_the_allowlist(): void {
+		$this->plant_malformed_row();
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+		$this->assertFalse( aafm_ability_allowed_for_principal( 'aafm/get-posts', $admin, '' ), 'The malformed row denies.' );
+
+		$json = $this->save_rows( array() );
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertSame( array(), get_option( 'aafm_ability_allowlist_overrides' ) );
+		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/get-posts', $admin, '' ) );
+		$html = $this->render_card();
+		$this->assertStringContainsString( '<p class="aafm-empty-state" id="aafm-allowlist-empty">', $html );
+		$this->assertStringNotContainsString( 'aafm-allowlist-malformed', $html );
+	}
+
+	/**
+	 * Saving one role row over a malformed row stores it: the card renders the table and no notice.
+	 */
+	public function test_saving_a_scope_over_a_malformed_row_stores_it(): void {
+		$this->plant_malformed_row();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$json = $this->save_rows(
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'editor',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+
+		$this->assertTrue( $json['success'] ?? false );
+		$html = $this->render_card();
+		$this->assertStringContainsString( 'id="aafm-allowlist-table"', $html );
+		$this->assertStringNotContainsString( 'aafm-allowlist-malformed', $html );
+		$this->assertStringNotContainsString( 'aafm-allowlist-empty', $html );
+	}
+
+	/**
+	 * A rejected save over a malformed row leaves the row malformed and the card in that state.
+	 */
+	public function test_a_rejected_save_over_a_malformed_row_leaves_it_malformed(): void {
+		$this->plant_malformed_row();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$json = $this->save_rows(
+			array(
+				array(
+					'scope_type'        => 'role',
+					'scope_id'          => 'not-a-real-role',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+
+		$this->assertFalse( $json['success'] ?? true );
+		$this->assertTrue( aafm_allowlist_overrides_for_display()['malformed'] );
+		$this->assertStringContainsString( 'id="aafm-allowlist-malformed"', $this->render_card() );
+	}
+
+	/**
 	 * Makes the ONE query containing $needle fail via wpdb::query()'s OTHER false-without-a-real-
 	 * error path (QueryFaultInjector's no-flush filter): the 'query' filter itself returning an
 	 * empty string. wp-includes/class-wpdb.php's query() checks `if ( ! $query )` and returns

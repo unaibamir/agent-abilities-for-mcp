@@ -38,11 +38,11 @@ add_filter( 'aafm_seo_rendered_head', 'aafm_rankmath_rendered_head', 10, 3 );
  * robots, OG/Twitter, JSON-LD schema). As a side effect it permanently removes a handful of core
  * wp_head actions it replaces (rel_canonical, index_rel_link, ...) - the same removal that already
  * happens on any real front-end request once Rank Math is active, not a new side effect introduced
- * here. So this renders inside a controlled, fully restored singular query for the post: snapshot
- * the main-query globals, build a throwaway singular WP_Query, buffer head(), then restore the
- * originals exactly (the same shape as aafm_aioseo_rendered_head()). Honors $source (passthrough
- * unless 'rankmath') and guards the real API defensively: a missing head object, a thrown error, or
- * empty output all fall back to the passed head rather than fataling.
+ * here. So this renders through aafm_with_seo_render_scope(), which buffers head() inside a
+ * throwaway singular query for the post and restores every global it touched exactly (shared with
+ * aafm_aioseo_rendered_head()). Honors $source (passthrough unless 'rankmath') and guards the real
+ * API defensively: a missing head object, a thrown error, or empty output all fall back to the
+ * passed head rather than fataling.
  *
  * Rank Math only builds rank_math()->head (and the OG/Twitter/schema generators that feed it) inside
  * Frontend::integrations(), which Rank Math itself hooks to the 'wp' action - an action that never
@@ -80,60 +80,14 @@ function aafm_rankmath_rendered_head( string $head, int $post_id, string $source
 		return $head; // Rank Math present but no head renderer (e.g. unregistered, or a differently-shaped build): best-effort.
 	}
 
-	$post = get_post( $post_id );
-	if ( ! $post instanceof WP_Post ) {
-		return $head;
-	}
-
-	// Snapshot the query globals Rank Math reads, so the throwaway query never leaks out of this call.
-	$saved_wp_query     = $GLOBALS['wp_query'] ?? null;
-	$saved_wp_the_query = $GLOBALS['wp_the_query'] ?? null;
-	$saved_post         = $GLOBALS['post'] ?? null;
-
-	$rendered = '';
-	try {
-		$temp_query = new WP_Query(
-			array(
-				'p'                      => $post_id,
-				'post_type'              => $post->post_type,
-				'posts_per_page'         => 1,
-				'no_found_rows'          => true,
-				'update_post_meta_cache' => true,
-				'update_post_term_cache' => false,
-			)
-		);
-		// Point the main-query globals at our singular query so is_singular()/get_queried_object()
-		// resolve to this post while Rank Math builds the head. Both originals are snapshotted above
-		// and restored in the finally block, so this swap never leaks past this call.
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
-		$GLOBALS['wp_query'] = $temp_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
-		$GLOBALS['wp_the_query'] = $temp_query;
-		if ( $temp_query->have_posts() ) {
-			$temp_query->the_post();
-		}
-
-		ob_start();
-		$plugin->head->head();
-		$rendered = (string) ob_get_clean();
-	} catch ( \Throwable $e ) {
-		// Make sure a half-open buffer from a throw inside head() is closed before we bail.
-		if ( ob_get_level() > 0 ) {
-			ob_end_clean();
-		}
-		$rendered = '';
-	} finally {
-		// Restore the originals exactly (order matters: globals first, then reset postdata).
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['wp_query'] = $saved_wp_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['wp_the_query'] = $saved_wp_the_query;
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
-		$GLOBALS['post'] = $saved_post;
-		wp_reset_postdata();
-	}
-
-	$rendered = trim( $rendered );
+	$rendered = trim(
+		aafm_with_seo_render_scope(
+			$post_id,
+			static function () use ( $plugin ): void {
+				$plugin->head->head();
+			}
+		)
+	);
 	return '' !== $rendered ? $rendered : $head;
 }
 
@@ -185,7 +139,7 @@ function aafm_rankmath_registry_definitions(): array {
 		),
 		'aafm/rankmath-update-post'   => array(
 			'label'        => __( 'Update post SEO (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post. The response returns each field's old value when it is plain text or a number.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'rankmath',
@@ -305,10 +259,10 @@ function aafm_rankmath_read_fields( int $id ): array {
 		'post_id' => $id,
 	);
 	foreach ( aafm_rankmath_fields() as $field => $key ) {
-		$val           = get_post_meta( $id, $key, true );
+		$val           = aafm_meta_get( 'post', $id, $key, true );
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
-	$robots = get_post_meta( $id, 'rank_math_robots', true );
+	$robots = aafm_meta_get( 'post', $id, 'rank_math_robots', true );
 	// Current Rank Math stores robots as an array of tokens; a legacy/imported row may hold a raw CSV
 	// string. Implode the array, pass a string through as-is, and floor anything else to ''.
 	if ( is_array( $robots ) ) {
@@ -319,6 +273,50 @@ function aafm_rankmath_read_fields( int $id ): array {
 		$out['robots'] = '';
 	}
 	return $out;
+}
+
+/**
+ * Every post meta key Rank Math reads that rankmath-update-post writes. Rank Math prefixes its
+ * keys with the literal 'rank_math_' (seo-by-rank-math 1.0.278, includes/class-metadata.php) and
+ * defines no constant for it; the keys are the ones its editor maps (includes/admin/metabox/
+ * class-screen.php) plus robots.
+ *
+ * @return string[]
+ */
+function aafm_rankmath_meta_keys(): array {
+	return array(
+		'rank_math_title',
+		'rank_math_description',
+		'rank_math_focus_keyword',
+		'rank_math_canonical_url',
+		'rank_math_facebook_title',
+		'rank_math_facebook_description',
+		'rank_math_facebook_image',
+		'rank_math_facebook_image_id',
+		'rank_math_twitter_use_facebook',
+		'rank_math_twitter_title',
+		'rank_math_twitter_description',
+		'rank_math_twitter_image',
+		'rank_math_twitter_image_id',
+		'rank_math_robots',
+	);
+}
+
+/**
+ * Write Rank Math post meta as one group. A key outside aafm_rankmath_meta_keys() refuses the
+ * whole call before anything is read or written, with one refused outcome per requested key.
+ * rank_math_robots is the one member stored as an array.
+ *
+ * @param int                 $id              Post id.
+ * @param array<string,mixed> $intended_by_key Meta key => unslashed value.
+ * @return array<string,mixed>|WP_Error The group result, or the validation error.
+ */
+function aafm_rankmath_write_meta( int $id, array $intended_by_key ) {
+	$refused = aafm_seo_refuse_unlisted_keys( $id, $intended_by_key, aafm_rankmath_meta_keys() );
+	if ( null !== $refused ) {
+		return $refused;
+	}
+	return aafm_meta_set_group( 'post', $id, $intended_by_key, (string) get_object_subtype( 'post', $id ), array( 'rank_math_robots' ) );
 }
 
 /**
@@ -384,7 +382,7 @@ function aafm_args_rankmath_get_post(): array {
  */
 function aafm_exec_rankmath_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	return aafm_rankmath_read_fields( $id );
@@ -428,7 +426,7 @@ function aafm_args_rankmath_update_post(): array {
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/rankmath-update-post' ),
-		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post. The response returns each field's old value when it is plain text or a number.", 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -438,7 +436,7 @@ function aafm_args_rankmath_update_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_rankmath_output_properties(),
+			'properties' => array_merge( aafm_rankmath_output_properties(), aafm_seo_group_write_output_properties() ),
 		),
 		'execute_callback'    => 'aafm_exec_rankmath_update_post',
 		'permission_callback' => 'aafm_perm_seo_post_object',
@@ -454,16 +452,17 @@ function aafm_args_rankmath_update_post(): array {
 /**
  * Execute aafm/rankmath-update-post.
  *
- * Writes the text/URL fields, then robots: split the CSV, validate each token against the allowlist,
- * and write the ARRAY (update_post_meta serializes it) - never a raw string, which Rank Math would
- * not honor. Returns the refreshed read shape.
+ * Writes the text/URL fields, the attachment-id companions, the Twitter fallback switch and robots
+ * as one group. Robots is split from the CSV, each token checked against the allowlist, and stored
+ * as an ARRAY, never a raw string, which Rank Math would not honor. Returns the refreshed read
+ * shape with `status` and the per-key `keys`.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_rankmath_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
@@ -497,44 +496,22 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		$resolved_ids[ $field ] = $attachment_id;
 	}
 
-	// Every write below is tracked by its real META KEY and the exact value passed to
-	// update_post_meta(), not a display-shaped stand-in - sanitize_meta() (called by
-	// aafm_meta_write_confirmed() below) must see the same value type a registered sanitize
-	// callback actually ran against, an array for rank_math_robots, a scalar everywhere else.
-	// Codex round 8 R8-2: resolve the subtype through get_object_subtype(), the same filterable
-	// call core itself makes at write time, rather than the raw get_post_type() - a
-	// get_object_subtype_post filter remapping the subtype is honoured here the same way it is
-	// at write time.
-	$post_type     = (string) get_object_subtype( 'post', $id );
-	$expected_meta = array();
-	// Read before each write below, so aafm_meta_write_confirmed() can tell a landed change from
-	// a silent veto rather than only replaying sanitize_meta() against a same-process recompute.
-	$old_meta = array();
-
+	// Keyed by storage meta key, unslashed, in write order: the text and URL fields, the
+	// attachment-id companions, the Twitter fallback switch, then robots.
+	$intended   = array();
 	$url_fields = aafm_rankmath_url_fields();
 	foreach ( aafm_rankmath_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
 		$raw              = (string) $input[ $field ];
-		$clean            = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
-		$old_meta[ $key ] = get_post_meta( $id, $key, true );
-		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
-		// is stripped unless it is slashed first. Every sibling meta writer (meta.php, terms.php,
-		// user-meta.php) slashes; these SEO writers must too.
-		update_post_meta( $id, $key, wp_slash( $clean ) );
-		$expected_meta[ $key ] = $clean;
+		$intended[ $key ] = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
 	}
 
-	// Persist the attachment-id companion meta the frontend actually renders from. A cleared image (0)
-	// blanks the id so the resolver falls through to the featured image, never a stale id. Codex round
-	// 6 B6-2: these companion writes were not confirmed below, so a filter could veto just one of them
-	// while the visible URL field still reported success and the frontend kept rendering a stale image.
+	// Rank Math's frontend renders a social image from the attachment-id companion, not the URL. A
+	// cleared image blanks the id so the resolver falls through to the featured image.
 	foreach ( $resolved_ids as $field => $attachment_id ) {
-		$companion_value                             = $attachment_id > 0 ? $attachment_id : '';
-		$expected_meta[ $image_id_fields[ $field ] ] = $companion_value;
-		$old_meta[ $image_id_fields[ $field ] ]      = get_post_meta( $id, $image_id_fields[ $field ], true );
-		update_post_meta( $id, $image_id_fields[ $field ], $companion_value );
+		$intended[ $image_id_fields[ $field ] ] = $attachment_id > 0 ? $attachment_id : '';
 	}
 
 	// Turn off the Twitter->Facebook fallback when Twitter-specific fields are provided; otherwise the
@@ -543,58 +520,38 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// Rank Math's normalize_data() (includes/helpers/class-options.php:51-62) reads only the exact
 	// string 'off' as false; an empty string, '0', or boolean false falls back to the truthy default.
 	if ( aafm_rankmath_twitter_fields_provided( $input ) ) {
-		$old_meta['rank_math_twitter_use_facebook'] = get_post_meta( $id, 'rank_math_twitter_use_facebook', true );
-		update_post_meta( $id, 'rank_math_twitter_use_facebook', 'off' );
-		$expected_meta['rank_math_twitter_use_facebook'] = 'off';
+		$intended['rank_math_twitter_use_facebook'] = 'off';
 	}
 
-	if ( array_key_exists( 'robots', $input ) ) {
+	$robots_requested = array_key_exists( 'robots', $input );
+	if ( $robots_requested ) {
 		$allowed                      = aafm_rankmath_robots_tokens();
 		$tokens                       = array_filter( array_map( 'trim', explode( ',', (string) $input['robots'] ) ) );
-		$kept                         = array_values(
+		$intended['rank_math_robots'] = array_values(
 			array_filter(
 				$tokens,
 				static fn( string $t ): bool => in_array( $t, $allowed, true )
 			)
 		);
-		$old_meta['rank_math_robots'] = get_post_meta( $id, 'rank_math_robots', true );
-		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
-		$expected_meta['rank_math_robots'] = $kept;
-
-		// Delegation audit sweep (210-sweep-B5-report.md): rank_math_robots is the exact meta key
-		// Sitemap::is_object_indexable() reads to decide sitemap inclusion, but Cache_Watcher only
-		// invalidates the cached sitemap on save_post/transition_post_status (class-cache-watcher.php),
-		// never on a bare meta write. A normal robots edit through the classic/Gutenberg metabox is
-		// always a full post save and so fires save_post naturally; this ability is the only write
-		// path that can flip robots without one, so it is the one path that must close the gap. Scoped
-		// to robots only: Rank Math's own bulk-edit REST controller (Rest\Post::save_column()) writes
-		// title/description/focus_keyword the same raw way with no invalidation either, so matching
-		// that vendor behaviour for those fields is deliberate, not an oversight. invalidate_post()
-		// degrades to a no-op when the class is absent (Rank Math inactive) or sitemap caching is
-		// disabled (Cache_Watcher::clear() checks Sitemap::is_cache_enabled() internally).
-		if ( class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {
-			\RankMath\Sitemap\Cache_Watcher::invalidate_post( $id );
-		}
 	}
 
-	// Codex round 5 R5-2: every update_post_meta() call above discarded its return value, unlike
-	// the schema sibling one call below (aafm_exec_rankmath_update_schema()), which already
-	// rereads and compares. A site-installed update_post_metadata filter vetoing any of these
-	// writes would report success while the response still carried the requested value rather
-	// than what storage actually holds. Codex round 6 B6-3: compare against the CANONICAL
-	// sanitize_meta() form of each write, not its pre-write intent, so a registered sanitize
-	// callback's legitimate normalization is not mistaken for a veto - a robots array runs through
-	// the same sanitize_meta() call a scalar field does, keeping the comparison correct for both.
-	foreach ( $expected_meta as $key => $value ) {
-		if ( ! aafm_meta_write_confirmed( $old_meta[ $key ] ?? '', get_post_meta( $id, $key, true ), $value, $key, 'post', $post_type ) ) {
-			return new WP_Error(
-				'aafm_rankmath_write_unconfirmed',
-				__( 'The SEO fields could not be confirmed as saved.', 'agent-abilities-for-mcp' )
-			);
-		}
+	$result = array() === $intended ? array(
+		'status' => AAFM_WRITE_UNCHANGED,
+		'keys'   => array(),
+	) : aafm_rankmath_write_meta( $id, $intended );
+
+	// rank_math_robots is the exact meta key Sitemap::is_object_indexable() reads to decide sitemap
+	// inclusion, but Cache_Watcher only invalidates the cached sitemap on save_post and
+	// transition_post_status, never on a bare meta write. This ability can flip robots without a
+	// post save, so it invalidates the post's sitemap entry itself. Rank Math's own bulk-edit REST
+	// controller writes title, description and focus_keyword without invalidating, so this stays
+	// scoped to robots. invalidate_post() is a no-op when Rank Math is inactive or sitemap caching is
+	// off.
+	if ( $robots_requested && class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {
+		\RankMath\Sitemap\Cache_Watcher::invalidate_post( $id );
 	}
 
-	return aafm_rankmath_read_fields( $id );
+	return aafm_seo_group_write_response( 'aafm_rankmath_write_unconfirmed', $id, $result, 'aafm_rankmath_read_fields' );
 }
 
 /**
@@ -664,14 +621,14 @@ function aafm_args_rankmath_get_schema(): array {
  */
 function aafm_exec_rankmath_get_schema( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$type = aafm_rankmath_validate_schema_type( (string) ( $input['type'] ?? '' ) );
 	if ( '' === $type ) {
 		return aafm_generic_error();
 	}
-	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
+	$stored = aafm_meta_get( 'post', $id, 'rank_math_schema_' . $type, true );
 	return array(
 		'post_id' => $id,
 		'type'    => $type,
@@ -743,7 +700,7 @@ function aafm_args_rankmath_update_schema(): array {
  */
 function aafm_exec_rankmath_update_schema( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	if ( ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 	$type = aafm_rankmath_validate_schema_type( (string) ( $input['type'] ?? '' ) );
@@ -755,42 +712,29 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 		return aafm_generic_error();
 	}
 	$clean = aafm_sanitize_schema_array( $schema );
-	// Read before the write, matching the field writer above.
-	$old = get_post_meta( $id, 'rank_math_schema_' . $type, true );
-	$old = is_array( $old ) ? $old : array();
-	// update_post_meta() unslashes the value, so a backslash inside the schema is stripped unless
-	// it is slashed first (see the field writer above and the sibling meta writers).
-	update_post_meta( $id, 'rank_math_schema_' . $type, wp_slash( $clean ) );
+	$key   = 'rank_math_schema_' . $type;
 
-	// Verify the write actually persisted. update_post_meta() itself returns truthy even when a
-	// consumer short-circuits the write via the documented update_post_metadata filter (a
-	// caching/compliance plugin's veto mechanism), so its return value cannot be trusted on its
-	// own - read the meta back and compare, mirroring the -get-schema sibling's own read
-	// (aafm_exec_rankmath_get_schema(), above). Returning the RE-READ value rather than the
-	// sanitized input also means a successful response always reflects what storage genuinely
-	// holds, never what the caller merely asked for.
-	//
-	// F5 (1.7.5 deferred): the comparison used to be a direct wp_json_encode() equality check
-	// against $clean, this plugin's own pre-write intent, rather than aafm_meta_write_confirmed()'s
-	// canonical sanitize_meta() form - the same B6-3 class the sibling field writer above already
-	// closed. A registered sanitizer on this dynamic rank_math_schema_{Type} key that legitimately
-	// normalizes a value (for example a headline) reported as a write failure even though the
-	// write landed exactly as that sanitizer defines "landed".
-	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
-	$stored = is_array( $stored ) ? $stored : array();
-	if ( ! aafm_meta_write_confirmed( $old, $stored, $clean, 'rank_math_schema_' . $type, 'post', (string) get_object_subtype( 'post', $id ) ) ) {
-		return new WP_Error(
-			'aafm_rankmath_schema_write_failed',
-			__( 'The schema could not be saved. Nothing was changed.', 'agent-abilities-for-mcp' )
-		);
+	// The schema is one array-valued key; the writer owns its baseline, so a stored value of any
+	// shape is compared as it is, never coerced first.
+	$result = aafm_meta_set( 'post', $id, $key, $clean, (string) get_object_subtype( 'post', $id ), false );
+	if ( ! in_array( $result['status'], array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED ), true ) ) {
+		return aafm_seo_write_error( 'aafm_rankmath_schema_write_failed', $result['status'], $id, $key );
 	}
 
-	return array(
-		'post_id' => $id,
-		'type'    => $type,
-		// (object) so an empty schema JSON-encodes to "{}" per the output_schema's type:object,
-		// never "[]" (mirrors the get-schema reader's own convention).
-		'schema'  => (object) $stored,
+	// The response reads the stored schema through core, as rankmath-get-schema does, inside a
+	// checked read so a failed load is an error rather than an empty schema.
+	return aafm_with_checked_reads(
+		static function () use ( $id, $type, $key ): array {
+			$stored = aafm_meta_get( 'post', $id, $key, true );
+			return array(
+				'post_id' => $id,
+				'type'    => $type,
+				// (object) so an empty schema JSON-encodes to "{}" per the output_schema's type:object,
+				// never "[]" (mirrors the get-schema reader's own convention).
+				'schema'  => (object) ( is_array( $stored ) ? $stored : array() ),
+			);
+		},
+		aafm_seo_write_error( 'aafm_rankmath_schema_write_failed', AAFM_WRITE_UNCONFIRMED, $id, $key )
 	);
 }
 
@@ -844,7 +788,7 @@ function aafm_args_rankmath_get_head(): array {
  */
 function aafm_exec_rankmath_get_head( array $input ) {
 	$id   = absint( $input['post_id'] ?? 0 );
-	$post = $id > 0 ? get_post( $id ) : null;
+	$post = $id > 0 ? aafm_exact_object( 'post', $id ) : null;
 	// Use the shared content-edit gate, not a bare edit_post: it enforces the operator's post-type
 	// exposure allowlist, so a get-head read is refused on a non-exposed post type exactly as the
 	// -get-meta sibling is. A bare edit_post would leak a non-allowlisted CPT's rendered SEO head.

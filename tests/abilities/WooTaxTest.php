@@ -16,6 +16,7 @@ namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\WcTaxStubStore;
 use WP_Error;
 
@@ -656,5 +657,237 @@ final class WooTaxTest extends TestCase {
 			$source,
 			'aafm_wc_get_tax_rate_by_id() must delegate to WC_Tax::_get_tax_rate(), the same by-id read WooCommerce\'s own REST controller uses.'
 		);
+	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * The detail of one woocommerce write_outcome row.
+	 *
+	 * @param string   $entity Logged entity.
+	 * @param int|null $id     Object id, or null.
+	 * @param string   $status Status.
+	 * @return array<string,mixed>
+	 */
+	private function wc_row( string $entity, ?int $id, string $status ): array {
+		return array(
+			'kind'             => 'woocommerce',
+			'entity'           => $entity,
+			'object_id'        => null === $id ? null : (string) $id,
+			'key'              => null,
+			'status'           => $status,
+			'rows'             => null,
+			'modified_by_site' => false,
+			'key_omitted'      => false,
+		);
+	}
+
+	public function test_rate_create_rate_update_and_class_create_each_log_one_accepted_row(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		$rate = wp_get_ability( 'aafm/wc-create-tax-rate' )->execute(
+			array(
+				'rate'    => '5.0000',
+				'name'    => 'Logged Rate',
+				'country' => 'US',
+			)
+		);
+		$this->assertIsArray( $rate );
+		$id = (int) $rate['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-tax-rate' )->execute(
+			array(
+				'rate_id' => $id,
+				'name'    => 'Logged Rate 2',
+			)
+		);
+		$this->assertSame( 'Logged Rate 2', $updated['name'] );
+
+		$class = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Logged Class' ) );
+		$this->assertIsArray( $class );
+
+		$this->assertSame(
+			array(
+				$this->wc_row( 'tax_rate', $id, 'accepted' ),
+				$this->wc_row( 'tax_rate', $id, 'accepted' ),
+				$this->wc_row( 'tax_class', null, 'accepted' ),
+			),
+			$this->outcome_details()
+		);
+	}
+
+	public function test_a_rate_insert_that_returns_no_id_logs_refused_and_returns_the_generic_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcTaxStubStore::$insert_rate_returns_zero = true;
+		$res                                      = wp_get_ability( 'aafm/wc-create-tax-rate' )->execute(
+			array(
+				'rate'    => '5.0000',
+				'name'    => 'Never',
+				'country' => 'US',
+			)
+		);
+		WcTaxStubStore::$insert_rate_returns_zero = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'tax_rate', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	public function test_a_class_create_wc_refuses_logs_refused_and_returns_its_error(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$this->acting_as( 'administrator' );
+
+		WcTaxStubStore::$force_save_failure = true;
+		$res                                = wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Refused Class' ) );
+		WcTaxStubStore::$force_save_failure = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'wc_tax', $res->get_error_code() );
+		$this->assertSame( array( $this->wc_row( 'tax_class', null, 'refused' ) ), $this->outcome_details() );
+	}
+
+	// =========================================================================
+	// A by-id rate read that another rate's row answers
+	// =========================================================================
+
+	/**
+	 * The two seeded rate ids, in insert order.
+	 *
+	 * @return int[]
+	 */
+	private function seeded_rate_ids(): array {
+		global $wpdb;
+		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare( 'SELECT tax_rate_id FROM %i ORDER BY tax_rate_id', $wpdb->prefix . 'woocommerce_tax_rates' ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- reads the fixture table.
+	}
+
+	/**
+	 * Run $run while the $occurrence-th by-id read that matches $needle answers with rate $leak's
+	 * row, database errors suppressed and output discarded.
+	 *
+	 * @param string|string[] $needle     The by-id read to fault.
+	 * @param int             $leak       The rate whose row is left behind.
+	 * @param int             $occurrence Which matching read to fault.
+	 * @param callable        $run        The call.
+	 * @return mixed
+	 */
+	private function with_leaked_rate( $needle, int $leak, int $occurrence, callable $run ) {
+		global $wpdb;
+		$filter     = QueryFaultInjector::leak_row_filter( $needle, $wpdb->prepare( 'SELECT * FROM %i WHERE tax_rate_id = %d', $wpdb->prefix . 'woocommerce_tax_rates', $leak ), $occurrence, is_string( $needle ) );
+		$suppressed = $wpdb->suppress_errors( true );
+		add_filter( 'query', $filter );
+		ob_start();
+		try {
+			return $run();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'query', $filter );
+			$wpdb->suppress_errors( $suppressed );
+		}
+	}
+
+	/**
+	 * The read the tax abilities make for one rate id.
+	 *
+	 * @param int $rate_id Rate id.
+	 */
+	private function rate_read( int $rate_id ): string {
+		global $wpdb;
+		return $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id = %d", $rate_id ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the fixture table name.
+	}
+
+	/**
+	 * A confirming read that another rate's row answers reports the write as not confirmed, never
+	 * the other rate as the result. The write itself has landed.
+	 */
+	public function test_a_confirming_read_that_leaks_another_rate_is_not_a_success(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		QueryFaultInjector::reset_fired_count();
+		list( $a, $b ) = $this->seeded_rate_ids();
+
+		$update = $this->with_leaked_rate(
+			$this->rate_read( $a ),
+			$b,
+			2,
+			static fn() => aafm_exec_wc_update_tax_rate(
+				array(
+					'rate_id' => $a,
+					'name'    => 'Renamed A',
+				)
+			)
+		);
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'update: the confirming read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $update, 'update' );
+		$this->assertSame( 'aafm_error', $update->get_error_code() );
+		$this->assertSame( 'Renamed A', $wpdb->get_var( $wpdb->prepare( 'SELECT tax_rate_name FROM %i WHERE tax_rate_id = %d', $wpdb->prefix . 'woocommerce_tax_rates', $a ) ), 'the update landed' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- checks the row itself.
+
+		QueryFaultInjector::reset_fired_count();
+		$create = $this->with_leaked_rate(
+			array( 'SELECT * FROM', 'woocommerce_tax_rates', 'WHERE tax_rate_id = ' ),
+			$b,
+			1,
+			static fn() => aafm_exec_wc_create_tax_rate(
+				array(
+					'rate'    => '7.0000',
+					'name'    => 'New C',
+					'country' => 'US',
+				)
+			)
+		);
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'create: the confirming read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $create, 'create' );
+		$this->assertSame( 'aafm_error', $create->get_error_code() );
+	}
+
+	/**
+	 * A get or an update's pre-read that another rate's row answers is not found, and the update
+	 * writes nothing.
+	 */
+	public function test_a_read_that_leaks_another_rate_is_not_found(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		QueryFaultInjector::reset_fired_count();
+		list( $a, $b ) = $this->seeded_rate_ids();
+		$before        = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i ORDER BY tax_rate_id', $wpdb->prefix . 'woocommerce_tax_rates' ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- snapshots the fixture table.
+
+		$get = $this->with_leaked_rate( $this->rate_read( $a ), $b, 1, static fn() => aafm_exec_wc_get_tax_rate( array( 'rate_id' => $a ) ) );
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'get: the read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $get, 'get' );
+		$this->assertSame( 'aafm_not_found', $get->get_error_code() );
+
+		QueryFaultInjector::reset_fired_count();
+		$update = $this->with_leaked_rate(
+			$this->rate_read( $a ),
+			$b,
+			1,
+			static fn() => aafm_exec_wc_update_tax_rate(
+				array(
+					'rate_id' => $a,
+					'name'    => 'Renamed A',
+				)
+			)
+		);
+		$this->assertSame( 1, QueryFaultInjector::fired_count(), 'update: the pre-read was faulted' );
+		$this->assertInstanceOf( WP_Error::class, $update, 'update' );
+		$this->assertSame( 'aafm_not_found', $update->get_error_code() );
+		$this->assertSame( $before, $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i ORDER BY tax_rate_id', $wpdb->prefix . 'woocommerce_tax_rates' ), ARRAY_A ), 'nothing was written' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- checks the fixture table.
 	}
 }

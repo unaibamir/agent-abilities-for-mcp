@@ -133,6 +133,11 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	if ( $id < 1 || ! function_exists( 'wc_get_product' ) ) {
 		return null;
 	}
+	// The product store resolves a variation's type and the variation store loads it, so either
+	// one being WooCommerce's own post store means the variation's post is read.
+	if ( ( false !== aafm_wc_store_is_core( 'product' ) || false !== aafm_wc_store_is_core( 'product-variation' ) ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return null;
+	}
 	$variation = wc_get_product( $id );
 	if ( $variation instanceof \WC_Product_Variation ) {
 		return $variation;
@@ -937,7 +942,13 @@ function aafm_exec_wc_create_product_variation( array $input ) {
 	if ( null !== $error ) {
 		return $error;
 	}
-	$id = (int) $variation->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $variation,
+			'entity' => 'variation',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_variation( $id );
 	if ( null === $saved ) {
@@ -1041,7 +1052,13 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 	if ( null !== $error ) {
 		return $error;
 	}
-	$id = (int) $variation->save();
+	$id = (int) aafm_wc_write(
+		'save',
+		array(
+			'object' => $variation,
+			'entity' => 'variation',
+		)
+	)['returned'];
 
 	$saved = aafm_wc_get_variation( $id );
 	if ( null === $saved ) {
@@ -1081,7 +1098,7 @@ function aafm_wc_can_delete_variation_object( WP_Post $variation ): bool {
 	if ( ! $type instanceof WP_Post_Type ) {
 		return false;
 	}
-	return current_user_can( $type->cap->delete_post, $variation->ID );
+	return aafm_user_can_checked( $type->cap->delete_post, $variation->ID );
 }
 
 /**
@@ -1091,9 +1108,16 @@ function aafm_wc_can_delete_variation_object( WP_Post $variation ): bool {
  * aafm_wc_can_delete_variation_object() above for why the variation check cannot be the identical
  * per-object guarantee the product check gets.
  *
- * A nonexistent id, or a variation with no real backing WP_Post to gate on, falls back to the
- * floor already checked: there is nothing more specific to authorize against, and the WC data
- * store (not a missing capability) is what reports "not found" from execute().
+ * A nonexistent id keeps the floor already checked, and execute() reports "not found". While the
+ * product or variation store is exactly WooCommerce's own post store, a variation whose post does
+ * not load exactly keeps the floor only when a failure-aware query finds its row absent, and is
+ * refused otherwise. An id whose post loads but is not a variation keeps the floor, as in 1.7.5.
+ *
+ * Under any store the variation is read through WooCommerce inside a checked-read scope, and a
+ * failed metadata load there refuses, since WooCommerce's read loads the variation's post meta.
+ *
+ * When the variation loads but its backing post does not, the post store refuses; any other
+ * store keeps the capability floor, since it has no post to authorize against.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
@@ -1102,14 +1126,24 @@ function aafm_perm_wc_delete_product_variation( array $input ): bool {
 	if ( ! aafm_wc_perm() ) {
 		return false;
 	}
-	$id        = isset( $input['variation_id'] ) ? absint( $input['variation_id'] ) : 0;
-	$variation = $id ? aafm_wc_get_variation( $id ) : null;
-	if ( null === $variation ) {
+	$id = isset( $input['variation_id'] ) ? absint( $input['variation_id'] ) : 0;
+	if ( $id && ( false !== aafm_wc_store_is_core( 'product' ) || false !== aafm_wc_store_is_core( 'product-variation' ) ) && ! aafm_exact_object( 'post', $id ) instanceof WP_Post ) {
+		return aafm_object_absent( 'post', $id );
+	}
+	$read = aafm_with_checked_reads(
+		static fn(): array => array( 'variation' => $id ? aafm_wc_get_variation( $id ) : null ),
+		aafm_generic_error()
+	);
+	if ( is_wp_error( $read ) ) {
+		return false;
+	}
+	$variation = $read['variation'] ?? null;
+	if ( ! $variation instanceof \WC_Product_Variation ) {
 		return true;
 	}
-	$post = get_post( $variation->get_id() );
+	$post = aafm_exact_object( 'post', $variation->get_id() );
 	if ( ! $post instanceof WP_Post ) {
-		return true;
+		return ! is_a( (string) $variation->get_data_store()->get_current_class_name(), 'WC_Product_Data_Store_CPT', true );
 	}
 	return aafm_wc_can_delete_variation_object( $post );
 }
@@ -1184,7 +1218,14 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	// this block exists to fix.
 	$parent_id = (int) $variation->get_parent_id( 'edit' );
 
-	$variation->delete( true );
+	aafm_wc_write(
+		'delete',
+		array(
+			'object'       => $variation,
+			'force_delete' => true,
+			'entity'       => 'variation',
+		)
+	);
 
 	// WC_Data::delete() returns true whenever a data store exists, and a loaded variation always has
 	// one, so its return never signals a store-level failure. Calling wc_get_product() again is not a
@@ -1200,7 +1241,9 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	// product's own id once it has run ($product->set_id( 0 )), and the backing post row is what it
 	// deleted through (wp_delete_post()), re-read here with the post cache busted first.
 	clean_post_cache( $id );
-	if ( $variation->get_id() > 0 || get_post( $id ) instanceof WP_Post ) {
+	// A re-read that does not load exactly proves nothing, so the row counts as deleted only when
+	// a failure-aware query finds it absent.
+	if ( $variation->get_id() > 0 || aafm_exact_object( 'post', $id ) instanceof WP_Post || ! aafm_object_absent( 'post', $id ) ) {
 		return aafm_generic_error();
 	}
 

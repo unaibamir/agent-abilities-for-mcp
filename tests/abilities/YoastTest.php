@@ -422,4 +422,207 @@ final class YoastTest extends TestCase {
 			'A host-inactive Yoast ability must not be in the registry.'
 		);
 	}
+
+	/**
+	 * The write_outcome rows' decoded detail, in insert order. Attaches the log observer, which the
+	 * fixture detaches, at its production priority.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function outcome_details(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_col( $wpdb->prepare( 'SELECT detail FROM %i WHERE event_type = %s ORDER BY id', aafm_activity_log_table(), 'write_outcome' ) );
+		return array_map(
+			static function ( $detail ): array {
+				return (array) json_decode( (string) $detail, true );
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * Run yoast-update-post as an administrator on a fresh post.
+	 *
+	 * @param array<string,mixed> $fields Fields to write.
+	 * @param int                 $post_id By reference: the post used, 0 for a new one.
+	 * @return mixed
+	 */
+	private function update_yoast( array $fields, int &$post_id = 0 ) {
+		if ( 0 === $post_id ) {
+			$admin_id = $this->acting_as( 'administrator' );
+			$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		}
+		return wp_get_ability( 'aafm/yoast-update-post' )->execute( array( 'post_id' => $post_id ) + $fields );
+	}
+
+	public function test_yoast_update_post_writes_each_storage_key_and_logs_a_row_per_key(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = 0;
+		$res     = $this->update_yoast(
+			array(
+				'title'       => 'New',
+				'description' => 'D',
+			),
+			$post_id
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 'written', $res['status'] );
+		$keys = (array) $res['keys'];
+		$this->assertSame( array( '_yoast_wpseo_title', '_yoast_wpseo_metadesc' ), array_keys( $keys ) );
+		$details = $this->outcome_details();
+		$this->assertCount( 2, $details );
+		$this->assertSame( array( '_yoast_wpseo_title', '_yoast_wpseo_metadesc' ), array_column( $details, 'key' ) );
+		$this->assertSame( array( 'written', 'written' ), array_column( $details, 'status' ) );
+	}
+
+	public function test_yoast_write_meta_refuses_a_key_outside_the_vendor_list_and_writes_nothing(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$post_id = (int) self::factory()->post->create();
+
+		$result = aafm_yoast_write_meta(
+			$post_id,
+			array(
+				'_yoast_wpseo_title' => 'New',
+				'aafm_not_a_yoast'   => 'x',
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'status' => 'refused',
+				'keys'   => array(
+					'_yoast_wpseo_title' => array( 'status' => 'refused' ),
+					'aafm_not_a_yoast'   => array( 'status' => 'refused' ),
+				),
+			),
+			$result
+		);
+		$this->assertFalse( metadata_exists( 'post', $post_id, '_yoast_wpseo_title' ) );
+		$details = $this->outcome_details();
+		$this->assertCount( 2, $details );
+		foreach ( $details as $detail ) {
+			$this->assertSame( array( 'kind', 'entity', 'object_id', 'key', 'status', 'rows', 'modified_by_site', 'key_omitted' ), array_keys( $detail ) );
+			$this->assertSame( 'refused', $detail['status'] );
+		}
+	}
+
+	public function test_yoast_vendor_key_list_equals_the_keys_the_field_maps_build(): void {
+		$built = array_values( aafm_yoast_fields() );
+		foreach ( aafm_yoast_robots_keys() as $spec ) {
+			$built[] = $spec['key'];
+		}
+		$listed = aafm_yoast_meta_keys();
+		sort( $built );
+		sort( $listed );
+		$this->assertSame( $built, $listed );
+	}
+
+	public function test_yoast_update_post_baseline_read_fault_writes_nothing_and_returns_read_failed(): void {
+		global $wpdb;
+		$post_id = 0;
+		$admin   = $this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create( array( 'post_author' => $admin ) );
+		update_post_meta( $post_id, '_yoast_wpseo_title', 'Old' );
+
+		$res = \AAFM\Tests\Support\QueryFaultInjector::break_query_with_real_error(
+			array( 'meta_key, meta_value,', $wpdb->postmeta ),
+			function () use ( $post_id ) {
+				$suppressed = $GLOBALS['wpdb']->suppress_errors( true );
+				$out        = $this->update_yoast( array( 'title' => 'New' ), $post_id );
+				$GLOBALS['wpdb']->suppress_errors( $suppressed );
+				return $out;
+			},
+			1
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_yoast_write_unconfirmed', $res->get_error_code() );
+		$this->assertSame( 'read_failed', $res->get_error_data()['status'] );
+		$this->assertSame( 'Old', get_post_meta( $post_id, '_yoast_wpseo_title', true ) );
+	}
+
+	public function test_yoast_update_post_a_value_the_site_sanitizes_into_an_array_is_refused_with_no_key(): void {
+		add_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN, 2 );
+		$to_array = static fn() => array( 'x' );
+		add_filter( 'sanitize_post_meta__yoast_wpseo_title', $to_array );
+		$res      = $this->update_yoast( array( 'title' => 'New' ) );
+		remove_filter( 'sanitize_post_meta__yoast_wpseo_title', $to_array );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_yoast_write_unconfirmed', $res->get_error_code() );
+		$this->assertSame( 'refused', $res->get_error_data()['status'] );
+		$this->assertArrayHasKey( 'key', $res->get_error_data() );
+		$this->assertNull( $res->get_error_data()['key'] );
+		$this->assertSame( array(), $this->outcome_details() );
+	}
+
+	public function test_yoast_clear_over_a_stored_title_is_written_under_yoasts_delete_on_default(): void {
+		require_once AAFM_PLUGIN_DIR . 'tests/stubs/WpseoMetaDouble.php';
+		\AAFM\Tests\WpseoMetaDouble::attach();
+		$post_id = 0;
+		$this->update_yoast( array( 'title' => 'Old' ), $post_id );
+		$this->assertSame( 'Old', get_post_meta( $post_id, '_yoast_wpseo_title', true ) );
+
+		$res = $this->update_yoast( array( 'title' => '' ), $post_id );
+		\AAFM\Tests\WpseoMetaDouble::detach();
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 'written', $res['status'] );
+		$this->assertSame( '', $res['title'] );
+		$this->assertFalse( metadata_exists( 'post', $post_id, '_yoast_wpseo_title' ) );
+	}
+
+	public function test_yoast_clear_with_no_row_is_unchanged_with_no_write_call(): void {
+		require_once AAFM_PLUGIN_DIR . 'tests/stubs/WpseoMetaDouble.php';
+		\AAFM\Tests\WpseoMetaDouble::attach();
+		$calls = 0;
+		$count = static function ( $check ) use ( &$calls ) {
+			++$calls;
+			return $check;
+		};
+		add_filter( 'update_post_metadata', $count, 1 );
+		$res = $this->update_yoast( array( 'title' => '' ) );
+		remove_filter( 'update_post_metadata', $count, 1 );
+		\AAFM\Tests\WpseoMetaDouble::detach();
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 'unchanged', $res['status'] );
+		$this->assertSame( 0, $calls );
+	}
+
+	public function test_yoast_noindex_default_over_a_stored_noindex_is_written(): void {
+		require_once AAFM_PLUGIN_DIR . 'tests/stubs/WpseoMetaDouble.php';
+		\AAFM\Tests\WpseoMetaDouble::attach();
+		$post_id = 0;
+		$this->update_yoast( array( 'robots_noindex' => '1' ), $post_id );
+		$res = $this->update_yoast( array( 'robots_noindex' => '0' ), $post_id );
+		\AAFM\Tests\WpseoMetaDouble::detach();
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 'written', $res['status'] );
+		$this->assertSame( '1', ( (array) $res['keys'] )['_yoast_wpseo_meta-robots-noindex']['previous'] );
+	}
+
+	public function test_yoast_clear_without_yoasts_own_filter_attached_returns_the_vendor_error_when_the_row_goes_missing(): void {
+		require_once AAFM_PLUGIN_DIR . 'tests/stubs/WpseoMetaDouble.php';
+		\AAFM\Tests\WpseoMetaDouble::load();
+		$post_id = 0;
+		$this->update_yoast( array( 'title' => 'Old' ), $post_id );
+		$deleting = static function ( $check, $object_id, $meta_key ) {
+			if ( '_yoast_wpseo_title' !== $meta_key ) {
+				return $check;
+			}
+			delete_post_meta( (int) $object_id, $meta_key );
+			return true;
+		};
+		add_filter( 'update_post_metadata', $deleting, 10, 3 );
+		$res = $this->update_yoast( array( 'title' => '' ), $post_id );
+		remove_filter( 'update_post_metadata', $deleting, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_yoast_write_unconfirmed', $res->get_error_code() );
+		$this->assertSame( 'unconfirmed', $res->get_error_data()['status'] );
+	}
 }

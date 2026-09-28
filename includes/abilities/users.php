@@ -190,7 +190,7 @@ function aafm_args_get_user(): array {
  */
 function aafm_exec_get_user( array $input ) {
 	$id   = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	$user = $id ? get_userdata( $id ) : false;
+	$user = $id ? aafm_exact_object( 'user', $id ) : null;
 	if ( ! $user instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -374,7 +374,14 @@ function aafm_exec_create_user( array $input ) {
 	// get_editable_roles() (which honors the editable_roles filter). Anything else floors to
 	// subscriber. get_option()'s fallback only fires when the option is ABSENT, and an empty
 	// string would create a roleless user, so the empty-string floor stays too.
-	$default_role = (string) get_option( 'default_role', 'subscriber' );
+	// The role is get_option()'s answer. A cache copy that disagrees with the row, an unreadable
+	// row, or a value that is not a role name refuses: roles have no order, so neither side can be
+	// picked as the safer one.
+	$default_role = get_option( 'default_role', 'subscriber' );
+	if ( is_array( $default_role ) || is_object( $default_role ) || null !== aafm_policy_row_if_stale( 'default_role' ) ) {
+		return aafm_generic_error();
+	}
+	$default_role = (string) $default_role;
 	$default_role = '' !== $default_role ? $default_role : 'subscriber';
 
 	// get_editable_roles() lives in wp-admin/includes/user.php, not loaded in a REST/MCP
@@ -405,7 +412,47 @@ function aafm_exec_create_user( array $input ) {
 		return aafm_generic_error();
 	}
 
-	return array( 'user' => aafm_rich_user( get_userdata( (int) $result ) ) );
+	return aafm_user_write_response( (int) $result );
+}
+
+/**
+ * Build the {user: ...} response create-user and update-user return after their write, so a
+ * failed read fails the call instead of returning an empty or zeroed field.
+ *
+ * The post count the response carries comes from count_user_posts(), which reads 0 when its query
+ * fails, so the same count query runs first through a failure-aware reader, and a failure is the
+ * error. The user is then read and the response built inside a checked-read scope: loading a
+ * WP_User loads its metadata, so a failed load there, and any later metadata read such as the
+ * bio, is the error too. A result that is not a WP_User is the error. A healthy database answers
+ * exactly as before.
+ *
+ * @param int $user_id The user just written.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_user_write_response( int $user_id ) {
+	global $wpdb;
+
+	$where = get_posts_by_author_sql( array( 'post' ), true, $user_id, false );
+	$sql   = "SELECT COUNT(*) FROM %i {$where}";
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- $where is core's own get_posts_by_author_sql() output, the clause count_user_posts() uses.
+	$count = aafm_wpdb_scalar( $wpdb->prepare( $sql, $wpdb->posts ) );
+	if ( ! $count['ok'] ) {
+		return aafm_generic_error();
+	}
+
+	$missing  = false;
+	$response = aafm_with_checked_reads(
+		static function () use ( $user_id, &$missing ): array {
+			$user = aafm_exact_object( 'user', $user_id );
+			if ( ! $user instanceof WP_User ) {
+				$missing = true;
+				return array();
+			}
+			return array( 'user' => aafm_rich_user( $user ) );
+		},
+		aafm_generic_error()
+	);
+	return $missing ? aafm_generic_error() : $response;
 }
 
 /**
@@ -489,7 +536,7 @@ function aafm_args_update_user(): array {
  */
 function aafm_perm_update_user( array $input ): bool {
 	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	return $id > 0 && current_user_can( 'edit_users' ) && current_user_can( 'edit_user', $id );
+	return $id > 0 && current_user_can( 'edit_users' ) && aafm_user_can_checked( 'edit_user', $id, 'user' );
 }
 
 /**
@@ -571,8 +618,44 @@ function aafm_with_named_lock( string $name, callable $callback ) {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_update_user( array $input ) {
-	$id     = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	$target = $id ? get_userdata( $id ) : false;
+	$id   = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
+	$role = null;
+	if ( isset( $input['role'] ) ) {
+		// A role assignment must clear every gate WP core enforces in wp-admin and the REST
+		// users controller - not just the global promote_users cap. Core additionally requires
+		// the per-target promote_user meta cap (so a delegated manager can only promote users
+		// they may edit) AND membership in get_editable_roles() (so the editable_roles filter
+		// can forbid a role - e.g. block a user-manager from handing out administrator). Without
+		// both, promote_users alone would let an agent assign any existing role, including one
+		// the site has deliberately put out of reach.
+		// The gate runs before the target is loaded. promote_user loads the target inside its own
+		// checked scope, so no earlier unchecked load can leave it with an empty set of roles.
+		$role = sanitize_key( (string) $input['role'] );
+		if ( null === get_role( $role )
+			|| ! current_user_can( 'promote_users' )
+			|| ! aafm_user_can_checked( 'promote_user', $id, 'user' )
+		) {
+			return aafm_generic_error();
+		}
+		// get_editable_roles() lives in wp-admin/includes/user.php, which is not loaded in a
+		// REST/MCP request - pull it in (mirrors the delete path's require below and core's own
+		// guard in WP_REST_Users_Controller::check_role_update()).
+		if ( ! function_exists( 'get_editable_roles' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+		$editable_roles = get_editable_roles();
+		if ( empty( $editable_roles[ $role ] ) ) {
+			return aafm_generic_error();
+		}
+	}
+
+	// The target's roles decide the last-admin guard below, so it is loaded inside the
+	// checked-read scope: a caps load that fails refuses instead of reading as no role.
+	$loaded = aafm_with_checked_reads(
+		static fn(): array => array( 'user' => $id ? aafm_exact_object( 'user', $id ) : null ),
+		aafm_generic_error()
+	);
+	$target = is_wp_error( $loaded ) ? null : $loaded['user'];
 	if ( ! $target instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -592,31 +675,7 @@ function aafm_exec_update_user( array $input ) {
 	}
 
 	$demotes_admin = false;
-	if ( isset( $input['role'] ) ) {
-		// A role assignment must clear every gate WP core enforces in wp-admin and the REST
-		// users controller - not just the global promote_users cap. Core additionally requires
-		// the per-target promote_user meta cap (so a delegated manager can only promote users
-		// they may edit) AND membership in get_editable_roles() (so the editable_roles filter
-		// can forbid a role - e.g. block a user-manager from handing out administrator). Without
-		// both, promote_users alone would let an agent assign any existing role, including one
-		// the site has deliberately put out of reach.
-		$role = sanitize_key( (string) $input['role'] );
-		if ( null === get_role( $role )
-			|| ! current_user_can( 'promote_users' )
-			|| ! current_user_can( 'promote_user', $id )
-		) {
-			return aafm_generic_error();
-		}
-		// get_editable_roles() lives in wp-admin/includes/user.php, which is not loaded in a
-		// REST/MCP request - pull it in (mirrors the delete path's require below and core's own
-		// guard in WP_REST_Users_Controller::check_role_update()).
-		if ( ! function_exists( 'get_editable_roles' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/user.php';
-		}
-		$editable_roles = get_editable_roles();
-		if ( empty( $editable_roles[ $role ] ) ) {
-			return aafm_generic_error();
-		}
+	if ( null !== $role ) {
 		$data['role']  = $role;
 		$demotes_admin = 'administrator' !== $role && in_array( 'administrator', (array) $target->roles, true );
 	}
@@ -638,14 +697,14 @@ function aafm_exec_update_user( array $input ) {
 
 		// Defense in depth: if this write somehow left the site admin-less, restore the role.
 		if ( $demotes_admin && aafm_count_administrators() < 1 ) {
-			$restored = get_userdata( $id );
+			$restored = aafm_exact_object( 'user', $id );
 			if ( $restored instanceof WP_User ) {
 				$restored->set_role( 'administrator' );
 			}
 			return aafm_generic_error();
 		}
 
-		return array( 'user' => aafm_rich_user( get_userdata( $id ) ) );
+		return aafm_user_write_response( $id );
 	};
 
 	return $demotes_admin
@@ -720,7 +779,7 @@ function aafm_args_delete_user(): array {
  */
 function aafm_perm_delete_user( array $input ): bool {
 	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	return $id > 0 && current_user_can( 'delete_users' ) && current_user_can( 'delete_user', $id );
+	return $id > 0 && current_user_can( 'delete_users' ) && aafm_user_can_checked( 'delete_user', $id, 'user' );
 }
 
 /**
@@ -740,7 +799,13 @@ function aafm_perm_delete_user( array $input ): bool {
 function aafm_exec_delete_user( array $input ) {
 	$id       = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	$reassign = isset( $input['reassign_to'] ) ? absint( $input['reassign_to'] ) : 0;
-	$victim   = $id ? get_userdata( $id ) : false;
+	// The victim's roles decide the last-admin guard below, so it is loaded inside the
+	// checked-read scope: a caps load that fails refuses instead of reading as no role.
+	$loaded = aafm_with_checked_reads(
+		static fn(): array => array( 'user' => $id ? aafm_exact_object( 'user', $id ) : null ),
+		aafm_generic_error()
+	);
+	$victim = is_wp_error( $loaded ) ? null : $loaded['user'];
 	if ( ! $victim instanceof WP_User ) {
 		return aafm_generic_error();
 	}
@@ -751,7 +816,7 @@ function aafm_exec_delete_user( array $input ) {
 	}
 
 	// The reassign target is mandatory, must exist, and must not be the victim.
-	if ( ! $reassign || $reassign === $id || ! get_userdata( $reassign ) instanceof WP_User ) {
+	if ( ! $reassign || $reassign === $id || ! aafm_exact_object( 'user', $reassign ) instanceof WP_User ) {
 		return aafm_generic_error();
 	}
 

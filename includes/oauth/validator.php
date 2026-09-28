@@ -233,9 +233,10 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			return $user_id;
 		}
 
-		// 11. Capability-narrowing seam. The token resolves to the approver's FULL account by
-		// default (unchanged behaviour); this offers operators/future code a hook to cap what a
-		// token may do based on the requested scope, without altering the resolved identity.
+		// 11. Token capability map. The token resolves to the approver's FULL account by default
+		// (unchanged behaviour). A site that registers aafm_oauth_token_capabilities replaces the
+		// listed capabilities for the rest of this MCP request, a capability the approver lacks
+		// included, in every user_has_cap check the request makes. The resolved identity is unchanged.
 		aafm_oauth_apply_token_capability_scope(
 			(int) $row['wp_user_id'],
 			isset( $row['scope'] ) ? (string) $row['scope'] : '',
@@ -256,20 +257,20 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 }
 
 /**
- * Optionally narrow the capabilities an OAuth token may exercise for this request.
+ * Optionally replace the capabilities an OAuth token may exercise for this request.
  *
  * The identity a token resolves to is never changed here: the token always acts AS the
- * approving WordPress user. What this offers is a seam to cap what that identity may DO on
+ * approving WordPress user. What this offers is a hook that sets the capabilities checked on
  * the current MCP request, keyed on the scope the grant was minted with.
  *
  * By default it does nothing - the `aafm_oauth_token_capabilities` filter returns null, so no
  * restriction is applied and existing "acts with the approver's full caps" behaviour is
  * preserved (non-breaking; live tokens are never silently reduced). A hook that returns a
- * capability => bool allow-map instead installs a request-scoped `user_has_cap` filter that
- * grants only the listed capabilities and denies the rest, so an operator (or future
- * scope-mapping code) can bind a token to least privilege. The map is applied only for the
- * remainder of THIS request, which only reaches here on the MCP route with a valid OAuth
- * bearer, so it can never leak into an unrelated context.
+ * capability => bool map instead installs a request-scoped `user_has_cap` filter that sets
+ * each listed capability outright, a capability the approver lacks included, and denies every
+ * capability not in the map. That filter applies to every user_has_cap check for the remainder
+ * of THIS request, whichever user it is for. The request only reaches here on the MCP route
+ * with a valid OAuth bearer, so the map never reaches an unrelated request.
  *
  * @param int    $user_id   The resolved approver (unchanged; passed for hook context).
  * @param string $scope     The scope the token was minted with (may be '').

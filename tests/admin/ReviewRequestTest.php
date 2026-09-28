@@ -413,7 +413,8 @@ final class ReviewRequestTest extends TestCase {
 	/**
 	 * The re-read has to reach the database, and dropping the option's own cache key is not
 	 * enough to make it. get_option() checks the 'notoptions' blob first, and this request's own
-	 * opening read put the key in there when it found no row, so without the second cache drop
+	 * opening read put the key in there when it found no row, so unless the
+	 * aafm_forget_option_caches() call before the re-read also takes the key out of notoptions,
 	 * the re-read answers 'pending' defaults from memory and the save writes over whatever
 	 * another tab stored in the meantime. The row is inserted here with a raw query on purpose:
 	 * going through add_option() would clear notoptions itself and hide the defect.

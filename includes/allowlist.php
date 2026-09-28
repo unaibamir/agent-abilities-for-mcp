@@ -21,10 +21,11 @@
  * behavior, so an operator who has never touched this feature sees no change.
  *
  * This is a SECOND, independent gate alongside the existing OAuth scope-to-capability mechanism
- * (aafm_oauth_apply_token_capability_scope(), includes/oauth/validator.php): that mechanism narrows
- * which WordPress capabilities an OAuth-authenticated request effectively has; this one narrows
- * which ability NAMES a scope/role/client may reach at all, evaluated before an ability's own
- * permission_callback runs. A call must clear both.
+ * (aafm_oauth_apply_token_capability_scope(), includes/oauth/validator.php): that mechanism, when a
+ * site registers its filter, replaces which WordPress capabilities an OAuth-authenticated request
+ * has, and can grant as well as deny; this one narrows which ability NAMES a scope/role/client may
+ * reach at all, evaluated before an ability's own permission_callback runs. A call must clear
+ * both.
  *
  * @package AgentAbilitiesForMCP
  */

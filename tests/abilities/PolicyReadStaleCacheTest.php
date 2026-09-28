@@ -753,8 +753,9 @@ final class PolicyReadStaleCacheTest extends TestCase {
 
 	/**
 	 * PM round f (s14f-code-1): a WP-CLI process keeps no policy memo. The MCP adapter's STDIO
-	 * server is one WP-CLI process for a whole agent session, so read-only mode and a narrower
-	 * allowlist saved by another process reach its next call, as 9626307's per-call read did.
+	 * server is one WP-CLI process for a whole agent session, so its next read returns read-only
+	 * mode and a narrower allowlist saved by another process, as 9626307's reads did. This pins the
+	 * reader; the session registers its tools once, when it starts.
 	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
@@ -798,8 +799,8 @@ final class PolicyReadStaleCacheTest extends TestCase {
 			)
 		);
 
-		$this->assertTrue( aafm_read_only_mode(), 'Read-only mode saved by another process applies to the next call.' );
-		$this->assertFalse( aafm_ability_allowed_for_principal( 'aafm/delete-post', $author, null ), 'A narrower allowlist saved by another process applies to the next call.' );
+		$this->assertTrue( aafm_read_only_mode(), 'In a WP-CLI process the next read returns the read-only switch another process saved.' );
+		$this->assertFalse( aafm_ability_allowed_for_principal( 'aafm/delete-post', $author, null ), 'In a WP-CLI process the next allowlist check reads the narrower allowlist another process saved.' );
 	}
 
 	/**

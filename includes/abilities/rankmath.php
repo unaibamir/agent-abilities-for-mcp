@@ -535,19 +535,10 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		);
 	}
 
-	if ( array() === $intended ) {
-		return aafm_seo_group_write_response(
-			'aafm_rankmath_write_unconfirmed',
-			$id,
-			array(
-				'status' => AAFM_WRITE_UNCHANGED,
-				'keys'   => array(),
-			),
-			'aafm_rankmath_read_fields'
-		);
-	}
-
-	$result = aafm_rankmath_write_meta( $id, $intended );
+	$result = array() === $intended ? array(
+		'status' => AAFM_WRITE_UNCHANGED,
+		'keys'   => array(),
+	) : aafm_rankmath_write_meta( $id, $intended );
 
 	// rank_math_robots is the exact meta key Sitemap::is_object_indexable() reads to decide sitemap
 	// inclusion, but Cache_Watcher only invalidates the cached sitemap on save_post and

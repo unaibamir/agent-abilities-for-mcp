@@ -113,7 +113,7 @@ function aafm_yoast_registry_definitions(): array {
 		),
 		'aafm/yoast-update-post' => array(
 			'label'        => __( 'Update post SEO (Yoast)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's Yoast SEO fields to its _yoast_wpseo_* post meta. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's Yoast SEO fields to its _yoast_wpseo_* post meta. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post. The response returns each field's old value when it is plain text or a number.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'yoast',
@@ -540,7 +540,7 @@ function aafm_args_yoast_update_post(): array {
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/yoast-update-post' ),
-		'description'         => __( "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'         => __( "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post. The response returns each field's old value when it is plain text or a number.", 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

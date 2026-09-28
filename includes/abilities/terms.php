@@ -68,7 +68,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-term-meta'] = array(
 		'label'        => __( 'Update term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
@@ -76,7 +76,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-term-meta'] = array(
 		'label'        => __( 'Delete term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key. The response returns the old value when it is plain text or a number.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'taxonomies',

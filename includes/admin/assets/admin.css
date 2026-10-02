@@ -2212,6 +2212,27 @@
 		overflow-x: auto;
 	}
 
+	/* Activity log: fixed columns that share the viewport, long values (JSON detail, argument
+	   keys, event names) wrap inside their cell instead of stretching the table sideways. The
+	   min-width keeps a phone-width screen readable by scrolling the wrapper. */
+	.aafm-log-table {
+		table-layout: fixed;
+		inline-size: 100%;
+		min-inline-size: 720px;
+
+		th,
+		td {
+			overflow-wrap: anywhere;
+			vertical-align: top;
+		}
+
+		th:nth-child(1) { inline-size: 9%; }
+		th:nth-child(2) { inline-size: 13%; }
+		th:nth-child(3) { inline-size: 20%; }
+		th:nth-child(5) { inline-size: 8%; }
+		th:nth-child(6) { inline-size: 14%; }
+	}
+
 	/* ---------- Shared section component (aafm_render_section) ---------- */
 	/* Real spacing between stacked sections so new sections inherit the gap
 	   automatically (the Settings cramped Safety/OAuth/Danger fix). */

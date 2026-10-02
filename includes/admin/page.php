@@ -1056,8 +1056,8 @@ function aafm_save_meta_pair_section( string $kind, array $posted ): array {
 /**
  * AJAX: save BOTH the exposed and denied post-meta lists in one request.
  *
- * Mirrors aafm_ajax_save_user_meta_keys() / aafm_ajax_save_term_meta_keys(): one click, one
- * request, one success/failure verdict for the whole post-meta selector. The exposed list and
+ * Mirrors aafm_ajax_save_user_meta_keys() / aafm_ajax_save_term_meta_keys(): one request, one
+ * success/failure verdict for the whole post-meta pair. The exposed list and
  * the deny list are persisted together so the UI can never report "Saved" while one of the two
  * writes silently failed (the prior split-handler design could). On this action the deny field
  * is optional, so a caller that posts only aafm_meta_keys simply clears the deny list, matching
@@ -1089,7 +1089,7 @@ function aafm_ajax_save_denied_meta_keys(): void {
 	}
 	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 
-	// Verified, not a bare update_option(): see aafm_ajax_save_meta_keys() above (Codex hunt F1).
+	// Verified, not a bare update_option(): see aafm_save_meta_pair_section() above (Codex hunt F1).
 	if ( ! aafm_update_option_verified( 'aafm_denied_meta_keys', $keys ) ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) ) ) );

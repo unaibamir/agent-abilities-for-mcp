@@ -625,6 +625,47 @@ function aafm_stored_option_list( string $option ): ?array {
 }
 
 /**
+ * Write one Activity Log row when an exposed list really changed: its name and how many keys were
+ * added and removed, never the keys. The detail column carries identifier-only notes, so the text
+ * is a fixed template around a translated label and two integers.
+ *
+ * @param string                 $option Option name the list is stored in.
+ * @param string                 $label  Human name of the list, already translated.
+ * @param array<int,string>|null $before The list before the write, or null when that read failed (the
+ *                                       change cannot be stated, so no row is written).
+ * @param array<int,string>      $after  The list the write certified.
+ * @return bool Whether a row was written.
+ */
+function aafm_log_exposed_list_change( string $option, string $label, ?array $before, array $after ): bool {
+	if ( null === $before ) {
+		return false;
+	}
+	$added   = count( array_unique( array_diff( $after, $before ) ) );
+	$removed = count( array_unique( array_diff( $before, $after ) ) );
+	if ( 0 === $added && 0 === $removed ) {
+		return false;
+	}
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => $option,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'success',
+			'event_type'        => 'setting_changed',
+			'detail'            => sprintf(
+				/* translators: 1: list name, 2: number of keys added, 3: number of keys removed. */
+				__( '%1$s changed: %2$d added, %3$d removed', 'agent-abilities-for-mcp' ),
+				$label,
+				$added,
+				$removed
+			),
+		)
+	);
+	return true;
+}
+
+/**
  * Save the exposed-content-types allowlist. The caller owns the nonce and capability checks.
  *
  * @param array<string,mixed> $posted           The $_POST payload, already unslashed by the caller.
@@ -648,6 +689,7 @@ function aafm_save_post_types_section( array $posted, bool $refuse_additions = f
 		aafm_log_ability_persist_failure( 'aafm_allowed_post_types', $label );
 		return aafm_section_failed( aafm_switch_not_persisted_message( $label ) );
 	}
+	aafm_log_exposed_list_change( 'aafm_allowed_post_types', $label, $before, $types );
 	return array(
 		'ok'      => true,
 		'message' => '',
@@ -955,6 +997,8 @@ function aafm_save_meta_pair_section( string $kind, array $posted ): array {
 	$exposed = $c['exposed_fn']( $posted );
 	$denied  = $c['denied_fn']( $posted );
 
+	$before = aafm_stored_option_list( $c['exposed_opt'] );
+
 	// Verified, not a bare update_option(): these two options gate which meta an agent can read or
 	// write, so a stale persistent object cache silently keeping the old list live (Codex hunt F1)
 	// must be reported as a failed save, not a success. The three-stage write order keeps every
@@ -969,6 +1013,8 @@ function aafm_save_meta_pair_section( string $kind, array $posted ): array {
 		aafm_log_ability_persist_failure( $c['exposed_opt'], $c['exposed_label'] );
 		return aafm_section_failed( aafm_paired_write_partial_failure_message( $c['denied_label'], $c['exposed_label'] ) );
 	}
+	// The exposed list landed in stages 0 and 3.
+	aafm_log_exposed_list_change( $c['exposed_opt'], $c['exposed_label'], $before, $exposed );
 	if ( 3 === $stage ) {
 		aafm_log_ability_persist_failure( $c['denied_opt'], $c['denied_label'] );
 		return aafm_section_failed( aafm_paired_write_partial_failure_message( $c['exposed_label'], $c['denied_label'] ) );

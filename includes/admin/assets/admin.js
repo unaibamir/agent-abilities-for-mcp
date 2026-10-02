@@ -12,6 +12,7 @@
 	class AafmAdmin {
 		#ajaxUrl = aafmAdmin.ajaxUrl;
 		#nonce = aafmAdmin.nonce;
+		#abilitiesDirty = false;
 
 		/**
 		 * Read a localized string, falling back to its English source when the
@@ -63,10 +64,6 @@
 			this.#bindBridgeFilter();
 			this.#bindBridgeConfirm();
 			this.#bindBridgeBulk();
-			this.#bindSavePostTypes();
-			this.#bindSaveMetaKeys();
-			this.#bindSaveUserMetaKeys();
-			this.#bindSaveTermMetaKeys();
 			this.#bindSaveSettings();
 			this.#bindMetaChips();
 			this.#bindCreateUser();
@@ -504,7 +501,7 @@
 				// above it. Hide it with the rest of the empty view and restore it in clear()
 				// or the moment a later keystroke matches again.
 				if ( savebar ) {
-					savebar.hidden = 0 === matchCount;
+					savebar.hidden = 0 === matchCount && ! this.#abilitiesDirty;
 				}
 				if ( status ) {
 					status.textContent =
@@ -929,9 +926,9 @@
 		}
 
 		/**
-		 * Save the Integrations tab's per-ability toggles. Reuses the same
-		 * aafm_save_abilities action and flat aafm_abilities[] contract as the
-		 * Abilities tab; the stored option is one shared enabled-ability list.
+		 * Save the Integrations tab's per-ability toggles. Posts the
+		 * aafm_save_abilities action with the same flat aafm_abilities[] fields the
+		 * Abilities tab's page save sends; the stored option is one shared enabled-ability list.
 		 */
 		#bindSaveIntegrations() {
 			const form = document.querySelector( '#aafm-integrations-form' );
@@ -1183,188 +1180,292 @@
 			} );
 		}
 
+		/**
+		 * The Abilities tab's one Save.
+		 *
+		 * One request, aafm_save_abilities_page, carries every section the user changed
+		 * (enabled abilities, exposed content types, post/user/term meta key pairs) and only
+		 * those; the server answers with one result per section. A section is "dirty" when its
+		 * live controls no longer serialize to its snapshot, so dirty is recomputed from the
+		 * controls (bind time, pageshow, submit, beforeunload, and every input/change/click on
+		 * the form) rather than tracked from events: a browser that restores edited values
+		 * without firing any event still reads as unsaved. All text reaches the DOM through
+		 * textContent. The Integrations tab keeps its own save (#bindSaveIntegrations).
+		 */
 		#bindSaveAbilities() {
 			const form = document.querySelector( '#aafm-abilities-form' );
-			if ( ! form ) {
+			const bar = form?.querySelector( '.aafm-savebar' );
+			const pill = bar?.querySelector( '.aafm-pill' );
+			const barStatus = bar?.querySelector( '.aafm-save-status' );
+			if ( ! pill || ! barStatus ) {
 				return;
 			}
-			form.addEventListener( 'submit', async ( e ) => {
-				e.preventDefault();
-				const status = form.querySelector( '.aafm-save-status' );
-				const enabled = [
-					...form.querySelectorAll( 'input[name="aafm_abilities[]"]:checked' ),
-				].map( ( i ) => i.value );
 
-				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_abilities' );
-				body.append( 'nonce', this.#nonce );
-				enabled.forEach( ( v ) => body.append( 'aafm_abilities[]', v ) );
-				// Send the tab's scope (the core subjects it owns) so the server
-				// merges only these and preserves every off-tab ability - e.g.
-				// enabled integration (WooCommerce/Yoast/ACF) abilities - from the
-				// persisted option. No off-tab state is trusted from the client.
-				[
-					...form.querySelectorAll( 'input[name="aafm_scope[]"]' ),
-				].forEach( ( i ) => body.append( 'aafm_scope[]', i.value ) );
+			// Section key -> its root, its controls and the keys of its result `data`, in the order
+			// the server writes them (gates before doors). A section with no root on this page (the
+			// post types card when no custom type is eligible) does not exist here, so it is never
+			// serialized and never sent.
+			const defs = [
+				{ key: 'meta_keys', root: form.querySelector( '[data-aafm-section="meta_keys"]' ), pair: [ 'aafm_meta_keys', 'aafm_deny_meta_keys' ], dataKeys: [ 'meta_keys', 'deny_meta_keys' ], label: [ 'sectionMetaKeys', 'Exposed meta keys' ] },
+				{ key: 'user_meta_keys', root: form.querySelector( '[data-aafm-section="user_meta_keys"]' ), pair: [ 'aafm_exposed_user_meta_keys', 'aafm_denied_user_meta_keys' ], dataKeys: [ 'exposed_user_meta_keys', 'denied_user_meta_keys' ], label: [ 'sectionUserKeys', 'Exposed user meta keys' ] },
+				{ key: 'term_meta_keys', root: form.querySelector( '[data-aafm-section="term_meta_keys"]' ), pair: [ 'aafm_exposed_term_meta_keys', 'aafm_denied_term_meta_keys' ], dataKeys: [ 'exposed_term_meta_keys', 'denied_term_meta_keys' ], label: [ 'sectionTermKeys', 'Exposed term meta keys' ] },
+				{ key: 'post_types', root: form.querySelector( '[data-aafm-section="post_types"]' ), checks: 'aafm_post_types[]', dataKeys: [ 'post_types' ], label: [ 'sectionPostTypes', 'Exposed content types' ] },
+				{ key: 'abilities', root: form, checks: 'aafm_abilities[]', dataKeys: [ 'enabled' ], label: [ 'sectionAbilities', 'Enabled abilities' ] },
+			].filter( ( d ) => d.root );
+			const byKey = Object.fromEntries( defs.map( ( d ) => [ d.key, d ] ) );
 
-				if ( status ) {
-					status.textContent = this.#t( 'saving', 'Saving…' );
+			const norm = ( text ) => text.split( /\r\n|\r|\n/ ).map( ( l ) => l.trim() ).filter( Boolean );
+			const asList = ( v ) => ( Array.isArray( v ) ? v : Object.values( v ?? {} ) );
+			// Controls as values: a pair is its two textarea strings, anything else the checked
+			// values. `live` reads what the user sees, otherwise what PHP rendered (ADR-5).
+			const read = ( d, live ) =>
+				d.pair
+					? d.pair.map( ( n ) => {
+							const t = d.root.querySelector( `textarea[name="${ n }"]` );
+							return live ? t.value : t.defaultValue;
+					  } )
+					: [ ...d.root.querySelectorAll( `input[name="${ d.checks }"]` ) ]
+							.filter( ( b ) => ( live ? b.checked : b.defaultChecked ) )
+							.map( ( b ) => b.value );
+			// The one comparison form, for the dirty check and every snapshot.
+			const ser = ( d, values ) =>
+				d.pair
+					? JSON.stringify( values.map( ( t ) => norm( t ).join( '\n' ) ) )
+					: [ ...values ].sort().join( '\n' );
+			const serialize = ( d ) => ser( d, read( d, true ) );
+			// A stored list as a textarea shows it after a reload: `*` first, then the rest.
+			const asText = ( list ) =>
+				( list.includes( '*' ) ? [ '*', ...list.filter( ( v ) => '*' !== v ) ] : list ).join( '\n' );
+			// The abilities section is the whole form and has no result line of its own.
+			const lineOf = ( d ) => ( d.root === form ? null : d.root.querySelector( '.aafm-section-result' ) );
+			const setLine = ( line, text = '', cls = '' ) => {
+				line.textContent = text;
+				line.classList.remove( 'is-ok', 'is-error' );
+				if ( cls ) {
+					line.classList.add( cls );
 				}
-				let json;
-				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-					json = await res.json();
-				} catch {
-					json = { success: false };
-				}
-				if ( json?.success ) {
-					this.#refreshLocalCounts( form, json.data?.enabled ?? [] );
-					const statTotal = document.querySelector(
-						'.aafm-stat-enabled-num'
-					);
-					if (
-						statTotal &&
-						undefined !== json.data?.ability_enabled_total
-					) {
-						statTotal.textContent = String(
-							json.data.ability_enabled_total
-						);
+				line.hidden = '' === text;
+			};
+			const setBar = ( text, isError = false ) => {
+				barStatus.textContent = text;
+				barStatus.classList.toggle( 'is-error', isError );
+			};
+
+			const snapshot = Object.fromEntries( defs.map( ( d ) => [ d.key, ser( d, read( d, false ) ) ] ) );
+			const dirty = {};
+
+			const recompute = () => {
+				let any = false;
+				defs.forEach( ( d ) => {
+					const now = serialize( d ) !== snapshot[ d.key ];
+					if ( now !== ( dirty[ d.key ] ?? false ) ) {
+						dirty[ d.key ] = now;
+						const line = lineOf( d );
+						// Back to clean clears whatever the card showed; a new edit clears a
+						// success line but keeps an error until the next result.
+						if ( line && ( ! now || line.classList.contains( 'is-ok' ) ) ) {
+							setLine( line );
+						}
+					}
+					any = any || now;
+				} );
+				if ( any !== this.#abilitiesDirty ) {
+					this.#abilitiesDirty = any;
+					pill.hidden = ! any;
+					if ( any || barStatus.classList.contains( 'is-error' ) ) {
+						setBar( '' );
 					}
 				}
-				if ( status ) {
-					status.textContent = json?.success
-						? this.#t( 'saved', 'Saved' )
-						: this.#t( 'errorSaving', 'Error saving' );
-				}
-			} );
-		}
+			};
 
-		#bindSavePostTypes() {
-			const btn = document.querySelector( '#aafm-post-types-save' );
-			const root = document.querySelector( '#aafm-post-types-form' );
-			if ( ! btn || ! root ) {
-				return;
-			}
-			btn.addEventListener( 'click', async () => {
-				const status = root.querySelector( '.aafm-post-types-status' );
-				const types = [
-					...root.querySelectorAll( 'input[name="aafm_post_types[]"]:checked' ),
-				].map( ( i ) => i.value );
+			// "Exposed meta keys (Content) and Exposed user meta keys (Users)" joiner. A language tag the engine rejects
+			// (WordPress can emit one such as pt-PT-ao90) falls back to the default locale, then
+			// to a plain comma list.
+			const joinList = ( items ) => {
+				try {
+					return new Intl.ListFormat( document.documentElement.lang || undefined, { type: 'conjunction' } ).format( items );
+				} catch {
+					// Fall through to the default locale.
+				}
+				try {
+					return new Intl.ListFormat( undefined, { type: 'conjunction' } ).format( items );
+				} catch {
+					return items.join( ', ' );
+				}
+			};
+			const labelOf = ( d ) => {
+				const label = this.#t( d.label[ 0 ], d.label[ 1 ] );
+				const tab = d.root.closest( '.aafm-subject-panel' )?.dataset.subjectLabel;
+				return tab ? this.#format( this.#t( 'sectionInTab', '%1$s (%2$s)' ), label, tab ) : label;
+			};
+
+			// One literal append per field name, so a missing field fails a test, not a user.
+			const appendSection = ( body, d ) => {
+				const [ a, b ] = d.pair ? read( d, true ) : [ '', '' ];
+				body.append( 'aafm_sections[]', d.key );
+				switch ( d.key ) {
+					case 'abilities':
+						body.append( 'aafm_abilities[]', '' );
+						read( d, true ).forEach( ( v ) => body.append( 'aafm_abilities[]', v ) );
+						// The scope (the core subjects this tab owns) lets the server keep every
+						// off-tab ability, such as enabled integration abilities, as stored.
+						form.querySelectorAll( 'input[name="aafm_scope[]"]' ).forEach( ( i ) => body.append( 'aafm_scope[]', i.value ) );
+						break;
+					case 'post_types':
+						body.append( 'aafm_post_types[]', '' );
+						read( d, true ).forEach( ( v ) => body.append( 'aafm_post_types[]', v ) );
+						break;
+					case 'meta_keys':
+						body.append( 'aafm_meta_keys', a );
+						body.append( 'aafm_deny_meta_keys', b );
+						break;
+					case 'user_meta_keys':
+						body.append( 'aafm_exposed_user_meta_keys', a );
+						body.append( 'aafm_denied_user_meta_keys', b );
+						break;
+					case 'term_meta_keys':
+						body.append( 'aafm_exposed_term_meta_keys', a );
+						body.append( 'aafm_denied_term_meta_keys', b );
+						break;
+				}
+			};
+
+			// Apply the server's answer. `sent` maps each sent key to what it carried.
+			const applyResults = ( results, sent ) => {
+				const failed = [];
+				const lines = [];
+				let abilitiesMessage = '';
+				let newerEdits = false;
+				Object.entries( sent ).forEach( ( [ key, was ] ) => {
+					const d = byKey[ key ];
+					const r = results[ key ];
+					if ( true === r?.ok ) {
+						const stored = d.dataKeys.map( ( k ) => asList( r.data?.[ k ] ) );
+						if ( serialize( d ) === was.ser ) {
+							// Not edited during the request: show what the server stored, which
+							// can differ from what was typed (a dropped key leaves the list).
+							if ( d.pair ) {
+								d.pair.forEach( ( n, i ) => {
+									d.root.querySelector( `textarea[name="${ n }"]` ).value = asText( stored[ i ] );
+								} );
+							} else {
+								d.root.querySelectorAll( `input[name="${ d.checks }"]` ).forEach( ( b ) => {
+									b.checked = stored[ 0 ].includes( b.value );
+								} );
+							}
+							snapshot[ key ] = serialize( d );
+							const cleaned = was.entries.some( ( list, i ) => list.some( ( v ) => ! stored[ i ].includes( v ) ) );
+							lines.push( [ d, cleaned ? this.#t( 'savedCleaned', 'Saved. Some entries were not accepted and were removed from the list.' ) : this.#t( 'saved', 'Saved' ), 'is-ok' ] );
+						} else {
+							// Edited during the request: leave the controls alone and keep the
+							// section dirty against what the server stored. Only boxes on this
+							// page count (off-scope and locked names have no checkbox here).
+							snapshot[ key ] = d.pair
+								? ser( d, stored.map( asText ) )
+								: ser( d, [ ...d.root.querySelectorAll( `input[name="${ d.checks }"]` ) ].map( ( b ) => b.value ).filter( ( v ) => stored[ 0 ].includes( v ) ) );
+							newerEdits = true;
+							lines.push( [ d, '', '' ] );
+						}
+						if ( 'abilities' === key ) {
+							this.#refreshLocalCounts( form, stored[ 0 ] );
+							const statTotal = document.querySelector( '.aafm-stat-enabled-num' );
+							if ( statTotal && undefined !== r.data?.ability_enabled_total ) {
+								statTotal.textContent = String( r.data.ability_enabled_total );
+							}
+						}
+						return;
+					}
+					// Failed, held, incomplete or missing: nothing was written for a check list,
+					// but a meta pair may have landed partway (stage 2 or 3), so it stays dirty
+					// until a later ok result rewrites its snapshot.
+					if ( d.pair ) {
+						snapshot[ key ] = null;
+					}
+					const message = 'string' === typeof r?.message ? r.message : '';
+					failed.push( labelOf( d ) );
+					if ( 'abilities' === key ) {
+						abilitiesMessage = message;
+					}
+					lines.push( [ d, message ? this.#format( this.#t( 'notSavedSection', 'Not saved: %s' ), message ) : this.#t( 'notSavedSectionGeneric', 'Not saved. Your changes are still here.' ), 'is-error' ] );
+				} );
+
+				// Recompute first, so a "Saved" line written below is not cleared by the same
+				// response's snapshot change.
+				recompute();
+				lines.forEach( ( [ d, text, cls ] ) => {
+					const line = lineOf( d );
+					if ( line ) {
+						setLine( line, text, cls );
+					}
+				} );
+
+				if ( 0 === failed.length ) {
+					setBar( this.#abilitiesDirty ? this.#t( 'savedWithNewerEdits', 'Saved. Changes you made while saving are not saved yet.' ) : this.#t( 'saved', 'Saved' ) );
+					return;
+				}
+				const everythingElse = failed.length < Object.keys( sent ).length && ! newerEdits;
+				const summary = this.#format(
+					everythingElse ? this.#t( 'notSavedSome', 'Not saved: %s. Everything else was saved.' ) : this.#t( 'notSavedAll', 'Not saved: %s.' ),
+					joinList( failed )
+				);
+				setBar( abilitiesMessage ? `${ summary } ${ abilitiesMessage }` : summary, true );
+			};
+
+			let inFlight = false;
+			form.addEventListener( 'submit', async ( e ) => {
+				e.preventDefault();
+				if ( inFlight ) {
+					return;
+				}
+				recompute();
+				if ( ! this.#abilitiesDirty ) {
+					setBar( this.#t( 'noChangesToSave', 'No changes to save.' ) );
+					return;
+				}
 
 				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_post_types' );
+				body.append( 'action', 'aafm_save_abilities_page' );
 				body.append( 'nonce', this.#nonce );
-				types.forEach( ( v ) => body.append( 'aafm_post_types[]', v ) );
+				const sent = {};
+				defs.filter( ( d ) => dirty[ d.key ] ).forEach( ( d ) => {
+					appendSection( body, d );
+					const values = read( d, true );
+					sent[ d.key ] = { ser: serialize( d ), entries: d.pair ? values.map( norm ) : [ values ] };
+				} );
 
-				if ( status ) {
-					status.textContent = this.#t( 'saving', 'Saving…' );
-				}
+				setBar( this.#t( 'saving', 'Saving…' ) );
+				inFlight = true;
 				let json;
 				try {
-					const res = await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
+					const res = await fetch( this.#ajaxUrl, { method: 'POST', body, credentials: 'same-origin' } );
 					json = await res.json();
 				} catch {
-					json = { success: false };
+					// Network failure or a body that is not JSON: json stays undefined.
+				} finally {
+					inFlight = false;
 				}
-				if ( status ) {
-					status.textContent = json?.success
-						? this.#t( 'saved', 'Saved' )
-						: this.#t( 'errorSaving', 'Error saving' );
-				}
-			} );
-		}
-		#bindSaveMetaKeys() {
-			const btn = document.querySelector( '#aafm-meta-keys-save' );
-			const root = document.querySelector( '#aafm-meta-keys-form' );
-			if ( ! btn || ! root ) {
-				return;
-			}
-			// Exposed and Deny share one Save button and are now persisted in a single request,
-			// matching the user-meta/term-meta single-handler pattern. The previous split (two
-			// actions, two handlers) let the deny-list save fail silently inside an empty
-			// catch{} while the exposed-list handler still printed "Saved" - so a dropped deny
-			// list read as success. One request + one status assignment removes that gap.
-			btn.addEventListener( 'click', async () => {
-				const status = root.querySelector( '.aafm-meta-keys-status' );
-				const textarea = root.querySelector( 'textarea[name="aafm_meta_keys"]' );
-				const deny = root.querySelector( 'textarea[name="aafm_deny_meta_keys"]' );
-				if ( status ) {
-					status.textContent = this.#t( 'saving', 'Saving…' );
-				}
-				const json = await this.#post( 'aafm_save_meta_keys', {
-					aafm_meta_keys: textarea?.value ?? '',
-					aafm_deny_meta_keys: deny?.value ?? '',
-				} );
-				if ( status ) {
-					status.textContent = json?.success
-						? this.#t( 'saved', 'Saved' )
-						: this.#t( 'errorSaving', 'Error saving' );
-				}
-			} );
-		}
 
-		#bindSaveUserMetaKeys() {
-			const btn = document.querySelector( '#aafm-user-meta-keys-save' );
-			const root = document.querySelector( '#aafm-user-meta-keys-form' );
-			if ( ! btn || ! root ) {
-				return;
-			}
-			btn.addEventListener( 'click', async () => {
-				const status = root.querySelector( '.aafm-user-meta-keys-status' );
-				const exposed = root.querySelector(
-					'textarea[name="aafm_exposed_user_meta_keys"]'
-				);
-				const deny = root.querySelector(
-					'textarea[name="aafm_denied_user_meta_keys"]'
-				);
-				if ( status ) {
-					status.textContent = this.#t( 'saving', 'Saving…' );
-				}
-				const json = await this.#post( 'aafm_save_user_meta_keys', {
-					aafm_exposed_user_meta_keys: exposed?.value ?? '',
-					aafm_denied_user_meta_keys: deny?.value ?? '',
-				} );
-				if ( status ) {
-					status.textContent = json?.success
-						? this.#t( 'saved', 'Saved' )
-						: this.#t( 'errorSaving', 'Error saving' );
+				// -1 is core's nonce refusal and 0 a logged-out session; both are what an admin
+				// gets from a tab left open overnight, and a reload fixes both.
+				if ( -1 === json || 0 === json ) {
+					setBar( this.#t( 'saveExpired', 'Could not save because this page has expired. Copy any unsaved changes, reload the page, and save again.' ), true );
+				} else if ( json?.data?.sections && 'object' === typeof json.data.sections ) {
+					applyResults( json.data.sections, sent );
+				} else if ( 'string' === typeof json?.data?.message ) {
+					setBar( json.data.message, true );
+				} else {
+					setBar( this.#t( 'saveNetworkError', 'Could not save. Check your connection and try again. Your changes are still on the page.' ), true );
 				}
 			} );
-		}
 
-		#bindSaveTermMetaKeys() {
-			const btn = document.querySelector( '#aafm-term-meta-keys-save' );
-			const root = document.querySelector( '#aafm-term-meta-keys-form' );
-			if ( ! btn || ! root ) {
-				return;
-			}
-			btn.addEventListener( 'click', async () => {
-				const status = root.querySelector( '.aafm-term-meta-keys-status' );
-				const exposed = root.querySelector(
-					'textarea[name="aafm_exposed_term_meta_keys"]'
-				);
-				const deny = root.querySelector(
-					'textarea[name="aafm_denied_term_meta_keys"]'
-				);
-				if ( status ) {
-					status.textContent = this.#t( 'saving', 'Saving…' );
-				}
-				const json = await this.#post( 'aafm_save_term_meta_keys', {
-					aafm_exposed_term_meta_keys: exposed?.value ?? '',
-					aafm_denied_term_meta_keys: deny?.value ?? '',
-				} );
-				if ( status ) {
-					status.textContent = json?.success
-						? this.#t( 'saved', 'Saved' )
-						: this.#t( 'errorSaving', 'Error saving' );
+			recompute();
+			[ 'input', 'change', 'click' ].forEach( ( ev ) => form.addEventListener( ev, recompute ) );
+			window.addEventListener( 'pageshow', recompute );
+			window.addEventListener( 'beforeunload', ( e ) => {
+				recompute();
+				if ( this.#abilitiesDirty ) {
+					e.preventDefault();
+					e.returnValue = true;
 				}
 			} );
 		}

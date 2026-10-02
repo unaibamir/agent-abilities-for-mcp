@@ -160,16 +160,16 @@ final class AbilitiesSaveTest extends TestCase {
 		);
 	}
 
-	public function test_meta_keys_save_uses_the_plugin_button_class(): void {
+	public function test_meta_keys_selector_renders_no_save_button(): void {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
 		aafm_render_meta_keys_selector();
 		$html = (string) ob_get_clean();
 
-		// The meta-keys Save button uses the plugin button family, not the WP default.
-		$this->assertStringContainsString( 'class="aafm-btn aafm-btn-primary"', $html );
-		$this->assertStringNotContainsString( 'class="button button-primary"', $html );
+		// The selector has no save button; the tab's one Save lives in the save bar.
+		$this->assertStringNotContainsString( 'aafm-btn-primary', $html );
+		$this->assertStringNotContainsString( 'button button-primary', $html );
 	}
 
 	public function test_every_registry_entry_declares_a_subject(): void {
@@ -237,7 +237,7 @@ final class AbilitiesSaveTest extends TestCase {
 		// </div> - the notice component and the meta selector both nest <div>s inside the panel,
 		// which a naive first-</div> slice would catch. The fallback keys off aafm-save-status,
 		// which the form renders exactly once after every panel, rather than the shared
-		// aafm-btn-primary class that also marks the post-types and meta-keys save buttons.
+		// aafm-btn-primary class, which the save bar's button also carries.
 		$content_open = strpos( $html, 'class="aafm-subject-panel" data-subject="content"' );
 		$this->assertNotFalse( $content_open, 'Content panel should render.' );
 		$next_panel    = strpos( $html, 'class="aafm-subject-panel" data-subject=', $content_open + 1 );

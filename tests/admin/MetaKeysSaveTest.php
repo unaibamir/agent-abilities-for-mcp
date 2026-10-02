@@ -39,7 +39,7 @@ final class MetaKeysSaveTest extends TestCase {
 		$this->assertSame( 1, substr_count( $html, '<form' ) );
 		$this->assertStringContainsString( 'id="aafm-meta-keys-form"', $html );
 		$this->assertStringContainsString( 'name="aafm_meta_keys"', $html );
-		$this->assertStringContainsString( 'id="aafm-meta-keys-save"', $html );
+		$this->assertStringNotContainsString( 'id="aafm-meta-keys-save"', $html );
 		$this->assertStringContainsString( 'aafm-meta-chip', $html );
 		// Direction A presentation: the meta-keys selector lives in a card.
 		$this->assertStringContainsString( 'aafm-card', $html );
@@ -72,8 +72,8 @@ final class MetaKeysSaveTest extends TestCase {
 		// The `*` wildcard is documented on both controls.
 		$this->assertGreaterThanOrEqual( 2, substr_count( $html, '*' ) );
 
-		// The Save button keeps the primary style; the selector is not a nested form.
-		$this->assertStringContainsString( 'aafm-btn aafm-btn-primary', $html );
+		// The selector has no Save button of its own and is not a nested form.
+		$this->assertStringNotContainsString( 'aafm-btn aafm-btn-primary', $html );
 		$this->assertSame( 0, substr_count( $html, '<form' ) );
 	}
 
@@ -88,7 +88,7 @@ final class MetaKeysSaveTest extends TestCase {
 
 		$this->assertStringContainsString( 'name="aafm_exposed_user_meta_keys"', $html );
 		$this->assertStringContainsString( 'name="aafm_denied_user_meta_keys"', $html );
-		$this->assertStringContainsString( 'aafm-btn', $html );
+		$this->assertStringNotContainsString( 'aafm-btn', $html );
 		$this->assertSame( 0, substr_count( $html, '<form' ) );
 	}
 
@@ -107,7 +107,7 @@ final class MetaKeysSaveTest extends TestCase {
 		$this->assertNotFalse( $exposed_pos, 'Exposed textarea must render.' );
 		$this->assertNotFalse( $deny_pos, 'Deny textarea must render.' );
 		$this->assertLessThan( $deny_pos, $exposed_pos, 'Exposed must render above Deny.' );
-		$this->assertStringContainsString( 'aafm-btn aafm-btn-primary', $html );
+		$this->assertStringNotContainsString( 'aafm-btn aafm-btn-primary', $html );
 		$this->assertSame( 0, substr_count( $html, '<form' ) );
 	}
 

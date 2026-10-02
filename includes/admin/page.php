@@ -230,6 +230,27 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'qcMethodAppPassword'      => __( 'Application password', 'agent-abilities-for-mcp' ),
 				'qcOn'                     => __( 'On', 'agent-abilities-for-mcp' ),
 				'qcOff'                    => __( 'Off', 'agent-abilities-for-mcp' ),
+				// Abilities tab: the one Save button, its dirty pill and its result lines.
+				'unsavedChanges'           => __( 'Unsaved changes', 'agent-abilities-for-mcp' ),
+				'noChangesToSave'          => __( 'No changes to save.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: names of the sections that were not saved, for example "Exposed meta keys (Content) and Exposed user meta keys (Users)". */
+				'notSavedSome'             => __( 'Not saved: %s. Everything else was saved.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: names of the sections that were not saved, for example "Exposed meta keys (Content)". */
+				'notSavedAll'              => __( 'Not saved: %s.', 'agent-abilities-for-mcp' ),
+				/* translators: 1: section name, for example "Exposed meta keys". 2: name of the sub-tab the section sits in, for example "Content". */
+				'sectionInTab'             => __( '%1$s (%2$s)', 'agent-abilities-for-mcp' ),
+				/* translators: %s: the reason the server gave for not saving a section; it has its own final punctuation. */
+				'notSavedSection'          => __( 'Not saved: %s', 'agent-abilities-for-mcp' ),
+				'notSavedSectionGeneric'   => __( 'Not saved. Your changes are still here.', 'agent-abilities-for-mcp' ),
+				'saveNetworkError'         => __( 'Could not save. Check your connection and try again. Your changes are still on the page.', 'agent-abilities-for-mcp' ),
+				'saveExpired'              => __( 'Could not save because this page has expired. Copy any unsaved changes, reload the page, and save again.', 'agent-abilities-for-mcp' ),
+				'savedCleaned'             => __( 'Saved. Some entries were not accepted and were removed from the list.', 'agent-abilities-for-mcp' ),
+				'savedWithNewerEdits'      => __( 'Saved. Changes you made while saving are not saved yet.', 'agent-abilities-for-mcp' ),
+				'sectionAbilities'         => __( 'Enabled abilities', 'agent-abilities-for-mcp' ),
+				'sectionPostTypes'         => __( 'Exposed content types', 'agent-abilities-for-mcp' ),
+				'sectionMetaKeys'          => __( 'Exposed meta keys', 'agent-abilities-for-mcp' ),
+				'sectionUserKeys'          => __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ),
+				'sectionTermKeys'          => __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ),
 			),
 		)
 	);
@@ -295,7 +316,7 @@ function aafm_get_stored_enabled_abilities_raw(): array {
  * result object) on purpose: this function's return value is already depended on directly as the
  * persisted set by every existing caller and by tests across the suite (HighRiskSaveGuardTest,
  * ReadOnlyModeTest among them), and changing that shape would have broken every one of them for a
- * concern only two callers actually need (aafm_ajax_save_abilities(),
+ * concern only two callers actually need (aafm_save_abilities_section(),
  * aafm_quickconnect_apply_abilities()). A caller that does not need it simply omits the argument.
  *
  * @param array<int,string> $enabled   Ability names to persist.
@@ -483,9 +504,99 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 }
 
 /**
+ * The result of a section that did not write: ok false, the operator-facing message, no data.
+ *
+ * @param string $message Message shown next to the section.
+ * @return array{ok:bool,message:string,data:array<string,mixed>}
+ */
+function aafm_section_failed( string $message ): array {
+	return array(
+		'ok'      => false,
+		'message' => $message,
+		'data'    => array(),
+	);
+}
+
+/**
+ * The result of a section that was left unwritten because it would add entries (see
+ * aafm_ajax_save_abilities_page()). The held flag lets the caller tell it from a failed write.
+ *
+ * @param string $label Human name of the section, already translated.
+ * @return array{ok:bool,message:string,data:array<string,mixed>,held:bool}
+ */
+function aafm_section_held( string $label ): array {
+	return array_merge(
+		aafm_section_failed(
+			sprintf(
+				/* translators: %s: the name of the section that was not saved, for example "Enabled abilities". */
+				__( '%s was not saved because another section on this page failed. Fix that section and save again.', 'agent-abilities-for-mcp' ),
+				$label
+			)
+		),
+		array( 'held' => true )
+	);
+}
+
+/**
+ * Answer an AJAX save with one section's result, in the shape the single-section actions have
+ * always used: the operator message on failure, the section's payload on success.
+ *
+ * @param array{ok:bool,message:string,data:array<string,mixed>} $result A section result.
+ * @return void
+ */
+function aafm_send_section_result( array $result ): void {
+	if ( ! $result['ok'] ) {
+		wp_send_json_error( array( 'message' => $result['message'] ) );
+	}
+	wp_send_json_success( $result['data'] );
+}
+
+/**
+ * Save the enabled-abilities toggles. The caller owns the nonce and capability checks.
+ *
+ * The result carries the full persisted enabled list - the server's authoritative answer, not
+ * whatever the client had checked - plus the global enabled-ability total, so the card/section
+ * headers on either tab can be patched to the real count right after save instead of reading
+ * stale until the next page load.
+ *
+ * @param array<string,mixed> $posted           The $_POST payload, already unslashed by the caller.
+ * @param bool                $refuse_additions Write nothing when the posted list adds an ability
+ *                                              (set once an earlier section of the request failed).
+ * @return array{ok:bool,message:string,data:array<string,mixed>}
+ */
+function aafm_save_abilities_section( array $posted, bool $refuse_additions = false ): array {
+	$label    = __( 'Enabled abilities', 'agent-abilities-for-mcp' );
+	$before   = aafm_get_stored_enabled_abilities_raw();
+	$resolved = aafm_resolve_scoped_enabled_input( $posted );
+	if ( $refuse_additions && array() !== array_diff( $resolved, $before ) ) {
+		return aafm_section_held( $label );
+	}
+	$enabled = aafm_set_enabled_abilities( $resolved, $persisted );
+
+	// The toggle diff is only ever an accurate record of what actually happened once the write is
+	// known to have persisted - logging it unconditionally would leave success-style rows for a
+	// change a stale persistent object cache silently swallowed (aafm_log_ability_persist_failure()).
+	if ( ! $persisted ) {
+		aafm_log_ability_persist_failure( 'aafm_enabled_abilities', $label );
+		return aafm_section_failed( aafm_switch_not_persisted_message( $label ) );
+	}
+
+	aafm_log_ability_toggle_diff( $before, $enabled );
+
+	return array(
+		'ok'      => true,
+		'message' => '',
+		'data'    => array(
+			'enabled'               => $enabled,
+			'ability_enabled_total' => aafm_enabled_ability_count(),
+		),
+	);
+}
+
+/**
  * AJAX: save the enabled-abilities toggles.
  *
- * Both the Integrations tab and the Abilities tab post here (same shared option, different
+ * The Integrations tab posts here; the Abilities tab runs the same section through aafm_save_abilities_page (same shared option, different
  * scope). The response carries the full persisted enabled list - the server's authoritative
  * answer, not whatever the client had checked - plus the global enabled-ability total, so the
  * card/section headers on either tab can be patched to the real count right after save instead
@@ -498,26 +609,7 @@ function aafm_ajax_save_abilities(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$before  = aafm_get_stored_enabled_abilities_raw();
-	$posted  = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$enabled = aafm_set_enabled_abilities( $posted, $persisted );
-
-	// The toggle diff is only ever an accurate record of what actually happened once the write is
-	// known to have persisted - logging it unconditionally would leave success-style rows for a
-	// change a stale persistent object cache silently swallowed (aafm_log_ability_persist_failure()).
-	if ( ! $persisted ) {
-		aafm_log_ability_persist_failure( 'aafm_enabled_abilities', __( 'Enabled abilities', 'agent-abilities-for-mcp' ) );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Enabled abilities', 'agent-abilities-for-mcp' ) ) ) );
-	}
-
-	aafm_log_ability_toggle_diff( $before, $enabled );
-
-	wp_send_json_success(
-		array(
-			'enabled'               => $enabled,
-			'ability_enabled_total' => aafm_enabled_ability_count(),
-		)
-	);
+	aafm_send_section_result( aafm_save_abilities_section( wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 }
 
 /**
@@ -542,6 +634,94 @@ function aafm_sanitize_allowed_post_types_input( array $posted ): array {
 }
 
 /**
+ * The stored members of an exposed-list option, read from the database row itself.
+ *
+ * @param string $option Option name.
+ * @return list<string>|null The list (empty when the row is absent or not an array), or null when
+ *                           the row could not be read.
+ */
+function aafm_stored_option_list( string $option ): ?array {
+	$views = aafm_read_option_views( $option );
+	if ( $views['db_error'] ) {
+		return null;
+	}
+	return ( $views['db_found'] && is_array( $views['db_value'] ) ) ? array_values( array_map( 'strval', $views['db_value'] ) ) : array();
+}
+
+/**
+ * Write one Activity Log row when an exposed list really changed: its name and how many keys were
+ * added and removed, never the keys. The detail column carries identifier-only notes, so the text
+ * is a fixed template around a translated label and two integers.
+ *
+ * @param string                 $option Option name the list is stored in.
+ * @param string                 $label  Human name of the list, already translated.
+ * @param array<int,string>|null $before The list before the write, or null when that read failed (the
+ *                                       change cannot be stated, so no row is written).
+ * @param array<int,string>      $after  The list the write certified.
+ * @return bool Whether a row was written.
+ */
+function aafm_log_exposed_list_change( string $option, string $label, ?array $before, array $after ): bool {
+	if ( null === $before ) {
+		return false;
+	}
+	$added   = count( array_unique( array_diff( $after, $before ) ) );
+	$removed = count( array_unique( array_diff( $before, $after ) ) );
+	if ( 0 === $added && 0 === $removed ) {
+		return false;
+	}
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => $option,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'success',
+			'event_type'        => 'setting_changed',
+			'detail'            => sprintf(
+				/* translators: 1: list name, 2: number of keys added, 3: number of keys removed. */
+				__( '%1$s changed: %2$d added, %3$d removed', 'agent-abilities-for-mcp' ),
+				$label,
+				$added,
+				$removed
+			),
+		)
+	);
+	return true;
+}
+
+/**
+ * Save the exposed-content-types allowlist. The caller owns the nonce and capability checks.
+ *
+ * @param array<string,mixed> $posted           The $_POST payload, already unslashed by the caller.
+ * @param bool                $refuse_additions Write nothing when the list adds a type, or when
+ *                                              the stored list cannot be read (set once an earlier
+ *                                              section of the request failed).
+ * @return array{ok:bool,message:string,data:array<string,mixed>}
+ */
+function aafm_save_post_types_section( array $posted, bool $refuse_additions = false ): array {
+	$label  = __( 'Exposed content types', 'agent-abilities-for-mcp' );
+	$types  = aafm_sanitize_allowed_post_types_input( $posted );
+	$before = aafm_stored_option_list( 'aafm_allowed_post_types' );
+	if ( $refuse_additions && ( null === $before || array() !== array_diff( $types, $before ) ) ) {
+		return aafm_section_held( $label );
+	}
+
+	// Verified, not a bare update_option(): this option gates which content types an agent can
+	// even see, so a stale persistent object cache silently keeping the old list live (Codex hunt
+	// F1) must be reported as a failed save, not a success.
+	if ( ! aafm_update_option_verified( 'aafm_allowed_post_types', $types ) ) {
+		aafm_log_ability_persist_failure( 'aafm_allowed_post_types', $label );
+		return aafm_section_failed( aafm_switch_not_persisted_message( $label ) );
+	}
+	aafm_log_exposed_list_change( 'aafm_allowed_post_types', $label, $before, $types );
+	return array(
+		'ok'      => true,
+		'message' => '',
+		'data'    => array( 'post_types' => $types ),
+	);
+}
+
+/**
  * AJAX: save the exposed-content-types allowlist.
  *
  * @return void
@@ -551,16 +731,7 @@ function aafm_ajax_save_post_types(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$types = aafm_sanitize_allowed_post_types_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-
-	// Verified, not a bare update_option(): this option gates which content types an agent can
-	// even see, so a stale persistent object cache silently keeping the old list live (Codex hunt
-	// F1) must be reported as a failed save, not a success.
-	if ( ! aafm_update_option_verified( 'aafm_allowed_post_types', $types ) ) {
-		aafm_log_ability_persist_failure( 'aafm_allowed_post_types', __( 'Exposed content types', 'agent-abilities-for-mcp' ) );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Exposed content types', 'agent-abilities-for-mcp' ) ) ) );
-	}
-	wp_send_json_success( array( 'post_types' => $types ) );
+	aafm_send_section_result( aafm_save_post_types_section( wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 }
 
 /**
@@ -801,14 +972,116 @@ function aafm_paired_meta_write_three_stage( string $deny_option, string $expose
 }
 
 /**
+ * Save one exposed/deny meta-key pair (post, user or term meta) through the three-stage write.
+ * The caller owns the nonce and capability checks.
+ *
+ * The exposed list and the deny list are persisted together so the UI can never report "Saved"
+ * while one of the two writes silently failed. A deny field missing from $posted reads as an
+ * empty list, which clears it; aafm_ajax_save_abilities_page() refuses that shape before it gets
+ * here.
+ *
+ * @param string              $kind             'post', 'user' or 'term'.
+ * @param array<string,mixed> $posted           The $_POST payload, already unslashed by the caller.
+ * @param bool                $refuse_additions Write nothing when the pair would widen: the exposed list
+ *                                              gains a key (unless the stored list is already `*`), the
+ *                                              deny list loses one (unless the request is `*`), or
+ *                                              either stored list cannot be read.
+ * @return array{ok:bool,message:string,data:array<string,mixed>}
+ */
+function aafm_save_meta_pair_section( string $kind, array $posted, bool $refuse_additions = false ): array {
+	$kinds   = array(
+		'post' => array(
+			'exposed_fn'    => 'aafm_sanitize_allowed_meta_keys_input',
+			'denied_fn'     => 'aafm_sanitize_denied_meta_keys_input',
+			'exposed_opt'   => 'aafm_allowed_meta_keys',
+			'denied_opt'    => 'aafm_denied_meta_keys',
+			'exposed_label' => __( 'Exposed post meta keys', 'agent-abilities-for-mcp' ),
+			'denied_label'  => __( 'Denied post meta keys', 'agent-abilities-for-mcp' ),
+			'exposed_key'   => 'meta_keys',
+			'denied_key'    => 'deny_meta_keys',
+		),
+		'user' => array(
+			'exposed_fn'    => 'aafm_sanitize_exposed_user_meta_keys_input',
+			'denied_fn'     => 'aafm_sanitize_denied_user_meta_keys_input',
+			'exposed_opt'   => 'aafm_exposed_user_meta_keys',
+			'denied_opt'    => 'aafm_denied_user_meta_keys',
+			'exposed_label' => __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ),
+			'denied_label'  => __( 'Denied user meta keys', 'agent-abilities-for-mcp' ),
+			'exposed_key'   => 'exposed_user_meta_keys',
+			'denied_key'    => 'denied_user_meta_keys',
+		),
+		'term' => array(
+			'exposed_fn'    => 'aafm_sanitize_exposed_term_meta_keys_input',
+			'denied_fn'     => 'aafm_sanitize_denied_term_meta_keys_input',
+			'exposed_opt'   => 'aafm_exposed_term_meta_keys',
+			'denied_opt'    => 'aafm_denied_term_meta_keys',
+			'exposed_label' => __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ),
+			'denied_label'  => __( 'Denied term meta keys', 'agent-abilities-for-mcp' ),
+			'exposed_key'   => 'exposed_term_meta_keys',
+			'denied_key'    => 'denied_term_meta_keys',
+		),
+	);
+	$c       = $kinds[ $kind ];
+	$exposed = $c['exposed_fn']( $posted );
+	$denied  = $c['denied_fn']( $posted );
+
+	$before = aafm_stored_option_list( $c['exposed_opt'] );
+	if ( $refuse_additions ) {
+		$before_denied = aafm_stored_option_list( $c['denied_opt'] );
+		// A stored exposed `*` already covers every key the request names, and a requested deny `*`
+		// already refuses every key the request drops, so neither set difference is a widening then.
+		if (
+			null === $before
+			|| null === $before_denied
+			|| ( ! in_array( '*', $before, true ) && array() !== array_diff( $exposed, $before ) )
+			|| ( ! in_array( '*', $denied, true ) && array() !== array_diff( $before_denied, $denied ) )
+		) {
+			return aafm_section_held( $c['exposed_label'] );
+		}
+	}
+
+	// Verified, not a bare update_option(): these two options gate which meta an agent can read or
+	// write, so a stale persistent object cache silently keeping the old list live (Codex hunt F1)
+	// must be reported as a failed save, not a success. The three-stage write order keeps every
+	// intermediate state at least as strict as before this request, even when it narrows both
+	// lists at once (Codex round 6, B6-1).
+	$stage = aafm_paired_meta_write_three_stage( $c['denied_opt'], $c['exposed_opt'], $denied, $exposed );
+	if ( 1 === $stage ) {
+		aafm_log_ability_persist_failure( $c['denied_opt'], $c['denied_label'] );
+		return aafm_section_failed( aafm_switch_not_persisted_message( $c['denied_label'] ) );
+	}
+	if ( 2 === $stage ) {
+		aafm_log_ability_persist_failure( $c['exposed_opt'], $c['exposed_label'] );
+		return aafm_section_failed( aafm_paired_write_partial_failure_message( $c['denied_label'], $c['exposed_label'] ) );
+	}
+	// The exposed list landed in stages 0 and 3.
+	aafm_log_exposed_list_change( $c['exposed_opt'], $c['exposed_label'], $before, $exposed );
+	if ( 3 === $stage ) {
+		aafm_log_ability_persist_failure( $c['denied_opt'], $c['denied_label'] );
+		return aafm_section_failed( aafm_paired_write_partial_failure_message( $c['exposed_label'], $c['denied_label'] ) );
+	}
+	if ( 'post' === $kind ) {
+		delete_transient( 'aafm_detected_meta_keys' );
+	}
+	return array(
+		'ok'      => true,
+		'message' => '',
+		'data'    => array(
+			$c['exposed_key'] => $exposed,
+			$c['denied_key']  => $denied,
+		),
+	);
+}
+
+/**
  * AJAX: save BOTH the exposed and denied post-meta lists in one request.
  *
- * Mirrors aafm_ajax_save_user_meta_keys() / aafm_ajax_save_term_meta_keys(): one click, one
- * request, one success/failure verdict for the whole post-meta selector. The exposed list and
+ * Mirrors aafm_ajax_save_user_meta_keys() / aafm_ajax_save_term_meta_keys(): one request, one
+ * success/failure verdict for the whole post-meta pair. The exposed list and
  * the deny list are persisted together so the UI can never report "Saved" while one of the two
- * writes silently failed (the prior split-handler design could). The deny field is optional in
- * the payload, so a caller that posts only aafm_meta_keys simply clears the deny list, matching
- * the old standalone behavior.
+ * writes silently failed (the prior split-handler design could). On this action the deny field
+ * is optional, so a caller that posts only aafm_meta_keys simply clears the deny list, matching
+ * the old standalone behavior. The tab's aafm_save_abilities_page refuses that shape instead.
  *
  * @return void
  */
@@ -817,45 +1090,15 @@ function aafm_ajax_save_meta_keys(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$keys   = aafm_sanitize_allowed_meta_keys_input( $posted );
-	$denied = aafm_sanitize_denied_meta_keys_input( $posted );
-
-	$deny_label    = __( 'Denied post meta keys', 'agent-abilities-for-mcp' );
-	$exposed_label = __( 'Exposed post meta keys', 'agent-abilities-for-mcp' );
-
-	// Verified, not a bare update_option(): these two options gate which post meta an agent can
-	// read or write, so a stale persistent object cache silently keeping the old list live (Codex
-	// hunt F1) must be reported as a failed save, not a success. The three-stage write order keeps
-	// every intermediate state at least as strict as before this request (Codex round 6, B6-1).
-	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_meta_keys', 'aafm_allowed_meta_keys', $denied, $keys );
-	if ( 1 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', $deny_label );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );
-	}
-	if ( 2 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_allowed_meta_keys', $exposed_label );
-		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $deny_label, $exposed_label ) ) );
-	}
-	if ( 3 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', $deny_label );
-		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $exposed_label, $deny_label ) ) );
-	}
-	delete_transient( 'aafm_detected_meta_keys' );
-	wp_send_json_success(
-		array(
-			'meta_keys'      => $keys,
-			'deny_meta_keys' => $denied,
-		)
-	);
+	aafm_send_section_result( aafm_save_meta_pair_section( 'post', wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 }
 
 /**
  * AJAX: save the denied-post-meta list on its own.
  *
  * Retained for the registered aafm_save_denied_meta_keys action and any external caller; the
- * admin UI now sends the deny list together with the exposed list through aafm_save_meta_keys
- * (see aafm_ajax_save_meta_keys), so this handler is no longer exercised by the bundled JS.
+ * admin UI now sends the deny list together with the exposed list through aafm_save_abilities_page
+ * (see aafm_save_meta_pair_section()), so this handler is no longer exercised by the bundled JS.
  *
  * @return void
  */
@@ -866,7 +1109,7 @@ function aafm_ajax_save_denied_meta_keys(): void {
 	}
 	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 
-	// Verified, not a bare update_option(): see aafm_ajax_save_meta_keys() above (Codex hunt F1).
+	// Verified, not a bare update_option(): see aafm_save_meta_pair_section() above (Codex hunt F1).
 	if ( ! aafm_update_option_verified( 'aafm_denied_meta_keys', $keys ) ) {
 		aafm_log_ability_persist_failure( 'aafm_denied_meta_keys', __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) );
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Denied post meta keys', 'agent-abilities-for-mcp' ) ) ) );
@@ -884,36 +1127,7 @@ function aafm_ajax_save_user_meta_keys(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$exposed = aafm_sanitize_exposed_user_meta_keys_input( $posted );
-	$denied  = aafm_sanitize_denied_user_meta_keys_input( $posted );
-
-	$deny_label    = __( 'Denied user meta keys', 'agent-abilities-for-mcp' );
-	$exposed_label = __( 'Exposed user meta keys', 'agent-abilities-for-mcp' );
-
-	// Verified, not a bare update_option(): these two options gate which user meta an agent can
-	// read or write (Codex hunt F1). The three-stage write order keeps every intermediate state
-	// at least as strict as before this request, even when this request narrows both lists at
-	// once (Codex round 6, B6-1; superseding the simple deny-first order from round 5, R5-1).
-	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_user_meta_keys', 'aafm_exposed_user_meta_keys', $denied, $exposed );
-	if ( 1 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_denied_user_meta_keys', $deny_label );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );
-	}
-	if ( 2 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_exposed_user_meta_keys', $exposed_label );
-		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $deny_label, $exposed_label ) ) );
-	}
-	if ( 3 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_denied_user_meta_keys', $deny_label );
-		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $exposed_label, $deny_label ) ) );
-	}
-	wp_send_json_success(
-		array(
-			'exposed_user_meta_keys' => $exposed,
-			'denied_user_meta_keys'  => $denied,
-		)
-	);
+	aafm_send_section_result( aafm_save_meta_pair_section( 'user', wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 }
 
 /**
@@ -926,36 +1140,124 @@ function aafm_ajax_save_term_meta_keys(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$exposed = aafm_sanitize_exposed_term_meta_keys_input( $posted );
-	$denied  = aafm_sanitize_denied_term_meta_keys_input( $posted );
+	aafm_send_section_result( aafm_save_meta_pair_section( 'term', wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+}
 
-	$deny_label    = __( 'Denied term meta keys', 'agent-abilities-for-mcp' );
-	$exposed_label = __( 'Exposed term meta keys', 'agent-abilities-for-mcp' );
+/**
+ * AJAX: save every section of the Abilities tab the request names, in one request.
+ *
+ * The request lists the sections it carries in aafm_sections[] and each one is written through the
+ * same section function its single-section action uses. A section that is not named is never read
+ * or written. A named section whose fields are missing or the wrong type is refused rather than
+ * read as empty (a missing deny field would otherwise clear the deny list); an empty list is sent
+ * as a textarea's empty string or as a list field's single empty entry.
+ *
+ * Sections that only narrow (remove an exposed key, a content type or an ability, add a deny
+ * entry, or change nothing) are written first, in the order of the table below. Sections that
+ * would widen (add an exposed key, a content type or an ability, or drop a deny entry) are written
+ * after them in the same order, the meta pairs (gates) before content types and enabled abilities
+ * (doors), and only while every section so far has saved: once any section has not saved, every
+ * widening section left is held back (aafm_section_held()). A widening is never written over a
+ * narrowing that did not land. A section that both widens and narrows is held whole. A failed
+ * section does not stop the narrowing ones. The answer has one result per named section, in table
+ * order.
+ *
+ * @return void
+ */
+function aafm_ajax_save_abilities_page(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$named  = ( isset( $posted['aafm_sections'] ) && is_array( $posted['aafm_sections'] ) ) ? array_map( 'sanitize_key', $posted['aafm_sections'] ) : array();
 
-	// Verified, not a bare update_option(): these two options gate which term meta an agent can
-	// read or write (Codex hunt F1). The three-stage write order keeps every intermediate state
-	// at least as strict as before this request, even when this request narrows both lists at
-	// once (Codex round 6, B6-1; superseding the simple deny-first order from round 5, R5-1).
-	$stage = aafm_paired_meta_write_three_stage( 'aafm_denied_term_meta_keys', 'aafm_exposed_term_meta_keys', $denied, $exposed );
-	if ( 1 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_denied_term_meta_keys', $deny_label );
-		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $deny_label ) ) );
-	}
-	if ( 2 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_exposed_term_meta_keys', $exposed_label );
-		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $deny_label, $exposed_label ) ) );
-	}
-	if ( 3 === $stage ) {
-		aafm_log_ability_persist_failure( 'aafm_denied_term_meta_keys', $deny_label );
-		wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( $exposed_label, $deny_label ) ) );
-	}
-	wp_send_json_success(
-		array(
-			'exposed_term_meta_keys' => $exposed,
-			'denied_term_meta_keys'  => $denied,
-		)
+	$table = array(
+		'meta_keys'      => array(
+			array(
+				'aafm_meta_keys'      => 'is_string',
+				'aafm_deny_meta_keys' => 'is_string',
+			),
+			static fn( array $p, bool $hold ): array => aafm_save_meta_pair_section( 'post', $p, $hold ),
+		),
+		'user_meta_keys' => array(
+			array(
+				'aafm_exposed_user_meta_keys' => 'is_string',
+				'aafm_denied_user_meta_keys'  => 'is_string',
+			),
+			static fn( array $p, bool $hold ): array => aafm_save_meta_pair_section( 'user', $p, $hold ),
+		),
+		'term_meta_keys' => array(
+			array(
+				'aafm_exposed_term_meta_keys' => 'is_string',
+				'aafm_denied_term_meta_keys'  => 'is_string',
+			),
+			static fn( array $p, bool $hold ): array => aafm_save_meta_pair_section( 'term', $p, $hold ),
+		),
+		'post_types'     => array(
+			array( 'aafm_post_types' => 'is_array' ),
+			'aafm_save_post_types_section',
+		),
+		'abilities'      => array(
+			array(
+				'aafm_abilities' => 'is_array',
+				'aafm_scope'     => 'is_array',
+			),
+			'aafm_save_abilities_section',
+		),
 	);
+
+	$results = array();
+	$run     = array();
+	$failed  = false;
+	foreach ( $table as $key => $section ) {
+		if ( ! in_array( $key, $named, true ) ) {
+			continue;
+		}
+		$complete = true;
+		foreach ( $section[0] as $field => $is_type ) {
+			$complete = $complete && isset( $posted[ $field ] ) && $is_type( $posted[ $field ] );
+		}
+		if ( $complete ) {
+			$run[ $key ] = $section[1];
+			continue;
+		}
+		$results[ $key ] = aafm_section_failed( __( 'This section was not saved because the request was incomplete. Reload the page and try again.', 'agent-abilities-for-mcp' ) );
+		$failed          = true;
+	}
+
+	// Pass 1: every section that does not widen anything is written, in table order. A section that
+	// would widen (add an ability, a content type or an exposed key, or drop a deny entry) comes
+	// back held and writes nothing, because a narrowing in another section may be what makes the
+	// widening safe and that narrowing has not landed yet. A lone section has nothing to wait for
+	// and is written as it always was, unless a section that was never written has already failed.
+	$defer = count( $run ) > 1;
+	foreach ( $run as $key => $section_fn ) {
+		$results[ $key ] = $section_fn( $posted, $defer || $failed );
+		$failed          = $failed || ( ! $results[ $key ]['ok'] && empty( $results[ $key ]['held'] ) );
+	}
+
+	// Pass 2: the widening sections, in table order (gates before doors), but only while every
+	// section so far has saved. The first one that does not save holds the rest.
+	foreach ( $run as $key => $section_fn ) {
+		if ( $failed || empty( $results[ $key ]['held'] ) ) {
+			continue;
+		}
+		$results[ $key ] = $section_fn( $posted, false );
+		$failed          = ! $results[ $key ]['ok'];
+	}
+
+	$sections = array();
+	foreach ( array_keys( $table ) as $key ) {
+		if ( isset( $results[ $key ] ) ) {
+			$sections[ $key ] = array_diff_key( $results[ $key ], array( 'held' => true ) );
+		}
+	}
+
+	if ( $failed ) {
+		wp_send_json_error( array( 'sections' => $sections ) );
+	}
+	wp_send_json_success( array( 'sections' => $sections ) );
 }
 
 /**
@@ -1668,7 +1970,7 @@ function aafm_render_abilities_tab(): void {
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
-	// This form and the Integrations tab both save through the same aafm_save_abilities action, but
+	// This form (aafm_save_abilities_page) and the Integrations tab (aafm_save_abilities) both write the enabled list, but
 	// each only renders the toggles for the subjects it owns. Declare the core subjects this form
 	// owns via aafm_scope[] so the server preserves every persisted ability OUTSIDE that scope (the
 	// integration abilities - WooCommerce, Yoast, ACF) from the stored option instead of treating a
@@ -1867,7 +2169,7 @@ function aafm_render_abilities_tab(): void {
 		echo '</div>';
 	}
 
-	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
+	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-savebar-dirty" role="status"><span class="aafm-pill aafm-pill-warn" hidden>' . esc_html__( 'Unsaved changes', 'agent-abilities-for-mcp' ) . '</span></span> <span class="aafm-save-status" aria-live="polite"></span></div>';
 	echo '</form>';
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
@@ -2044,7 +2346,7 @@ function aafm_abilities_display_tabs( array $subjects, array $by_subject, array 
  *
  * Lists every eligible (public, non-internal) CPT except post/page (always-on). Each row
  * names the exact fields the agent can read and flags read-only (non map_meta_cap) types,
- * so the operator opts in informed. Saved via the aafm_save_post_types AJAX action; the
+ * so the operator opts in informed. Saved by the tab's one Save (aafm_save_abilities_page); the
  * stored option is always re-floored on read, so the UI is a convenience, not the gate.
  *
  * @return void
@@ -2063,8 +2365,8 @@ function aafm_render_post_types_selector(): void {
 	}
 
 	// The selector is a plain <div> (never a nested <form>): only the outer abilities <form>
-	// may open a form here, and the save control below is a type="button" the JS binds to.
-	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types">';
+	// may open a form here, and the tab's one Save button saves this section.
+	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types" data-aafm-section="post_types">';
 	echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '<div class="aafm-table-wrap">';
@@ -2105,7 +2407,7 @@ function aafm_render_post_types_selector(): void {
 	echo '</tbody></table>';
 	echo '</div>'; // .aafm-table-wrap
 	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
-	echo '<p><button type="button" id="aafm-post-types-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
+	echo '<p class="aafm-section-result aafm-post-types-status" hidden></p>';
 	echo '</div>';
 }
 
@@ -2117,7 +2419,7 @@ function aafm_render_post_types_selector(): void {
  * own getters, do their own '*' sentinel restore, and hand the result plus their own copy
  * strings and element ids here. Only the post-meta wrapper passes 'detected', rendering the
  * "detected on your exposed types" chip row the user/term wrappers don't have. All three
- * share the same plain <div> (never a nested <form>) with a type="button" save, so the one
+ * share the same plain <div> (never a nested <form>) and no save control of their own, so the one
  * outer abilities <form> is never closed early.
  *
  * @param array<string,mixed> $cfg {
@@ -2139,14 +2441,13 @@ function aafm_render_post_types_selector(): void {
  *     @type string        $denied_textarea_id  Textarea id attribute.
  *     @type string        $denied_label_id     Id the h3 carries.
  *     @type string        $denied_hint_id      Id the hint paragraph carries.
- *     @type string        $save_button_id      Save button id attribute.
- *     @type string        $save_button_label   Save button visible text.
- *     @type string        $status_class        Class on the aria-live status span.
+ *     @type string        $section             Section key the tab's one Save sends, for data-aafm-section.
+ *     @type string        $status_class        Class on the hidden section result line.
  * }
  * @return void
  */
 function aafm_render_meta_keys_pair( array $cfg ): void {
-	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-card-pad aafm-meta-keys">';
+	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-card-pad aafm-meta-keys" data-aafm-section="' . esc_attr( $cfg['section'] ) . '">';
 	echo '<h3 id="' . esc_attr( $cfg['exposed_label_id'] ) . '">' . esc_html( $cfg['exposed_title'] ) . '</h3>';
 	echo '<p class="description">' . esc_html( $cfg['exposed_description'] ) . '</p>';
 	aafm_render_notice( 'warning', $cfg['warning'] );
@@ -2191,7 +2492,7 @@ function aafm_render_meta_keys_pair( array $cfg ): void {
 	);
 	echo '<p class="description" id="' . esc_attr( $cfg['denied_hint_id'] ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
 
-	echo '<p><button type="button" id="' . esc_attr( $cfg['save_button_id'] ) . '" class="aafm-btn aafm-btn-primary">' . esc_html( $cfg['save_button_label'] ) . '</button> <span class="' . esc_attr( $cfg['status_class'] ) . '" aria-live="polite"></span></p>';
+	echo '<p class="aafm-section-result ' . esc_attr( $cfg['status_class'] ) . '" hidden></p>';
 	echo '</div>';
 }
 
@@ -2199,10 +2500,10 @@ function aafm_render_meta_keys_pair( array $cfg ): void {
  * Render the "Exposed meta keys" opt-in selector inside the Content sub-tab.
  *
  * One key per line in the textarea is the allowlist; chips below offer the meta keys
- * actually detected on the exposed types as one-click adds. Saved via the
- * aafm_save_meta_keys AJAX action; the stored allowlist is always re-floored against the
+ * actually detected on the exposed types as one-click adds. Saved by the tab's one Save
+ * (aafm_save_abilities_page); the stored allowlist is always re-floored against the
  * hard-block on read, so this UI is a convenience, not the gate. It mirrors the post-types
- * selector exactly: a plain <div> (never a nested <form>) with a type="button" save, so the
+ * selector exactly: a plain <div> (never a nested <form>) with no save control of its own, so the
  * one outer abilities <form> is never closed early.
  *
  * @return void
@@ -2239,8 +2540,7 @@ function aafm_render_meta_keys_selector(): void {
 			'denied_textarea_id'  => 'aafm-deny-meta-keys',
 			'denied_label_id'     => 'aafm-deny-meta-keys-label',
 			'denied_hint_id'      => 'aafm-deny-meta-keys-hint',
-			'save_button_id'      => 'aafm-meta-keys-save',
-			'save_button_label'   => __( 'Save meta keys', 'agent-abilities-for-mcp' ),
+			'section'             => 'meta_keys',
 			'status_class'        => 'aafm-meta-keys-status',
 		)
 	);
@@ -2250,7 +2550,7 @@ function aafm_render_meta_keys_selector(): void {
  * Render the exposed/denied user-meta selector for the Users sub-tab.
  *
  * Mirrors aafm_render_meta_keys_selector() but for user meta: a plain <div> (never a nested
- * <form>) with two textareas (exposed above denied) and a type="button" save, so the one outer
+ * <form>) with two textareas (exposed above denied) and no save control of its own, so the one outer
  * abilities <form> is never closed early. The deny list always wins over the exposed list,
  * even when the exposed list uses *.
  *
@@ -2287,8 +2587,7 @@ function aafm_render_user_meta_keys_selector(): void {
 			'denied_textarea_id'  => 'aafm-denied-user-meta-keys',
 			'denied_label_id'     => 'aafm-denied-user-meta-keys-label',
 			'denied_hint_id'      => 'aafm-denied-user-meta-keys-hint',
-			'save_button_id'      => 'aafm-user-meta-keys-save',
-			'save_button_label'   => __( 'Save user meta keys', 'agent-abilities-for-mcp' ),
+			'section'             => 'user_meta_keys',
 			'status_class'        => 'aafm-user-meta-keys-status',
 		)
 	);
@@ -2298,7 +2597,7 @@ function aafm_render_user_meta_keys_selector(): void {
  * Render the exposed/denied term-meta selector for the Taxonomies & Terms sub-tab.
  *
  * Mirrors aafm_render_user_meta_keys_selector() but for term meta: a plain <div> (never a
- * nested <form>) with two textareas (exposed above denied) and a type="button" save, so the
+ * nested <form>) with two textareas (exposed above denied) and no save control of its own, so the
  * one outer abilities <form> is never closed early. The deny list always wins over the exposed
  * list, even when the exposed list uses *.
  *
@@ -2335,8 +2634,7 @@ function aafm_render_term_meta_keys_selector(): void {
 			'denied_textarea_id'  => 'aafm-denied-term-meta-keys',
 			'denied_label_id'     => 'aafm-denied-term-meta-keys-label',
 			'denied_hint_id'      => 'aafm-denied-term-meta-keys-hint',
-			'save_button_id'      => 'aafm-term-meta-keys-save',
-			'save_button_label'   => __( 'Save term meta keys', 'agent-abilities-for-mcp' ),
+			'section'             => 'term_meta_keys',
 			'status_class'        => 'aafm-term-meta-keys-status',
 		)
 	);

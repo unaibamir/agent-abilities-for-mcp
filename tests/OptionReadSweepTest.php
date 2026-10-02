@@ -122,6 +122,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/abilities/woocommerce/gateways.php|aafm_exec_wc_update_payment_gateway|1',
 		'includes/admin/onboarding-pointer.php|aafm_quickconnect_flag_menu_pointer|1',
 		'includes/admin/page.php|aafm_paired_meta_write_three_stage|1',
+		'includes/admin/page.php|aafm_stored_option_list|1',
 		'includes/allowlist.php|aafm_allowlist_overrides|1',
 		'includes/allowlist.php|aafm_allowlist_overrides_for_display|1',
 		'includes/audit/log.php|aafm_maybe_upgrade_activity_log|1',

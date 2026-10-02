@@ -5,7 +5,7 @@
  *
  * Reuses the shared admin design system (aafm-card / aafm-btn / inline-SVG aafm-icon) and
  * stores enabled abilities in the same aafm_enabled_abilities option as the Abilities tab,
- * saved through the same aafm_save_abilities AJAX action. Integration abilities are bucketed
+ * saved through the aafm_save_abilities AJAX action. Integration abilities are bucketed
  * by their registry `subject` (one of the integration slugs), so this tab needs no new option.
  *
  * @package AgentAbilitiesForMCP
@@ -274,12 +274,12 @@ function aafm_render_integrations_tab(): void {
 	echo '</div>';
 
 	// One outer form for every per-ability toggle across all integration cards (never a
-	// nested form). The save handler binds to the same aafm_save_abilities AJAX action as
-	// the Abilities tab; the stored value is a flat list of enabled ability names.
+	// nested form). The save handler binds to the aafm_save_abilities AJAX action, which writes
+	// the same option as the Abilities tab; the stored value is a flat list of enabled ability names.
 	echo '<form id="aafm-integrations-form" class="aafm-integrations-cards">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
-	// This form saves through the same aafm_save_abilities action as the Abilities tab, but it
+	// This form saves through aafm_save_abilities into the same option as the Abilities tab, but it
 	// only renders integration toggles. Rather than carrying off-tab abilities forward as
 	// client-side hidden inputs (which a stale tab or a tamper could drop or flip), it declares
 	// the subjects it OWNS via aafm_scope[]. The server preserves every persisted ability outside

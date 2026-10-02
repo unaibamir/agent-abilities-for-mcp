@@ -323,6 +323,10 @@
 			font-size: 13px;
 		}
 
+		/* The Abilities save bar's "Unsaved changes" pill toggles via `hidden`; the
+		   `display: inline-flex` above would otherwise beat it. */
+		&[hidden] { display: none; }
+
 		/* Leading status dot. Rendered from CSS (::before) so the markup stays
 		   a bare <span class="aafm-pill aafm-pill-VARIANT">word</span> - no dot
 		   element needed. --aafm-dot is set per variant below; falls back to
@@ -1941,6 +1945,23 @@
 		color: var(--aafm-text-subtle);
 	}
 
+	/* The Abilities tab's one Save bar shows an error summary in red. Scoped to this tab so the
+	   Settings, Integrations and Bridge bars that share .aafm-save-status are untouched. */
+	.aafm-abilities .aafm-savebar .aafm-save-status.is-error {
+		color: var(--aafm-red-text);
+		font-weight: 600;
+	}
+
+	/* Each card's result line sits where the card's own Save button used to be. Placed after
+	   the shared status block above so its margin wins. */
+	.aafm-section-result {
+		margin-block: var(--aafm-space-3) 0;
+		margin-inline-start: 0;
+
+		&.is-ok { color: var(--aafm-green-text); }
+		&.is-error { color: var(--aafm-red-text); font-weight: 600; }
+	}
+
 	/* ---------- Help accordion (native <details class="aafm-help-entry">) ---------- */
 	.aafm-help {
 		max-inline-size: 820px;
@@ -2189,6 +2210,27 @@
 
 	.aafm-table-wrap {
 		overflow-x: auto;
+	}
+
+	/* Activity log: fixed columns that share the viewport, long values (JSON detail, argument
+	   keys, event names) wrap inside their cell instead of stretching the table sideways. The
+	   min-width keeps a phone-width screen readable by scrolling the wrapper. */
+	.aafm-log-table {
+		table-layout: fixed;
+		inline-size: 100%;
+		min-inline-size: 720px;
+
+		th,
+		td {
+			overflow-wrap: anywhere;
+			vertical-align: top;
+		}
+
+		th:nth-child(1) { inline-size: 9%; }
+		th:nth-child(2) { inline-size: 13%; }
+		th:nth-child(3) { inline-size: 20%; }
+		th:nth-child(5) { inline-size: 8%; }
+		th:nth-child(6) { inline-size: 14%; }
 	}
 
 	/* ---------- Shared section component (aafm_render_section) ---------- */

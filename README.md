@@ -295,6 +295,13 @@ It makes two kinds of outbound HTTP request on its own: the Connection tab's rea
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), run on your own machine and not bundled with this plugin.
 
 ## Changelog
+### 1.7.7
+
+* **Feature:** The Abilities tab now has one Save changes button that saves every section on it, with an "Unsaved changes" note and a warning if you leave the page with edits pending.
+* **Feature:** The Activity Log gets a row when an exposed list changes (content types, or post, user or term meta keys), giving the list name and how many keys were added and removed.
+* **Fix:** Edits to exposed meta keys or content types were lost when you pressed only the main Save. The four separate section buttons are gone, and the one Save covers them.
+* **Fix:** When a section fails to save, the page names it and keeps your edits so you can retry. Sections that did save stay saved.
+
 ### 1.7.6
 
 * **Fix:** An OAuth token issued for the MCP endpoint also signed its holder in on other REST routes, admin-ajax.php, admin-post.php, the comment form, the OAuth authorize screen and discovery URLs. It now works on the MCP route only.

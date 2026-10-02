@@ -1207,8 +1207,8 @@
 			// serialized and never sent.
 			const defs = [
 				{ key: 'meta_keys', root: form.querySelector( '[data-aafm-section="meta_keys"]' ), pair: [ 'aafm_meta_keys', 'aafm_deny_meta_keys' ], dataKeys: [ 'meta_keys', 'deny_meta_keys' ], label: [ 'sectionMetaKeys', 'Exposed meta keys' ] },
-				{ key: 'user_meta_keys', root: form.querySelector( '[data-aafm-section="user_meta_keys"]' ), pair: [ 'aafm_exposed_user_meta_keys', 'aafm_denied_user_meta_keys' ], dataKeys: [ 'exposed_user_meta_keys', 'denied_user_meta_keys' ], label: [ 'sectionUserMetaKeys', 'Exposed user meta keys' ] },
-				{ key: 'term_meta_keys', root: form.querySelector( '[data-aafm-section="term_meta_keys"]' ), pair: [ 'aafm_exposed_term_meta_keys', 'aafm_denied_term_meta_keys' ], dataKeys: [ 'exposed_term_meta_keys', 'denied_term_meta_keys' ], label: [ 'sectionTermMetaKeys', 'Exposed term meta keys' ] },
+				{ key: 'user_meta_keys', root: form.querySelector( '[data-aafm-section="user_meta_keys"]' ), pair: [ 'aafm_exposed_user_meta_keys', 'aafm_denied_user_meta_keys' ], dataKeys: [ 'exposed_user_meta_keys', 'denied_user_meta_keys' ], label: [ 'sectionUserKeys', 'Exposed user meta keys' ] },
+				{ key: 'term_meta_keys', root: form.querySelector( '[data-aafm-section="term_meta_keys"]' ), pair: [ 'aafm_exposed_term_meta_keys', 'aafm_denied_term_meta_keys' ], dataKeys: [ 'exposed_term_meta_keys', 'denied_term_meta_keys' ], label: [ 'sectionTermKeys', 'Exposed term meta keys' ] },
 				{ key: 'post_types', root: form.querySelector( '[data-aafm-section="post_types"]' ), checks: 'aafm_post_types[]', dataKeys: [ 'post_types' ], label: [ 'sectionPostTypes', 'Exposed content types' ] },
 				{ key: 'abilities', root: form, checks: 'aafm_abilities[]', dataKeys: [ 'enabled' ], label: [ 'sectionAbilities', 'Enabled abilities' ] },
 			].filter( ( d ) => d.root );

@@ -218,8 +218,8 @@ final class AbilitiesTabSingleSaveTest extends TestCase {
 			'sectionAbilities',
 			'sectionPostTypes',
 			'sectionMetaKeys',
-			'sectionUserMetaKeys',
-			'sectionTermMetaKeys',
+			'sectionUserKeys',
+			'sectionTermKeys',
 		) as $key ) {
 			$this->assertStringContainsString( '"' . $key . '"', $data, "The i18n bag must carry $key." );
 		}

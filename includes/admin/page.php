@@ -249,8 +249,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'sectionAbilities'         => __( 'Enabled abilities', 'agent-abilities-for-mcp' ),
 				'sectionPostTypes'         => __( 'Exposed content types', 'agent-abilities-for-mcp' ),
 				'sectionMetaKeys'          => __( 'Exposed meta keys', 'agent-abilities-for-mcp' ),
-				'sectionUserMetaKeys'      => __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ),
-				'sectionTermMetaKeys'      => __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ),
+				'sectionUserKeys'          => __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ),
+				'sectionTermKeys'          => __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ),
 			),
 		)
 	);

@@ -812,6 +812,85 @@ final class AbilitiesPageSaveTest extends TestCase {
 		$this->assertSame( array( 'old-deny', 'also-denied' ), $this->stored( 'aafm_denied_meta_keys' ) );
 	}
 
+	public function test_replacing_deny_entries_with_the_wildcard_saves_after_another_section_failed(): void {
+		$this->plant( array( 'aafm_denied_meta_keys' => array( 'old-deny', 'also-denied' ) ) );
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => 'old-exp',
+					'aafm_deny_meta_keys' => '*',
+					'aafm_abilities'      => array( '' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$sections = $json['data']['sections'] ?? array();
+		$this->assertFalse( $sections['abilities']['ok'] ?? true );
+		$this->assertTrue( $sections['meta_keys']['ok'] ?? false, 'Deny-all covers every dropped key, so it cannot widen.' );
+		$this->assertSame( array( '*' ), $this->stored( 'aafm_denied_meta_keys' ) );
+	}
+
+	public function test_replacing_a_stored_deny_wildcard_with_keys_is_still_held_when_another_section_failed(): void {
+		$this->plant( array( 'aafm_denied_meta_keys' => array( '*' ) ) );
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => 'old-exp',
+					'aafm_deny_meta_keys' => 'old-deny',
+					'aafm_abilities'      => array( '' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$this->assertSame( self::HOLD_POST_META, $json['data']['sections']['meta_keys']['message'] ?? '' );
+		$this->assertSame( array( '*' ), $this->stored( 'aafm_denied_meta_keys' ) );
+	}
+
+	public function test_replacing_a_stored_exposed_wildcard_with_keys_saves_after_another_section_failed(): void {
+		$this->plant( array( 'aafm_allowed_meta_keys' => array( '*' ) ) );
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => 'price',
+					'aafm_deny_meta_keys' => 'old-deny',
+					'aafm_abilities'      => array( '' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$sections = $json['data']['sections'] ?? array();
+		$this->assertFalse( $sections['abilities']['ok'] ?? true );
+		$this->assertTrue( $sections['meta_keys']['ok'] ?? false, 'Explicit keys sit inside the stored wildcard, so they cannot widen.' );
+		$this->assertSame( array( 'price' ), $this->stored( 'aafm_allowed_meta_keys' ) );
+	}
+
+	public function test_a_new_exposed_wildcard_is_still_held_when_another_section_failed(): void {
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => '*',
+					'aafm_deny_meta_keys' => 'old-deny',
+					'aafm_abilities'      => array( '' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$this->assertSame( self::HOLD_POST_META, $json['data']['sections']['meta_keys']['message'] ?? '' );
+		$this->assertSame( array( 'old-exp' ), $this->stored( 'aafm_allowed_meta_keys' ) );
+	}
+
 	public function test_adding_a_deny_entry_alone_still_saves_after_another_section_failed(): void {
 		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
 

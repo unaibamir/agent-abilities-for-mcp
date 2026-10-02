@@ -983,8 +983,9 @@ function aafm_paired_meta_write_three_stage( string $deny_option, string $expose
  * @param string              $kind             'post', 'user' or 'term'.
  * @param array<string,mixed> $posted           The $_POST payload, already unslashed by the caller.
  * @param bool                $refuse_additions Write nothing when the pair would widen: the exposed list
- *                                              gains a key, the deny list loses one, or either stored
- *                                              list cannot be read.
+ *                                              gains a key (unless the stored list is already `*`), the
+ *                                              deny list loses one (unless the request is `*`), or
+ *                                              either stored list cannot be read.
  * @return array{ok:bool,message:string,data:array<string,mixed>}
  */
 function aafm_save_meta_pair_section( string $kind, array $posted, bool $refuse_additions = false ): array {
@@ -1027,7 +1028,14 @@ function aafm_save_meta_pair_section( string $kind, array $posted, bool $refuse_
 	$before = aafm_stored_option_list( $c['exposed_opt'] );
 	if ( $refuse_additions ) {
 		$before_denied = aafm_stored_option_list( $c['denied_opt'] );
-		if ( null === $before || null === $before_denied || array() !== array_diff( $exposed, $before ) || array() !== array_diff( $before_denied, $denied ) ) {
+		// A stored exposed `*` already covers every key the request names, and a requested deny `*`
+		// already refuses every key the request drops, so neither set difference is a widening then.
+		if (
+			null === $before
+			|| null === $before_denied
+			|| ( ! in_array( '*', $before, true ) && array() !== array_diff( $exposed, $before ) )
+			|| ( ! in_array( '*', $denied, true ) && array() !== array_diff( $before_denied, $denied ) )
+		) {
 			return aafm_section_held( $c['exposed_label'] );
 		}
 	}

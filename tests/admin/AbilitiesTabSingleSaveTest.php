@@ -192,6 +192,12 @@ final class AbilitiesTabSingleSaveTest extends TestCase {
 			"'savedWithNewerEdits'",
 			'new Intl.ListFormat( undefined, { type: \'conjunction\' } )',
 			'snapshot[ key ] = null;',
+			// A2: the edited-during-request snapshot counts only checkboxes that are on the page.
+			'.filter( ( v ) => stored[ 0 ].includes( v ) )',
+			// A3: going clean clears an error left in the bar.
+			"barStatus.classList.contains( 'is-error' )",
+			// A7: a newer edit means the summary must not claim everything else was saved.
+			'&& ! newerEdits',
 		) as $token ) {
 			$this->assertStringContainsString( $token, $region, "The page save must contain: $token" );
 		}

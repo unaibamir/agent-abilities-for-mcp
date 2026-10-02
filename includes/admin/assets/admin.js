@@ -498,8 +498,8 @@
 
 				// A zero-match query leaves the savebar as the only thing still rendered above
 				// "No abilities match." - a bare Save button with no rows, heading, or context
-				// above it. Hide it with the rest of the empty view and restore it in clear()
-				// or the moment a later keystroke matches again.
+				// above it. Hide it with the rest of the empty view, unless there are unsaved changes (the
+				// pill then gives it context), and restore it in clear() or when a later keystroke matches.
 				if ( savebar ) {
 					savebar.hidden = 0 === matchCount && ! this.#abilitiesDirty;
 				}

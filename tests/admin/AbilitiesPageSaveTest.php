@@ -26,6 +26,10 @@ final class AbilitiesPageSaveTest extends TestCase {
 
 	private const HOLD_POST_TYPES = 'Exposed content types was not saved because another section on this page failed. Fix that section and save again.';
 
+	private const HOLD_POST_META = 'Exposed post meta keys was not saved because another section on this page failed. Fix that section and save again.';
+
+	private const HOLD_USER_META = 'Exposed user meta keys was not saved because another section on this page failed. Fix that section and save again.';
+
 	private const MSG_A_SUFFIX = ' could not be changed: the site\'s persistent object cache is still returning the old value. Flush the object cache (Redis, Memcached, or your host\'s cache) and save again.';
 
 	/**
@@ -464,10 +468,20 @@ final class AbilitiesPageSaveTest extends TestCase {
 		$this->assert_options_hold( self::OLD );
 	}
 
-	public function test_a_failed_meta_section_does_not_stop_the_other_meta_sections(): void {
+	public function test_a_failed_meta_section_does_not_stop_a_narrowing_meta_section(): void {
 		$this->fail_the_post_meta_pair();
 
-		$json = $this->save( $this->fields(), array( 'meta_keys', 'user_meta_keys', 'term_meta_keys' ) );
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_exposed_user_meta_keys' => '',
+					'aafm_denied_user_meta_keys'  => "old-u-deny\nmore",
+					'aafm_exposed_term_meta_keys' => '',
+					'aafm_denied_term_meta_keys'  => "old-t-deny\nmore",
+				)
+			),
+			array( 'meta_keys', 'user_meta_keys', 'term_meta_keys' )
+		);
 
 		$this->assertFalse( $json['success'] ?? true );
 		$sections = $json['data']['sections'] ?? array();
@@ -479,12 +493,32 @@ final class AbilitiesPageSaveTest extends TestCase {
 			array(
 				'aafm_denied_meta_keys'       => array( 'old-deny', 'new-deny' ),
 				'aafm_allowed_meta_keys'      => array( 'old-exp' ),
-				'aafm_denied_user_meta_keys'  => array( 'u-deny' ),
-				'aafm_exposed_user_meta_keys' => array( 'u-exp' ),
-				'aafm_denied_term_meta_keys'  => array( 't-deny' ),
-				'aafm_exposed_term_meta_keys' => array( 't-exp' ),
+				'aafm_denied_user_meta_keys'  => array( 'old-u-deny', 'more' ),
+				'aafm_exposed_user_meta_keys' => array(),
+				'aafm_denied_term_meta_keys'  => array( 'old-t-deny', 'more' ),
+				'aafm_exposed_term_meta_keys' => array(),
 			)
 		);
+	}
+
+	public function test_a_failed_meta_section_holds_a_widening_meta_section(): void {
+		$this->fail_the_post_meta_pair();
+
+		$json = $this->save( $this->fields(), array( 'meta_keys', 'user_meta_keys' ) );
+
+		$sections = $json['data']['sections'] ?? array();
+		$this->assertFalse( $sections['meta_keys']['ok'] );
+		$this->assertFalse( $sections['user_meta_keys']['ok'] );
+		$this->assertSame( self::HOLD_USER_META, $sections['user_meta_keys']['message'] );
+		$this->assertSame( array(), $sections['user_meta_keys']['data'] );
+		$this->assertArrayNotHasKey( 'held', $sections['user_meta_keys'] );
+		$this->assert_options_hold(
+			array(
+				'aafm_denied_user_meta_keys'  => array( 'old-u-deny' ),
+				'aafm_exposed_user_meta_keys' => array( 'old-u-exp' ),
+			)
+		);
+		$this->assertSame( array(), $this->rows_for( 'aafm_exposed_user_meta_keys' ), 'A held pair logs nothing.' );
 	}
 
 	public function test_stage_one_failure_in_a_combined_request(): void {
@@ -656,6 +690,166 @@ final class AbilitiesPageSaveTest extends TestCase {
 		$this->assertSame( self::INCOMPLETE, $sections['meta_keys']['message'] ?? '' );
 		$this->assertSame( self::HOLD_ABILITIES, $sections['abilities']['message'] ?? '' );
 		$this->assertSame( array( 'aafm/get-posts' ), $this->stored( 'aafm_enabled_abilities' ) );
+	}
+
+	public function test_a_widened_meta_key_is_held_when_the_ability_that_gates_it_fails_to_turn_off(): void {
+		$this->plant(
+			array(
+				'aafm_allowed_meta_keys' => array( 'price' ),
+				'aafm_enabled_abilities' => array( 'aafm/get-posts', 'aafm/get-post-meta' ),
+			)
+		);
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/get-post-meta' ) );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => "price\ncost_price",
+					'aafm_deny_meta_keys' => 'old-deny',
+					'aafm_abilities'      => array( '', 'aafm/get-posts' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$sections = $json['data']['sections'] ?? array();
+		$this->assertSame( 'Enabled abilities' . self::MSG_A_SUFFIX, $sections['abilities']['message'] ?? '' );
+		$this->assertSame( self::HOLD_POST_META, $sections['meta_keys']['message'] ?? '' );
+		$this->assertSame( array(), $sections['meta_keys']['data'] ?? null );
+		$this->assertSame( array( 'price' ), $this->stored( 'aafm_allowed_meta_keys' ), 'The key stays unexposed: the read ability it needs is still on.' );
+		$this->assertSame( array( 'old-deny' ), $this->stored( 'aafm_denied_meta_keys' ) );
+		$this->assertSame( array(), $this->rows_for( 'aafm_allowed_meta_keys' ), 'A held pair logs nothing, not even a persist failure.' );
+	}
+
+	public function test_a_widened_meta_key_is_held_when_the_type_that_gates_it_fails_to_untick(): void {
+		$this->stuck_at( 'aafm_allowed_post_types', array( 'aafm_film' ) );
+
+		$json = $this->save( $this->fields( array( 'aafm_post_types' => array( '' ) ) ), array( 'meta_keys', 'post_types' ) );
+
+		$sections = $json['data']['sections'] ?? array();
+		$this->assertSame( 'Exposed content types' . self::MSG_A_SUFFIX, $sections['post_types']['message'] ?? '' );
+		$this->assertSame( self::HOLD_POST_META, $sections['meta_keys']['message'] ?? '' );
+		$this->assert_options_hold(
+			array(
+				'aafm_allowed_post_types' => array( 'aafm_film' ),
+				'aafm_allowed_meta_keys'  => array( 'old-exp' ),
+				'aafm_denied_meta_keys'   => array( 'old-deny' ),
+			)
+		);
+	}
+
+	public function test_a_ticked_type_is_held_when_the_ability_that_gates_it_fails_to_turn_off(): void {
+		$this->plant( array( 'aafm_enabled_abilities' => array( 'aafm/get-posts', 'aafm/get-pages' ) ) );
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/get-pages' ) );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_post_types' => array( '', 'aafm_film', 'aafm_book' ),
+					'aafm_abilities'  => array( '', 'aafm/get-posts' ),
+				)
+			),
+			array( 'post_types', 'abilities' )
+		);
+
+		$sections = $json['data']['sections'] ?? array();
+		$this->assertSame( 'Enabled abilities' . self::MSG_A_SUFFIX, $sections['abilities']['message'] ?? '' );
+		$this->assertSame( self::HOLD_POST_TYPES, $sections['post_types']['message'] ?? '' );
+		$this->assertSame( array( 'aafm_film' ), $this->stored( 'aafm_allowed_post_types' ) );
+	}
+
+	public function test_narrowing_sections_are_written_before_widening_ones_whatever_the_table_order(): void {
+		$this->plant(
+			array(
+				'aafm_allowed_meta_keys' => array( 'price' ),
+				'aafm_enabled_abilities' => array( 'aafm/get-posts', 'aafm/get-post-meta' ),
+			)
+		);
+		$seen     = array();
+		$listener = static function ( $option ) use ( &$seen ): void {
+			if ( 0 === strpos( (string) $option, 'aafm_' ) ) {
+				$seen[] = $option;
+			}
+		};
+		add_action( 'updated_option', $listener );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => "price\ncost_price",
+					'aafm_deny_meta_keys' => 'old-deny',
+					'aafm_abilities'      => array( '', 'aafm/get-posts' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$this->assertTrue( $json['success'] ?? false );
+		$this->assertSame( array( 'meta_keys', 'abilities' ), array_keys( $json['data']['sections'] ?? array() ), 'The answer stays in table order.' );
+		$this->assertSame( 'aafm_enabled_abilities', $seen[0] ?? '', 'The ability goes off before the key goes live.' );
+		$this->assertSame( array( 'price', 'cost_price' ), $this->stored( 'aafm_allowed_meta_keys' ) );
+		$this->assertSame( array( 'aafm/get-posts' ), $this->stored( 'aafm_enabled_abilities' ) );
+	}
+
+	public function test_dropping_a_deny_entry_counts_as_widening(): void {
+		$this->plant( array( 'aafm_denied_meta_keys' => array( 'old-deny', 'also-denied' ) ) );
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => 'old-exp',
+					'aafm_deny_meta_keys' => 'old-deny',
+					'aafm_abilities'      => array( '' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$sections = $json['data']['sections'] ?? array();
+		$this->assertSame( 'Enabled abilities' . self::MSG_A_SUFFIX, $sections['abilities']['message'] ?? '' );
+		$this->assertSame( self::HOLD_POST_META, $sections['meta_keys']['message'] ?? '' );
+		$this->assertSame( array( 'old-deny', 'also-denied' ), $this->stored( 'aafm_denied_meta_keys' ) );
+	}
+
+	public function test_adding_a_deny_entry_alone_still_saves_after_another_section_failed(): void {
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => 'old-exp',
+					'aafm_deny_meta_keys' => "old-deny\nnew-deny",
+					'aafm_abilities'      => array( '' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$sections = $json['data']['sections'] ?? array();
+		$this->assertFalse( $sections['abilities']['ok'] ?? true );
+		$this->assertTrue( $sections['meta_keys']['ok'] ?? false );
+		$this->assertSame( array( 'old-deny', 'new-deny' ), $this->stored( 'aafm_denied_meta_keys' ) );
+	}
+
+	public function test_an_unreadable_deny_list_counts_as_widening_when_another_section_failed(): void {
+		$this->stuck_at( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+		$this->fail_option_read( 'aafm_denied_meta_keys' );
+
+		$json = $this->save(
+			$this->fields(
+				array(
+					'aafm_meta_keys'      => '',
+					'aafm_deny_meta_keys' => 'old-deny',
+					'aafm_abilities'      => array( '' ),
+				)
+			),
+			array( 'meta_keys', 'abilities' )
+		);
+
+		$this->assertSame( self::HOLD_POST_META, $json['data']['sections']['meta_keys']['message'] ?? '' );
+		$this->assertSame( array(), $this->rows_for( 'aafm_denied_meta_keys' ), 'Held, so nothing was attempted and nothing was logged.' );
+		$this->assertSame( array( 'old-exp' ), $this->stored( 'aafm_allowed_meta_keys' ) );
 	}
 
 	public function test_a_hard_blocked_key_comes_back_removed(): void {

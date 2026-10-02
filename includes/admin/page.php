@@ -518,19 +518,22 @@ function aafm_section_failed( string $message ): array {
 }
 
 /**
- * The result of a section that was left unwritten because an earlier section in the same request
- * failed and this one would add entries (see aafm_ajax_save_abilities_page()).
+ * The result of a section that was left unwritten because it would add entries (see
+ * aafm_ajax_save_abilities_page()). The held flag lets the caller tell it from a failed write.
  *
  * @param string $label Human name of the section, already translated.
- * @return array{ok:bool,message:string,data:array<string,mixed>}
+ * @return array{ok:bool,message:string,data:array<string,mixed>,held:bool}
  */
 function aafm_section_held( string $label ): array {
-	return aafm_section_failed(
-		sprintf(
-			/* translators: %s: the name of the section that was not saved, for example "Enabled abilities". */
-			__( '%s was not saved because another section on this page failed. Fix that section and save again.', 'agent-abilities-for-mcp' ),
-			$label
-		)
+	return array_merge(
+		aafm_section_failed(
+			sprintf(
+				/* translators: %s: the name of the section that was not saved, for example "Enabled abilities". */
+				__( '%s was not saved because another section on this page failed. Fix that section and save again.', 'agent-abilities-for-mcp' ),
+				$label
+			)
+		),
+		array( 'held' => true )
 	);
 }
 
@@ -977,11 +980,14 @@ function aafm_paired_meta_write_three_stage( string $deny_option, string $expose
  * empty list, which clears it; aafm_ajax_save_abilities_page() refuses that shape before it gets
  * here.
  *
- * @param string              $kind   'post', 'user' or 'term'.
- * @param array<string,mixed> $posted The $_POST payload, already unslashed by the caller.
+ * @param string              $kind             'post', 'user' or 'term'.
+ * @param array<string,mixed> $posted           The $_POST payload, already unslashed by the caller.
+ * @param bool                $refuse_additions Write nothing when the pair would widen: the exposed list
+ *                                              gains a key, the deny list loses one, or either stored
+ *                                              list cannot be read.
  * @return array{ok:bool,message:string,data:array<string,mixed>}
  */
-function aafm_save_meta_pair_section( string $kind, array $posted ): array {
+function aafm_save_meta_pair_section( string $kind, array $posted, bool $refuse_additions = false ): array {
 	$kinds   = array(
 		'post' => array(
 			'exposed_fn'    => 'aafm_sanitize_allowed_meta_keys_input',
@@ -1019,6 +1025,12 @@ function aafm_save_meta_pair_section( string $kind, array $posted ): array {
 	$denied  = $c['denied_fn']( $posted );
 
 	$before = aafm_stored_option_list( $c['exposed_opt'] );
+	if ( $refuse_additions ) {
+		$before_denied = aafm_stored_option_list( $c['denied_opt'] );
+		if ( null === $before || null === $before_denied || array() !== array_diff( $exposed, $before ) || array() !== array_diff( $before_denied, $denied ) ) {
+			return aafm_section_held( $c['exposed_label'] );
+		}
+	}
 
 	// Verified, not a bare update_option(): these two options gate which meta an agent can read or
 	// write, so a stale persistent object cache silently keeping the old list live (Codex hunt F1)
@@ -1132,11 +1144,15 @@ function aafm_ajax_save_term_meta_keys(): void {
  * read as empty (a missing deny field would otherwise clear the deny list); an empty list is sent
  * as a textarea's empty string or as a list field's single empty entry.
  *
- * Sections run in the order of the table below: the meta pairs (gates), then content types, then
- * enabled abilities (doors). A failed section does not stop the others, except that once any
- * section has not saved, a later section that would add an ability or a content type is held
- * back (aafm_section_held()) so a door is never opened over a gate that did not narrow. A section
- * that only removes entries is still written. The answer has one result per named section.
+ * Sections that only narrow (remove an exposed key, a content type or an ability, add a deny
+ * entry, or change nothing) are written first, in the order of the table below. Sections that
+ * would widen (add an exposed key, a content type or an ability, or drop a deny entry) are written
+ * after them in the same order, the meta pairs (gates) before content types and enabled abilities
+ * (doors), and only while every section so far has saved: once any section has not saved, every
+ * widening section left is held back (aafm_section_held()). A widening is never written over a
+ * narrowing that did not land. A section that both widens and narrows is held whole. A failed
+ * section does not stop the narrowing ones. The answer has one result per named section, in table
+ * order.
  *
  * @return void
  */
@@ -1154,21 +1170,21 @@ function aafm_ajax_save_abilities_page(): void {
 				'aafm_meta_keys'      => 'is_string',
 				'aafm_deny_meta_keys' => 'is_string',
 			),
-			static fn( array $p ): array => aafm_save_meta_pair_section( 'post', $p ),
+			static fn( array $p, bool $hold ): array => aafm_save_meta_pair_section( 'post', $p, $hold ),
 		),
 		'user_meta_keys' => array(
 			array(
 				'aafm_exposed_user_meta_keys' => 'is_string',
 				'aafm_denied_user_meta_keys'  => 'is_string',
 			),
-			static fn( array $p ): array => aafm_save_meta_pair_section( 'user', $p ),
+			static fn( array $p, bool $hold ): array => aafm_save_meta_pair_section( 'user', $p, $hold ),
 		),
 		'term_meta_keys' => array(
 			array(
 				'aafm_exposed_term_meta_keys' => 'is_string',
 				'aafm_denied_term_meta_keys'  => 'is_string',
 			),
-			static fn( array $p ): array => aafm_save_meta_pair_section( 'term', $p ),
+			static fn( array $p, bool $hold ): array => aafm_save_meta_pair_section( 'term', $p, $hold ),
 		),
 		'post_types'     => array(
 			array( 'aafm_post_types' => 'is_array' ),
@@ -1183,8 +1199,9 @@ function aafm_ajax_save_abilities_page(): void {
 		),
 	);
 
-	$sections = array();
-	$failed   = false;
+	$results = array();
+	$run     = array();
+	$failed  = false;
 	foreach ( $table as $key => $section ) {
 		if ( ! in_array( $key, $named, true ) ) {
 			continue;
@@ -1193,11 +1210,40 @@ function aafm_ajax_save_abilities_page(): void {
 		foreach ( $section[0] as $field => $is_type ) {
 			$complete = $complete && isset( $posted[ $field ] ) && $is_type( $posted[ $field ] );
 		}
-		$result           = $complete
-			? $section[1]( $posted, $failed )
-			: aafm_section_failed( __( 'This section was not saved because the request was incomplete. Reload the page and try again.', 'agent-abilities-for-mcp' ) );
-		$sections[ $key ] = $result;
-		$failed           = $failed || ! $result['ok'];
+		if ( $complete ) {
+			$run[ $key ] = $section[1];
+			continue;
+		}
+		$results[ $key ] = aafm_section_failed( __( 'This section was not saved because the request was incomplete. Reload the page and try again.', 'agent-abilities-for-mcp' ) );
+		$failed          = true;
+	}
+
+	// Pass 1: every section that does not widen anything is written, in table order. A section that
+	// would widen (add an ability, a content type or an exposed key, or drop a deny entry) comes
+	// back held and writes nothing, because a narrowing in another section may be what makes the
+	// widening safe and that narrowing has not landed yet. A lone section has nothing to wait for
+	// and is written as it always was, unless a section that was never written has already failed.
+	$defer = count( $run ) > 1;
+	foreach ( $run as $key => $section_fn ) {
+		$results[ $key ] = $section_fn( $posted, $defer || $failed );
+		$failed          = $failed || ( ! $results[ $key ]['ok'] && empty( $results[ $key ]['held'] ) );
+	}
+
+	// Pass 2: the widening sections, in table order (gates before doors), but only while every
+	// section so far has saved. The first one that does not save holds the rest.
+	foreach ( $run as $key => $section_fn ) {
+		if ( $failed || empty( $results[ $key ]['held'] ) ) {
+			continue;
+		}
+		$results[ $key ] = $section_fn( $posted, false );
+		$failed          = ! $results[ $key ]['ok'];
+	}
+
+	$sections = array();
+	foreach ( array_keys( $table ) as $key ) {
+		if ( isset( $results[ $key ] ) ) {
+			$sections[ $key ] = array_diff_key( $results[ $key ], array( 'held' => true ) );
+		}
 	}
 
 	if ( $failed ) {

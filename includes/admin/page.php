@@ -230,6 +230,27 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'qcMethodAppPassword'      => __( 'Application password', 'agent-abilities-for-mcp' ),
 				'qcOn'                     => __( 'On', 'agent-abilities-for-mcp' ),
 				'qcOff'                    => __( 'Off', 'agent-abilities-for-mcp' ),
+				// Abilities tab: the one Save button, its dirty pill and its result lines.
+				'unsavedChanges'           => __( 'Unsaved changes', 'agent-abilities-for-mcp' ),
+				'noChangesToSave'          => __( 'No changes to save.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: names of the sections that were not saved, for example "Exposed meta keys (Content) and Exposed user meta keys (Users)". */
+				'notSavedSome'             => __( 'Not saved: %s. Everything else was saved.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: names of the sections that were not saved, for example "Exposed meta keys (Content)". */
+				'notSavedAll'              => __( 'Not saved: %s.', 'agent-abilities-for-mcp' ),
+				/* translators: 1: section name, for example "Exposed meta keys". 2: name of the sub-tab the section sits in, for example "Content". */
+				'sectionInTab'             => __( '%1$s (%2$s)', 'agent-abilities-for-mcp' ),
+				/* translators: %s: the reason the server gave for not saving a section; it has its own final punctuation. */
+				'notSavedSection'          => __( 'Not saved: %s', 'agent-abilities-for-mcp' ),
+				'notSavedSectionGeneric'   => __( 'Not saved. Your changes are still here.', 'agent-abilities-for-mcp' ),
+				'saveNetworkError'         => __( 'Could not save. Check your connection and try again. Your changes are still on the page.', 'agent-abilities-for-mcp' ),
+				'saveExpired'              => __( 'Could not save because this page has expired. Copy any unsaved changes, reload the page, and save again.', 'agent-abilities-for-mcp' ),
+				'savedCleaned'             => __( 'Saved. Some entries were not accepted and were removed from the list.', 'agent-abilities-for-mcp' ),
+				'savedWithNewerEdits'      => __( 'Saved. Changes you made while saving are not saved yet.', 'agent-abilities-for-mcp' ),
+				'sectionAbilities'         => __( 'Enabled abilities', 'agent-abilities-for-mcp' ),
+				'sectionPostTypes'         => __( 'Exposed content types', 'agent-abilities-for-mcp' ),
+				'sectionMetaKeys'          => __( 'Exposed meta keys', 'agent-abilities-for-mcp' ),
+				'sectionUserMetaKeys'      => __( 'Exposed user meta keys', 'agent-abilities-for-mcp' ),
+				'sectionTermMetaKeys'      => __( 'Exposed term meta keys', 'agent-abilities-for-mcp' ),
 			),
 		)
 	);
@@ -1895,7 +1916,7 @@ function aafm_render_abilities_tab(): void {
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
-	// This form and the Integrations tab both save through the same aafm_save_abilities action, but
+	// This form (aafm_save_abilities_page) and the Integrations tab (aafm_save_abilities) both write the enabled list, but
 	// each only renders the toggles for the subjects it owns. Declare the core subjects this form
 	// owns via aafm_scope[] so the server preserves every persisted ability OUTSIDE that scope (the
 	// integration abilities - WooCommerce, Yoast, ACF) from the stored option instead of treating a
@@ -2094,7 +2115,7 @@ function aafm_render_abilities_tab(): void {
 		echo '</div>';
 	}
 
-	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
+	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-savebar-dirty" role="status"><span class="aafm-pill aafm-pill-warn" hidden>' . esc_html__( 'Unsaved changes', 'agent-abilities-for-mcp' ) . '</span></span> <span class="aafm-save-status" aria-live="polite"></span></div>';
 	echo '</form>';
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
@@ -2271,7 +2292,7 @@ function aafm_abilities_display_tabs( array $subjects, array $by_subject, array 
  *
  * Lists every eligible (public, non-internal) CPT except post/page (always-on). Each row
  * names the exact fields the agent can read and flags read-only (non map_meta_cap) types,
- * so the operator opts in informed. Saved via the aafm_save_post_types AJAX action; the
+ * so the operator opts in informed. Saved by the tab's one Save (aafm_save_abilities_page); the
  * stored option is always re-floored on read, so the UI is a convenience, not the gate.
  *
  * @return void
@@ -2290,8 +2311,8 @@ function aafm_render_post_types_selector(): void {
 	}
 
 	// The selector is a plain <div> (never a nested <form>): only the outer abilities <form>
-	// may open a form here, and the save control below is a type="button" the JS binds to.
-	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types">';
+	// may open a form here, and the tab's one Save button saves this section.
+	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types" data-aafm-section="post_types">';
 	echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '<div class="aafm-table-wrap">';
@@ -2332,7 +2353,7 @@ function aafm_render_post_types_selector(): void {
 	echo '</tbody></table>';
 	echo '</div>'; // .aafm-table-wrap
 	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
-	echo '<p><button type="button" id="aafm-post-types-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
+	echo '<p class="aafm-section-result aafm-post-types-status" hidden></p>';
 	echo '</div>';
 }
 
@@ -2344,7 +2365,7 @@ function aafm_render_post_types_selector(): void {
  * own getters, do their own '*' sentinel restore, and hand the result plus their own copy
  * strings and element ids here. Only the post-meta wrapper passes 'detected', rendering the
  * "detected on your exposed types" chip row the user/term wrappers don't have. All three
- * share the same plain <div> (never a nested <form>) with a type="button" save, so the one
+ * share the same plain <div> (never a nested <form>) and no save control of their own, so the one
  * outer abilities <form> is never closed early.
  *
  * @param array<string,mixed> $cfg {
@@ -2366,14 +2387,13 @@ function aafm_render_post_types_selector(): void {
  *     @type string        $denied_textarea_id  Textarea id attribute.
  *     @type string        $denied_label_id     Id the h3 carries.
  *     @type string        $denied_hint_id      Id the hint paragraph carries.
- *     @type string        $save_button_id      Save button id attribute.
- *     @type string        $save_button_label   Save button visible text.
- *     @type string        $status_class        Class on the aria-live status span.
+ *     @type string        $section             Section key the tab's one Save sends, for data-aafm-section.
+ *     @type string        $status_class        Class on the hidden section result line.
  * }
  * @return void
  */
 function aafm_render_meta_keys_pair( array $cfg ): void {
-	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-card-pad aafm-meta-keys">';
+	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-card-pad aafm-meta-keys" data-aafm-section="' . esc_attr( $cfg['section'] ) . '">';
 	echo '<h3 id="' . esc_attr( $cfg['exposed_label_id'] ) . '">' . esc_html( $cfg['exposed_title'] ) . '</h3>';
 	echo '<p class="description">' . esc_html( $cfg['exposed_description'] ) . '</p>';
 	aafm_render_notice( 'warning', $cfg['warning'] );
@@ -2418,7 +2438,7 @@ function aafm_render_meta_keys_pair( array $cfg ): void {
 	);
 	echo '<p class="description" id="' . esc_attr( $cfg['denied_hint_id'] ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
 
-	echo '<p><button type="button" id="' . esc_attr( $cfg['save_button_id'] ) . '" class="aafm-btn aafm-btn-primary">' . esc_html( $cfg['save_button_label'] ) . '</button> <span class="' . esc_attr( $cfg['status_class'] ) . '" aria-live="polite"></span></p>';
+	echo '<p class="aafm-section-result ' . esc_attr( $cfg['status_class'] ) . '" hidden></p>';
 	echo '</div>';
 }
 
@@ -2426,10 +2446,10 @@ function aafm_render_meta_keys_pair( array $cfg ): void {
  * Render the "Exposed meta keys" opt-in selector inside the Content sub-tab.
  *
  * One key per line in the textarea is the allowlist; chips below offer the meta keys
- * actually detected on the exposed types as one-click adds. Saved via the
- * aafm_save_meta_keys AJAX action; the stored allowlist is always re-floored against the
+ * actually detected on the exposed types as one-click adds. Saved by the tab's one Save
+ * (aafm_save_abilities_page); the stored allowlist is always re-floored against the
  * hard-block on read, so this UI is a convenience, not the gate. It mirrors the post-types
- * selector exactly: a plain <div> (never a nested <form>) with a type="button" save, so the
+ * selector exactly: a plain <div> (never a nested <form>) with no save control of its own, so the
  * one outer abilities <form> is never closed early.
  *
  * @return void
@@ -2466,8 +2486,7 @@ function aafm_render_meta_keys_selector(): void {
 			'denied_textarea_id'  => 'aafm-deny-meta-keys',
 			'denied_label_id'     => 'aafm-deny-meta-keys-label',
 			'denied_hint_id'      => 'aafm-deny-meta-keys-hint',
-			'save_button_id'      => 'aafm-meta-keys-save',
-			'save_button_label'   => __( 'Save meta keys', 'agent-abilities-for-mcp' ),
+			'section'             => 'meta_keys',
 			'status_class'        => 'aafm-meta-keys-status',
 		)
 	);
@@ -2477,7 +2496,7 @@ function aafm_render_meta_keys_selector(): void {
  * Render the exposed/denied user-meta selector for the Users sub-tab.
  *
  * Mirrors aafm_render_meta_keys_selector() but for user meta: a plain <div> (never a nested
- * <form>) with two textareas (exposed above denied) and a type="button" save, so the one outer
+ * <form>) with two textareas (exposed above denied) and no save control of its own, so the one outer
  * abilities <form> is never closed early. The deny list always wins over the exposed list,
  * even when the exposed list uses *.
  *
@@ -2514,8 +2533,7 @@ function aafm_render_user_meta_keys_selector(): void {
 			'denied_textarea_id'  => 'aafm-denied-user-meta-keys',
 			'denied_label_id'     => 'aafm-denied-user-meta-keys-label',
 			'denied_hint_id'      => 'aafm-denied-user-meta-keys-hint',
-			'save_button_id'      => 'aafm-user-meta-keys-save',
-			'save_button_label'   => __( 'Save user meta keys', 'agent-abilities-for-mcp' ),
+			'section'             => 'user_meta_keys',
 			'status_class'        => 'aafm-user-meta-keys-status',
 		)
 	);
@@ -2525,7 +2543,7 @@ function aafm_render_user_meta_keys_selector(): void {
  * Render the exposed/denied term-meta selector for the Taxonomies & Terms sub-tab.
  *
  * Mirrors aafm_render_user_meta_keys_selector() but for term meta: a plain <div> (never a
- * nested <form>) with two textareas (exposed above denied) and a type="button" save, so the
+ * nested <form>) with two textareas (exposed above denied) and no save control of its own, so the
  * one outer abilities <form> is never closed early. The deny list always wins over the exposed
  * list, even when the exposed list uses *.
  *
@@ -2562,8 +2580,7 @@ function aafm_render_term_meta_keys_selector(): void {
 			'denied_textarea_id'  => 'aafm-denied-term-meta-keys',
 			'denied_label_id'     => 'aafm-denied-term-meta-keys-label',
 			'denied_hint_id'      => 'aafm-denied-term-meta-keys-hint',
-			'save_button_id'      => 'aafm-term-meta-keys-save',
-			'save_button_label'   => __( 'Save term meta keys', 'agent-abilities-for-mcp' ),
+			'section'             => 'term_meta_keys',
 			'status_class'        => 'aafm-term-meta-keys-status',
 		)
 	);

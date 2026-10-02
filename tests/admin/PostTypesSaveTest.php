@@ -99,9 +99,9 @@ final class PostTypesSaveTest extends TestCase {
 		$this->assertStringContainsString( '<div id="aafm-post-types-form"', $html );
 		$this->assertStringNotContainsString( '<form id="aafm-post-types-form"', $html );
 
-		// The save control is a non-submit button so it can never submit the outer form.
-		$this->assertStringContainsString( 'id="aafm-post-types-save"', $html );
-		$this->assertStringContainsString( 'type="button"', $html );
+		// The card has no save control of its own; the tab's one Save is the only submit.
+		$this->assertStringNotContainsString( 'id="aafm-post-types-save"', $html );
+		$this->assertSame( 1, substr_count( $html, 'type="submit"' ) );
 	}
 
 	public function test_content_panel_has_no_selector_when_no_eligible_cpts(): void {

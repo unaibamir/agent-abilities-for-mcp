@@ -102,7 +102,7 @@ final class AbilitiesCountRefreshTest extends TestCase {
 	}
 
 	/**
-	 * Client wiring guard: both save handlers that share the aafm_save_abilities action must
+	 * Client wiring guard: both save handlers that write the enabled-abilities list must
 	 * call the count-refresh helper on a successful save, or the server carrying the right
 	 * numbers is moot - nothing on the page ever reads them. Mirrors
 	 * SettingsSaveTest::test_settings_save_script_forwards_every_checkbox's static-scan approach,
@@ -123,7 +123,7 @@ final class AbilitiesCountRefreshTest extends TestCase {
 		// method's, so a call forwarded by a different handler cannot mask a regression here.
 		$bounds = array(
 			'#bindSaveIntegrations() {' => '#bindSaveBridge() {',
-			'#bindSaveAbilities() {'    => '#bindSavePostTypes() {',
+			'#bindSaveAbilities() {'    => '#bindSaveSettings() {',
 		);
 		foreach ( $bounds as $start_token => $end_token ) {
 			$start = strpos( $js, $start_token );

@@ -313,6 +313,7 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 * **Feature:** The Activity Log gets a row when an exposed list changes (content types, or post, user or term meta keys), giving the list name and how many keys were added and removed.
 * **Fix:** Edits to exposed meta keys or content types were lost when you pressed only the main Save. The four separate section buttons are gone, and the one Save covers them.
 * **Fix:** When a section fails to save, the page names it and keeps your edits so you can retry. Sections that did save stay saved.
+* **Fix:** The Activity Log table scrolled sideways when a value such as the detail JSON was long; the columns now share the page width and long values wrap.
 
 = 1.7.6 =
 

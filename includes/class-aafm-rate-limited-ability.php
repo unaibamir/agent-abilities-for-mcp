@@ -122,8 +122,10 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 	 * execute(), which has already validated the result under the source's own class rules, and a
 	 * violation comes back as that ability's WP_Error. Checking the same data again against the
 	 * schema copied onto the wrapper turned a source that skips validation on purpose (ACF's REST
-	 * abilities) into a spurious ability_invalid_output after the change had landed. The schema stays
-	 * advertised; only the second check is skipped. Native abilities keep core's validation.
+	 * abilities) into a spurious ability_invalid_output after the change had landed. A source that keeps
+	 * core's check keeps its advertised schema and only the second check is skipped; one that skips its
+	 * own check has no schema advertised (aafm_register_enabled_bridged_abilities()). Native abilities
+	 * keep core's validation.
 	 *
 	 * @param mixed $output The ability's result.
 	 * @return true|\WP_Error

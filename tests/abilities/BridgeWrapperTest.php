@@ -583,14 +583,16 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * Register a foreign ability with a custom class and a declared output schema.
+	 * Register a foreign ability with a declared output schema, using a class that skips core's output
+	 * check or, when $overrides is false, core's own class.
 	 *
-	 * @param string              $slug     Foreign slug.
-	 * @param array<string,mixed> $schema   Declared output schema.
-	 * @param callable            $execute  The execute callback.
+	 * @param string              $slug      Foreign slug.
+	 * @param array<string,mixed> $schema    Declared output schema.
+	 * @param callable            $execute   The execute callback.
+	 * @param bool                $overrides Whether the source class overrides validate_output().
 	 * @return void
 	 */
-	private function register_foreign_with_class( string $slug, array $schema, callable $execute ): void {
+	private function register_foreign_with_class( string $slug, array $schema, callable $execute, bool $overrides = true ): void {
 		$this->in_action(
 			'wp_abilities_api_categories_init',
 			static function (): void {
@@ -607,23 +609,23 @@ final class BridgeWrapperTest extends TestCase {
 		);
 		$this->in_action(
 			'wp_abilities_api_init',
-			static function () use ( $slug, $schema, $execute ): void {
-				wp_register_ability(
-					$slug,
-					array(
-						'label'               => $slug,
-						'description'         => 'Overrides validate_output.',
-						'category'            => 'demo-things',
-						'input_schema'        => array(
-							'type'       => 'object',
-							'properties' => array(),
-						),
-						'output_schema'       => $schema,
-						'execute_callback'    => $execute,
-						'permission_callback' => '__return_true',
-						'ability_class'       => \AAFM\Tests\Fixtures\ValidateOutputOverridingAbility::class,
-					)
+			static function () use ( $slug, $schema, $execute, $overrides ): void {
+				$args = array(
+					'label'               => $slug,
+					'description'         => $overrides ? 'Overrides validate_output.' : 'Keeps core validate_output.',
+					'category'            => 'demo-things',
+					'input_schema'        => array(
+						'type'       => 'object',
+						'properties' => array(),
+					),
+					'output_schema'       => $schema,
+					'execute_callback'    => $execute,
+					'permission_callback' => '__return_true',
 				);
+				if ( $overrides ) {
+					$args['ability_class'] = \AAFM\Tests\Fixtures\ValidateOutputOverridingAbility::class;
+				}
+				wp_register_ability( $slug, $args );
 			}
 		);
 	}
@@ -659,7 +661,8 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * A pin, green on the base commit by design: the advertised schema is copied, not removed.
+	 * A pin, green by design: a source that keeps core's output check still has its schema advertised
+	 * on the wrapper, and the wrapper still has it checked.
 	 */
 	public function test_wrapper_still_registers_the_source_output_schema(): void {
 		$schema = array(
@@ -667,17 +670,35 @@ final class BridgeWrapperTest extends TestCase {
 			'properties' => array( 'name' => array( 'type' => 'string' ) ),
 			'required'   => array( 'name' ),
 		);
-		$this->register_foreign_with_class( 'vendor/skips-validation', $schema, static fn(): array => array() );
-		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/skips-validation' ) );
+		$this->register_foreign_with_class( 'vendor/keeps-validation', $schema, static fn(): array => array(), false );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/keeps-validation' ) );
 		$this->register_wrappers();
 
-		$wrapper = wp_get_ability( 'aafm-bridge/vendor-skips-validation' );
+		$wrapper = wp_get_ability( 'aafm-bridge/vendor-keeps-validation' );
 		$this->assertNotEmpty( $wrapper->get_output_schema() );
 		$this->assertSame(
-			aafm_bridge_output_schema( wp_get_ability( 'vendor/skips-validation' ) ),
+			aafm_bridge_output_schema( wp_get_ability( 'vendor/keeps-validation' ) ),
 			$wrapper->get_output_schema(),
 			'outputSchema must be exactly what the helper derives from the source.'
 		);
+	}
+
+	/**
+	 * A source that overrides validate_output() opted out of its own schema, so advertising that schema
+	 * would promise a shape its data does not keep.
+	 */
+	public function test_wrapper_registers_no_output_schema_for_a_source_that_skips_its_own_output_check(): void {
+		$schema = array(
+			'type'       => 'object',
+			'properties' => array( 'name' => array( 'type' => 'string' ) ),
+			'required'   => array( 'name' ),
+		);
+		$this->register_foreign_with_class( 'vendor/skips-validation', $schema, static fn(): array => array(), true );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/skips-validation' ) );
+		$this->register_wrappers();
+
+		$this->assertNotEmpty( wp_get_ability( 'vendor/skips-validation' )->get_output_schema(), 'Fixture check: the source itself declares a schema.' );
+		$this->assertSame( array(), wp_get_ability( 'aafm-bridge/vendor-skips-validation' )->get_output_schema() );
 	}
 
 	/**

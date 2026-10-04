@@ -337,4 +337,63 @@ final class ServerToolsListExposureTest extends TestCase {
 		$this->assertSame( array( 'aafm-bridge-demo-wire-object-id' ), $expected, 'Fixture check: only the bridged tool is enabled.' );
 		$this->assertSame( $expected, $wire_names, 'The editor must get exactly the independent oracle set, not a subset.' );
 	}
+
+	/**
+	 * The tools/list answer carries an outputSchema for a bridged tool whose source checks its own output, and
+	 * none for one whose source skips that check (its data would not keep the schema it advertises).
+	 */
+	public function test_tools_list_omits_the_output_schema_only_for_a_source_that_skips_its_own_output_check(): void {
+		$this->register_enabled( array() );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				$base = array(
+					'label'               => 'Wire output',
+					'description'         => 'Returns an object.',
+					'category'            => 'demo-things',
+					'input_schema'        => array(
+						'type'       => 'object',
+						'properties' => array(),
+					),
+					'output_schema'       => array(
+						'type'       => 'object',
+						'properties' => array( 'name' => array( 'type' => 'string' ) ),
+					),
+					'execute_callback'    => static fn() => array( 'name' => 'x' ),
+					'permission_callback' => '__return_true',
+				);
+				wp_register_ability( 'demo/wire-checks-output', $base );
+				wp_register_ability( 'demo/wire-skips-output', $base + array( 'ability_class' => \AAFM\Tests\Fixtures\ValidateOutputOverridingAbility::class ) );
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/wire-checks-output', 'demo/wire-skips-output' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_bridged_abilities' );
+		$this->acting_as( 'administrator' );
+
+		$server = $this->build_exposure_test_server( \WP\MCP\Core\McpAdapter::instance() );
+		$tools  = array();
+		foreach ( ( new \WP\MCP\Handlers\Tools\ToolsHandler( $server ) )->list_tools()->getTools() as $tool ) {
+			$tools[ $tool->getName() ] = $tool;
+		}
+
+		$this->assertArrayHasKey( 'aafm-bridge-demo-wire-checks-output', $tools );
+		$this->assertArrayHasKey( 'aafm-bridge-demo-wire-skips-output', $tools );
+		$this->assertNotNull( $tools['aafm-bridge-demo-wire-checks-output']->getOutputSchema(), 'A source that checks its own output keeps its advertised schema.' );
+		$this->assertNull( $tools['aafm-bridge-demo-wire-skips-output']->getOutputSchema(), 'A source that skips its own check advertises no schema.' );
+	}
 }

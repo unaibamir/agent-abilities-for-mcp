@@ -332,8 +332,11 @@ function aafm_bridge_permission_state( string $foreign_slug, $input ): string {
  * Returns null (not a default object schema) when the foreign ability has no output schema, so the
  * wrapper simply omits output_schema and inherits core's no-output-validation default.
  *
- * One caveat worth naming rather than leaving as a silent side effect: the wrapper no longer validates a bridged result itself
- * (AAFM_Rate_Limited_Ability::validate_output()); this is about the schema a client is shown.
+ * This is the schema a client is shown. The registration walk leaves it off the wrapper when the source
+ * skips its own output check (aafm_bridge_source_skips_output_check()), and the wrapper does not check a
+ * bridged result against it a second time (AAFM_Rate_Limited_Ability::validate_output()).
+ *
+ * One caveat worth naming rather than leaving as a silent side effect:
  * SchemaTransformer::transform_to_object_schema() stamps type:object onto a typeless schema itself
  * when building the advertised outputSchema, and McpTool::execute() wraps a scalar result under
  * `result`. So for a bare oneOf schema returning a string the bridged call now EXECUTES instead of
@@ -349,6 +352,23 @@ function aafm_bridge_output_schema( $ability ): ?array {
 		return null;
 	}
 	return aafm_prepare_bridge_schema_for_client( $schema );
+}
+
+/**
+ * Whether the source ability opted out of core's output check by overriding validate_output().
+ *
+ * ACF's REST abilities do this on purpose: a delete returns the trashed object, which its own output
+ * schema does not describe. Advertising that schema on the wrapper would promise clients a shape the
+ * data does not keep, and a client that validates structuredContent would reject a call that worked.
+ *
+ * @param mixed $ability The foreign ability.
+ * @return bool True when the declaring class of validate_output() is not core's WP_Ability.
+ */
+function aafm_bridge_source_skips_output_check( $ability ): bool {
+	if ( ! is_object( $ability ) || ! method_exists( $ability, 'validate_output' ) ) {
+		return false;
+	}
+	return 'WP_Ability' !== ( new \ReflectionMethod( $ability, 'validate_output' ) )->getDeclaringClass()->getName();
 }
 
 /**
@@ -674,9 +694,10 @@ function aafm_register_enabled_bridged_abilities(): void {
 
 		// Copy the foreign output schema only when it actually exposes one (see helper). It is advertised to
 		// clients; AAFM_Rate_Limited_Ability::validate_output() skips core's second check for bridged names,
-		// because the source validated its own result.
+		// because the source validated its own result. A source that skips its own check (it overrides
+		// validate_output()) does not keep its schema, so none is advertised for it.
 		$output_schema = aafm_bridge_output_schema( $foreign );
-		if ( null !== $output_schema ) {
+		if ( null !== $output_schema && ! aafm_bridge_source_skips_output_check( $foreign ) ) {
 			$args['output_schema'] = $output_schema;
 		}
 

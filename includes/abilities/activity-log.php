@@ -27,7 +27,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_activity_log_definitions' 
 function aafm_register_activity_log_definitions( array $registry ): array {
 	$registry['aafm/get-activity-log'] = array(
 		'label'        => __( 'Get activity log', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, whether the caller is flagged as an agent identity, the argument keys passed, the timestamp, and a short identifier-only detail (an object id or slug, a WP_Error code, or a crashed call's exception class and throw site). Most recent first. Response includes total (the count for the status filter). Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, whether the caller is flagged as an agent identity, the argument keys passed, the timestamp, and a short identifier-only detail (an object id or slug, a WP_Error code, or a crashed call's exception class and throw site; a code returned by another plugin's bridged ability is prefixed with foreign:). Most recent first. Response includes total (the count for the status filter). Never free-text argument content or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -89,7 +89,7 @@ function aafm_args_get_activity_log(): array {
 							),
 							'detail'            => array(
 								'type'        => array( 'string', 'null' ),
-								'description' => __( 'Identifier-only note about what the call touched or why it failed, or null when the call recorded none. It is one of an allowlisted identifier (an object id or slug), a WP_Error code, or a crash\'s exception class and throw site, for example "WC_Data_Exception at abstract-wc-data.php:1001". It never contains argument values, free text, or file paths.', 'agent-abilities-for-mcp' ),
+								'description' => __( 'Identifier-only note about what the call touched or why it failed, or null when the call recorded none. It is one of an allowlisted identifier (an object id or slug), a WP_Error code (prefixed with foreign: when another plugin\'s bridged ability returned it), or a crash\'s exception class and throw site, for example "WC_Data_Exception at abstract-wc-data.php:1001". It never contains free text or file paths, and a code a plugin builds from its input can carry a short fragment of that input.', 'agent-abilities-for-mcp' ),
 							),
 						),
 					),

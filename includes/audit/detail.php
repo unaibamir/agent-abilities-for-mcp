@@ -11,13 +11,17 @@
  * the distinction is worth stating: it reads the KEY NAMES of a structured argument, never a value
  * from it, and renders a name only if the ability's own allowlist already contains it, so no input
  * an agent can craft puts its own text in this column. A failed call also records its WP_Error
- * code, which is an identifier by construction for an ability THIS PLUGIN ships - every
- * `new WP_Error(` under includes/ takes a string literal - but not for a bridged one, whose code a
- * foreign plugin is free to build out of its own input, so bridged results are excluded from that
- * branch, except this plugin's own refusal code. An ability contributed through the public aafm_abilities_registry filter is on the
- * trusted side of that line: a site that adds a row to the catalog supplies its own permission
+ * code. For an ability THIS PLUGIN ships that code is an identifier by construction: every
+ * `new WP_Error(` under includes/ takes a string literal. A bridged ability's code comes from a
+ * foreign plugin, which can build it out of its own input, so it is recorded behind
+ * AAFM_BRIDGE_FOREIGN_CODE_PREFIX after the same key check (letters, digits, underscore and hyphen, 64
+ * characters at most). That is a limit worth stating plainly: a foreign plugin that builds a code from
+ * its input can place a short key-shaped fragment of it in the column. Its message and error data are
+ * never recorded. An ability contributed through the public aafm_abilities_registry filter is on the
+ * trusted side of the first-party line: a site that adds a row to the catalog supplies its own permission
  * callback and is trusted with far more than an error code already. Read the guarantee as "the
- * codes this plugin and its host write", not "every code the column can hold". Since
+ * codes this plugin and its host write, and a bounded, prefixed foreign code", not "every code the
+ * column can hold". Since
  * 1.6.1 there is one further writer,
  * aafm_build_activity_detail_from_exception() below, for the crash detail the choke point in
  * includes/register.php records. It is not map-driven, because a crash is not per-ability, but it
@@ -709,35 +713,30 @@ function aafm_build_activity_detail( string $ability, array $args, string $statu
  * @return string|null
  */
 function aafm_build_activity_detail_from_result( string $ability, $result ): ?string {
-	// A failed call records WHY it failed, for every FIRST-PARTY ability rather than only the mapped
-	// ones. The error CODE and never get_error_message(): a code is an identifier by construction,
+	// A failed call records WHY it failed, for every ability rather than only the mapped ones. The error CODE and never get_error_message(): a code is an identifier by construction,
 	// while a message is free-form prose that routinely interpolates the value that failed (see
 	// aafm_wc_invalid_coupon_amount, which quotes the rejected amount). This branch sits before the
 	// is_array() return below, which a WP_Error would otherwise fall straight through.
 	//
-	// A bridged ability is excluded, and "a code is an identifier by construction" is exactly why.
-	// That holds for the codes this plugin ships: every `new WP_Error(` under includes/ takes a
-	// string literal. It also holds, by trust rather than by inspection, for an ability a site adds
-	// through the aafm_abilities_registry filter, which supplies its own permission callback and so
-	// is trusted with a great deal more than an error code. It does not hold for a foreign plugin's,
-	// which is third-party code the operator merely enabled, free to build a code out of
-	// its input - `new WP_Error( 'duplicate_sku_' . $sku )` passes the key type's own character
-	// check and would land an argument value in this column, on the wire through
-	// aafm/get-activity-log, and in the CSV export. This file's header, the aafm_ability_resolved
-	// docblock and the admin panel all promise that cannot happen, and a promise with a
-	// third-party-shaped hole in it is not one. A bridged crash still records its exception class
-	// and throw site, which the engine supplies and no input can reach, so a bridged row is not
-	// left blind - it just does not carry a string a foreign plugin composed. The one bridged code
-	// recorded is the fixed literal AAFM_BRIDGE_REFUSED_SHAPE; the check compares the string, so a
-	// foreign ability that returns that exact code would record it too, and no foreign-built value
-	// can reach the column.
+	// A bridged ability's code is recorded too, but behind a prefix. "A code is an identifier by
+	// construction" holds for the codes this plugin ships (every `new WP_Error(` under includes/ takes
+	// a string literal) and, by trust, for an ability a site adds through aafm_abilities_registry. It
+	// does not hold for a foreign plugin's, which can build a code out of its input:
+	// `new WP_Error( 'duplicate_sku_' . $sku )` passes the key check below and puts a fragment of the
+	// argument in this column. So a code a foreign plugin returned is recorded as
+	// AAFM_BRIDGE_FOREIGN_CODE_PREFIX plus the key-checked code, which also keeps it from reading as one
+	// of ours. Only an error made here by aafm_bridge_own_error() is recorded plain. The message and the
+	// error data are never read. A bridged crash still records its exception class and throw site,
+	// which the engine supplies.
 	if ( is_wp_error( $result ) ) {
-		if ( str_starts_with( $ability, AAFM_BRIDGE_NAMESPACE . '/' ) ) {
-			// Only the fixed refusal literal is recorded; any other foreign code can be built from input.
-			return AAFM_BRIDGE_REFUSED_SHAPE === $result->get_error_code() ? AAFM_BRIDGE_REFUSED_SHAPE : null;
-		}
 		$code = aafm_activity_detail_field( 'key', $result->get_error_code() );
-		return ( null === $code || '' === $code ) ? null : $code;
+		if ( null === $code || '' === $code ) {
+			return null;
+		}
+		if ( str_starts_with( $ability, AAFM_BRIDGE_NAMESPACE . '/' ) && ! aafm_bridge_is_own_error( $result ) ) {
+			return AAFM_BRIDGE_FOREIGN_CODE_PREFIX . $code;
+		}
+		return $code;
 	}
 
 	$entry = aafm_activity_detail_map()[ $ability ] ?? null;

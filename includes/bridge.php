@@ -109,10 +109,17 @@ const AAFM_BRIDGE_NAMESPACE = 'aafm-bridge';
 /**
  * The error code of a bridged call whose result held something other than plain data.
  *
- * Also the one code the Activity Log detail records for a bridged failure (includes/audit/detail.php),
- * because it is this plugin's own literal and no input can reach it.
+ * The Activity Log detail records it as it is when the error came from this plugin
+ * (aafm_bridge_own_error()), and behind AAFM_BRIDGE_FOREIGN_CODE_PREFIX when a foreign plugin returned
+ * the same string.
  */
 const AAFM_BRIDGE_REFUSED_SHAPE = 'aafm_bridge_unsupported_result_shape';
+
+/**
+ * What the Activity Log detail puts in front of an error code that a foreign plugin returned, so it
+ * can never read as one of this plugin's own codes.
+ */
+const AAFM_BRIDGE_FOREIGN_CODE_PREFIX = 'foreign:';
 
 /**
  * Whether an array has sequential integer keys starting at 0 (a list / tuple).
@@ -352,6 +359,43 @@ function aafm_bridge_output_schema( $ability ): ?array {
 		return null;
 	}
 	return aafm_prepare_bridge_schema_for_client( $schema );
+}
+
+/**
+ * Build a WP_Error that this plugin raised for a bridged call, and remember it.
+ *
+ * The Activity Log records a bridged error's code as it is only for an error made here; any other
+ * bridged error carries a foreign plugin's code and is recorded behind a prefix. The memory is by
+ * object identity, so a foreign plugin cannot pass for the bridge by returning the same code string.
+ *
+ * @param string $code    Error code.
+ * @param string $message Static, translated message.
+ * @return \WP_Error
+ */
+function aafm_bridge_own_error( string $code, string $message ): \WP_Error {
+	$error = new \WP_Error( $code, $message );
+	aafm_bridge_is_own_error( $error, true );
+	return $error;
+}
+
+/**
+ * Whether an error was made by aafm_bridge_own_error() in this request.
+ *
+ * @param mixed $error The value to check.
+ * @param bool  $mark  True to remember $error as made here (only aafm_bridge_own_error() passes it).
+ * @return bool
+ */
+function aafm_bridge_is_own_error( $error, bool $mark = false ): bool {
+	static $own = array();
+
+	if ( ! $error instanceof \WP_Error ) {
+		return false;
+	}
+	$id = spl_object_id( $error );
+	if ( $mark ) {
+		$own[ $id ] = $error; // Held so the id cannot be reused by another object.
+	}
+	return isset( $own[ $id ] );
 }
 
 /**
@@ -683,7 +727,7 @@ function aafm_register_enabled_bridged_abilities(): void {
 				// closure's return value is what register.php turns into the Activity Log status, so
 				// a refusal is logged as an error. The foreign ability has already run by now.
 				if ( ! aafm_bridge_result_is_plain_data( $result ) ) {
-					return new WP_Error(
+					return aafm_bridge_own_error(
 						AAFM_BRIDGE_REFUSED_SHAPE,
 						__( 'This bridged ability ran, but its result held a raw object that cannot be safely relayed over MCP. If it changes data, check the site before you repeat the call. Contact the site administrator.', 'agent-abilities-for-mcp' )
 					);

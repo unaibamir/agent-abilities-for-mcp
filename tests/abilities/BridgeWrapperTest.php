@@ -1015,16 +1015,15 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * A bridged call announces its resolve like any other, and a bridged FAILURE announces the null
-	 * detail the exclusion leaves on the column rather than the foreign plugin's own error code.
+	 * A bridged call announces its resolve like any other, and a bridged FAILURE announces the foreign
+	 * plugin's error code behind the `foreign:` prefix, never the message.
 	 *
-	 * Both halves were unpinned end to end. aafm_ability_resolved is reached through the real
-	 * wrapper only by ResolveHookTest's native cases, so skipping the announcement for every
-	 * aafm-bridge/* call left the whole suite green, and the bridged exclusion in
+	 * The announcement was unpinned end to end: aafm_ability_resolved is reached through the real
+	 * wrapper only by ResolveHookTest's native cases, and the bridged branch of
 	 * aafm_build_activity_detail_from_result() was asserted only as a unit, never at the layer a
 	 * monitor actually reads.
 	 */
-	public function test_a_bridged_call_announces_its_resolve_and_never_a_foreign_error_code(): void {
+	public function test_a_bridged_call_announces_its_resolve_with_the_foreign_code_behind_a_prefix(): void {
 		$fired = array();
 		add_action(
 			'aafm_ability_resolved',
@@ -1061,8 +1060,7 @@ final class BridgeWrapperTest extends TestCase {
 							'type'       => 'object',
 							'properties' => array( 'v' => array( 'type' => 'string' ) ),
 						),
-						// A foreign plugin composing a code out of its own input, which is the
-						// whole reason bridged codes are excluded from the detail column.
+						// A foreign plugin composing a code out of its own input.
 						'execute_callback'    => static fn( $i ) => new \WP_Error(
 							'duplicate_sku_' . ( $i['v'] ?? '' ),
 							'That SKU already exists.'
@@ -1079,15 +1077,35 @@ final class BridgeWrapperTest extends TestCase {
 
 		$this->assertCount( 1, $fired, 'A bridged resolve is a resolve: it announces exactly once.' );
 		$this->assertSame( 'error', $fired[0]['status'] );
-		$this->assertNull(
+		$this->assertSame(
+			'foreign:duplicate_sku_ABC-123-CUSTOMER',
 			$fired[0]['detail'],
-			'A foreign error code is not an identifier by construction, so it must reach neither the column nor the hook.'
+			'A foreign code is recorded behind the prefix, and the hook announces what the column holds.'
 		);
 
 		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/demo-echo' ) );
 		$this->assertCount( 1, $rows, 'Guard on the guard: one row per call, so there is a single id to match against.' );
 		$this->assertSame( (int) $rows[0]['id'], $fired[0]['row_id'], 'The announced row_id must be the row the call wrote.' );
-		$this->assertNull( $rows[0]['detail'], 'And the column agrees with the hook.' );
+		$this->assertSame( 'foreign:duplicate_sku_ABC-123-CUSTOMER', $rows[0]['detail'], 'And the column agrees with the hook.' );
+		$this->assertStringNotContainsString( 'already exists', (string) $rows[0]['detail'], 'The message is never recorded.' );
+	}
+
+	/**
+	 * A foreign plugin that returns this plugin's own refusal code string records as a foreign code,
+	 * so it cannot pass for the bridge's own refusal.
+	 */
+	public function test_a_foreign_error_carrying_the_bridge_refusal_code_records_as_foreign(): void {
+		$this->register_foreign_returning( 'vendor/spoofs', static fn() => new \WP_Error( 'aafm_bridge_unsupported_result_shape', 'Pretend refusal.' ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/spoofs' ) );
+		$this->register_wrappers();
+		$this->acting_as( 'administrator' );
+
+		wp_get_ability( 'aafm-bridge/vendor-spoofs' )->execute( array() );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-spoofs' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'] );
+		$this->assertSame( 'foreign:aafm_bridge_unsupported_result_shape', $rows[0]['detail'] );
 	}
 
 	/**

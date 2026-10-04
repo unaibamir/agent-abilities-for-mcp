@@ -731,8 +731,10 @@ function aafm_announce_ability_resolved( ?int $row_id, string $status, ?int $res
 	 * consumer must treat row_id as int-or-null: a real id joins as before, null means "no row".
 	 *
 	 * $detail is identifier-only and never carries an argument value from any first-party ability:
-	 * it is an ability's allowlisted detail, a first-party WP_Error code, or a crash's exception
-	 * class and throw site. It is sanitized exactly as the column sanitizes it. It is NOT always
+	 * it is an ability's allowlisted detail, a WP_Error code, or a crash's exception class and throw
+	 * site. A bridged ability's code comes from a foreign plugin, so it is prefixed with `foreign:` and
+	 * limited to a short key-shaped string; a plugin that builds a code from its input can put a
+	 * fragment of that input there. Its message is never included. It is sanitized exactly as the column sanitizes it. It is NOT always
 	 * the whole of what the column holds, though: it is the detail this resolve contributed. An
 	 * ordinary update or read contributes none and announces null while the row keeps the detail
 	 * its opening insert wrote, so a consumer that treats a null detail as "nothing to correlate"

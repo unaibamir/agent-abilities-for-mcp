@@ -1454,43 +1454,84 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
-	 * "A code is an identifier by construction" is true of our own codes and only our own: every
-	 * `new WP_Error(` under includes/ takes a string literal. A foreign plugin's is third-party code
-	 * free to build a code out of its input, and `duplicate_sku_ABC-123-CUSTOMER` clears the key
-	 * type's character check with room to spare. That is an argument value in the audit column, on
-	 * the wire through aafm/get-activity-log, and in the CSV export, against a promise this file's
-	 * header, the aafm_ability_resolved docblock and the admin panel all make in so many words.
-	 *
-	 * So bridged results skip the branch. Both halves are asserted here, because a test that only
-	 * pins the exclusion would also pass if the whole branch were deleted.
+	 * A first-party WP_Error code is an identifier by construction: every `new WP_Error(` under
+	 * includes/ takes a string literal. A foreign plugin's is third-party code, free to build a code
+	 * out of its input, and `duplicate_sku_ABC-123-CUSTOMER` clears the key type's character check.
+	 * So a bridged code is recorded behind the `foreign:` prefix, after the same key check, which
+	 * limits what it can hold to a short key-shaped fragment. Both halves are asserted, because a
+	 * test that only pins the prefix would also pass if the first-party branch were deleted.
 	 */
-	public function test_a_bridged_error_code_is_not_recorded_but_a_first_party_one_is(): void {
+	public function test_a_bridged_error_code_is_recorded_behind_the_foreign_prefix_and_a_first_party_one_is_not(): void {
 		$foreign = new \WP_Error( 'duplicate_sku_ABC-123-CUSTOMER', 'That SKU already exists.' );
 
-		$this->assertNull(
-			aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $foreign ),
-			'A foreign plugin composes its own error codes, so one cannot be trusted as an identifier.'
+		$this->assertSame(
+			'foreign:duplicate_sku_ABC-123-CUSTOMER',
+			aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $foreign )
 		);
 		$this->assertSame(
 			'duplicate_sku_ABC-123-CUSTOMER',
 			aafm_build_activity_detail_from_result( 'aafm/create-post', $foreign ),
-			'Guard on the guard: this code does clear the key check, so the exclusion above is what dropped it.'
+			'A first-party code is recorded as it is.'
 		);
 	}
 
 	/**
-	 * The one bridged code the log records is the fixed refusal literal, which no input can build. Any
-	 * other foreign code still records nothing. The check compares the string, not the origin.
+	 * The row holds the code only: never the message, never the error data.
 	 */
-	public function test_a_bridged_refusal_records_our_own_code_and_a_foreign_code_still_records_nothing(): void {
-		$refused = new \WP_Error( 'aafm_bridge_unsupported_result_shape', 'static text' );
-		$foreign = new \WP_Error( 'duplicate_sku_ABC-123-CUSTOMER', 'That SKU already exists.' );
+	public function test_a_bridged_error_records_neither_its_message_nor_its_data(): void {
+		$foreign = new \WP_Error( 'vendor_failed', 'Secret message for customer 4411.', array( 'detail' => 'Secret data 8812' ) );
 
+		$detail = (string) aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $foreign );
+
+		$this->assertSame( 'foreign:vendor_failed', $detail );
+		$this->assertStringNotContainsString( 'Secret', $detail );
+		$this->assertStringNotContainsString( '4411', $detail );
+		$this->assertStringNotContainsString( '8812', $detail );
+	}
+
+	/**
+	 * A foreign code goes through the key check that native codes use: a code that is too long or
+	 * holds anything but key characters records nothing, and the longest code that passes stays far
+	 * inside the column's 255 characters once the prefix is added.
+	 *
+	 * @dataProvider foreign_code_provider
+	 *
+	 * @param string      $code     The foreign error code.
+	 * @param string|null $expected The recorded detail, or null for none.
+	 */
+	public function test_a_foreign_error_code_is_bounded_by_the_key_check( string $code, ?string $expected ): void {
 		$this->assertSame(
-			'aafm_bridge_unsupported_result_shape',
-			aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $refused )
+			$expected,
+			aafm_build_activity_detail_from_result( 'aafm-bridge/vendor-thing', new \WP_Error( $code, 'text' ) )
 		);
-		$this->assertNull( aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $foreign ) );
+	}
+
+	/**
+	 * Foreign codes and what the log records for each.
+	 *
+	 * @return array<string,array{0:string,1:string|null}>
+	 */
+	public function foreign_code_provider(): array {
+		return array(
+			'plain key'             => array( 'some_vendor_code', 'foreign:some_vendor_code' ),
+			'64 characters'         => array( str_repeat( 'a', 64 ), 'foreign:' . str_repeat( 'a', 64 ) ),
+			'65 characters'         => array( str_repeat( 'a', 65 ), null ),
+			'space and punctuation' => array( 'bad code: 1!', null ),
+			'html'                  => array( '<b>x</b>', null ),
+			'empty'                 => array( '', null ),
+		);
+	}
+
+	/**
+	 * The bridge's own refusal is recorded as its literal. The same string coming back from a foreign
+	 * plugin is recorded as a foreign code, so it cannot pass for the bridge's refusal.
+	 */
+	public function test_the_bridge_refusal_records_its_literal_and_the_same_string_from_a_foreign_plugin_does_not(): void {
+		$own     = aafm_bridge_own_error( AAFM_BRIDGE_REFUSED_SHAPE, 'static text' );
+		$foreign = new \WP_Error( AAFM_BRIDGE_REFUSED_SHAPE, 'static text' );
+
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $own ) );
+		$this->assertSame( 'foreign:aafm_bridge_unsupported_result_shape', aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $foreign ) );
 	}
 
 	/**

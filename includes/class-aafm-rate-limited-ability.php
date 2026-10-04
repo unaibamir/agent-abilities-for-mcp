@@ -114,4 +114,24 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 			aafm_resolve_dangling_invocation_if_mine( $this->get_name(), $invocation_token, $result );
 		}
 	}
+
+	/**
+	 * Validate a result against the output schema, except for a bridged wrapper.
+	 *
+	 * A bridged wrapper fronts someone else's ability. Its execute callback calls the source's own
+	 * execute(), which has already validated the result under the source's own class rules, and a
+	 * violation comes back as that ability's WP_Error. Checking the same data again against the
+	 * schema copied onto the wrapper turned a source that skips validation on purpose (ACF's REST
+	 * abilities) into a spurious ability_invalid_output after the change had landed. The schema stays
+	 * advertised; only the second check is skipped. Native abilities keep core's validation.
+	 *
+	 * @param mixed $output The ability's result.
+	 * @return true|\WP_Error
+	 */
+	protected function validate_output( $output ) {
+		if ( str_starts_with( $this->get_name(), AAFM_BRIDGE_NAMESPACE . '/' ) ) {
+			return true;
+		}
+		return parent::validate_output( $output );
+	}
 }

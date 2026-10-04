@@ -527,10 +527,10 @@ final class BridgeWrapperTest extends TestCase {
 	 * execute_callback calls $live->execute() on the FOREIGN ability object, so
 	 * the foreign ability validates its own output against its own schema before
 	 * our closure ever sees the result; a mismatch already comes back a WP_Error.
-	 * Separately, aafm_register_enabled_bridged_abilities() copies that same
-	 * schema onto our OWN wrapper's registration, so our wrapper's execute() would
-	 * independently validate again even if the foreign ability somehow did not.
-	 * Both layers are core's, not this file's. No bridge.php change was made; this
+	 * The wrapper does not validate a second time:
+	 * AAFM_Rate_Limited_Ability::validate_output() skips bridged names, so the
+	 * source's own WP_Error is what the caller gets.
+	 * That layer is core's, not this file's. No bridge.php change was made; this
 	 * test pins the invariant so a future refactor that bypasses WP_Ability::execute()
 	 * (e.g. calling the raw execute_callback directly) cannot reopen the hole
 	 * silently.
@@ -579,6 +579,104 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame(
 			array( 'count' => 7 ),
 			wp_get_ability( 'aafm-bridge/vendor-honest' )->execute( array() )
+		);
+	}
+
+	/**
+	 * Register a foreign ability with a custom class and a declared output schema.
+	 *
+	 * @param string              $slug     Foreign slug.
+	 * @param array<string,mixed> $schema   Declared output schema.
+	 * @param callable            $execute  The execute callback.
+	 * @return void
+	 */
+	private function register_foreign_with_class( string $slug, array $schema, callable $execute ): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $slug, $schema, $execute ): void {
+				wp_register_ability(
+					$slug,
+					array(
+						'label'               => $slug,
+						'description'         => 'Overrides validate_output.',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'output_schema'       => $schema,
+						'execute_callback'    => $execute,
+						'permission_callback' => '__return_true',
+						'ability_class'       => \AAFM\Tests\Fixtures\ValidateOutputOverridingAbility::class,
+					)
+				);
+			}
+		);
+	}
+
+	public function test_a_source_that_overrides_validate_output_and_returns_off_schema_data_is_relayed(): void {
+		$schema = array(
+			'type'       => 'object',
+			'properties' => array(
+				'status' => array(
+					'type' => 'string',
+					'enum' => array( 'publish', 'draft' ),
+				),
+				'name'   => array( 'type' => 'string' ),
+			),
+			'required'   => array( 'name' ),
+		);
+		// Status outside the enum, and the required `name` missing: the term-delete and trashed-view shapes.
+		$off_schema = array(
+			'status'   => 'trash',
+			'deleted'  => true,
+			'previous' => array( 'id' => 5 ),
+		);
+		$this->register_foreign_with_class( 'vendor/skips-validation', $schema, static fn(): array => $off_schema );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/skips-validation' ) );
+		$this->register_wrappers();
+
+		$this->assertSame( $off_schema, wp_get_ability( 'vendor/skips-validation' )->execute( array() ), 'Fixture check: the source itself relays the off-schema data.' );
+		$this->assertSame(
+			$off_schema,
+			wp_get_ability( 'aafm-bridge/vendor-skips-validation' )->execute( array() ),
+			'The wrapper must relay the source result, not turn it into ability_invalid_output.'
+		);
+	}
+
+	/**
+	 * A pin, green on the base commit by design: the advertised schema is copied, not removed.
+	 */
+	public function test_wrapper_still_registers_the_source_output_schema(): void {
+		$schema = array(
+			'type'       => 'object',
+			'properties' => array( 'name' => array( 'type' => 'string' ) ),
+			'required'   => array( 'name' ),
+		);
+		$this->register_foreign_with_class( 'vendor/skips-validation', $schema, static fn(): array => array() );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/skips-validation' ) );
+		$this->register_wrappers();
+
+		$wrapper = wp_get_ability( 'aafm-bridge/vendor-skips-validation' );
+		$this->assertNotEmpty( $wrapper->get_output_schema() );
+		$this->assertSame(
+			aafm_bridge_output_schema( wp_get_ability( 'vendor/skips-validation' ) ),
+			$wrapper->get_output_schema(),
+			'outputSchema must be exactly what the helper derives from the source.'
 		);
 	}
 

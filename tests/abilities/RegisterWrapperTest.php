@@ -118,6 +118,38 @@ final class RegisterWrapperTest extends TestCase {
 		$this->assertSame( 'foo', $rows[0]['arg_keys'] ); // keys, not values.
 	}
 
+	/**
+	 * A pin, green on the base commit by design: the class that now skips validation for bridged
+	 * wrappers must keep core's output validation for every native ability.
+	 */
+	public function test_a_native_ability_with_off_schema_output_still_errors(): void {
+		$this->acting_as( 'administrator' );
+		$this->register(
+			'aafm/native-offschema-probe',
+			array(
+				'label'               => 'Probe',
+				'description'         => 'Returns data that breaks its own schema.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array(
+					'type'       => 'object',
+					'properties' => array( 'ok' => array( 'type' => 'boolean' ) ),
+					'required'   => array( 'ok' ),
+				),
+				'input_schema'        => array(
+					'type'       => 'object',
+					'properties' => array(),
+				),
+				'execute_callback'    => static fn() => array( 'ok' => 'not a boolean' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		$result = wp_get_ability( 'aafm/native-offschema-probe' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'ability_invalid_output', $result->get_error_code() );
+	}
+
 	public function test_denied_call_is_logged_as_denied(): void {
 		$this->acting_as( 'subscriber' );
 		$this->register(

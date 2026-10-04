@@ -324,8 +324,8 @@ function aafm_bridge_permission_state( string $foreign_slug, $input ): string {
  * Returns null (not a default object schema) when the foreign ability has no output schema, so the
  * wrapper simply omits output_schema and inherits core's no-output-validation default.
  *
- * One caveat worth naming rather than leaving as a silent side effect: this is about our wrapper's
- * own validate_output() call, not about what a client sees.
+ * One caveat worth naming rather than leaving as a silent side effect: the wrapper no longer validates a bridged result itself
+ * (AAFM_Rate_Limited_Ability::validate_output()); this is about the schema a client is shown.
  * SchemaTransformer::transform_to_object_schema() stamps type:object onto a typeless schema itself
  * when building the advertised outputSchema, and McpTool::execute() wraps a scalar result under
  * `result`. So for a bare oneOf schema returning a string the bridged call now EXECUTES instead of
@@ -651,7 +651,9 @@ function aafm_register_enabled_bridged_abilities(): void {
 			},
 		);
 
-		// Copy the foreign output schema only when it actually exposes one (see helper).
+		// Copy the foreign output schema only when it actually exposes one (see helper). It is advertised to
+		// clients; AAFM_Rate_Limited_Ability::validate_output() skips core's second check for bridged names,
+		// because the source validated its own result.
 		$output_schema = aafm_bridge_output_schema( $foreign );
 		if ( null !== $output_schema ) {
 			$args['output_schema'] = $output_schema;

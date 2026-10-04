@@ -928,7 +928,7 @@ final class BridgeWrapperTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$this->register_foreign_returning(
 			'vendor/errors',
-			static fn() => new \WP_Error( 'vendor_boom', 'The vendor ability failed.' )
+			static fn() => new \WP_Error( 'vendor_boom', 'That ability failed.' )
 		);
 		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/errors' ) );
 		$this->register_wrappers();
@@ -1247,7 +1247,7 @@ final class BridgeWrapperTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$this->register_foreign_returning(
 			'vendor/fails',
-			static fn() => new \WP_Error( 'vendor_boom', 'The vendor ability failed.', array( 'status' => 409 ) )
+			static fn() => new \WP_Error( 'vendor_boom', 'That ability failed.', array( 'status' => 409 ) )
 		);
 		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/fails' ) );
 		$this->register_wrappers();
@@ -1256,7 +1256,7 @@ final class BridgeWrapperTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'vendor_boom', $result->get_error_code() );
-		$this->assertSame( 'The vendor plugin returned an error: The vendor ability failed.', $result->get_error_message() );
+		$this->assertSame( 'The vendor plugin returned an error: That ability failed.', $result->get_error_message() );
 		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
 	}
 
@@ -1269,6 +1269,21 @@ final class BridgeWrapperTest extends TestCase {
 
 		$invalid = new \WP_Error( 'ability_invalid_input', 'Ability "vendor/x" has invalid input.' );
 		$this->assertSame( $invalid, aafm_bridge_attribute_error( 'vendor/x', $invalid ), 'Core words its own errors and already names the ability.' );
+	}
+
+	/**
+	 * A message that already names the plugin is left alone, so the client does not read the name twice.
+	 */
+	public function test_a_message_that_already_names_the_plugin_is_not_prefixed_again(): void {
+		$named = new \WP_Error( 'woocommerce_rest_invalid_id', 'WooCommerce: product 5 was not found.' );
+		$this->assertSame( $named, aafm_bridge_attribute_error( 'woocommerce/product-update', $named ) );
+
+		$lower = new \WP_Error( 'x_failed', 'the woocommerce store is in maintenance mode.' );
+		$this->assertSame( $lower, aafm_bridge_attribute_error( 'woocommerce/product-update', $lower ), 'The match ignores case.' );
+
+		$plain    = new \WP_Error( 'x_failed', 'Product 5 was not found.' );
+		$prefixed = aafm_bridge_attribute_error( 'woocommerce/product-update', $plain );
+		$this->assertSame( 'The woocommerce plugin returned an error: Product 5 was not found.', $prefixed->get_error_message(), 'Guard on the guard: a message without the name is still prefixed.' );
 	}
 
 	public function test_our_own_refusal_is_not_given_a_plugin_prefix(): void {

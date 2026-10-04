@@ -830,7 +830,8 @@ function aafm_bridge_result_is_plain_data( $value, int $depth = 0 ): bool {
  * The client sees only the error text, so a bare "No such customer" gives no hint which plugin said
  * it. The source is the foreign slug's namespace, the label the admin directory uses. The error
  * code and data are kept; only the first message gets the prefix. The core namespace, an error
- * with no code and core's own ability_* errors are returned as they are.
+ * with no code, core's own ability_* errors and a message that already names the plugin (compared
+ * ignoring case) are returned as they are.
  *
  * @param string    $foreign_slug Foreign ability slug, for example "woocommerce/product-update".
  * @param \WP_Error $error        The error the foreign ability returned.
@@ -840,7 +841,7 @@ function aafm_bridge_attribute_error( string $foreign_slug, \WP_Error $error ): 
 	$pos    = strpos( $foreign_slug, '/' );
 	$source = false === $pos ? $foreign_slug : substr( $foreign_slug, 0, $pos );
 	$code   = $error->get_error_code();
-	if ( '' === $source || 'core' === $source || '' === $code || str_starts_with( (string) $code, 'ability_' ) ) {
+	if ( '' === $source || 'core' === $source || '' === $code || str_starts_with( (string) $code, 'ability_' ) || false !== stripos( $error->get_error_message(), $source ) ) {
 		return $error;
 	}
 

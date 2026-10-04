@@ -327,7 +327,7 @@ function aafm_bridge_permission_state( string $foreign_slug, $input ): string {
 	if ( true === $answer ) {
 		return 'allow';
 	}
-	if ( $answer instanceof WP_Error && 'ability_callback_exception' === $answer->get_error_code() ) {
+	if ( aafm_bridge_is_core_callback_exception( $answer, $foreign_slug ) ) {
 		return 'crash';
 	}
 	return 'deny';
@@ -404,6 +404,27 @@ function aafm_bridge_is_own_error( $error, bool $mark = false ): bool {
 		$own[ $id ] = $error; // Held so the id cannot be reused by another object.
 	}
 	return isset( $own[ $id ] );
+}
+
+/**
+ * Whether an error is core's own report of a throw inside an ability callback.
+ *
+ * From WP 7.0 core's WP_Ability::invoke_callback() catches a throwing callback and returns
+ * WP_Error ability_callback_exception with the text 'Ability "<slug>" callback threw an exception:
+ * <the exception's own text>'. The 6.9 floor lets the throw escape instead. The error carries no
+ * data, so the only way to tell it from a foreign plugin that returns the same code on purpose is its
+ * message, which names the ability. A plugin that returns the code with a message that also names its
+ * own ability cannot be told apart; it is read as a crash, which fails closed. The message is
+ * translated by core, so only the slug is matched.
+ *
+ * @param mixed  $error        The value a foreign callback or check returned.
+ * @param string $foreign_slug The foreign ability's slug.
+ * @return bool
+ */
+function aafm_bridge_is_core_callback_exception( $error, string $foreign_slug ): bool {
+	return $error instanceof \WP_Error
+		&& 'ability_callback_exception' === $error->get_error_code()
+		&& false !== strpos( $error->get_error_message(), $foreign_slug );
 }
 
 /**
@@ -729,6 +750,11 @@ function aafm_register_enabled_bridged_abilities(): void {
 				// that collision; the guard downstream is scoped to skip bridged names instead.
 				$result = $live->execute( aafm_bridge_forward_input( $live, $input ) );
 				if ( is_wp_error( $result ) ) {
+					// Core's own report of a throw carries the exception's raw text. A client gets the same static
+					// error the choke point gives a throw that escapes the source on the 6.9 floor.
+					if ( aafm_bridge_is_core_callback_exception( $result, $foreign_slug ) ) {
+						return aafm_bridge_own_error( 'aafm_ability_exception', aafm_ability_exception_message() );
+					}
 					return aafm_bridge_attribute_error( $foreign_slug, $result );
 				}
 				// The verdict on raw objects lives here, not in the adapter's result filter: this

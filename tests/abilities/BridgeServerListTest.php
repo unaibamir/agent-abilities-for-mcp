@@ -350,6 +350,44 @@ final class BridgeServerListTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Core's own catch of a throw words its error "Ability "<slug>" callback threw an exception: ...".
+	 * A permission callback that returns the same code with its own text is an ordinary "no": it gets the
+	 * discovery floor like any other denial instead of the fail-closed treatment a crash gets.
+	 */
+	public function test_a_permission_callback_returning_the_core_exception_code_with_its_own_text_is_denied_not_crashed(): void {
+		$this->register_object_id_foreigners(
+			array(
+				'demo/says-no' => static fn() => new \WP_Error( 'ability_callback_exception', 'The vendor refuses this one.' ),
+			)
+		);
+
+		$this->assertSame( 'deny', aafm_bridge_permission_state( 'demo/says-no', array() ) );
+		$this->acting_as( 'editor' );
+		$this->assertContains( 'aafm-bridge/demo-says-no', $this->discoverable( array( 'demo/says-no' ) ), 'A denial lists under the floor.' );
+	}
+
+	/**
+	 * A permission callback that throws is a crash on a core that catches it, and an exception on one
+	 * that does not. Either way the state is never "deny" or "allow".
+	 */
+	public function test_a_throwing_permission_callback_is_never_read_as_a_denial(): void {
+		$this->register_object_id_foreigners(
+			array(
+				'demo/throws-again' => static function () {
+					throw new \RuntimeException( 'permission boom' );
+				},
+			)
+		);
+
+		try {
+			$state = aafm_bridge_permission_state( 'demo/throws-again', array() );
+		} catch ( \RuntimeException $e ) {
+			$state = 'thrown';
+		}
+		$this->assertContains( $state, array( 'crash', 'thrown' ) );
+	}
+
 	public function test_discovery_floor_filter_is_honoured(): void {
 		add_filter(
 			'aafm_bridge_discovery_capability',

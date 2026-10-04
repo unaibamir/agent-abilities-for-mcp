@@ -1286,6 +1286,94 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( 'The woocommerce plugin returned an error: Product 5 was not found.', $prefixed->get_error_message(), 'Guard on the guard: a message without the name is still prefixed.' );
 	}
 
+	/**
+	 * The helper that tells core's catch of a throw from a foreign plugin's own return.
+	 */
+	public function test_core_callback_exception_is_recognised_by_code_and_by_naming_the_ability(): void {
+		$core = new \WP_Error( 'ability_callback_exception', 'Ability "vendor/x" callback threw an exception: boom' );
+		$this->assertTrue( aafm_bridge_is_core_callback_exception( $core, 'vendor/x' ) );
+
+		$own_text = new \WP_Error( 'ability_callback_exception', 'Vendor says no.' );
+		$this->assertFalse( aafm_bridge_is_core_callback_exception( $own_text, 'vendor/x' ), 'The same code with text that does not name the ability.' );
+
+		$other_code = new \WP_Error( 'vendor_boom', 'Ability "vendor/x" callback threw an exception: boom' );
+		$this->assertFalse( aafm_bridge_is_core_callback_exception( $other_code, 'vendor/x' ) );
+		$this->assertFalse( aafm_bridge_is_core_callback_exception( $core, 'vendor/y' ), 'Another ability\'s slug.' );
+		$this->assertFalse( aafm_bridge_is_core_callback_exception( array( 'ability_callback_exception' ), 'vendor/x' ) );
+	}
+
+	/**
+	 * A source that throws must give the client the same static error on every core, and the row and the
+	 * announced detail must hold no part of the exception text. On a core that catches the throw itself
+	 * (7.0 and later) the error arrives as a WP_Error carrying the raw text; on 6.9 the throw escapes to the
+	 * choke point. The client text is the same either way.
+	 */
+	public function test_a_source_that_throws_gives_the_client_and_the_row_no_part_of_the_exception_text(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$fired = array();
+		add_action(
+			'aafm_ability_resolved',
+			static function ( $record ) use ( &$fired ): void {
+				$fired[] = $record;
+			}
+		);
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning(
+			'vendor/throws',
+			static function () {
+				throw new \RuntimeException( 'secret-token-123 for customer 77' );
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/throws' ) );
+		$this->register_wrappers();
+
+		try {
+			$direct       = wp_get_ability( 'vendor/throws' )->execute( array() );
+			$core_catches = is_wp_error( $direct ) && 'ability_callback_exception' === $direct->get_error_code();
+		} catch ( \Throwable $e ) {
+			$core_catches = false;
+		}
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-throws' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_ability_exception', $result->get_error_code() );
+		$this->assertSame( aafm_ability_exception_message(), $result->get_error_message() );
+		$this->assertStringNotContainsString( 'secret-token', $result->get_error_message() );
+		$this->assertStringNotContainsString( '77', $result->get_error_message() );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-throws' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'] );
+		$this->assertStringNotContainsString( 'secret-token', (string) $rows[0]['detail'] );
+		$this->assertStringNotContainsString( '77', (string) $rows[0]['detail'] );
+		if ( $core_catches ) {
+			$this->assertSame( 'aafm_ability_exception', $rows[0]['detail'], 'Core swallowed the throw, so there is no class or site to record.' );
+		} else {
+			$this->assertMatchesRegularExpression( '/^RuntimeException at /', (string) $rows[0]['detail'] );
+		}
+		$this->assertCount( 1, $fired );
+		$this->assertSame( $rows[0]['detail'], $fired[0]['detail'], 'The announced detail is the column.' );
+	}
+
+	/**
+	 * A source that returns the core exception code on purpose, with its own text, is an ordinary
+	 * foreign error: its text is relayed and its code is recorded behind the foreign prefix.
+	 */
+	public function test_a_source_returning_the_core_exception_code_with_its_own_text_is_relayed_as_a_foreign_error(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning( 'vendor/says-no', static fn() => new \WP_Error( 'ability_callback_exception', 'Vendor says no.' ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/says-no' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-says-no' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'Vendor says no.', $result->get_error_message() );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-says-no' ) );
+		$this->assertSame( 'foreign:ability_callback_exception', $rows[0]['detail'] );
+	}
+
 	public function test_our_own_refusal_is_not_given_a_plugin_prefix(): void {
 		$this->acting_as( 'administrator' );
 		$user = new \WP_User( self::factory()->user->create() );

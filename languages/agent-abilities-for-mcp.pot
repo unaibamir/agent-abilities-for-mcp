@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-04T19:29:33+05:00\n"
+"POT-Creation-Date: 2026-10-04T23:11:31+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -168,7 +168,7 @@ msgid "Get activity log"
 msgstr ""
 
 #: includes/abilities/activity-log.php:30
-msgid "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, whether the caller is flagged as an agent identity, the argument keys passed, the timestamp, and a short identifier-only detail (an object id or slug, a WP_Error code, or a crashed call's exception class and throw site). Most recent first. Response includes total (the count for the status filter). Never argument values or network addresses. Requires the manage-options capability."
+msgid "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, whether the caller is flagged as an agent identity, the argument keys passed, the timestamp, and a short identifier-only detail (an object id or slug, a WP_Error code, or a crashed call's exception class and throw site; a code returned by another plugin's bridged ability is prefixed with foreign:). Most recent first. Response includes total (the count for the status filter). Never free-text argument content or network addresses. Requires the manage-options capability."
 msgstr ""
 
 #: includes/abilities/activity-log.php:56
@@ -205,7 +205,7 @@ msgid "Whether the acting user or the OAuth client this call is attributed to is
 msgstr ""
 
 #: includes/abilities/activity-log.php:92
-msgid "Identifier-only note about what the call touched or why it failed, or null when the call recorded none. It is one of an allowlisted identifier (an object id or slug), a WP_Error code, or a crash's exception class and throw site, for example \"WC_Data_Exception at abstract-wc-data.php:1001\". It never contains argument values, free text, or file paths."
+msgid "Identifier-only note about what the call touched or why it failed, or null when the call recorded none. It is one of an allowlisted identifier (an object id or slug), a WP_Error code (prefixed with foreign: when another plugin's bridged ability returned it), or a crash's exception class and throw site, for example \"WC_Data_Exception at abstract-wc-data.php:1001\". It never contains free text or file paths, and a code a plugin builds from its input can carry a short fragment of that input."
 msgstr ""
 
 #: includes/abilities/aioseo.php:121
@@ -4829,7 +4829,7 @@ msgid "Searches the content types you have exposed in a single query, returning 
 msgstr ""
 
 #: includes/admin/disclosures.php:63
-msgid "Reads this plugin's own audit log (ability, status, acting user, argument keys, timestamp, and a short identifier-only detail such as an object id, a WP_Error code, or a crashed call's exception class and throw site), most recent first. Never free-text argument content or network addresses. Requires the manage-options capability."
+msgid "Reads this plugin's own audit log (ability, status, acting user, argument keys, timestamp, and a short identifier-only detail such as an object id, a WP_Error code, or a crashed call's exception class and throw site; a code returned by another plugin's bridged ability is prefixed with foreign:), most recent first. Never free-text argument content or network addresses. Requires the manage-options capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:64
@@ -7217,187 +7217,187 @@ msgid "Clears every plugin setting - enabled abilities, exposed content types an
 msgstr ""
 
 #. translators: 1: meta key name. 2: the post's numeric ID.
-#: includes/audit/detail.php:170
+#: includes/audit/detail.php:174
 #, php-format
 msgid "Updated meta key `%1$s` on post #%2$s"
 msgstr ""
 
 #. translators: %s: the new page's numeric ID.
-#: includes/audit/detail.php:185
+#: includes/audit/detail.php:189
 #, php-format
 msgid "Created page #%s"
 msgstr ""
 
 #. translators: 1: the order's numeric ID. 2: the new order status key.
-#: includes/audit/detail.php:195
+#: includes/audit/detail.php:199
 #, php-format
 msgid "Set order #%1$s to status `%2$s`"
 msgstr ""
 
 #. translators: %s: the new post's numeric ID.
-#: includes/audit/detail.php:216
+#: includes/audit/detail.php:220
 #, php-format
 msgid "Created post #%s"
 msgstr ""
 
 #. translators: %s: the new draft's numeric ID.
-#: includes/audit/detail.php:224
+#: includes/audit/detail.php:228
 #, php-format
 msgid "Created draft #%s"
 msgstr ""
 
 #. translators: %s: the new user's numeric ID.
-#: includes/audit/detail.php:230
+#: includes/audit/detail.php:234
 #, php-format
 msgid "Created user #%s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the post's numeric ID.
-#: includes/audit/detail.php:238
+#: includes/audit/detail.php:242
 #, php-format
 msgid "Deleted meta key `%1$s` on post #%2$s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:253
+#: includes/audit/detail.php:257
 #, php-format
 msgid "Updated post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:264
+#: includes/audit/detail.php:268
 #, php-format
 msgid "Updated page #%s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:278
+#: includes/audit/detail.php:282
 #, php-format
 msgid "Deleted post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:289
+#: includes/audit/detail.php:293
 #, php-format
 msgid "Deleted page #%s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:301
+#: includes/audit/detail.php:305
 #, php-format
 msgid "Trashed post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:312
+#: includes/audit/detail.php:316
 #, php-format
 msgid "Trashed page #%s"
 msgstr ""
 
 #. translators: %s: the restored revision's numeric ID.
-#: includes/audit/detail.php:324
+#: includes/audit/detail.php:328
 #, php-format
 msgid "Restored revision #%s"
 msgstr ""
 
 #. translators: %s: the user's numeric ID.
-#: includes/audit/detail.php:338
+#: includes/audit/detail.php:342
 #, php-format
 msgid "Updated user #%s"
 msgstr ""
 
 #. translators: %s: the user's numeric ID.
-#: includes/audit/detail.php:349
+#: includes/audit/detail.php:353
 #, php-format
 msgid "Deleted user #%s"
 msgstr ""
 
 #. translators: %s: the order's numeric ID.
-#: includes/audit/detail.php:360
+#: includes/audit/detail.php:364
 #, php-format
 msgid "Refunded order #%s"
 msgstr ""
 
 #. translators: %s: the payment gateway's id slug.
-#: includes/audit/detail.php:371
+#: includes/audit/detail.php:375
 #, php-format
 msgid "Updated payment gateway `%s`"
 msgstr ""
 
 #. translators: %s: the comment's numeric ID.
-#: includes/audit/detail.php:410
+#: includes/audit/detail.php:414
 #, php-format
 msgid "Deleted comment #%s"
 msgstr ""
 
 #. translators: %s: the attachment's numeric ID.
-#: includes/audit/detail.php:423
+#: includes/audit/detail.php:427
 #, php-format
 msgid "Deleted media #%s"
 msgstr ""
 
 #. translators: %s: the navigation menu's numeric ID.
-#: includes/audit/detail.php:435
+#: includes/audit/detail.php:439
 #, php-format
 msgid "Deleted menu #%s"
 msgstr ""
 
 #. translators: %s: the menu item's numeric ID.
-#: includes/audit/detail.php:448
+#: includes/audit/detail.php:452
 #, php-format
 msgid "Deleted menu item #%s"
 msgstr ""
 
 #. translators: %s: the deleted revision's numeric ID.
-#: includes/audit/detail.php:461
+#: includes/audit/detail.php:465
 #, php-format
 msgid "Deleted revision #%s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the term's numeric ID.
-#: includes/audit/detail.php:493
+#: includes/audit/detail.php:497
 #, php-format
 msgid "Updated meta key `%1$s` on term #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the user's numeric ID.
-#: includes/audit/detail.php:511
+#: includes/audit/detail.php:515
 #, php-format
 msgid "Updated meta key `%1$s` on user #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the term's numeric ID.
-#: includes/audit/detail.php:529
+#: includes/audit/detail.php:533
 #, php-format
 msgid "Deleted meta key `%1$s` on term #%2$s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the user's numeric ID.
-#: includes/audit/detail.php:548
+#: includes/audit/detail.php:552
 #, php-format
 msgid "Deleted meta key `%1$s` on user #%2$s"
 msgstr ""
 
 #. translators: %s: the product's numeric ID.
-#: includes/audit/detail.php:566
+#: includes/audit/detail.php:570
 #, php-format
 msgid "Deleted product #%s"
 msgstr ""
 
 #. translators: %s: comma-separated list of the site setting names that were changed.
-#: includes/audit/detail.php:589
+#: includes/audit/detail.php:593
 #, php-format
 msgid "Updated site settings: %s"
 msgstr ""
 
 #. translators: %s: the variation's numeric ID.
-#: includes/audit/detail.php:600
+#: includes/audit/detail.php:604
 #, php-format
 msgid "Deleted product variation #%s"
 msgstr ""
 
 #. translators: %s: what the call tried to do, such as "Updated meta key `x` on post #5".
-#: includes/audit/detail.php:692
+#: includes/audit/detail.php:696
 #, php-format
 msgid "Attempted: %s"
 msgstr ""
@@ -7522,16 +7522,16 @@ msgstr ""
 msgid "The initialize parameters are too large. Send a normal handshake: a protocol version, your capabilities, and a short client name and version."
 msgstr ""
 
-#: includes/bridge.php:643
+#: includes/bridge.php:736
 msgid "The bridged ability is no longer available."
 msgstr ""
 
-#: includes/bridge.php:668
+#: includes/bridge.php:766
 msgid "This bridged ability ran, but its result held a raw object that cannot be safely relayed over MCP. If it changes data, check the site before you repeat the call. Contact the site administrator."
 msgstr ""
 
 #. translators: 1: the plugin's ability namespace, for example "woocommerce". 2: the error text that plugin returned.
-#: includes/bridge.php:762
+#: includes/bridge.php:878
 #, php-format
 msgid "The %1$s plugin returned an error: %2$s"
 msgstr ""
@@ -8047,12 +8047,12 @@ msgstr ""
 msgid "Ability \"%s\" was not registered: an execute_callback is required."
 msgstr ""
 
-#: includes/register.php:1253
-msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
+#: includes/register.php:1279
+msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 
-#: includes/register.php:1282
-msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
+#: includes/register.php:1356
+msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
 msgstr ""
 
 #: includes/server.php:1063

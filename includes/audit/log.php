@@ -453,8 +453,10 @@ function aafm_sanitize_activity_detail( string $detail ): string {
 
 /**
  * Write one activity row. Records argument KEYS, never their free-text content; the detail
- * column carries identifier-only notes (ids, key names, slugs, enum members - see
- * includes/audit/detail.php for the allowlist that guarantees it).
+ * column carries identifier-only notes (ids, key names, slugs, enum members, error codes - see
+ * includes/audit/detail.php for the allowlist, and for the one bounded exception: a code a bridged
+ * foreign plugin returned is prefixed `foreign:` and may hold a short key-shaped fragment of that
+ * plugin's own input).
  *
  * @param array<string,mixed> $record {
  *     Activity record.

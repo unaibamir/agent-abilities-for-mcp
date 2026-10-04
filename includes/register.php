@@ -1226,6 +1226,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			 * ability's PERMISSION callback as well as its EXECUTE callback, so one switch covers
 			 * both phases.
 			 *
+			 * When it re-throws, the source's exception text can reach the client on WordPress 6.9,
+			 * which is why the default is WP_DEBUG only.
+			 *
 			 * Re-throwing deliberately leaves no resolved audit row: on the execute path the row
 			 * stays at 'started', on the permission path no row is written at all. That absence is
 			 * the forensic signal, and it is intentional - do not "fix" it.

@@ -161,6 +161,9 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'where you can restore it', $html );
 		$this->assertStringContainsString( 'every media or user deletion, is permanent', $html );
 		$this->assertStringContainsString( 'argument KEYS only', $html );
+		// The foreign error code a bridged ability can add to the log is named, with its prefix.
+		$this->assertStringContainsString( 'behind a &quot;foreign:&quot; prefix', $html );
+		$this->assertStringNotContainsString( 'records only the argument KEYS', $html );
 	}
 
 	public function test_help_copy_lines_reuse_the_copy_button_hook(): void {

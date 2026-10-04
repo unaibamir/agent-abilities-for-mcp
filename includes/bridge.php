@@ -308,9 +308,9 @@ function aafm_remember_bridge_source( string $wrapper, ?string $foreign_slug = n
  *
  * The wrapper's permission closure reduces this to a boolean. Discovery needs more: a permission
  * callback that crashed must not be confused with one that said no because an object id was
- * missing. On WP 7.1 and later core catches a throw inside a permission callback and returns
- * WP_Error ability_callback_exception (WP_Ability::invoke_callback()); on the 6.9 floor the throw
- * escapes, and the caller's catch covers that.
+ * missing. On WP 7.0.6 and 7.1.2 core catches a throw inside a permission callback and returns
+ * WP_Error ability_callback_exception (WP_Ability::invoke_callback()); on 6.9.4 it does not, the
+ * throw escapes, and the caller's catch covers that.
  *
  * @param string $foreign_slug Foreign ability slug.
  * @param mixed  $input        Input to check, before forwarding.

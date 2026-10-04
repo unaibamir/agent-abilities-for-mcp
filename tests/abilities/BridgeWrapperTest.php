@@ -922,6 +922,66 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( 'error', (string) $rows[0]['status'] );
 	}
 
+	public function test_a_bridged_result_with_a_populated_stdclass_is_relayed_unchanged(): void {
+		$this->acting_as( 'administrator' );
+		$expected = array(
+			'saved'    => true,
+			'event_id' => 7,
+			'changed'  => (object) array( 'title' => 'x' ),
+		);
+		$this->register_foreign_returning( 'vendor/returns-an-object', static fn(): array => $expected );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/returns-an-object' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-returns-an-object' )->execute( array() );
+
+		$this->assertEquals( $expected, $result );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-returns-an-object' ) );
+		$this->assertSame( 'success', (string) $rows[0]['status'] );
+	}
+
+	public function test_a_bridged_wp_term_result_is_relayed(): void {
+		$this->acting_as( 'administrator' );
+		$term = self::factory()->term->create_and_get( array( 'taxonomy' => 'category' ) );
+		$this->register_foreign_returning( 'vendor/returns-a-term', static fn(): array => array( 'options' => array( $term ) ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/returns-a-term' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-returns-a-term' )->execute( array() );
+
+		$this->assertSame( $term, $result['options'][0] );
+	}
+
+	public function test_a_bridged_result_with_a_wp_user_is_an_error_and_the_row_says_error(): void {
+		$this->acting_as( 'administrator' );
+		$user  = new \WP_User( self::factory()->user->create() );
+		$calls = 0;
+		$this->register_foreign_returning(
+			'vendor/returns-a-user',
+			static function () use ( &$calls, $user ): array {
+				++$calls;
+				return array(
+					'saved' => true,
+					'user'  => $user,
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/returns-a-user' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-returns-a-user' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+		$this->assertStringContainsString( 'cannot be safely relayed over MCP', $result->get_error_message() );
+		$this->assertStringContainsString( 'ran', $result->get_error_message() );
+		$this->assertSame( 1, $calls, 'The foreign callback ran exactly once: the honest write-then-refuse case.' );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-returns-a-user' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'], 'The Activity Log must say error for a refused call.' );
+	}
+
 	/**
 	 * A bridged call announces its resolve like any other, and a bridged FAILURE announces the null
 	 * detail the exclusion leaves on the column rather than the foreign plugin's own error code.

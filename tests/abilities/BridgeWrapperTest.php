@@ -1287,6 +1287,25 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
+	 * A short namespace only counts as named when it stands alone as a word, so "ai" inside "failed"
+	 * or "email" does not suppress the prefix.
+	 */
+	public function test_a_short_namespace_inside_another_word_does_not_count_as_named(): void {
+		$inside = new \WP_Error( 'ai_failed', 'Request failed.' );
+		$result = aafm_bridge_attribute_error( 'ai/summarize', $inside );
+		$this->assertSame( 'The ai plugin returned an error: Request failed.', $result->get_error_message() );
+
+		$email = new \WP_Error( 'ai_failed', 'Could not send the email.' );
+		$this->assertSame( 'The ai plugin returned an error: Could not send the email.', aafm_bridge_attribute_error( 'ai/summarize', $email )->get_error_message() );
+
+		$named = new \WP_Error( 'ai_failed', 'The AI service is unavailable.' );
+		$this->assertSame( $named, aafm_bridge_attribute_error( 'ai/summarize', $named ), 'A whole-word mention is not prefixed again.' );
+
+		$punctuated = new \WP_Error( 'ai_failed', 'ai: quota exceeded.' );
+		$this->assertSame( $punctuated, aafm_bridge_attribute_error( 'ai/summarize', $punctuated ) );
+	}
+
+	/**
 	 * The helper that tells core's catch of a throw from a foreign plugin's own return.
 	 */
 	public function test_core_callback_exception_is_recognised_by_code_and_by_naming_the_ability(): void {

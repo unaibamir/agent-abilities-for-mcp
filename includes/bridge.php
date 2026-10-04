@@ -657,7 +657,7 @@ function aafm_register_enabled_bridged_abilities(): void {
 				// that collision; the guard downstream is scoped to skip bridged names instead.
 				$result = $live->execute( aafm_bridge_forward_input( $live, $input ) );
 				if ( is_wp_error( $result ) ) {
-					return $result;
+					return aafm_bridge_attribute_error( $foreign_slug, $result );
 				}
 				// The verdict on raw objects lives here, not in the adapter's result filter: this
 				// closure's return value is what register.php turns into the Activity Log status, so
@@ -733,6 +733,38 @@ function aafm_bridge_result_is_plain_data( $value, int $depth = 0 ): bool {
 		}
 	}
 	return true;
+}
+
+/**
+ * Name the plugin behind a bridged ability's own failure.
+ *
+ * The client sees only the error text, so a bare "No such customer" gives no hint which plugin said
+ * it. The source is the foreign slug's namespace, the label the admin directory uses. The error
+ * code and data are kept; only the first message gets the prefix. The core namespace, an error
+ * with no code and core's own ability_* errors are returned as they are.
+ *
+ * @param string    $foreign_slug Foreign ability slug, for example "woocommerce/product-update".
+ * @param \WP_Error $error        The error the foreign ability returned.
+ * @return \WP_Error
+ */
+function aafm_bridge_attribute_error( string $foreign_slug, \WP_Error $error ): \WP_Error {
+	$pos    = strpos( $foreign_slug, '/' );
+	$source = false === $pos ? $foreign_slug : substr( $foreign_slug, 0, $pos );
+	$code   = $error->get_error_code();
+	if ( '' === $source || 'core' === $source || '' === $code || str_starts_with( (string) $code, 'ability_' ) ) {
+		return $error;
+	}
+
+	return new WP_Error(
+		$code,
+		sprintf(
+			/* translators: 1: the plugin's ability namespace, for example "woocommerce". 2: the error text that plugin returned. */
+			__( 'The %1$s plugin returned an error: %2$s', 'agent-abilities-for-mcp' ),
+			$source,
+			$error->get_error_message()
+		),
+		$error->get_error_data()
+	);
 }
 
 /**

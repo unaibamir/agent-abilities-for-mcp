@@ -1203,4 +1203,44 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertArrayHasKey( 'properties', $schema, 'A recognized keyword must survive.' );
 		$this->assertArrayNotHasKey( 'x-vendor-extension', $schema, 'An unsupported keyword must be stripped from the output schema before it reaches an MCP client.' );
 	}
+
+	public function test_a_bridged_failure_names_the_plugin_and_keeps_its_text_code_and_data(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning(
+			'vendor/fails',
+			static fn() => new \WP_Error( 'vendor_boom', 'The vendor ability failed.', array( 'status' => 409 ) )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/fails' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-fails' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'vendor_boom', $result->get_error_code() );
+		$this->assertSame( 'The vendor plugin returned an error: The vendor ability failed.', $result->get_error_message() );
+		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
+	}
+
+	public function test_attribution_leaves_core_errors_and_an_empty_error_alone(): void {
+		$error = new \WP_Error( 'core_boom', 'Core said no.' );
+		$this->assertSame( $error, aafm_bridge_attribute_error( 'core/get-user-info', $error ) );
+
+		$empty = new \WP_Error();
+		$this->assertSame( $empty, aafm_bridge_attribute_error( 'vendor/x', $empty ) );
+
+		$invalid = new \WP_Error( 'ability_invalid_input', 'Ability "vendor/x" has invalid input.' );
+		$this->assertSame( $invalid, aafm_bridge_attribute_error( 'vendor/x', $invalid ), 'Core words its own errors and already names the ability.' );
+	}
+
+	public function test_our_own_refusal_is_not_given_a_plugin_prefix(): void {
+		$this->acting_as( 'administrator' );
+		$user = new \WP_User( self::factory()->user->create() );
+		$this->register_foreign_returning( 'vendor/returns-a-user-again', static fn(): array => array( 'user' => $user ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/returns-a-user-again' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-returns-a-user-again' )->execute( array() );
+
+		$this->assertStringStartsWith( 'This bridged ability ran', $result->get_error_message() );
+	}
 }

@@ -32,6 +32,8 @@ final class BridgeResultPlainDataTest extends TestCase {
 			'bool'                 => array( true ),
 			'int'                  => array( 7 ),
 			'float'                => array( 1.5 ),
+			'zero float'           => array( 0.0 ),
+			'large finite float'   => array( PHP_FLOAT_MAX ),
 			'string'               => array( 'ok' ),
 			'empty array'          => array( array() ),
 			'nested arrays'        => array( array( 'a' => array( 'b' => array( 1, 'two', null ) ) ) ),
@@ -97,6 +99,11 @@ final class BridgeResultPlainDataTest extends TestCase {
 			'Closure'                             => array( static fn() => 1 ),
 			'WP_Error inside an array'            => array( array( 'result' => new \WP_Error( 'x', 'y' ) ) ),
 			'refused class inside a stdClass'     => array( (object) array( 'inner' => new \ArrayObject() ) ),
+			'NaN'                                 => array( NAN ),
+			'INF'                                 => array( INF ),
+			'negative INF'                        => array( -INF ),
+			'NaN inside an array'                 => array( array( 'price' => array( 1.5, NAN ) ) ),
+			'INF inside a stdClass'               => array( (object) array( 'ratio' => INF ) ),
 		);
 	}
 

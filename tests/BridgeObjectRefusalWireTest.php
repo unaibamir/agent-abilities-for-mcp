@@ -201,4 +201,124 @@ final class BridgeObjectRefusalWireTest extends TestCase {
 		$this->assertTrue( $response->getIsError(), 'Renaming the wire tool must not skip the verdict.' );
 		$this->assertStringContainsString( 'cannot be safely relayed over MCP', $response->getContent()[0]->getText() );
 	}
+
+	/**
+	 * A float that is NaN or infinite cannot be JSON encoded, so it is refused like any other value the
+	 * bridge cannot relay: the same static message, and an error row.
+	 *
+	 * @dataProvider non_finite_provider
+	 *
+	 * @param float $value The non-finite float.
+	 */
+	public function test_a_non_finite_float_result_is_refused_with_the_static_message_and_an_error_row( float $value ): void {
+		$wrapper = $this->bridge_foreign( 'wirefix/float', static fn(): array => array( 'ratio' => $value ), true );
+
+		$response = $this->call_wrapper( $wrapper );
+
+		$this->assertTrue( $response->getIsError() );
+		$this->assertStringContainsString( 'cannot be safely relayed over MCP', $response->getContent()[0]->getText() );
+		$rows = aafm_query_activity( array( 'ability' => $wrapper ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'] );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $rows[0]['detail'] );
+	}
+
+	/**
+	 * Floats the wrapper refuses.
+	 *
+	 * @return array<string,array{0:float}>
+	 */
+	public function non_finite_provider(): array {
+		return array(
+			'NaN'          => array( NAN ),
+			'INF'          => array( INF ),
+			'negative INF' => array( -INF ),
+		);
+	}
+
+	/**
+	 * The adapter turns a result of exactly { success: false, error: "<text>" } into an error for the
+	 * client, so the Activity Log row says error too, and the client gets the text unchanged.
+	 */
+	public function test_a_success_false_result_with_an_error_string_logs_an_error_row_and_relays_the_text(): void {
+		$wrapper = $this->bridge_foreign(
+			'wirefix/reported',
+			static fn(): array => array(
+				'success' => false,
+				'error'   => 'Quota exceeded.',
+			),
+			true
+		);
+
+		$response = $this->call_wrapper( $wrapper );
+
+		$this->assertTrue( $response->getIsError() );
+		$this->assertSame( 'Quota exceeded.', $response->getContent()[0]->getText() );
+		$rows = aafm_query_activity( array( 'ability' => $wrapper ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'], 'The log must agree with what the client was told.' );
+		$this->assertSame( 'aafm_bridge_reported_failure', $rows[0]['detail'] );
+	}
+
+	/**
+	 * Anything wider than that exact shape is data. The adapter relays it as a success, so the row says
+	 * success too.
+	 *
+	 * @dataProvider success_false_but_data_provider
+	 *
+	 * @param array<string,mixed> $result The foreign result.
+	 */
+	public function test_a_result_that_is_not_the_exact_success_false_error_shape_is_relayed_as_success( array $result ): void {
+		$wrapper = $this->bridge_foreign( 'wirefix/data', static fn(): array => $result, true );
+
+		$response = $this->call_wrapper( $wrapper );
+
+		$this->assertFalse( $response->getIsError() );
+		$rows = aafm_query_activity( array( 'ability' => $wrapper ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'success', (string) $rows[0]['status'] );
+	}
+
+	/**
+	 * Results that look like a failure but are not the adapter's exact error shape.
+	 *
+	 * @return array<string,array{0:array<string,mixed>}>
+	 */
+	public function success_false_but_data_provider(): array {
+		return array(
+			'success false alone'        => array( array( 'success' => false ) ),
+			'success false, empty error' => array(
+				array(
+					'success' => false,
+					'error'   => '  ',
+				),
+			),
+			'success false, non-string'  => array(
+				array(
+					'success' => false,
+					'error'   => array( 'code' => 5 ),
+				),
+			),
+			'success true with an error' => array(
+				array(
+					'success' => true,
+					'error'   => 'ignored',
+				),
+			),
+			'success 0 with an error'    => array(
+				array(
+					'success' => 0,
+					'error'   => 'not a boolean false',
+				),
+			),
+			'the shape nested one level' => array(
+				array(
+					'data' => array(
+						'success' => false,
+						'error'   => 'nested',
+					),
+				),
+			),
+		);
+	}
 }

@@ -116,6 +116,14 @@ const AAFM_BRIDGE_NAMESPACE = 'aafm-bridge';
 const AAFM_BRIDGE_REFUSED_SHAPE = 'aafm_bridge_unsupported_result_shape';
 
 /**
+ * The error code of a bridged call whose result was exactly { success: false, error: "<text>" }.
+ *
+ * The adapter turns that shape into an error for the client, so the wrapper returns it as one and the
+ * Activity Log row says error as well.
+ */
+const AAFM_BRIDGE_REPORTED_FAILURE = 'aafm_bridge_reported_failure';
+
+/**
  * What the Activity Log detail puts in front of an error code that a foreign plugin returned, so it
  * can never read as one of this plugin's own codes.
  */
@@ -732,6 +740,18 @@ function aafm_register_enabled_bridged_abilities(): void {
 						__( 'This bridged ability ran, but its result held a raw object that cannot be safely relayed over MCP. If it changes data, check the site before you repeat the call. Contact the site administrator.', 'agent-abilities-for-mcp' )
 					);
 				}
+				// The adapter tells the client this exact shape failed, so the wrapper reports it as an
+				// error too and the row agrees. Anything wider, such as { success: false } alone, is data.
+				if (
+					is_array( $result )
+					&& array_key_exists( 'success', $result )
+					&& false === $result['success']
+					&& isset( $result['error'] )
+					&& is_string( $result['error'] )
+					&& '' !== trim( $result['error'] )
+				) {
+					return aafm_bridge_own_error( AAFM_BRIDGE_REPORTED_FAILURE, $result['error'] );
+				}
 				return $result;
 			},
 		);
@@ -765,7 +785,8 @@ function aafm_register_enabled_bridged_abilities(): void {
  * JsonSerializable objects, stdClass subclasses (the check is get_class() ===, because
  * `instanceof stdClass` is also true for a subclass that can carry private state), closures,
  * resources, WP_Error inside a result, and any array or object nested at AAFM_SCHEMA_MAX_DEPTH or
- * deeper (null and scalars are plain at any depth: they cannot hide state). The depth bound also
+ * deeper (null and scalars are plain at any depth: they cannot hide state), and a float that is NaN or
+ * infinite, which JSON cannot encode. The depth bound also
  * stops a stdClass that references itself. This plugin cannot know a third-party object's fields
  * well enough to redact them, so it refuses rather than shapes. An exact stdClass is relayed with
  * every property it holds, so a raw database row (`$wpdb->get_row()`) or a bare `WP_User::$data`
@@ -777,6 +798,9 @@ function aafm_register_enabled_bridged_abilities(): void {
  * @return bool
  */
 function aafm_bridge_result_is_plain_data( $value, int $depth = 0 ): bool {
+	if ( is_float( $value ) ) {
+		return is_finite( $value ); // NaN and infinity cannot be encoded as JSON.
+	}
 	if ( null === $value || is_scalar( $value ) ) {
 		return true;
 	}

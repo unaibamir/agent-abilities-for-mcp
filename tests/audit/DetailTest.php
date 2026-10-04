@@ -1479,6 +1479,21 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
+	 * The one bridged code the log records is the fixed refusal literal, which no input can build. Any
+	 * other foreign code still records nothing. The check compares the string, not the origin.
+	 */
+	public function test_a_bridged_refusal_records_our_own_code_and_a_foreign_code_still_records_nothing(): void {
+		$refused = new \WP_Error( 'aafm_bridge_unsupported_result_shape', 'static text' );
+		$foreign = new \WP_Error( 'duplicate_sku_ABC-123-CUSTOMER', 'That SKU already exists.' );
+
+		$this->assertSame(
+			'aafm_bridge_unsupported_result_shape',
+			aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $refused )
+		);
+		$this->assertNull( aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $foreign ) );
+	}
+
+	/**
 	 * A regex ending in `$` also matches just before one final newline, so each anchored rule has to
 	 * reject a value that ends in one.
 	 */

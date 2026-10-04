@@ -14,7 +14,7 @@
  * code, which is an identifier by construction for an ability THIS PLUGIN ships - every
  * `new WP_Error(` under includes/ takes a string literal - but not for a bridged one, whose code a
  * foreign plugin is free to build out of its own input, so bridged results are excluded from that
- * branch. An ability contributed through the public aafm_abilities_registry filter is on the
+ * branch, except this plugin's own refusal code. An ability contributed through the public aafm_abilities_registry filter is on the
  * trusted side of that line: a site that adds a row to the catalog supplies its own permission
  * callback and is trusted with far more than an error code already. Read the guarantee as "the
  * codes this plugin and its host write", not "every code the column can hold". Since
@@ -727,10 +727,14 @@ function aafm_build_activity_detail_from_result( string $ability, $result ): ?st
 	// docblock and the admin panel all promise that cannot happen, and a promise with a
 	// third-party-shaped hole in it is not one. A bridged crash still records its exception class
 	// and throw site, which the engine supplies and no input can reach, so a bridged row is not
-	// left blind - it just does not carry a string a foreign plugin composed.
+	// left blind - it just does not carry a string a foreign plugin composed. The one bridged code
+	// recorded is the fixed literal AAFM_BRIDGE_REFUSED_SHAPE; the check compares the string, so a
+	// foreign ability that returns that exact code would record it too, and no foreign-built value
+	// can reach the column.
 	if ( is_wp_error( $result ) ) {
 		if ( str_starts_with( $ability, AAFM_BRIDGE_NAMESPACE . '/' ) ) {
-			return null;
+			// Only the fixed refusal literal is recorded; any other foreign code can be built from input.
+			return AAFM_BRIDGE_REFUSED_SHAPE === $result->get_error_code() ? AAFM_BRIDGE_REFUSED_SHAPE : null;
 		}
 		$code = aafm_activity_detail_field( 'key', $result->get_error_code() );
 		return ( null === $code || '' === $code ) ? null : $code;

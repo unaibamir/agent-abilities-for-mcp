@@ -953,6 +953,13 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	public function test_a_bridged_result_with_a_wp_user_is_an_error_and_the_row_says_error(): void {
+		$fired = array();
+		add_action(
+			'aafm_ability_resolved',
+			static function ( $record ) use ( &$fired ): void {
+				$fired[] = $record;
+			}
+		);
 		$this->acting_as( 'administrator' );
 		$user  = new \WP_User( self::factory()->user->create() );
 		$calls = 0;
@@ -980,6 +987,10 @@ final class BridgeWrapperTest extends TestCase {
 		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-returns-a-user' ) );
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'error', (string) $rows[0]['status'], 'The Activity Log must say error for a refused call.' );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $rows[0]['detail'], 'The row names why the call was refused.' );
+		$this->assertCount( 1, $fired );
+		$this->assertSame( 'error', $fired[0]['status'] );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $fired[0]['detail'], 'The announced payload agrees with the row.' );
 	}
 
 	/**

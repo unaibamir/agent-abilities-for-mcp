@@ -258,6 +258,59 @@ function aafm_bridge_forward_input( $live, $input ) {
 }
 
 /**
+ * Remember which foreign ability a bridged wrapper fronts, so the id-free discovery probe can ask
+ * that ability directly.
+ *
+ * Same store shape as aafm_remember_raw_permission() in register.php: a slug writes, no slug reads.
+ * Written only by aafm_register_enabled_bridged_abilities(), at the moment the wrapper's own
+ * closures capture the same slug.
+ *
+ * @param string      $wrapper      Wrapper ability name, for example "aafm-bridge/demo-echo".
+ * @param string|null $foreign_slug Foreign slug to store, or null to read.
+ * @return string|null The stored slug on a read, null on a write or when nothing is stored.
+ */
+function aafm_remember_bridge_source( string $wrapper, ?string $foreign_slug = null ): ?string {
+	static $store = array();
+
+	if ( null !== $foreign_slug ) {
+		$store[ $wrapper ] = $foreign_slug;
+		return null;
+	}
+
+	return $store[ $wrapper ] ?? null;
+}
+
+/**
+ * Ask the live foreign ability whether $input is permitted, keeping the KIND of the answer.
+ *
+ * The wrapper's permission closure reduces this to a boolean. Discovery needs more: a permission
+ * callback that crashed must not be confused with one that said no because an object id was
+ * missing. On WP 7.1 and later core catches a throw inside a permission callback and returns
+ * WP_Error ability_callback_exception (WP_Ability::invoke_callback()); on the 6.9 floor the throw
+ * escapes, and the caller's catch covers that.
+ *
+ * @param string $foreign_slug Foreign ability slug.
+ * @param mixed  $input        Input to check, before forwarding.
+ * @return string 'allow' when the plugin said yes, 'deny' for any other answer, 'crash' when core
+ *                reports the callback threw, 'gone' when the foreign ability is not registered.
+ */
+function aafm_bridge_permission_state( string $foreign_slug, $input ): string {
+	$live = wp_get_ability( $foreign_slug );
+	if ( ! $live instanceof WP_Ability ) {
+		return 'gone';
+	}
+
+	$answer = $live->check_permissions( aafm_bridge_forward_input( $live, $input ) );
+	if ( true === $answer ) {
+		return 'allow';
+	}
+	if ( $answer instanceof WP_Error && 'ability_callback_exception' === $answer->get_error_code() ) {
+		return 'crash';
+	}
+	return 'deny';
+}
+
+/**
  * The foreign ability's output schema exactly as it declared it - or null when it exposes none.
  *
  * Deliberately NOT routed through aafm_normalize_json_schema(). That function is INPUT-oriented:
@@ -572,12 +625,8 @@ function aafm_register_enabled_bridged_abilities(): void {
 				// check_permissions() runs the FOREIGN plugin's own callback, which can throw.
 				// Deliberately no try/catch here: every caller guards it already - the decorated
 				// closure in aafm_register_ability_with_log() on the tools/call path, and
-				// aafm_user_can_call_ability() on the tools/list path, which reaches this same
-				// closure raw and undecorated. aafm_user_can_discover_ability() is the third, and it
-				// carries its own guard over the branch that never reaches
-				// aafm_user_can_call_ability(). A catch here would be the per-site drift the
-				// choke-point design exists to avoid. If a NEW caller ever invokes this closure
-				// directly, it must carry its own guard.
+				// aafm_user_can_discover_bridged_ability() on the tools/list path. If a NEW caller
+				// ever invokes this closure directly, it must carry its own guard.
 				return true === $live->check_permissions( aafm_bridge_forward_input( $live, $input ) );
 			},
 			'execute_callback'    => static function ( $input = null ) use ( $foreign_slug ) {
@@ -608,6 +657,7 @@ function aafm_register_enabled_bridged_abilities(): void {
 			$args['output_schema'] = $output_schema;
 		}
 
+		aafm_remember_bridge_source( $wrapper, $foreign_slug );
 		aafm_register_ability_with_log( $wrapper, $args );
 	}
 

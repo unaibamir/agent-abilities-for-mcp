@@ -267,4 +267,74 @@ final class ServerToolsListExposureTest extends TestCase {
 			);
 		}
 	}
+
+	public function tear_down(): void {
+		delete_option( 'aafm_enabled_bridged_abilities' );
+		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
+			$slug = (string) $slug;
+			if ( 0 === strncmp( $slug, 'demo/', 5 ) || 0 === strncmp( $slug, 'aafm-bridge/', 12 ) ) {
+				wp_unregister_ability( $slug );
+			}
+		}
+		parent::tear_down();
+	}
+
+	public function test_tools_list_wire_response_for_an_editor_with_a_per_object_bridged_tool_matches_the_oracle_exactly(): void {
+		$this->register_enabled( array() );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'demo/wire-object-id',
+					array(
+						'label'               => 'Wire object id',
+						'description'         => 'Needs a post id to say yes.',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array( 'post_id' => array( 'type' => 'integer' ) ),
+						),
+						'execute_callback'    => static fn() => array(),
+						'permission_callback' => static fn( $input = null ): bool => ! empty( $input['post_id'] ) && current_user_can( 'edit_post', (int) $input['post_id'] ),
+					)
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/wire-object-id' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_bridged_abilities' );
+		$this->acting_as( 'editor' );
+
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$server  = $this->build_exposure_test_server( $adapter );
+		$result  = ( new \WP\MCP\Handlers\Tools\ToolsHandler( $server ) )->list_tools();
+
+		$wire_names = array_map(
+			static function ( $tool ) {
+				return $tool->getName();
+			},
+			$result->getTools()
+		);
+		sort( $wire_names );
+
+		$expected = array_map( 'aafm_mcp_tool_name', aafm_all_server_ability_names() );
+		sort( $expected );
+
+		$this->assertSame( array( 'aafm-bridge-demo-wire-object-id' ), $expected, 'Fixture check: only the bridged tool is enabled.' );
+		$this->assertSame( $expected, $wire_names, 'The editor must get exactly the independent oracle set, not a subset.' );
+	}
 }

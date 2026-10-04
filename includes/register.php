@@ -1351,7 +1351,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
  * The static text a client gets when an ability crashed, whichever core ran it.
  *
  * Never the exception's own message: a vendor exception routinely interpolates the value that caused
- * it, and this plugin keeps argument values out of what it returns and logs.
+ * it, and this plugin keeps free-text argument content out of what it returns and logs.
  *
  * @return string
  */

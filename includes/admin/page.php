@@ -1577,8 +1577,8 @@ function aafm_activity_log_headers(): array {
  * the columns the table shows are exposed; the log holds argument KEYS (never values), a
  * REMOTE_ADDR source IP, and since v5 a short detail string: an allowlisted identifier, a
  * WP_Error code, or a crash's class name and file:line (aafm_build_activity_detail_from_exception()).
- * A code returned by a bridged foreign ability is prefixed `foreign:` and cut to a short
- * key-shaped string, never its message, so there is no PII to strip beyond shaping.
+ * A code returned by a bridged foreign ability is prefixed `foreign:` and kept only when it is
+ * a short key-shaped string, never its message, so there is no free text to strip beyond that.
  *
  * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
  * @return array<int,array{time:string,principal:string,ability:string,detail:string,detail_link:array{before:string,id:int,url:string,after:string}|null,status:string,variant:string,arg_keys:string}>
@@ -2647,9 +2647,9 @@ function aafm_render_term_meta_keys_selector(): void {
  * Every cell renders stored audit data, so each value is escaped on output. The log
  * holds argument KEYS (never values), a REMOTE_ADDR source IP, and since v5 a short
  * detail string: an allowlisted identifier, a WP_Error code, or a crash's class name and
- * file:line. A code returned by a bridged foreign ability is prefixed `foreign:` and cut to a
- * short key-shaped string, never its message, so there is no PII to redact here beyond
- * standard escaping.
+ * file:line. A code returned by a bridged foreign ability is prefixed `foreign:` and kept only
+ * when it is a short key-shaped string, never its message, so there is no free text to redact
+ * here beyond standard escaping.
  *
  * @return void
  */
@@ -2929,8 +2929,8 @@ function aafm_export_activity_csv( ?string $status = null ): void {
  * includes/audit/detail.php is an allowlist of field types with no string or text type, and its
  * one non-map writer (aafm_build_activity_detail_from_exception(), for a caught crash) emits only
  * a class name and a file:line. A first-party detail never carries an argument value. A code
- * returned by a bridged foreign ability is prefixed `foreign:` and cut to a short key-shaped
- * string, and a plugin that builds a code from its input can place a short fragment of that
+ * returned by a bridged foreign ability is prefixed `foreign:` and kept only when it is a short
+ * key-shaped string, and a plugin that builds a code from its input can place a short fragment of that
  * input there. Standard escaping is sufficient for all of it. An empty set renders a single "no activity" row so the table never
  * collapses to a bare <tbody>.
  *
@@ -3384,7 +3384,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Everything is logged, values are not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call - including denied ones - is recorded on the Activity Log tab with the argument KEYS only, never the values, plus a short identifier-only note such as an object id or an error code. When another plugin\'s bridged ability fails, its error code is recorded behind a "foreign:" prefix, trimmed to a short key-shaped string, and never its message. A plugin that builds that code from its own input can put a short fragment of it there. You can see what was attempted without the log keeping the content.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Everything is logged, free text is not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call - including denied ones - is recorded on the Activity Log tab. The arguments column holds the argument KEYS only, never the values, and a separate short identifier-only note holds something like an object id or an error code. When another plugin\'s bridged ability fails, its error code is recorded behind a "foreign:" prefix, kept only when it is a short key-shaped string of letters, digits, underscore and hyphen, and never its message or error data. A plugin that builds that code from its own input can put a short fragment of that input there. You can see what was attempted without the log keeping free-text content.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>',
 			$inline
@@ -3396,7 +3396,7 @@ function aafm_render_help_tab(): void {
 		__( 'What does the plugin log, and does it call out to anything?', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'The plugin never sends your content, credentials, or other site data anywhere. It can make two outbound requests of its own: the Connection tab\'s same-origin reachability check, and, only if you turn on the "Upload media from URL" ability, a fetch of the URL your AI client supplies so that file can be added to your media library - like any HTTP request, that fetch reveals the URL, your site\'s IP, and its timing to whatever server answers it.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'The activity log records the argument KEYS of each call (never the values), a short identifier-only note such as an object id or an error code, and the source IP address of the request. An error code returned by another plugin\'s bridged ability is recorded behind a "foreign:" prefix, trimmed to a short key-shaped string, and never with its message; a plugin that builds that code from its own input can put a short fragment of it there. You can clear the log any time from the Activity Log tab.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'The activity log records the argument KEYS of each call (the arguments column never holds the values), a short identifier-only note such as an object id or an error code, and the source IP address of the request. An error code returned by another plugin\'s bridged ability is recorded behind a "foreign:" prefix, kept only when it is a short key-shaped string of letters, digits, underscore and hyphen, and never with its message or error data; a plugin that builds that code from its own input can put a short fragment of that input there. You can clear the log any time from the Activity Log tab.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);

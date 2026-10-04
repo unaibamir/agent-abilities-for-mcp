@@ -5,7 +5,7 @@
  * Surfaces the plugin's OWN audit table (every ability execute + denial) to an agent,
  * gated on manage_options - the same bar the admin Dashboard activity panel sits behind.
  * It returns each row's id, ability name, status, acting user id + login, the argument
- * KEYS that were passed (never values - values are never logged), and the timestamp. It
+ * KEYS that were passed (never their values), a short identifier-only detail, and the timestamp. It
  * deliberately OMITS source_ip: a network address is PII the admin panel does not show, so
  * it is never handed to an agent. Read-only: there is no write/clear ability here.
  *

@@ -2,8 +2,8 @@
 /**
  * Activity log detail: the identifier-only allowlist.
  *
- * The log's central privacy promise is that argument VALUES are never stored (see the
- * aafm_log_activity() docblock). The detail column is the one narrow exception, and this file is
+ * The log's central privacy promise is that free-text argument content is never stored, and that
+ * the arguments column holds key names only (see the aafm_log_activity() docblock). The detail column is the one narrow exception, and this file is
  * the whole of it: an ability logs a detail only if it appears in aafm_activity_detail_map(), and
  * only the fields that map names, each of which must clear a type check that no free-form string
  * can pass. Default deny in both directions. There is deliberately no string or text field type,
@@ -757,8 +757,8 @@ function aafm_build_activity_detail_from_result( string $ability, $result ): ?st
  *
  * $e->getMessage() is never read. A vendor exception message routinely interpolates the value that
  * caused it - a rejected email address, a duplicated SKU, a download filename - and the log's
- * central promise, stated in the wp.org listing and not only in this codebase, is that argument
- * VALUES are never stored. The class and the throw site identify the defect more precisely than the
+ * central promise, stated in the wp.org listing and not only in this codebase, is that free-text
+ * argument content is never stored. The class and the throw site identify the defect more precisely than the
  * prose does anyway.
  *
  * get_class() needs the guard below, not only the message: PHP renders an anonymous class as

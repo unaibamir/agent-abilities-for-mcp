@@ -527,10 +527,10 @@ final class BridgeWrapperTest extends TestCase {
 	 * execute_callback calls $live->execute() on the FOREIGN ability object, so
 	 * the foreign ability validates its own output against its own schema before
 	 * our closure ever sees the result; a mismatch already comes back a WP_Error.
-	 * Separately, aafm_register_enabled_bridged_abilities() copies that same
-	 * schema onto our OWN wrapper's registration, so our wrapper's execute() would
-	 * independently validate again even if the foreign ability somehow did not.
-	 * Both layers are core's, not this file's. No bridge.php change was made; this
+	 * The wrapper does not validate a second time:
+	 * AAFM_Rate_Limited_Ability::validate_output() skips bridged names, so the
+	 * source's own WP_Error is what the caller gets.
+	 * That layer is core's, not this file's. No bridge.php change was made; this
 	 * test pins the invariant so a future refactor that bypasses WP_Ability::execute()
 	 * (e.g. calling the raw execute_callback directly) cannot reopen the hole
 	 * silently.
@@ -580,6 +580,125 @@ final class BridgeWrapperTest extends TestCase {
 			array( 'count' => 7 ),
 			wp_get_ability( 'aafm-bridge/vendor-honest' )->execute( array() )
 		);
+	}
+
+	/**
+	 * Register a foreign ability with a declared output schema, using a class that skips core's output
+	 * check or, when $overrides is false, core's own class.
+	 *
+	 * @param string              $slug      Foreign slug.
+	 * @param array<string,mixed> $schema    Declared output schema.
+	 * @param callable            $execute   The execute callback.
+	 * @param bool                $overrides Whether the source class overrides validate_output().
+	 * @return void
+	 */
+	private function register_foreign_with_class( string $slug, array $schema, callable $execute, bool $overrides = true ): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $slug, $schema, $execute, $overrides ): void {
+				$args = array(
+					'label'               => $slug,
+					'description'         => $overrides ? 'Overrides validate_output.' : 'Keeps core validate_output.',
+					'category'            => 'demo-things',
+					'input_schema'        => array(
+						'type'       => 'object',
+						'properties' => array(),
+					),
+					'output_schema'       => $schema,
+					'execute_callback'    => $execute,
+					'permission_callback' => '__return_true',
+				);
+				if ( $overrides ) {
+					$args['ability_class'] = \AAFM\Tests\Fixtures\ValidateOutputOverridingAbility::class;
+				}
+				wp_register_ability( $slug, $args );
+			}
+		);
+	}
+
+	public function test_a_source_that_overrides_validate_output_and_returns_off_schema_data_is_relayed(): void {
+		$schema = array(
+			'type'       => 'object',
+			'properties' => array(
+				'status' => array(
+					'type' => 'string',
+					'enum' => array( 'publish', 'draft' ),
+				),
+				'name'   => array( 'type' => 'string' ),
+			),
+			'required'   => array( 'name' ),
+		);
+		// Status outside the enum, and the required `name` missing: the term-delete and trashed-view shapes.
+		$off_schema = array(
+			'status'   => 'trash',
+			'deleted'  => true,
+			'previous' => array( 'id' => 5 ),
+		);
+		$this->register_foreign_with_class( 'vendor/skips-validation', $schema, static fn(): array => $off_schema );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/skips-validation' ) );
+		$this->register_wrappers();
+
+		$this->assertSame( $off_schema, wp_get_ability( 'vendor/skips-validation' )->execute( array() ), 'Fixture check: the source itself relays the off-schema data.' );
+		$this->assertSame(
+			$off_schema,
+			wp_get_ability( 'aafm-bridge/vendor-skips-validation' )->execute( array() ),
+			'The wrapper must relay the source result, not turn it into ability_invalid_output.'
+		);
+	}
+
+	/**
+	 * A pin, green by design: a source that keeps core's output check still has its schema advertised
+	 * on the wrapper, and the wrapper still has it checked.
+	 */
+	public function test_wrapper_still_registers_the_source_output_schema(): void {
+		$schema = array(
+			'type'       => 'object',
+			'properties' => array( 'name' => array( 'type' => 'string' ) ),
+			'required'   => array( 'name' ),
+		);
+		$this->register_foreign_with_class( 'vendor/keeps-validation', $schema, static fn(): array => array(), false );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/keeps-validation' ) );
+		$this->register_wrappers();
+
+		$wrapper = wp_get_ability( 'aafm-bridge/vendor-keeps-validation' );
+		$this->assertNotEmpty( $wrapper->get_output_schema() );
+		$this->assertSame(
+			aafm_bridge_output_schema( wp_get_ability( 'vendor/keeps-validation' ) ),
+			$wrapper->get_output_schema(),
+			'outputSchema must be exactly what the helper derives from the source.'
+		);
+	}
+
+	/**
+	 * A source that overrides validate_output() opted out of its own schema, so advertising that schema
+	 * would promise a shape its data does not keep.
+	 */
+	public function test_wrapper_registers_no_output_schema_for_a_source_that_skips_its_own_output_check(): void {
+		$schema = array(
+			'type'       => 'object',
+			'properties' => array( 'name' => array( 'type' => 'string' ) ),
+			'required'   => array( 'name' ),
+		);
+		$this->register_foreign_with_class( 'vendor/skips-validation', $schema, static fn(): array => array(), true );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/skips-validation' ) );
+		$this->register_wrappers();
+
+		$this->assertNotEmpty( wp_get_ability( 'vendor/skips-validation' )->get_output_schema(), 'Fixture check: the source itself declares a schema.' );
+		$this->assertSame( array(), wp_get_ability( 'aafm-bridge/vendor-skips-validation' )->get_output_schema() );
 	}
 
 	/**
@@ -809,7 +928,7 @@ final class BridgeWrapperTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$this->register_foreign_returning(
 			'vendor/errors',
-			static fn() => new \WP_Error( 'vendor_boom', 'The vendor ability failed.' )
+			static fn() => new \WP_Error( 'vendor_boom', 'That ability failed.' )
 		);
 		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/errors' ) );
 		$this->register_wrappers();
@@ -824,17 +943,87 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( 'error', (string) $rows[0]['status'] );
 	}
 
+	public function test_a_bridged_result_with_a_populated_stdclass_is_relayed_unchanged(): void {
+		$this->acting_as( 'administrator' );
+		$expected = array(
+			'saved'    => true,
+			'event_id' => 7,
+			'changed'  => (object) array( 'title' => 'x' ),
+		);
+		$this->register_foreign_returning( 'vendor/returns-an-object', static fn(): array => $expected );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/returns-an-object' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-returns-an-object' )->execute( array() );
+
+		$this->assertEquals( $expected, $result );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-returns-an-object' ) );
+		$this->assertSame( 'success', (string) $rows[0]['status'] );
+	}
+
+	public function test_a_bridged_wp_term_result_is_relayed(): void {
+		$this->acting_as( 'administrator' );
+		$term = self::factory()->term->create_and_get( array( 'taxonomy' => 'category' ) );
+		$this->register_foreign_returning( 'vendor/returns-a-term', static fn(): array => array( 'options' => array( $term ) ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/returns-a-term' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-returns-a-term' )->execute( array() );
+
+		$this->assertSame( $term, $result['options'][0] );
+	}
+
+	public function test_a_bridged_result_with_a_wp_user_is_an_error_and_the_row_says_error(): void {
+		$fired = array();
+		add_action(
+			'aafm_ability_resolved',
+			static function ( $record ) use ( &$fired ): void {
+				$fired[] = $record;
+			}
+		);
+		$this->acting_as( 'administrator' );
+		$user  = new \WP_User( self::factory()->user->create() );
+		$calls = 0;
+		$this->register_foreign_returning(
+			'vendor/returns-a-user',
+			static function () use ( &$calls, $user ): array {
+				++$calls;
+				return array(
+					'saved' => true,
+					'user'  => $user,
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/returns-a-user' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-returns-a-user' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+		$this->assertStringContainsString( 'cannot be safely relayed over MCP', $result->get_error_message() );
+		$this->assertStringContainsString( 'ran', $result->get_error_message() );
+		$this->assertSame( 1, $calls, 'The foreign callback ran exactly once: the honest write-then-refuse case.' );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-returns-a-user' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'], 'The Activity Log must say error for a refused call.' );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $rows[0]['detail'], 'The row names why the call was refused.' );
+		$this->assertCount( 1, $fired );
+		$this->assertSame( 'error', $fired[0]['status'] );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $fired[0]['detail'], 'The announced payload agrees with the row.' );
+	}
+
 	/**
-	 * A bridged call announces its resolve like any other, and a bridged FAILURE announces the null
-	 * detail the exclusion leaves on the column rather than the foreign plugin's own error code.
+	 * A bridged call announces its resolve like any other, and a bridged FAILURE announces the foreign
+	 * plugin's error code behind the `foreign:` prefix, never the message.
 	 *
-	 * Both halves were unpinned end to end. aafm_ability_resolved is reached through the real
-	 * wrapper only by ResolveHookTest's native cases, so skipping the announcement for every
-	 * aafm-bridge/* call left the whole suite green, and the bridged exclusion in
+	 * The announcement was unpinned end to end: aafm_ability_resolved is reached through the real
+	 * wrapper only by ResolveHookTest's native cases, and the bridged branch of
 	 * aafm_build_activity_detail_from_result() was asserted only as a unit, never at the layer a
 	 * monitor actually reads.
 	 */
-	public function test_a_bridged_call_announces_its_resolve_and_never_a_foreign_error_code(): void {
+	public function test_a_bridged_call_announces_its_resolve_with_the_foreign_code_behind_a_prefix(): void {
 		$fired = array();
 		add_action(
 			'aafm_ability_resolved',
@@ -871,8 +1060,7 @@ final class BridgeWrapperTest extends TestCase {
 							'type'       => 'object',
 							'properties' => array( 'v' => array( 'type' => 'string' ) ),
 						),
-						// A foreign plugin composing a code out of its own input, which is the
-						// whole reason bridged codes are excluded from the detail column.
+						// A foreign plugin composing a code out of its own input.
 						'execute_callback'    => static fn( $i ) => new \WP_Error(
 							'duplicate_sku_' . ( $i['v'] ?? '' ),
 							'That SKU already exists.'
@@ -889,15 +1077,35 @@ final class BridgeWrapperTest extends TestCase {
 
 		$this->assertCount( 1, $fired, 'A bridged resolve is a resolve: it announces exactly once.' );
 		$this->assertSame( 'error', $fired[0]['status'] );
-		$this->assertNull(
+		$this->assertSame(
+			'foreign:duplicate_sku_ABC-123-CUSTOMER',
 			$fired[0]['detail'],
-			'A foreign error code is not an identifier by construction, so it must reach neither the column nor the hook.'
+			'A foreign code is recorded behind the prefix, and the hook announces what the column holds.'
 		);
 
 		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/demo-echo' ) );
 		$this->assertCount( 1, $rows, 'Guard on the guard: one row per call, so there is a single id to match against.' );
 		$this->assertSame( (int) $rows[0]['id'], $fired[0]['row_id'], 'The announced row_id must be the row the call wrote.' );
-		$this->assertNull( $rows[0]['detail'], 'And the column agrees with the hook.' );
+		$this->assertSame( 'foreign:duplicate_sku_ABC-123-CUSTOMER', $rows[0]['detail'], 'And the column agrees with the hook.' );
+		$this->assertStringNotContainsString( 'already exists', (string) $rows[0]['detail'], 'The message is never recorded.' );
+	}
+
+	/**
+	 * A foreign plugin that returns this plugin's own refusal code string records as a foreign code,
+	 * so it cannot pass for the bridge's own refusal.
+	 */
+	public function test_a_foreign_error_carrying_the_bridge_refusal_code_records_as_foreign(): void {
+		$this->register_foreign_returning( 'vendor/spoofs', static fn() => new \WP_Error( 'aafm_bridge_unsupported_result_shape', 'Pretend refusal.' ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/spoofs' ) );
+		$this->register_wrappers();
+		$this->acting_as( 'administrator' );
+
+		wp_get_ability( 'aafm-bridge/vendor-spoofs' )->execute( array() );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-spoofs' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'] );
+		$this->assertSame( 'foreign:aafm_bridge_unsupported_result_shape', $rows[0]['detail'] );
 	}
 
 	/**
@@ -1033,5 +1241,167 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertArrayHasKey( 'type', $schema, 'A recognized keyword must survive.' );
 		$this->assertArrayHasKey( 'properties', $schema, 'A recognized keyword must survive.' );
 		$this->assertArrayNotHasKey( 'x-vendor-extension', $schema, 'An unsupported keyword must be stripped from the output schema before it reaches an MCP client.' );
+	}
+
+	public function test_a_bridged_failure_names_the_plugin_and_keeps_its_text_code_and_data(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning(
+			'vendor/fails',
+			static fn() => new \WP_Error( 'vendor_boom', 'That ability failed.', array( 'status' => 409 ) )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/fails' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-fails' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'vendor_boom', $result->get_error_code() );
+		$this->assertSame( 'The vendor plugin returned an error: That ability failed.', $result->get_error_message() );
+		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
+	}
+
+	public function test_attribution_leaves_core_errors_and_an_empty_error_alone(): void {
+		$error = new \WP_Error( 'core_boom', 'Core said no.' );
+		$this->assertSame( $error, aafm_bridge_attribute_error( 'core/get-user-info', $error ) );
+
+		$empty = new \WP_Error();
+		$this->assertSame( $empty, aafm_bridge_attribute_error( 'vendor/x', $empty ) );
+
+		$invalid = new \WP_Error( 'ability_invalid_input', 'Ability "vendor/x" has invalid input.' );
+		$this->assertSame( $invalid, aafm_bridge_attribute_error( 'vendor/x', $invalid ), 'Core words its own errors and already names the ability.' );
+	}
+
+	/**
+	 * A message that already names the plugin is left alone, so the client does not read the name twice.
+	 */
+	public function test_a_message_that_already_names_the_plugin_is_not_prefixed_again(): void {
+		$named = new \WP_Error( 'woocommerce_rest_invalid_id', 'WooCommerce: product 5 was not found.' );
+		$this->assertSame( $named, aafm_bridge_attribute_error( 'woocommerce/product-update', $named ) );
+
+		$lower = new \WP_Error( 'x_failed', 'the woocommerce store is in maintenance mode.' );
+		$this->assertSame( $lower, aafm_bridge_attribute_error( 'woocommerce/product-update', $lower ), 'The match ignores case.' );
+
+		$plain    = new \WP_Error( 'x_failed', 'Product 5 was not found.' );
+		$prefixed = aafm_bridge_attribute_error( 'woocommerce/product-update', $plain );
+		$this->assertSame( 'The woocommerce plugin returned an error: Product 5 was not found.', $prefixed->get_error_message(), 'Guard on the guard: a message without the name is still prefixed.' );
+	}
+
+	/**
+	 * A short namespace only counts as named when it stands alone as a word, so "ai" inside "failed"
+	 * or "email" does not suppress the prefix.
+	 */
+	public function test_a_short_namespace_inside_another_word_does_not_count_as_named(): void {
+		$inside = new \WP_Error( 'ai_failed', 'Request failed.' );
+		$result = aafm_bridge_attribute_error( 'ai/summarize', $inside );
+		$this->assertSame( 'The ai plugin returned an error: Request failed.', $result->get_error_message() );
+
+		$email = new \WP_Error( 'ai_failed', 'Could not send the email.' );
+		$this->assertSame( 'The ai plugin returned an error: Could not send the email.', aafm_bridge_attribute_error( 'ai/summarize', $email )->get_error_message() );
+
+		$named = new \WP_Error( 'ai_failed', 'The AI service is unavailable.' );
+		$this->assertSame( $named, aafm_bridge_attribute_error( 'ai/summarize', $named ), 'A whole-word mention is not prefixed again.' );
+
+		$punctuated = new \WP_Error( 'ai_failed', 'ai: quota exceeded.' );
+		$this->assertSame( $punctuated, aafm_bridge_attribute_error( 'ai/summarize', $punctuated ) );
+	}
+
+	/**
+	 * The helper that tells core's catch of a throw from a foreign plugin's own return.
+	 */
+	public function test_core_callback_exception_is_recognised_by_code_and_by_naming_the_ability(): void {
+		$core = new \WP_Error( 'ability_callback_exception', 'Ability "vendor/x" callback threw an exception: boom' );
+		$this->assertTrue( aafm_bridge_is_core_callback_exception( $core, 'vendor/x' ) );
+
+		$own_text = new \WP_Error( 'ability_callback_exception', 'Vendor says no.' );
+		$this->assertFalse( aafm_bridge_is_core_callback_exception( $own_text, 'vendor/x' ), 'The same code with text that does not name the ability.' );
+
+		$other_code = new \WP_Error( 'vendor_boom', 'Ability "vendor/x" callback threw an exception: boom' );
+		$this->assertFalse( aafm_bridge_is_core_callback_exception( $other_code, 'vendor/x' ) );
+		$this->assertFalse( aafm_bridge_is_core_callback_exception( $core, 'vendor/y' ), 'Another ability\'s slug.' );
+		$this->assertFalse( aafm_bridge_is_core_callback_exception( array( 'ability_callback_exception' ), 'vendor/x' ) );
+	}
+
+	/**
+	 * A source that throws must give the client the same static error on every core, and the row and the
+	 * announced detail must hold no part of the exception text. On a core that catches the throw itself
+	 * (7.0 and later) the error arrives as a WP_Error carrying the raw text; on 6.9 the throw escapes to the
+	 * choke point. The client text is the same either way.
+	 */
+	public function test_a_source_that_throws_gives_the_client_and_the_row_no_part_of_the_exception_text(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$fired = array();
+		add_action(
+			'aafm_ability_resolved',
+			static function ( $record ) use ( &$fired ): void {
+				$fired[] = $record;
+			}
+		);
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning(
+			'vendor/throws',
+			static function () {
+				throw new \RuntimeException( 'secret-token-123 for customer 77' );
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/throws' ) );
+		$this->register_wrappers();
+
+		try {
+			$direct       = wp_get_ability( 'vendor/throws' )->execute( array() );
+			$core_catches = is_wp_error( $direct ) && 'ability_callback_exception' === $direct->get_error_code();
+		} catch ( \Throwable $e ) {
+			$core_catches = false;
+		}
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-throws' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'aafm_ability_exception', $result->get_error_code() );
+		$this->assertSame( aafm_ability_exception_message(), $result->get_error_message() );
+		$this->assertStringNotContainsString( 'secret-token', $result->get_error_message() );
+		$this->assertStringNotContainsString( '77', $result->get_error_message() );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-throws' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'] );
+		$this->assertStringNotContainsString( 'secret-token', (string) $rows[0]['detail'] );
+		$this->assertStringNotContainsString( '77', (string) $rows[0]['detail'] );
+		if ( $core_catches ) {
+			$this->assertSame( 'aafm_ability_exception', $rows[0]['detail'], 'Core swallowed the throw, so there is no class or site to record.' );
+		} else {
+			$this->assertMatchesRegularExpression( '/^RuntimeException at /', (string) $rows[0]['detail'] );
+		}
+		$this->assertCount( 1, $fired );
+		$this->assertSame( $rows[0]['detail'], $fired[0]['detail'], 'The announced detail is the column.' );
+	}
+
+	/**
+	 * A source that returns the core exception code on purpose, with its own text, is an ordinary
+	 * foreign error: its text is relayed and its code is recorded behind the foreign prefix.
+	 */
+	public function test_a_source_returning_the_core_exception_code_with_its_own_text_is_relayed_as_a_foreign_error(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning( 'vendor/says-no', static fn() => new \WP_Error( 'ability_callback_exception', 'Vendor says no.' ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/says-no' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-says-no' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'Vendor says no.', $result->get_error_message() );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-says-no' ) );
+		$this->assertSame( 'foreign:ability_callback_exception', $rows[0]['detail'] );
+	}
+
+	public function test_our_own_refusal_is_not_given_a_plugin_prefix(): void {
+		$this->acting_as( 'administrator' );
+		$user = new \WP_User( self::factory()->user->create() );
+		$this->register_foreign_returning( 'vendor/returns-a-user-again', static fn(): array => array( 'user' => $user ) );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/returns-a-user-again' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-returns-a-user-again' )->execute( array() );
+
+		$this->assertStringStartsWith( 'This bridged ability ran', $result->get_error_message() );
 	}
 }

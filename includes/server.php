@@ -864,6 +864,9 @@ function aafm_ability_list_permission( string $name ): ?callable {
  * Discovery never grants execution: each ability's permission_callback still runs at
  * execute time and still denies (and audits) on any specific object the user can't touch.
  *
+ * A bridged wrapper takes its own path, aafm_user_can_discover_bridged_ability(): the foreign
+ * plugin's permission callback often needs an object id that discovery cannot supply.
+ *
  * @param string $ability_name Ability name, e.g. "aafm/update-post".
  * @return bool
  * @throws \Throwable When the aafm_rethrow_ability_exceptions filter is on.
@@ -895,7 +898,68 @@ function aafm_user_can_discover_ability( string $ability_name ): bool {
 			return aafm_deny_crashed_permission_check( $ability_name, $e );
 		}
 	}
+	if ( str_starts_with( $ability_name, AAFM_BRIDGE_NAMESPACE . '/' ) ) {
+		return aafm_user_can_discover_bridged_ability( $ability_name );
+	}
 	return aafm_user_can_call_ability( $ability_name, array() );
+}
+
+/**
+ * Whether the current user may DISCOVER a bridged wrapper.
+ *
+ * The probe asks the foreign plugin's own permission callback with empty input. A plugin that
+ * guards on an object id (Meta Box, SiteOrigin, Premium Addons, SEOPress, WPForms, WooCommerce,
+ * Elementor, ElementsKit) answers no or a WP_Error to that, so the tool used to vanish from
+ * tools/list for every role while tools/call still worked. For that one case, an answer of "no"
+ * rather than a crash, discovery falls back to an id-free floor: edit_posts by default. The probe
+ * cannot tell "no because the id is missing" from "no because the role is wrong", so a role-gated
+ * tool also lists for an editor; its call is still refused by the plugin's own check with a denied
+ * row. Discovery never grants execution.
+ *
+ * A callback that crashes, and a foreign ability that is no longer registered, get no floor. The
+ * allowlist scope check has already run in the caller.
+ *
+ * @param string $ability_name Wrapper ability name, for example "aafm-bridge/demo-echo".
+ * @return bool
+ * @throws \Throwable When the aafm_rethrow_ability_exceptions filter is on.
+ */
+function aafm_user_can_discover_bridged_ability( string $ability_name ): bool {
+	$foreign_slug = aafm_remember_bridge_source( $ability_name );
+	if ( null === $foreign_slug ) {
+		return false; // This plugin never registered it: fail closed, as aafm_user_can_call_ability() does.
+	}
+
+	try {
+		$state = aafm_bridge_permission_state( $foreign_slug, array() );
+	} catch ( \Throwable $e ) {
+		return aafm_deny_crashed_permission_check( $ability_name, $e );
+	}
+
+	if ( 'allow' === $state ) {
+		return true;
+	}
+	if ( 'deny' !== $state ) {
+		return false; // 'crash' or 'gone': no floor.
+	}
+
+	/**
+	 * Filters the capability that lets a user discover a bridged tool whose own permission check
+	 * needs an object id.
+	 *
+	 * @since 1.7.8
+	 * @param string $capability   Capability the current user must hold. Default 'edit_posts'.
+	 * @param string $ability_name Wrapper ability name, for example "aafm-bridge/demo-echo".
+	 */
+	$capability = apply_filters( 'aafm_bridge_discovery_capability', 'edit_posts', $ability_name );
+	if ( ! is_string( $capability ) || '' === $capability ) {
+		return false;
+	}
+
+	try {
+		return current_user_can( $capability );
+	} catch ( \Throwable $e ) {
+		return aafm_deny_crashed_permission_check( $ability_name, $e );
+	}
 }
 
 /**
@@ -1603,9 +1667,10 @@ function aafm_register_mcp_server( $adapter ): void {
 	// Advertise only the capabilities we actually implement (tools); strip prompts/resources.
 	add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 2 );
 
-	// Wrap a bridged ability's bare top-level list result under a `data` key, and refuse a
-	// hidden unsafe object anywhere in it (see aafm_filter_bridged_tool_call_result() in
-	// bridge.php for the full rationale). Accepts 4 args (not 3) so the callback receives the
+	// Wrap a bridged ability's bare top-level list result under a `data` key (see
+	// aafm_filter_bridged_tool_call_result() in bridge.php). The raw-object check is not here: the
+	// bridged wrapper makes that call itself, so the Activity Log row matches what the client is
+	// told. Accepts 4 args (not 3) so the callback receives the
 	// McpTool instance and can classify by backing ability identity rather than by wire tool
 	// name alone - final gate round 3: a site can rename a tool via mcp_adapter_tool_name, so
 	// the wire name is not a reliable bridged/native discriminator on its own.

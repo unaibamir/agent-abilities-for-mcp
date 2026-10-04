@@ -1226,6 +1226,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			 * ability's PERMISSION callback as well as its EXECUTE callback, so one switch covers
 			 * both phases.
 			 *
+			 * When it re-throws, the source's exception text can reach the client on WordPress 6.9,
+			 * which is why the default is WP_DEBUG only.
+			 *
 			 * Re-throwing deliberately leaves no resolved audit row: on the execute path the row
 			 * stays at 'started', on the permission path no row is written at all. That absence is
 			 * the forensic signal, and it is intentional - do not "fix" it.
@@ -1248,10 +1251,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// the same signal the stuck 'started' row used to carry before this catch existed.
 			$crash_detail = aafm_log_ability_exception( $row_id, $e );
 
-			$result = new \WP_Error(
-				'aafm_ability_exception',
-				__( 'This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log.', 'agent-abilities-for-mcp' )
-			);
+			$result = new \WP_Error( 'aafm_ability_exception', aafm_ability_exception_message() );
 		}
 
 		// Every NATIVE ability's execute_callback is contracted to return array|WP_Error. That
@@ -1345,6 +1345,18 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 	// caller that skips this function entirely and calls the class directly with its own,
 	// undecorated $args.
 	return AAFM_Registration_Authority::register( $name, $args );
+}
+
+/**
+ * The static text a client gets when an ability crashed, whichever core ran it.
+ *
+ * Never the exception's own message: a vendor exception routinely interpolates the value that caused
+ * it, and this plugin keeps free-text argument content out of what it returns and logs.
+ *
+ * @return string
+ */
+function aafm_ability_exception_message(): string {
+	return __( 'This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log.', 'agent-abilities-for-mcp' );
 }
 
 /**

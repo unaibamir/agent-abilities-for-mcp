@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.7
+Stable tag: 1.7.8
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -155,7 +155,7 @@ Yes. Beyond the site-wide list of enabled abilities, you can add a per-role allo
 
 = Is there an audit log of what the agent did? =
 
-Yes. Agent Abilities for MCP writes every ability call to an audit log in your own database, denied attempts included. Each entry records the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. Free-text argument content, a post body or an email address, is never stored. You can clear the log from the admin screen.
+Yes. Agent Abilities for MCP writes every ability call to an audit log in your own database, denied attempts included. Each entry records the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. For a failed call to another plugin's bridged ability, it also records that plugin's error code, never its message. Free-text argument content, a post body or an email address, is never stored. You can clear the log from the admin screen.
 
 = Is it safe to connect an AI agent to my WordPress site? =
 
@@ -271,7 +271,7 @@ No AI provider and no telemetry. Your agent talks directly to your site. The one
 
 = What does the audit log record? =
 
-Every ability call, whether it started, succeeded, errored, or was denied, with the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. Free-text argument content, a post body or an email address, is never stored. The activity log lives in your own database and can be cleared from the admin screen.
+Every ability call, whether it started, succeeded, errored, or was denied, with the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. For a failed call to another plugin's bridged ability, it also records that plugin's error code, never its message. Free-text argument content, a post body or an email address, is never stored. The activity log lives in your own database and can be cleared from the admin screen.
 
 = Does uninstalling the plugin revoke my agent's access? =
 
@@ -306,6 +306,14 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==
+
+= 1.7.8 =
+
+* **Feature:** A bridged ability's error now says which plugin returned it, and the Activity Log records that plugin's error code (the code only, never its message).
+* **Fix:** 37 bridged tools from WooCommerce, Meta Box, SiteOrigin, Premium Addons, SEOPress, WPForms, Elementor and ElementsKit worked when called but never showed in the tool list. They now list for users who can edit posts, and the source plugin still decides whether a call is allowed.
+* **Fix:** Deleting through bridged ACF reported an error after the item was already deleted. It now returns ACF's own result.
+* **Fix:** Bridged results holding plain objects (such as a PixelYourSite response) were refused after the write had already happened. They now come through, and a refused call is logged as an error instead of success.
+* **Fix:** On WordPress 7.0 and later, the raw exception text from a throwing plugin no longer reaches the client.
 
 = 1.7.7 =
 
@@ -380,19 +388,6 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 * **Chore:** Condensed the changelog so the full release history fits within the wordpress.org listing's length limit, in both readmes. Same releases, fewer lines, with the security and data-integrity fixes still called out one by one.
 * **Chore:** Corrected a code comment that slightly overstated when a consumer plugin's short-circuit is visible to the rate-limit release hook.
-
-= 1.6.2 =
-
-* **Feature:** The admin activity log can filter on "Started", the state a crashed call leaves behind, matching what the activity-log ability already exposed.
-* **Fix:** Closed a privilege gap where editing a WooCommerce customer, or writing user meta or ACF user fields, needed only the manage-WooCommerce capability and could read or overwrite any account's details. These require a real user-editing capability now and sit behind the high-risk lock.
-* **Fix:** The rate limit on the OAuth endpoints never took effect on sites with no persistent object cache, which covers most shared hosting. It does now, and the per-user limit no longer counts each call twice.
-* **Fix:** Several WooCommerce writes reported success when nothing happened: deletes that removed nothing, order-status changes that failed to apply, and per-line refunds that quietly became full refunds. Each is confirmed or refused before it reports success now, and an invalid billing email no longer erases the stored address.
-* **Fix:** Bad values that used to be coerced silently are refused now: unparseable sales-report and coupon dates, non-numeric coupon amounts, negative limits, unknown tax classes (which had been filed under Standard and changed checkout tax), and a stock status set while stock management is on.
-* **Fix:** ACF repeater, group, and flexible-content writes saved their rows but reported a failure, so an agent would retry over content it had already published; and fields nested in flexible-content or clone layouts were sanitized as plain text, flattening rich text and letting a javascript: link through. Both are fixed, at any nesting depth.
-* **Fix:** Tightened what an agent can see and reach: an enabled admin-only tool could leak into a lower-privileged connection's tool list, an SEO head read could return for a post type the operator had not exposed, and a caller on a blocked IP could flood the activity log with denial rows.
-* **Fix:** Multisite activation creates the plugin's tables on every site now, including sites added later; deleting a user reports that they were only removed from the current site rather than fully deleted; and creating an agent user honours the network's add-new-users setting.
-* **Fix:** Corrected a run of tool descriptions and operator disclosures that overstated behaviour (what the activity log stores, how the ACF maps are keyed, count semantics, revision reversibility), and fixed a batch of smaller crash and response-shape defects across posts, blocks, comments, WPML, and SEO reads.
-* **Chore:** Cleared stale comments and dead test scaffolding, and brought the WooCommerce test stubs in line with what the real plugin does.
 
 Full release history: https://agentabilitieswp.com/changelog/
 

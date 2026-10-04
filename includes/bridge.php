@@ -107,6 +107,29 @@ const AAFM_SCHEMA_MAX_BYTES = 262144;
 const AAFM_BRIDGE_NAMESPACE = 'aafm-bridge';
 
 /**
+ * The error code of a bridged call whose result held something other than plain data.
+ *
+ * The Activity Log detail records it as it is when the error came from this plugin
+ * (aafm_bridge_own_error()), and behind AAFM_BRIDGE_FOREIGN_CODE_PREFIX when a foreign plugin returned
+ * the same string.
+ */
+const AAFM_BRIDGE_REFUSED_SHAPE = 'aafm_bridge_unsupported_result_shape';
+
+/**
+ * The error code of a bridged call whose result was exactly { success: false, error: "<text>" }.
+ *
+ * The adapter turns that shape into an error for the client, so the wrapper returns it as one and the
+ * Activity Log row says error as well.
+ */
+const AAFM_BRIDGE_REPORTED_FAILURE = 'aafm_bridge_reported_failure';
+
+/**
+ * What the Activity Log detail puts in front of an error code that a foreign plugin returned, so it
+ * can never read as one of this plugin's own codes.
+ */
+const AAFM_BRIDGE_FOREIGN_CODE_PREFIX = 'foreign:';
+
+/**
  * Whether an array has sequential integer keys starting at 0 (a list / tuple).
  *
  * A stand-in for array_is_list() (8.1+) that also works on this plugin's PHP 7.4 floor. Its one
@@ -258,6 +281,59 @@ function aafm_bridge_forward_input( $live, $input ) {
 }
 
 /**
+ * Remember which foreign ability a bridged wrapper fronts, so the id-free discovery probe can ask
+ * that ability directly.
+ *
+ * Same store shape as aafm_remember_raw_permission() in register.php: a slug writes, no slug reads.
+ * Written only by aafm_register_enabled_bridged_abilities(), at the moment the wrapper's own
+ * closures capture the same slug.
+ *
+ * @param string      $wrapper      Wrapper ability name, for example "aafm-bridge/demo-echo".
+ * @param string|null $foreign_slug Foreign slug to store, or null to read.
+ * @return string|null The stored slug on a read, null on a write or when nothing is stored.
+ */
+function aafm_remember_bridge_source( string $wrapper, ?string $foreign_slug = null ): ?string {
+	static $store = array();
+
+	if ( null !== $foreign_slug ) {
+		$store[ $wrapper ] = $foreign_slug;
+		return null;
+	}
+
+	return $store[ $wrapper ] ?? null;
+}
+
+/**
+ * Ask the live foreign ability whether $input is permitted, keeping the KIND of the answer.
+ *
+ * The wrapper's permission closure reduces this to a boolean. Discovery needs more: a permission
+ * callback that crashed must not be confused with one that said no because an object id was
+ * missing. On WP 7.0.6 and 7.1.2 core catches a throw inside a permission callback and returns
+ * WP_Error ability_callback_exception (WP_Ability::invoke_callback()); on 6.9.4 it does not, the
+ * throw escapes, and the caller's catch covers that.
+ *
+ * @param string $foreign_slug Foreign ability slug.
+ * @param mixed  $input        Input to check, before forwarding.
+ * @return string 'allow' when the plugin said yes, 'deny' for any other answer, 'crash' when core
+ *                reports the callback threw, 'gone' when the foreign ability is not registered.
+ */
+function aafm_bridge_permission_state( string $foreign_slug, $input ): string {
+	$live = wp_get_ability( $foreign_slug );
+	if ( ! $live instanceof WP_Ability ) {
+		return 'gone';
+	}
+
+	$answer = $live->check_permissions( aafm_bridge_forward_input( $live, $input ) );
+	if ( true === $answer ) {
+		return 'allow';
+	}
+	if ( aafm_bridge_is_core_callback_exception( $answer, $foreign_slug ) ) {
+		return 'crash';
+	}
+	return 'deny';
+}
+
+/**
  * The foreign ability's output schema exactly as it declared it - or null when it exposes none.
  *
  * Deliberately NOT routed through aafm_normalize_json_schema(). That function is INPUT-oriented:
@@ -271,8 +347,11 @@ function aafm_bridge_forward_input( $live, $input ) {
  * Returns null (not a default object schema) when the foreign ability has no output schema, so the
  * wrapper simply omits output_schema and inherits core's no-output-validation default.
  *
- * One caveat worth naming rather than leaving as a silent side effect: this is about our wrapper's
- * own validate_output() call, not about what a client sees.
+ * This is the schema a client is shown. The registration walk leaves it off the wrapper when the source
+ * skips its own output check (aafm_bridge_source_skips_output_check()), and the wrapper does not check a
+ * bridged result against it a second time (AAFM_Rate_Limited_Ability::validate_output()).
+ *
+ * One caveat worth naming rather than leaving as a silent side effect:
  * SchemaTransformer::transform_to_object_schema() stamps type:object onto a typeless schema itself
  * when building the advertised outputSchema, and McpTool::execute() wraps a scalar result under
  * `result`. So for a bare oneOf schema returning a string the bridged call now EXECUTES instead of
@@ -288,6 +367,81 @@ function aafm_bridge_output_schema( $ability ): ?array {
 		return null;
 	}
 	return aafm_prepare_bridge_schema_for_client( $schema );
+}
+
+/**
+ * Build a WP_Error that this plugin raised for a bridged call, and remember it.
+ *
+ * The Activity Log records a bridged error's code as it is only for an error made here; any other
+ * bridged error carries a foreign plugin's code and is recorded behind a prefix. The memory is by
+ * object identity, so a foreign plugin cannot pass for the bridge by returning the same code string.
+ *
+ * @param string $code    Error code.
+ * @param string $message Static, translated message.
+ * @return \WP_Error
+ */
+function aafm_bridge_own_error( string $code, string $message ): \WP_Error {
+	$error = new \WP_Error( $code, $message );
+	aafm_bridge_is_own_error( $error, true );
+	return $error;
+}
+
+/**
+ * Whether an error was made by aafm_bridge_own_error() in this request.
+ *
+ * @param mixed $error The value to check.
+ * @param bool  $mark  True to remember $error as made here (only aafm_bridge_own_error() passes it).
+ * @return bool
+ */
+function aafm_bridge_is_own_error( $error, bool $mark = false ): bool {
+	static $own = array();
+
+	if ( ! $error instanceof \WP_Error ) {
+		return false;
+	}
+	$id = spl_object_id( $error );
+	if ( $mark ) {
+		$own[ $id ] = $error; // Held so the id cannot be reused by another object.
+	}
+	return isset( $own[ $id ] );
+}
+
+/**
+ * Whether an error is core's own report of a throw inside an ability callback.
+ *
+ * From WP 7.0 core's WP_Ability::invoke_callback() catches a throwing callback and returns
+ * WP_Error ability_callback_exception with the text 'Ability "<slug>" callback threw an exception:
+ * <the exception's own text>'. The 6.9 floor lets the throw escape instead. The error carries no
+ * data, so the only way to tell it from a foreign plugin that returns the same code on purpose is its
+ * message, which names the ability. A plugin that returns the code with a message that also names its
+ * own ability cannot be told apart; it is read as a crash, which fails closed. The message is
+ * translated by core, so only the slug is matched.
+ *
+ * @param mixed  $error        The value a foreign callback or check returned.
+ * @param string $foreign_slug The foreign ability's slug.
+ * @return bool
+ */
+function aafm_bridge_is_core_callback_exception( $error, string $foreign_slug ): bool {
+	return $error instanceof \WP_Error
+		&& 'ability_callback_exception' === $error->get_error_code()
+		&& false !== strpos( $error->get_error_message(), $foreign_slug );
+}
+
+/**
+ * Whether the source ability opted out of core's output check by overriding validate_output().
+ *
+ * ACF's REST abilities do this on purpose: a delete returns the trashed object, which its own output
+ * schema does not describe. Advertising that schema on the wrapper would promise clients a shape the
+ * data does not keep, and a client that validates structuredContent would reject a call that worked.
+ *
+ * @param mixed $ability The foreign ability.
+ * @return bool True when the declaring class of validate_output() is not core's WP_Ability.
+ */
+function aafm_bridge_source_skips_output_check( $ability ): bool {
+	if ( ! is_object( $ability ) || ! method_exists( $ability, 'validate_output' ) ) {
+		return false;
+	}
+	return 'WP_Ability' !== ( new \ReflectionMethod( $ability, 'validate_output' ) )->getDeclaringClass()->getName();
 }
 
 /**
@@ -572,12 +726,8 @@ function aafm_register_enabled_bridged_abilities(): void {
 				// check_permissions() runs the FOREIGN plugin's own callback, which can throw.
 				// Deliberately no try/catch here: every caller guards it already - the decorated
 				// closure in aafm_register_ability_with_log() on the tools/call path, and
-				// aafm_user_can_call_ability() on the tools/list path, which reaches this same
-				// closure raw and undecorated. aafm_user_can_discover_ability() is the third, and it
-				// carries its own guard over the branch that never reaches
-				// aafm_user_can_call_ability(). A catch here would be the per-site drift the
-				// choke-point design exists to avoid. If a NEW caller ever invokes this closure
-				// directly, it must carry its own guard.
+				// aafm_user_can_discover_bridged_ability() on the tools/list path. If a NEW caller
+				// ever invokes this closure directly, it must carry its own guard.
 				return true === $live->check_permissions( aafm_bridge_forward_input( $live, $input ) );
 			},
 			'execute_callback'    => static function ( $input = null ) use ( $foreign_slug ) {
@@ -598,16 +748,50 @@ function aafm_register_enabled_bridged_abilities(): void {
 				// the wrapped array against that schema, turning a real success into a spurious
 				// ability_invalid_output error. Returning the foreign result unchanged avoids
 				// that collision; the guard downstream is scoped to skip bridged names instead.
-				return $live->execute( aafm_bridge_forward_input( $live, $input ) );
+				$result = $live->execute( aafm_bridge_forward_input( $live, $input ) );
+				if ( is_wp_error( $result ) ) {
+					// Core's own report of a throw carries the exception's raw text. A client gets the same static
+					// error the choke point gives a throw that escapes the source on the 6.9 floor.
+					if ( aafm_bridge_is_core_callback_exception( $result, $foreign_slug ) ) {
+						return aafm_bridge_own_error( 'aafm_ability_exception', aafm_ability_exception_message() );
+					}
+					return aafm_bridge_attribute_error( $foreign_slug, $result );
+				}
+				// The verdict on raw objects lives here, not in the adapter's result filter: this
+				// closure's return value is what register.php turns into the Activity Log status, so
+				// a refusal is logged as an error. The foreign ability has already run by now.
+				if ( ! aafm_bridge_result_is_plain_data( $result ) ) {
+					return aafm_bridge_own_error(
+						AAFM_BRIDGE_REFUSED_SHAPE,
+						__( 'This bridged ability ran, but its result held a raw object that cannot be safely relayed over MCP. If it changes data, check the site before you repeat the call. Contact the site administrator.', 'agent-abilities-for-mcp' )
+					);
+				}
+				// The adapter tells the client this exact shape failed, so the wrapper reports it as an
+				// error too and the row agrees. Anything wider, such as { success: false } alone, is data.
+				if (
+					is_array( $result )
+					&& array_key_exists( 'success', $result )
+					&& false === $result['success']
+					&& isset( $result['error'] )
+					&& is_string( $result['error'] )
+					&& '' !== trim( $result['error'] )
+				) {
+					return aafm_bridge_own_error( AAFM_BRIDGE_REPORTED_FAILURE, $result['error'] );
+				}
+				return $result;
 			},
 		);
 
-		// Copy the foreign output schema only when it actually exposes one (see helper).
+		// Copy the foreign output schema only when it actually exposes one (see helper). It is advertised to
+		// clients; AAFM_Rate_Limited_Ability::validate_output() skips core's second check for bridged names,
+		// because the source validated its own result. A source that skips its own check (it overrides
+		// validate_output()) does not keep its schema, so none is advertised for it.
 		$output_schema = aafm_bridge_output_schema( $foreign );
-		if ( null !== $output_schema ) {
+		if ( null !== $output_schema && ! aafm_bridge_source_skips_output_check( $foreign ) ) {
 			$args['output_schema'] = $output_schema;
 		}
 
+		aafm_remember_bridge_source( $wrapper, $foreign_slug );
 		aafm_register_ability_with_log( $wrapper, $args );
 	}
 
@@ -616,55 +800,91 @@ function aafm_register_enabled_bridged_abilities(): void {
 }
 
 /**
- * Whether $value contains, at $value itself or nested at any depth inside it, an object that is
- * not an exact empty stdClass.
+ * Whether a bridged ability's result is plain data: something that cannot hide state the plugin
+ * has not examined.
  *
- * Final gate round 2: the ORIGINAL top-level-only check inspected the wrong layer. On the real
- * MCP wire, McpTool::execute() already wraps any non-array bridged result as
- * array('result' => $value) BEFORE mcp_adapter_tool_call_result (this file's filter) ever runs
- * (vendor/wordpress/mcp-adapter/includes/Domain/Tools/McpTool.php:295-299,
- * ToolsHandler.php:189/205) - so a bare object at the FUNCTION's top level is a shape the real
- * adapter never delivers; a hidden object one or more levels inside an array is exactly what it
- * delivers instead. This walks the whole structure so the guard fires where the danger actually
- * is, not only where the old (unreachable in production) shape assumed it would be.
+ * Plain data is null, a scalar, an array, an exact stdClass, and an exact WP_Term, with every
+ * member of an array or object plain in turn. An object's public properties are walked exactly like
+ * an array's, so a stdClass holding a stdClass holding a scalar is fine and a stdClass holding a
+ * WP_User is not. WP_Term is final but allows dynamic properties, so it is walked too rather than
+ * trusted. Everything else is refused: WP_User (its ->data carries the password hash), WP_Post,
+ * JsonSerializable objects, stdClass subclasses (the check is get_class() ===, because
+ * `instanceof stdClass` is also true for a subclass that can carry private state), closures,
+ * resources, WP_Error inside a result, and any array or object nested at AAFM_SCHEMA_MAX_DEPTH or
+ * deeper (null and scalars are plain at any depth: they cannot hide state), and a float that is NaN or
+ * infinite, which JSON cannot encode. The depth bound also
+ * stops a stdClass that references itself. This plugin cannot know a third-party object's fields
+ * well enough to redact them, so it refuses rather than shapes. An exact stdClass is relayed with
+ * every property it holds, so a raw database row (`$wpdb->get_row()`) or a bare `WP_User::$data`
+ * returned by a foreign ability reaches the client, the same as that row returned as an array. The
+ * bridge does not redact fields; this is a known limit.
  *
- * The house idiom (object) array() can legitimately appear at ANY depth, not only the root - a
- * bridged ability might return {"items": [...], "meta": {}} where the empty map sits one level
- * down. So the exemption for an exact, empty stdClass (get_class() === 'stdClass', not
- * `instanceof`, which a subclass also satisfies - see the fix round 1 note this replaces) applies
- * at whatever depth it is found, and nothing else does: any other object, at any depth, is
- * refused.
- *
- * Recursion is depth-bounded, deliberately, using the same AAFM_SCHEMA_MAX_DEPTH bound
- * aafm_sanitize_schema_array() uses for the identical reason: a bridged result is foreign data of
- * unknown shape, and an unbounded walk risks exhausting the stack on a pathologically deep or (via
- * a leaked reference) self-referential array. Real vendor response shapes are only a handful of
- * levels deep, so the bound never clips legitimate output. Unlike the schema sanitizer, which
- * drops a sub-tree past its bound (safe, because dropping IS the sanitizing action), this function
- * REFUSES once the bound is hit rather than reporting "nothing found" - past the bound this
- * function no longer knows what is down there, and this guard's whole job is refusing what it
- * cannot vouch for, not assuming the unexamined remainder is safe.
- *
- * @param mixed $value Value to inspect (array, scalar, or object).
- * @param int   $depth Current recursion depth (internal; callers pass 0).
- * @return bool True if an unsafe object was found (or the depth bound was hit before ruling it out).
+ * @param mixed $value Value to inspect.
+ * @param int   $depth Current depth (internal; callers pass 0).
+ * @return bool
  */
-function aafm_bridge_result_hides_an_object( $value, int $depth = 0 ): bool {
-	if ( is_object( $value ) ) {
-		return ! ( 'stdClass' === get_class( $value ) && array() === get_object_vars( $value ) );
+function aafm_bridge_result_is_plain_data( $value, int $depth = 0 ): bool {
+	if ( is_float( $value ) ) {
+		return is_finite( $value ); // NaN and infinity cannot be encoded as JSON.
 	}
-	if ( ! is_array( $value ) ) {
-		return false;
+	if ( null === $value || is_scalar( $value ) ) {
+		return true;
 	}
 	if ( $depth >= AAFM_SCHEMA_MAX_DEPTH ) {
-		return true; // Past the bound: cannot vouch for what is here, so refuse rather than assume.
+		return false;
 	}
-	foreach ( $value as $item ) {
-		if ( aafm_bridge_result_hides_an_object( $item, $depth + 1 ) ) {
-			return true;
+
+	if ( is_array( $value ) ) {
+		$members = $value;
+	} elseif ( is_object( $value ) && in_array( get_class( $value ), array( 'stdClass', 'WP_Term' ), true ) ) {
+		$members = get_object_vars( $value );
+	} else {
+		return false;
+	}
+
+	foreach ( $members as $member ) {
+		if ( ! aafm_bridge_result_is_plain_data( $member, $depth + 1 ) ) {
+			return false;
 		}
 	}
-	return false;
+	return true;
+}
+
+/**
+ * Name the plugin behind a bridged ability's own failure.
+ *
+ * The client sees only the error text, so a bare "No such customer" gives no hint which plugin said
+ * it. The source is the foreign slug's namespace, the label the admin directory uses. The error
+ * code and data are kept; only the first message gets the prefix. The core namespace, an error
+ * with no code, core's own ability_* errors and a message that already names the plugin (as a whole word,
+ * ignoring case) are returned as they are.
+ *
+ * @param string    $foreign_slug Foreign ability slug, for example "woocommerce/product-update".
+ * @param \WP_Error $error        The error the foreign ability returned.
+ * @return \WP_Error
+ */
+function aafm_bridge_attribute_error( string $foreign_slug, \WP_Error $error ): \WP_Error {
+	$pos    = strpos( $foreign_slug, '/' );
+	$source = false === $pos ? $foreign_slug : substr( $foreign_slug, 0, $pos );
+	$code   = $error->get_error_code();
+	if ( '' === $source || 'core' === $source || '' === $code || str_starts_with( (string) $code, 'ability_' ) ) {
+		return $error;
+	}
+	// Whole-word match, so a short namespace such as "ai" is not found inside "failed" or "email".
+	if ( 1 === preg_match( '/(?<![a-z0-9])' . preg_quote( $source, '/' ) . '(?![a-z0-9])/i', $error->get_error_message() ) ) {
+		return $error;
+	}
+
+	return new WP_Error(
+		$code,
+		sprintf(
+			/* translators: 1: the plugin's ability namespace, for example "woocommerce". 2: the error text that plugin returned. */
+			__( 'The %1$s plugin returned an error: %2$s', 'agent-abilities-for-mcp' ),
+			$source,
+			$error->get_error_message()
+		),
+		$error->get_error_data()
+	);
 }
 
 /**
@@ -674,7 +894,7 @@ function aafm_bridge_result_hides_an_object( $value, int $depth = 0 ): bool {
  * Final gate round 3: the wire-name prefix test alone is bypassable both directions. The adapter
  * applies the PUBLIC mcp_adapter_tool_name filter to rename a tool's wire name AFTER sanitizing
  * the ability name (RegisterAbilityAsMcpTool::resolve_tool_name), so a site hooking that filter
- * could rename a bridged wrapper OUT of the aafm-bridge- prefix (skipping this guard entirely) or
+ * could rename a bridged wrapper OUT of the aafm-bridge- prefix (skipping the list wrap entirely) or
  * a NATIVE tool INTO it (wrongly subjecting it to bridge shaping). includes/server.php's own
  * aafm_filter_mcp_tools_list() already solved the identical hazard for tools/list by re-applying
  * that same filter to a name it derives itself; this takes the more direct route available here -
@@ -697,7 +917,7 @@ function aafm_bridge_result_hides_an_object( $value, int $depth = 0 ): bool {
  * Falls back to the wire-name prefix test when $mcp_tool is absent or its metadata is not in the
  * expected shape (an older call site still registered at accepted_args=3, a non-ability-backed
  * tool built via McpTool::fromArray() which never stamps 'ability_name', or a future adapter
- * version) - fails toward still inspecting the result, never toward silently skipping it.
+ * version) - fails toward treating the tool as bridged, so a bare list is still wrapped.
  *
  * @param string $tool_name The wire tool name (fallback only).
  * @param mixed  $mcp_tool  The McpTool instance the adapter passes as the 4th filter argument;
@@ -790,21 +1010,6 @@ function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name, $mcp_
 	// ToolsHandler::handle_tool_call() turns it into a proper MCP error result.
 	if ( is_wp_error( $result ) ) {
 		return $result;
-	}
-
-	// Nothing in this plugin or the adapter inspects an object's own properties before the wire, and
-	// this plugin cannot know a third-party object's shape well enough to redact it selectively - so
-	// it refuses the call outright rather than guess at what is safe to keep, exactly as the
-	// adapter's own docblock on this filter recommends (PII redaction). aafm_bridge_result_hides_an_
-	// object() (defined above) walks $result at every depth: on the real wire $result here is
-	// typically already the adapter's own array('result' => $value) wrapper (or a plain array a
-	// foreign ability returned directly), never a bare object at THIS function's top level - see
-	// that function's docblock for the full wire-order finding this replaces.
-	if ( aafm_bridge_result_hides_an_object( $result ) ) {
-		return new WP_Error(
-			'aafm_bridge_unsupported_result_shape',
-			__( 'This bridged ability returned a raw object, which cannot be safely relayed over MCP. Contact the site administrator.', 'agent-abilities-for-mcp' )
-		);
 	}
 
 	if ( ! is_array( $result ) || ! aafm_bridge_is_list( $result ) ) {

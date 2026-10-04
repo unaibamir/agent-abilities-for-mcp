@@ -161,6 +161,15 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'where you can restore it', $html );
 		$this->assertStringContainsString( 'every media or user deletion, is permanent', $html );
 		$this->assertStringContainsString( 'argument KEYS only', $html );
+		// The foreign error code a bridged ability can add to the log is named, with its prefix.
+		$this->assertStringContainsString( 'behind a &quot;foreign:&quot; prefix', $html );
+		$this->assertStringNotContainsString( 'records only the argument KEYS', $html );
+		// The heading claims free text is not logged, not that every value is absent, and the foreign
+		// code is described as kept only when it has the key shape, never as trimmed to it.
+		$this->assertStringContainsString( 'Everything is logged, free text is not.', $html );
+		$this->assertStringNotContainsString( 'values are not', $html );
+		$this->assertStringNotContainsString( 'trimmed to a short key-shaped string', $html );
+		$this->assertStringContainsString( 'kept only when it is a short key-shaped string of letters, digits, underscore and hyphen', $html );
 	}
 
 	public function test_help_copy_lines_reuse_the_copy_button_hook(): void {

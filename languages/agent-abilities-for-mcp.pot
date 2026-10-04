@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-04T23:50:48+05:00\n"
+"POT-Creation-Date: 2026-10-04T23:57:31+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -6603,11 +6603,11 @@ msgid "Trash abilities (trash a post or page) move content to the Trash, where y
 msgstr ""
 
 #: includes/admin/page.php:3387
-msgid "Everything is logged, values are not."
+msgid "Everything is logged, free text is not."
 msgstr ""
 
 #: includes/admin/page.php:3387
-msgid "Every call - including denied ones - is recorded on the Activity Log tab with the argument KEYS only, never the values, plus a short identifier-only note such as an object id or an error code. When another plugin's bridged ability fails, its error code is recorded behind a \"foreign:\" prefix, trimmed to a short key-shaped string, and never its message. A plugin that builds that code from its own input can put a short fragment of it there. You can see what was attempted without the log keeping the content."
+msgid "Every call - including denied ones - is recorded on the Activity Log tab. The arguments column holds the argument KEYS only, never the values, and a separate short identifier-only note holds something like an object id or an error code. When another plugin's bridged ability fails, its error code is recorded behind a \"foreign:\" prefix, kept only when it is a short key-shaped string of letters, digits, underscore and hyphen, and never its message or error data. A plugin that builds that code from its own input can put a short fragment of that input there. You can see what was attempted without the log keeping free-text content."
 msgstr ""
 
 #: includes/admin/page.php:3388
@@ -6627,7 +6627,7 @@ msgid "The plugin never sends your content, credentials, or other site data anyw
 msgstr ""
 
 #: includes/admin/page.php:3399
-msgid "The activity log records the argument KEYS of each call (never the values), a short identifier-only note such as an object id or an error code, and the source IP address of the request. An error code returned by another plugin's bridged ability is recorded behind a \"foreign:\" prefix, trimmed to a short key-shaped string, and never with its message; a plugin that builds that code from its own input can put a short fragment of it there. You can clear the log any time from the Activity Log tab."
+msgid "The activity log records the argument KEYS of each call (the arguments column never holds the values), a short identifier-only note such as an object id or an error code, and the source IP address of the request. An error code returned by another plugin's bridged ability is recorded behind a \"foreign:\" prefix, kept only when it is a short key-shaped string of letters, digits, underscore and hyphen, and never with its message or error data; a plugin that builds that code from its own input can put a short fragment of that input there. You can clear the log any time from the Activity Log tab."
 msgstr ""
 
 #: includes/admin/page.php:3406

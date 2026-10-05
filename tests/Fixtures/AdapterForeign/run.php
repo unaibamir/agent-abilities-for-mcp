@@ -46,15 +46,15 @@ if ( 'foreign' === $argv[1] ) {
 	);
 }
 
-$before = count( spl_autoload_functions() );
+$before = count( spl_autoload_functions() ?: array() );
 
 require AAFM_PLUGIN_DIR . 'includes/adapter-loader.php';
 
 $loaded = aafm_load_bundled_adapter();
 
-$after_loader = count( spl_autoload_functions() );
+$after_loader = count( spl_autoload_functions() ?: array() );
 $vendor       = aafm_load_vendor_autoloader();
-$after_vendor = count( spl_autoload_functions() );
+$after_vendor = count( spl_autoload_functions() ?: array() );
 
 echo json_encode(
 	array(

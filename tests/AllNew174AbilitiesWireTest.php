@@ -390,7 +390,7 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 		$server = $adapter->get_server( $server_id );
 		$this->assertInstanceOf( \WP\MCP\Core\McpServer::class, $server, "Failed to build the sweep server for {$ability_name}." );
 
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 		$result  = $handler->call_tool(
 			array(
 				'name'      => $tool_name,
@@ -408,11 +408,11 @@ final class AllNew174AbilitiesWireTest extends TestCase {
 		// permission bypass symptom, an unexpected validation failure) pass silently, since
 		// nothing distinguished "expected refusal" from "actually broken". Require success here;
 		// a refusal-path test belongs in that ability's own dedicated test file instead.
-		$failure_detail = $result instanceof \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse
+		$failure_detail = $result instanceof \AAFM\Tests\Support\McpProtocolError
 			? "{$result->getError()->getCode()} {$result->getError()->getMessage()}"
 			: '';
 		$this->assertNotInstanceOf(
-			\WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class,
+			\AAFM\Tests\Support\McpProtocolError::class,
 			$result,
 			"{$tool_name} returned an error instead of succeeding on a valid fixture: {$failure_detail}"
 		);

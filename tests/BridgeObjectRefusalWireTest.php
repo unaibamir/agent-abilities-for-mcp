@@ -20,8 +20,8 @@ declare( strict_types=1 );
 namespace AAFM\Tests;
 
 use WP\MCP\Core\McpServer;
-use WP\MCP\Handlers\Tools\ToolsHandler;
-use WP\McpSchema\Server\Tools\DTO\CallToolResult;
+use AAFM\Tests\Support\McpToolsHandlerShim;
+use AAFM\Tests\Support\McpToolCallOutcome;
 
 final class BridgeObjectRefusalWireTest extends TestCase {
 
@@ -96,9 +96,9 @@ final class BridgeObjectRefusalWireTest extends TestCase {
 	 * Call the wrapper through the real ToolsHandler::call_tool(), on a throwaway server.
 	 *
 	 * @param string $wrapper Wrapper ability name.
-	 * @return CallToolResult
+	 * @return McpToolCallOutcome
 	 */
-	private function call_wrapper( string $wrapper ): CallToolResult {
+	private function call_wrapper( string $wrapper ): McpToolCallOutcome {
 		// The production list-shaping filter, wired as aafm_register_mcp_server() wires it.
 		add_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result', 10, 4 );
 
@@ -115,15 +115,15 @@ final class BridgeObjectRefusalWireTest extends TestCase {
 			array( $wrapper )
 		);
 
-		$tools = $server->get_tools();
+		$tools = $server->get_tools( \AAFM\Tests\Support\McpToolsHandlerShim::schema() );
 		$this->assertNotEmpty( $tools, 'The wrapper must resolve to a registered MCP tool.' );
-		$response = ( new ToolsHandler( $server ) )->call_tool(
+		$response = ( new McpToolsHandlerShim( $server ) )->call_tool(
 			array(
 				'name'      => (string) array_key_first( $tools ),
 				'arguments' => array(),
 			)
 		);
-		$this->assertInstanceOf( CallToolResult::class, $response );
+		$this->assertInstanceOf( McpToolCallOutcome::class, $response );
 		return $response;
 	}
 

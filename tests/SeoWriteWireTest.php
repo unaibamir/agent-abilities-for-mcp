@@ -26,7 +26,7 @@ final class SeoWriteWireTest extends TestCase {
 	/**
 	 * Tools handler for the test server.
 	 *
-	 * @var \WP\MCP\Handlers\Tools\ToolsHandler
+	 * @var \AAFM\Tests\Support\McpToolsHandlerShim
 	 */
 	private $handler;
 
@@ -48,7 +48,7 @@ final class SeoWriteWireTest extends TestCase {
 		parent::tear_down();
 	}
 
-	private function handler(): \WP\MCP\Handlers\Tools\ToolsHandler {
+	private function handler(): \AAFM\Tests\Support\McpToolsHandlerShim {
 		static $counter = 0;
 		++$counter;
 		$server_id = 'aafm-server-seo-write-wire-test-' . $counter;
@@ -82,7 +82,7 @@ final class SeoWriteWireTest extends TestCase {
 		if ( ! $server instanceof \WP\MCP\Core\McpServer ) {
 			throw new \RuntimeException( 'Failed to build the test-only SEO write wire server.' );
 		}
-		return new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		return new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 	}
 
 	/**
@@ -90,7 +90,7 @@ final class SeoWriteWireTest extends TestCase {
 	 *
 	 * @param string              $ability   Ability name.
 	 * @param array<string,mixed> $arguments Tool arguments.
-	 * @return \WP\McpSchema\Server\Tools\DTO\CallToolResult
+	 * @return \AAFM\Tests\Support\McpToolCallOutcome
 	 */
 	private function call( string $ability, array $arguments ) {
 		$result = $this->handler->call_tool(
@@ -100,14 +100,14 @@ final class SeoWriteWireTest extends TestCase {
 			),
 			'req-seo-write-wire'
 		);
-		$this->assertInstanceOf( \WP\McpSchema\Server\Tools\DTO\CallToolResult::class, $result );
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $result );
 		return $result;
 	}
 
 	/**
 	 * The tool's JSON text decoded as arrays, after asserting the call succeeded.
 	 *
-	 * @param \WP\McpSchema\Server\Tools\DTO\CallToolResult $result Tool result.
+	 * @param \AAFM\Tests\Support\McpToolCallOutcome $result Tool result.
 	 * @return array<string,mixed>
 	 */
 	private function body( $result ): array {

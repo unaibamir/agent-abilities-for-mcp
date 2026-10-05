@@ -80,7 +80,7 @@ final class AvadaWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_avada_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$get_result = $handler->call_tool(
 			array(
@@ -89,7 +89,7 @@ final class AvadaWireTest extends TestCase {
 			),
 			'req-avada-get-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $get_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $get_result );
 		$this->assertTrue( $get_result->getStructuredContent()['is_avada_owned'] ?? false );
 
 		$replace_result = $handler->call_tool(
@@ -103,7 +103,7 @@ final class AvadaWireTest extends TestCase {
 			),
 			'req-avada-replace-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $replace_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $replace_result );
 		$this->assertSame( 1, $replace_result->getStructuredContent()['replacements'] ?? null );
 
 		$stored = get_post_field( 'post_content', $post->ID, 'raw' );

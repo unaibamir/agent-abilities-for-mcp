@@ -63,7 +63,7 @@ final class ReplaceSitewideWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$preview = $handler->call_tool(
 			array(
@@ -75,7 +75,7 @@ final class ReplaceSitewideWireTest extends TestCase {
 			),
 			'req-replace-sitewide-preview-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $preview );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $preview );
 		$preview_shape = $preview->getStructuredContent();
 		$this->assertTrue( $preview_shape['dry_run'] );
 		$this->assertSame( 'the quick fox', get_post( $post->ID )->post_content, 'A dry-run preview must never write.' );
@@ -91,7 +91,7 @@ final class ReplaceSitewideWireTest extends TestCase {
 			),
 			'req-replace-sitewide-apply-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $apply );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $apply );
 		$this->assertSame( 'the slow fox', get_post( $post->ID )->post_content );
 	}
 }

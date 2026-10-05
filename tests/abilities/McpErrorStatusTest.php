@@ -237,8 +237,9 @@ final class McpErrorStatusTest extends TestCase {
 
 	/**
 	 * Every test above hand-builds a JSON-RPC error body and feeds it to the filter, which
-	 * proves the filter's own logic but assumes the adapter actually returns -32003 for an
-	 * unknown tool name. This test drives the real vendored code instead: it registers the
+	 * proves the filter's own logic but assumes what the adapter returns for an unknown tool
+	 * name. Adapter 0.6.1 returned -32003 (HTTP 404, which the filter above rewrites to 200); 0.7.0
+	 * returns -32602 (invalid params), which maps to HTTP 200 on its own. This test drives the real vendored code instead: it registers the
 	 * plugin's real MCP server (the same aafm_register_mcp_server() the live site calls,
 	 * simulating mcp_adapter_init the way ServerToolsTest.php already does) and calls the
 	 * adapter's own ToolsHandler::call_tool() - the exact method a live tools/call request
@@ -273,11 +274,11 @@ final class McpErrorStatusTest extends TestCase {
 		$server = $adapter->get_server( 'aafm-server' );
 		$this->assertNotNull( $server, 'The plugin must have a registered MCP server to call tools/call against.' );
 
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 		$result  = $handler->call_tool( array( 'name' => 'definitely-not-a-real-tool-9f3c1a' ), 'req-premise-1' );
 
-		$this->assertInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $result );
-		$this->assertSame( -32003, $result->getError()->getCode() );
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $result );
+		$this->assertSame( -32602, $result->getError()->getCode() );
 	}
 
 	/**

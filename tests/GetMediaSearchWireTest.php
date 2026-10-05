@@ -78,7 +78,7 @@ final class GetMediaSearchWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$result = $handler->call_tool(
 			array(
@@ -89,7 +89,7 @@ final class GetMediaSearchWireTest extends TestCase {
 		);
 
 		$this->assertNotInstanceOf(
-			\WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class,
+			\AAFM\Tests\Support\McpProtocolError::class,
 			$result,
 			'aafm-get-media must succeed for an authorized author over a real tools/call.'
 		);

@@ -24,10 +24,10 @@ final class MetaWriteWireTest extends TestCase {
 	 * Build a throwaway MCP server over the given abilities and return its tools handler.
 	 *
 	 * @param string[] $abilities Ability names.
-	 * @return \WP\MCP\Handlers\Tools\ToolsHandler
+	 * @return \AAFM\Tests\Support\McpToolsHandlerShim
 	 * @throws \RuntimeException When the adapter refuses to build the server.
 	 */
-	private function handler( array $abilities ): \WP\MCP\Handlers\Tools\ToolsHandler {
+	private function handler( array $abilities ): \AAFM\Tests\Support\McpToolsHandlerShim {
 		static $counter = 0;
 		++$counter;
 		$server_id = 'aafm-server-meta-write-wire-test-' . $counter;
@@ -61,18 +61,18 @@ final class MetaWriteWireTest extends TestCase {
 		if ( ! $server instanceof \WP\MCP\Core\McpServer ) {
 			throw new \RuntimeException( 'Failed to build the test-only meta write wire server.' );
 		}
-		return new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		return new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 	}
 
 	/**
 	 * Call one tool and return the result DTO.
 	 *
-	 * @param \WP\MCP\Handlers\Tools\ToolsHandler $handler   Handler.
-	 * @param string                              $ability   Ability name.
-	 * @param array<string,mixed>                 $arguments Arguments.
-	 * @return \WP\McpSchema\Server\Tools\DTO\CallToolResult
+	 * @param \AAFM\Tests\Support\McpToolsHandlerShim $handler   Handler.
+	 * @param string                                  $ability   Ability name.
+	 * @param array<string,mixed>                     $arguments Arguments.
+	 * @return \AAFM\Tests\Support\McpToolCallOutcome
 	 */
-	private function call( \WP\MCP\Handlers\Tools\ToolsHandler $handler, string $ability, array $arguments ) {
+	private function call( \AAFM\Tests\Support\McpToolsHandlerShim $handler, string $ability, array $arguments ) {
 		$result = $handler->call_tool(
 			array(
 				'name'      => aafm_mcp_tool_name( $ability ),
@@ -80,7 +80,7 @@ final class MetaWriteWireTest extends TestCase {
 			),
 			'req-meta-write-wire'
 		);
-		$this->assertInstanceOf( \WP\McpSchema\Server\Tools\DTO\CallToolResult::class, $result );
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $result );
 		return $result;
 	}
 
@@ -217,7 +217,7 @@ final class MetaWriteWireTest extends TestCase {
 	 * Call create-post over the wire as an editor with the given extra arguments.
 	 *
 	 * @param array<string,mixed> $extra Extra arguments.
-	 * @return \WP\McpSchema\Server\Tools\DTO\CallToolResult
+	 * @return \AAFM\Tests\Support\McpToolCallOutcome
 	 */
 	private function create_post( array $extra ) {
 		$this->acting_as( 'editor' );
@@ -287,8 +287,11 @@ final class MetaWriteWireTest extends TestCase {
 		$result = $this->create_post( array( 'meta' => array( '0' => 'v' ) ) );
 
 		$this->assertFalse( $result->getIsError() );
-		$this->assertArrayHasKey( 'enrichment', $result->getStructuredContent() );
-		$this->assertSame( '{"meta":{"0":"refused"}}', wp_json_encode( $result->getStructuredContent()['enrichment'] ) );
+		// The record keeps JSON objects as objects; the array view the other tests use would turn
+		// the '0'-keyed map into a list and hide exactly what this test pins.
+		$structured = $result->record()->getStructuredContent();
+		$this->assertObjectHasProperty( 'enrichment', $structured );
+		$this->assertSame( '{"meta":{"0":"refused"}}', wp_json_encode( $structured->enrichment ) );
 	}
 
 	public function test_enrichment_reports_terms_and_featured_image(): void {
@@ -453,7 +456,7 @@ final class MetaWriteWireTest extends TestCase {
 	 * An object of the family with `aafm_note` allowlisted, the handler, and the base arguments.
 	 *
 	 * @param string $type 'post', 'term' or 'user'.
-	 * @return array{0:int,1:\WP\MCP\Handlers\Tools\ToolsHandler,2:array<string,mixed>,3:array<string,mixed>}
+	 * @return array{0:int,1:\AAFM\Tests\Support\McpToolsHandlerShim,2:array<string,mixed>,3:array<string,mixed>}
 	 */
 	private function family( string $type ): array {
 		if ( 'post' === $type ) {

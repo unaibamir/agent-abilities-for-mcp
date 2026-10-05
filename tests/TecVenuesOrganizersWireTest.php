@@ -73,7 +73,7 @@ final class TecVenuesOrganizersWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$venue_result = $handler->call_tool(
 			array(
@@ -82,7 +82,7 @@ final class TecVenuesOrganizersWireTest extends TestCase {
 			),
 			'req-tec-vo-wire-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $venue_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $venue_result );
 		$this->assertSame( 'Wire Test Venue', $venue_result->getStructuredContent()['venue']['title'] );
 
 		$organizer_result = $handler->call_tool(
@@ -92,7 +92,7 @@ final class TecVenuesOrganizersWireTest extends TestCase {
 			),
 			'req-tec-vo-wire-2'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $organizer_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $organizer_result );
 		$this->assertSame( 'Wire Test Organizer', $organizer_result->getStructuredContent()['organizer']['title'] );
 	}
 

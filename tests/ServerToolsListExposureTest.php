@@ -124,7 +124,7 @@ final class ServerToolsListExposureTest extends TestCase {
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_exposure_test_server( $adapter );
 
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 		$result  = $handler->list_tools();
 
 		$wire_names = array_map(
@@ -136,7 +136,7 @@ final class ServerToolsListExposureTest extends TestCase {
 		sort( $wire_names );
 
 		// The independent oracle: computed from the enabled-ability registry and bridge list
-		// directly, NOT from $server->get_tools() (which is what list_tools() itself reads).
+		// directly, NOT from $server->get_tools( \AAFM\Tests\Support\McpToolsHandlerShim::schema() ) (which is what list_tools() itself reads).
 		$expected_names = array_map( 'aafm_mcp_tool_name', aafm_all_server_ability_names() );
 		sort( $expected_names );
 
@@ -215,7 +215,7 @@ final class ServerToolsListExposureTest extends TestCase {
 
 		$wire_name = aafm_mcp_tool_name( $disabled_registered_name );
 
-		$handler            = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler            = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 		$list               = $handler->list_tools();
 		$wire_names_on_list = array_map(
 			static function ( $tool ) {
@@ -232,11 +232,11 @@ final class ServerToolsListExposureTest extends TestCase {
 
 		$result = $handler->call_tool( array( 'name' => $wire_name ), 'req-disabled-ability-1' );
 
-		$this->assertInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $result );
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $result );
 		$this->assertSame(
-			-32003,
+			-32602,
 			$result->getError()->getCode(),
-			sprintf( 'A tools/call for the disabled ability "%s" must be refused the same way an unregistered tool name is (tool_not_found).', $disabled_registered_name )
+			sprintf( 'A tools/call for the disabled ability "%s" must be refused the same way an unregistered tool name is (adapter 0.7.0 reports it as invalid params).', $disabled_registered_name )
 		);
 	}
 
@@ -251,7 +251,7 @@ final class ServerToolsListExposureTest extends TestCase {
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_exposure_test_server( $adapter );
 
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 		$result  = $handler->list_tools();
 
 		$this->assertNotEmpty( $result->getTools(), 'tools/list returned nothing - nothing to check.' );
@@ -321,7 +321,7 @@ final class ServerToolsListExposureTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_exposure_test_server( $adapter );
-		$result  = ( new \WP\MCP\Handlers\Tools\ToolsHandler( $server ) )->list_tools();
+		$result  = ( new \AAFM\Tests\Support\McpToolsHandlerShim( $server ) )->list_tools();
 
 		$wire_names = array_map(
 			static function ( $tool ) {
@@ -387,7 +387,7 @@ final class ServerToolsListExposureTest extends TestCase {
 
 		$server = $this->build_exposure_test_server( \WP\MCP\Core\McpAdapter::instance() );
 		$tools  = array();
-		foreach ( ( new \WP\MCP\Handlers\Tools\ToolsHandler( $server ) )->list_tools()->getTools() as $tool ) {
+		foreach ( ( new \AAFM\Tests\Support\McpToolsHandlerShim( $server ) )->list_tools()->getTools() as $tool ) {
 			$tools[ $tool->getName() ] = $tool;
 		}
 

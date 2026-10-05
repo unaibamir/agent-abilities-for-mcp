@@ -71,6 +71,10 @@ phpunit-contract.xml.dist
 # prune non-PHP files from an installed package.
 /vendor/wordpress/mcp-adapter/package.json
 /vendor/wordpress/mcp-adapter/package-lock.json
+/vendor/wordpress/mcp-adapter/bin
+/vendor/wordpress/php-mcp-schema/docs
+/vendor/wordpress/php-mcp-schema/generator
+/vendor/wordpress/php-mcp-schema/CONTRIBUTING.md
 
 # Codex final round 9 LOW: a dependency's own readme.txt/CHANGELOG.md is not README.md (already
 # unanchored above), so three of them (mcp-adapter's readme.txt, php-mcp-schema's and

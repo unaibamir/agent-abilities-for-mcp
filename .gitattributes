@@ -43,6 +43,10 @@ composer.lock   export-ignore
 /vendor/yoast            export-ignore
 /vendor/wordpress/mcp-adapter/package.json      export-ignore
 /vendor/wordpress/mcp-adapter/package-lock.json export-ignore
+/vendor/wordpress/mcp-adapter/bin export-ignore
+/vendor/wordpress/php-mcp-schema/docs export-ignore
+/vendor/wordpress/php-mcp-schema/generator export-ignore
+/vendor/wordpress/php-mcp-schema/CONTRIBUTING.md export-ignore
 # Codex final round 9 LOW: a dependency's own readme.txt/CHANGELOG.md is not README.md (already
 # unanchored above, on purpose - see .distignore's own note on anchoring), so it slipped through
 # uncaught (vendor/wordpress/mcp-adapter/readme.txt, vendor/wordpress/php-mcp-schema/CHANGELOG.md,

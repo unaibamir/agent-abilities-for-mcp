@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.8
+Stable tag: 1.7.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -306,6 +306,13 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==
+
+= 1.7.9 =
+
+* **Fix:** With the standalone MCP Adapter plugin (0.7.0) active and loading before this one, the /mcp endpoint returned a 404. It now serves in either load order.
+* **Fix:** The standalone MCP Adapter plugin showed a red "Another version of MCP Adapter is already loaded" notice while this plugin's copy was in use. It no longer does.
+* **Fix:** The adapter's per-request "bundled dependency" deprecation line no longer lands in the PHP error log.
+* **Chore:** The bundled MCP Adapter moves from 0.6.1 to 0.7.0, and adapter versions 0.6.1 through 0.7.x are supported. The adapter itself now returns error -32602 instead of -32003 for an unknown tool, and clients must send the MCP-Protocol-Version header after initialize.
 
 = 1.7.8 =
 

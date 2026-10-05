@@ -3,7 +3,7 @@
  * Subprocess for AdapterForeignCopyTest: runs the bundled-adapter loader with no WordPress,
  * optionally after another copy has declared McpAdapter, and prints what the loader did as JSON.
  *
- * Usage: php run.php <foreign|none> <plugin-dir>
+ * Usage: php run.php <foreign|none> <plugin-dir> [active-plugins-json]
  */
 
 define( 'ABSPATH', __DIR__ . '/' );
@@ -20,6 +20,12 @@ function add_action( $hook, $callback, $priority = 10 ) {
 }
 
 function get_option( $name, $default = false ) {
+	global $argv;
+
+	if ( 'active_plugins' === $name && isset( $argv[3] ) ) {
+		return json_decode( $argv[3], true );
+	}
+
 	return $default;
 }
 
@@ -44,6 +50,7 @@ echo json_encode(
 		'tools_handler' => class_exists( 'WP\\MCP\\Handlers\\Tools\\ToolsHandler', false ),
 		'schema_loaded' => class_exists( 'WP\\McpSchema\\Schema', false ),
 		'version'       => \WP\MCP\Core\McpAdapter::VERSION,
+		'autoload_const' => defined( 'WP_MCP_AUTOLOAD' ) ? WP_MCP_AUTOLOAD : 'undefined',
 		'actions'       => $GLOBALS['recorded_actions'],
 	)
 );

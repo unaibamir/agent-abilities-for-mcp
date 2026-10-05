@@ -22,14 +22,16 @@ final class AdapterForeignCopyTest extends TestCase {
 	/**
 	 * Run the loader fixture in its own PHP process and decode what it reported.
 	 *
-	 * @param string $mode 'foreign' to declare another copy first, 'none' for a clean process.
+	 * @param string            $mode    'foreign' to declare another copy first, 'none' for a clean process.
+	 * @param array<int,string> $active  Plugin files the process reports as active.
 	 * @return array<string, mixed>
 	 */
-	private function run_loader( string $mode ): array {
+	private function run_loader( string $mode, array $active = array() ): array {
 		$command = escapeshellarg( PHP_BINARY ) . ' '
 			. escapeshellarg( AAFM_PLUGIN_DIR . 'tests/Fixtures/AdapterForeign/run.php' ) . ' '
 			. escapeshellarg( $mode ) . ' '
-			. escapeshellarg( rtrim( AAFM_PLUGIN_DIR, '/' ) ) . ' 2>&1';
+			. escapeshellarg( rtrim( AAFM_PLUGIN_DIR, '/' ) ) . ' '
+			. escapeshellarg( (string) wp_json_encode( $active ) ) . ' 2>&1';
 
 		$output = (string) shell_exec( $command ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec -- test-only subprocess to isolate class declarations.
 		$data   = json_decode( $output, true );
@@ -77,5 +79,36 @@ final class AdapterForeignCopyTest extends TestCase {
 
 	public function test_declared_elsewhere_flags_a_class_outside_our_bundle(): void {
 		$this->assertTrue( aafm_adapter_declared_elsewhere( self::class ) );
+	}
+
+	public function test_standalone_plugin_active_turns_off_its_autoloader_when_our_copy_loads(): void {
+		$result = $this->run_loader( 'none', array( 'akismet/akismet.php', 'mcp-adapter/mcp-adapter.php' ) );
+
+		$this->assertTrue( $result['loaded'] );
+		$this->assertFalse( $result['autoload_const'], 'WP_MCP_AUTOLOAD must be false so the standalone plugin shows no conflict notice.' );
+	}
+
+	public function test_no_standalone_plugin_leaves_its_constant_alone(): void {
+		$result = $this->run_loader( 'none', array( 'akismet/akismet.php' ) );
+
+		$this->assertTrue( $result['loaded'] );
+		$this->assertSame( 'undefined', $result['autoload_const'] );
+	}
+
+	public function test_standalone_plugin_loaded_first_is_not_touched(): void {
+		$result = $this->run_loader( 'foreign', array( 'mcp-adapter/mcp-adapter.php' ) );
+
+		$this->assertFalse( $result['loaded'] );
+		$this->assertSame( 'undefined', $result['autoload_const'], 'The standalone copy is the one loaded, so its autoloader runs as normal.' );
+	}
+
+	public function test_standalone_plugin_detection_covers_site_and_network_activation(): void {
+		$file = 'mcp-adapter/mcp-adapter.php';
+
+		$this->assertTrue( aafm_standalone_adapter_plugin_active( array( 'a/a.php', $file ), array() ) );
+		$this->assertTrue( aafm_standalone_adapter_plugin_active( array(), array( $file => 1700000000 ) ) );
+		$this->assertFalse( aafm_standalone_adapter_plugin_active( array( 'a/a.php' ), array( 'b/b.php' => 1 ) ) );
+		$this->assertFalse( aafm_standalone_adapter_plugin_active( array( 'mcp-adapter/other.php', 'x/mcp-adapter/mcp-adapter.php' ), array() ) );
+		$this->assertFalse( aafm_standalone_adapter_plugin_active( array(), array() ) );
 	}
 }

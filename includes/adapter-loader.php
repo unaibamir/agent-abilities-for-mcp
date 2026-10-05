@@ -357,6 +357,47 @@ function aafm_adapter_declared_elsewhere( string $adapter_class = 'WP\\MCP\\Core
 }
 
 /**
+ * Whether the standalone mcp-adapter plugin is active on this site or network-wide.
+ *
+ * Pure so the match can be asserted against fixtures. The standalone plugin's main file is always
+ * mcp-adapter/mcp-adapter.php under its wordpress.org slug.
+ *
+ * @param array<int|string, mixed> $active_plugins  The site's active_plugins option (a list of plugin files).
+ * @param array<int|string, mixed> $network_plugins The network's active_sitewide_plugins option (plugin file => time).
+ * @return bool
+ */
+function aafm_standalone_adapter_plugin_active( array $active_plugins, array $network_plugins ): bool {
+	$main_file = 'mcp-adapter/mcp-adapter.php';
+
+	return in_array( $main_file, $active_plugins, true ) || isset( $network_plugins[ $main_file ] );
+}
+
+/**
+ * Stop the standalone mcp-adapter plugin from reporting our copy as a conflict.
+ *
+ * When our bundle is the adapter in use and the standalone plugin is active too, its autoloader
+ * would see a McpAdapter declared outside its own directory and show a red "Another version of MCP
+ * Adapter is already loaded" notice. It has a documented off switch, WP_MCP_AUTOLOAD set to false,
+ * which makes its autoloader step aside and leave the classes to the copy already loaded. Only
+ * called on the path where our copy is the one committed, and never overrides a value the site
+ * already set.
+ *
+ * @return void
+ */
+function aafm_maybe_disable_standalone_adapter_autoload(): void {
+	if ( defined( 'WP_MCP_AUTOLOAD' ) ) {
+		return;
+	}
+
+	$active  = (array) get_option( 'active_plugins', array() );
+	$network = is_multisite() ? (array) get_site_option( 'active_sitewide_plugins', array() ) : array();
+
+	if ( aafm_standalone_adapter_plugin_active( $active, $network ) ) {
+		define( 'WP_MCP_AUTOLOAD', false ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- constant owned by the mcp-adapter plugin, read by its autoloader.
+	}
+}
+
+/**
  * Load our bundled adapter at plugin-include time, unless another copy already owns McpAdapter.
  *
  * Entry point for the plugin file. With another copy declared first (the standalone plugin loading
@@ -374,6 +415,7 @@ function aafm_load_bundled_adapter(): bool {
 		return false;
 	}
 
+	aafm_maybe_disable_standalone_adapter_autoload();
 	aafm_register_adapter_autoloader();
 	aafm_eager_load_adapter();
 

@@ -434,6 +434,26 @@ function aafm_suppress_one_deprecation_trigger(): bool {
 }
 
 /**
+ * Load the plugin's Composer autoloader unless another copy of the adapter owns McpAdapter.
+ *
+ * That autoloader maps the WP\MCP\ and WP\McpSchema\ namespaces to our bundle. With another copy
+ * loaded, registering it would let a class that copy has not declared yet resolve from our files,
+ * which is the version mix aafm_load_bundled_adapter() exists to prevent. Nothing else the plugin
+ * needs comes from it: its own classes are required by path.
+ *
+ * @return bool True when the autoloader was loaded.
+ */
+function aafm_load_vendor_autoloader(): bool {
+	if ( aafm_adapter_declared_elsewhere() ) {
+		return false;
+	}
+
+	require_once dirname( __DIR__ ) . '/vendor/autoload.php';
+
+	return true;
+}
+
+/**
  * Load our bundled adapter at plugin-include time, unless another copy already owns McpAdapter.
  *
  * Entry point for the plugin file. With another copy declared first (the standalone plugin loading
@@ -610,16 +630,17 @@ function aafm_adapter_file_applies_tools_list_filter( string $file ): bool {
  *
  * Reflects the loaded WP\MCP\Handlers\Tools\ToolsHandler (the class that dispatches tools/list) to
  * its source file and asserts that file applies the mcp_adapter_tools_list filter. Fails safe
- * (returns false) when the handler class is not loaded, its file cannot be resolved or read, or the
- * filter call is absent. Uses class_exists(..., false) so a missing handler is treated as "gate
- * absent" rather than triggering an autoload that could mask the very substitution we are checking.
+ * (returns false) when the handler class cannot be found, its file cannot be resolved or read, or
+ * the filter call is absent. When our bundle is loaded the handler is already declared by the eager
+ * load, so nothing is resolved here. When another copy owns McpAdapter we declared nothing, so the
+ * handler is resolved through that copy's own autoloader and checked there.
  *
  * @return bool True when the loaded tools/list handler applies the capability filter.
  */
 function aafm_adapter_capability_gate_present(): bool {
 	$handler = 'WP\\MCP\\Handlers\\Tools\\ToolsHandler';
 
-	if ( ! class_exists( $handler, false ) ) {
+	if ( ! class_exists( $handler ) ) {
 		return false;
 	}
 

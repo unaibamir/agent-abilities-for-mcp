@@ -35,6 +35,15 @@ function is_multisite() {
 
 if ( 'foreign' === $argv[1] ) {
 	require __DIR__ . '/McpAdapter.php';
+
+	// The other copy's own autoloader resolves the rest of its classes lazily.
+	spl_autoload_register(
+		static function ( $class_name ) {
+			if ( 'WP\\MCP\\Handlers\\Tools\\ToolsHandler' === $class_name ) {
+				require __DIR__ . '/ToolsHandler.php';
+			}
+		}
+	);
 }
 
 $before = count( spl_autoload_functions() );
@@ -43,11 +52,18 @@ require AAFM_PLUGIN_DIR . 'includes/adapter-loader.php';
 
 $loaded = aafm_load_bundled_adapter();
 
+$after_loader = count( spl_autoload_functions() );
+$vendor       = aafm_load_vendor_autoloader();
+$after_vendor = count( spl_autoload_functions() );
+
 echo json_encode(
 	array(
 		'loaded'        => $loaded,
-		'autoloaders'   => count( spl_autoload_functions() ) - $before,
-		'tools_handler' => class_exists( 'WP\\MCP\\Handlers\\Tools\\ToolsHandler', false ),
+		'autoloaders'   => $after_loader - $before,
+		'vendor_loaded' => $vendor,
+		'vendor_added'  => $after_vendor - $after_loader,
+		'gate_present'  => aafm_adapter_capability_gate_present(),
+		'tools_handler' => class_exists( 'WP\\MCP\\Core\\McpServer', false ),
 		'schema_loaded' => class_exists( 'WP\\McpSchema\\Schema', false ),
 		'version'       => \WP\MCP\Core\McpAdapter::VERSION,
 		'autoload_const' => defined( 'WP_MCP_AUTOLOAD' ) ? WP_MCP_AUTOLOAD : 'undefined',

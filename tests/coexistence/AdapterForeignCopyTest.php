@@ -51,6 +51,22 @@ final class AdapterForeignCopyTest extends TestCase {
 		$this->assertSame( '0.7.1', $result['version'], 'The foreign McpAdapter stays the one in use.' );
 	}
 
+	public function test_foreign_copy_gets_no_vendor_autoloader_and_its_gate_is_still_checked(): void {
+		$result = $this->run_loader( 'foreign' );
+
+		$this->assertFalse( $result['vendor_loaded'], 'Our Composer autoloader maps WP\\MCP\\ to our bundle, so it must stay unloaded.' );
+		$this->assertSame( 0, $result['vendor_added'] );
+		$this->assertTrue( $result['gate_present'], 'The gate check must resolve the handler through the other copy.' );
+	}
+
+	public function test_our_copy_loads_the_vendor_autoloader_and_passes_its_own_gate_check(): void {
+		$result = $this->run_loader( 'none' );
+
+		$this->assertTrue( $result['vendor_loaded'] );
+		$this->assertGreaterThan( 0, $result['vendor_added'] );
+		$this->assertTrue( $result['gate_present'] );
+	}
+
 	public function test_foreign_copy_still_gets_the_capability_gate_guard(): void {
 		$result = $this->run_loader( 'foreign' );
 

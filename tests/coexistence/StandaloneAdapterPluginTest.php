@@ -3,7 +3,7 @@
  * Coexistence: the standalone `mcp-adapter` plugin.
  *
  * The standalone WordPress/mcp-adapter *plugin* bundles the same wordpress/mcp-adapter library we
- * do (this plugin's own copy is 0.6.1; the standalone plugin's exact version is not tracked here
+ * do (this plugin's own copy is 0.7.0; the standalone plugin's exact version is not tracked here
  * and does not need to match ours for this collision to reproduce), but its main file
  * `require_once`s includes/Autoloader.php UNCONDITIONALLY - a
  * plain require with no class_exists guard - which declares WP\MCP\Autoloader. Before the fix, our
@@ -71,9 +71,9 @@ final class StandaloneAdapterPluginTest extends TestCase {
 			'Eager load must NOT pre-declare WP\\MCP\\Plugin.'
 		);
 
-		// But our runtime adapter IS committed to our 0.6.1 copy (the win we must not lose).
+		// But our runtime adapter IS committed to our 0.7.0 copy (the win we must not lose).
 		$this->assertTrue( class_exists( \WP\MCP\Core\McpAdapter::class, false ) );
-		$this->assertSame( '0.6.1', \WP\MCP\Core\McpAdapter::VERSION );
+		$this->assertSame( '0.7.0', \WP\MCP\Core\McpAdapter::VERSION );
 	}
 
 	/**

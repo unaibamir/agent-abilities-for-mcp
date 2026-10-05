@@ -9,12 +9,18 @@
  * that race, and our floor check then rejects the loaded version - so our /mcp route never
  * registers (site-wide 404 for our endpoint).
  *
- * Our copy is 0.6.1 and we MUST run it: 0.4.1 lacks the mcp_adapter_tools_list filter, our
- * request-time per-connection capability gate, so running on it would be a silent security
- * regression. The public McpAdapter API is additive between 0.4.1 and 0.5.0. Whether that same
- * claim holds through 0.6.1 - specifically for McpValidator's public MIME-validation methods,
- * which the adapter's own changelog says were removed - is verified directly against a simulated
- * sibling in tests/coexistence/McpValidatorRemovedMethodsTest.php, not assumed here.
+ * Our copy is 0.7.0 and we MUST run it when we load first: 0.4.1 lacks the mcp_adapter_tools_list
+ * filter, our request-time per-connection capability gate, so running on it would be a silent
+ * security regression. The public McpAdapter API is additive between 0.4.1 and 0.5.0. Whether that
+ * same claim holds through later versions - specifically for McpValidator's public MIME-validation
+ * methods, which the adapter's own changelog says were removed - is verified directly against a
+ * simulated sibling in tests/coexistence/McpValidatorRemovedMethodsTest.php, not assumed here.
+ *
+ * The opposite order is handled too. When another copy has already declared McpAdapter by the time
+ * this file runs (the standalone mcp-adapter plugin loading first, or a sibling that touches the
+ * adapter at include time), PHP is committed to that copy. Declaring our classes under it would mix
+ * two versions in one request, so aafm_load_bundled_adapter() declares nothing and registers no
+ * autoloader, and the version floor in bootstrap.php judges the copy that won.
  *
  * The fix: register a PREPENDED autoloader for the WP\MCP\ namespace resolving from our bundled
  * copy, then EAGER-DECLARE every adapter class from that copy (aafm_eager_load_adapter()), both at
@@ -156,7 +162,7 @@ function aafm_adapter_path_to_class( string $path, string $base, string $prefix 
  * (WP\MCP\Core\*, Handlers\*, Domain\*, Transport\*, Infrastructure\*, Servers\*, Abilities\*) never
  * references either of them, so we gain nothing by pre-declaring them and lose coexistence by doing
  * so. We therefore skip them in the eager load: the standalone plugin's unguarded require then
- * declares its OWN copy with no collision, while our eager load still commits PHP to our 0.6.1
+ * declares its OWN copy with no collision, while our eager load still commits PHP to our 0.7.0
  * McpAdapter (the class that carries the per-connection capability gate). This does NOT weaken the
  * Rank Math case: Rank Math bundles an older adapter as a plain Composer LIBRARY (lazy autoloader, no
  * unguarded plugin-shell require) and loads after us, so our eager McpAdapter still wins that race.
@@ -253,7 +259,7 @@ function aafm_register_adapter_autoloader(): void {
  * request. The win is eager-declare vs lazy-autoload, not folder ordering: plugins load in
  * activation order (the active_plugins option), not alphabetically, but a sibling that ships the
  * adapter as a plain Composer library only declares its classes on first reference, whereas we
- * declare all of our 0.6.1 WP\MCP\ classes here, during our plugin-include phase. That makes PHP
+ * declare all of our 0.7.0 WP\MCP\ classes here, during our plugin-include phase. That makes PHP
  * commit to our copy; a later sibling that references the same class then transparently uses ours. The public
  * McpAdapter API is additive across 0.4.1 and 0.5.0, so a 0.4.1-expecting consumer keeps working -
  * and we keep the per-connection capability gate that 0.4.1 lacks. A 0.5.0-expecting consumer that
@@ -280,7 +286,7 @@ function aafm_register_adapter_autoloader(): void {
  * only a handful of require_once calls on already-bundled files.
  *
  * Inverse-version trade: this override is version-agnostic - it forces ANY later-loading sibling
- * (older OR newer copy) onto our 0.6.1, since PHP commits to whichever copy is declared first. The
+ * (older OR newer copy) onto our 0.7.0, since PHP commits to whichever copy is declared first. The
  * floor/upper-bound check and "too old"/"too new" notices in bootstrap.php are the fallback for the
  * residual case where an incompatible copy is declared by a plugin that loads BEFORE us.
  *
@@ -299,13 +305,79 @@ function aafm_eager_load_adapter(): void {
 
 	aafm_eager_require_adapter_dir( AAFM_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/' );
 
-	// Now that a copy is committed, guard the request-time per-connection capability gate. The
-	// version floor (bootstrap.php) only proves the copy REPORTS an in-range version; it cannot
-	// prove that copy still APPLIES the mcp_adapter_tools_list filter our gate rides on. Priority 5
-	// runs before server.php registers aafm_register_mcp_server (priority 10) on mcp_adapter_init,
-	// so a stripped copy is caught before create_server ever registers the /mcp route. See
-	// aafm_guard_adapter_capability_gate().
+	aafm_hook_adapter_capability_gate_guard();
+}
+
+/**
+ * Guard the request-time per-connection capability gate of whichever adapter copy is loaded.
+ *
+ * The version floor (bootstrap.php) only proves the copy REPORTS an in-range version; it cannot
+ * prove that copy still APPLIES the mcp_adapter_tools_list filter our gate rides on. Priority 5
+ * runs before server.php registers aafm_register_mcp_server (priority 10) on mcp_adapter_init, so
+ * a stripped copy is caught before create_server ever registers the /mcp route. See
+ * aafm_guard_adapter_capability_gate().
+ *
+ * @return void
+ */
+function aafm_hook_adapter_capability_gate_guard(): void {
 	add_action( 'mcp_adapter_init', 'aafm_guard_adapter_capability_gate', 5 );
+}
+
+/**
+ * Whether the McpAdapter declared in this request came from a copy other than our bundle.
+ *
+ * PHP holds one declaration of WP\MCP\Core\McpAdapter per request. When one exists before our
+ * loader runs and its file is outside our bundle, another plugin's copy won the race and every
+ * other WP\MCP\ class has to come from that same copy. A class that is not declared at all, or
+ * one declared from our own bundle, is not foreign.
+ *
+ * @param string $adapter_class Fully-qualified name of the class to inspect.
+ * @return bool True when that class is declared and its file lies outside our bundled adapter.
+ */
+function aafm_adapter_declared_elsewhere( string $adapter_class = 'WP\\MCP\\Core\\McpAdapter' ): bool {
+	if ( ! class_exists( $adapter_class, false ) ) {
+		return false;
+	}
+
+	$file = ( new ReflectionClass( $adapter_class ) )->getFileName();
+	$base = realpath( AAFM_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes' );
+
+	if ( ! is_string( $file ) || false === $base ) {
+		return true;
+	}
+
+	$real = realpath( $file );
+	if ( false === $real ) {
+		return true;
+	}
+
+	$prefix = rtrim( $base, '/\\' ) . DIRECTORY_SEPARATOR;
+
+	return 0 !== strncmp( $real, $prefix, strlen( $prefix ) );
+}
+
+/**
+ * Load our bundled adapter at plugin-include time, unless another copy already owns McpAdapter.
+ *
+ * Entry point for the plugin file. With another copy declared first (the standalone plugin loading
+ * ahead of us, or a sibling that touches the adapter at include time) nothing of ours is declared
+ * and no autoloader is registered, so every WP\MCP\ class comes from that one copy. Otherwise we
+ * commit PHP to our copy as before. The capability-gate guard is hooked either way, since it checks
+ * whichever copy ended up loaded.
+ *
+ * @return bool True when our bundle was loaded, false when another copy was already declared.
+ */
+function aafm_load_bundled_adapter(): bool {
+	if ( aafm_adapter_declared_elsewhere() ) {
+		aafm_hook_adapter_capability_gate_guard();
+
+		return false;
+	}
+
+	aafm_register_adapter_autoloader();
+	aafm_eager_load_adapter();
+
+	return true;
 }
 
 /**

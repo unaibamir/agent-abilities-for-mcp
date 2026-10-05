@@ -28,6 +28,9 @@
 	     namespace (some intentionally duplicated) to reproduce the standalone mcp-adapter plugin's
 	     unguarded shell-class declaration in both load orders. Throwaway fixtures, never shipped. -->
 	<exclude-pattern>*/tests/Fixtures/AdapterShell/*</exclude-pattern>
+	<!-- The foreign-copy fixture declares a McpAdapter in the shared WP\MCP\Core namespace and stubs
+	     a few WordPress functions so the loader can run in a bare PHP process. Throwaway, never shipped. -->
+	<exclude-pattern>*/tests/Fixtures/AdapterForeign/*</exclude-pattern>
 	<!-- The TEC/Event Tickets stub declares the THIRD-PARTY globals (Tribe__Events__Main,
 	     tribe_events(), Tribe__Tickets__Tickets, etc.) this plugin's own TEC integration calls -
 	     names it cannot prefix without breaking the very calls it stands in for, and functions

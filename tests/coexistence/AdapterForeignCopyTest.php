@@ -111,4 +111,30 @@ final class AdapterForeignCopyTest extends TestCase {
 		$this->assertFalse( aafm_standalone_adapter_plugin_active( array( 'mcp-adapter/other.php', 'x/mcp-adapter/mcp-adapter.php' ), array() ) );
 		$this->assertFalse( aafm_standalone_adapter_plugin_active( array(), array() ) );
 	}
+
+	public function test_deprecation_filter_is_only_hooked_when_our_copy_loads(): void {
+		$ours    = $this->run_loader( 'none' );
+		$foreign = $this->run_loader( 'foreign' );
+
+		$this->assertContains( 'deprecated_function_run:aafm_quiet_bundled_adapter_deprecation', $ours['actions'] );
+		$this->assertNotContains( 'deprecated_function_run:aafm_quiet_bundled_adapter_deprecation', $foreign['actions'] );
+	}
+
+	public function test_adapter_deprecation_trigger_is_silenced_once_and_only_for_the_adapter(): void {
+		$hook = 'deprecated_function_trigger_error';
+
+		// A different deprecated function is left alone.
+		aafm_quiet_bundled_adapter_deprecation( 'some_other_function' );
+		$this->assertFalse( has_filter( $hook, 'aafm_suppress_one_deprecation_trigger' ) );
+
+		// The adapter's own notice for our copy turns off the one trigger that follows.
+		aafm_quiet_bundled_adapter_deprecation( \WP\MCP\Core\McpAdapter::class );
+		$this->assertNotFalse( has_filter( $hook, 'aafm_suppress_one_deprecation_trigger' ) );
+
+		remove_all_filters( $hook );
+		aafm_quiet_bundled_adapter_deprecation( \WP\MCP\Core\McpAdapter::class );
+		$this->assertFalse( apply_filters( $hook, true ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- core hook, held in a variable.
+		$this->assertFalse( has_filter( $hook, 'aafm_suppress_one_deprecation_trigger' ), 'The one-shot filter must remove itself.' );
+		$this->assertTrue( apply_filters( $hook, true ), 'The next deprecation is not silenced.' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- core hook, held in a variable.
+	}
 }

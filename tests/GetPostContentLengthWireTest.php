@@ -72,7 +72,7 @@ final class GetPostContentLengthWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$result = $handler->call_tool(
 			array(
@@ -86,7 +86,7 @@ final class GetPostContentLengthWireTest extends TestCase {
 		);
 
 		$this->assertNotInstanceOf(
-			\WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class,
+			\AAFM\Tests\Support\McpProtocolError::class,
 			$result,
 			'include_content:false must be an accepted parameter on the real wire, not rejected by a closed schema.'
 		);

@@ -79,7 +79,7 @@ final class AllowlistWireTest extends TestCase {
 		// than the server-construction-time exclusion AllowlistSweepTest already covers directly.
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		update_option(
 			'aafm_ability_allowlist_overrides',
@@ -125,7 +125,7 @@ final class AllowlistWireTest extends TestCase {
 		// MCP protocol reports a tool EXECUTION failure as a successful JSON-RPC response with
 		// CallToolResult.isError=true, not a JSONRPCErrorResponse (that shape is reserved for
 		// protocol-level errors such as an unknown tool name).
-		$this->assertInstanceOf( \WP\McpSchema\Server\Tools\DTO\CallToolResult::class, $result );
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $result );
 		$this->assertTrue(
 			$result->getIsError(),
 			'A scoped-out ability must be refused on tools/call even though the underlying WordPress capability would allow it.'
@@ -154,7 +154,7 @@ final class AllowlistWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$result = $handler->call_tool(
 			array(
@@ -166,6 +166,6 @@ final class AllowlistWireTest extends TestCase {
 			),
 			'req-allowlist-wire-2'
 		);
-		$this->assertInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $result );
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $result );
 	}
 }

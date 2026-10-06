@@ -82,7 +82,7 @@ final class TecTicketsWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$result = $handler->call_tool(
 			array(
@@ -92,7 +92,7 @@ final class TecTicketsWireTest extends TestCase {
 			'req-tec-tickets-wire-1'
 		);
 
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $result );
 		$structured = $result->getStructuredContent();
 		$this->assertCount( 1, $structured['tickets'] );
 		$this->assertSame( 'Wire GA', $structured['tickets'][0]['name'] );

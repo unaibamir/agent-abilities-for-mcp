@@ -37,7 +37,8 @@ use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\TestCase;
 use WP\MCP\Domain\Tools\McpTool;
 use WP\MCP\Domain\Utils\ContentBlockHelper;
-use WP\McpSchema\Server\Tools\DTO\CallToolResult;
+use AAFM\Tests\Support\McpToolsHandlerShim;
+use WP\McpSchema\Record\CallToolResult;
 
 final class ReservedMetaKeyRouteTest extends TestCase {
 
@@ -68,10 +69,10 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 	/**
 	 * Reproduce the adapter's permission branch and return the wire body a client would receive.
 	 *
-	 * Mirrors ToolsHandler::handle_tools_call() lines 149-166 plus create_error_result(): the
+	 * Mirrors ToolsHandler::call_tool()'s permission branch plus create_error_result(): the
 	 * permission verdict goes through McpTool so AbilityArgumentNormalizer runs exactly as it does
 	 * in production, a WP_Error's own message is echoed, and anything else becomes the hardcoded
-	 * literal. The result is the real CallToolResult DTO, so what these tests compare is the
+	 * literal. The result is the real CallToolResult record, so what these tests compare is the
 	 * serialized body and not a PHP return value.
 	 *
 	 * @param string              $ability Ability name.
@@ -89,13 +90,15 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 			$message = $permission->get_error_message();
 		}
 
-		return CallToolResult::fromArray(
+		$result = McpToolsHandlerShim::schema()->fromArray(
+			CallToolResult::class,
 			array(
-				'content'           => array( ContentBlockHelper::text( $message ) ),
-				'structuredContent' => null,
-				'isError'           => true,
+				'content' => array( ContentBlockHelper::text( $message ) ),
+				'isError' => true,
 			)
-		)->toArray();
+		);
+
+		return json_decode( (string) wp_json_encode( $result ), true );
 	}
 
 	/**

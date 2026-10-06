@@ -87,7 +87,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$result = $handler->call_tool(
 			array(
@@ -100,7 +100,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 			'req-page-builder-wire-1'
 		);
 
-		$this->assertInstanceOf( \WP\McpSchema\Server\Tools\DTO\CallToolResult::class, $result );
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $result );
 		$this->assertTrue(
 			$result->getIsError(),
 			'A builder-owned post must be refused on a real tools/call, even though the caller holds edit_posts.'
@@ -126,7 +126,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$result = $handler->call_tool(
 			array(
@@ -139,7 +139,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 			'req-page-builder-wire-unknown'
 		);
 
-		$this->assertInstanceOf( \WP\McpSchema\Server\Tools\DTO\CallToolResult::class, $result );
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $result );
 		$this->assertTrue( $result->getIsError() );
 		$content = $result->getContent();
 		$this->assertNotEmpty( $content );
@@ -165,7 +165,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter, array( 'aafm/update-post', 'aafm/update-post-meta' ) );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$clear = $handler->call_tool(
 			array(
@@ -216,7 +216,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter, array( 'aafm/tec-update-event' ) );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$result = $handler->call_tool(
 			array(
@@ -252,7 +252,7 @@ final class PageBuilderGuardWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_single_ability_server( $adapter, array( 'aafm/geodirectory-update-listing' ) );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$result = $handler->call_tool(
 			array(

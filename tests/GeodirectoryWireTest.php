@@ -89,7 +89,7 @@ final class GeodirectoryWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_geodirectory_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$create_result = $handler->call_tool(
 			array(
@@ -101,7 +101,7 @@ final class GeodirectoryWireTest extends TestCase {
 			),
 			'req-geodir-create-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $create_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $create_result );
 		$listing_id = (int) ( $create_result->getStructuredContent()['listing_id'] ?? 0 );
 		$this->assertGreaterThan( 0, $listing_id );
 
@@ -112,7 +112,7 @@ final class GeodirectoryWireTest extends TestCase {
 			),
 			'req-geodir-get-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $get_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $get_result );
 		$this->assertSame( 'Wire City', $get_result->getStructuredContent()['city'] ?? null );
 
 		$list_result = $handler->call_tool(
@@ -122,7 +122,7 @@ final class GeodirectoryWireTest extends TestCase {
 			),
 			'req-geodir-list-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $list_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $list_result );
 		$ids = wp_list_pluck( $list_result->getStructuredContent()['listings'] ?? array(), 'listing_id' );
 		$this->assertContains( $listing_id, $ids );
 
@@ -136,7 +136,7 @@ final class GeodirectoryWireTest extends TestCase {
 			),
 			'req-geodir-update-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $update_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $update_result );
 		$this->assertSame( 'Wire Test Listing Updated', $update_result->getStructuredContent()['title'] ?? null );
 	}
 }

@@ -1162,32 +1162,44 @@ function aafm_reject_scalar_mcp_body( $result, $server, $request ) {
  * The adapter advertises prompts/resources/tools capabilities by default, but this plugin only
  * implements tools - every ability is a tool, and there is no resource or prompt provider. A
  * truthful capability set keeps a client from issuing resources/list or prompts/list calls that
- * could only error. Rebuilds the DTO from its array form with the two unimplemented keys removed,
- * leaving `tools` intact. Defensive: any non-DTO/non-array shape is returned untouched.
+ * could only error. Rebuilds the result with the two unimplemented keys removed, leaving `tools`
+ * intact, through whichever shape the adapter passes:
  *
- * @param mixed $result The InitializeResult DTO from the adapter.
- * @param mixed $server  The MCP server instance (unused).
+ * - 0.7.0 passes a schema Record and the selected Schema; the result is rebuilt through that
+ *   Schema, the way the adapter documents for this filter.
+ * - 0.6.1 passes a DTO with toArray() and a static fromArray(); it is rebuilt from its own class.
+ *
+ * Defensive: any other shape, or a result that cannot be rebuilt, is returned untouched.
+ *
+ * @param mixed $result The initialize result from the adapter.
+ * @param mixed $server The MCP server instance (unused).
+ * @param mixed $schema The selected schema (0.7.0 and later; absent on 0.6.1).
  * @return mixed The (possibly rebuilt) initialize result.
  */
-function aafm_filter_initialize_capabilities( $result, $server = null ) {
+function aafm_filter_initialize_capabilities( $result, $server = null, $schema = null ) {
 	unset( $server );
 
-	if ( ! is_object( $result ) || ! method_exists( $result, 'toArray' ) ) {
+	if ( ! is_object( $result ) ) {
 		return $result;
 	}
 
-	$data = $result->toArray();
-	if ( ! is_array( $data ) || ! isset( $data['capabilities'] ) || ! is_array( $data['capabilities'] ) ) {
+	$via_schema = is_object( $schema ) && method_exists( $schema, 'fromArray' ) && $result instanceof \JsonSerializable;
+	if ( ! $via_schema && ! ( method_exists( $result, 'toArray' ) && method_exists( $result, 'fromArray' ) ) ) {
 		return $result;
 	}
 
-	unset( $data['capabilities']['resources'], $data['capabilities']['prompts'] );
+	try {
+		$data = $via_schema ? json_decode( (string) wp_json_encode( $result ), true ) : $result->toArray();
+		if ( ! is_array( $data ) || ! isset( $data['capabilities'] ) || ! is_array( $data['capabilities'] ) ) {
+			return $result;
+		}
 
-	if ( ! class_exists( \WP\McpSchema\Common\Protocol\DTO\InitializeResult::class ) ) {
+		unset( $data['capabilities']['resources'], $data['capabilities']['prompts'] );
+
+		return $via_schema ? $schema->fromArray( get_class( $result ), $data ) : call_user_func( array( get_class( $result ), 'fromArray' ), $data );
+	} catch ( \Throwable $e ) {
 		return $result;
 	}
-
-	return \WP\McpSchema\Common\Protocol\DTO\InitializeResult::fromArray( $data );
 }
 
 /**
@@ -1665,7 +1677,7 @@ function aafm_register_mcp_server( $adapter ): void {
 	add_filter( 'mcp_adapter_tools_list', 'aafm_filter_mcp_tools_list', 5, 2 );
 
 	// Advertise only the capabilities we actually implement (tools); strip prompts/resources.
-	add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 2 );
+	add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 3 );
 
 	// Wrap a bridged ability's bare top-level list result under a `data` key (see
 	// aafm_filter_bridged_tool_call_result() in bridge.php). The raw-object check is not here: the

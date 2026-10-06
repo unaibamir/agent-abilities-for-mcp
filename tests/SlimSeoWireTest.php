@@ -86,7 +86,7 @@ final class SlimSeoWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_slim_seo_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$get_result = $handler->call_tool(
 			array(
@@ -95,7 +95,7 @@ final class SlimSeoWireTest extends TestCase {
 			),
 			'req-slim-seo-get-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $get_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $get_result );
 		$this->assertSame( 'Old title', $get_result->getStructuredContent()['title'] ?? null );
 
 		$update_result = $handler->call_tool(
@@ -108,7 +108,7 @@ final class SlimSeoWireTest extends TestCase {
 			),
 			'req-slim-seo-update-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $update_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $update_result );
 		$this->assertSame( 'New title', $update_result->getStructuredContent()['title'] ?? null );
 
 		$stored = get_post_meta( $post->ID, 'slim_seo', true );
@@ -121,7 +121,7 @@ final class SlimSeoWireTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		$this->register_enabled( array( 'aafm/slim-seo-get-post', 'aafm/slim-seo-update-post' ) );
 		$this->acting_as( 'editor' );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $this->build_slim_seo_server( \WP\MCP\Core\McpAdapter::instance() ) );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $this->build_slim_seo_server( \WP\MCP\Core\McpAdapter::instance() ) );
 
 		$bodies = array();
 		foreach ( array( 'req-slim-seo-status-1', 'req-slim-seo-status-2' ) as $request_id ) {

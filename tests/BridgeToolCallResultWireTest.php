@@ -15,8 +15,8 @@ declare( strict_types=1 );
 namespace AAFM\Tests;
 
 use WP\MCP\Core\McpServer;
-use WP\MCP\Handlers\Tools\ToolsHandler;
-use WP\McpSchema\Server\Tools\DTO\CallToolResult;
+use AAFM\Tests\Support\McpToolsHandlerShim;
+use AAFM\Tests\Support\McpToolCallOutcome;
 
 final class BridgeToolCallResultWireTest extends TestCase {
 
@@ -77,7 +77,7 @@ final class BridgeToolCallResultWireTest extends TestCase {
 	 * Build a throwaway single-ability MCP server and drive a real tools/call against it.
 	 *
 	 * @param string $ability_name The fixture ability's registered name.
-	 * @return array{0:CallToolResult,1:string}
+	 * @return array{0:McpToolCallOutcome,1:string}
 	 */
 	private function call_it_for_real( string $ability_name ): array {
 		$server = new McpServer(
@@ -92,11 +92,11 @@ final class BridgeToolCallResultWireTest extends TestCase {
 			null,
 			array( $ability_name )
 		);
-		$tools  = $server->get_tools();
+		$tools  = $server->get_tools( \AAFM\Tests\Support\McpToolsHandlerShim::schema() );
 		$this->assertNotEmpty( $tools, "The fixture ability {$ability_name} must resolve to at least one registered MCP tool." );
 		$wire_tool_name = (string) array_key_first( $tools );
 
-		$handler = new ToolsHandler( $server );
+		$handler = new McpToolsHandlerShim( $server );
 		return array(
 			$handler->call_tool(
 				array(
@@ -109,25 +109,21 @@ final class BridgeToolCallResultWireTest extends TestCase {
 	}
 
 	/**
-	 * Step 1's control: prove the wire path is genuinely reachable BEFORE trusting any assertion
-	 * below. Without add_filter(), a bridged bare-list result must reach the wire UNWRAPPED - if
-	 * this test fails (the result comes back already wrapped, or the filter fires anyway), every
-	 * other test in this file is not proving what it claims to.
+	 * The control: prove the wire path is genuinely reachable BEFORE trusting any assertion
+	 * below. Without add_filter(), a bridged bare-list result reaches the adapter UNWRAPPED, and
+	 * adapter 0.7.0 cannot project a list as structuredContent (it must be an object), so building
+	 * the result record throws. If this test stops throwing, the wrapping tests below are not
+	 * proving what they claim.
 	 */
-	public function test_control_a_bare_list_is_not_wrapped_when_the_filter_is_not_registered(): void {
+	public function test_control_a_bare_list_is_rejected_by_the_adapter_when_the_filter_is_not_registered(): void {
 		$this->register_fixture_category();
 		$this->register_ability( self::LIST_ABILITY, static fn() => array( 'a', 'b', 'c' ) );
 		// Deliberately NOT registering aafm_filter_bridged_tool_call_result here.
 
-		list( $response, ) = $this->call_it_for_real( self::LIST_ABILITY );
+		$this->expectException( \WP\McpSchema\Exception\ValidationException::class );
+		$this->expectExceptionMessage( 'structuredContent' );
 
-		$this->assertInstanceOf( CallToolResult::class, $response );
-		$this->assertFalse( $response->getIsError(), 'An honest list result is not an error.' );
-		$this->assertSame(
-			array( 'a', 'b', 'c' ),
-			$response->getStructuredContent(),
-			'CONTROL: with the filter unregistered, a bridged bare list must reach the wire UNWRAPPED. If this assertion fails, the filter is firing from some other registration path and every "real wire" claim in this file is unproven.'
-		);
+		$this->call_it_for_real( self::LIST_ABILITY );
 	}
 
 	public function test_a_bare_top_level_list_is_wrapped_under_data_on_the_real_wire(): void {
@@ -137,29 +133,46 @@ final class BridgeToolCallResultWireTest extends TestCase {
 
 		list( $response, ) = $this->call_it_for_real( self::LIST_ABILITY );
 
-		$this->assertInstanceOf( CallToolResult::class, $response );
+		$this->assertInstanceOf( McpToolCallOutcome::class, $response );
 		$this->assertFalse( $response->getIsError() );
 		$this->assertSame( array( 'data' => array( 'a', 'b', 'c' ) ), $response->getStructuredContent() );
 	}
 
-	public function test_a_native_tools_list_result_is_never_wrapped_on_the_real_wire(): void {
+	public function test_a_native_tools_bare_list_result_is_left_unwrapped_on_the_real_wire(): void {
 		add_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result', 10, 4 );
 		$this->register_fixture_category();
 		$this->register_ability( self::NATIVE_ABILITY, static fn() => array( 1, 2, 3 ) );
 
-		list( $response, $wire_tool_name ) = $this->call_it_for_real( self::NATIVE_ABILITY );
-
+		// The wire tool name is resolved first so the test proves the fixture is native.
+		$server         = new McpServer(
+			'aafm-wire-shape-test-server',
+			'aafm-wire-shape-test/v1',
+			'aafm-wire-shape-test',
+			'AAFM wire shape test server',
+			'Throwaway server for the bridged tools/call wire shape tests.',
+			'0.0.0',
+			array(),
+			null,
+			null,
+			array( self::NATIVE_ABILITY )
+		);
+		$wire_tool_name = (string) array_key_first( $server->get_tools( McpToolsHandlerShim::schema() ) );
 		$this->assertStringStartsNotWith(
 			'aafm-bridge-',
 			$wire_tool_name,
 			'This fixture must resolve to a native (non-bridge-prefixed) wire tool name for the test to prove what it claims.'
 		);
-		$this->assertInstanceOf( CallToolResult::class, $response );
-		$this->assertFalse( $response->getIsError() );
-		$this->assertSame(
-			array( 1, 2, 3 ),
-			$response->getStructuredContent(),
-			'A native ability\'s bare-list result must never be wrapped, even with the bridge filter registered.'
+
+		// A wrapped list would build a valid result. Left alone, the adapter rejects the bare list,
+		// which is how the test shows the bridge filter did not touch a native ability's result.
+		$this->expectException( \WP\McpSchema\Exception\ValidationException::class );
+		$this->expectExceptionMessage( 'structuredContent' );
+
+		( new McpToolsHandlerShim( $server ) )->call_tool(
+			array(
+				'name'      => $wire_tool_name,
+				'arguments' => array(),
+			)
 		);
 	}
 
@@ -173,7 +186,7 @@ final class BridgeToolCallResultWireTest extends TestCase {
 
 		list( $response, ) = $this->call_it_for_real( self::ERROR_ABILITY );
 
-		$this->assertInstanceOf( CallToolResult::class, $response );
+		$this->assertInstanceOf( McpToolCallOutcome::class, $response );
 		$this->assertTrue( $response->getIsError(), 'A WP_Error execute() result must surface as a tool-call error on the real wire.' );
 
 		// "Passes through untouched" means the ORIGINAL vendor message survives, not merely that
@@ -219,7 +232,7 @@ final class BridgeToolCallResultWireTest extends TestCase {
 			$wire_tool_name,
 			'The rename filter must actually have applied for this test to prove what it claims.'
 		);
-		$this->assertInstanceOf( CallToolResult::class, $response );
+		$this->assertInstanceOf( McpToolCallOutcome::class, $response );
 		$this->assertFalse( $response->getIsError() );
 		$this->assertSame(
 			array( 'data' => array( 'x', 'y' ) ),

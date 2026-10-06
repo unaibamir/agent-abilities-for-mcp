@@ -96,24 +96,24 @@ function aafm_is_mcp_route( $route ): bool {
 /**
  * Upper bound (exclusive) for a compatible MCP adapter version.
  *
- * The plugin is built against the adapter's 0.6.x contract (create_server() signature,
- * initialize-response shape, tools-list filter), so it gates the loaded copy to the tested
- * range [floor, next-minor) and warns the operator otherwise.
+ * The plugin runs on the adapter's 0.6.1 and 0.7.x lines (create_server() signature,
+ * initialize-response shape, tools-list filter), so it gates the loaded copy to the tested range
+ * [floor, next-minor) and warns the operator otherwise. Code that touches an adapter detail that
+ * differs between the two lines (the initialize response, the deprecation notice, the standalone
+ * plugin's autoloader) handles both shapes.
  *
- * After the eager-load fix (see adapter-loader.php), our bundled copy is the one in use
- * whenever we load before the conflicting sibling - and because we sort alphabetically first
- * as "agent-abilities-for-mcp", that is the normal case. We deliberately OVERRIDE any
- * later-loading sibling's copy of ANY version (older or newer); the trade is that a sibling
- * bundling a newer adapter is forced onto our version, which is acceptable because the
- * adapter's public API is additive and stable across the versions we support.
+ * Our bundled copy is the one in use whenever it is declared first - see adapter-loader.php. A
+ * later-loading sibling's copy of ANY version is overridden by ours; the trade is that a sibling
+ * bundling a newer adapter is forced onto our version, which is acceptable because the adapter's
+ * public API is additive and stable across the versions we support. When another copy is declared
+ * before ours instead (the standalone plugin loading first), that copy is the one judged here.
  *
- * Consequently this floor/upper-bound check and the "too old" / "too new" notices below now
- * only fire in the residual case: an incompatible copy is declared by a plugin that loads
- * BEFORE us (an alphabetically-earlier folder), so its copy wins the class declaration before
- * our eager load runs. Bump the bound deliberately after verifying against a new adapter line.
+ * Consequently this floor/upper-bound check and the "too old" / "too new" notices below fire only
+ * when an incompatible copy is declared by a plugin that loads BEFORE us, so its copy wins the
+ * class declaration. Bump the bound deliberately after verifying against a new adapter line.
  */
 if ( ! defined( 'AAFM_MAX_ADAPTER_VERSION' ) ) {
-	define( 'AAFM_MAX_ADAPTER_VERSION', '0.7.0' );
+	define( 'AAFM_MAX_ADAPTER_VERSION', '0.8.0' );
 }
 
 /**
@@ -223,7 +223,7 @@ function aafm_notice_adapter_outdated(): void {
 /**
  * Admin notice: another plugin loaded an adapter NEWER than our tested upper bound.
  *
- * A 0.7+ adapter may have changed the create_server() signature or response shape the plugin is
+ * A 0.8+ adapter may have changed the create_server() signature or response shape the plugin is
  * built against, so it is disabled rather than risking a runtime break. Names the offending plugin
  * when it can be resolved, and reports the loaded vs maximum-supported versions. All output escaped.
  *

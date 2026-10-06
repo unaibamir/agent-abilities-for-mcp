@@ -5,7 +5,7 @@
   "license": "GPL-2.0-or-later",
   "require": {
     "php": ">=7.4",
-    "wordpress/mcp-adapter": "0.6.1"
+    "wordpress/mcp-adapter": "0.7.0"
   },
   "require-dev": {
     "yoast/phpunit-polyfills": "^4.0",

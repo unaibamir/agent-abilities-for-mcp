@@ -73,7 +73,7 @@ final class TecEventsWireTest extends TestCase {
 
 		$adapter = \WP\MCP\Core\McpAdapter::instance();
 		$server  = $this->build_server( $adapter );
-		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 
 		$create_result = $handler->call_tool(
 			array(
@@ -91,7 +91,7 @@ final class TecEventsWireTest extends TestCase {
 			),
 			'req-tec-events-wire-1'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $create_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $create_result );
 		$created = $create_result->getStructuredContent();
 		$this->assertSame( 'Wire Test Event', $created['event']['title'] );
 
@@ -102,7 +102,7 @@ final class TecEventsWireTest extends TestCase {
 			),
 			'req-tec-events-wire-2'
 		);
-		$this->assertNotInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $list_result );
+		$this->assertNotInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $list_result );
 		$listed = $list_result->getStructuredContent();
 		$this->assertSame( 1, $listed['total'] );
 	}

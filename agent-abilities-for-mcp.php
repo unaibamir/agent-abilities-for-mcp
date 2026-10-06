@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission controls, off by default, and a full audit log.
- * Version:           1.7.8
+ * Version:           1.7.9
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.7.8' );
+define( 'AAFM_VERSION', '1.7.9' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -32,7 +32,7 @@ define( 'AAFM_MIN_ADAPTER_VERSION', '0.6.1' );
 // plugins under the same WP\MCP\ namespace, but PHP can load only one McpAdapter per request:
 // whichever copy is declared first wins site-wide. A sibling shipping an older copy via a plain
 // Composer autoloader (confirmed: Rank Math SEO 0.4.1) can win that race and trip our floor check,
-// killing our /mcp route. We MUST run our own 0.6.1 (0.4.1 lacks the per-connection capability
+// killing our /mcp route. We MUST run our own 0.7.0 (0.4.1 lacks the per-connection capability
 // gate). A prepended autoloader alone is not enough - later plugins' Composer autoloaders also
 // prepend and leapfrog ours - so we EAGER-LOAD our copy: declare every WP\MCP\ class from our
 // bundle now, during the plugin-include phase. Declaring every class up front beats a sibling's
@@ -42,10 +42,10 @@ define( 'AAFM_MIN_ADAPTER_VERSION', '0.6.1' );
 // rely on winning a name sort.) The prepended autoloader (still registered first) resolves
 // interface/trait dependencies during the eager load and covers no-conflict installs. The
 // floor/notice logic in includes/bootstrap.php stays as the fallback for a sibling that eager-loads
-// before us and declares an incompatible copy first.
+// before us and declares an incompatible copy first. When another copy has already declared
+// McpAdapter by the time we get here, we declare nothing of ours, so two versions never mix.
 require_once AAFM_PLUGIN_DIR . 'includes/adapter-loader.php';
-aafm_register_adapter_autoloader();
-aafm_eager_load_adapter();
+aafm_load_bundled_adapter();
 
 // Stored plain-text sanitizing. First, because the audit log and the OAuth client registration
 // below both sanitize text they store, and both are required before aafm_bootstrap() runs. It
@@ -327,7 +327,7 @@ add_action( 'init', 'aafm_oauth_handle_authorize' );
  * @return void
  */
 function aafm_bootstrap() {
-	require_once AAFM_PLUGIN_DIR . 'vendor/autoload.php';
+	aafm_load_vendor_autoloader();
 	require_once AAFM_PLUGIN_DIR . 'includes/registry.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/helpers.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/wpml.php';

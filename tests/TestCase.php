@@ -17,6 +17,27 @@ use WP_UnitTestCase;
 abstract class TestCase extends WP_UnitTestCase {
 
 	/**
+	 * Ignore the adapter's bundled-copy deprecation notice.
+	 *
+	 * From 0.7.0 the adapter reports every request that runs it as a library instead of as the
+	 * standalone plugin, which is how this plugin ships it. The notice fires once, on the first
+	 * test that boots the REST server, so the unexpected-deprecation check would blame an
+	 * arbitrary test for it.
+	 *
+	 * @param string $function_name The deprecated function.
+	 * @param string $replacement   The replacement, if any.
+	 * @param string $version       The version that deprecated it.
+	 * @param string $message       Optional message.
+	 */
+	public function deprecated_function_run( $function_name, $replacement, $version, $message = '' ) {
+		if ( 'WP\\MCP\\Core\\McpAdapter' === $function_name ) {
+			return;
+		}
+
+		parent::deprecated_function_run( $function_name, $replacement, $version, $message );
+	}
+
+	/**
 	 * Reset plugin state before each test.
 	 */
 	public function set_up(): void {

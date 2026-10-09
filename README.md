@@ -9,7 +9,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.7.9 |
+| **Stable tag** | 1.7.10 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -295,6 +295,10 @@ It makes two kinds of outbound HTTP request on its own: the Connection tab's rea
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), run on your own machine and not bundled with this plugin.
 
 ## Changelog
+### 1.7.10
+
+* **Fix:** Query Monitor showed a "bundled dependency" deprecation warning from the MCP Adapter on every request that started it; it no longer does.
+
 ### 1.7.9
 
 * **Fix:** With the standalone MCP Adapter plugin (0.7.0) active and loading before this one, the /mcp endpoint returned a 404. It now serves in either load order.

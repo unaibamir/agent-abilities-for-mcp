@@ -398,39 +398,26 @@ function aafm_maybe_disable_standalone_adapter_autoload(): void {
 }
 
 /**
- * Keep the adapter's bundled-copy deprecation out of the PHP error log for our own copy.
+ * Mark our bundled adapter as loaded so 0.7.0+ does not raise its bundled-copy deprecation.
  *
- * From 0.7.0 the adapter calls _deprecated_function() on every request when it runs as a bundled
- * library instead of the standalone plugin. Bundling is how this plugin ships and is supported, so
- * the log line is noise. Hooked on deprecated_function_run, which fires immediately before core
- * decides whether to trigger the error, it adds a one-shot filter that turns that single trigger
- * off. Other deprecations, and the same notice from a copy that is not ours, are untouched, and the
- * run action itself still fires for tools like Query Monitor.
+ * From 0.7.0 the adapter calls _deprecated_function() when it initialises unless WP_MCP_VERSION,
+ * the constant the standalone plugin defines, already exists. Bundling is how this plugin ships and
+ * is supported, so the notice only adds noise: PHP error log lines, and a warning in Query Monitor,
+ * which listens on deprecated_function_run and cannot be silenced from a filter. The adapter defines
+ * the same constant itself right after the notice, so defining it first changes nothing else.
  *
- * @param string $function_name Name passed to _deprecated_function().
+ * Hooked just ahead of the adapter's own init (rest_api_init, or init under WP-CLI), never earlier:
+ * other plugins read this constant as "an adapter plugin is installed", so a request that never
+ * initialises the adapter must keep seeing it undefined. A copy that is not ours is left alone.
+ *
  * @return void
  */
-function aafm_quiet_bundled_adapter_deprecation( $function_name ): void {
-	if ( 'WP\\MCP\\Core\\McpAdapter' !== $function_name || aafm_adapter_declared_elsewhere() ) {
+function aafm_mark_bundled_adapter_loaded(): void {
+	if ( defined( 'WP_MCP_VERSION' ) || aafm_adapter_declared_elsewhere() ) {
 		return;
 	}
 
-	// Core only reads the trigger filter when WP_DEBUG is on, so a filter added otherwise would
-	// never run to remove itself.
-	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-		add_filter( 'deprecated_function_trigger_error', 'aafm_suppress_one_deprecation_trigger' );
-	}
-}
-
-/**
- * One-shot filter callback for deprecated_function_trigger_error: answer false once, then unhook.
- *
- * @return bool Always false.
- */
-function aafm_suppress_one_deprecation_trigger(): bool {
-	remove_filter( 'deprecated_function_trigger_error', 'aafm_suppress_one_deprecation_trigger' );
-
-	return false;
+	define( 'WP_MCP_VERSION', \WP\MCP\Core\McpAdapter::VERSION ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- constant owned by the mcp-adapter plugin, read by its own check.
 }
 
 /**
@@ -474,7 +461,6 @@ function aafm_load_bundled_adapter(): bool {
 	aafm_maybe_disable_standalone_adapter_autoload();
 	aafm_register_adapter_autoloader();
 	aafm_eager_load_adapter();
-	add_action( 'deprecated_function_run', 'aafm_quiet_bundled_adapter_deprecation' );
 
 	return true;
 }

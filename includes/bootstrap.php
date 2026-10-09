@@ -180,6 +180,13 @@ function aafm_init_mcp(): bool {
 	// Only our governed server should exist.
 	add_filter( 'mcp_adapter_create_default_server', '__return_false' );
 
+	// The adapter initialises on init (WP-CLI) or rest_api_init; mark our copy loaded just before it does.
+	if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		add_action( 'init', 'aafm_mark_bundled_adapter_loaded', 19 );
+	} else {
+		add_action( 'rest_api_init', 'aafm_mark_bundled_adapter_loaded', 14 );
+	}
+
 	McpAdapter::instance();
 	add_action( 'mcp_adapter_init', 'aafm_register_mcp_server' );
 

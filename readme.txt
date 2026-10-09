@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.9
+Stable tag: 1.7.10
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -306,6 +306,10 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==
+
+= 1.7.10 =
+
+* **Fix:** Query Monitor showed a "bundled dependency" deprecation warning from the MCP Adapter on every request that started it; it no longer does.
 
 = 1.7.9 =
 

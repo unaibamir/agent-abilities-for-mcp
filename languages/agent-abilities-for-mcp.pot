@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log 1.7.9\n"
+"Project-Id-Version: Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log 1.7.10\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/agent-abilities-for-mcp\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-06T00:15:29+05:00\n"
+"POT-Creation-Date: 2026-10-09T13:35:21+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -3782,12 +3782,12 @@ msgid "ID of the post to render the Yoast SEO head for."
 msgstr ""
 
 #. translators: %s: name of the plugin loading the stripped adapter copy.
-#: includes/adapter-loader.php:715
+#: includes/adapter-loader.php:701
 #, php-format
 msgid "Agent Abilities for MCP is disabled: the plugin %s is loading an MCP Adapter copy that is missing the per-connection capability gate, so agent tools cannot be served safely. Update or deactivate that plugin to enable agent tools."
 msgstr ""
 
-#: includes/adapter-loader.php:719
+#: includes/adapter-loader.php:705
 msgid "Agent Abilities for MCP is disabled: another active plugin is loading an MCP Adapter copy that is missing the per-connection capability gate, so agent tools cannot be served safely. Update or deactivate that plugin to enable agent tools."
 msgstr ""
 
@@ -5582,7 +5582,7 @@ msgid "Error: %s"
 msgstr ""
 
 #: includes/admin/page.php:189
-#: includes/bootstrap.php:262
+#: includes/bootstrap.php:269
 msgid "unknown"
 msgstr ""
 
@@ -7490,35 +7490,35 @@ msgstr ""
 msgid "The block content was rejected because these blocks would show as invalid in the editor: %s. Encode all styling as block attributes inside the block delimiters and try again."
 msgstr ""
 
-#: includes/bootstrap.php:199
+#: includes/bootstrap.php:206
 msgid "Agent Abilities for MCP could not load the MCP adapter. Please reinstall the plugin."
 msgstr ""
 
 #. translators: 1: offending plugin name, 2: loaded adapter version, 3: minimum required adapter version.
-#: includes/bootstrap.php:216
+#: includes/bootstrap.php:223
 #, php-format
 msgid "Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Agent Abilities for MCP requires %3$s or newer. Update or deactivate %1$s to enable agent tools."
 msgstr ""
 
 #. translators: 1: loaded adapter version, 2: minimum required adapter version.
-#: includes/bootstrap.php:218
+#: includes/bootstrap.php:225
 #, php-format
 msgid "Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools."
 msgstr ""
 
 #. translators: 1: offending plugin name, 2: loaded adapter version, 3: maximum supported adapter version (exclusive).
-#: includes/bootstrap.php:235
+#: includes/bootstrap.php:242
 #, php-format
 msgid "Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools."
 msgstr ""
 
 #. translators: 1: loaded adapter version, 2: maximum supported adapter version (exclusive).
-#: includes/bootstrap.php:237
+#: includes/bootstrap.php:244
 #, php-format
 msgid "Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools."
 msgstr ""
 
-#: includes/bootstrap.php:390
+#: includes/bootstrap.php:397
 msgid "The initialize parameters are too large. Send a normal handshake: a protocol version, your capabilities, and a short client name and version."
 msgstr ""
 

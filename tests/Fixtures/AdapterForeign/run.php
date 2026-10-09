@@ -3,13 +3,14 @@
  * Subprocess for AdapterForeignCopyTest: runs the bundled-adapter loader with no WordPress,
  * optionally after another copy has declared McpAdapter, and prints what the loader did as JSON.
  *
- * Usage: php run.php <foreign|none> <plugin-dir> [active-plugins-json]
+ * Usage: php run.php <foreign|none> <plugin-dir> [active-plugins-json] [skipmark]
  */
 
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'AAFM_PLUGIN_DIR', rtrim( $argv[2], '/' ) . '/' );
 
 $GLOBALS['recorded_actions'] = array();
+$GLOBALS['deprecations']     = array();
 
 function wp_normalize_path( $path ) {
 	return str_replace( '\\', '/', $path );
@@ -27,6 +28,14 @@ function get_option( $name, $default = false ) {
 	}
 
 	return $default;
+}
+
+function esc_html__( $text ) {
+	return $text;
+}
+
+function _deprecated_function( $function_name ) {
+	$GLOBALS['deprecations'][] = $function_name;
 }
 
 function is_multisite() {
@@ -56,6 +65,22 @@ $after_loader = count( spl_autoload_functions() ?: array() );
 $vendor       = aafm_load_vendor_autoloader();
 $after_vendor = count( spl_autoload_functions() ?: array() );
 
+$const_before = defined( 'WP_MCP_VERSION' ) ? WP_MCP_VERSION : 'undefined';
+
+// 'skipmark' leaves the marker out, to show what the adapter does without it.
+if ( 'skipmark' !== ( $argv[4] ?? '' ) ) {
+	aafm_mark_bundled_adapter_loaded();
+}
+
+$const_after = defined( 'WP_MCP_VERSION' ) ? WP_MCP_VERSION : 'undefined';
+
+// Run the adapter's own bundled-copy check, as its init() does, when this copy has one.
+if ( method_exists( \WP\MCP\Core\McpAdapter::class, 'check_plugin_loaded' ) ) {
+	$check = new ReflectionMethod( \WP\MCP\Core\McpAdapter::class, 'check_plugin_loaded' );
+	$check->setAccessible( true );
+	$check->invoke( ( new ReflectionClass( \WP\MCP\Core\McpAdapter::class ) )->newInstanceWithoutConstructor() );
+}
+
 echo json_encode(
 	array(
 		'loaded'        => $loaded,
@@ -68,5 +93,8 @@ echo json_encode(
 		'version'       => \WP\MCP\Core\McpAdapter::VERSION,
 		'autoload_const' => defined( 'WP_MCP_AUTOLOAD' ) ? WP_MCP_AUTOLOAD : 'undefined',
 		'actions'       => $GLOBALS['recorded_actions'],
+		'const_before'  => $const_before,
+		'const_after'   => $const_after,
+		'deprecations'  => $GLOBALS['deprecations'],
 	)
 );

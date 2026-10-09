@@ -24,14 +24,16 @@ final class AdapterForeignCopyTest extends TestCase {
 	 *
 	 * @param string            $mode    'foreign' to declare another copy first, 'none' for a clean process.
 	 * @param array<int,string> $active  Plugin files the process reports as active.
+	 * @param string            $extra   'skipmark' to leave out the WP_MCP_VERSION marker.
 	 * @return array<string, mixed>
 	 */
-	private function run_loader( string $mode, array $active = array() ): array {
+	private function run_loader( string $mode, array $active = array(), string $extra = '' ): array {
 		$command = escapeshellarg( PHP_BINARY ) . ' '
 			. escapeshellarg( AAFM_PLUGIN_DIR . 'tests/Fixtures/AdapterForeign/run.php' ) . ' '
 			. escapeshellarg( $mode ) . ' '
 			. escapeshellarg( rtrim( AAFM_PLUGIN_DIR, '/' ) ) . ' '
-			. escapeshellarg( (string) wp_json_encode( $active ) ) . ' 2>&1';
+			. escapeshellarg( (string) wp_json_encode( $active ) ) . ' '
+			. escapeshellarg( $extra ) . ' 2>&1';
 
 		$output = (string) shell_exec( $command ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec -- test-only subprocess to isolate class declarations.
 		$data   = json_decode( $output, true );
@@ -128,29 +130,30 @@ final class AdapterForeignCopyTest extends TestCase {
 		$this->assertFalse( aafm_standalone_adapter_plugin_active( array(), array() ) );
 	}
 
-	public function test_deprecation_filter_is_only_hooked_when_our_copy_loads(): void {
-		$ours    = $this->run_loader( 'none' );
-		$foreign = $this->run_loader( 'foreign' );
+	public function test_without_the_marker_the_adapter_raises_its_bundled_copy_deprecation(): void {
+		$result = $this->run_loader( 'none', array(), 'skipmark' );
 
-		$this->assertContains( 'deprecated_function_run:aafm_quiet_bundled_adapter_deprecation', $ours['actions'] );
-		$this->assertNotContains( 'deprecated_function_run:aafm_quiet_bundled_adapter_deprecation', $foreign['actions'] );
+		$this->assertSame( 'undefined', $result['const_after'] );
+		$this->assertSame( array( 'WP\\MCP\\Core\\McpAdapter' ), $result['deprecations'] );
 	}
 
-	public function test_adapter_deprecation_trigger_is_silenced_once_and_only_for_the_adapter(): void {
-		$hook = 'deprecated_function_trigger_error';
+	public function test_marking_our_copy_loaded_defines_the_constant_and_skips_the_deprecation(): void {
+		$result = $this->run_loader( 'none' );
 
-		// A different deprecated function is left alone.
-		aafm_quiet_bundled_adapter_deprecation( 'some_other_function' );
-		$this->assertFalse( has_filter( $hook, 'aafm_suppress_one_deprecation_trigger' ) );
+		$this->assertSame( 'undefined', $result['const_before'], 'Nothing may define the constant before the adapter is about to initialise.' );
+		$this->assertSame( \WP\MCP\Core\McpAdapter::VERSION, $result['const_after'] );
+		$this->assertSame( array(), $result['deprecations'], 'Query Monitor listens on the run action, so the adapter must not call _deprecated_function() at all.' );
+	}
 
-		// The adapter's own notice for our copy turns off the one trigger that follows.
-		aafm_quiet_bundled_adapter_deprecation( \WP\MCP\Core\McpAdapter::class );
-		$this->assertNotFalse( has_filter( $hook, 'aafm_suppress_one_deprecation_trigger' ) );
+	public function test_marker_leaves_a_foreign_copy_alone(): void {
+		$result = $this->run_loader( 'foreign' );
 
-		remove_all_filters( $hook );
-		aafm_quiet_bundled_adapter_deprecation( \WP\MCP\Core\McpAdapter::class );
-		$this->assertFalse( apply_filters( $hook, true ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- core hook, held in a variable.
-		$this->assertFalse( has_filter( $hook, 'aafm_suppress_one_deprecation_trigger' ), 'The one-shot filter must remove itself.' );
-		$this->assertTrue( apply_filters( $hook, true ), 'The next deprecation is not silenced.' ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- core hook, held in a variable.
+		$this->assertSame( 'undefined', $result['const_after'], 'The copy that is not ours decides for itself.' );
+	}
+
+	public function test_marker_runs_just_before_the_adapter_init_and_never_on_plain_requests(): void {
+		$this->assertSame( 14, has_action( 'rest_api_init', 'aafm_mark_bundled_adapter_loaded' ), 'The adapter initialises on rest_api_init at 15.' );
+		$this->assertFalse( has_action( 'init', 'aafm_mark_bundled_adapter_loaded' ), 'A web request must not define the constant on init, or plugins that read it see an adapter plugin on every page.' );
+		$this->assertFalse( has_action( 'plugins_loaded', 'aafm_mark_bundled_adapter_loaded' ) );
 	}
 }

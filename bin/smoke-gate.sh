@@ -11,12 +11,15 @@
 # Env: SMOKE_DEFAULT_SERVER_STRICT=1  default-server leg becomes a hard check.
 #      SMOKE_INJECT_FAULT=1           drops a PHP-warning mu-plugin (proves the gate goes red).
 #      SMOKE_DB / SMOKE_ROOT          override the disposable site; only to test the guard.
+#      SMOKE_PLUGIN_SRC               plugin tree to symlink in (under /var/www/plugin-src); only to
+#                                     run the gate against an older release export.
 #
 # Never touches the DDEV site database (`db`) or anything under /var/www/html.
 
 set -u
 
-PLUGIN_SRC=/var/www/plugin-src
+REPO_SRC=/var/www/plugin-src
+PLUGIN_SRC="${SMOKE_PLUGIN_SRC:-$REPO_SRC}"
 SMOKE_DB="${SMOKE_DB:-aafm_smoke}"
 SMOKE_ROOT="${SMOKE_ROOT:-/tmp/aafm-smoke}"
 URL=http://localhost:8070
@@ -33,7 +36,7 @@ BAD_BODY='Fatal error|Uncaught|already defined|is deprecated'
 ENABLED='["aafm/get-posts","aafm/get-pages","aafm/count-posts"]'
 
 # Guard: refuse before anything is created.
-if [ ! -f "$PLUGIN_SRC/agent-abilities-for-mcp.php" ]; then
+if [ ! -f "$REPO_SRC/agent-abilities-for-mcp.php" ]; then
 	echo "refusing: not inside the DDEV web container"
 	exit 2
 fi
@@ -41,17 +44,43 @@ if [ "$SMOKE_DB" = "db" ]; then
 	echo "refusing: SMOKE_DB=db is the DDEV site database"
 	exit 2
 fi
+case "$SMOKE_DB" in
+	*[!A-Za-z0-9_]*)
+		echo "refusing: SMOKE_DB may only contain letters, digits and underscores"
+		exit 2
+		;;
+	aafm_smoke*) ;;
+	*)
+		echo "refusing: SMOKE_DB must start with aafm_smoke"
+		exit 2
+		;;
+esac
 case "$SMOKE_ROOT" in
 	/var/www/html* | *..*)
 		echo "refusing: SMOKE_ROOT must not be under /var/www/html or contain .."
 		exit 2
 		;;
-	/tmp/?*) ;;
+	*[!A-Za-z0-9_./-]*)
+		echo "refusing: SMOKE_ROOT has characters outside letters, digits and _ . / -"
+		exit 2
+		;;
+	/tmp/aafm-smoke*) ;;
 	*)
-		echo "refusing: SMOKE_ROOT must be a directory under /tmp"
+		echo "refusing: SMOKE_ROOT must be /tmp/aafm-smoke or a path under it"
 		exit 2
 		;;
 esac
+case "$PLUGIN_SRC" in
+	"$REPO_SRC" | "$REPO_SRC"/*) ;;
+	*)
+		echo "refusing: SMOKE_PLUGIN_SRC must be under $REPO_SRC"
+		exit 2
+		;;
+esac
+if [ ! -f "$PLUGIN_SRC/agent-abilities-for-mcp.php" ]; then
+	echo "refusing: no agent-abilities-for-mcp.php in $PLUGIN_SRC"
+	exit 2
+fi
 
 FROM=''
 KEEP=0
@@ -84,6 +113,8 @@ ds() { if [ "${SMOKE_DEFAULT_SERVER_STRICT:-0}" = 1 ]; then fail default-server 
 
 LOG="$SMOKE_ROOT/wp-content/debug.log"
 W() { wp --allow-root --quiet --path="$SMOKE_ROOT" "$@"; }
+# WT: the same, for commands that download; bounded so a dead network cannot hang the gate.
+WT() { timeout 120 wp --allow-root --quiet --path="$SMOKE_ROOT" "$@"; }
 
 finish() {
 	echo "SMOKE: $P pass, $F fail, $K known"
@@ -104,7 +135,7 @@ setup_site() {
 	rm -rf "$SMOKE_ROOT"
 	mkdir -p "$SMOKE_ROOT" || return 1
 	mysql -hdb -uroot -proot -e "DROP DATABASE IF EXISTS \`$SMOKE_DB\`; CREATE DATABASE \`$SMOKE_DB\`;" 2>/dev/null || return 1
-	W core download >/dev/null 2>&1 || return 1
+	WT core download >/dev/null 2>&1 || return 1
 	W config create --dbname="$SMOKE_DB" --dbuser=root --dbpass=root --dbhost=db >/dev/null 2>&1 || return 1
 	W config set WP_DEBUG true --raw >/dev/null 2>&1 || return 1
 	W config set WP_DEBUG_LOG true --raw >/dev/null 2>&1 || return 1
@@ -152,7 +183,7 @@ ADAPTER_STATE=''
 fetch_adapter() {
 	if [ -z "$ADAPTER_STATE" ]; then
 		ADAPTER_STATE=bad
-		if curl -fsSL --max-time 120 -o "$SMOKE_ROOT/mcp-adapter.zip" "$ADAPTER_URL" \
+		if curl -fsSL --max-time 60 -o "$SMOKE_ROOT/mcp-adapter.zip" "$ADAPTER_URL" \
 			&& unzip -q -o "$SMOKE_ROOT/mcp-adapter.zip" -d "$SMOKE_ROOT/wp-content/plugins" \
 			&& [ -f "$SMOKE_ROOT/wp-content/plugins/$ADAPTER" ]; then
 			ADAPTER_STATE=ok
@@ -163,13 +194,44 @@ fetch_adapter() {
 	return 1
 }
 
-# set_state <active_plugins json> <WP_DEBUG true|false> [predefine WP_MCP_VERSION 1|0]
+# set_state <leg> <label> <active_plugins json> <WP_DEBUG true|false> [predefine WP_MCP_VERSION 1|0]
+# Applies the state, then reads it back from a booted WordPress. FAILs the leg and returns 1 if any
+# setter failed or the loaded state is not the requested one (WordPress silently drops invalid
+# active_plugins entries, so B or C could otherwise fall back to A and still PASS).
 set_state() {
-	W option update active_plugins "$1" --format=json >/dev/null 2>&1
-	W config set WP_DEBUG "$2" --raw >/dev/null 2>&1
+	local leg="$1" label="$2" plugins="$3" debug="$4" pre="${5:-0}" want got mcpver wantdbg
+	# Clear the previous scenario's predefine first: with a fake WP_MCP_VERSION loaded, WP-CLI's
+	# own option update can fail.
 	rm -f "$SMOKE_ROOT/wp-content/mu-plugins/predefine.php"
-	[ "${3:-0}" = 1 ] && echo "<?php define( 'WP_MCP_VERSION', '9.9.9' );" > "$SMOKE_ROOT/wp-content/mu-plugins/predefine.php"
+	# WP-CLI exits 1 when the new value equals the stored one, so a failed update only counts if
+	# the stored list is not the wanted one.
+	if ! W option update active_plugins "$plugins" --format=json >/dev/null 2>&1 \
+		&& [ "$(W option get active_plugins --format=json 2>/dev/null | jq -c .)" != "$(echo "$plugins" | jq -c .)" ]; then
+		fail "$leg" "$label: could not set active_plugins"
+		return 1
+	fi
+	W config set WP_DEBUG "$debug" --raw >/dev/null 2>&1 || { fail "$leg" "$label: could not set WP_DEBUG"; return 1; }
+	if [ "$pre" = 1 ]; then
+		echo "<?php define( 'WP_MCP_VERSION', '9.9.9' );" > "$SMOKE_ROOT/wp-content/mu-plugins/predefine.php" || { fail "$leg" "$label: could not write the WP_MCP_VERSION mu-plugin"; return 1; }
+	fi
+	got=$(W eval 'foreach ( wp_get_active_and_valid_plugins() as $p ) { echo "plugin:" . plugin_basename( $p ) . "\n"; } echo "debug:" . var_export( WP_DEBUG, true ) . "\n"; echo "mcpver:" . ( defined( "WP_MCP_VERSION" ) ? WP_MCP_VERSION : "undef" ) . "\n";' 2>/dev/null)
+	want=$(echo "$plugins" | jq -r '.[]' | sed 's/^/plugin:/')
+	if [ "$(echo "$got" | grep '^plugin:')" != "$want" ]; then
+		fail "$leg" "$label: loaded plugins are $(echo "$got" | grep '^plugin:' | sed 's/^plugin://' | tr '\n' ' '), wanted $(echo "$want" | sed 's/^plugin://' | tr '\n' ' ')"
+		return 1
+	fi
+	wantdbg=$debug
+	if [ "$(echo "$got" | grep '^debug:')" != "debug:$wantdbg" ]; then
+		fail "$leg" "$label: WP_DEBUG reads $(echo "$got" | grep '^debug:'), wanted $wantdbg"
+		return 1
+	fi
+	mcpver=$(echo "$got" | grep '^mcpver:' | sed 's/^mcpver://')
+	if { [ "$pre" = 1 ] && [ "$mcpver" != 9.9.9 ]; } || { [ "$pre" != 1 ] && [ "$mcpver" = 9.9.9 ]; }; then
+		fail "$leg" "$label: WP_MCP_VERSION reads '$mcpver', predefine=$pre"
+		return 1
+	fi
 	: > "$LOG"
+	return 0
 }
 
 # mcp_post <route> <json body> [session id]: prints the HTTP code; body in body.json, headers in head.txt.
@@ -222,7 +284,7 @@ log_ok() {
 }
 
 matrix_scenario() { # label plugins debug predefine
-	set_state "$2" "$3" "$4"
+	set_state matrix "$1" "$2" "$3" "$4" || return 0
 	init_ok matrix "$1" "$ROUTE_OURS"
 	pages_ok matrix "$1"
 	log_ok matrix "$1"
@@ -238,25 +300,31 @@ leg_matrix() {
 }
 
 leg_qm() {
-	local listener="$SMOKE_ROOT/wp-content/mu-plugins/smoke-listener.php" seen="$SMOKE_ROOT/wp-content/smoke-listener.log"
-	if ! W plugin install query-monitor --activate >/dev/null 2>&1; then
-		fail qm "download query-monitor"
+	local listener="$SMOKE_ROOT/wp-content/mu-plugins/smoke-listener.php" seen="$SMOKE_ROOT/wp-content/smoke-listener.log" qmurl=https://downloads.wordpress.org/plugin/query-monitor.latest-stable.zip
+	if ! WT plugin install query-monitor --activate >/dev/null 2>&1; then
+		fail qm "download $qmurl"
 		return 0
 	fi
 	cat > "$listener" <<'PHP'
 <?php
-// Stand-in for what Query Monitor records: every deprecated_function_run and doing_it_wrong_run.
-add_action( 'deprecated_function_run', function ( $f, $r, $v ) { file_put_contents( WP_CONTENT_DIR . '/smoke-listener.log', "deprecated $f since $v\n", FILE_APPEND ); }, 10, 3 );
+// Stand-in for what Query Monitor records: every deprecation and doing-it-wrong signal WordPress raises.
+add_action( 'deprecated_function_run', function ( $f, $r, $v ) { file_put_contents( WP_CONTENT_DIR . '/smoke-listener.log', "deprecated_function $f since $v\n", FILE_APPEND ); }, 10, 3 );
 add_action( 'doing_it_wrong_run', function ( $f, $m, $v ) { file_put_contents( WP_CONTENT_DIR . '/smoke-listener.log', "doing_it_wrong $f: $m\n", FILE_APPEND ); }, 10, 3 );
+foreach ( array( 'deprecated_argument_run', 'deprecated_hook_run', 'deprecated_file_included', 'deprecated_class_run' ) as $smoke_hook ) {
+	add_action( $smoke_hook, function ( $what = '' ) use ( $smoke_hook ) { file_put_contents( WP_CONTENT_DIR . '/smoke-listener.log', "$smoke_hook $what\n", FILE_APPEND ); }, 10, 1 );
+}
 PHP
-	set_state "[\"$OURS\",\"$QM\"]" true 0
-	: > "$seen"
-	init_ok qm 'ours + Query Monitor' "$ROUTE_OURS"
-	pages_ok qm 'ours + Query Monitor'
-	if [ ! -s "$seen" ]; then
-		pass qm 'ours + Query Monitor: no deprecated_function_run / doing_it_wrong_run entries'
-	else
-		fail qm "ours + Query Monitor: $(wc -l < "$seen" | tr -d ' ') listener entr(ies): $(head -2 "$seen" | cut -c1-200 | tr '\n' '|')"
+	# Query Monitor reorders active_plugins to load itself first, as it does on a real site.
+	if set_state qm 'ours + Query Monitor' "[\"$QM\",\"$OURS\"]" true 0; then
+		: > "$seen"
+		init_ok qm 'ours + Query Monitor' "$ROUTE_OURS"
+		pages_ok qm 'ours + Query Monitor'
+		if [ ! -s "$seen" ]; then
+			pass qm 'ours + Query Monitor: no deprecation or doing_it_wrong listener entries'
+		else
+			fail qm "ours + Query Monitor: $(wc -l < "$seen" | tr -d ' ') listener entr(ies): $(head -2 "$seen" | cut -c1-200 | tr '\n' '|')"
+		fi
+		log_ok qm 'ours + Query Monitor'
 	fi
 	rm -f "$listener" "$seen"
 	W plugin deactivate query-monitor >/dev/null 2>&1
@@ -265,11 +333,17 @@ PHP
 }
 
 leg_upgrade() {
-	local plugins="$SMOKE_ROOT/wp-content/plugins" dir cur snap after vold vnew
+	local plugins="$SMOKE_ROOT/wp-content/plugins" dir cur snap after vold vnew t
 	dir="$plugins/agent-abilities-for-mcp"
 	cur=$(grep -m1 -E '^ \* Version:' "$PLUGIN_SRC/agent-abilities-for-mcp.php" | sed 's/.*: *//' | tr -d '\r')
 	if [ -z "$FROM" ]; then
-		FROM=$(git -c safe.directory='*' -C "$PLUGIN_SRC" tag --list '1.*' --sort=-v:refname 2>/dev/null | grep -vxF "$cur" | head -1)
+		# Newest 1.* tag that sorts strictly below the version under test.
+		for t in $(git -c safe.directory='*' -C "$REPO_SRC" tag --list '1.*' --sort=-v:refname 2>/dev/null); do
+			if [ "$t" != "$cur" ] && [ "$(printf '%s\n%s\n' "$t" "$cur" | sort -V | head -1)" = "$t" ]; then
+				FROM=$t
+				break
+			fi
+		done
 	fi
 	if [ -z "$FROM" ]; then
 		fail upgrade "no previous release tag found; pass --from <version>"
@@ -278,10 +352,18 @@ leg_upgrade() {
 	[ -L "$dir" ] || { fail upgrade "expected $dir to be the working-tree symlink"; return 0; }
 	W option update active_plugins '[]' --format=json >/dev/null 2>&1
 	rm "$dir" # removes the symlink only, never the repo it points at
-	if ! W plugin install agent-abilities-for-mcp --version="$FROM" --activate >/dev/null 2>&1; then
+	# WP-CLI sometimes answers "Plugin already installed" (exit 0) for a slug whose directory it
+	# just lost, installing nothing. Check the directory, and retry once with --force; the symlink
+	# is gone by now, so --force cannot write through into the repo.
+	WT plugin install agent-abilities-for-mcp --version="$FROM" --activate >/dev/null 2>&1
+	if [ ! -f "$dir/agent-abilities-for-mcp.php" ] && [ ! -L "$dir" ]; then
+		WT plugin install agent-abilities-for-mcp --version="$FROM" --activate --force >/dev/null 2>&1
+	fi
+	if [ -L "$dir" ] || [ ! -f "$dir/agent-abilities-for-mcp.php" ]; then
+		[ -L "$dir" ] || rm -rf "$dir" # a failed install can leave a partial directory behind
 		ln -s "$PLUGIN_SRC" "$dir"
 		W option update active_plugins "[\"$OURS\"]" --format=json >/dev/null 2>&1
-		fail upgrade "download agent-abilities-for-mcp $FROM from wordpress.org"
+		fail upgrade "download https://downloads.wordpress.org/plugin/agent-abilities-for-mcp.$FROM.zip"
 		return 0
 	fi
 	W option update aafm_enabled_abilities "$ENABLED" --format=json >/dev/null 2>&1
@@ -292,7 +374,7 @@ leg_upgrade() {
 	else
 		fail upgrade "release install: version '$vold' (wanted $FROM), snapshot '$snap'"
 	fi
-	rm -rf "$dir"
+	[ -L "$dir" ] || rm -rf "$dir"
 	ln -s "$PLUGIN_SRC" "$dir"
 	: > "$LOG"
 	vnew=$(W plugin get agent-abilities-for-mcp --field=version 2>/dev/null)
@@ -339,7 +421,7 @@ tools_list() {
 leg_default_server() {
 	local names="$SMOKE_ROOT/names.txt" base ours leaked msg label plugins
 	fetch_adapter default-server || return 0
-	set_state "[\"$OURS\"]" true 0
+	set_state default-server 'ours-only baseline' "[\"$OURS\"]" true 0 || return 0
 	if ! msg=$(tools_list "$ROUTE_OURS" "$names"); then
 		fail default-server "ours-only baseline: $msg"
 		return 0
@@ -347,7 +429,7 @@ leg_default_server() {
 	base=$(grep -c . "$names")
 	pass default-server "ours-only baseline: $base tools on /$ROUTE_OURS"
 	# Control: the standalone adapter alone must serve its default server, or a 404 below proves nothing.
-	set_state "[\"$ADAPTER\"]" true 0
+	set_state default-server 'control' "[\"$ADAPTER\"]" true 0 || return 0
 	if msg=$(tools_list "$ROUTE_DEFAULT" "$names"); then
 		pass default-server "control: standalone alone serves /$ROUTE_DEFAULT ($(grep -c . "$names") tools)"
 	else
@@ -355,7 +437,7 @@ leg_default_server() {
 	fi
 	for label in 'ours first' 'standalone first'; do
 		if [ "$label" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; else plugins="[\"$ADAPTER\",\"$OURS\"]"; fi
-		set_state "$plugins" true 0
+		set_state default-server "$label" "$plugins" true 0 || continue
 		msg=$(tools_list "$ROUTE_DEFAULT" "$names")
 		case $? in
 			0)

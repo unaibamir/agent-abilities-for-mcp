@@ -64,12 +64,24 @@ case "$SMOKE_ROOT" in
 		echo "refusing: SMOKE_ROOT has characters outside letters, digits and _ . / -"
 		exit 2
 		;;
-	/tmp/aafm-smoke*) ;;
+	/tmp/aafm-smoke) ;;
+	/tmp/aafm-smoke-*)
+		case "${SMOKE_ROOT#/tmp/aafm-smoke-}" in
+			'' | *[!A-Za-z0-9_]*)
+				echo "refusing: SMOKE_ROOT must be /tmp/aafm-smoke or /tmp/aafm-smoke-<letters, digits, underscores>"
+				exit 2
+				;;
+		esac
+		;;
 	*)
-		echo "refusing: SMOKE_ROOT must be /tmp/aafm-smoke or a path under it"
+		echo "refusing: SMOKE_ROOT must be /tmp/aafm-smoke or /tmp/aafm-smoke-<letters, digits, underscores>"
 		exit 2
 		;;
 esac
+if [ -L "$SMOKE_ROOT" ]; then
+	echo "refusing: SMOKE_ROOT is a symlink"
+	exit 2
+fi
 case "$PLUGIN_SRC" in
 	"$REPO_SRC" | "$REPO_SRC"/*) ;;
 	*)
@@ -143,7 +155,7 @@ setup_site() {
 	W config set WP_ENVIRONMENT_TYPE local >/dev/null 2>&1 || return 1
 	W core install --url="$URL" --title=smoke --admin_user=admin --admin_password=admin \
 		--admin_email=a@b.co --skip-email >/dev/null 2>&1 || return 1
-	ln -s "$PLUGIN_SRC" "$SMOKE_ROOT/wp-content/plugins/agent-abilities-for-mcp" || return 1
+	ln -sfn "$PLUGIN_SRC" "$SMOKE_ROOT/wp-content/plugins/agent-abilities-for-mcp" || return 1
 	W plugin activate agent-abilities-for-mcp >/dev/null 2>&1 || return 1
 	W option update aafm_enabled_abilities "$ENABLED" --format=json >/dev/null 2>&1 || return 1
 	APP_PW=$(W user application-password create admin smoke --porcelain 2>/dev/null)
@@ -275,6 +287,10 @@ pages_ok() {
 # log_ok <leg> <label>: debug.log lines about us or the adapter that are not clean.
 log_ok() {
 	local hits
+	if [ ! -r "$LOG" ]; then
+		fail "$1" "$2: debug.log is missing or unreadable"
+		return
+	fi
 	hits=$(grep -i -E 'deprecat|already defined|fatal|warning|notice' "$LOG" 2>/dev/null | grep -E 'plugin-src|agent-abilities-for-mcp|mcp-adapter')
 	if [ -z "$hits" ]; then
 		pass "$1" "$2: debug.log clean"
@@ -297,6 +313,7 @@ leg_matrix() {
 	matrix_scenario 'C standalone 0.7.0 then ours' "[\"$ADAPTER\",\"$OURS\"]" true 0
 	matrix_scenario 'A ours only, WP_DEBUG off' "[\"$OURS\"]" false 0
 	matrix_scenario 'A ours only, WP_MCP_VERSION predefined' "[\"$OURS\"]" true 1
+	rm -f "$SMOKE_ROOT/wp-content/mu-plugins/predefine.php" # later legs must not run with the constant defined
 }
 
 leg_qm() {
@@ -351,7 +368,8 @@ leg_upgrade() {
 	fi
 	[ -L "$dir" ] || { fail upgrade "expected $dir to be the working-tree symlink"; return 0; }
 	W option update active_plugins '[]' --format=json >/dev/null 2>&1
-	rm "$dir" # removes the symlink only, never the repo it points at
+	rm "$dir" || { fail upgrade "could not remove the plugin symlink"; return 0; } # symlink only, never the repo it points at
+	[ ! -L "$dir" ] || { fail upgrade "plugin symlink still present after rm"; return 0; }
 	# WP-CLI sometimes answers "Plugin already installed" (exit 0) for a slug whose directory it
 	# just lost, installing nothing. Check the directory, and retry once with --force; the symlink
 	# is gone by now, so --force cannot write through into the repo.
@@ -361,7 +379,7 @@ leg_upgrade() {
 	fi
 	if [ -L "$dir" ] || [ ! -f "$dir/agent-abilities-for-mcp.php" ]; then
 		[ -L "$dir" ] || rm -rf "$dir" # a failed install can leave a partial directory behind
-		ln -s "$PLUGIN_SRC" "$dir"
+		ln -sfn "$PLUGIN_SRC" "$dir"
 		W option update active_plugins "[\"$OURS\"]" --format=json >/dev/null 2>&1
 		fail upgrade "download https://downloads.wordpress.org/plugin/agent-abilities-for-mcp.$FROM.zip"
 		return 0
@@ -375,7 +393,7 @@ leg_upgrade() {
 		fail upgrade "release install: version '$vold' (wanted $FROM), snapshot '$snap'"
 	fi
 	[ -L "$dir" ] || rm -rf "$dir"
-	ln -s "$PLUGIN_SRC" "$dir"
+	ln -sfn "$PLUGIN_SRC" "$dir"
 	: > "$LOG"
 	vnew=$(W plugin get agent-abilities-for-mcp --field=version 2>/dev/null)
 	after=$(W option get aafm_enabled_abilities --format=json 2>/dev/null)
@@ -419,7 +437,7 @@ tools_list() {
 }
 
 leg_default_server() {
-	local names="$SMOKE_ROOT/names.txt" base ours leaked msg label plugins
+	local names="$SMOKE_ROOT/names.txt" base ours leaked msg label plugins want missing t
 	fetch_adapter default-server || return 0
 	set_state default-server 'ours-only baseline' "[\"$OURS\"]" true 0 || return 0
 	if ! msg=$(tools_list "$ROUTE_OURS" "$names"); then
@@ -427,7 +445,14 @@ leg_default_server() {
 		return 0
 	fi
 	base=$(grep -c . "$names")
-	pass default-server "ours-only baseline: $base tools on /$ROUTE_OURS"
+	want=$(echo "$ENABLED" | jq -r '.[]' | tr / -)
+	missing=''
+	for t in $want; do grep -qx "$t" "$names" || missing="$missing $t"; done
+	if [ "$base" -le 0 ] || [ -n "$missing" ]; then
+		fail default-server "ours-only baseline lists $base tools, missing:${missing:- (any)}"
+		return 0
+	fi
+	pass default-server "ours-only baseline: $base tools on /$ROUTE_OURS, including every enabled tool"
 	# Control: the standalone adapter alone must serve its default server, or a 404 below proves nothing.
 	set_state default-server 'control' "[\"$ADAPTER\"]" true 0 || return 0
 	if msg=$(tools_list "$ROUTE_DEFAULT" "$names"); then

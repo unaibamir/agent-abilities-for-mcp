@@ -257,6 +257,7 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 			return;
 		}
 		$event = array(
+			'id'         => wp_generate_uuid4(),
 			'trigger'    => $trigger,
 			'subtype'    => $subtype,
 			'time'       => time(),
@@ -269,9 +270,13 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 			'user_id'    => isset( $facts['user_id'] ) ? max( 0, (int) $facts['user_id'] ) : 0,
 			'suppressed' => $slot['suppressed'],
 		);
-		aafm_notify_pending_push( $event );
+		if ( ! aafm_notify_pending_push( $event ) ) {
+			aafm_notify_log_failure( __( 'A notification could not be saved for the admin notice', 'agent-abilities-for-mcp' ) );
+		}
 		if ( 'digest' === $settings['mode'] ) {
-			aafm_notify_queue_push( $event );
+			if ( ! aafm_notify_queue_push( $event ) ) {
+				aafm_notify_log_failure( __( 'A notification could not be queued for the daily email', 'agent-abilities-for-mcp' ) );
+			}
 		} elseif ( 'immediate' === $settings['mode'] ) {
 			aafm_notify_send_capped( $settings['email'], array( $event ), false );
 		}
@@ -481,12 +486,12 @@ function aafm_notify_pending_list(): array {
  * Add one admin-notice entry, newest first, capped.
  *
  * @param array<string,mixed> $event The event.
- * @return void
+ * @return bool Whether the write was certified.
  */
-function aafm_notify_pending_push( array $event ): void {
+function aafm_notify_pending_push( array $event ): bool {
 	$list = aafm_notify_pending_list();
 	array_unshift( $list, $event );
-	aafm_update_option_verified( 'aafm_notify_pending', array_slice( $list, 0, AAFM_NOTIFY_PENDING_MAX ), false );
+	return aafm_update_option_verified( 'aafm_notify_pending', array_slice( $list, 0, AAFM_NOTIFY_PENDING_MAX ), false );
 }
 
 /**
@@ -511,12 +516,12 @@ function aafm_notify_queue_list(): array {
  * Append one event to the digest queue, dropping the oldest past the cap.
  *
  * @param array<string,mixed> $event The event.
- * @return void
+ * @return bool Whether the write was certified.
  */
-function aafm_notify_queue_push( array $event ): void {
+function aafm_notify_queue_push( array $event ): bool {
 	$queue   = aafm_notify_queue_list();
 	$queue[] = $event;
-	aafm_update_option_verified( 'aafm_notify_queue', array_slice( $queue, -AAFM_NOTIFY_QUEUE_MAX ), false );
+	return aafm_update_option_verified( 'aafm_notify_queue', array_slice( $queue, -AAFM_NOTIFY_QUEUE_MAX ), false );
 }
 
 /**
@@ -529,7 +534,29 @@ function aafm_notify_queue_clear(): bool {
 }
 
 /**
- * Cron: send the daily summary and clear the queue only when the mail went out.
+ * Remove the events that were sent from the digest queue and keep the rest. The queue is read again
+ * first, so an event appended while the mail was in flight survives. This is a read-modify-write with
+ * no lock: an append landing between the read and the write is lost, and a lock option is the upgrade
+ * if that ever shows up.
+ *
+ * @param array<int,array<string,mixed>> $sent The events the summary described.
+ * @return bool Whether the queue now holds exactly the unsent events.
+ */
+function aafm_notify_queue_remove( array $sent ): bool {
+	$left = array();
+	foreach ( aafm_notify_queue_list() as $event ) {
+		if ( ! in_array( $event, $sent, true ) ) {
+			$left[] = $event;
+		}
+	}
+	if ( array() === $left ) {
+		return aafm_notify_queue_clear();
+	}
+	return aafm_update_option_verified( 'aafm_notify_queue', $left, false );
+}
+
+/**
+ * Cron: send the daily summary, then drop only the events it described.
  *
  * @return void
  */
@@ -543,8 +570,8 @@ function aafm_notify_digest_run(): void {
 		if ( array() === $queue ) {
 			return;
 		}
-		if ( aafm_notify_deliver( $s['email'], $queue, true ) ) {
-			aafm_notify_queue_clear();
+		if ( aafm_notify_deliver( $s['email'], $queue, true ) && ! aafm_notify_queue_remove( $queue ) ) {
+			aafm_notify_log_failure( __( 'The daily summary went out but the queue could not be cleared', 'agent-abilities-for-mcp' ) );
 		}
 	} catch ( \Throwable $e ) {
 		unset( $e );

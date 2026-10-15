@@ -292,6 +292,82 @@ final class NotificationsTest extends TestCase {
 		$this->assertSame( array(), aafm_notify_queue_list() );
 	}
 
+	public function test_the_digest_cron_keeps_an_event_appended_while_the_mail_was_in_flight(): void {
+		$this->configure( array( 'mode' => 'digest' ) );
+		aafm_notify_event( 'switch_flip', 'read_only_on', array( 'row_id' => 1 ) );
+		$late = array(
+			'id'      => 'late-event',
+			'trigger' => 'risky_run',
+			'subtype' => 'high_risk',
+			'time'    => time(),
+		);
+		add_filter(
+			'pre_wp_mail',
+			static function () use ( $late ) {
+				aafm_notify_queue_push( $late );
+				return null;
+			},
+			5
+		);
+
+		aafm_notify_digest_run();
+
+		$this->assertCount( 1, $this->sent );
+		$this->assertSame( array( $late ), aafm_notify_queue_list(), 'Only the sent batch is cleared.' );
+	}
+
+	public function test_a_pending_write_that_does_not_certify_leaves_a_bounded_error_row(): void {
+		$this->configure(
+			array(
+				'mode'  => 'notice',
+				'email' => '',
+			)
+		);
+		add_filter(
+			'pre_update_option_aafm_notify_pending',
+			static function ( $value, $old ) {
+				unset( $value );
+				return $old;
+			},
+			10,
+			2
+		);
+
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm/notifications',
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A notice entry that did not land is reported, not swallowed.' );
+		$this->assertLessThanOrEqual( AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW, count( $rows ) );
+	}
+
+	public function test_a_queue_write_that_does_not_certify_leaves_an_error_row(): void {
+		$this->configure( array( 'mode' => 'digest' ) );
+		add_filter(
+			'pre_update_option_aafm_notify_queue',
+			static function ( $value, $old ) {
+				unset( $value );
+				return $old;
+			},
+			10,
+			2
+		);
+
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm/notifications',
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows );
+	}
+
 	/**
 	 * Review Focus 4: mail broken. The notice still appears, the call returns, and the error rows are
 	 * bounded.

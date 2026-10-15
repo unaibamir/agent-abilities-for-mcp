@@ -100,6 +100,111 @@ final class MetadataTest extends TestCase {
 		}
 	}
 
+	private const TITLE = 'Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log';
+
+	/**
+	 * The listing title lives in exactly three places and they must agree: the plugin header, the
+	 * readme.txt header line, and the README.md H1.
+	 */
+	public function test_title_is_the_same_in_the_three_places_that_carry_it(): void {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		$this->assertSame( self::TITLE, $this->plugin_headers()['Name'] );
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
+		$this->assertSame( 1, preg_match( '/\A=== (.+) ===$/m', $readme, $txt ) );
+		$this->assertSame( self::TITLE, $txt[1] );
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$md = (string) file_get_contents( AAFM_PLUGIN_DIR . 'README.md' );
+		$this->assertSame( 1, preg_match( '/\A# (.+)$/m', $md, $heading ) );
+		$this->assertSame( self::TITLE, $heading[1] );
+	}
+
+	/**
+	 * The short description names no AI brand, is short enough for wordpress.org, reads the same in
+	 * both readmes, and is the plugin header's Description too.
+	 */
+	public function test_short_description_is_brand_free_and_identical_everywhere_it_appears(): void {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
+		$this->assertSame( 1, preg_match( '/^License URI:[^\n]*\n\n([^\n]+)\n/m', $readme, $txt ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$md = (string) file_get_contents( AAFM_PLUGIN_DIR . 'README.md' );
+		$this->assertSame( 1, preg_match( '/\A# [^\n]+\n\n([^\n]+)\n/', $md, $short ) );
+
+		$this->assertSame( $txt[1], $short[1] );
+		$this->assertSame( $txt[1], $this->plugin_headers()['Description'] );
+		$this->assertSame( 0, preg_match( '/chatgpt|claude|openai|anthropic|gemini/i', $txt[1] ) );
+		$this->assertLessThanOrEqual( 150, strlen( $txt[1] ) );
+	}
+
+	/**
+	 * Audit finding (InstaWP review): "A connection only sees the tools its user can call" is not true
+	 * of a bridged tool whose own check needs an item id, which lists to anyone who can edit posts
+	 * (since 1.7.8) while the other plugin still decides every call. Both readmes must say so.
+	 */
+	public function test_the_capability_gating_sentence_names_the_bridged_exception(): void {
+		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			$text = (string) file_get_contents( AAFM_PLUGIN_DIR . $file );
+			$this->assertSame( 1, preg_match( '/Two-layer capability gating\.\*\*([^\n]+)/', $text, $m ), $file );
+			$this->assertStringContainsString( 'every call re-checks that capability before it runs', $m[1], $file );
+			$this->assertStringContainsString( 'bridged from another plugin', $m[1], $file );
+			$this->assertStringContainsString( 'anyone who can edit posts', $m[1], $file );
+		}
+	}
+
+	/**
+	 * Audit finding (default-server modes): read-only mode, the allowlists, the rate limit and the
+	 * audit log cover the tools this plugin serves, not tools another plugin publishes straight to
+	 * the Adapter's default server. Neither readme may claim they cover "other plugins" without
+	 * saying which route, and the FAQ must name the default server and the core/* trade-off.
+	 */
+	public function test_readmes_scope_the_governance_claims_to_this_plugins_own_endpoint(): void {
+		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			$text = (string) file_get_contents( AAFM_PLUGIN_DIR . $file );
+			// Old changelog entries are history and keep the wording they shipped with.
+			$text = (string) preg_split( '/^(?:== Changelog ==|## Changelog)$/m', $text )[0];
+			$this->assertStringNotContainsString( 'including tools from other plugins', $text, $file );
+			$this->assertStringNotContainsString( 'including tools from your other plugins', $text, $file );
+			$this->assertStringNotContainsString( 'abilities from other plugins included', $text, $file );
+			$this->assertStringNotContainsString( 'updates never silently widen access', $text, $file );
+			$this->assertSame( 1, preg_match( '/Do I need to install the MCP Adapter separately\?[ =]*\n\n([^\n]+)/', $text, $faq ), $file );
+			$this->assertStringContainsString( 'Always on', $faq[1], $file );
+			$this->assertStringContainsString( 'read-only mode', $faq[1], $file );
+			$this->assertStringContainsString( "WordPress core's own", $faq[1], $file );
+		}
+	}
+
+	/**
+	 * Audit finding (Connection Doctor): the External Services section says what the plugin
+	 * requests on its own. The Doctor sends a few requests from the site to itself, so the section
+	 * cannot keep describing a single same-origin call.
+	 */
+	public function test_external_services_describes_the_doctors_self_requests(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
+		$this->assertSame( 1, preg_match( '/== External Services ==(.+?)== Screenshots ==/s', $readme, $m ) );
+		$this->assertStringNotContainsString( 'a same-origin call', $m[1] );
+		$this->assertStringContainsString( 'requests your site makes to its own address', $m[1] );
+	}
+
+	/**
+	 * The Description section plus External Services must fit wordpress.org's 2,500-word cap on the
+	 * Description tab, which counts External Services inside it.
+	 */
+	public function test_readme_description_and_external_services_fit_the_wporg_word_cap(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
+		$this->assertSame( 1, preg_match( '/== Description ==(.+?)== Installation ==/s', $readme, $description ) );
+		$this->assertSame( 1, preg_match( '/== External Services ==(.+?)== Screenshots ==/s', $readme, $external ) );
+		$words = str_word_count( $description[1] ) + str_word_count( $external[1] );
+		$this->assertLessThanOrEqual( 2450, $words, 'Description plus External Services is over the wordpress.org cap margin.' );
+	}
+
 	public function test_readme_core_ability_count_is_not_drifted(): void {
 		// The changelog advertises the core-ability count in digits ("NN across WordPress core").
 		// Assert it against the live count so the readme can never silently fall out of sync again.

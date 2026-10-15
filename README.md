@@ -1,6 +1,6 @@
-# Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
+# Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
 
-MCP server for ChatGPT and Claude. Let an AI agent work on one site or many, with limited access, read-only mode, drafts and an audit log.
+MCP server for WordPress. Let an AI agent work on one site or many, with limited access, read-only mode, drafts and an audit log.
 
 | | |
 |---|---|
@@ -18,7 +18,7 @@ MCP server for ChatGPT and Claude. Let an AI agent work on one site or many, wit
 
 Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 179 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install and no custom server or transport to trust.
 
-Nothing is exposed until you turn it on. The agent never gets an admin key: it acts as the WordPress user you pick, so an Editor account can write and publish posts but cannot install plugins or change settings. Every call is checked against that user's permissions and written to the audit log before it runs, denied attempts included. You add reach as you build trust, not all at once. See External Services below for exactly what the plugin can reach on its own.
+Nothing is exposed until you turn it on. The agent never gets an admin key: it acts as the WordPress user you pick, so an Editor account can write and publish posts but cannot install plugins or change settings. Every call to this plugin's tools is checked against that user's permissions and written to the audit log before it runs, denied attempts included. You add reach as you build trust, not all at once. See External Services below for exactly what the plugin can reach on its own.
 
 Model Context Protocol (MCP) is an open specification originally developed by Anthropic. Claude, ChatGPT, Cursor, VS Code, Gemini, and other product names are trademarks of their respective owners. Agent Abilities for MCP is a third-party plugin and is not affiliated with, endorsed by, or sponsored by any of them.
 
@@ -39,18 +39,18 @@ Prefer to watch first? Here is a short walkthrough of the plugin in action.
 * **Run several sites from one AI chat.** Install it on each site and add each one to ChatGPT or Claude as its own connector. Each site keeps its own user, its own switches and its own audit log, so an agency can hand one client's site to the agent without touching the others.
 * **Let ChatGPT or Claude write and edit posts without admin access.** Connect the agent as an Editor, Author or Contributor account. It can only do what that role can do in wp-admin.
 * **Have the agent save drafts for you to approve.** Turn on Force draft on create and anything the agent creates or tries to publish is saved as a draft. To stop it changing posts that are already live as well, connect it as a Contributor.
-* **Let AI read your site without changing anything.** Read-only mode stops every write tool from loading, including tools from your other plugins.
+* **Let AI read your site without changing anything.** Read-only mode stops every write tool from loading, including write tools you have bridged from your other plugins.
 * **Fix typos and refresh old posts.** The agent can search your posts, read one and update it, and every step is logged.
 * **Use your other plugins through the agent.** Plugins that register WordPress abilities, such as WPForms, show up on the Other plugins screen and stay off until you switch them on.
 
 ### 🛡️ Permission controls and an audit log on every call
 
 * **Least privilege by design.** The AI agent connects as a real, scoped WordPress user through OAuth or an Application Password, never an admin-equivalent key.
-* **Off by default.** Nothing is exposed until you enable it, and updates never silently widen access.
-* **Read-only mode.** One switch stops every write ability from registering at all, whatever is ticked, abilities from other plugins included, and your selections are untouched when you switch it back off.
-* **Two-layer capability gating.** A connection only sees the tools its user can call, and every call re-checks that capability before it runs.
+* **Off by default.** None of this plugin's tools are exposed until you enable them, and an update never switches one on. The one thing an update can change is the Adapter's default server, which other plugins publish to. The FAQ explains it.
+* **Read-only mode.** One switch stops every write ability from registering at all, whatever is ticked, abilities bridged from other plugins included, and your selections are untouched when you switch it back off. Tools another plugin publishes straight to the Adapter's default server are outside it.
+* **Two-layer capability gating.** A connection only sees the tools its user can call, and every call re-checks that capability before it runs. One exception: a tool bridged from another plugin whose own check needs an item id is listed to anyone who can edit posts, and that plugin's check still decides every call.
 * **Per-role and per-connection allowlist.** Narrow what one role, or one connection, can reach on top of the global list. The lists only narrow: an ability has to clear the global list, the role's list, and that connection's list before an agent can call it. A site that never opens the screen sees no change.
-* **Honest audit log.** Every call is recorded, denied attempts included, along with the user or connection that made the call, the argument keys, and a short identifier-only note of what it touched. Free-text argument content is never stored, and the log lives in your own database.
+* **Honest audit log.** Every call to this plugin's tools is recorded, denied attempts included, along with the user or connection that made the call, the argument keys, and a short identifier-only note of what it touched. Free-text argument content is never stored, and the log lives in your own database.
 * **Bounded by construction.** No arbitrary option or meta access, no code execution. Uploads are validated by their real bytes against an image allow-list, and a URL upload refuses private, loopback, or link-local targets with no redirects followed. A new user gets the default role, never admin, and the last administrator can never be removed. Anything destructive is off by default, capability-gated, and routed to Trash where supported.
 * **Optional safety controls.** Switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
 * **No content leaves your site.** The plugin contacts no AI provider and has no telemetry; see External Services below for the two outbound requests it can make on its own.
@@ -99,6 +99,8 @@ WordPress 6.9 lets any plugin register its own abilities, not just this one, and
 
 One limit worth knowing: since it's the other plugin's code doing the work, WordPress can only check a bridged ability's answer against a description if that plugin publishes one. The governance above (permissions, scoping, rate limiting, the audit log) applies in full either way.
 
+Some plugins skip this screen and publish tools straight to the Adapter's default server. Those tools are outside this plugin's controls (see the FAQ on the default server).
+
 So you are not limited to the integrations shipped here: any plugin that speaks the Abilities API can be handed to your agent, with a whole plugin's set toggled at once. The bundled WP-CLI command `wp aafm catalog export` prints a site's discoverable abilities as JSON.
 
 ### Page builder pages: refused, not silently broken
@@ -124,7 +126,7 @@ Connect any MCP client that can reach your endpoint. Hosted cloud apps (ChatGPT,
 3. Open the **Agent Abilities for MCP** menu in your admin sidebar. On the Abilities tab, turn on only the abilities you want the agent to have. Everything starts off.
 4. On the Connection tab, copy your site's MCP endpoint. The simplest path is OAuth: paste the endpoint into your MCP client and approve the connection once in the browser, where the agent acts as your own account.
 5. Prefer not to use OAuth, or on a client that can't? Create the dedicated low-privilege agent user the Connection tab offers, generate an Application Password for it, and connect with that instead.
-6. Use the connection check on the Connection tab to confirm the endpoint is reachable from your server.
+6. Run Check my connection on the Connection tab to confirm the endpoint is reachable from your server.
 
 ## Configuration
 
@@ -217,7 +219,7 @@ Yes, for a set of supported plugins. When one is active, Agent Abilities for MCP
 
 ### Can I expose abilities from my other plugins?
 
-Yes. WordPress 6.9 lets any plugin register abilities, and Agent Abilities for MCP can bridge the ones declared by your other active plugins. Open **Other plugins** in the admin, where they are grouped by the plugin that registered them and start off. Turn one on and it becomes a governed MCP tool under the same rules as everything else: scoped to the bound user, capability-checked on every call, rate-limited, and logged. You can enable or disable a whole plugin's set at once, and nothing is exposed until you choose it.
+Yes. WordPress 6.9 lets any plugin register abilities, and Agent Abilities for MCP can bridge the ones declared by your other active plugins. Open **Other plugins** in the admin, where they are grouped by the plugin that registered them and start off. Turn one on and it becomes a governed MCP tool under the same rules as everything else: scoped to the bound user, capability-checked on every call, rate-limited, and logged. You can enable or disable a whole plugin's set at once, and nothing is bridged until you choose it.
 
 ### Can an agent manage my events, tickets, or directory listings?
 
@@ -265,15 +267,15 @@ Connect it as a WordPress user with a smaller role. An Editor can write, edit an
 
 ### Can the agent only save drafts so I approve before anything goes live?
 
-Yes. Turn on Force draft on create in Settings. Anything the agent creates, and any request to publish, is saved as a draft instead. Edits to a post that is already published still go live, so if you want every change reviewed, connect the agent as a Contributor, who cannot edit published posts at all.
+Yes. Turn on Force draft on create in Settings. Anything the agent creates, and any request to publish, is saved as a draft instead. Edits to a post that is already published still go live, unless the edit asks for a publish status again, which is also saved as a draft. So if you want every change reviewed, connect the agent as a Contributor, who cannot edit published posts at all.
 
 ### Can AI read my site without being able to change anything?
 
-Yes. Switch on read-only mode and no write tool registers, whatever else is ticked, including tools from other plugins. The agent can still search and read. Your selections are kept for when you switch it back off.
+Yes. Switch on read-only mode and no write tool registers, whatever else is ticked, including write abilities you bridged from other plugins. The agent can still search and read. Your selections are kept for when you switch it back off. Tools another plugin publishes straight to the Adapter's default server are not covered; the next answer explains.
 
 ### Do I need to install the MCP Adapter separately?
 
-No. The official MCP Adapter is bundled with this plugin, and if you also run the standalone Adapter plugin, the two work together. The Adapter has a built-in default server that other plugins can publish tools to. By default this plugin leaves it alone: it switches on only when another active plugin publishes tools there, and you can force it on or off in Settings. This plugin's own tools are never on that server, whatever you choose. They are served only by its governed endpoint. This plugin does not govern the tools that are on the default server.
+No. The official MCP Adapter is bundled with this plugin, and if you also run the standalone Adapter plugin, the two work together. The Adapter has a built-in default server that other plugins can publish tools to. Settings has a choice for it: Automatic (the default), Always on or Always off. Automatic starts the server only when another active plugin publishes tools there, so a site that updates from an earlier version gets the server back if one does, and the Activity Log notes the first time. WordPress core's own public abilities do not count as a publisher, so if you ran the standalone Adapter only to reach those, choose Always on. This plugin's own tools are never on that server, whatever you choose. They are served only by its governed endpoint. The tools that are on the default server are not governed by this plugin: its read-only mode, allowlists, IP allowlist, rate limit and audit log do not apply to them. Choose Always off if you want none of it.
 
 ### I'm on Windows and the config won't start.
 
@@ -319,7 +321,7 @@ Please report security issues privately rather than in the support forum, so a f
 
 This plugin contacts no AI provider and includes no analytics or telemetry.
 
-It makes two kinds of outbound HTTP request on its own: the Connection tab's reachability check (a same-origin call confirming your MCP endpoint answers), and, only when you enable the off-by-default upload-media-from-url ability, a fetch of the exact HTTPS URL your AI client supplies so that file can be added to your media library. That fetch is SSRF-hardened against private, reserved, and redirect-based targets, and carries none of your content, credentials, or site data - it only reads what's already public at that URL.
+It makes two kinds of outbound HTTP request on its own: the Connection tab's checks (a few requests your site makes to its own address, to see whether the MCP endpoint answers and, with OAuth on, whether the discovery documents load), and, only when you enable the off-by-default upload-media-from-url ability, a fetch of the exact HTTPS URL your AI client supplies so that file can be added to your media library. That fetch is SSRF-hardened against private, reserved, and redirect-based targets, and carries none of your content, credentials, or site data - it only reads what's already public at that URL.
 
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), run on your own machine and not bundled with this plugin.
 

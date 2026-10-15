@@ -12,17 +12,25 @@ namespace AAFM\Tests\Support;
 trait AjaxHarness {
 
 	/**
+	 * The wp_die handler filter intercept_die() added, so reset removes only that callback.
+	 *
+	 * @var callable|null
+	 */
+	private $ajax_die_filter = null;
+
+	/**
 	 * Route wp_send_json through a throwing wp_die so the handler is observable in-process.
 	 *
 	 * @return void
 	 */
 	protected function intercept_die(): void {
 		add_filter( 'wp_doing_ajax', '__return_true' );
-		$die = static function (): void {
+		$die                   = static function (): void {
 			throw new \WPDieException( 'aafm-die' );
 		};
-		add_filter( 'wp_die_ajax_handler', static fn() => $die );
-		add_filter( 'wp_die_handler', static fn() => $die );
+		$this->ajax_die_filter = static fn() => $die;
+		add_filter( 'wp_die_ajax_handler', $this->ajax_die_filter );
+		add_filter( 'wp_die_handler', $this->ajax_die_filter );
 	}
 
 	/**
@@ -64,8 +72,11 @@ trait AjaxHarness {
 	 * @return void
 	 */
 	protected function reset_ajax_harness(): void {
-		remove_all_filters( 'wp_die_ajax_handler' );
-		remove_all_filters( 'wp_die_handler' );
+		if ( null !== $this->ajax_die_filter ) {
+			remove_filter( 'wp_die_ajax_handler', $this->ajax_die_filter );
+			remove_filter( 'wp_die_handler', $this->ajax_die_filter );
+			$this->ajax_die_filter = null;
+		}
 		remove_filter( 'wp_doing_ajax', '__return_true' );
 		$_POST = array();
 		unset( $_REQUEST['nonce'] );

@@ -496,9 +496,10 @@ function aafm_notify_outbox( string $op, array $item = array() ): array {
  * @param bool                           $digest Whether this is a summary.
  * @param string                         $extra  Optional closing paragraph added to the body.
  * @param string                         $pool   Which hourly pool to draw from, see aafm_notify_global_slot().
+ * @param array<int,array<string,mixed>> $drain  Digest queue events to remove once, and only if, wp_mail() reports success.
  * @return bool Whether a message was queued.
  */
-function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'global' ): bool {
+function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'global', array $drain = array() ): bool {
 	if ( ! aafm_notify_global_slot( $pool ) ) {
 		return false;
 	}
@@ -509,6 +510,7 @@ function aafm_notify_send_later( string $to, array $events, bool $digest, string
 			'events' => $events,
 			'digest' => $digest,
 			'extra'  => $extra,
+			'drain'  => $drain,
 		)
 	);
 	add_action( 'shutdown', 'aafm_notify_flush_outbox' );
@@ -531,9 +533,13 @@ function aafm_notify_flush_outbox(): void {
 	}
 	foreach ( $items as $item ) {
 		try {
-			aafm_notify_deliver( (string) $item['to'], (array) $item['events'], (bool) $item['digest'], (string) $item['extra'] );
+			$sent = aafm_notify_deliver( (string) $item['to'], (array) $item['events'], (bool) $item['digest'], (string) $item['extra'] );
+			if ( $sent && ! empty( $item['drain'] ) && ! aafm_notify_queue_remove( (array) $item['drain'] ) ) {
+				aafm_notify_log_failure( __( 'The queued notifications went out but could not be cleared', 'agent-abilities-for-mcp' ) );
+			}
 		} catch ( \Throwable $e ) {
 			unset( $e );
+			aafm_notify_log_failure( __( 'A notification email could not be sent', 'agent-abilities-for-mcp' ) );
 		}
 	}
 }

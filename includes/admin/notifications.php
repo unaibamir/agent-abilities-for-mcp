@@ -165,9 +165,11 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 /**
  * Settle the digest queue after a save. A save that leaves digest mode, or points the digest at a new
  * address, hands the queued events (including this very save's read-only or high-risk flip, queued
- * moments earlier under the old settings) to the OLD address through the capped delivery path, then
- * clears the queue. A queue left behind a mode that is no longer digest is cleared too, so stale
- * events never mail weeks later when digest mode comes back.
+ * moments earlier under the old settings) to the OLD address through the capped delivery path. The
+ * queue is cleared by the end-of-request flush, and only once wp_mail() reports success; a full hourly
+ * cap or a failing mailer keeps it and writes one bounded error row. A queue left behind a mode that
+ * is no longer digest loses its ordinary events so they never mail weeks later when digest mode comes
+ * back, but an undelivered switch flip stays.
  *
  * @param array<string,mixed> $before Settings before.
  * @param array<string,mixed> $after  Settings after.
@@ -185,9 +187,13 @@ function aafm_notify_settle_queue( array $before, array $after ): void {
 			return;
 		}
 		if ( $flush ) {
-			aafm_notify_send_later( (string) $before['email'], $queue, true );
+			if ( ! aafm_notify_send_later( (string) $before['email'], $queue, true, '', 'global', $queue ) ) {
+				aafm_notify_log_failure( __( 'The queued notifications could not be sent and were kept', 'agent-abilities-for-mcp' ) );
+			}
+			return;
 		}
-		if ( ! aafm_notify_queue_clear() ) {
+		$stale = array_values( wp_list_filter( $queue, array( 'trigger' => 'switch_flip' ), 'NOT' ) );
+		if ( array() !== $stale && ! aafm_notify_queue_remove( $stale ) ) {
 			aafm_notify_log_failure( __( 'The queued notifications could not be cleared', 'agent-abilities-for-mcp' ) );
 		}
 	} catch ( \Throwable $e ) {

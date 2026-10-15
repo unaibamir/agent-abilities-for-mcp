@@ -490,7 +490,7 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->assertSame( array(), aafm_notify_queue_list() );
 	}
 
-	public function test_leaving_digest_clears_the_queue_even_when_it_cannot_be_mailed(): void {
+	public function test_leaving_digest_clears_the_queue_once_the_old_address_was_mailed(): void {
 		$this->store( 'digest', 'old@example.com' );
 		aafm_notify_event( 'risky_run', 'high_risk', array( 'ability' => 'aafm/delete-user' ) );
 
@@ -501,7 +501,75 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
+		$this->assertCount( 1, aafm_notify_queue_list(), 'The queue stays until the mail has actually gone out.' );
+		$this->assertStringContainsString( 'daily summary', $this->sent()[0]['subject'] );
 		$this->assertSame( array(), aafm_notify_queue_list(), 'A stale queue must not mail weeks later.' );
+	}
+
+	public function test_leaving_digest_keeps_the_queue_when_the_mailer_fails(): void {
+		$this->store( 'digest', 'old@example.com' );
+		aafm_notify_event( 'switch_flip', 'read_only_on', array( 'row_id' => 1 ) );
+		$this->mail_ok = false;
+
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'notice',
+				'aafm_notify_switch_flip' => '1',
+			)
+		);
+		$this->sent();
+
+		$this->assertCount( 1, aafm_notify_queue_list(), 'A flip that was never delivered is not thrown away.' );
+	}
+
+	public function test_leaving_digest_keeps_the_queue_and_logs_a_row_when_the_hourly_cap_is_full(): void {
+		$this->store( 'digest', 'old@example.com' );
+		aafm_notify_event( 'switch_flip', 'read_only_on', array( 'row_id' => 1 ) );
+		set_transient( 'aafm_ntf_global', AAFM_NOTIFY_GLOBAL_MAX, HOUR_IN_SECONDS );
+
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'notice',
+				'aafm_notify_switch_flip' => '1',
+			)
+		);
+
+		$this->assertSame( array(), $this->sent() );
+		$this->assertCount( 1, aafm_notify_queue_list(), 'The cap rejected the send, so nothing may be dropped.' );
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm/notifications',
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows );
+		$this->assertLessThanOrEqual( AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW, count( $rows ) );
+	}
+
+	public function test_a_stale_queue_drops_chatter_but_keeps_an_undelivered_flip(): void {
+		$this->store( 'notice', '' );
+		aafm_update_option_verified(
+			'aafm_notify_queue',
+			array(
+				array(
+					'id'      => 'a',
+					'trigger' => 'risky_run',
+					'subtype' => 'high_risk',
+				),
+				array(
+					'id'      => 'b',
+					'trigger' => 'switch_flip',
+					'subtype' => 'read_only_off',
+				),
+			),
+			false
+		);
+
+		$this->save( array( 'aafm_notify_mode' => 'off' ) );
+
+		$left = aafm_notify_queue_list();
+		$this->assertCount( 1, $left );
+		$this->assertSame( 'b', $left[0]['id'] );
 	}
 
 	public function test_a_digest_save_that_changes_nothing_important_keeps_the_queue(): void {

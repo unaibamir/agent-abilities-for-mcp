@@ -456,6 +456,14 @@ final class NotificationsTest extends TestCase {
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
 		$this->assertCount( 1, aafm_notify_pending_list(), 'The call returned and the notice was written first.' );
 		aafm_notify_flush_outbox(); // The failing mailer runs at the end of the request and must not escape there either.
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm/notifications',
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A mailer that throws leaves an error row.' );
+		$this->assertLessThanOrEqual( AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW, count( $rows ) );
 	}
 
 	public function test_a_throwing_throttle_cannot_stop_the_notice_being_written(): void {
@@ -490,6 +498,45 @@ final class NotificationsTest extends TestCase {
 
 		$this->assertFalse( get_transient( 'aafm_ntf_' . substr( md5( 'switch_flip:read_only_on' ), 0, 20 ) ), 'The bucket slot is untouched.' );
 		$this->assertFalse( get_transient( 'aafm_ntf_global' ), 'The shared hourly pool is untouched.' );
+	}
+
+	public function test_a_denial_flood_never_evicts_a_critical_notice(): void {
+		$this->configure(
+			array(
+				'mode'  => 'notice',
+				'email' => '',
+			)
+		);
+		aafm_notify_event( 'switch_flip', 'read_only_on', array( 'row_id' => 1 ) );
+		aafm_notify_event( 'risky_run', 'high_risk', array( 'row_id' => 2 ) );
+		aafm_notify_event( 'new_app', 'oauth_grant', array( 'row_id' => 3 ) );
+		for ( $i = 1; $i <= 15; $i++ ) {
+			aafm_notify_event( 'denial_burst', 'bucket' . $i, array( 'row_id' => 100 + $i ) );
+		}
+
+		$list    = aafm_notify_pending_list();
+		$denials = array_values( wp_list_filter( $list, array( 'trigger' => 'denial_burst' ) ) );
+		$this->assertCount( 3, $denials, 'At most three denial entries are kept.' );
+		$this->assertSame( 115, $denials[0]['row_id'], 'The newest denials win.' );
+		$this->assertSame( array( 1, 2, 3 ), array_column( array_reverse( array_values( wp_list_filter( $list, array( 'trigger' => 'denial_burst' ), 'NOT' ) ) ), 'row_id' ) );
+	}
+
+	public function test_a_denial_cannot_push_a_critical_notice_out_of_a_full_list(): void {
+		$this->configure(
+			array(
+				'mode'  => 'notice',
+				'email' => '',
+			)
+		);
+		for ( $i = 1; $i <= AAFM_NOTIFY_PENDING_MAX; $i++ ) {
+			aafm_notify_event( 'risky_run', 'bucket' . $i, array( 'row_id' => $i ) );
+		}
+		aafm_notify_event( 'denial_burst', 'flood', array( 'row_id' => 99 ) );
+
+		$list = aafm_notify_pending_list();
+		$this->assertCount( AAFM_NOTIFY_PENDING_MAX, $list );
+		$this->assertSame( array(), wp_list_filter( $list, array( 'trigger' => 'denial_burst' ) ), 'The full list of critical entries is untouched.' );
+		$this->assertSame( 1, $list[ AAFM_NOTIFY_PENDING_MAX - 1 ]['row_id'] );
 	}
 
 	public function test_the_message_is_sanitized(): void {

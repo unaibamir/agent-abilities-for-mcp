@@ -1526,6 +1526,7 @@ function aafm_ajax_get_log_page(): void {
 		'page'        => $page,
 		'total_pages' => $total_pages,
 		'total'       => $total,
+		'count_note'  => aafm_activity_count_note( $total, aafm_log_retention_days() ),
 		'filter'      => $filter,
 		'filtered'    => array() !== $filters,
 	);
@@ -2796,8 +2797,8 @@ function aafm_render_activity_tab(): void {
 /**
  * The words after the entry count: "entry" or "entries", then what the log keeps.
  *
- * The admin script swaps between the one and many forms of this as the count changes, so both are localized
- * (see the countNoteOne and countNoteMany strings).
+ * The AJAX page response carries this string for the count it returns, so the plural form is chosen by
+ * _n() and not by the script. The countNoteOne and countNoteMany strings stay as the script's fallback.
  *
  * @param int $total     How many entries the count above shows.
  * @param int $retention Days the log keeps entries, 0 for everything.

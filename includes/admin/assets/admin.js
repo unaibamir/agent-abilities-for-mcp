@@ -1944,24 +1944,28 @@
 		}
 
 		/**
-		 * Show the entry count and the matching "entry"/"entries" note.
+		 * Show the entry count and its note.
 		 *
-		 * ponytail: only the one and many forms are localized, so a language with more plural forms gets
-		 * the many form for every count except 1. Add Intl.PluralRules keyed strings if that matters.
+		 * The server sends the note already pluralized for the count. The one/many pair is only the
+		 * fallback for a response without it, and it knows two forms, so a language with more would
+		 * get the many form there.
 		 *
 		 * @param {number} total How many entries match.
+		 * @param {*}      note  The server's pluralized note, when the response carries one.
 		 */
-		#renderLogCount( total ) {
+		#renderLogCount( total, note ) {
 			const num = document.querySelector( '.aafm-count-num' );
 			if ( num ) {
 				num.textContent = new Intl.NumberFormat().format( total );
 			}
-			const note = document.querySelector( '.aafm-count-note' );
-			if ( note ) {
-				note.textContent =
-					total === 1
-						? this.#t( 'countNoteOne', 'entry' )
-						: this.#t( 'countNoteMany', 'entries' );
+			const noteEl = document.querySelector( '.aafm-count-note' );
+			if ( noteEl ) {
+				noteEl.textContent =
+					typeof note === 'string' && note !== ''
+						? note
+						: total === 1
+							? this.#t( 'countNoteOne', 'entry' )
+							: this.#t( 'countNoteMany', 'entries' );
 			}
 		}
 
@@ -2149,7 +2153,7 @@
 				setActiveFilterButton( wrap.dataset.filter );
 				this.#updatePager( Number( data.page ) || 1, Number( data.total_pages ) || 1 );
 				if ( typeof data.total === 'number' ) {
-					this.#renderLogCount( data.total );
+					this.#renderLogCount( data.total, data.count_note );
 				}
 				appliedFilters = values;
 				this.#syncExportLinkFilter( wrap.dataset.filter, values );

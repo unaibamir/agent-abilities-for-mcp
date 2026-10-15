@@ -332,5 +332,7 @@ final class ActivityFiltersUiTest extends TestCase {
 		$this->assertStringContainsString( "this.#t( 'noMatches'", $js );
 		$this->assertStringContainsString( "'countNoteOne'", $js );
 		$this->assertStringContainsString( "'countNoteMany'", $js );
+		// The server's pluralized note wins; the one/many pair is only the fallback.
+		$this->assertStringContainsString( 'this.#renderLogCount( data.total, data.count_note );', $js );
 	}
 }

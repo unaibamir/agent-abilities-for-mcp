@@ -448,6 +448,38 @@ final class ActivityTabTest extends TestCase {
 		$this->assertTrue( $this->run_handler( 'aafm_ajax_get_log_page' )['data']['filtered'] ?? null );
 	}
 
+	public function test_the_ajax_page_handler_sends_the_count_note_pluralized_for_the_count(): void {
+		$this->acting_as( 'administrator' );
+		for ( $i = 0; $i < 2; $i++ ) {
+			aafm_log_activity(
+				array(
+					'ability' => 'aafm/get-posts',
+					'status'  => 'success',
+				)
+			);
+		}
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+
+		// A language with a third plural form: the script only knows one and many, so the word has to come from the server.
+		$few = static function ( $translation, $single, $plural, $number ) {
+			return 'entry' === $single && 2 === $number ? 'few-form' : $translation;
+		};
+		add_filter( 'ngettext', $few, 10, 4 );
+		try {
+			$json     = $this->run_handler( 'aafm_ajax_get_log_page' );
+			$expected = aafm_activity_count_note( 2, aafm_log_retention_days() );
+		} finally {
+			remove_filter( 'ngettext', $few, 10 );
+		}
+
+		$this->assertSame( 2, $json['data']['total'] ?? null );
+		$this->assertSame( $expected, $json['data']['count_note'] ?? null );
+		$this->assertStringStartsWith( 'few-form', (string) ( $json['data']['count_note'] ?? '' ) );
+	}
+
 	public function test_the_ajax_page_handler_ignores_an_array_page_parameter(): void {
 		$this->acting_as( 'administrator' );
 		aafm_log_activity(

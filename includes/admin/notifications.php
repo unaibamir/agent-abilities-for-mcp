@@ -321,7 +321,12 @@ function aafm_ajax_notify_test(): void {
 	$site = aafm_notify_site_name();
 	/* translators: %s: the site name. */
 	$subject = sprintf( __( '[%s] Agent Abilities test email', 'agent-abilities-for-mcp' ), $site );
-	$sent    = wp_mail( $s['email'], $subject, __( 'This is a test. If you can read it, alerts from Agent Abilities for MCP will reach this address.', 'agent-abilities-for-mcp' ) );
+	try {
+		$sent = wp_mail( $s['email'], $subject, __( 'This is a test. If you can read it, alerts from Agent Abilities for MCP will reach this address.', 'agent-abilities-for-mcp' ) );
+	} catch ( \Throwable $e ) {
+		unset( $e ); // A mailer that throws gets the same answer as one that reports failure, never a 500.
+		$sent = false;
+	}
 	if ( $sent ) {
 		wp_send_json_success( array( 'message' => __( 'Test email sent. Check the inbox, and the spam folder.', 'agent-abilities-for-mcp' ) ) );
 	}

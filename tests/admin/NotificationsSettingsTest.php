@@ -222,6 +222,33 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->assertCount( 1, $this->sent() );
 	}
 
+	public function test_the_test_button_answers_with_an_error_when_the_mailer_throws(): void {
+		aafm_update_option_verified(
+			'aafm_notifications',
+			array(
+				'mode'     => 'immediate',
+				'email'    => 'owner@example.com',
+				'triggers' => array( 'switch_flip' => true ),
+			),
+			true
+		);
+		$thrower = static function (): bool {
+			throw new \RuntimeException( 'SMTP exploded' );
+		};
+		add_filter( 'pre_wp_mail', $thrower, 5 );
+		$this->post_as( 'administrator' );
+
+		try {
+			$json = $this->run_handler( 'aafm_ajax_notify_test' );
+		} finally {
+			remove_filter( 'pre_wp_mail', $thrower, 5 );
+		}
+
+		$this->assertFalse( $json['success'] ?? true, wp_json_encode( $json ) );
+		$this->assertStringContainsString( 'could not send', (string) ( $json['data']['message'] ?? '' ) );
+		$this->assertStringNotContainsString( 'SMTP exploded', (string) ( $json['data']['message'] ?? '' ), 'The exception text stays out of the response.' );
+	}
+
 	public function test_the_test_button_needs_an_address_and_manage_options(): void {
 		$this->post_as( 'administrator' );
 		$this->assertFalse( $this->run_handler( 'aafm_ajax_notify_test' )['success'] ?? true );

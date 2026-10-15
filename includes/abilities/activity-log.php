@@ -114,7 +114,9 @@ function aafm_args_get_activity_log(): array {
  *
  * Passes the (validated) filters straight to aafm_query_activity(), which caps per_page at
  * 200 and orders most-recent-first, then redacts each row to the safe field set - never
- * source_ip.
+ * source_ip. The refusal reason a denied row carries is not returned either: any manage_options
+ * principal can call this, including an agent, and the reason would let it map the allowlist and
+ * deny list that every other path keeps opaque.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
@@ -152,7 +154,7 @@ function aafm_exec_get_activity_log( array $input ): array {
 			// consumer can tell "this call recorded nothing" from "this call recorded an empty
 			// string". Safe to expose only because includes/audit/detail.php constrains every
 			// writer to identifiers.
-			'detail'            => isset( $row['detail'] ) ? (string) $row['detail'] : null,
+			'detail'            => isset( $row['detail'] ) ? aafm_redact_denial_reason( (string) $row['detail'] ) : null,
 			// source_ip is deliberately NOT returned (network PII, not shown in the admin panel).
 		);
 	}

@@ -435,6 +435,19 @@ final class ActivityTabTest extends TestCase {
 		$this->assertSame( 'started', $json['data']['rows'][0]['status'] ?? null );
 	}
 
+	public function test_the_ajax_page_handler_says_whether_filters_emptied_the_table(): void {
+		$this->acting_as( 'administrator' );
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+
+		$this->assertFalse( $this->run_handler( 'aafm_ajax_get_log_page' )['data']['filtered'] ?? null, 'No filter, so an empty log is just empty.' );
+
+		$_POST['filter'] = 'denied';
+		$this->assertTrue( $this->run_handler( 'aafm_ajax_get_log_page' )['data']['filtered'] ?? null );
+	}
+
 	public function test_the_ajax_page_handler_ignores_an_array_page_parameter(): void {
 		$this->acting_as( 'administrator' );
 		aafm_log_activity(

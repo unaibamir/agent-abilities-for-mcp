@@ -180,6 +180,10 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'pagerStatus'              => __( 'Page %1$s of %2$s', 'agent-abilities-for-mcp' ),
 				'loadingPage'              => __( 'Loading…', 'agent-abilities-for-mcp' ),
 				'noActivity'               => __( 'No activity recorded yet.', 'agent-abilities-for-mcp' ),
+				'noMatches'                => __( 'No entries match these filters.', 'agent-abilities-for-mcp' ),
+				'searchTooShort'           => __( 'Type at least 2 characters to search.', 'agent-abilities-for-mcp' ),
+				'countNoteOne'             => aafm_activity_count_note( 1, aafm_log_retention_days() ),
+				'countNoteMany'            => aafm_activity_count_note( 2, aafm_log_retention_days() ),
 				// Activity Log: Live view and summary.
 				'liveOn'                   => __( 'Live', 'agent-abilities-for-mcp' ),
 				'liveStopped'              => __( 'Live view stopped.', 'agent-abilities-for-mcp' ),
@@ -1523,6 +1527,7 @@ function aafm_ajax_get_log_page(): void {
 		'total_pages' => $total_pages,
 		'total'       => $total,
 		'filter'      => $filter,
+		'filtered'    => array() !== $filters,
 	);
 	if ( ! empty( $posted['with_summary'] ) ) {
 		$data['summary'] = aafm_activity_summary_view( aafm_activity_summary() );
@@ -2699,20 +2704,7 @@ function aafm_render_activity_tab(): void {
 	echo '</div>';
 
 	// Live count headline plus a plain clarifier describing the retention window.
-	if ( $retention > 0 ) {
-		$count_note = sprintf(
-			/* translators: %s: number of days of activity the log keeps. */
-			_n(
-				'entries, keeping the last %s day',
-				'entries, keeping the last %s days',
-				$retention,
-				'agent-abilities-for-mcp'
-			),
-			number_format_i18n( $retention )
-		);
-	} else {
-		$count_note = __( 'entries, keeping everything', 'agent-abilities-for-mcp' );
-	}
+	$count_note = aafm_activity_count_note( $total, $retention );
 	printf(
 		'<span class="aafm-activity-count" aria-live="polite"><strong class="aafm-count-num">%1$s</strong> <span class="aafm-count-note">%2$s</span></span>',
 		esc_html( number_format_i18n( $total ) ),
@@ -2772,7 +2764,7 @@ function aafm_render_activity_tab(): void {
 	}
 	echo '</tr></thead><tbody>';
 
-	echo wp_kses( aafm_activity_rows_html( $rows ), aafm_admin_allowed_html() );
+	echo wp_kses( aafm_activity_rows_html( $rows, array() !== $filters ), aafm_admin_allowed_html() );
 
 	echo '</tbody></table>';
 	echo '</div>'; // .aafm-table-wrap
@@ -2799,6 +2791,34 @@ function aafm_render_activity_tab(): void {
 	echo '</div>';
 
 	echo '</div>';
+}
+
+/**
+ * The words after the entry count: "entry" or "entries", then what the log keeps.
+ *
+ * admin.js swaps between the one and many forms of this as the count changes, so both are localized
+ * (see the countNoteOne and countNoteMany strings).
+ *
+ * @param int $total     How many entries the count above shows.
+ * @param int $retention Days the log keeps entries, 0 for everything.
+ * @return string
+ */
+function aafm_activity_count_note( int $total, int $retention ): string {
+	if ( $retention > 0 ) {
+		$keeping = sprintf(
+			/* translators: %s: number of days of activity the log keeps. */
+			_n( 'keeping the last %s day', 'keeping the last %s days', $retention, 'agent-abilities-for-mcp' ),
+			number_format_i18n( $retention )
+		);
+	} else {
+		$keeping = __( 'keeping everything', 'agent-abilities-for-mcp' );
+	}
+	return sprintf(
+		/* translators: 1: "entry" or "entries", 2: what the log keeps, for example "keeping the last 30 days". */
+		__( '%1$s, %2$s', 'agent-abilities-for-mcp' ),
+		_n( 'entry', 'entries', $total, 'agent-abilities-for-mcp' ),
+		$keeping
+	);
 }
 
 /**
@@ -2991,12 +3011,14 @@ function aafm_export_activity_csv( $filters = null ): void {
  * input there. Standard escaping is sufficient for all of it. An empty set renders a single "no activity" row so the table never
  * collapses to a bare <tbody>.
  *
- * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
+ * @param array<int,array<string,mixed>> $rows     Rows from aafm_query_activity().
+ * @param bool                           $filtered Whether filters are applied, which changes what an empty table says.
  * @return string Escaped <tr>…</tr> markup.
  */
-function aafm_activity_rows_html( array $rows ): string {
+function aafm_activity_rows_html( array $rows, bool $filtered = false ): string {
 	if ( empty( $rows ) ) {
-		return '<tr><td colspan="' . (int) count( aafm_activity_log_headers() ) . '">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
+		$empty = $filtered ? __( 'No entries match these filters.', 'agent-abilities-for-mcp' ) : __( 'No activity recorded yet.', 'agent-abilities-for-mcp' );
+		return '<tr><td colspan="' . (int) count( aafm_activity_log_headers() ) . '">' . esc_html( $empty ) . '</td></tr>';
 	}
 
 	$names = aafm_activity_connection_names( array_column( $rows, 'client_id' ) );

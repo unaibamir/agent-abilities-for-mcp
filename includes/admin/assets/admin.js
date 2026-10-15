@@ -1931,10 +1931,7 @@
 				if ( json?.success ) {
 					// Empty the table, reset the count, and collapse the pager to page 1 of 1.
 					this.#renderLogRows( [] );
-					const num = document.querySelector( '.aafm-count-num' );
-					if ( num ) {
-						num.textContent = '0';
-					}
+					this.#renderLogCount( 0 );
 					const wrap = document.querySelector( '#aafm-log-table-wrap' );
 					if ( wrap ) {
 						wrap.dataset.page = '1';
@@ -1944,6 +1941,28 @@
 					this.#renderLogSummary( { ok: true, total: 0, success: 0, error: 0, denied: 0, rate: '-', top: [] } );
 				}
 			} );
+		}
+
+		/**
+		 * Show the entry count and the matching "entry"/"entries" note.
+		 *
+		 * ponytail: only the one and many forms are localized, so a language with more plural forms gets
+		 * the many form for every count except 1. Add Intl.PluralRules keyed strings if that matters.
+		 *
+		 * @param {number} total How many entries match.
+		 */
+		#renderLogCount( total ) {
+			const num = document.querySelector( '.aafm-count-num' );
+			if ( num ) {
+				num.textContent = new Intl.NumberFormat().format( total );
+			}
+			const note = document.querySelector( '.aafm-count-note' );
+			if ( note ) {
+				note.textContent =
+					total === 1
+						? this.#t( 'countNoteOne', 'entry' )
+						: this.#t( 'countNoteMany', 'entries' );
+			}
 		}
 
 		/**
@@ -2123,15 +2142,14 @@
 					return 'failed';
 				}
 				const data = json.data ?? {};
-				this.#renderLogRows( Array.isArray( data.rows ) ? data.rows : [] );
+				this.#renderLogRows( Array.isArray( data.rows ) ? data.rows : [], Boolean( data.filtered ) );
 				wrap.dataset.page = String( data.page ?? 1 );
 				wrap.dataset.filter = String( data.filter ?? filter );
 				wrap.dataset.totalPages = String( data.total_pages ?? 1 );
 				setActiveFilterButton( wrap.dataset.filter );
 				this.#updatePager( Number( data.page ) || 1, Number( data.total_pages ) || 1 );
-				const num = document.querySelector( '.aafm-count-num' );
-				if ( num && typeof data.total === 'number' ) {
-					num.textContent = new Intl.NumberFormat().format( data.total );
+				if ( typeof data.total === 'number' ) {
+					this.#renderLogCount( data.total );
 				}
 				appliedFilters = values;
 				this.#syncExportLinkFilter( wrap.dataset.filter, values );
@@ -2154,7 +2172,19 @@
 
 			const applyBtn = document.querySelector( '#aafm-log-apply' );
 			const resetBtn = document.querySelector( '#aafm-log-reset' );
-			const applyFilters = () => load( 1, wrap.dataset.filter ?? 'all', { filters: this.#logFilterValues() } );
+			const searchBox = document.querySelector( '.aafm-log-filters [data-filter-key="q"]' );
+			searchBox?.addEventListener( 'input', () => searchBox.setCustomValidity( '' ) );
+			const applyFilters = () => {
+				const filters = this.#logFilterValues();
+				// The server ignores a one-character search, so say so with the browser's own validation bubble
+				// instead of silently showing the unfiltered table.
+				if ( searchBox && [ ...( filters.q ?? '' ) ].length === 1 ) {
+					searchBox.setCustomValidity( this.#t( 'searchTooShort', 'Type at least 2 characters to search.' ) );
+					searchBox.reportValidity();
+					return;
+				}
+				load( 1, wrap.dataset.filter ?? 'all', { filters } );
+			};
 			applyBtn?.addEventListener( 'click', applyFilters );
 			resetBtn?.addEventListener( 'click', () => {
 				// Every input goes, including the hidden "row" field a notification link fills in,
@@ -2164,7 +2194,9 @@
 					.forEach( ( el ) => {
 						el.value = '';
 					} );
-				load( 1, wrap.dataset.filter ?? 'all', { filters: {} } );
+				searchBox?.setCustomValidity( '' );
+				// The status segment is a filter too: Reset returns it to All.
+				load( 1, 'all', { filters: {} } );
 			} );
 			document.querySelectorAll( '.aafm-log-filters input' ).forEach( ( input ) => {
 				input.addEventListener( 'keydown', ( e ) => {
@@ -2334,9 +2366,10 @@
 		 * Replace the activity table body with a page of rows, built cell-by-cell with
 		 * textContent (never innerHTML). An empty set renders a single "no activity" row.
 		 *
-		 * @param {Array<Object>} rows Row objects from the aafm_get_log_page response.
+		 * @param {Array<Object>} rows     Row objects from the aafm_get_log_page response.
+		 * @param {boolean}       filtered Whether filters are applied, which changes what an empty table says.
 		 */
-		#renderLogRows( rows ) {
+		#renderLogRows( rows, filtered = false ) {
 			const tbody = document.querySelector( '.aafm-log-table tbody' );
 			if ( ! tbody ) {
 				return;
@@ -2347,7 +2380,9 @@
 				const tr = document.createElement( 'tr' );
 				const td = document.createElement( 'td' );
 				td.colSpan = 9;
-				td.textContent = this.#t( 'noActivity', 'No activity recorded yet.' );
+				td.textContent = filtered
+					? this.#t( 'noMatches', 'No entries match these filters.' )
+					: this.#t( 'noActivity', 'No activity recorded yet.' );
 				tr.append( td );
 				tbody.append( tr );
 				return;

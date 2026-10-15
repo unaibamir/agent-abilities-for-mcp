@@ -35,6 +35,40 @@ final class ActivityFiltersUiTest extends TestCase {
 		$this->assertStringContainsString( 'colspan="9"', aafm_activity_rows_html( array() ) );
 	}
 
+	public function test_a_table_emptied_by_filters_says_so_and_an_empty_log_does_not(): void {
+		$this->acting_as( 'administrator' );
+		$this->assertStringContainsString( 'No entries match these filters.', aafm_activity_rows_html( array(), true ) );
+		$this->assertStringNotContainsString( 'No activity recorded yet.', aafm_activity_rows_html( array(), true ) );
+		$this->assertStringContainsString( 'No activity recorded yet.', aafm_activity_rows_html( array() ) );
+
+		$this->assertStringContainsString( 'No activity recorded yet.', $this->render() );
+		$_GET['filter'] = 'denied';
+		$filtered       = $this->render();
+		$this->assertStringContainsString( 'No entries match these filters.', $filtered );
+		$this->assertStringNotContainsString( 'No activity recorded yet.', $filtered );
+	}
+
+	public function test_the_count_note_agrees_with_the_count(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+			)
+		);
+		$this->assertMatchesRegularExpression( '#aafm-count-num">1</strong> <span class="aafm-count-note">entry, #', $this->render() );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+			)
+		);
+		$this->assertMatchesRegularExpression( '#aafm-count-num">2</strong> <span class="aafm-count-note">entries, #', $this->render() );
+		$this->assertSame( 'entry, keeping everything', aafm_activity_count_note( 1, 0 ) );
+		$this->assertSame( 'entries, keeping the last 1 day', aafm_activity_count_note( 0, 1 ) );
+		$this->assertSame( 'entries, keeping the last 30 days', aafm_activity_count_note( 5, 30 ) );
+	}
+
 	public function test_duration_formatting(): void {
 		$this->assertSame( '-', aafm_format_duration( null ) );
 		$this->assertSame( '0 ms', aafm_format_duration( 0 ) );
@@ -283,5 +317,20 @@ final class ActivityFiltersUiTest extends TestCase {
 		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
 		$this->assertStringContainsString( "'summaryUnavailable'", $page );
 		$this->assertStringContainsString( "'liveNeedsRange'", $page );
+	}
+
+	public function test_admin_js_resets_the_status_hints_a_short_search_and_follows_the_count(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+
+		// Reset returns the status segment to All, so the table and the export link leave "Denied".
+		$this->assertMatchesRegularExpression( "/resetBtn\\?\\.addEventListener\\( 'click'.*?load\\( 1, 'all', \\{ filters: \\{\\} \\} \\);/s", $js );
+		// A one-character search is not sent; the viewer gets the browser's own validation bubble.
+		$this->assertStringContainsString( "this.#t( 'searchTooShort'", $js );
+		$this->assertStringContainsString( 'reportValidity()', $js );
+		// The empty row and the count note come from the localized bag.
+		$this->assertStringContainsString( "this.#t( 'noMatches'", $js );
+		$this->assertStringContainsString( "'countNoteOne'", $js );
+		$this->assertStringContainsString( "'countNoteMany'", $js );
 	}
 }

@@ -3,7 +3,7 @@
 # into it in the plugin-order and cache combinations that have bitten us before, and
 # asserts on what the HTTP responses and debug.log actually say.
 #
-#   ddev exec bash /var/www/plugin-src/bin/smoke-gate.sh [--from <version>] [--keep]
+#   ddev exec bash /var/www/plugin-src/bin/smoke-gate.sh [--from <version>] [--keep] [--shots]
 #
 # Exit 0 = every hard check passed. Lines are PASS / FAIL / KNOWN <leg>: <detail>, then
 # a final "SMOKE: <n> pass, <n> fail, <n> known".
@@ -98,10 +98,12 @@ fi
 
 FROM=''
 KEEP=0
+SHOTS=0
+BIND=localhost
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--from)
-			[ $# -ge 2 ] || { echo "usage: smoke-gate.sh [--from <version>] [--keep]"; exit 2; }
+			[ $# -ge 2 ] || { echo "usage: smoke-gate.sh [--from <version>] [--keep] [--shots]"; exit 2; }
 			FROM="$2"
 			shift 2
 			;;
@@ -109,12 +111,17 @@ while [ $# -gt 0 ]; do
 			KEEP=1
 			shift
 			;;
+		--shots)
+			SHOTS=1
+			shift
+			;;
 		*)
-			echo "usage: smoke-gate.sh [--from <version>] [--keep]"
+			echo "usage: smoke-gate.sh [--from <version>] [--keep] [--shots]"
 			exit 2
 			;;
 	esac
 done
+[ "$SHOTS" = 1 ] && BIND=0.0.0.0
 
 P=0
 F=0
@@ -138,7 +145,7 @@ finish() {
 
 teardown() {
 	[ "$KEEP" = 1 ] && { echo "kept: $SMOKE_ROOT (database $SMOKE_DB, server may still be running)"; return; }
-	pkill -f 'php -S localhost:8070' 2>/dev/null
+	pkill -f 'php -S [^ ]*:8070' 2>/dev/null
 	mysql -hdb -uroot -proot -e "DROP DATABASE IF EXISTS \`$SMOKE_DB\`" 2>/dev/null
 	rm -rf "$SMOKE_ROOT"
 }
@@ -193,14 +200,14 @@ PHP
 }
 
 start_server() {
-	pkill -f 'php -S localhost:8070' 2>/dev/null
+	pkill -f 'php -S [^ ]*:8070' 2>/dev/null
 	sleep 1
 	if [ "$(curl -s --max-time 3 -o /dev/null -w '%{http_code}' "$URL/")" != 000 ]; then
 		fail setup "port 8070 busy"
 		return 1
 	fi
 	# Four workers so the built-in server can answer a request that a command it is serving makes to itself.
-	(PHP_CLI_SERVER_WORKERS=4 php -S localhost:8070 -t "$SMOKE_ROOT" > "$SMOKE_ROOT/server.log" 2>&1 &)
+	(PHP_CLI_SERVER_WORKERS=4 php -S "$BIND:8070" -t "$SMOKE_ROOT" > "$SMOKE_ROOT/server.log" 2>&1 &)
 	local i
 	for i in $(seq 1 20); do
 		[ "$(curl -s --max-time 3 -o /dev/null -w '%{http_code}' "$URL/")" != 000 ] && return 0
@@ -874,8 +881,45 @@ leg_doctor() {
 	log_ok doctor 'Connection Doctor'
 }
 
+# shots_mode: build the disposable site, seed demo data, point WordPress at the container's own IP so a
+# browser on the host can use it, then wait until $SMOKE_ROOT/shots.done exists (or two hours pass).
+# The site is the gate's own disposable one (database aafm_smoke, /tmp/aafm-smoke), never the DDEV site.
+# AAFM_SHOTS_SEED=0 skips the seed, for the one shot (the first-run wizard) that needs an unconfigured
+# site; seed afterwards with: wp --allow-root --path=/tmp/aafm-smoke eval-file <repo>/bin/screenshots/seed-demo.php
+shots_mode() {
+	local cip i
+	cip=$(hostname -i | awk '{print $1}')
+	if [ -z "$cip" ]; then
+		fail shots "could not read the container IP"
+		return 1
+	fi
+	WT plugin install woocommerce --activate >/dev/null 2>&1 || known shots "WooCommerce did not install; screenshots 5 and 6 need it"
+	WT plugin install wordpress-seo --activate >/dev/null 2>&1 || known shots "Yoast SEO did not install; screenshot 6 will show fewer running integrations"
+	cp "$PLUGIN_SRC/bin/screenshots/shots-mu.php" "$PLUGIN_SRC/bin/screenshots/demo-plugin.php" "$SMOKE_ROOT/wp-content/mu-plugins/" || { fail shots "could not copy the capture mu-plugins"; return 1; }
+	if [ "${AAFM_SHOTS_SEED:-1}" = 1 ]; then
+		if W eval-file "$PLUGIN_SRC/bin/screenshots/seed-demo.php" >/dev/null 2>&1; then
+			pass shots "demo data seeded"
+		else
+			fail shots "seed-demo.php failed"
+			return 1
+		fi
+	else
+		echo "SHOTS_UNSEEDED"
+	fi
+	W option update home "http://$cip:8070" >/dev/null 2>&1
+	W option update siteurl "http://$cip:8070" >/dev/null 2>&1
+	echo "SHOTS_URL=http://$cip:8070"
+	echo "SHOTS_READY"
+	for i in $(seq 1 3600); do
+		[ -e "$SMOKE_ROOT/shots.done" ] && return 0
+		sleep 2
+	done
+	known shots "timed out waiting for $SMOKE_ROOT/shots.done"
+}
+
 setup_site || { fail setup "could not build the disposable site at $SMOKE_ROOT"; finish; }
 start_server || finish
+if [ "$SHOTS" = 1 ]; then shots_mode; finish; fi
 leg_matrix
 leg_qm
 leg_upgrade

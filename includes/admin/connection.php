@@ -98,6 +98,34 @@ function aafm_site_is_local(): bool {
 }
 
 /**
+ * The diagnostics rail's Authorization header row. A browser page load carries no Authorization
+ * header, so it shows what the last "Check my connection" probe learned (doctor.php) instead of
+ * guessing from the current request.
+ *
+ * @return array{id:string,label:string,status:string,detail:string}
+ */
+function aafm_diagnostic_auth_header_check(): array {
+	$auth_seen = aafm_doctor_last_header_result();
+	if ( null === $auth_seen ) {
+		$status = 'warn';
+		$detail = __( 'Not tested yet. Run "Check my connection" on this tab.', 'agent-abilities-for-mcp' );
+	} elseif ( $auth_seen ) {
+		$status = 'pass';
+		$detail = __( 'PHP received the test Authorization header on the last connection check.', 'agent-abilities-for-mcp' );
+	} else {
+		$status = 'fail';
+		$detail = __( 'The server removed the test Authorization header on the last connection check. Run "Check my connection" for the fix.', 'agent-abilities-for-mcp' );
+	}
+
+	return array(
+		'id'     => 'auth_header',
+		'label'  => __( 'Authorization header reaches WordPress', 'agent-abilities-for-mcp' ),
+		'status' => $status,
+		'detail' => $detail,
+	);
+}
+
+/**
  * Run the lean, read-only connection diagnostics shown on the Connection tab.
  *
  * @return array<int,array{id:string,label:string,status:string,detail:string}>
@@ -127,26 +155,8 @@ function aafm_diagnostic_checks(): array {
 		'detail' => aafm_endpoint_url(),
 	);
 
-	// 3. The Authorization header reaches PHP (some hosts/proxies strip it). A browser page load
-	// carries no Authorization header, so this row shows what the last "Check my connection" probe
-	// learned (doctor.php) rather than guessing from the current request.
-	$auth_seen = aafm_doctor_last_header_result();
-	if ( null === $auth_seen ) {
-		$auth_status = 'warn';
-		$auth_detail = __( 'Not tested yet. Run "Check my connection" on this tab.', 'agent-abilities-for-mcp' );
-	} elseif ( $auth_seen ) {
-		$auth_status = 'pass';
-		$auth_detail = __( 'PHP received the test Authorization header on the last connection check.', 'agent-abilities-for-mcp' );
-	} else {
-		$auth_status = 'fail';
-		$auth_detail = __( 'The server removed the test Authorization header on the last connection check. Run "Check my connection" for the fix.', 'agent-abilities-for-mcp' );
-	}
-	$checks[] = array(
-		'id'     => 'auth_header',
-		'label'  => __( 'Authorization header reaches WordPress', 'agent-abilities-for-mcp' ),
-		'status' => $auth_status,
-		'detail' => $auth_detail,
-	);
+	// 3. The Authorization header reaches PHP (some hosts/proxies strip it).
+	$checks[] = aafm_diagnostic_auth_header_check();
 
 	return $checks;
 }
@@ -1505,10 +1515,11 @@ function aafm_render_connection_tab(): void {
 	foreach ( aafm_diagnostic_checks() as $check ) {
 		$dot = $dot_class[ $check['status'] ] ?? 'd-warn';
 		printf(
-			'<div class="aafm-diag-row"><span class="dot-lg %1$s"></span><div><div class="d-title">%2$s</div><div class="d-detail">%3$s</div></div></div>',
+			'<div class="aafm-diag-row" data-check="%4$s"><span class="dot-lg %1$s"></span><div><div class="d-title">%2$s</div><div class="d-detail">%3$s</div></div></div>',
 			esc_attr( $dot ),
 			esc_html( $check['label'] ),
-			esc_html( $check['detail'] )
+			esc_html( $check['detail'] ),
+			esc_attr( $check['id'] )
 		);
 	}
 	echo '</div>';

@@ -409,6 +409,31 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertStringNotContainsString( 'error_log', $whole );
 	}
 
+	public function test_the_doctor_row_is_not_labelled_like_the_rail_row(): void {
+		$this->respond( $this->endpoint_ok() );
+		$rail = aafm_diagnostic_auth_header_check();
+
+		$this->assertNotSame( $rail['label'], $this->row( aafm_doctor_run_checks(), 'auth_header' )['label'] );
+	}
+
+	public function test_the_ajax_answer_carries_the_rail_row_as_it_now_reads(): void {
+		$this->respond( $this->endpoint_ok() );
+		$this->post_as( 'administrator' );
+
+		$json = $this->run_handler( 'aafm_ajax_run_doctor' );
+
+		$this->assertSame( 'pass', $json['data']['rail']['status'] );
+		$this->assertSame( aafm_diagnostic_auth_header_check()['detail'], $json['data']['rail']['detail'] );
+	}
+
+	public function test_the_rail_row_can_be_found_by_the_script(): void {
+		ob_start();
+		aafm_render_connection_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertSame( 1, substr_count( $html, 'data-check="auth_header"' ) );
+	}
+
 	public function test_the_probe_handler_is_hooked_first(): void {
 		$this->assertSame( 1, has_filter( 'rest_pre_dispatch', 'aafm_doctor_handle_probe' ) );
 	}

@@ -1827,6 +1827,14 @@
 				copyBtn.dataset.copy = json.data.report ?? '';
 				copyBtn.hidden = false;
 				applyFilter();
+
+				// Keep the diagnostics rail's Authorization header row in step with this run.
+				const rail = json.data.rail;
+				const railRow = document.querySelector( '.aafm-diag-row[data-check="auth_header"]' );
+				if ( rail && railRow ) {
+					railRow.querySelector( '.dot-lg' ).className = `dot-lg ${ dot[ rail.status ] ?? 'd-warn' }`;
+					railRow.querySelector( '.d-detail' ).textContent = rail.detail ?? '';
+				}
 			} );
 			showAll.addEventListener( 'change', applyFilter );
 		}

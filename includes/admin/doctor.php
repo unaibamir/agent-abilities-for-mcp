@@ -361,7 +361,7 @@ function aafm_doctor_header_snippet(): string {
  * @return array<string,mixed>
  */
 function aafm_doctor_check_auth_header( array $probe ): array {
-	$label = __( 'Authorization header reaches WordPress', 'agent-abilities-for-mcp' );
+	$label = __( 'Authorization header test request', 'agent-abilities-for-mcp' );
 	if ( null === $probe['seen'] ) {
 		return aafm_doctor_row( 'auth_header', $label, 'skip', '', __( 'Could not test: the test request did not reach this plugin. See the endpoint check above.', 'agent-abilities-for-mcp' ) );
 	}
@@ -750,6 +750,8 @@ function aafm_ajax_run_doctor(): void {
 		array(
 			'rows'   => $rows,
 			'report' => aafm_doctor_build_report( $rows ),
+			// The diagnostics rail's Authorization header row, as it now reads, so the page can update it.
+			'rail'   => aafm_diagnostic_auth_header_check(),
 		)
 	);
 }

@@ -586,6 +586,18 @@ final class ReviewInboxTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-review-count">2<', $html );
 	}
 
+	public function test_preview_and_open_in_editor_both_open_in_a_new_tab(): void {
+		$this->acting_as( 'administrator' );
+		$this->agent_draft();
+
+		ob_start();
+		aafm_render_review_inbox_card();
+		$html = (string) ob_get_clean();
+
+		$this->assertMatchesRegularExpression( '#target="_blank" rel="noopener noreferrer">Preview<#', $html );
+		$this->assertMatchesRegularExpression( '#target="_blank" rel="noopener noreferrer">Open in editor<#', $html );
+	}
+
 	/**
 	 * Rendering.
 	 */

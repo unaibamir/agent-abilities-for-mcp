@@ -1,6 +1,6 @@
 <?php
 /**
- * Needs review: drafts and pending posts an agent wrote, with Preview, Publish and Discard.
+ * Needs review: drafts and pending posts an agent wrote, with Preview, Open in editor, Publish and Discard.
  *
  * Pairs with "Force draft on create": the agent writes, the owner approves. Every action checks
  * the owner's capabilities again at click time, re-reads the post's marker and status (the page may
@@ -290,7 +290,7 @@ function aafm_render_review_inbox_card(): void {
 				printf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%s" target="_blank" rel="noopener noreferrer">%s</a>', esc_url( (string) $row['preview'] ), esc_html__( 'Preview', 'agent-abilities-for-mcp' ) );
 			}
 			if ( '' !== $row['edit'] ) {
-				printf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%s">%s</a>', esc_url( (string) $row['edit'] ), esc_html__( 'Open in editor', 'agent-abilities-for-mcp' ) );
+				printf( '<a class="aafm-btn aafm-btn-secondary aafm-btn-sm" href="%s" target="_blank" rel="noopener noreferrer">%s</a>', esc_url( (string) $row['edit'] ), esc_html__( 'Open in editor', 'agent-abilities-for-mcp' ) );
 			}
 			if ( $row['can_publish'] ) {
 				printf( '<button type="button" class="aafm-btn aafm-btn-primary aafm-btn-sm" data-review-action="publish">%s</button>', esc_html__( 'Publish', 'agent-abilities-for-mcp' ) );

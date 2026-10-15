@@ -30,6 +30,18 @@ use AAFM\Tests\TestCase;
 final class StandaloneAdapterPluginTest extends TestCase {
 
 	/**
+	 * The standalone 0.6.x plugin defines WP_MCP_VERSION and then asks for WP\MCP\Plugin. Answering
+	 * with the bundled 0.7 Plugin would define the constant a second time (a warning on every request),
+	 * so the on-demand autoloader declines that one class while the constant exists, and nothing else.
+	 */
+	public function test_autoloader_declines_the_plugin_shell_only_when_the_version_constant_exists(): void {
+		$this->assertTrue( aafm_adapter_autoload_should_skip( 'WP\\MCP\\Plugin', true ) );
+		$this->assertFalse( aafm_adapter_autoload_should_skip( 'WP\\MCP\\Plugin', false ), 'Without the constant (standalone 0.7 or none) the bundled Plugin still loads.' );
+		$this->assertFalse( aafm_adapter_autoload_should_skip( 'WP\\MCP\\Core\\McpAdapter', true ), 'Runtime classes always load from our bundle.' );
+		$this->assertFalse( aafm_adapter_autoload_should_skip( 'WP\\MCP\\Autoloader', true ) );
+	}
+
+	/**
 	 * The bootstrap-shell classifier matches only the explicit allowlist of the standalone plugin's
 	 * two scaffolding classes, and never a real runtime class (which always lives in a sub-namespace).
 	 */

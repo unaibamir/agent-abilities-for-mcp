@@ -127,15 +127,25 @@ function aafm_diagnostic_checks(): array {
 		'detail' => aafm_endpoint_url(),
 	);
 
-	// 3. The Authorization header reaches PHP (some hosts/proxies strip it).
-	$auth_seen = isset( $_SERVER['HTTP_AUTHORIZATION'] ) || isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
-	$checks[]  = array(
+	// 3. The Authorization header reaches PHP (some hosts/proxies strip it). A browser page load
+	// carries no Authorization header, so this row shows what the last "Check my connection" probe
+	// learned (doctor.php) rather than guessing from the current request.
+	$auth_seen = aafm_doctor_last_header_result();
+	if ( null === $auth_seen ) {
+		$auth_status = 'warn';
+		$auth_detail = __( 'Not tested yet. Run "Check my connection" on this tab.', 'agent-abilities-for-mcp' );
+	} elseif ( $auth_seen ) {
+		$auth_status = 'pass';
+		$auth_detail = __( 'PHP received the test Authorization header on the last connection check.', 'agent-abilities-for-mcp' );
+	} else {
+		$auth_status = 'fail';
+		$auth_detail = __( 'The server removed the test Authorization header on the last connection check. Run "Check my connection" for the fix.', 'agent-abilities-for-mcp' );
+	}
+	$checks[] = array(
 		'id'     => 'auth_header',
 		'label'  => __( 'Authorization header reaches WordPress', 'agent-abilities-for-mcp' ),
-		'status' => $auth_seen ? 'pass' : 'warn',
-		'detail' => $auth_seen
-			? __( 'Authorization header present on this request.', 'agent-abilities-for-mcp' )
-			: __( 'Not detectable from this admin page load. Application Password auth still works if your host forwards the header.', 'agent-abilities-for-mcp' ),
+		'status' => $auth_status,
+		'detail' => $auth_detail,
 	);
 
 	return $checks;
@@ -1171,6 +1181,8 @@ function aafm_render_connection_tab(): void {
 	);
 	echo '</div>';
 	echo '</section>';
+
+	aafm_render_doctor_card();
 
 	// ---- 2. OAuth card ----
 	echo '<section class="aafm-card aafm-card-pad aafm-oauth-card">';

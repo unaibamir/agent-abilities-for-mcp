@@ -68,6 +68,7 @@
 			this.#bindMetaChips();
 			this.#bindCreateUser();
 			this.#bindTestConnection();
+			this.#bindDoctor();
 			this.#bindClearLog();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
@@ -1721,6 +1722,113 @@
 					);
 				}
 			} );
+		}
+
+		/**
+		 * Connection Doctor: run the server-side checks and show only what needs attention.
+		 * Every string from the server is set with textContent, never as markup.
+		 */
+		#bindDoctor() {
+			const card = document.querySelector( '#aafm-doctor' );
+			if ( ! card ) {
+				return;
+			}
+			const runBtn = card.querySelector( '#aafm-doctor-run' );
+			const copyBtn = card.querySelector( '#aafm-doctor-copy' );
+			const showAll = card.querySelector( '#aafm-doctor-show-all' );
+			const status = card.querySelector( '.aafm-doctor-status' );
+			const results = card.querySelector( '#aafm-doctor-results' );
+			const allGood = card.querySelector( '.aafm-doctor-allgood' );
+			const known = [ 'pass', 'warn', 'fail', 'skip' ];
+			const dot = { pass: 'd-ok', warn: 'd-warn', fail: 'd-bad', skip: 'd-skip' };
+			const statusLabel = {
+				pass: this.#t( 'doctorPass', 'Pass' ),
+				warn: this.#t( 'doctorWarn', 'Warning' ),
+				fail: this.#t( 'doctorFail', 'Fail' ),
+				skip: this.#t( 'doctorSkip', 'Could not test' ),
+			};
+			const whoLabel = {
+				you: this.#t( 'doctorWhoYou', 'You can fix this' ),
+				host: this.#t( 'doctorWhoHost', 'Your host can fix this' ),
+				plugin: this.#t( 'doctorWhoPlugin', 'A security plugin may be the cause' ),
+			};
+
+			const applyFilter = () => {
+				const rows = [ ...results.querySelectorAll( '.aafm-doctor-row' ) ];
+				for ( const row of rows ) {
+					row.hidden = ! showAll.checked && 'pass' === row.dataset.status;
+				}
+				allGood.hidden = 0 === rows.length || rows.some( ( row ) => ! row.hidden );
+			};
+
+			const renderRow = ( row ) => {
+				const state = known.includes( row.status ) ? row.status : 'skip';
+				const wrap = document.createElement( 'div' );
+				wrap.className = 'aafm-diag-row aafm-doctor-row';
+				wrap.dataset.status = state;
+
+				const marker = document.createElement( 'span' );
+				marker.className = `dot-lg ${ dot[ state ] }`;
+
+				const body = document.createElement( 'div' );
+				const title = document.createElement( 'div' );
+				title.className = 'd-title';
+				title.textContent = `${ row.label }: ${ statusLabel[ state ] }`;
+				body.append( title );
+
+				if ( whoLabel[ row.who ] ) {
+					const who = document.createElement( 'div' );
+					who.className = 'd-who';
+					who.textContent = whoLabel[ row.who ];
+					body.append( who );
+				}
+				const detail = document.createElement( 'div' );
+				detail.className = 'd-detail';
+				detail.textContent = row.detail ?? '';
+				body.append( detail );
+
+				if ( row.fix ) {
+					const pre = document.createElement( 'pre' );
+					pre.className = 'aafm-doctor-fix';
+					pre.textContent = row.fix;
+					const copy = document.createElement( 'button' );
+					copy.type = 'button';
+					copy.className = 'aafm-btn aafm-btn-secondary aafm-btn-sm';
+					copy.textContent = this.#t( 'doctorCopySnippet', 'Copy snippet' );
+					copy.addEventListener( 'click', async () => {
+						try {
+							await navigator.clipboard.writeText( row.fix );
+							copy.textContent = this.#t( 'copyCopied', 'Copied' );
+						} catch {
+							copy.textContent = this.#t( 'copyFallback', 'Press Ctrl+C' );
+						}
+						setTimeout( () => {
+							copy.textContent = this.#t( 'doctorCopySnippet', 'Copy snippet' );
+						}, 1500 );
+					} );
+					body.append( pre, copy );
+				}
+
+				wrap.append( marker, body );
+				return wrap;
+			};
+
+			runBtn.addEventListener( 'click', async () => {
+				runBtn.disabled = true;
+				status.textContent = this.#t( 'checking', 'Checking…' );
+				const json = await this.#post( 'aafm_run_doctor' );
+				runBtn.disabled = false;
+				if ( ! json?.success ) {
+					status.textContent = json?.data?.message ?? this.#t( 'doctorError', 'The check could not run. Reload the page and try again.' );
+					return;
+				}
+				status.textContent = '';
+				results.replaceChildren( ...( json.data.rows ?? [] ).map( renderRow ) );
+				copyBtn.dataset.copy = json.data.report ?? '';
+				copyBtn.hidden = false;
+				applyFilter();
+			} );
+			showAll.addEventListener( 'change', applyFilter );
 		}
 
 		#bindClearLog() {

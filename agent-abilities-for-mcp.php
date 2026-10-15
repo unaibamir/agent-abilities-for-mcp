@@ -371,6 +371,9 @@ function aafm_bootstrap() {
 	// it runs AFTER the governed-status rewrite above and records the final HTTP status the client sees.
 	add_filter( 'rest_post_dispatch', 'aafm_log_mcp_transport_outcome', 11, 3 );
 
+	// The Connection Doctor's own probe: answered before any MCP code runs, only for a live single-use token.
+	add_filter( 'rest_pre_dispatch', 'aafm_doctor_handle_probe', 1, 3 );
+
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/pages.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/terms.php';
@@ -444,6 +447,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/doctor.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/allowlist.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
@@ -473,6 +477,7 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_reset_plugin', 'aafm_ajax_reset_plugin' );
 		add_action( 'wp_ajax_aafm_create_agent_user', 'aafm_ajax_create_agent_user' );
 		add_action( 'wp_ajax_aafm_test_connection', 'aafm_ajax_test_connection' );
+		add_action( 'wp_ajax_aafm_run_doctor', 'aafm_ajax_run_doctor' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
 		add_action( 'wp_ajax_aafm_set_client_agent_identity', 'aafm_ajax_set_client_agent_identity' );

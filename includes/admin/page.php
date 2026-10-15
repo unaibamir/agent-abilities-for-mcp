@@ -184,6 +184,16 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'connectionOk'             => __( 'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: HTTP status code returned by the endpoint. */
 				'connectionNoTools'        => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
+				// Connection Doctor.
+				'doctorPass'               => __( 'Pass', 'agent-abilities-for-mcp' ),
+				'doctorWarn'               => __( 'Warning', 'agent-abilities-for-mcp' ),
+				'doctorFail'               => __( 'Fail', 'agent-abilities-for-mcp' ),
+				'doctorSkip'               => __( 'Could not test', 'agent-abilities-for-mcp' ),
+				'doctorWhoYou'             => __( 'You can fix this', 'agent-abilities-for-mcp' ),
+				'doctorWhoHost'            => __( 'Your host can fix this', 'agent-abilities-for-mcp' ),
+				'doctorWhoPlugin'          => __( 'A security plugin may be the cause', 'agent-abilities-for-mcp' ),
+				'doctorCopySnippet'        => __( 'Copy snippet', 'agent-abilities-for-mcp' ),
+				'doctorError'              => __( 'The check could not run. Reload the page and try again.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: error message returned by the server. */
 				'errorWithMessage'         => __( 'Error: %s', 'agent-abilities-for-mcp' ),
 				'errorUnknown'             => __( 'unknown', 'agent-abilities-for-mcp' ),
@@ -3257,17 +3267,26 @@ function aafm_render_help_tab(): void {
 	echo '<div class="aafm-acc-group">';
 	echo '<h2>' . esc_html__( 'Authentication', 'agent-abilities-for-mcp' ) . '</h2>';
 
-	// 2. Authorization header diagnostic fails.
+	// 2. Authorization header diagnostic fails. The lines come from the same helper the Connection
+	// Doctor uses, so the two never show different advice.
+	$header_snippets = aafm_authorization_header_snippets();
+	$apache_lines    = '';
+	foreach ( $header_snippets['apache'] as $line ) {
+		$apache_lines .= aafm_help_copy_line( $line );
+	}
+	$nginx_lines = '';
+	foreach ( $header_snippets['nginx'] as $line ) {
+		$nginx_lines .= aafm_help_copy_line( $line );
+	}
 	aafm_render_help_entry(
 		__( 'The "Authorization header reaches WordPress" diagnostic fails', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'Some hosts and reverse proxies strip the Authorization header before it reaches PHP, so the Application Password never arrives and auth silently fails. Forward the header at the web-server layer.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p><strong>' . esc_html__( 'Apache (.htaccess) - either of these:', 'agent-abilities-for-mcp' ) . '</strong></p>'
-			. aafm_help_copy_line( 'SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1' )
-			. aafm_help_copy_line( 'RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]' )
+			. $apache_lines
 			. '<p><strong>' . esc_html__( 'Nginx / FastCGI:', 'agent-abilities-for-mcp' ) . '</strong></p>'
-			. aafm_help_copy_line( 'fastcgi_param HTTP_AUTHORIZATION $http_authorization;' )
-			. '<p>' . esc_html__( 'After applying, reload the web server and re-run Connection → Diagnostics.', 'agent-abilities-for-mcp' ) . '</p>',
+			. $nginx_lines
+			. '<p>' . esc_html__( 'After applying, reload the web server and run Check my connection again on the Connection tab.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);

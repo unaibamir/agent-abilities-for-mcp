@@ -36,6 +36,10 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/connection.php|aafm_format_admin_datetime|1' => 'N',
 		'includes/admin/connection.php|aafm_format_admin_datetime|2' => 'N',
 		'includes/admin/dashboard.php|aafm_render_dashboard_tab|1' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_build_report|1' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_build_report|2' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_check_https|1' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_check_permalinks|1' => 'N',
 		'includes/admin/onboarding-pointer.php|aafm_quickconnect_pointer_should_show|1' => 'N',
 		'includes/admin/onboarding-pointer.php|aafm_maybe_enqueue_menu_pointer|1' => 'N',
 		'includes/admin/page.php|aafm_get_stored_enabled_abilities_raw|1' => 'G',
@@ -107,6 +111,8 @@ final class OptionReadSweepTest extends TestCase {
 	 * @var list<string>
 	 */
 	private const GET_TRANSIENT = array(
+		'includes/admin/doctor.php|aafm_doctor_handle_probe|1',
+		'includes/admin/doctor.php|aafm_doctor_last_header_result|1',
 		'includes/admin/page.php|aafm_detected_meta_keys|1',
 		'includes/admin/review-request.php|aafm_review_request_display_count|1',
 		'includes/audit/log.php|aafm_activity_log_schema_admin_notice|1',
@@ -337,7 +343,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 20,
+				'N' => 24,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),
@@ -374,7 +380,7 @@ final class OptionReadSweepTest extends TestCase {
 	public function test_every_get_transient_call_is_listed_exactly_once(): void {
 		$found = $this->plugin_calls();
 
-		$this->assertCount( 8, $found['get_transient'] );
+		$this->assertCount( 10, $found['get_transient'] );
 		$this->assertSame( $this->sorted( self::GET_TRANSIENT ), $this->keys_of( $found, 'get_transient' ) );
 	}
 

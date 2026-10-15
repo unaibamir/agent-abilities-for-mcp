@@ -745,14 +745,16 @@ final class SecurityRegressionTest extends TestCase {
 	 * prefix, or bare identifier, so only the specific calls this codebase's own SSRF design already
 	 * accounts for are allowed, and one more of any of them anywhere fails the suite.
 	 *
-	 * Only two call sites may reach the network at all: aafm_ssrf_owned_curl_fetch()'s
+	 * Only these call sites may reach the network at all: aafm_ssrf_owned_curl_fetch()'s
 	 * cURL handle in media.php (owned outright, pinned via CURLOPT_RESOLVE, proxy disabled, no
 	 * redirects, TLS verified, size-capped, reachable only through aafm_ssrf_safe_fetch_url()'s
 	 * SSRF gate - covered by SsrfOwnedCurlFetchTest and UploadMediaFromUrlSsrfTest), and
 	 * aafm_ajax_test_connection()'s single wp_remote_post() call in connection.php: an
 	 * admin-only, manage_options + nonce gated reachability probe never reachable by an MCP
 	 * agent (Codex hunt F3 already covers why its target URL is trusted; see
-	 * aafm_ability_disclosures()'s file docblock in disclosures.php).
+	 * aafm_ability_disclosures()'s file docblock in disclosures.php). The Connection
+	 * Doctor adds two calls in doctor.php: the probe POST to this site's own endpoint and the OAuth
+	 * discovery GET to its own /.well-known/ documents (same gate, same trust, own-site targets).
 	 *
 	 * Codex round 7, R7-6: tokens are collapsed (collapse_qualified_names()) and each file's own
 	 * `use` imports resolved (parse_use_aliases()) before matching, so a fully-qualified call or
@@ -785,6 +787,12 @@ final class SecurityRegressionTest extends TestCase {
 			),
 			'includes/admin/connection.php' => array(
 				'wp_remote_post' => 1,
+			),
+			// The Connection Doctor: admin-only (manage_options + nonce), requests only this site's own
+			// endpoint and its own /.well-known/ documents, never an agent-reachable path.
+			'includes/admin/doctor.php'     => array(
+				'wp_remote_post' => 1,
+				'wp_remote_get'  => 1,
 			),
 			// Codex round 7, R7-6: aafm_adapter_file_applies_tools_list_filter() reads an
 			// already-loaded, is_readable()-checked local adapter file path, never a URL - but the

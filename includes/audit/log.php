@@ -86,9 +86,9 @@ function aafm_activity_log_table(): string {
  *
  * Idempotent: dbDelta() only applies the diff. Mirrors aafm_install_oauth_tables().
  *
- * @return void
+ * @return bool Whether the schema verified and its version was stamped.
  */
-function aafm_install_activity_log(): void {
+function aafm_install_activity_log(): bool {
 	global $wpdb;
 	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
@@ -118,7 +118,7 @@ function aafm_install_activity_log(): void {
 
 	dbDelta( $sql );
 
-	aafm_activity_log_finalize_schema();
+	return aafm_activity_log_finalize_schema();
 }
 
 /**
@@ -133,9 +133,9 @@ function aafm_install_activity_log(): void {
  * its latest columns/index are present. On failure leave the prior version so the next admin or
  * REST request retries, and raise a bounded admin notice.
  *
- * @return void
+ * @return bool Whether the schema verified and the version stamp was certified.
  */
-function aafm_activity_log_finalize_schema(): void {
+function aafm_activity_log_finalize_schema(): bool {
 	if ( aafm_activity_log_schema_verify() ) {
 		delete_transient( 'aafm_activity_log_schema_error' );
 		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_activity_log()
@@ -150,13 +150,15 @@ function aafm_activity_log_finalize_schema(): void {
 			// visible instead of silent.
 			set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
 			aafm_log_ability_persist_failure( 'aafm_activity_log_schema_version', __( 'The activity-log schema version', 'agent-abilities-for-mcp' ) );
+			return false;
 		}
-		return;
+		return true;
 	}
 
 	// Bounded: a day-long flag the next successful verify clears, so the notice shows only while the
 	// schema is genuinely behind and disappears the moment the self-heal lands.
 	set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
+	return false;
 }
 
 /**
@@ -276,7 +278,7 @@ function aafm_activity_log_schema_admin_notice(): void {
 		return;
 	}
 	echo '<div class="notice notice-error"><p>';
-	echo esc_html__( 'Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin retries automatically on the next admin or REST request.', 'agent-abilities-for-mcp' );
+	echo esc_html__( 'Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin tries again on its own, at most once an hour.', 'agent-abilities-for-mcp' );
 	echo '</p></div>';
 }
 add_action( 'admin_notices', 'aafm_activity_log_schema_admin_notice' );
@@ -299,7 +301,22 @@ function aafm_maybe_upgrade_activity_log(): void {
 		return;
 	}
 
-	aafm_install_activity_log();
+	// One request upgrades at a time, and a failed upgrade waits an hour before the next try, so a
+	// refused ALTER does not rerun dbDelta() on every admin and REST request. The lock is held for a
+	// minute while the installer runs, released on success, and kept for an hour on failure.
+	// ponytail: a transient is get-then-set, not atomic, so two requests landing in the same instant
+	// can both pass. dbDelta() is idempotent, so that costs a repeat, not damage. Upgrade path is an
+	// add_option() row with its own expiry if it ever shows up. An unreadable lock counts as held.
+	$held = aafm_transient_count( 'aafm_activity_log_upgrade_lock' );
+	if ( null === $held || $held > 0 ) {
+		return;
+	}
+	set_transient( 'aafm_activity_log_upgrade_lock', 1, MINUTE_IN_SECONDS );
+	if ( aafm_install_activity_log() ) {
+		delete_transient( 'aafm_activity_log_upgrade_lock' );
+		return;
+	}
+	set_transient( 'aafm_activity_log_upgrade_lock', 1, HOUR_IN_SECONDS );
 }
 
 // Keep the activity-log schema current on real upgrades. The guard above early-returns once

@@ -137,6 +137,75 @@ final class LogTest extends TestCase {
 	}
 
 	/**
+	 * Count the ALTER and CREATE statements the installer tries, and optionally break the schema check
+	 * (the duration_ms column probe fails) while refusing them, so a test can see how often dbDelta()
+	 * ran and can force a failed upgrade without issuing any DDL of its own.
+	 *
+	 * @param int  $attempts Receives the number of statements seen.
+	 * @param bool $sabotage    Whether to refuse them and fail the column probe.
+	 * @return callable The filter, to remove afterwards.
+	 */
+	private function watch_schema_statements( int &$attempts, bool $sabotage ): callable {
+		$filter = static function ( $query ) use ( &$attempts, $sabotage ) {
+			if ( ! is_string( $query ) ) {
+				return $query;
+			}
+			if ( 1 === preg_match( '/^\s*(ALTER|CREATE)\s+(TEMPORARY\s+)?TABLE\s/i', $query ) ) {
+				++$attempts;
+				return $sabotage ? '' : $query;
+			}
+			if ( $sabotage && 1 === preg_match( '/^\s*SHOW\s+COLUMNS\s.*duration_ms/i', $query ) ) {
+				return '';
+			}
+			return $query;
+		};
+		add_filter( 'query', $filter, 1 );
+		return $filter;
+	}
+
+	public function test_a_held_upgrade_lock_stops_a_second_request_from_running_dbdelta(): void {
+		delete_transient( 'aafm_activity_log_upgrade_lock' );
+		update_option( 'aafm_activity_log_schema_version', '2' );
+		$attempts = 0;
+		$filter   = $this->watch_schema_statements( $attempts, false );
+
+		set_transient( 'aafm_activity_log_upgrade_lock', 1, MINUTE_IN_SECONDS );
+		aafm_maybe_upgrade_activity_log();
+		$held_attempts = $attempts;
+		$this->assertSame( '2', get_option( 'aafm_activity_log_schema_version' ), 'Another request holds the lock, so this one does not run the installer.' );
+
+		delete_transient( 'aafm_activity_log_upgrade_lock' );
+		aafm_maybe_upgrade_activity_log();
+		remove_filter( 'query', $filter, 1 );
+		$this->assertSame( 0, $held_attempts );
+		$this->assertSame( AAFM_ACTIVITY_LOG_SCHEMA_VERSION, get_option( 'aafm_activity_log_schema_version' ) );
+		$this->assertFalse( get_transient( 'aafm_activity_log_upgrade_lock' ), 'A good upgrade releases the lock.' );
+	}
+
+	public function test_a_failed_upgrade_backs_off_instead_of_retrying_on_every_request(): void {
+		delete_transient( 'aafm_activity_log_upgrade_lock' );
+		update_option( 'aafm_activity_log_schema_version', '2' );
+		$attempts = 0;
+		$filter   = $this->watch_schema_statements( $attempts, true );
+
+		aafm_maybe_upgrade_activity_log();
+		$this->assertFalse( aafm_activity_log_schema_verify(), 'Precondition: the upgrade did not land.' );
+		$this->assertSame( '2', get_option( 'aafm_activity_log_schema_version' ) );
+		$this->assertNotFalse( get_transient( 'aafm_activity_log_upgrade_lock' ), 'A failed upgrade leaves the lock as a back-off.' );
+
+		$this->assertGreaterThan( 0, $attempts, 'The first request tries.' );
+		$first = $attempts;
+		aafm_maybe_upgrade_activity_log();
+		aafm_maybe_upgrade_activity_log();
+		$this->assertSame( $first, $attempts, 'Later requests inside the hour do not run dbDelta again.' );
+
+		remove_filter( 'query', $filter, 1 );
+		delete_transient( 'aafm_activity_log_upgrade_lock' );
+		aafm_maybe_upgrade_activity_log();
+		$this->assertSame( AAFM_ACTIVITY_LOG_SCHEMA_VERSION, get_option( 'aafm_activity_log_schema_version' ), 'Once the wait is over the upgrade heals.' );
+	}
+
+	/**
 	 * Codex round 7, R7-2: the version guard used to read get_option()'s cache-trusting view, so
 	 * a stale persistent cache claiming the current version was already stored, over a real
 	 * database row that is genuinely behind, would skip the self-heal for good - permanently,

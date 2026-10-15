@@ -189,6 +189,66 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 }
 
 /**
+ * Warn the address that was receiving alerts before a plugin reset deletes the settings: the reset
+ * itself, each governance switch the reset moves back (read-only mode off, the high-risk lock closed),
+ * and the digest events still waiting in the queue. Takes the state captured BEFORE the reset, and must
+ * run before anything is deleted; the mail goes out at the end of the request through the capped
+ * delivery path, so the delete loop never waits on it. Nothing is sent unless the old settings mailed
+ * to an address. The flip mails respect the old switch-alert tick; the reset mail does not.
+ *
+ * @param array<string,mixed>            $before    Notification settings before the reset.
+ * @param bool                           $read_only Whether read-only mode was on.
+ * @param bool                           $unlocked  Whether the high-risk category was unlocked.
+ * @param array<int,array<string,mixed>> $queue     The digest queue before the reset.
+ * @return void
+ */
+function aafm_notify_reset_warning( array $before, bool $read_only, bool $unlocked, array $queue ): void {
+	try {
+		if ( ! in_array( $before['mode'], array( 'immediate', 'digest' ), true ) || '' === $before['email'] ) {
+			return;
+		}
+		$kinds = array( 'settings:plugin_reset' );
+		if ( ! empty( $before['triggers']['switch_flip'] ) ) {
+			if ( $read_only ) {
+				$kinds[] = 'switch_flip:read_only_off';
+			}
+			if ( $unlocked ) {
+				$kinds[] = 'switch_flip:high_risk_locked';
+			}
+		}
+		foreach ( $kinds as $kind ) {
+			// The flip kinds use the buckets a live flip uses, so a flip already mailed this window is not repeated.
+			$bucket = 'settings:plugin_reset' === $kind ? $kind . ':' . substr( md5( strtolower( (string) $before['email'] ) ), 0, 12 ) : $kind;
+			if ( ! aafm_notify_take_slot( $bucket )['allowed'] ) {
+				continue;
+			}
+			list( $trigger, $subtype ) = explode( ':', $kind, 2 );
+			aafm_notify_send_later(
+				(string) $before['email'],
+				array(
+					array(
+						'trigger' => $trigger,
+						'subtype' => $subtype,
+						'time'    => time(),
+					),
+				),
+				false,
+				__( 'If you did not do this, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
+				'critical',
+				array(),
+				$bucket
+			);
+		}
+		if ( array() !== $queue ) {
+			// No drain: the reset deletes the queue itself, so the events are not kept for a retry.
+			aafm_notify_send_later( (string) $before['email'], $queue, true, '', 'critical' );
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+
+/**
  * Settle the digest queue after a save. A save that leaves digest mode, or points the digest at a new
  * address, hands the queued events (including this very save's read-only or high-risk flip, queued
  * moments earlier under the old settings) to the OLD address through the capped delivery path. The

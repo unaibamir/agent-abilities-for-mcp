@@ -384,6 +384,7 @@ function aafm_notify_event_label( array $event ): string {
 		'switch_flip:high_risk_unlocked' => __( 'The high-risk lock was opened', 'agent-abilities-for-mcp' ),
 		'switch_flip:high_risk_locked'   => __( 'The high-risk lock was closed', 'agent-abilities-for-mcp' ),
 		'recipient:changed'              => __( 'The notification address was changed', 'agent-abilities-for-mcp' ),
+		'settings:plugin_reset'          => __( 'The plugin settings were reset', 'agent-abilities-for-mcp' ),
 		'settings:alerts_off'            => __( 'Email alerts were turned off', 'agent-abilities-for-mcp' ),
 	);
 	foreach ( aafm_notify_trigger_phrases() as $slug => $phrase ) {

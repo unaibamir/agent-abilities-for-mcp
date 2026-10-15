@@ -739,6 +739,92 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->assertSame( array( 'a@example.com', 'b@example.com' ), array_column( $this->sent(), 'to' ), 'B hears that its address was replaced.' );
 	}
 
+	/**
+	 * Put the site in the state a reset weakens: alerts mailed to an address, read-only mode on, the
+	 * high-risk category unlocked.
+	 *
+	 * @param string $mode Stored notification mode.
+	 */
+	private function arm_for_reset( string $mode ): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		$this->acting_as( 'administrator' );
+		$this->assertTrue(
+			aafm_update_option_verified(
+				'aafm_notifications',
+				array(
+					'mode'     => $mode,
+					'email'    => 'old@example.com',
+					'triggers' => array( 'switch_flip' => true ),
+				),
+				true
+			)
+		);
+		$this->assertTrue( aafm_persist_operator_switch( 'aafm_read_only_mode', true ) );
+		$this->assertTrue( aafm_persist_operator_switch( 'aafm_high_risk_abilities_unlocked', true ) );
+	}
+
+	public function test_a_reset_warns_the_old_address_about_the_reset_and_each_switch_it_changed(): void {
+		$this->arm_for_reset( 'immediate' );
+
+		$this->assertTrue( aafm_reset_plugin() );
+
+		$mail     = $this->sent();
+		$subjects = implode( ' | ', array_column( $mail, 'subject' ) );
+		$this->assertCount( 3, $mail, $subjects );
+		$this->assertStringContainsString( 'plugin settings were reset', $subjects );
+		$this->assertStringContainsString( 'Read-only mode was turned off', $subjects );
+		$this->assertStringContainsString( 'The high-risk lock was closed', $subjects );
+		foreach ( $mail as $one ) {
+			$this->assertSame( 'old@example.com', $one['to'] );
+		}
+	}
+
+	public function test_a_reset_hands_the_queued_digest_to_the_old_address(): void {
+		$this->arm_for_reset( 'digest' );
+		aafm_update_option_verified(
+			'aafm_notify_queue',
+			array(
+				array(
+					'trigger' => 'switch_flip',
+					'subtype' => 'read_only_on',
+					'time'    => 1,
+				),
+			),
+			false
+		);
+
+		$this->assertTrue( aafm_reset_plugin() );
+
+		$subjects = implode( ' | ', array_column( $this->sent(), 'subject' ) );
+		$this->assertStringContainsString( 'daily summary', $subjects );
+		foreach ( $this->sent() as $one ) {
+			$this->assertSame( 'old@example.com', $one['to'] );
+		}
+	}
+
+	public function test_a_reset_records_the_switch_changes_in_a_log_that_survives_the_clear(): void {
+		$this->arm_for_reset( 'notice' );
+
+		$this->assertTrue( aafm_reset_plugin() );
+
+		$details = array_column( aafm_query_activity( array() ), 'detail' );
+		$this->assertContains( 'Activity log cleared', $details );
+		$this->assertContains( 'Read-only mode turned off', $details );
+		$this->assertContains( 'High-risk abilities locked', $details );
+		$this->assertSame( array(), $this->sent(), 'A notice-only setup had no address to warn.' );
+	}
+
+	public function test_a_reset_warns_nobody_when_alerts_were_never_emailed(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		$this->acting_as( 'administrator' );
+
+		$this->assertTrue( aafm_reset_plugin() );
+
+		$this->assertSame( array(), $this->sent() );
+	}
+
 	public function test_reset_removes_the_notification_options_and_the_tabs_still_render(): void {
 		aafm_install_activity_log();
 		aafm_install_oauth_tables();

@@ -644,6 +644,9 @@ function aafm_uninstall_site_data(): void {
  * trail, and OAuth state only. The activity-log and OAuth tables themselves are kept (rows cleared)
  * so the plugin keeps working immediately afterwards. This cannot be undone.
  *
+ * The old notification address is warned before anything is deleted (aafm_notify_reset_warning()), and the
+ * two governance switches a reset moves back are logged after the clear so their rows survive it.
+ *
  * Wiping the activity log is itself security-relevant, so a tamper-evident marker is written
  * after the clear (L4, shared with the direct "Clear log" action in
  * aafm_ajax_clear_log()) - the emptied log always shows who reset the plugin and when.
@@ -658,6 +661,14 @@ function aafm_uninstall_site_data(): void {
  */
 function aafm_reset_plugin(): bool {
 	$ok = true;
+
+	// A reset quietly weakens the alerts: it deletes the notification settings and the queue, empties the
+	// log, and moves the two governance switches back to their defaults. Capture what is about to go and
+	// warn the old address first, while the settings that name it still exist.
+	$ntf_before    = aafm_notifications_settings();
+	$was_read_only = aafm_read_only_mode_stored();
+	$was_unlocked  = aafm_high_risk_unlocked();
+	aafm_notify_reset_warning( $ntf_before, $was_read_only, $was_unlocked, aafm_notify_queue_list() );
 
 	// Cache-safe on purpose: reset is what an operator reaches for when a setting looks stuck, and
 	// a stale persistent object cache is one way a setting gets stuck (aafm_forget_option_caches()).
@@ -674,6 +685,14 @@ function aafm_reset_plugin(): bool {
 		$ok = false;
 	} elseif ( ! aafm_log_activity_cleared_marker() ) {
 		$ok = false;
+	}
+
+	// Written after the clear so these rows survive it: the log shows the reset and what it changed.
+	if ( $was_read_only && ! aafm_read_only_mode_stored() ) {
+		aafm_log_read_only_switch_change( true, false );
+	}
+	if ( $was_unlocked && ! aafm_high_risk_unlocked() ) {
+		aafm_log_high_risk_switch_change( true, false );
 	}
 
 	if ( ! aafm_truncate_oauth_tables() ) {

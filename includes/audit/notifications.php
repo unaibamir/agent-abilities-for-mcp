@@ -550,7 +550,9 @@ function aafm_notify_pending_list(): array {
 }
 
 /**
- * Add one admin-notice entry, newest first, capped.
+ * Add one admin-notice entry, newest first, capped. Denial bursts, which any authenticated principal can
+ * trigger, keep at most three entries, oldest dropped first, and past the overall cap a denial goes
+ * before any other entry does, so a flood of them can never push out a switch flip, a risky run or a new app.
  *
  * @param array<string,mixed> $event The event.
  * @return bool Whether the write was certified.
@@ -558,7 +560,25 @@ function aafm_notify_pending_list(): array {
 function aafm_notify_pending_push( array $event ): bool {
 	$list = aafm_notify_pending_list();
 	array_unshift( $list, $event );
-	return aafm_update_option_verified( 'aafm_notify_pending', array_slice( $list, 0, AAFM_NOTIFY_PENDING_MAX ), false );
+	$is_denial = static function ( array $e ): bool {
+		return 'denial_burst' === ( $e['trigger'] ?? '' );
+	};
+	$kept      = 0;
+	foreach ( $list as $i => $e ) {
+		if ( $is_denial( $e ) && ++$kept > 3 ) {
+			unset( $list[ $i ] );
+		}
+	}
+	$list = array_values( $list );
+	$over = count( $list ) - AAFM_NOTIFY_PENDING_MAX;
+	for ( $i = count( $list ) - 1; $over > 0 && $i >= 0; $i-- ) {
+		if ( $is_denial( $list[ $i ] ) ) {
+			unset( $list[ $i ] );
+			--$over;
+		}
+	}
+	$list = array_slice( array_values( $list ), 0, AAFM_NOTIFY_PENDING_MAX );
+	return aafm_update_option_verified( 'aafm_notify_pending', $list, false );
 }
 
 /**
@@ -602,14 +622,17 @@ function aafm_notify_queue_clear(): bool {
 
 /**
  * Remove the events that were sent from the digest queue and keep the rest. The queue is read again
- * first, so an event appended while the mail was in flight survives. This is a read-modify-write with
- * no lock: an append landing between the read and the write is lost, and a lock option is the upgrade
- * if that ever shows up.
+ * first, so an event appended while the mail was in flight survives.
+ *
+ * This is an unlocked read-modify-write, see the ponytail note in the body.
  *
  * @param array<int,array<string,mixed>> $sent The events the summary described.
  * @return bool Whether the queue now holds exactly the unsent events.
  */
 function aafm_notify_queue_remove( array $sent ): bool {
+	// ponytail: unlocked read-modify-write. An append from a concurrent request landing between the read
+	// and the write is lost. Upgrade path is an atomic store (one row per event, or a lock around the
+	// option) if that ever shows up.
 	$left = array();
 	foreach ( aafm_notify_queue_list() as $event ) {
 		if ( ! in_array( $event, $sent, true ) ) {

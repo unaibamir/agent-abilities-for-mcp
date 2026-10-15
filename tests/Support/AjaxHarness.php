@@ -19,11 +19,26 @@ trait AjaxHarness {
 	private $ajax_die_filter = null;
 
 	/**
+	 * Remove the wp_die filter intercept_die() added, if any.
+	 *
+	 * @return void
+	 */
+	private function remove_die_filter(): void {
+		if ( null !== $this->ajax_die_filter ) {
+			remove_filter( 'wp_die_ajax_handler', $this->ajax_die_filter );
+			remove_filter( 'wp_die_handler', $this->ajax_die_filter );
+			$this->ajax_die_filter = null;
+		}
+	}
+
+	/**
 	 * Route wp_send_json through a throwing wp_die so the handler is observable in-process.
 	 *
 	 * @return void
 	 */
 	protected function intercept_die(): void {
+		// A second call replaces the first filter instead of orphaning it.
+		$this->remove_die_filter();
 		add_filter( 'wp_doing_ajax', '__return_true' );
 		$die                   = static function (): void {
 			throw new \WPDieException( 'aafm-die' );
@@ -72,11 +87,7 @@ trait AjaxHarness {
 	 * @return void
 	 */
 	protected function reset_ajax_harness(): void {
-		if ( null !== $this->ajax_die_filter ) {
-			remove_filter( 'wp_die_ajax_handler', $this->ajax_die_filter );
-			remove_filter( 'wp_die_handler', $this->ajax_die_filter );
-			$this->ajax_die_filter = null;
-		}
+		$this->remove_die_filter();
 		remove_filter( 'wp_doing_ajax', '__return_true' );
 		$_POST = array();
 		unset( $_REQUEST['nonce'] );

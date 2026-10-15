@@ -107,7 +107,7 @@ function aafm_render_site_brief_section(): void {
 			),
 			'help'    => sprintf(
 				/* translators: %s: the maximum number of characters, for example 1,500. */
-				__( 'Plain text, up to %s characters. Every agent that connects gets this text when its session starts, so keep passwords and private details out of it. Only you can change it; agents cannot. For example: British spelling, never touch the pricing page, drafts only on Fridays.', 'agent-abilities-for-mcp' ),
+				__( 'Plain text, up to %s characters. Every agent that connects to this plugin\'s endpoint gets this text when its session starts, so keep passwords and private details out of it. Only you can change it; agents cannot. For example: British spelling, never touch the pricing page, drafts only on Fridays.', 'agent-abilities-for-mcp' ),
 				number_format_i18n( AAFM_SITE_BRIEF_MAX )
 			),
 		)

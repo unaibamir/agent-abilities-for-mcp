@@ -141,5 +141,6 @@ final class SiteBriefTest extends TestCase {
 
 		$this->assertStringContainsString( 'name="aafm_site_brief"', $html );
 		$this->assertStringContainsString( 'Tom &amp; Jerry rules.', $html );
+		$this->assertStringContainsString( 'Every agent that connects to this plugin&#039;s endpoint gets this text', $html, "The brief reaches this plugin's endpoint only, not other plugins' servers." );
 	}
 }

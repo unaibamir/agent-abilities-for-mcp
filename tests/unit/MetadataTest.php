@@ -172,7 +172,7 @@ final class MetadataTest extends TestCase {
 			$this->assertStringNotContainsString( 'including tools from your other plugins', $text, $file );
 			$this->assertStringNotContainsString( 'abilities from other plugins included', $text, $file );
 			$this->assertStringNotContainsString( 'updates never silently widen access', $text, $file );
-			foreach ( array( 'Nothing is exposed until you turn it on', 'governed and off by default', 'logs every call including', 'every call is logged', 'writes every ability call', 'Every ability call, whether', 'capability-gated on every call, and logged', 'Every write is capability-checked' ) as $unscoped ) {
+			foreach ( array( 'Nothing is exposed until you turn it on', 'Nothing is exposed until you switch it on', 'governed and off by default', 'logs every call including', 'every call is logged', 'writes every ability call', 'Every ability call, whether', 'capability-gated on every call, and logged', 'Every write is capability-checked' ) as $unscoped ) {
 				$this->assertStringNotContainsString( $unscoped, $text, "{$file}: '{$unscoped}' claims more than this plugin's own endpoint delivers." );
 			}
 			$this->assertSame( 1, preg_match( '/Do I need to install the MCP Adapter separately\?[ =]*\n\n([^\n]+)/', $text, $faq ), $file );

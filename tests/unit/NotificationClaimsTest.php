@@ -49,4 +49,12 @@ final class NotificationClaimsTest extends TestCase {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 		$this->assertStringContainsString( 'test_the_message_never_names_a_user_or_an_ip_address', (string) file_get_contents( __DIR__ . '/../audit/NotificationsTest.php' ), 'The behavioural proof of the promise must exist.' );
 	}
+
+	public function test_the_faq_qualifies_the_application_password_and_app_authorization_triggers(): void {
+		$faq = $this->faq_entry();
+		$this->assertStringContainsString( 'an app being authorized to connect', $faq );
+		$this->assertStringContainsString( 'created for a user who can edit posts or for the agent user', $faq );
+		$this->assertStringContainsString( 'destructive tool from another plugin', $faq );
+		$this->assertStringContainsString( 'count separately', $faq );
+	}
 }

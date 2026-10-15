@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-16T00:35:46+05:00\n"
+"POT-Creation-Date: 2026-10-16T00:50:52+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -3926,8 +3926,8 @@ msgstr ""
 #: includes/admin/connection.php:700
 #: includes/admin/connection.php:762
 #: includes/admin/doctor.php:767
-#: includes/admin/notifications.php:212
-#: includes/admin/notifications.php:271
+#: includes/admin/notifications.php:215
+#: includes/admin/notifications.php:274
 #: includes/admin/page.php:632
 #: includes/admin/page.php:754
 #: includes/admin/page.php:1113
@@ -5794,59 +5794,63 @@ msgstr ""
 msgid "One address, needed for the two email modes. The grey example is your site admin address; it is not used unless you type it here. Emails say what happened and link to the Activity Log. They never include the content of a call, a user name or an IP address."
 msgstr ""
 
-#: includes/admin/notifications.php:80
+#: includes/admin/notifications.php:77
+msgid "An alert for every app authorization, including an app that already had consent. An Application Password counts only when it is created for a user who can edit posts, or for the agent user."
+msgstr ""
+
+#: includes/admin/notifications.php:83
 msgid "The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run \"wp cron event run --due-now\") for the daily email. Admin notice only and Email right away do not depend on cron. If email is unreliable on your host, the admin notice still shows every alert."
 msgstr ""
 
-#: includes/admin/notifications.php:86
+#: includes/admin/notifications.php:89
 msgid "Notifications"
 msgstr ""
 
 #. translators: %s: the notification mode, for example "Off".
-#: includes/admin/notifications.php:112
+#: includes/admin/notifications.php:115
 #, php-format
 msgid "Notifications set to: %s"
 msgstr ""
 
-#: includes/admin/notifications.php:158
+#: includes/admin/notifications.php:161
 msgid "If you did not make this change, review who can sign in as an administrator."
 msgstr ""
 
-#: includes/admin/notifications.php:191
+#: includes/admin/notifications.php:194
 msgid "The queued notifications could not be sent and were kept"
 msgstr ""
 
-#: includes/admin/notifications.php:197
+#: includes/admin/notifications.php:200
 msgid "The queued notifications could not be cleared"
 msgstr ""
 
-#: includes/admin/notifications.php:216
+#: includes/admin/notifications.php:219
 msgid "Save a valid email address first, then send the test."
 msgstr ""
 
-#: includes/admin/notifications.php:219
+#: includes/admin/notifications.php:222
 msgid "A test email was sent a moment ago. Wait a minute and try again."
 msgstr ""
 
 #. translators: %s: the site name.
-#: includes/admin/notifications.php:224
+#: includes/admin/notifications.php:227
 #, php-format
 msgid "[%s] Agent Abilities test email"
 msgstr ""
 
-#: includes/admin/notifications.php:225
+#: includes/admin/notifications.php:228
 msgid "This is a test. If you can read it, alerts from Agent Abilities for MCP will reach this address."
 msgstr ""
 
-#: includes/admin/notifications.php:227
+#: includes/admin/notifications.php:230
 msgid "Test email sent. Check the inbox, and the spam folder."
 msgstr ""
 
-#: includes/admin/notifications.php:229
+#: includes/admin/notifications.php:232
 msgid "WordPress could not send the email. Your host may block mail; the admin notice will still show every alert."
 msgstr ""
 
-#: includes/admin/notifications.php:250
+#: includes/admin/notifications.php:253
 #: includes/admin/onboarding-pointer.php:205
 #: includes/admin/page.php:40
 #: includes/admin/page.php:41
@@ -5859,23 +5863,23 @@ msgstr ""
 msgid "Agent Abilities for MCP"
 msgstr ""
 
-#: includes/admin/notifications.php:252
+#: includes/admin/notifications.php:255
 msgid "View in Activity Log"
 msgstr ""
 
 #. translators: %d: how many further alerts are waiting, which Dismiss would also clear.
-#: includes/admin/notifications.php:257
+#: includes/admin/notifications.php:260
 #, php-format
 msgid "and %d more alert."
 msgid_plural "and %d more alerts."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/notifications.php:258
+#: includes/admin/notifications.php:261
 msgid "Open the Activity Log"
 msgstr ""
 
-#: includes/admin/notifications.php:260
+#: includes/admin/notifications.php:263
 #: includes/admin/onboarding-pointer.php:208
 msgid "Dismiss"
 msgstr ""
@@ -8164,7 +8168,7 @@ msgid "A notification could not be queued for the daily email"
 msgstr ""
 
 #: includes/audit/notifications.php:318
-msgid "A new app was approved to connect"
+msgid "An app was authorized to connect"
 msgstr ""
 
 #: includes/audit/notifications.php:319
@@ -8288,7 +8292,7 @@ msgid "Held back since the last message: plus %d more"
 msgstr ""
 
 #: includes/audit/notifications.php:417
-msgid "Open the Activity Log entry:"
+msgid "Open the Activity Log:"
 msgstr ""
 
 #: includes/audit/notifications.php:421

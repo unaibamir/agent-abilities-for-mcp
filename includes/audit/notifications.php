@@ -315,7 +315,7 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 function aafm_notify_event_label( array $event ): string {
 	$key    = (string) ( $event['trigger'] ?? '' ) . ':' . (string) ( $event['subtype'] ?? '' );
 	$labels = array(
-		'new_app:oauth_grant'            => __( 'A new app was approved to connect', 'agent-abilities-for-mcp' ),
+		'new_app:oauth_grant'            => __( 'An app was authorized to connect', 'agent-abilities-for-mcp' ),
 		'new_app:app_password'           => __( 'An Application Password was created', 'agent-abilities-for-mcp' ),
 		'risky_run:high_risk'            => __( 'A high-risk tool ran', 'agent-abilities-for-mcp' ),
 		'risky_run:permanent_delete'     => __( 'A tool that deletes permanently ran', 'agent-abilities-for-mcp' ),
@@ -414,7 +414,7 @@ function aafm_notify_build_message( array $events, bool $digest ): array {
 			$lines[] = sprintf( __( 'Held back since the last message: plus %d more', 'agent-abilities-for-mcp' ), (int) $event['suppressed'] );
 		}
 		$lines[] = '';
-		$lines[] = __( 'Open the Activity Log entry:', 'agent-abilities-for-mcp' );
+		$lines[] = __( 'Open the Activity Log:', 'agent-abilities-for-mcp' );
 		$lines[] = aafm_notify_event_link( $event );
 	}
 	$lines[] = '';

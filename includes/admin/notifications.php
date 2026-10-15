@@ -73,6 +73,9 @@ function aafm_render_notifications_section(): void {
 					esc_attr( $label ),
 					checked( ! empty( $s['triggers'][ $slug ] ), true, false )
 				),
+				'help'    => 'new_app' === $slug
+					? __( 'An alert for every app authorization, including an app that already had consent. An Application Password counts only when it is created for a user who can edit posts, or for the agent user.', 'agent-abilities-for-mcp' )
+					: '',
 			)
 		);
 	}

@@ -191,7 +191,7 @@ Yes. Beyond the site-wide list of enabled abilities, you can add a per-role allo
 
 Open the Activity Log tab. You can filter by user, connection, tool, plugin, date and text. Each row shows the connection name, the source IP address and how long the tool ran. A summary at the top covers the last 7 days, and a Live view keeps the first page current while you watch (it needs a date range when a text search or a user filter is applied). Export CSV downloads exactly the rows the filters show.
 
-The IP is the address the request came from, so behind a proxy or CDN it is the proxy's address. Duration is the time spent inside the tool, not what the agent experienced.
+The IP is the address the request came from, so behind a proxy or CDN it is the proxy's address. Duration is the time spent inside the tool, not what the agent experienced. A denied call never runs, so it has no duration.
 
 ### Is there an audit log of what the agent did?
 
@@ -313,9 +313,9 @@ On WP Engine, check Global Edge Security first if your site uses it: in the User
 
 ### Can I get an email when something important happens?
 
-Yes, but it is off by default. Under Settings, Notifications, choose an admin notice only, an email right away (plus the notice) or one daily email (plus the notice), then tick the events you want to hear about: a new app approved to connect or an Application Password created, a high-risk tool or a permanent delete running, a burst of denied calls or a connection hitting the rate limit, and read-only mode or the high-risk lock being switched.
+Yes, but it is off by default. Under Settings, Notifications, choose an admin notice only, an email right away (plus the notice) or one daily email (plus the notice), then tick the events you want to hear about: an app being authorized to connect, an Application Password created for a user who can edit posts or for the agent user, a high-risk tool, a permanent delete or a destructive tool from another plugin running, a burst of denied calls or a connection hitting the rate limit, and read-only mode or the high-risk lock being switched.
 
-Each kind of event sends at most one email every 15 minutes (a new OAuth app counts separately for each app), and the site sends at most six emails an hour, plus two more an hour for bursts of denied calls. Emails say what happened and link to the Activity Log entry. They never include the content of a call, a user name or an IP address. They go out through WordPress's own mail, so on a host where mail is unreliable the admin notice is the dependable option. The daily email needs WP-Cron.
+Each type of event sends at most one email every 15 minutes, so turning read-only mode on and turning it off count separately, as does each app that is authorized. The site sends at most six emails an hour, plus two more an hour for bursts of denied calls. Emails say what happened and link to the Activity Log. They never include the content of a call, a user name or an IP address. They go out through WordPress's own mail, so on a host where mail is unreliable the admin notice is the dependable option. The daily email needs WP-Cron.
 
 ### Is there rate limiting?
 
@@ -352,8 +352,8 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 ## Changelog
 ### 1.9.0
 
-* **Feature:** The Activity Log can be searched and filtered by user, connection, tool, plugin, date and text. Each call shows its connection, IP address and duration, and the log has a 7-day summary and a Live view. The CSV export follows your filters.
-* **Feature:** Optional alerts, off by default: an admin notice, an email right away or a daily email when a new app or Application Password is added, a high-risk tool or permanent delete runs, calls are denied in a burst, or read-only mode or the high-risk lock is switched.
+* **Feature:** The Activity Log can be searched and filtered by user, connection, tool, plugin, date and text. Each call shows its connection and IP address, and its duration when it ran; the log adds a 7-day summary and a Live view. The CSV export follows your filters.
+* **Feature:** Optional alerts, off by default: an admin notice, an email right away or a daily email when an app is authorized to connect, an Application Password is created for a user who can edit posts or for the agent user, a high-risk tool or permanent delete runs, calls are denied in a burst, or read-only mode or the high-risk lock is switched.
 * **Fix:** A denied call now records why in the Activity Log, for example "key is not on the allowlist"; the message the agent sees is unchanged. Reading a meta key now logs a note the way writing one does.
 * **Chore:** The Cloudflare advice in the FAQ, README and Help tab now points to "Configure AI bot policies" instead of the deprecated "Block AI bots" switch, and adds steps for WP Engine edge traffic rules and HTTP 429 limits.
 

@@ -175,7 +175,7 @@ final class NotificationDetectionTest extends TestCase {
 			)
 		);
 		$this->assertCount( 1, $this->sent() );
-		$this->assertStringContainsString( 'A new app was approved to connect', $this->sent()[0]['subject'] );
+		$this->assertStringContainsString( 'An app was authorized to connect', $this->sent()[0]['subject'] );
 		$this->assertStringContainsString( $client['client_id'], $this->sent()[0]['message'] );
 		$this->assertStringContainsString( 'The name the app gave itself: Claude', $this->sent()[0]['message'] );
 		$this->assertStringNotContainsString( 'Claude', $this->sent()[0]['subject'], 'An app-chosen name is never in the subject.' );

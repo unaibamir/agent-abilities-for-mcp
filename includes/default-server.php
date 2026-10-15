@@ -145,13 +145,80 @@ function aafm_default_server_decision( string $mode, bool $create, callable $has
 }
 
 /**
+ * Whether the Abilities API registries have finished initialising, so a lookup of registered
+ * abilities cannot start them early.
+ *
+ * @return bool
+ */
+function aafm_abilities_registries_ready(): bool {
+	return did_action( 'wp_abilities_api_init' ) > 0 && ! doing_action( 'wp_abilities_api_categories_init' ) && ! doing_action( 'wp_abilities_api_init' );
+}
+
+/**
+ * Remove the adapter's category and three meta abilities, which it registered while the Automatic
+ * answer was still "maybe". Called once the answer is no, so Automatic with no publisher leaves
+ * nothing behind, the same as Always off.
+ *
+ * @return void
+ */
+function aafm_forget_default_server_abilities(): void {
+	foreach ( array( 'discover-abilities', 'get-ability-info', 'execute-ability' ) as $slug ) {
+		if ( wp_has_ability( 'mcp-adapter/' . $slug ) ) {
+			wp_unregister_ability( 'mcp-adapter/' . $slug );
+		}
+	}
+	if ( wp_has_ability_category( 'mcp-adapter' ) ) {
+		wp_unregister_ability_category( 'mcp-adapter' );
+	}
+}
+
+/**
  * The `mcp_adapter_create_default_server` callback.
+ *
+ * Looking up registered abilities starts the Abilities API registries if nothing has yet, and
+ * starting them from inside the adapter's own registration (0.7.x asks while it registers its
+ * category and meta abilities) or before it has attached its hooks (0.6.x asks first) leaves a
+ * default server with no tools. So in Automatic the answer is the value so far until the registries
+ * have finished, and aafm_veto_default_server_without_publisher() makes the real call afterwards.
  *
  * @param mixed $create Filter value so far.
  * @return bool
  */
 function aafm_filter_default_server_enabled( $create ): bool {
-	return aafm_default_server_decision( aafm_default_server_mode(), (bool) $create, 'aafm_default_server_has_publisher' );
+	$mode = aafm_default_server_mode();
+	if ( 'auto' === $mode && ! aafm_abilities_registries_ready() ) {
+		return (bool) $create;
+	}
+
+	$run = aafm_default_server_decision( $mode, (bool) $create, 'aafm_default_server_has_publisher' );
+	if ( 'auto' === $mode && ! $run ) {
+		aafm_forget_default_server_abilities();
+	}
+
+	return $run;
+}
+
+/**
+ * Automatic's real decision, taken just before the adapter creates its default server (hooked on
+ * `mcp_adapter_init` ahead of the adapter's own callback). By now every ability is registered, so
+ * "does another plugin publish tools here" has an answer: when none does, the adapter's one
+ * create callback is taken off the hook and its leftover category and meta abilities are removed.
+ * Only that single callback is removed, found by identity; nothing else on the hook is touched.
+ *
+ * @return void
+ */
+function aafm_veto_default_server_without_publisher(): void {
+	if ( 'auto' !== aafm_default_server_mode() ) {
+		return;
+	}
+	$create   = array( 'WP\\MCP\\Servers\\DefaultServerFactory', 'create' );
+	$priority = has_action( 'mcp_adapter_init', $create );
+	if ( false === $priority || aafm_default_server_has_publisher() ) {
+		return;
+	}
+
+	remove_action( 'mcp_adapter_init', $create, $priority );
+	aafm_forget_default_server_abilities();
 }
 
 /**

@@ -21,9 +21,38 @@ final class DefaultServerModeTest extends TestCase {
 	 */
 	private $config_probe = null;
 
+	/**
+	 * The wp_abilities_api_init count before a test forced "registries finished", or null.
+	 *
+	 * @var int|null
+	 */
+	private $saved_init_count = null;
+
+	/**
+	 * Make the Abilities API registries read as finished initialising. The suite builds registered
+	 * abilities by hand and never fires the real actions, so the count is set directly.
+	 */
+	private function registries_finished(): void {
+		global $wp_actions;
+		if ( null === $this->saved_init_count ) {
+			$this->saved_init_count = (int) ( $wp_actions['wp_abilities_api_init'] ?? 0 );
+		}
+		$wp_actions['wp_abilities_api_init'] = max( 1, $this->saved_init_count ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test fixture.
+	}
+
 	public function tear_down(): void {
+		global $wp_actions;
+		if ( null !== $this->saved_init_count ) {
+			if ( 0 === $this->saved_init_count ) {
+				unset( $wp_actions['wp_abilities_api_init'] );
+			} else {
+				$wp_actions['wp_abilities_api_init'] = $this->saved_init_count; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test fixture.
+			}
+			$this->saved_init_count = null;
+		}
 		delete_option( 'aafm_default_server_mode' );
 		delete_option( 'aafm_default_server_auto_noted' );
+		remove_action( 'mcp_adapter_init', array( 'WP\\MCP\\Servers\\DefaultServerFactory', 'create' ) );
 		if ( null !== $this->config_probe ) {
 			remove_filter( 'mcp_adapter_default_server_config', $this->config_probe );
 			$this->config_probe = null;
@@ -193,7 +222,121 @@ final class DefaultServerModeTest extends TestCase {
 
 		$this->assertContains( 'smokefix/ping', aafm_default_server_publishers( wp_get_abilities() ) );
 		$this->assertTrue( aafm_default_server_has_publisher() );
+		$this->registries_finished();
 		$this->assertTrue( aafm_filter_default_server_enabled( true ) );
+	}
+
+	/**
+	 * The adapter asks while it registers its category and abilities. Looking up abilities then would
+	 * start the registries out of order, so Automatic answers with the value so far and does not
+	 * consult publishers; outside registration the same call decides (no publisher here, so false).
+	 */
+	public function test_auto_answers_with_the_value_so_far_while_the_registries_register(): void {
+		delete_option( 'aafm_default_server_mode' );
+		$answers = array();
+		foreach ( array( 'wp_abilities_api_categories_init', 'wp_abilities_api_init' ) as $action ) {
+			$this->in_action(
+				$action,
+				static function () use ( &$answers, $action ): void {
+					$answers[ $action ] = array( aafm_filter_default_server_enabled( true ), aafm_filter_default_server_enabled( false ) );
+				}
+			);
+		}
+
+		$this->assertSame( array( true, false ), $answers['wp_abilities_api_categories_init'] );
+		$this->assertSame( array( true, false ), $answers['wp_abilities_api_init'] );
+		$this->assertTrue( aafm_filter_default_server_enabled( true ), 'Before the registries have finished Automatic keeps the value so far.' );
+
+		$this->registries_finished();
+		$this->assertFalse( aafm_filter_default_server_enabled( true ), 'Once they have finished Automatic decides, and nobody publishes here.' );
+	}
+
+	/**
+	 * Automatic said maybe while registering, so the adapter's category and meta abilities exist; a
+	 * final no removes them, leaving what Always off leaves.
+	 */
+	public function test_a_final_no_in_auto_removes_the_adapters_meta_abilities(): void {
+		delete_option( 'aafm_default_server_mode' );
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'mcp-adapter' ) ) {
+					wp_register_ability_category(
+						'mcp-adapter',
+						array(
+							'label'       => 'MCP Adapter',
+							'description' => 'Fixture.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				if ( wp_has_ability( 'mcp-adapter/discover-abilities' ) ) {
+					return;
+				}
+				wp_register_ability(
+					'mcp-adapter/discover-abilities',
+					array(
+						'label'               => 'Discover',
+						'description'         => 'Fixture for the adapter meta ability.',
+						'category'            => 'mcp-adapter',
+						'execute_callback'    => static fn() => array(),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+		$this->assertTrue( wp_has_ability( 'mcp-adapter/discover-abilities' ) );
+
+		$this->registries_finished();
+		$this->assertFalse( aafm_filter_default_server_enabled( true ) );
+
+		$this->assertFalse( wp_has_ability( 'mcp-adapter/discover-abilities' ) );
+		$this->assertFalse( wp_has_ability_category( 'mcp-adapter' ) );
+	}
+
+	/**
+	 * The adapter's one create callback, as the adapter adds it before it fires mcp_adapter_init.
+	 *
+	 * @return array{0:string,1:string}
+	 */
+	private function adapter_create_callback(): array {
+		return array( 'WP\\MCP\\Servers\\DefaultServerFactory', 'create' );
+	}
+
+	public function test_the_veto_takes_the_adapters_create_callback_off_when_nobody_publishes(): void {
+		delete_option( 'aafm_default_server_mode' );
+		$this->assertNotFalse( has_action( 'mcp_adapter_init', 'aafm_veto_default_server_without_publisher' ) );
+		add_action( 'mcp_adapter_init', $this->adapter_create_callback() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+
+		aafm_veto_default_server_without_publisher();
+
+		$this->assertFalse( has_action( 'mcp_adapter_init', $this->adapter_create_callback() ) );
+	}
+
+	public function test_the_veto_leaves_the_create_callback_when_another_plugin_publishes(): void {
+		delete_option( 'aafm_default_server_mode' );
+		$this->config_probe = static fn( $config ) => $config;
+		add_filter( 'mcp_adapter_default_server_config', $this->config_probe ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		add_action( 'mcp_adapter_init', $this->adapter_create_callback() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+
+		aafm_veto_default_server_without_publisher();
+
+		$this->assertNotFalse( has_action( 'mcp_adapter_init', $this->adapter_create_callback() ) );
+		remove_action( 'mcp_adapter_init', $this->adapter_create_callback() );
+	}
+
+	public function test_the_veto_only_acts_in_auto_mode(): void {
+		update_option( 'aafm_default_server_mode', 'on' );
+		add_action( 'mcp_adapter_init', $this->adapter_create_callback() ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+
+		aafm_veto_default_server_without_publisher();
+
+		$this->assertNotFalse( has_action( 'mcp_adapter_init', $this->adapter_create_callback() ) );
+		remove_action( 'mcp_adapter_init', $this->adapter_create_callback() );
 	}
 
 	public function test_the_mode_option_is_in_the_reset_list(): void {

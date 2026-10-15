@@ -185,6 +185,7 @@ function aafm_init_mcp(): bool {
 	// default server"), resolved late so no other plugin's filter overrides it. Our own tools never
 	// appear on it in any mode (guards registered at the top of this function).
 	add_filter( 'mcp_adapter_create_default_server', 'aafm_filter_default_server_enabled', AAFM_DEFAULT_SERVER_FILTER_PRIORITY );
+	add_action( 'mcp_adapter_init', 'aafm_veto_default_server_without_publisher', 9 );
 	add_action( 'mcp_adapter_init', 'aafm_note_automatic_default_server', 20 );
 
 	// The adapter initialises on init (WP-CLI) or rest_api_init; mark our copy loaded just before it does.

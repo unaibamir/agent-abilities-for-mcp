@@ -588,7 +588,7 @@ ds_route_state() {
 # ds_up_checks <label> <expect publisher listed: 1|0>: the default server is up. Assert the three
 # guarantees on tool CALLS, plus a control call so a refusal means something.
 ds_up_checks() {
-	local label="$1" want_pub="$2" names="$SMOKE_ROOT/names.txt" disc exe info found leaked
+	local label="$1" want_pub="$2" names="$SMOKE_ROOT/names.txt" disc exe info found leaked ctl
 	disc=$(grep 'discover-abilities$' "$names" | head -1)
 	exe=$(grep 'execute-ability$' "$names" | head -1)
 	info=$(grep 'get-ability-info$' "$names" | head -1)
@@ -617,24 +617,33 @@ ds_up_checks() {
 	else
 		fail default-server "$label: discover-abilities call failed: $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
 	fi
-	if [ "$want_pub" = 1 ]; then
-		if tools_call "$ROUTE_DEFAULT" "$exe" '{"ability_name":"smokefix/ping","parameters":{}}' >/dev/null \
-			&& jq -e '.result.isError == false and .result.structuredContent.success == true' "$SMOKE_ROOT/body.json" >/dev/null 2>&1; then
-			pass default-server "$label: control, the foreign ability executes through the default server"
-		else
-			fail default-server "$label: control call to smokefix/ping did not succeed: $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
-		fi
+	# Control: a public foreign ability (the fixture's, or core's when nobody publishes) must run
+	# through the same tool with the same argument shape, so the refusals below are real refusals.
+	ctl=smokefix/ping
+	[ "$want_pub" = 1 ] || ctl=core/get-site-info
+	if tools_call "$ROUTE_DEFAULT" "$exe" "{\"ability_name\":\"$ctl\",\"parameters\":{}}" >/dev/null \
+		&& jq -e '.result.isError == false and .result.structuredContent.success == true' "$SMOKE_ROOT/body.json" >/dev/null 2>&1; then
+		pass default-server "$label: control, $ctl executes through the default server"
+	else
+		fail default-server "$label: control call to $ctl did not succeed: $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
 	fi
 	refusal_check "$label" "$exe" '{"ability_name":"aafm/get-posts","parameters":{}}' 'execute-ability for aafm/get-posts'
 	refusal_check "$label" "$info" '{"ability_name":"aafm/get-posts"}' 'get-ability-info for aafm/get-posts'
 }
 
-# ds_scenario <label> <plugins json> <publisher on|off> <mode> <expect: up|down> <base tool count>
+# ds_scenario <label> <plugins json> <publisher on|off> <mode> <expect: up|down> <base tool count> <adapter version that must load>
+# The label names the adapter copy under test, so the loaded McpAdapter::VERSION is read back and a
+# mismatch is a FAIL (our bundled copy wins whenever we are declared first).
 ds_scenario() {
-	local label="$1" plugins="$2" pub="$3" mode="$4" expect="$5" base="$6" ours msg
+	local label="$1" plugins="$2" pub="$3" mode="$4" expect="$5" base="$6" want_ver="$7" ours msg got_ver
 	publisher "$pub"
 	set_mode "$mode"
 	set_state default-server "$label" "$plugins" true 0 || return 0
+	got_ver=$(W eval 'echo class_exists( "WP\\MCP\\Core\\McpAdapter" ) ? \WP\MCP\Core\McpAdapter::VERSION : "none";' 2>/dev/null)
+	if [ "$got_ver" != "$want_ver" ]; then
+		fail default-server "$label: McpAdapter::VERSION reads '$got_ver', the scenario needs $want_ver"
+		return 0
+	fi
 	ds_route_state "$label"
 	if [ "$expect" = up ]; then
 		if [ "$DS_STATE" = up ]; then
@@ -657,10 +666,19 @@ ds_scenario() {
 	else
 		ds "$label: our endpoint lists $ours tools, ours-only lists $base"
 	fi
+	# Known, not caused by this plugin's default-server code: our bundled 0.7.0 loading while a standalone
+	# 0.6.1 plugin is also active makes 0.7.0's Plugin::constants() redefine WP_MCP_VERSION, which 0.6.1's
+	# plugin file already defined. Reported once per scenario as KNOWN; any other log line still fails.
+	if [ "$ADAPTER_INSTALLED" = 0.6.1 ] && [ "$want_ver" = 0.7.0 ] && grep -q 'Constant WP_MCP_VERSION already defined' "$LOG" 2>/dev/null; then
+		known default-server "$label: debug.log has 'Constant WP_MCP_VERSION already defined' (bundled 0.7.0 beside an active standalone 0.6.1)"
+		grep -v 'Constant WP_MCP_VERSION already defined' "$LOG" > "$LOG.filtered"
+		mv "$LOG.filtered" "$LOG" # grep -v exits 1 when nothing is left, so no && here
+	fi
+	log_ok default-server "$label"
 }
 
-leg_default_server() {
-	local names="$SMOKE_ROOT/names.txt" base msg ver order plugins want missing t found disc exe stamped
+leg_default_server_run() {
+	local names="$SMOKE_ROOT/names.txt" base msg ver order plugins want missing t found disc exe stamped lv name
 	fetch_adapter default-server 0.7.0 || return 0
 	publisher off
 	restamp off
@@ -689,11 +707,20 @@ leg_default_server() {
 	for ver in 0.7.0 0.6.1; do
 		fetch_adapter default-server "$ver" || continue
 		for order in 'ours first' 'standalone first'; do
-			if [ "$order" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; else plugins="[\"$ADAPTER\",\"$OURS\"]"; fi
-			ds_scenario "adapter $ver, $order, another plugin publishes, Automatic" "$plugins" on unset up "$base"
-			ds_scenario "adapter $ver, $order, another plugin publishes, Always off" "$plugins" on off down "$base"
-			ds_scenario "adapter $ver, $order, nobody publishes, Automatic" "$plugins" off unset down "$base"
-			ds_scenario "adapter $ver, $order, nobody publishes, Always on" "$plugins" off on up "$base"
+			if [ "$order" = 'ours first' ]; then
+				# Declared first, our bundled 0.7.0 loads whatever standalone version is installed.
+				plugins="[\"$OURS\",\"$ADAPTER\"]"
+				lv=0.7.0
+				name="bundled 0.7.0 loads, standalone $ver installed, ours first"
+			else
+				plugins="[\"$ADAPTER\",\"$OURS\"]"
+				lv=$ver
+				name="adapter $ver, standalone first"
+			fi
+			ds_scenario "$name, another plugin publishes, Automatic" "$plugins" on unset up "$base" "$lv"
+			ds_scenario "$name, another plugin publishes, Always off" "$plugins" on off down "$base" "$lv"
+			ds_scenario "$name, nobody publishes, Automatic" "$plugins" off unset down "$base" "$lv"
+			ds_scenario "$name, nobody publishes, Always on" "$plugins" off on up "$base" "$lv"
 		done
 	done
 	# Our abilities re-stamped public by a late filter: the guards alone must keep them off the default server.
@@ -706,7 +733,7 @@ leg_default_server() {
 			stamped=$(W eval '$a = wp_get_ability( "aafm/get-posts" ); echo $a ? var_export( $a->get_meta()["mcp"]["public"] ?? null, true ) : "missing";' 2>/dev/null)
 			if [ "$stamped" = true ]; then
 				pass default-server "re-stamped public, $order: aafm/get-posts reads meta.mcp.public = true, so the guards are what is under test"
-				ds_scenario "adapter 0.7.0, $order, re-stamped public, another plugin publishes, Automatic" "$plugins" on unset up "$base"
+				ds_scenario "adapter 0.7.0, $order, re-stamped public, another plugin publishes, Automatic" "$plugins" on unset up "$base" 0.7.0
 			else
 				fail default-server "re-stamped public, $order: the fixture did not take effect (meta.mcp.public reads '$stamped')"
 			fi
@@ -746,6 +773,19 @@ leg_default_server() {
 	restamp off
 	publisher off
 	set_mode unset
+}
+
+# leg_default_server: runs the leg, then puts the site back to the plain state on every exit path, so
+# an early return (a failed download, a failed set_state) cannot leave a mode, a publisher, the
+# re-stamp fixture or a bridged-abilities row behind for the next leg.
+leg_default_server() {
+	leg_default_server_run
+	REQUIRE_GUARD=0
+	restamp off
+	publisher off
+	set_mode unset
+	W option delete aafm_enabled_bridged_abilities >/dev/null 2>&1
+	return 0
 }
 
 leg_brief() {

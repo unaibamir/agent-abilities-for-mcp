@@ -23,8 +23,11 @@ if ( ! defined( 'AAFM_NOTIFY_BURST_COUNT' ) ) {
 if ( ! defined( 'AAFM_NOTIFY_BURST_WINDOW' ) ) {
 	define( 'AAFM_NOTIFY_BURST_WINDOW', 5 * MINUTE_IN_SECONDS );
 }
-if ( ! defined( 'AAFM_NOTIFY_CRITICAL_MAX' ) ) {
-	define( 'AAFM_NOTIFY_CRITICAL_MAX', 6 );
+if ( ! defined( 'AAFM_NOTIFY_GOVERNANCE_MAX' ) ) {
+	define( 'AAFM_NOTIFY_GOVERNANCE_MAX', 6 );
+}
+if ( ! defined( 'AAFM_NOTIFY_RISKY_MAX' ) ) {
+	define( 'AAFM_NOTIFY_RISKY_MAX', 4 );
 }
 if ( ! defined( 'AAFM_NOTIFY_APP_MAX' ) ) {
 	define( 'AAFM_NOTIFY_APP_MAX', 2 );
@@ -230,20 +233,22 @@ function aafm_notify_take_slot( string $bucket ): array {
 
 /**
  * Claim one of the hourly email slots. Each kind of mail draws from a pool of its own, so one kind can
- * never use up another's slots: "critical" (a switch flip, a high-risk run, and the warnings sent to the
- * old address) is reserved, and new apps and denial bursts, which a contributor or any authenticated
- * principal can trigger, each get a small pool.
+ * never use up another's slots: "governance" (a switch flip and the warnings sent to the old address)
+ * is reserved for the changes only an administrator can make, and risky runs, new apps and denial
+ * bursts, which an agent, a contributor or any authenticated principal can trigger, each get a smaller
+ * pool.
  *
- * @param string $pool "critical", "new_app" or "denial".
+ * @param string $pool "governance", "risky", "new_app" or "denial".
  * @return bool
  */
-function aafm_notify_global_slot( string $pool = 'critical' ): bool {
+function aafm_notify_global_slot( string $pool = 'governance' ): bool {
 	$pools             = array(
-		'critical' => array( 'aafm_ntf_global_critical', AAFM_NOTIFY_CRITICAL_MAX ),
-		'new_app'  => array( 'aafm_ntf_global_new_app', AAFM_NOTIFY_APP_MAX ),
-		'denial'   => array( 'aafm_ntf_global_denial', AAFM_NOTIFY_DENIAL_MAX ),
+		'governance' => array( 'aafm_ntf_global_governance', AAFM_NOTIFY_GOVERNANCE_MAX ),
+		'risky'      => array( 'aafm_ntf_global_risky', AAFM_NOTIFY_RISKY_MAX ),
+		'new_app'    => array( 'aafm_ntf_global_new_app', AAFM_NOTIFY_APP_MAX ),
+		'denial'     => array( 'aafm_ntf_global_denial', AAFM_NOTIFY_DENIAL_MAX ),
 	);
-	list( $key, $max ) = $pools[ $pool ] ?? $pools['critical'];
+	list( $key, $max ) = $pools[ $pool ] ?? $pools['governance'];
 	$count             = aafm_transient_count( $key );
 	if ( null === $count || $count >= $max ) {
 		return false;
@@ -260,10 +265,12 @@ function aafm_notify_global_slot( string $pool = 'critical' ): bool {
  * @return string
  */
 function aafm_notify_pool_for( string $trigger ): string {
-	if ( 'denial_burst' === $trigger ) {
-		return 'denial';
-	}
-	return 'new_app' === $trigger ? 'new_app' : 'critical';
+	$pools = array(
+		'denial_burst' => 'denial',
+		'new_app'      => 'new_app',
+		'risky_run'    => 'risky',
+	);
+	return $pools[ $trigger ] ?? 'governance';
 }
 
 /**
@@ -562,7 +569,7 @@ function aafm_notify_outbox( string $op, array $item = array() ): array {
  * @param string                         $bucket The throttle bucket whose slot this message already took, so a refusal can be counted against it.
  * @return bool Whether a message was queued.
  */
-function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'critical', array $drain = array(), string $bucket = '' ): bool {
+function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'governance', array $drain = array(), string $bucket = '' ): bool {
 	if ( ! aafm_notify_global_slot( $pool ) ) {
 		if ( '' !== $bucket ) {
 			aafm_notify_hold_back( $bucket, (int) ( $events[0]['suppressed'] ?? 0 ) );

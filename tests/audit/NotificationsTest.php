@@ -253,13 +253,13 @@ final class NotificationsTest extends TestCase {
 
 	public function test_a_mail_refused_for_lack_of_pool_room_is_counted_as_held_back(): void {
 		$this->configure();
-		set_transient( 'aafm_ntf_global_critical', 99, HOUR_IN_SECONDS );
+		set_transient( 'aafm_ntf_global_governance', 99, HOUR_IN_SECONDS );
 
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
 		$this->assertSame( array(), $this->sent(), 'The pool is full, so no mail.' );
 
 		// The next window opens and the pool has room: the message says what it missed.
-		delete_transient( 'aafm_ntf_global_critical' );
+		delete_transient( 'aafm_ntf_global_governance' );
 		delete_transient( 'aafm_ntf_' . substr( md5( 'switch_flip:read_only_on' ), 0, 20 ) );
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
 		$sent = $this->sent();
@@ -381,8 +381,41 @@ final class NotificationsTest extends TestCase {
 		for ( $i = 1; $i <= 9; $i++ ) {
 			aafm_notify_event( 'risky_run', 'bucket' . $i, array( 'row_id' => $i ) );
 		}
-		$this->assertCount( AAFM_NOTIFY_CRITICAL_MAX, $this->sent() );
+		$this->assertCount( AAFM_NOTIFY_RISKY_MAX, $this->sent() );
 		$this->assertCount( 9, aafm_notify_pending_list(), 'Events past the mail cap still reach the admin notice list.' );
+	}
+
+	/**
+	 * An agent allowed to run high-risk tools can only use up the risky pool: a switch flip, and the
+	 * warnings to the old address, still go out.
+	 */
+	public function test_risky_runs_cannot_starve_the_governance_pool(): void {
+		$this->configure();
+		for ( $i = 1; $i <= 12; $i++ ) {
+			aafm_notify_event( 'risky_run', 'bucket' . $i, array( 'row_id' => $i ) );
+		}
+		$this->assertCount( AAFM_NOTIFY_RISKY_MAX, $this->sent() );
+		$this->mail = array();
+
+		aafm_notify_event( 'switch_flip', 'read_only_off', array( 'row_id' => 99 ) );
+
+		$sent = $this->sent();
+		$this->assertCount( 1, $sent, 'The flip is mailed although the risky pool is empty.' );
+		$this->assertStringContainsString( 'turned off', $sent[0]['subject'] );
+	}
+
+	public function test_the_governance_pool_holds_its_own_cap_and_counts_what_it_held_back(): void {
+		$this->configure();
+		$subtypes = array( 'read_only_on', 'read_only_off', 'high_risk_unlocked', 'high_risk_locked' );
+		for ( $i = 0; $i < AAFM_NOTIFY_GOVERNANCE_MAX; $i++ ) {
+			$this->assertTrue( aafm_notify_global_slot( 'governance' ) );
+		}
+		$this->assertFalse( aafm_notify_global_slot( 'governance' ), 'The seventh governance mail inside the hour is refused.' );
+		$this->assertTrue( aafm_notify_global_slot( 'risky' ), 'A full governance pool does not close the risky one.' );
+
+		aafm_notify_event( 'switch_flip', $subtypes[0] );
+		$this->assertSame( array(), $this->sent() );
+		$this->assertSame( 1, (int) get_transient( aafm_notify_bucket_key( 'switch_flip:' . $subtypes[0] ) . '_n' ), 'The refused flip is counted as held back.' );
 	}
 
 	public function test_notice_mode_sends_no_mail_but_keeps_the_notice(): void {
@@ -603,7 +636,7 @@ final class NotificationsTest extends TestCase {
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
 
 		$this->assertFalse( get_transient( 'aafm_ntf_' . substr( md5( 'switch_flip:read_only_on' ), 0, 20 ) ), 'The bucket slot is untouched.' );
-		$this->assertFalse( get_transient( 'aafm_ntf_global_critical' ), 'The hourly pool is untouched.' );
+		$this->assertFalse( get_transient( 'aafm_ntf_global_governance' ), 'The hourly pool is untouched.' );
 	}
 
 	public function test_a_denial_flood_never_evicts_a_critical_notice(): void {

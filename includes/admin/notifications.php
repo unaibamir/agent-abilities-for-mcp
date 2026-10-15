@@ -178,7 +178,7 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 				array( $event ),
 				false,
 				__( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
-				'critical',
+				'governance',
 				array(),
 				$bucket
 			);
@@ -234,14 +234,14 @@ function aafm_notify_reset_warning( array $before, bool $read_only, bool $unlock
 				),
 				false,
 				__( 'If you did not do this, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
-				'critical',
+				'governance',
 				array(),
 				$bucket
 			);
 		}
 		if ( array() !== $queue ) {
 			// No drain: the reset deletes the queue itself, so the events are not kept for a retry.
-			aafm_notify_send_later( (string) $before['email'], $queue, true, '', 'critical' );
+			aafm_notify_send_later( (string) $before['email'], $queue, true, '', 'governance' );
 		}
 	} catch ( \Throwable $e ) {
 		unset( $e );
@@ -273,7 +273,7 @@ function aafm_notify_settle_queue( array $before, array $after ): void {
 			return;
 		}
 		if ( $flush ) {
-			if ( ! aafm_notify_send_later( (string) $before['email'], $queue, true, '', 'critical', $queue ) ) {
+			if ( ! aafm_notify_send_later( (string) $before['email'], $queue, true, '', 'governance', $queue ) ) {
 				aafm_notify_log_failure( __( 'The queued notifications could not be sent and were kept', 'agent-abilities-for-mcp' ) );
 			}
 			return;

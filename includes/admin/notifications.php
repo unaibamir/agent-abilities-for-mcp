@@ -220,6 +220,9 @@ function aafm_notify_reset_warning( array $before, bool $read_only, bool $unlock
 		if ( ! in_array( $before['mode'], array( 'immediate', 'digest' ), true ) || '' === $before['email'] ) {
 			return;
 		}
+		// ponytail: the reset deletes the address and the queue, so a warning whose wp_mail() fails at the
+		// end of this request is lost: nothing is left to retry from. Keep the address until one send
+		// succeeds if a failing mailer at reset time ever matters.
 		$kinds = array( 'settings:plugin_reset' );
 		if ( ! empty( $before['triggers']['switch_flip'] ) ) {
 			if ( $read_only ) {

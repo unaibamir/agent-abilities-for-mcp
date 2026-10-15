@@ -718,6 +718,9 @@ function aafm_notify_pending_push( array $event ): bool {
 		}
 		$list[ $found ]['time'] = $event['time'];
 	} else {
+		// ponytail: a folded entry keeps only the newest row id, so its notice link opens the latest
+		// run and earlier ones are found in the Activity Log by tool and time. Keep a list of row ids if
+		// the older links matter.
 		$entry           = $list[ $found ];
 		$entry['repeat'] = (int) ( $entry['repeat'] ?? 0 ) + 1;
 		foreach ( array( 'time', 'row_id', 'ability' ) as $field ) {

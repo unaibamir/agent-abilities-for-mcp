@@ -100,8 +100,8 @@ $rows    = array();
 $add     = static function ( string $ability, string $status, string $client, ?string $detail, ?int $duration ) use ( &$rows ): void {
 	$rows[] = array( $ability, $status, $client, $detail, $duration );
 };
-$refused = static function ( string $base, string $label ) use ( $v19 ): string {
-	return $v19 ? $base . '. Refused: ' . $label : $base;
+$refused = static function ( string $base, string $code ) use ( $v19 ): string {
+	return $v19 ? $base . '. Refused: ' . $code : $base;
 };
 $plan = array( 'aafm/get-posts' => 22, 'aafm/get-post' => 14, 'aafm/get-pages' => 8, 'aafm/create-post' => 5, 'aafm/update-post' => 4, 'aafm/get-terms' => 3 );
 foreach ( $plan as $ability => $n ) {
@@ -113,13 +113,13 @@ foreach ( $plan as $ability => $n ) {
 $add( 'aafm/get-posts', 'error', $claude_id, 'aafm_error', 1400 );
 $add( 'aafm/update-post', 'error', $gpt_id, 'aafm_error', 240 );
 for ( $i = 0; $i < 3; $i++ ) {
-	$add( 'aafm/update-post-meta', 'denied', $claude_id, $refused( 'Attempted: Updated meta key `price_note` on post #12', 'key is not on the allowlist' ), null );
+	$add( 'aafm/update-post-meta', 'denied', $claude_id, $refused( 'Attempted: Updated meta key `price_note` on post #12', 'not_allowlisted' ), null );
 }
 for ( $i = 0; $i < 3; $i++ ) {
-	$add( 'aafm/trash-post', 'denied', $gpt_id, $refused( 'Attempted: Trashed post #8', 'ability is not in this role or connection list' ), null );
+	$add( 'aafm/trash-post', 'denied', $gpt_id, $refused( 'Attempted: Trashed post #8', 'scope_list' ), null );
 }
-$add( 'aafm/get-posts', 'denied', $gpt_id, $v19 ? 'Refused: rate limit reached' : null, null );
-$add( 'aafm/delete-post', 'denied', $claude_id, $refused( 'Attempted: Deleted post #9', 'WordPress capability check failed' ), null );
+$add( 'aafm/get-posts', 'denied', $gpt_id, $v19 ? 'Refused: rate_limit' : null, null );
+$add( 'aafm/delete-post', 'denied', $claude_id, $refused( 'Attempted: Deleted post #9', 'capability' ), null );
 foreach ( $rows as $r ) {
 	$data = array(
 		'ability'           => $r[0],

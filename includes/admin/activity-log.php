@@ -46,7 +46,7 @@ function aafm_activity_row_view( array $row, array $names ): array {
 	);
 	$status     = (string) ( $row['status'] ?? '' );
 	$ability    = (string) ( $row['ability'] ?? '' );
-	$detail_raw = (string) ( $row['detail'] ?? '' );
+	$detail_raw = aafm_localize_denied_detail( (string) ( $row['detail'] ?? '' ) );
 	$ip         = (string) ( $row['source_ip'] ?? '' );
 	$duration   = isset( $row['duration_ms'] ) ? (int) $row['duration_ms'] : null;
 

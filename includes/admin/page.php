@@ -2955,7 +2955,8 @@ function aafm_export_activity_csv( $filters = null ): void {
 			foreach ( $rows as $row ) {
 				$line = array();
 				foreach ( $columns as $column ) {
-					$line[] = aafm_csv_cell( 'connection_name' === $column ? aafm_activity_connection_label( $row, $names ) : (string) ( $row[ $column ] ?? '' ) );
+					$cell = 'connection_name' === $column ? aafm_activity_connection_label( $row, $names ) : (string) ( $row[ $column ] ?? '' );
+					$line[] = aafm_csv_cell( 'detail' === $column ? aafm_localize_denied_detail( $cell ) : $cell );
 				}
 				fputcsv( $out, $line, ',', '"', '' );
 			}

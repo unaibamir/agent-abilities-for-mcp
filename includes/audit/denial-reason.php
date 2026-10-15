@@ -49,21 +49,53 @@ function aafm_denial_reason_label( string $code ): ?string {
 /**
  * Append the refusal reason to a denied row's detail.
  *
+ * The clause is stored as the fixed marker "Refused: " plus the reason CODE, never a translated label,
+ * so aafm_redact_denial_reason() finds it on a site in any language. aafm_localize_denied_detail()
+ * turns the code into the translated label when an admin surface shows the row.
+ *
  * @param string|null $base Detail the row would carry anyway (may be null).
  * @param string|null $code Reason code, or null for none.
  * @return string|null
  */
 function aafm_compose_denied_detail( ?string $base, ?string $code ): ?string {
-	$label = null === $code ? null : aafm_denial_reason_label( $code );
-	if ( null === $label ) {
+	if ( null === $code || null === aafm_denial_reason_label( $code ) ) {
 		return $base;
 	}
-	if ( null === $base || '' === $base ) {
+	return null === $base || '' === $base ? 'Refused: ' . $code : $base . '. Refused: ' . $code;
+}
+
+/**
+ * Split a stored detail into what the call tried and the refusal code.
+ *
+ * @param string $detail Stored detail.
+ * @return array{0:string,1:string}|null Base (may be empty) and code, or null when there is no refusal clause.
+ */
+function aafm_split_denied_detail( string $detail ): ?array {
+	if ( 1 !== preg_match( '/\A(?:(.*)\. )?Refused: ([a-z_]*)\z/su', $detail, $m ) ) {
+		return null;
+	}
+	return array( $m[1] ?? '', $m[2] );
+}
+
+/**
+ * A stored detail with its refusal code replaced by the translated label, for the admin table and the CSV.
+ * A detail with no clause, or a code that is not in the closed list, comes back unchanged.
+ *
+ * @param string $detail Stored detail.
+ * @return string
+ */
+function aafm_localize_denied_detail( string $detail ): string {
+	$parts = aafm_split_denied_detail( $detail );
+	$label = null === $parts ? null : aafm_denial_reason_label( $parts[1] );
+	if ( null === $parts || null === $label ) {
+		return $detail;
+	}
+	if ( '' === $parts[0] ) {
 		/* translators: %s: why a call was refused, for example "rate limit reached". */
 		return sprintf( __( 'Refused: %s', 'agent-abilities-for-mcp' ), $label );
 	}
 	/* translators: 1: what the call tried to do, such as "Attempted: Updated meta key `x` on post #5". 2: why it was refused. */
-	return sprintf( __( '%1$s. Refused: %2$s', 'agent-abilities-for-mcp' ), $base, $label );
+	return sprintf( __( '%1$s. Refused: %2$s', 'agent-abilities-for-mcp' ), $parts[0], $label );
 }
 
 /**
@@ -203,8 +235,8 @@ function aafm_denial_reason_for_permission( string $name, array $input ): string
  * The aafm/get-activity-log ability is readable by any principal with manage_options, including an agent. The meta
  * gate gives every rejection the same generic message so a caller cannot tell which rule refused it, and
  * the reason must not become readable through the audit ability instead. The Activity Log screen and the
- * CSV export are human surfaces and keep the full detail. Labels contain no period (pinned by a test),
- * so the reason is always the last ". Refused: ..." clause, or the whole string when nothing precedes it.
+ * CSV export are human surfaces and keep the full detail. The stored clause is the untranslated marker
+ * "Refused: <code>" (see aafm_compose_denied_detail()), so this works under any site language.
  *
  * @param string|null $detail Stored detail.
  * @return string|null Null when nothing is left, so the wire still carries "detail":null.
@@ -213,7 +245,9 @@ function aafm_redact_denial_reason( ?string $detail ): ?string {
 	if ( null === $detail ) {
 		return null;
 	}
-	$out = preg_replace( '/(?:^|\. )Refused: [^.]*\z/u', '', $detail );
-	$out = null === $out ? $detail : rtrim( $out );
-	return '' === $out ? null : $out;
+	$parts = aafm_split_denied_detail( $detail );
+	if ( null === $parts ) {
+		return $detail;
+	}
+	return '' === $parts[0] ? null : $parts[0];
 }

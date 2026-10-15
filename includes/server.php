@@ -1705,7 +1705,7 @@ function aafm_register_mcp_server( $adapter ): void {
 		AAFM_MCP_NAMESPACE,
 		AAFM_MCP_ROUTE_SEGMENT,
 		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),
-		__( 'Curated, governed WordPress abilities for AI agents.', 'agent-abilities-for-mcp' ),
+		aafm_server_description(),
 		AAFM_VERSION,
 		array( \WP\MCP\Transport\HttpTransport::class ),
 		\WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,

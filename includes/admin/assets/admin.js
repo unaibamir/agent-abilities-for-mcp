@@ -1503,6 +1503,7 @@
 					'input[name="aafm_high_risk_abilities_unlocked"]'
 				);
 				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
+				const siteBrief = form.querySelector( 'textarea[name="aafm_site_brief"]' );
 
 				const body = new URLSearchParams();
 				body.append( 'action', 'aafm_save_settings' );
@@ -1537,6 +1538,9 @@
 					body.append( 'aafm_high_risk_abilities_unlocked', '1' );
 				}
 				body.append( 'aafm_ip_allowlist', allowlist?.value ?? '' );
+				if ( siteBrief ) {
+					body.append( 'aafm_site_brief', siteBrief.value );
+				}
 
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
@@ -1565,6 +1569,9 @@
 								'Could not save - your previous settings are still in effect.'
 							);
 					} else {
+						if ( siteBrief && 'string' === typeof json.data?.aafm_site_brief ) {
+							siteBrief.value = json.data.aafm_site_brief; // Show what was actually kept.
+						}
 						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
 						const kept = Array.isArray( json.data?.aafm_ip_allowlist )
 							? json.data.aafm_ip_allowlist.length

@@ -68,6 +68,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/safety.php|aafm_log_retention_days|1'    => 'G',
 		'includes/server.php|aafm_reconcile_omitted_abilities|1' => 'N',
 		'includes/server.php|aafm_notice_omitted_abilities|1' => 'N',
+		'includes/site-brief.php|aafm_site_brief|1'        => 'N',
 	);
 
 	/**
@@ -334,7 +335,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 20,
 				'L' => 3,
-				'N' => 19,
+				'N' => 20,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

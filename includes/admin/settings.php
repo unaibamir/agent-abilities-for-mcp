@@ -37,7 +37,7 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_site_brief:string,aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -56,6 +56,8 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	$raw   = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
 	$lines = array_values( array_filter( aafm_split_and_trim_lines( $raw ), 'aafm_is_valid_ip_or_cidr' ) );
 
+	$brief_raw = isset( $posted['aafm_site_brief'] ) && is_scalar( $posted['aafm_site_brief'] ) ? (string) $posted['aafm_site_brief'] : '';
+
 	return array(
 		'aafm_rate_limit_per_min'           => $rate,
 		'aafm_max_title_len'                => $title,
@@ -67,6 +69,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_read_only_mode'               => $read_only,
 		'aafm_oauth_enabled'                => $oauth,
 		'aafm_oauth_dcr_enabled'            => $oauth_dcr,
+		'aafm_site_brief'                   => aafm_clean_site_brief( $brief_raw ),
 		'aafm_ip_allowlist'                 => array_values( array_unique( $lines ) ),
 	);
 }
@@ -132,6 +135,12 @@ function aafm_ajax_save_settings(): void {
 	}
 	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$clean  = aafm_sanitize_settings_input( $posted );
+
+	// Free-text field: a save that does not carry it (a stale cached admin.js, a script) leaves the
+	// stored brief alone instead of clearing it. Checkboxes in this form read "absent" as off; this
+	// is not a checkbox.
+	$brief_posted = array_key_exists( 'aafm_site_brief', $posted );
+	$brief_before = aafm_site_brief();
 
 	$raw_allowlist = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
 	$dropped       = aafm_count_dropped_ip_lines( $raw_allowlist );
@@ -252,6 +261,9 @@ function aafm_ajax_save_settings(): void {
 		// turn on.
 		'aafm_ip_allowlist'             => array( $clean['aafm_ip_allowlist'], __( 'The IP allowlist', 'agent-abilities-for-mcp' ) ),
 	);
+	if ( $brief_posted ) {
+		$verified_settings['aafm_site_brief'] = array( $clean['aafm_site_brief'], __( 'The site brief', 'agent-abilities-for-mcp' ) );
+	}
 	foreach ( $verified_settings as $verified_option => $verified_pair ) {
 		list( $verified_value, $verified_label ) = $verified_pair;
 		if ( ! aafm_update_option_verified( $verified_option, $verified_value ) ) {
@@ -268,6 +280,12 @@ function aafm_ajax_save_settings(): void {
 			}
 			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $verified_label ) ) );
 		}
+	}
+
+	if ( $brief_posted ) {
+		aafm_log_site_brief_change( $brief_before, $clean['aafm_site_brief'] );
+	} else {
+		$clean['aafm_site_brief'] = $brief_before; // The response reports what is stored, not the empty default.
 	}
 
 	// Every requested restrictive change is safely in place and every ordinary setting verified, so
@@ -448,6 +466,8 @@ function aafm_config_option_names(): array {
 		// because uninstall.php loads this file but NOT server.php, so the constant is not defined in
 		// the uninstall context. A drift guard in OmittedAbilitiesPreflightTest keeps the two in step.
 		'aafm_omitted_abilities',
+		// The owner's standing rules for every agent; reset and delete-data uninstall clear it.
+		'aafm_site_brief',
 	);
 }
 
@@ -693,6 +713,8 @@ function aafm_render_settings_tab(): void {
 			'body'  => $oauth_body,
 		)
 	);
+
+	aafm_render_site_brief_section();
 
 	// Caption for the card immediately below it. It names the safety controls outright, so it
 	// travelled down with them when OAuth took the top of the tab rather than staying at the head

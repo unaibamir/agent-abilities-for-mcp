@@ -1917,32 +1917,101 @@
 		}
 
 		/**
-		 * Keep the "Export CSV" link's filter query arg in step with the currently selected
-		 * status filter, so a click always exports what the operator is looking at rather than
-		 * whatever filter happened to be active on first page load.
+		 * Keep the "Export CSV" link's query args in step with the filters the table currently shows,
+		 * so a click always exports what the operator is looking at rather than whatever was active
+		 * on first page load.
 		 *
-		 * @param {string} filter One of all|started|success|error|denied.
+		 * @param {string}                 filter One of all|started|success|error|denied.
+		 * @param {Object<string,string>}  extra  The applied filter values (user, conn, tool, plugin, from, to, q, row).
 		 */
-		#syncExportLinkFilter( filter ) {
+		#syncExportLinkFilter( filter, extra = {} ) {
 			const link = document.querySelector( '#aafm-export-log' );
 			if ( ! link ) {
 				return;
 			}
 			const url = new URL( link.href, window.location.origin );
+			[ 'user', 'conn', 'tool', 'plugin', 'from', 'to', 'q', 'row' ].forEach( ( key ) =>
+				url.searchParams.delete( key )
+			);
 			url.searchParams.set( 'filter', filter );
+			Object.entries( extra ).forEach( ( [ key, value ] ) =>
+				url.searchParams.set( key, value )
+			);
 			link.href = url.toString();
 		}
 
 		/**
-		 * Wire the activity log's status filter (segmented buttons) and Prev/Next pager.
+		 * The filter row's current input values, empty ones left out. Read only when the viewer applies or resets; every other code path uses the applied copy. The server validates every one.
 		 *
-		 * Both are server-side: only one page of rows is ever in the DOM, so a filter or a
-		 * page change re-queries the aafm_get_log_page action and re-renders the tbody. The
-		 * table wrapper (#aafm-log-table-wrap) holds the current page/filter/total-pages as
-		 * data-* state so this stays the single source of truth. Rows are built with the DOM
-		 * (textContent only), never innerHTML, so the response is never an HTML sink.
+		 * @return {Object<string,string>}
+		 */
+		#logFilterValues() {
+			const values = {};
+			document
+				.querySelectorAll( '.aafm-log-filters [data-filter-key]' )
+				.forEach( ( el ) => {
+					const value = String( el.value ?? '' ).trim();
+					if ( value !== '' ) {
+						values[ el.dataset.filterKey ] = value;
+					}
+				} );
+			return values;
+		}
+
+		/**
+		 * Fill the 7-day summary card from an AJAX payload. textContent only.
+		 *
+		 * @param {Object} s Summary view from aafm_activity_summary_view().
+		 */
+		#renderLogSummary( s ) {
+			const root = document.querySelector( '#aafm-log-summary' );
+			if ( ! root || ! s ) {
+				return;
+			}
+			const fmt = new Intl.NumberFormat();
+			const set = ( key, text ) => {
+				const el = root.querySelector( `[data-summary="${ key }"]` );
+				if ( el ) {
+					el.textContent = text;
+				}
+			};
+			set( 'total', fmt.format( s.total ?? 0 ) );
+			set( 'rate', s.rate ?? '-' );
+			set( 'denied', fmt.format( s.denied ?? 0 ) );
+			set( 'errors', fmt.format( s.error ?? 0 ) );
+			const list = root.querySelector( 'ol[data-summary="top"]' );
+			if ( list ) {
+				list.replaceChildren();
+				const top = Array.isArray( s.top ) ? s.top : [];
+				if ( ! top.length ) {
+					const li = document.createElement( 'li' );
+					li.textContent = this.#t( 'noCalls', 'No calls in the last 7 days.' );
+					list.append( li );
+				}
+				top.forEach( ( tool ) => {
+					const li = document.createElement( 'li' );
+					const name = document.createElement( 'code' );
+					name.textContent = tool.ability ?? '';
+					li.append( name, document.createTextNode( ` ${ fmt.format( tool.count ?? 0 ) }` ) );
+					list.append( li );
+				} );
+			}
+		}
+
+		/**
+		 * Wire the activity log's filters, status buttons, pager and Live view.
+		 *
+		 * All server-side: only one page of rows is ever in the DOM, so a filter or a page change
+		 * re-queries the aafm_get_log_page action and re-renders the tbody. The table wrapper
+		 * (#aafm-log-table-wrap) holds the current page, status filter and total pages as data-*
+		 * state; the other filters live in appliedFilters and change only on Apply, Enter or Reset.
+		 * Rows are built with the DOM (textContent only), never innerHTML.
 		 */
 		#bindLogPaginationAndFilters() {
+			const LIVE_INTERVAL_MS = 10000;
+			const LIVE_MAX_MS = 15 * 60 * 1000;
+			const LIVE_MAX_FAILS = 3;
+
 			const wrap = document.querySelector( '#aafm-log-table-wrap' );
 			if ( ! wrap ) {
 				return;
@@ -1953,16 +2022,16 @@
 			const prev = document.querySelector( '.aafm-pager-prev' );
 			const next = document.querySelector( '.aafm-pager-next' );
 
-			// In-flight guard. Rapid Next/filter clicks fire overlapping requests whose
-			// responses can arrive out of order; a stale page would then clobber the newest.
-			// Each load() bumps a token and only the request holding the latest token is
-			// allowed to render - older responses are dropped.
+			// In-flight guard: only the newest request may render, so a slow older response can
+			// never clobber a newer filter result.
 			let loadToken = 0;
 
-			// Light the segmented button matching `filter` and dim the rest. Called only from
-			// inside load() - once on success, and once on failure to snap the buttons back to
-			// the last filter that actually loaded - so the active button can never disagree
-			// with what the table and the export link are actually showing.
+			// The filters the table currently shows. Set ONLY on Apply, Enter, Reset and at load (from the
+			// server-rendered inputs). Typing in a box changes nothing until then: paging, the Live poll, the
+			// status buttons and the export link all read this object, never the live input values
+			// (spec 3.7: filters apply on Apply or Enter, never per keystroke).
+			let appliedFilters = this.#logFilterValues();
+
 			const setActiveFilterButton = ( filter ) => {
 				segButtons.forEach( ( b ) => {
 					const on = b.dataset.filter === filter;
@@ -1972,29 +2041,30 @@
 				} );
 			};
 
-			const load = async ( page, filter ) => {
+			// Resolves 'ok', 'failed' or 'stale'.
+			const load = async ( page, filter, { withSummary = false } = {} ) => {
 				const token = ++loadToken;
+				const values = appliedFilters;
 				const pagerStatus = document.querySelector( '.aafm-pager-status' );
-				if ( pagerStatus ) {
+				if ( pagerStatus && ! withSummary ) {
 					pagerStatus.textContent = this.#t( 'loadingPage', 'Loading…' );
 				}
 				const json = await this.#post( 'aafm_get_log_page', {
 					page,
 					filter,
+					...values,
+					...( withSummary ? { with_summary: '1' } : {} ),
 				} );
-				// A newer load() started while this one was in flight: discard this result.
 				if ( token !== loadToken ) {
-					return;
+					return 'stale';
 				}
 				if ( ! json?.success ) {
-					// The request failed: leave the rows and export link on the last filter that
-					// actually loaded, and snap the segmented buttons back to agree with it.
 					setActiveFilterButton( wrap.dataset.filter ?? 'all' );
 					this.#updatePager(
 						Number( wrap.dataset.page ) || 1,
 						Number( wrap.dataset.totalPages ) || 1
 					);
-					return;
+					return 'failed';
 				}
 				const data = json.data ?? {};
 				this.#renderLogRows( Array.isArray( data.rows ) ? data.rows : [] );
@@ -2002,41 +2072,141 @@
 				wrap.dataset.filter = String( data.filter ?? filter );
 				wrap.dataset.totalPages = String( data.total_pages ?? 1 );
 				setActiveFilterButton( wrap.dataset.filter );
-				this.#updatePager(
-					Number( data.page ) || 1,
-					Number( data.total_pages ) || 1
-				);
+				this.#updatePager( Number( data.page ) || 1, Number( data.total_pages ) || 1 );
 				const num = document.querySelector( '.aafm-count-num' );
 				if ( num && typeof data.total === 'number' ) {
 					num.textContent = new Intl.NumberFormat().format( data.total );
 				}
-				this.#syncExportLinkFilter( wrap.dataset.filter );
+				this.#syncExportLinkFilter( wrap.dataset.filter, values );
+				if ( data.summary ) {
+					this.#renderLogSummary( data.summary );
+				}
+				return 'ok';
 			};
 
 			segButtons.forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
-					// A filter change always restarts at page 1. The active button itself is set
-					// by load() once the request resolves, not here - a failed request must never
-					// leave the clicked filter looking active while the data underneath it is
-					// still the old one.
 					load( 1, btn.dataset.filter ?? 'all' );
 				} );
 			} );
 
-			if ( prev ) {
-				prev.addEventListener( 'click', () => {
-					const page = ( Number( wrap.dataset.page ) || 1 ) - 1;
-					if ( page >= 1 ) {
-						load( page, wrap.dataset.filter ?? 'all' );
+			const applyBtn = document.querySelector( '#aafm-log-apply' );
+			const resetBtn = document.querySelector( '#aafm-log-reset' );
+			const applyFilters = () => {
+				appliedFilters = this.#logFilterValues();
+				return load( 1, wrap.dataset.filter ?? 'all' );
+			};
+			applyBtn?.addEventListener( 'click', applyFilters );
+			resetBtn?.addEventListener( 'click', () => {
+				// Every input goes, including the hidden "row" field a notification link fills in,
+				// so a deep-linked single row can be reset in place.
+				document
+					.querySelectorAll( '.aafm-log-filters [data-filter-key]' )
+					.forEach( ( el ) => {
+						el.value = '';
+					} );
+				appliedFilters = {};
+				load( 1, wrap.dataset.filter ?? 'all' );
+			} );
+			document.querySelectorAll( '.aafm-log-filters input' ).forEach( ( input ) => {
+				input.addEventListener( 'keydown', ( e ) => {
+					if ( e.key === 'Enter' ) {
+						e.preventDefault();
+						applyFilters();
 					}
 				} );
-			}
-			if ( next ) {
-				next.addEventListener( 'click', () => {
-					const page = ( Number( wrap.dataset.page ) || 1 ) + 1;
-					const totalPages = Number( wrap.dataset.totalPages ) || 1;
-					if ( page <= totalPages ) {
-						load( page, wrap.dataset.filter ?? 'all' );
+			} );
+
+			prev?.addEventListener( 'click', () => {
+				const page = ( Number( wrap.dataset.page ) || 1 ) - 1;
+				if ( page >= 1 ) {
+					load( page, wrap.dataset.filter ?? 'all' );
+				}
+			} );
+			next?.addEventListener( 'click', () => {
+				const page = ( Number( wrap.dataset.page ) || 1 ) + 1;
+				const totalPages = Number( wrap.dataset.totalPages ) || 1;
+				if ( page <= totalPages ) {
+					load( page, wrap.dataset.filter ?? 'all' );
+				}
+			} );
+
+			// Live view: re-queries page 1 every 10 s with the current filters while the tab is
+			// visible. Same handler, nonce and capability as paging; read-only. Stops on its own
+			// after 15 minutes, after three failures in a row (an expired nonce answers -1, which
+			// is a failure like any other) and when the viewer leaves page 1.
+			const liveBtn = document.querySelector( '#aafm-log-live' );
+			const liveNote = document.querySelector( '.aafm-log-live-note' );
+			if ( liveBtn ) {
+				let liveOn = false;
+				let liveTimer = null;
+				let liveStarted = 0;
+				let liveFails = 0;
+
+				const stopLive = ( why = '' ) => {
+					liveOn = false;
+					clearTimeout( liveTimer );
+					liveTimer = null;
+					liveBtn.setAttribute( 'aria-pressed', 'false' );
+					liveBtn.classList.remove( 'is-active' );
+					if ( liveNote ) {
+						liveNote.textContent = why;
+					}
+				};
+				const scheduleLive = () => {
+					clearTimeout( liveTimer );
+					if ( liveOn && ! document.hidden ) {
+						liveTimer = setTimeout( tickLive, LIVE_INTERVAL_MS );
+					}
+				};
+				const tickLive = async () => {
+					if ( ! liveOn || document.hidden ) {
+						return;
+					}
+					if ( Date.now() - liveStarted > LIVE_MAX_MS ) {
+						stopLive( this.#t( 'liveTimedOut', 'Live view paused after 15 minutes. Turn it on again to keep watching.' ) );
+						return;
+					}
+					if ( ( Number( wrap.dataset.page ) || 1 ) > 1 ) {
+						stopLive( this.#t( 'livePage', 'Live view only follows page 1.' ) );
+						return;
+					}
+					const result = await load( 1, wrap.dataset.filter ?? 'all', { withSummary: true } );
+					if ( result === 'failed' ) {
+						liveFails += 1;
+						if ( liveFails >= LIVE_MAX_FAILS ) {
+							stopLive( this.#t( 'liveFailed', 'Live view stopped after repeated errors. Reload the page.' ) );
+							return;
+						}
+					} else if ( result === 'ok' ) {
+						liveFails = 0;
+					}
+					scheduleLive();
+				};
+
+				liveBtn.addEventListener( 'click', () => {
+					if ( liveOn ) {
+						stopLive( this.#t( 'liveStopped', 'Live view stopped.' ) );
+						return;
+					}
+					liveOn = true;
+					liveFails = 0;
+					liveStarted = Date.now();
+					liveBtn.setAttribute( 'aria-pressed', 'true' );
+					liveBtn.classList.add( 'is-active' );
+					if ( liveNote ) {
+						liveNote.textContent = '';
+					}
+					tickLive();
+				} );
+				document.addEventListener( 'visibilitychange', () => {
+					if ( ! liveOn ) {
+						return;
+					}
+					if ( document.hidden ) {
+						clearTimeout( liveTimer );
+					} else {
+						tickLive();
 					}
 				} );
 			}
@@ -2087,7 +2257,7 @@
 			if ( ! rows.length ) {
 				const tr = document.createElement( 'tr' );
 				const td = document.createElement( 'td' );
-				td.colSpan = 6;
+				td.colSpan = 9;
 				td.textContent = this.#t( 'noActivity', 'No activity recorded yet.' );
 				tr.append( td );
 				tbody.append( tr );
@@ -2105,6 +2275,7 @@
 
 				tr.append( cell( row.time ) );
 				tr.append( cell( row.principal ) );
+				tr.append( cell( row.connection ) );
 				tr.append( cell( row.ability ) );
 				tr.append( this.#buildDetailCell( row ) );
 
@@ -2117,6 +2288,8 @@
 				statusTd.append( pill );
 				tr.append( statusTd );
 
+				tr.append( cell( row.duration ) );
+				tr.append( cell( row.ip ) );
 				tr.append( cell( row.arg_keys ) );
 				tbody.append( tr );
 			} );

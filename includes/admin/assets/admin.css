@@ -1685,6 +1685,89 @@
 		}
 	}
 
+	/* ---------- Activity log: 7-day summary, filter row, Live view ---------- */
+	.aafm-activity {
+		.aafm-log-summary {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+			gap: 12px;
+			margin-block: 0 16px;
+
+			.aafm-log-stat,
+			.aafm-log-top {
+				border: 1px solid var(--aafm-border);
+				border-radius: 6px;
+				background: var(--aafm-surface);
+				padding: 12px 14px;
+			}
+
+			.aafm-log-stat-num {
+				font-size: 22px;
+				font-weight: 600;
+				line-height: 1.2;
+			}
+
+			.aafm-log-stat-label {
+				color: var(--aafm-text-subtle);
+				font-size: 12px;
+			}
+
+			.aafm-log-top {
+				grid-column: span 2;
+
+				ol {
+					margin: 6px 0 0;
+					padding-inline-start: 18px;
+				}
+			}
+
+			.aafm-log-summary-note {
+				grid-column: 1 / -1;
+				margin: 0;
+				color: var(--aafm-text-subtle);
+				font-size: 12px;
+			}
+		}
+
+		.aafm-log-filters {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: end;
+			gap: 8px 12px;
+			margin-block: 12px;
+
+			.aafm-log-filter {
+				display: grid;
+				gap: 4px;
+				font-size: 12px;
+
+				input,
+				select {
+					min-inline-size: 130px;
+				}
+			}
+
+			.help {
+				flex-basis: 100%;
+				margin: 0;
+			}
+		}
+
+		.aafm-log-row-note {
+			margin-block: 8px;
+		}
+
+		#aafm-log-live.is-active {
+			border-color: var(--aafm-accent);
+			color: var(--aafm-accent);
+		}
+
+		.aafm-log-live-note {
+			color: var(--aafm-text-subtle);
+			font-size: 12px;
+		}
+	}
+
 	/* ---------- Segmented control ---------- */
 	.aafm-seg {
 		display: inline-flex;

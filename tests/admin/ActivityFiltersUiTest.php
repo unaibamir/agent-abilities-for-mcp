@@ -185,4 +185,15 @@ final class ActivityFiltersUiTest extends TestCase {
 			)['rate']
 		);
 	}
+
+	public function test_admin_js_wires_every_hook_the_markup_exposes(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		foreach ( array( '#aafm-log-apply', '#aafm-log-reset', '#aafm-log-live', 'data-filter-key', 'with_summary', 'visibilitychange', 'LIVE_INTERVAL_MS', 'LIVE_MAX_MS', 'appliedFilters' ) as $hook ) {
+			$this->assertStringContainsString( $hook, $js, $hook );
+		}
+		// Whole-file assertion on an ASSIGNMENT. The file mentions the word innerHTML in ten comments (VERIFIED), so a plain substring check cannot pass;
+		// and a slice from the first '#bindLogPaginationAndFilters()' is the CALL at admin.js:74, which runs to the end of the file.
+		$this->assertDoesNotMatchRegularExpression( '/\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML\s*\(/', $js, 'The admin script builds DOM with textContent only.' );
+	}
 }

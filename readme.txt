@@ -334,16 +334,19 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 == Screenshots ==
 
-1. The first run walks you through connecting an agent in three steps. Turn the connection on, choose what it can touch, then hand the endpoint to your AI client.
-2. None of this plugin's tools is exposed until you switch it on. Three of this site's 179 abilities are enabled here, all of them reads, using the button that turns on a section's reads and leaves its writes alone.
-3. Read-only mode in force. Every ability that writes loses its checkbox completely and says which switch is holding it down, so a bulk enable cannot sweep one back in by accident.
-4. Read-only mode is a single switch on the Settings tab. While it is on, the high-risk category underneath is held as well, and says so instead of sitting there looking live.
-5. The WooCommerce abilities that move money or grant authority stay padlocked behind a second switch of their own, sitting among ordinary writes you can turn on one at a time.
-6. An integration only appears once the plugin it belongs to is active. WooCommerce, Yoast, Rank Math, and All in One SEO are all running here, each with its abilities turned on, while Slim SEO waits for its plugin to be installed.
-7. Abilities that your other plugins register for themselves, grouped by the plugin that declared them, each one off until you turn it on and labelled with the risk that plugin reports.
-8. Your MCP endpoint, the OAuth approval flow that leaves no secret in your config file, and a dedicated low-privilege agent user. The Application Password fallback carries a plain warning that it reaches further than this plugin can scope.
-9. The activity log records what happened and who did it, including every change to what is enabled, with filters for successes, errors, denials and calls that never finished, and a CSV export.
-10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
+1. The first run walks you through connecting an agent in three steps: turn the connection on, choose what it can touch, then finish and hand the endpoint to your AI client.
+2. None of this plugin's 179 abilities is exposed until you switch it on. They are grouped by section, here Menus with its three reads on and its writes off, and each section has buttons to enable all reads or all writes at once.
+3. Read-only mode in force. The header badge reads Read-only and the Content section drops its Enable all writes button, because while the mode is on no ability that writes can be switched on.
+4. Read-only mode is a single switch under Safety controls on the Settings tab. While it is on, the high-risk unlock beneath it is held as well and says so instead of sitting there looking live.
+5. WooCommerce abilities that change orders, issue refunds, or touch payment settings stay padlocked behind a second switch on the Settings tab, sitting among ordinary writes you can turn on one at a time.
+6. Each integration has a card that says whether its plugin is active and how many of its abilities are on. WooCommerce and Yoast SEO are active here, Rank Math, All in One SEO, ACF and the rest are marked Not installed, and every ability starts off until you turn it on.
+7. Abilities that other plugins register for themselves, grouped by the plugin that declared them and off until you turn them on. A warning reminds you that this plugin does not filter what a bridged ability returns.
+8. The Connection tab shows your MCP endpoint, a Check my connection button, and the OAuth route: pick your operating system and client, paste the endpoint into your agent, and approve it in the browser, with no secret to put in a config file.
+9. The activity log records what happened and who did it, with filters for successes, errors, denials and calls that never finished, and a CSV export. A denied row says what the agent tried to do.
+10. The dashboard opens with a setup checklist that ticks off as you go, then the Needs review card and, further down, enabled abilities, recent agents, audit history, your endpoint and the versions in play.
+11. The Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.
+12. The Connection Doctor checks the connection from your own server and says what to fix. Each finding says whether you or your host can fix it, and some come with a snippet to paste.
+13. Needs review: drafts and pending posts your agents wrote wait here, with Preview, Open in editor, Publish and Discard.
 
 == Changelog ==
 

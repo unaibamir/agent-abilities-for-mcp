@@ -180,6 +180,13 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'pagerStatus'              => __( 'Page %1$s of %2$s', 'agent-abilities-for-mcp' ),
 				'loadingPage'              => __( 'Loading…', 'agent-abilities-for-mcp' ),
 				'noActivity'               => __( 'No activity recorded yet.', 'agent-abilities-for-mcp' ),
+				// Activity Log: Live view and summary.
+				'liveOn'                   => __( 'Live', 'agent-abilities-for-mcp' ),
+				'liveStopped'              => __( 'Live view stopped.', 'agent-abilities-for-mcp' ),
+				'liveTimedOut'             => __( 'Live view paused after 15 minutes. Turn it on again to keep watching.', 'agent-abilities-for-mcp' ),
+				'livePage'                 => __( 'Live view only follows page 1.', 'agent-abilities-for-mcp' ),
+				'liveFailed'               => __( 'Live view stopped after repeated errors. Reload the page.', 'agent-abilities-for-mcp' ),
+				'noCalls'                  => __( 'No calls in the last 7 days.', 'agent-abilities-for-mcp' ),
 				/* translators: 1: HTTP status code, 2: number of tools visible in the admin view. */
 				'connectionOk'             => __( 'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: HTTP status code returned by the endpoint. */
@@ -1468,13 +1475,14 @@ function aafm_log_blocked_ability_enables( array $blocked, ?string $reason = nul
 }
 
 /**
- * AJAX: return one page of activity rows for a given page number and status filter.
+ * AJAX: return one page of activity rows for a given page number and filter set.
  *
  * Server-side paging and filtering so the table never has to load tens of thousands of rows
- * into the DOM. The incoming filter is sanitized against the known set (all|started|success|error|denied)
- * and mapped to a query status; the page number is clamped to the filtered total. Returns the
- * rendered <tr> HTML (every cell escaped by aafm_activity_rows_html()) plus the paging state the
- * JS needs to update the pager. Read-only - never touches state.
+ * into the DOM. The request is reduced to the known, valid filters by
+ * aafm_activity_filters_from_request() (status, user, connection, tool, plugin, dates, search, one
+ * row); the page number is clamped to the filtered total. Returns flat row values for the JS
+ * renderer plus the paging state it needs to update the pager, and the 7-day summary when the
+ * request sets with_summary. Read-only - never touches state.
  *
  * @return void
  */
@@ -1485,14 +1493,12 @@ function aafm_ajax_get_log_page(): void {
 	}
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$filter = isset( $_POST['filter'] ) ? sanitize_key( wp_unslash( (string) $_POST['filter'] ) ) : 'all';
-	if ( ! in_array( $filter, array( 'all', 'started', 'success', 'error', 'denied' ), true ) ) {
-		$filter = 'all';
-	}
-	$status = aafm_activity_filter_status( $filter );
+	$posted  = wp_unslash( $_POST );
+	$filters = aafm_activity_filters_from_request( is_array( $posted ) ? $posted : array() );
+	$filter  = isset( $filters['status'] ) ? (string) $filters['status'] : 'all';
 
 	$per_page    = aafm_activity_page_size();
-	$total       = aafm_activity_count_filtered( $status );
+	$total       = aafm_activity_count_matching( $filters );
 	$total_pages = max( 1, (int) ceil( $total / $per_page ) );
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
@@ -1500,22 +1506,26 @@ function aafm_ajax_get_log_page(): void {
 	$page = min( max( 1, $page ), $total_pages );
 
 	$rows = aafm_query_activity(
-		array(
-			'per_page' => $per_page,
-			'page'     => $page,
-			'status'   => $status,
+		array_merge(
+			$filters,
+			array(
+				'per_page' => $per_page,
+				'page'     => $page,
+			)
 		)
 	);
 
-	wp_send_json_success(
-		array(
-			'rows'        => aafm_activity_rows_data( $rows ),
-			'page'        => $page,
-			'total_pages' => $total_pages,
-			'total'       => $total,
-			'filter'      => $filter,
-		)
+	$data = array(
+		'rows'        => aafm_activity_rows_data( $rows ),
+		'page'        => $page,
+		'total_pages' => $total_pages,
+		'total'       => $total,
+		'filter'      => $filter,
 	);
+	if ( ! empty( $posted['with_summary'] ) ) {
+		$data['summary'] = aafm_activity_summary_view( aafm_activity_summary() );
+	}
+	wp_send_json_success( $data );
 }
 
 /**
@@ -1538,14 +1548,9 @@ function aafm_handle_export_activity_log(): void {
 	}
 	check_admin_referer( 'aafm_admin' );
 
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; sanitized and unslashed two lines down once confirmed to be a string, never an array.
-	$raw_filter = $_GET['filter'] ?? null;
-	// ?filter[]=x arrives here as an array; casting that to string would emit a PHP warning
-	// before the headers below are sent, breaking the download with "headers already sent".
-	$filter = is_string( $raw_filter ) ? sanitize_key( wp_unslash( $raw_filter ) ) : 'all';
-	if ( ! in_array( $filter, array( 'all', 'started', 'success', 'error', 'denied' ), true ) ) {
-		$filter = 'all';
-	}
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified above.
+	$request = wp_unslash( $_GET );
+	$filters = aafm_activity_filters_from_request( is_array( $request ) ? $request : array() );
 
 	$filename = sanitize_file_name(
 		get_bloginfo( 'name' ) . '-activity-log-' . gmdate( 'Y-m-d' ) . '.csv'
@@ -1555,7 +1560,7 @@ function aafm_handle_export_activity_log(): void {
 	header( 'Content-Type: text/csv; charset=utf-8' );
 	header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
 
-	aafm_export_activity_csv( aafm_activity_filter_status( $filter ) );
+	aafm_export_activity_csv( $filters );
 	exit;
 }
 
@@ -1573,9 +1578,12 @@ function aafm_activity_log_headers(): array {
 	return array(
 		__( 'Time (UTC)', 'agent-abilities-for-mcp' ),
 		__( 'Principal', 'agent-abilities-for-mcp' ),
+		__( 'Connection', 'agent-abilities-for-mcp' ),
 		__( 'Event', 'agent-abilities-for-mcp' ),
 		__( 'Detail', 'agent-abilities-for-mcp' ),
 		__( 'Status', 'agent-abilities-for-mcp' ),
+		__( 'Duration', 'agent-abilities-for-mcp' ),
+		__( 'IP', 'agent-abilities-for-mcp' ),
 		__( 'Arg keys', 'agent-abilities-for-mcp' ),
 	);
 }
@@ -1594,31 +1602,13 @@ function aafm_activity_log_headers(): array {
  * a short key-shaped string, never its message, so there is no free text to strip beyond that.
  *
  * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
- * @return array<int,array{time:string,principal:string,ability:string,detail:string,detail_link:array{before:string,id:int,url:string,after:string}|null,status:string,variant:string,arg_keys:string}>
+ * @return array<int,array{id:int,time:string,principal:string,connection:string,ability:string,detail:string,detail_link:?array<string,mixed>,status:string,variant:string,duration:string,ip:string,arg_keys:string}>
  */
 function aafm_activity_rows_data( array $rows ): array {
-	$status_variants = array(
-		'success' => 'success',
-		'error'   => 'danger',
-		'denied'  => 'warn',
-		'started' => 'neutral',
-	);
-
-	$out = array();
+	$names = aafm_activity_connection_names( array_column( $rows, 'client_id' ) );
+	$out   = array();
 	foreach ( $rows as $row ) {
-		$status     = (string) ( $row['status'] ?? '' );
-		$ability    = (string) ( $row['ability'] ?? '' );
-		$detail_raw = (string) ( $row['detail'] ?? '' );
-		$out[]      = array(
-			'time'        => (string) ( $row['created_at'] ?? '' ),
-			'principal'   => (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')',
-			'ability'     => $ability,
-			'detail'      => $detail_raw,
-			'detail_link' => aafm_activity_detail_link( $ability, $detail_raw ),
-			'status'      => $status,
-			'variant'     => $status_variants[ $status ] ?? 'neutral',
-			'arg_keys'    => (string) ( $row['arg_keys'] ?? '' ),
-		);
+		$out[] = aafm_activity_row_view( $row, $names );
 	}
 	return $out;
 }
@@ -2667,24 +2657,43 @@ function aafm_render_term_meta_keys_selector(): void {
  * @return void
  */
 function aafm_render_activity_tab(): void {
-	$per_page = aafm_activity_page_size();
-	$rows     = aafm_query_activity( array( 'per_page' => $per_page ) );
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only filters from the URL; nothing is written.
+	$query   = wp_unslash( $_GET );
+	$filters = aafm_activity_filters_from_request( is_array( $query ) ? $query : array() );
+	$status  = isset( $filters['status'] ) ? (string) $filters['status'] : 'all';
 
-	$total       = aafm_activity_count();
+	$per_page = aafm_activity_page_size();
+	$rows     = aafm_query_activity( array_merge( $filters, array( 'per_page' => $per_page ) ) );
+
+	$total       = aafm_activity_count_matching( $filters );
 	$total_pages = max( 1, (int) ceil( $total / $per_page ) );
 	$retention   = aafm_log_retention_days();
 
 	echo '<div class="aafm-activity">';
 	wp_nonce_field( 'aafm_admin', 'aafm_log_nonce' );
 
+	aafm_render_activity_summary( aafm_activity_summary() );
+
 	// Status filter - server-side: each button re-queries page 1 with its status (admin.js).
 	echo '<div class="aafm-activity-toolbar">';
 	echo '<div class="aafm-seg" role="group" aria-label="' . esc_attr__( 'Filter by status', 'agent-abilities-for-mcp' ) . '">';
-	echo '<button type="button" class="aafm-seg-btn is-active on" data-filter="all" aria-pressed="true">' . esc_html__( 'All', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<button type="button" class="aafm-seg-btn" data-filter="success" aria-pressed="false">' . esc_html__( 'Success', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<button type="button" class="aafm-seg-btn" data-filter="error" aria-pressed="false">' . esc_html__( 'Errors', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<button type="button" class="aafm-seg-btn" data-filter="denied" aria-pressed="false">' . esc_html__( 'Denied', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<button type="button" class="aafm-seg-btn" data-filter="started" aria-pressed="false">' . esc_html__( 'Started', 'agent-abilities-for-mcp' ) . '</button>';
+	$segments = array(
+		'all'     => __( 'All', 'agent-abilities-for-mcp' ),
+		'success' => __( 'Success', 'agent-abilities-for-mcp' ),
+		'error'   => __( 'Errors', 'agent-abilities-for-mcp' ),
+		'denied'  => __( 'Denied', 'agent-abilities-for-mcp' ),
+		'started' => __( 'Started', 'agent-abilities-for-mcp' ),
+	);
+	foreach ( $segments as $slug => $label ) {
+		$on = $slug === $status;
+		printf(
+			'<button type="button" class="aafm-seg-btn%1$s" data-filter="%2$s" aria-pressed="%3$s">%4$s</button>',
+			$on ? ' is-active on' : '',
+			esc_attr( $slug ),
+			$on ? 'true' : 'false',
+			esc_html( $label )
+		);
+	}
 	echo '</div>';
 
 	// Live count headline plus a plain clarifier describing the retention window.
@@ -2713,9 +2722,18 @@ function aafm_render_activity_tab(): void {
 	// segmented filter buttons as the operator switches between them.
 	$export_url = wp_nonce_url(
 		add_query_arg(
-			array(
-				'action' => 'aafm_export_log',
-				'filter' => 'all',
+			array_merge(
+				array(
+					'action' => 'aafm_export_log',
+					'filter' => $status,
+				),
+				array_diff_key(
+					$filters,
+					array(
+						'status' => true,
+						'max_id' => true,
+					)
+				)
 			),
 			admin_url( 'admin-post.php' )
 		),
@@ -2727,10 +2745,23 @@ function aafm_render_activity_tab(): void {
 		esc_html__( 'Export CSV', 'agent-abilities-for-mcp' )
 	);
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
+	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-log-live" aria-pressed="false">' . esc_html__( 'Live', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-log-live-note" aria-live="polite"></span>';
 	echo '</div>';
 
+	aafm_render_activity_filters( $filters );
+
+	if ( isset( $filters['row'] ) ) {
+		printf(
+			'<p class="aafm-log-row-note">%1$s <a href="%2$s">%3$s</a></p>',
+			esc_html__( 'Showing one entry.', 'agent-abilities-for-mcp' ),
+			esc_url( admin_url( 'admin.php?page=agent-abilities-for-mcp&tab=activity' ) ),
+			esc_html__( 'Show all', 'agent-abilities-for-mcp' )
+		);
+	}
+
 	printf(
-		'<div class="aafm-table-wrap" id="aafm-log-table-wrap" data-page="1" data-filter="all" data-total-pages="%s">',
+		'<div class="aafm-table-wrap" id="aafm-log-table-wrap" data-page="1" data-filter="%1$s" data-total-pages="%2$s">',
+		esc_attr( $status ),
 		esc_attr( (string) $total_pages )
 	);
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
@@ -2821,7 +2852,7 @@ function aafm_write_export_failure_row( $out ): void {
 	$message = __( 'EXPORT INCOMPLETE - a database read failed partway through. Rows after this point were NOT exported. Re-run the export.', 'agent-abilities-for-mcp' );
 	fputcsv(
 		$out,
-		array( 'EXPORT INCOMPLETE', 'export_failed', 'EXPORT INCOMPLETE', $message, 'error', '', '', '', '', '', '' ),
+		array( 'EXPORT INCOMPLETE', 'export_failed', 'EXPORT INCOMPLETE', $message, 'error', '', '', '', '', '', '', '', '' ),
 		',',
 		'"',
 		''
@@ -2854,10 +2885,15 @@ function aafm_write_export_failure_row( $out ): void {
  * still looks complete is worse than the request failing outright, so each batch is flushed to
  * the client as soon as it is written rather than held until the whole export finishes.
  *
- * @param string|null $status Optional status filter, matching the tab's current filter.
+ * @param array<string,mixed>|string|null $filters Filter set matching the tab's current view; a bare status string or null still works.
  * @return void
  */
-function aafm_export_activity_csv( ?string $status = null ): void {
+function aafm_export_activity_csv( $filters = null ): void {
+	if ( is_string( $filters ) && '' !== $filters ) {
+		$filters = array( 'status' => $filters );
+	}
+	$filters = is_array( $filters ) ? aafm_activity_filters_normalize( $filters ) : array();
+
 	$columns = array(
 		'created_at',
 		'event_type',
@@ -2870,6 +2906,8 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 		'source_ip',
 		'client_id',
 		'result_count',
+		'duration_ms',
+		'connection_name',
 	);
 
 	if ( function_exists( 'set_time_limit' ) ) {
@@ -2898,11 +2936,13 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 		$page = 1;
 		while ( true ) {
 			$view = aafm_query_activity_result(
-				array(
-					'per_page' => 200,
-					'page'     => $page,
-					'status'   => $status,
-					'max_id'   => $max_id,
+				array_merge(
+					$filters,
+					array(
+						'per_page' => 200,
+						'page'     => $page,
+						'max_id'   => $max_id,
+					)
 				)
 			);
 			if ( ! $view['ok'] ) {
@@ -2910,11 +2950,12 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 				break;
 			}
 
-			$rows = $view['rows'];
+			$rows  = $view['rows'];
+			$names = aafm_activity_connection_names( array_column( $rows, 'client_id' ) );
 			foreach ( $rows as $row ) {
 				$line = array();
 				foreach ( $columns as $column ) {
-					$line[] = aafm_csv_cell( (string) ( $row[ $column ] ?? '' ) );
+					$line[] = aafm_csv_cell( 'connection_name' === $column ? aafm_activity_connection_label( $row, $names ) : (string) ( $row[ $column ] ?? '' ) );
 				}
 				fputcsv( $out, $line, ',', '"', '' );
 			}
@@ -2952,33 +2993,26 @@ function aafm_export_activity_csv( ?string $status = null ): void {
  */
 function aafm_activity_rows_html( array $rows ): string {
 	if ( empty( $rows ) ) {
-		return '<tr><td colspan="6">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
+		return '<tr><td colspan="' . (int) count( aafm_activity_log_headers() ) . '">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
 	}
 
-	// Map each log status to a pill variant; the status word stays visible (never colour-only).
-	$status_variants = array(
-		'success' => 'success',
-		'error'   => 'danger',
-		'denied'  => 'warn',
-		'started' => 'neutral',
-	);
-
-	$html = '';
+	$names = aafm_activity_connection_names( array_column( $rows, 'client_id' ) );
+	$html  = '';
 	foreach ( $rows as $row ) {
-		$status  = (string) ( $row['status'] ?? '' );
-		$variant = $status_variants[ $status ] ?? 'neutral';
-		$ability = (string) ( $row['ability'] ?? '' );
-		$detail  = aafm_activity_detail_html( $ability, (string) ( $row['detail'] ?? '' ) );
-		$html   .= sprintf(
-			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td><span class="aafm-pill aafm-pill-%5$s aafm-status aafm-status-%6$s">%7$s</span></td><td>%8$s</td></tr>',
-			esc_html( (string) ( $row['created_at'] ?? '' ) ),
-			esc_html( (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')' ),
-			esc_html( $ability ),
-			$detail,
-			esc_attr( $variant ),
-			esc_attr( $status ),
-			esc_html( $status ),
-			esc_html( (string) ( $row['arg_keys'] ?? '' ) )
+		$v     = aafm_activity_row_view( $row, $names );
+		$html .= sprintf(
+			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td>%5$s</td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td>%10$s</td><td>%11$s</td></tr>',
+			esc_html( $v['time'] ),
+			esc_html( $v['principal'] ),
+			esc_html( $v['connection'] ),
+			esc_html( $v['ability'] ),
+			aafm_activity_detail_html( $v['ability'], $v['detail'] ),
+			esc_attr( $v['variant'] ),
+			esc_attr( $v['status'] ),
+			esc_html( $v['status'] ),
+			esc_html( $v['duration'] ),
+			esc_html( $v['ip'] ),
+			esc_html( $v['arg_keys'] )
 		);
 	}
 	return $html;

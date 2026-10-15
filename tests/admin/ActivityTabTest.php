@@ -205,9 +205,9 @@ final class ActivityTabTest extends TestCase {
 		$this->assertSame( 'aafm/get-posts', $rows[0]['ability'], 'No tamper marker must be written when the clear could never be confirmed.' );
 	}
 
-	public function test_the_header_row_is_the_v5_six(): void {
+	public function test_the_header_row_keeps_the_v5_labels(): void {
 		$html = $this->render_activity_tab();
-		foreach ( array( 'Time (UTC)', 'Principal', 'Event', 'Detail', 'Status', 'Arg keys' ) as $header ) {
+		foreach ( array( 'Time (UTC)', 'Principal', 'Connection', 'Event', 'Detail', 'Status', 'Duration', 'IP', 'Arg keys' ) as $header ) {
 			$this->assertStringContainsString( '<th scope="col">' . $header, $html );
 		}
 		$this->assertStringNotContainsString( '<th scope="col">Ability', $html );
@@ -231,11 +231,11 @@ final class ActivityTabTest extends TestCase {
 		$html = aafm_activity_rows_html( aafm_query_activity( array( 'per_page' => 1 ) ) );
 		$this->assertStringContainsString( 'aafm/get-posts', $html );
 		$this->assertStringContainsString( 'per_page', $html );
-		$this->assertSame( 6, substr_count( $html, '<td' ) );
+		$this->assertSame( 9, substr_count( $html, '<td' ) );
 	}
 
-	public function test_the_empty_state_spans_all_six_columns(): void {
-		$this->assertStringContainsString( 'colspan="6"', aafm_activity_rows_html( array() ) );
+	public function test_the_empty_state_spans_all_nine_columns(): void {
+		$this->assertStringContainsString( 'colspan="9"', aafm_activity_rows_html( array() ) );
 	}
 
 	public function test_a_detail_bearing_row_renders_its_detail(): void {
@@ -375,8 +375,8 @@ final class ActivityTabTest extends TestCase {
 		$rows = aafm_activity_rows_data( aafm_query_activity( array( 'per_page' => 1 ) ) );
 		$this->assertCount( 1, $rows );
 
-		// One field per header column - Time, Principal, Event, Detail, Status, Arg keys.
-		foreach ( array( 'time', 'principal', 'ability', 'detail', 'status', 'arg_keys' ) as $key ) {
+		// One field per header column - Time, Principal, Connection, Event, Detail, Status, Duration, IP, Arg keys.
+		foreach ( array( 'time', 'principal', 'connection', 'ability', 'detail', 'status', 'duration', 'ip', 'arg_keys' ) as $key ) {
 			$this->assertArrayHasKey(
 				$key,
 				$rows[0],

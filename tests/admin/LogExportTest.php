@@ -18,7 +18,7 @@ final class LogExportTest extends TestCase {
 	public function test_the_header_row_names_every_exported_column(): void {
 		$csv = $this->capture_export();
 		$this->assertStringStartsWith(
-			'created_at,event_type,ability,detail,status,arg_keys,principal_login,principal_user_id,source_ip,client_id,result_count',
+			'created_at,event_type,ability,detail,status,arg_keys,principal_login,principal_user_id,source_ip,client_id,result_count,duration_ms,connection_name',
 			$csv
 		);
 	}

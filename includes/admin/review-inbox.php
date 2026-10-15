@@ -14,12 +14,17 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * How many waiting posts the card lists; a count at this number shows as "20+".
+ */
+const AAFM_REVIEW_INBOX_LIMIT = 20;
+
+/**
  * Ids of agent-written posts still waiting for the owner, most recently changed first.
  *
  * @param int $limit Maximum rows.
  * @return list<int>
  */
-function aafm_review_inbox_ids( int $limit = 20 ): array {
+function aafm_review_inbox_ids( int $limit = AAFM_REVIEW_INBOX_LIMIT ): array {
 	$ids = get_posts(
 		array(
 			'post_type'      => array_values( get_post_types( array( 'show_ui' => true ), 'names' ) ),
@@ -47,7 +52,7 @@ function aafm_review_inbox_ids( int $limit = 20 ): array {
  * @param int $limit Maximum rows.
  * @return list<array<string,mixed>>
  */
-function aafm_review_inbox_rows( int $limit = 20 ): array {
+function aafm_review_inbox_rows( int $limit = AAFM_REVIEW_INBOX_LIMIT ): array {
 	$rows = array();
 	foreach ( aafm_review_inbox_ids( $limit ) as $post_id ) {
 		$post = aafm_exact_object_chain( 'post', $post_id );
@@ -125,7 +130,10 @@ function aafm_review_apply( string $action, int $post_id ) {
 	if ( ! aafm_trash_is_enabled() ) {
 		return new WP_Error( 'aafm_review_no_trash', __( 'The Trash is turned off on this site, so this would delete the item for good. Open it in the editor to remove it yourself.', 'agent-abilities-for-mcp' ) );
 	}
-	if ( ! wp_trash_post( $post_id ) instanceof WP_Post ) {
+	// A pre_trash_post callback can hand back the unchanged post, so success is the status, not the return value.
+	wp_trash_post( $post_id );
+	$after = aafm_exact_object( 'post', $post_id );
+	if ( ! $after instanceof WP_Post || 'trash' !== $after->post_status ) {
 		return new WP_Error( 'aafm_review_failed', __( 'WordPress would not move this item to the Trash.', 'agent-abilities-for-mcp' ) );
 	}
 
@@ -181,13 +189,18 @@ function aafm_review_handle( string $action ): void {
 	$post_id  = isset( $_POST['post_id'] ) ? absint( wp_unslash( $_POST['post_id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- only an id for the audit row; no action is taken before the nonce check below.
 	$tool     = $post_id > 0 ? (string) aafm_meta_get( 'post', $post_id, AAFM_ORIGIN_TOOL_META, true ) : '';
 
+	// The two refusals below are open to any logged-in user, so their rows share one per-IP cap.
 	if ( ! $nonce_ok ) {
-		aafm_log_review_action( $action, $post_id, 'error', $tool );
+		if ( aafm_denial_log_within_cap( 'rv' ) ) {
+			aafm_log_review_action( $action, $post_id, 'error', $tool );
+		}
 		wp_send_json_error( array( 'message' => __( 'Your session expired. Reload the page and try again.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 
 	if ( ! current_user_can( 'manage_options' ) ) {
-		aafm_log_review_action( $action, $post_id, 'denied', $tool );
+		if ( aafm_denial_log_within_cap( 'rv' ) ) {
+			aafm_log_review_action( $action, $post_id, 'denied', $tool );
+		}
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 
@@ -238,7 +251,7 @@ function aafm_render_review_inbox_card(): void {
 	echo wp_kses( aafm_icon( 'check' ), aafm_svg_allowed_html() );
 	echo '</span><h2>' . esc_html__( 'Needs review', 'agent-abilities-for-mcp' ) . '</h2>';
 	if ( array() !== $rows ) {
-		printf( '<span class="aafm-pill aafm-pill-warn aafm-review-count">%s</span>', esc_html( number_format_i18n( count( $rows ) ) ) );
+		printf( '<span class="aafm-pill aafm-pill-warn aafm-review-count">%s</span>', esc_html( count( $rows ) >= AAFM_REVIEW_INBOX_LIMIT ? number_format_i18n( AAFM_REVIEW_INBOX_LIMIT ) . '+' : number_format_i18n( count( $rows ) ) ) );
 	}
 	echo '</div><div class="aafm-card-pad">';
 

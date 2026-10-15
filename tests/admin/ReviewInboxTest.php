@@ -492,6 +492,101 @@ final class ReviewInboxTest extends TestCase {
 	}
 
 	/**
+	 * Final review I1: the two refusals any logged-in user can trigger are bounded per IP.
+	 */
+	public function test_forged_nonce_rows_stop_at_the_per_ip_cap(): void {
+		$this->acting_as( 'administrator' );
+		$id = $this->agent_draft();
+		$this->post_as( 'administrator', array( 'post_id' => (string) $id ) );
+		$_POST['nonce']         = 'bad';
+		$_REQUEST['nonce']      = 'bad';
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.91';
+
+		for ( $i = 0; $i < AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 3; $i++ ) {
+			$json = $this->run_handler( 'aafm_ajax_review_publish' );
+			$this->assertFalse( (bool) ( $json['success'] ?? true ), 'The refusal itself is never capped.' );
+		}
+
+		$this->assertCount(
+			AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW,
+			aafm_query_activity(
+				array(
+					'ability'  => 'aafm/review-publish',
+					'per_page' => 50,
+				)
+			)
+		);
+	}
+
+	public function test_non_admin_rows_stop_at_the_per_ip_cap(): void {
+		$this->acting_as( 'administrator' );
+		$id = $this->agent_draft();
+		$this->post_as( 'editor', array( 'post_id' => (string) $id ) );
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.92';
+
+		for ( $i = 0; $i < AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 3; $i++ ) {
+			$json = $this->run_handler( 'aafm_ajax_review_discard' );
+			$this->assertFalse( (bool) ( $json['success'] ?? true ) );
+		}
+
+		$this->assertSame( 'draft', get_post_status( $id ) );
+		$this->assertCount(
+			AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW,
+			aafm_query_activity(
+				array(
+					'ability'  => 'aafm/review-discard',
+					'per_page' => 50,
+				)
+			)
+		);
+	}
+
+	/**
+	 * Final review L1: a pre_trash_post callback that returns the unchanged post is not a trashed post.
+	 */
+	public function test_discard_fails_when_a_filter_stops_the_trash_but_returns_the_post(): void {
+		$this->acting_as( 'administrator' );
+		$id   = $this->agent_draft();
+		$hold = static fn( $check, $post ) => $post;
+		add_filter( 'pre_trash_post', $hold, 10, 2 );
+
+		$result = aafm_review_apply( 'discard', $id );
+		remove_filter( 'pre_trash_post', $hold, 10 );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_review_failed', $result->get_error_code() );
+		$this->assertSame( 'draft', get_post_status( $id ) );
+	}
+
+	/**
+	 * Final review M5: the card lists at most the limit, so a full list reads "20+", not "20".
+	 */
+	public function test_the_badge_reads_plus_when_the_list_is_full(): void {
+		$this->acting_as( 'administrator' );
+		for ( $i = 0; $i < AAFM_REVIEW_INBOX_LIMIT + 2; $i++ ) {
+			$this->agent_draft();
+		}
+
+		ob_start();
+		aafm_render_review_inbox_card();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '>' . AAFM_REVIEW_INBOX_LIMIT . '+<', $html );
+	}
+
+	public function test_the_badge_is_the_plain_count_below_the_limit(): void {
+		$this->acting_as( 'administrator' );
+		$this->agent_draft();
+		$this->agent_draft();
+
+		ob_start();
+		aafm_render_review_inbox_card();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'aafm-review-count">2<', $html );
+	}
+
+	/**
 	 * Rendering.
 	 */
 	public function test_the_dashboard_card_escapes_titles_and_offers_the_three_actions(): void {

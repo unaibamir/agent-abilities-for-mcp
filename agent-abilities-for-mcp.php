@@ -458,6 +458,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-request.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/activity-log.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/notifications.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/disclosures.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/settings.php';
@@ -496,6 +497,9 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_review_discard', 'aafm_ajax_review_discard' );
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
+		add_action( 'wp_ajax_aafm_notify_test', 'aafm_ajax_notify_test' );
+		add_action( 'admin_post_aafm_notify_dismiss', 'aafm_handle_notify_dismiss' );
+		add_action( 'admin_notices', 'aafm_notify_admin_notice' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
 		add_action( 'admin_notices', 'aafm_notice_omitted_abilities' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );

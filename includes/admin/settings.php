@@ -37,7 +37,7 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_notifications:array{mode:string,email:string,triggers:array<string,bool>},aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -74,6 +74,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_oauth_dcr_enabled'            => $oauth_dcr,
 		'aafm_site_brief'                   => aafm_clean_site_brief( $brief_raw ),
 		'aafm_default_server_mode'          => $mode,
+		'aafm_notifications'                => aafm_notifications_sanitize( $posted ),
 		'aafm_ip_allowlist'                 => array_values( array_unique( $lines ) ),
 	);
 }
@@ -139,6 +140,19 @@ function aafm_ajax_save_settings(): void {
 	}
 	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$clean  = aafm_sanitize_settings_input( $posted );
+
+	// Notifications are posted-only, like the Site Brief: a save that does not carry the mode (a stale
+	// cached script) leaves them alone. A bad address or an empty trigger list is refused HERE, before
+	// any write, so one bad field never half-saves the form.
+	$ntf_posted = isset( $posted['aafm_notify_mode'] ) && is_string( $posted['aafm_notify_mode'] );
+	$ntf_before = aafm_notifications_settings();
+	if ( $ntf_posted ) {
+		$ntf_raw   = isset( $posted['aafm_notify_email'] ) && is_string( $posted['aafm_notify_email'] ) ? trim( $posted['aafm_notify_email'] ) : '';
+		$ntf_error = aafm_notifications_validate( $clean['aafm_notifications'], $ntf_raw );
+		if ( null !== $ntf_error ) {
+			wp_send_json_error( array( 'message' => $ntf_error ) );
+		}
+	}
 
 	// Free-text field: a save that does not carry it (a stale cached admin.js, a script) leaves the
 	// stored brief alone instead of clearing it, and so does a value that is not text (an array).
@@ -353,6 +367,21 @@ function aafm_ajax_save_settings(): void {
 				'message' => aafm_paired_write_partial_failure_message( __( 'Every other setting', 'agent-abilities-for-mcp' ), __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) ),
 			)
 		);
+	}
+
+	// Notification settings are written last. The flip alerts above (the two aafm_log_*_switch_change()
+	// calls) read the settings that were stored when this request ARRIVED, so a save that flips read-only
+	// mode and turns alerts off at once still tells the owner about the flip. A save that returned an
+	// error earlier never reaches this point and leaves the notification settings as they were.
+	if ( $ntf_posted ) {
+		if ( ! aafm_update_option_verified( 'aafm_notifications', $clean['aafm_notifications'], true ) ) {
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The notification settings', 'agent-abilities-for-mcp' ) ) ) );
+		}
+		aafm_log_notifications_change( $ntf_before, $clean['aafm_notifications'] );
+		aafm_notify_sync_schedule();
+		aafm_notify_settings_weakened( $ntf_before, $clean['aafm_notifications'] );
+	} else {
+		$clean['aafm_notifications'] = $ntf_before;
 	}
 
 	wp_send_json_success(
@@ -750,6 +779,7 @@ function aafm_render_settings_tab(): void {
 	);
 
 	aafm_render_site_brief_section();
+	aafm_render_notifications_section();
 
 	// Caption for the card immediately below it. It names the safety controls outright, so it
 	// travelled down with them when OAuth took the top of the tab rather than staying at the head

@@ -71,6 +71,7 @@
 			this.#bindDoctor();
 			this.#bindReviewInbox();
 			this.#bindClearLog();
+			this.#bindNotifyTest();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
 			this.#bindOauthRevoke();
@@ -1507,6 +1508,8 @@
 				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
 				const siteBrief = form.querySelector( 'textarea[name="aafm_site_brief"]' );
 				const defaultServer = form.querySelector( 'select[name="aafm_default_server_mode"]' );
+				const notifyMode = form.querySelector( 'select[name="aafm_notify_mode"]' );
+				const notifyEmail = form.querySelector( 'input[name="aafm_notify_email"]' );
 
 				const body = new URLSearchParams();
 				body.append( 'action', 'aafm_save_settings' );
@@ -1546,6 +1549,15 @@
 				}
 				if ( siteBrief ) {
 					body.append( 'aafm_site_brief', siteBrief.value );
+				}
+				if ( notifyMode ) {
+					body.append( 'aafm_notify_mode', notifyMode.value );
+					body.append( 'aafm_notify_email', notifyEmail?.value ?? '' );
+					[ 'new_app', 'risky_run', 'denial_burst', 'switch_flip' ].forEach( ( slug ) => {
+						if ( form.querySelector( `input[name="aafm_notify_${ slug }"]` )?.checked ) {
+							body.append( `aafm_notify_${ slug }`, '1' );
+						}
+					} );
 				}
 
 				if ( status ) {
@@ -1884,6 +1896,23 @@
 				}
 			} );
 			showAll.addEventListener( 'change', applyFilter );
+		}
+
+		#bindNotifyTest() {
+			const btn = document.querySelector( '#aafm-notify-test' );
+			if ( ! btn ) {
+				return;
+			}
+			btn.addEventListener( 'click', async () => {
+				const status = document.querySelector( '.aafm-notify-test-status' );
+				if ( status ) {
+					status.textContent = this.#t( 'saving', 'Saving…' );
+				}
+				const json = await this.#post( 'aafm_notify_test' );
+				if ( status ) {
+					status.textContent = json?.data?.message ?? this.#t( 'error', 'Error' );
+				}
+			} );
 		}
 
 		#bindClearLog() {

@@ -96,6 +96,10 @@ function aafm_activity_filters_normalize( array $raw ): array {
 			$out['q'] = mb_substr( $q, 0, 64 );
 		}
 	}
+	// Set by code only (aafm_exec_get_activity_log()); aafm_activity_filters_from_request() never passes it.
+	if ( ! empty( $raw['hide_notifications'] ) ) {
+		$out['hide_notifications'] = 1;
+	}
 	if ( isset( $raw['row'] ) && is_scalar( $raw['row'] ) && absint( $raw['row'] ) > 0 ) {
 		$out['row'] = absint( $raw['row'] );
 	}
@@ -207,6 +211,10 @@ function aafm_activity_filter_where( array $filters ): array {
 		$params[] = $like;
 		$params[] = $like;
 		$params[] = $like;
+	}
+	if ( isset( $f['hide_notifications'] ) ) {
+		$sql     .= ' AND ability <> %s';
+		$params[] = 'aafm/notifications';
 	}
 	if ( isset( $f['row'] ) ) {
 		$sql     .= ' AND id = %d';

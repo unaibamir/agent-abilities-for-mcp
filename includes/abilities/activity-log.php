@@ -114,15 +114,19 @@ function aafm_args_get_activity_log(): array {
  *
  * Passes the (validated) filters straight to aafm_query_activity(), which caps per_page at
  * 200 and orders most-recent-first, then redacts each row to the safe field set - never
- * source_ip. The refusal reason a denied row carries is not returned either: any manage_options
- * principal can call this, including an agent, and the reason would let it map the allowlist and
- * deny list that every other path keeps opaque.
+ * source_ip. Rows about the owner's notification settings (ability aafm/notifications, including the
+ * rows for an alert that failed to send) are left out, from the entries and from the total. The
+ * refusal reason a denied row carries is not returned either: any manage_options principal can call
+ * this, including an agent, and the reason would let it map the allowlist and deny list that every
+ * other path keeps opaque.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
 function aafm_exec_get_activity_log( array $input ): array {
-	$args = array();
+	// The rows that record the owner's alert settings, and alerts failing to send, are for the people who
+	// read the screen: an agent holding an administrator credential could learn how loud it can be.
+	$args = array( 'hide_notifications' => 1 );
 	if ( ! empty( $input['status'] ) ) {
 		$args['status'] = (string) $input['status'];
 	}
@@ -162,7 +166,15 @@ function aafm_exec_get_activity_log( array $input ): array {
 	// total counts the set narrowed by the optional status filter (the count helper supports
 	// status only); when an ability filter is also supplied, total still reflects the status
 	// scope and may exceed the per-ability entries shown. See the output_schema note.
-	$total = aafm_activity_count_filtered( isset( $args['status'] ) ? (string) $args['status'] : null );
+	$total = aafm_activity_count_matching(
+		array_intersect_key(
+			$args,
+			array(
+				'status'             => true,
+				'hide_notifications' => true,
+			)
+		)
+	);
 
 	return array(
 		'entries' => $entries,

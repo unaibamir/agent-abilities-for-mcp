@@ -149,15 +149,28 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 		}
 		$still_emailing = in_array( $after['mode'], array( 'immediate', 'digest' ), true );
 		$kinds          = array();
+		$turned_off     = array();
+		foreach ( array_keys( aafm_notify_trigger_phrases() ) as $slug ) {
+			if ( ! empty( $before['triggers'][ $slug ] ) && empty( $after['triggers'][ $slug ] ) ) {
+				$turned_off[] = array(
+					'trigger' => 'settings',
+					'subtype' => aafm_notify_trigger_off_subtype( $slug ),
+					'time'    => time(),
+				);
+			}
+		}
+		// An address or mode change would otherwise be the only thing the old address hears about, so the
+		// triggers unticked in the same save ride in the same message.
+		$rides_along = array();
 		if ( ! $still_emailing ) {
-			$kinds[] = 'settings:alerts_off';
+			$kinds[]     = 'settings:alerts_off';
+			$rides_along = $turned_off;
 		} elseif ( $before['email'] !== $after['email'] ) {
-			$kinds[] = 'recipient:changed';
+			$kinds[]     = 'recipient:changed';
+			$rides_along = $turned_off;
 		} else {
-			foreach ( array_keys( aafm_notify_trigger_phrases() ) as $slug ) {
-				if ( ! empty( $before['triggers'][ $slug ] ) && empty( $after['triggers'][ $slug ] ) ) {
-					$kinds[] = 'settings:' . aafm_notify_trigger_off_subtype( $slug );
-				}
+			foreach ( $turned_off as $event ) {
+				$kinds[] = 'settings:' . $event['subtype'];
 			}
 		}
 		foreach ( $kinds as $kind ) {
@@ -175,7 +188,7 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 			);
 			aafm_notify_send_later(
 				(string) $before['email'],
-				array( $event ),
+				array_merge( array( $event ), $rides_along ),
 				false,
 				__( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
 				'governance',

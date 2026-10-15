@@ -481,6 +481,14 @@ function aafm_notify_build_message( array $events, bool $digest ): array {
 			/* translators: %d: how many similar alerts were held back. */
 			$lines[] = sprintf( __( 'Held back since the last message: plus %d more', 'agent-abilities-for-mcp' ), (int) $event['suppressed'] );
 		}
+		if ( count( $events ) > 1 ) {
+			// A settings save that did several things at once: the first event is the headline, the rest follow.
+			$lines[] = '';
+			$lines[] = __( 'The same save also did this:', 'agent-abilities-for-mcp' );
+			foreach ( array_slice( $events, 1 ) as $more ) {
+				$lines[] = '- ' . aafm_notify_event_label( (array) $more );
+			}
+		}
 		$lines[] = '';
 		$lines[] = __( 'Open the Activity Log:', 'agent-abilities-for-mcp' );
 		$lines[] = aafm_notify_event_link( $event );

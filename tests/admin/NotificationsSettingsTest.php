@@ -467,6 +467,78 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'owner@example.com', $details );
 	}
 
+	public function test_a_combined_save_lists_every_unticked_trigger_in_the_one_old_address_mail(): void {
+		$this->assertTrue(
+			aafm_update_option_verified(
+				'aafm_notifications',
+				array(
+					'mode'     => 'immediate',
+					'email'    => 'old@example.com',
+					'triggers' => array(
+						'new_app'      => true,
+						'risky_run'    => true,
+						'denial_burst' => true,
+						'switch_flip'  => true,
+					),
+				),
+				true
+			)
+		);
+
+		// The address changes AND two triggers are unticked in the same save.
+		$this->save(
+			array(
+				'aafm_notify_mode'         => 'immediate',
+				'aafm_notify_email'        => 'new@example.com',
+				'aafm_notify_new_app'      => '1',
+				'aafm_notify_denial_burst' => '1',
+			)
+		);
+
+		$sent = $this->sent();
+		$this->assertCount( 1, $sent, 'One mail, not one per change.' );
+		$this->assertSame( 'old@example.com', $sent[0]['to'] );
+		$this->assertStringContainsString( 'notification address was changed', $sent[0]['subject'] );
+		$this->assertStringContainsString( 'Alerts for high-risk and permanent-delete runs were turned off', $sent[0]['message'] );
+		$this->assertStringContainsString( 'Alerts for read-only and high-risk switch changes were turned off', $sent[0]['message'] );
+		$this->assertStringNotContainsString( 'denied-call bursts', $sent[0]['message'], 'A trigger that stayed on is not listed.' );
+		$this->assertStringNotContainsString( 'new@example.com', $sent[0]['message'] );
+		$details = implode( ' | ', array_column( aafm_query_activity( array( 'ability' => 'aafm/notifications' ) ), 'detail' ) );
+		$this->assertStringContainsString( 'alerts for high-risk and permanent-delete runs turned off', $details );
+		$this->assertStringContainsString( 'alerts for read-only and high-risk switch changes turned off', $details );
+	}
+
+	public function test_turning_alerts_off_and_unticking_triggers_in_one_save_lists_the_triggers(): void {
+		$this->assertTrue(
+			aafm_update_option_verified(
+				'aafm_notifications',
+				array(
+					'mode'     => 'immediate',
+					'email'    => 'old@example.com',
+					'triggers' => array(
+						'new_app'     => true,
+						'switch_flip' => true,
+					),
+				),
+				true
+			)
+		);
+
+		$this->save(
+			array(
+				'aafm_notify_mode'      => 'notice',
+				'aafm_notify_email'     => 'old@example.com',
+				'aafm_notify_risky_run' => '1',
+			)
+		);
+
+		$sent = $this->sent();
+		$this->assertCount( 1, $sent );
+		$this->assertStringContainsString( 'Email alerts were turned off', $sent[0]['subject'] );
+		$this->assertStringContainsString( 'Alerts for new apps and Application Passwords were turned off', $sent[0]['message'] );
+		$this->assertStringContainsString( 'Alerts for read-only and high-risk switch changes were turned off', $sent[0]['message'] );
+	}
+
 	public function test_ticking_a_trigger_on_sends_no_warning_and_no_off_row(): void {
 		$this->store( 'immediate' );
 

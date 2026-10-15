@@ -131,6 +131,20 @@ final class DefaultServerModeTest extends TestCase {
 		$this->assertSame( array( 'acme/explicit', 'acme/inherits' ), aafm_default_server_publishers( $abilities ) );
 	}
 
+	/**
+	 * Final review I2: an older adapter copy from another plugin has no exposure resolver. The
+	 * Settings state line and the Automatic decision must answer "nothing publishes", not fatal.
+	 */
+	public function test_an_adapter_without_the_exposure_resolver_publishes_nothing_and_does_not_fatal(): void {
+		add_filter( 'aafm_adapter_exposure_resolver_available', '__return_false' );
+		$abilities = array( $this->ability( 'acme/explicit', array( 'mcp' => array( 'public' => true ) ) ) );
+
+		$this->assertSame( array(), aafm_default_server_publishers( $abilities ) );
+
+		update_option( 'aafm_default_server_mode', 'auto' );
+		$this->assertSame( 'Currently not running', aafm_default_server_state_label() );
+	}
+
 	public function test_a_callback_on_the_default_server_config_filter_counts_as_a_publisher(): void {
 		$this->config_probe = static fn( $config ) => $config;
 		add_filter( 'mcp_adapter_default_server_config', $this->config_probe ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.

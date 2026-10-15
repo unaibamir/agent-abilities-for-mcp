@@ -116,6 +116,30 @@ final class DefaultServerGuardTest extends TestCase {
 		$this->assertCount( 1, $denied );
 	}
 
+	/**
+	 * Final review I1: any authenticated caller can trigger the refusal, so its log rows are
+	 * bounded per IP while the refusal itself is not.
+	 */
+	public function test_refusal_rows_stop_at_the_per_ip_cap(): void {
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.93';
+		$default                = $this->server( 'mcp-adapter-default-server' );
+
+		for ( $i = 0; $i < AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 3; $i++ ) {
+			$result = aafm_guard_default_server_tool_call( array( 'ability_name' => 'aafm/get-posts' ), 'mcp-adapter-execute-ability', null, $default );
+			$this->assertWPError( $result );
+		}
+
+		$this->assertCount(
+			AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW,
+			aafm_query_activity(
+				array(
+					'ability'  => 'aafm/get-posts',
+					'per_page' => 50,
+				)
+			)
+		);
+	}
+
 	public function test_other_calls_and_our_own_server_pass_through(): void {
 		$default = $this->server( 'mcp-adapter-default-server' );
 		$args    = array( 'ability_name' => 'acme/ping' );

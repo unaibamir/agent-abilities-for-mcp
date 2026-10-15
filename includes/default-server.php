@@ -83,6 +83,19 @@ function aafm_is_own_ability_name( string $name ): bool {
 }
 
 /**
+ * Whether the loaded adapter has the exposure resolver the publisher scan calls.
+ *
+ * Another plugin's older adapter copy can win the class-declaration race, and the adapter's own
+ * autoloader is not guaranteed to be registered then, so the class is checked, not assumed. The
+ * filter is the seam tests use to stand in for such an adapter.
+ *
+ * @return bool
+ */
+function aafm_adapter_exposure_resolver_available(): bool {
+	return (bool) apply_filters( 'aafm_adapter_exposure_resolver_available', class_exists( '\WP\MCP\Abilities\McpAbilityExposure' ) );
+}
+
+/**
  * Names of the abilities that publish themselves to the default server and are not ours,
  * WordPress core's or the adapter's own.
  *
@@ -94,6 +107,10 @@ function aafm_is_own_ability_name( string $name ): bool {
  * @return list<string> Ability names, in the order given.
  */
 function aafm_default_server_publishers( iterable $abilities ): array {
+	// An older adapter copy loaded by another plugin has no exposure resolver (it arrived in 0.6.1): publish nothing rather than fatal.
+	if ( ! aafm_adapter_exposure_resolver_available() ) {
+		return array();
+	}
 	$names = array();
 	foreach ( $abilities as $ability ) {
 		$name = $ability->get_name();
@@ -402,16 +419,19 @@ function aafm_guard_default_server_tool_call( $args, $tool_name = '', $mcp_tool 
 		return $args;
 	}
 
-	$user = wp_get_current_user();
-	aafm_log_activity(
-		array(
-			'ability'           => '' !== $target ? $target : (string) $tool_name,
-			'principal_user_id' => (int) $user->ID,
-			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
-			'status'            => 'denied',
-			'detail'            => 'refused on the adapter default server',
-		)
-	);
+	// Any authenticated caller can reach this refusal, so its row shares a per-IP cap with the other denial classes.
+	if ( aafm_denial_log_within_cap( 'dsg' ) ) {
+		$user = wp_get_current_user();
+		aafm_log_activity(
+			array(
+				'ability'           => '' !== $target ? $target : (string) $tool_name,
+				'principal_user_id' => (int) $user->ID,
+				'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+				'status'            => 'denied',
+				'detail'            => 'refused on the adapter default server',
+			)
+		);
+	}
 
 	return new WP_Error(
 		'aafm_not_on_default_server',

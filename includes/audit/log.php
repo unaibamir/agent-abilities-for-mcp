@@ -358,7 +358,9 @@ if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
  *                       'fa' (failed Application Password auth), 'ipb' (IP-blocked transport),
  *                       'br' (an invalid OAuth bearer that still matched a real stored token),
  *                       'tx' (an MCP-route JSON-RPC error the transport-outcome logger records),
- *                       or 'ssl' (an aafm_oat_ bearer presented over http where HTTPS is required).
+ *                       'ssl' (an aafm_oat_ bearer presented over http where HTTPS is required),
+ *                       'rv' (a refused Needs review Publish or Discard click),
+ *                       or 'dsg' (a refused call naming this plugin's tool on the adapter default server).
  * @return bool True when the caller may write its row (the slot is consumed), false when this
  *              IP has used up its cap for the current window.
  */

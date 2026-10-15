@@ -1546,7 +1546,7 @@ function aafm_handle_export_activity_log(): void {
 	// ("link expired") instead of an authorization failure, which is the wrong refusal reason to
 	// show them even though aafm_export_activity_csv() was never reachable either way.
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_die( esc_html__( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) );
+		wp_die( esc_html__( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ), '', array( 'response' => 403 ) );
 	}
 	check_admin_referer( 'aafm_admin' );
 

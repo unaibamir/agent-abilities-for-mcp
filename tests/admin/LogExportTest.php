@@ -331,6 +331,29 @@ final class LogExportTest extends TestCase {
 		aafm_handle_export_activity_log();
 	}
 
+	public function test_the_export_handler_answers_a_caller_without_manage_options_with_403(): void {
+		$this->acting_as( 'subscriber' );
+		$seen = array();
+		$spy  = static function () use ( &$seen ) {
+			return static function ( $message, $title, $args ) use ( &$seen ): void {
+				$seen = (array) $args;
+				throw new \WPDieException( 'aafm-die' );
+			};
+		};
+		add_filter( 'wp_die_handler', $spy );
+
+		try {
+			aafm_handle_export_activity_log();
+			$this->fail( 'The handler must stop the request.' );
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		} finally {
+			remove_filter( 'wp_die_handler', $spy );
+		}
+
+		$this->assertSame( 403, $seen['response'] ?? null, 'A refusal is a 403, not the default 500.' );
+	}
+
 	/**
 	 * The admin_post handler refuses a request carrying no valid nonce, even from an
 	 * administrator - the capability check passes here (an administrator has manage_options),

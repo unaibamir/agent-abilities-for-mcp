@@ -56,6 +56,9 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/settings.php|aafm_render_settings_tab|1' => 'G',
 		'includes/admin/settings.php|aafm_render_settings_tab|2' => 'G',
 		'includes/audit/high-risk.php|aafm_high_risk_unlocked|1' => 'G',
+		'includes/audit/notifications.php|aafm_notifications_settings|1' => 'N',
+		'includes/audit/notifications.php|aafm_notify_pending_list|1' => 'N',
+		'includes/audit/notifications.php|aafm_notify_queue_list|1' => 'N',
 		'includes/audit/read-only.php|aafm_read_only_mode_stored|1' => 'G',
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => 'G',
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => 'G',
@@ -347,7 +350,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 27,
+				'N' => 30,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

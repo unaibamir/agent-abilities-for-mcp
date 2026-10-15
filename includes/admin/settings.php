@@ -490,6 +490,12 @@ function aafm_config_option_names(): array {
 		'aafm_default_server_mode',
 		// The once-only marker for the "started automatically" log row; a reset logs it afresh.
 		'aafm_default_server_auto_noted',
+		// Owner notification settings; off is the absent row.
+		'aafm_notifications',
+		// Digest events waiting to be sent.
+		'aafm_notify_queue',
+		// Admin-notice entries for the Notifications card.
+		'aafm_notify_pending',
 	);
 }
 
@@ -533,7 +539,7 @@ function aafm_uninstall_should_delete_data(): bool {
 /**
  * Remove this plugin's data for the current blog.
  *
- * Clears this site's cron registrations FIRST, unconditionally - cron registrations are
+ * Clears this site's cron registrations (prune, OAuth cleanup, notification digest) FIRST, unconditionally - cron registrations are
  * executable plugin machinery, not retained user data, so they go regardless of the
  * data-retention choice below them. Without this, a default (retain-data) uninstall left both
  * daily events behind: their callbacks no longer exist once the plugin is gone, so WordPress
@@ -558,6 +564,7 @@ function aafm_uninstall_should_delete_data(): bool {
 function aafm_uninstall_site_data(): void {
 	wp_clear_scheduled_hook( 'aafm_prune_activity_log_daily' );
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
+	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
 
 	if ( ! aafm_uninstall_should_delete_data() ) {
 		return;

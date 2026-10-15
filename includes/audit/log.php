@@ -366,7 +366,8 @@ if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
  *                       'tx' (an MCP-route JSON-RPC error the transport-outcome logger records),
  *                       'ssl' (an aafm_oat_ bearer presented over http where HTTPS is required),
  *                       'rv' (a refused Needs review Publish or Discard click),
- *                       or 'dsg' (a refused call naming this plugin's tool on the adapter default server).
+ *                       'dsg' (a refused call naming this plugin's tool on the adapter default server),
+ *                       or 'ntf' (a notification email that could not be sent).
  * @return bool True when the caller may write its row (the slot is consumed), false when this
  *              IP has used up its cap for the current window.
  */

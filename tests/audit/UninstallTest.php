@@ -302,6 +302,44 @@ final class UninstallTest extends TestCase {
 		$this->assertFalse( $this->activity_log_table_exists() );
 	}
 
+	public function test_uninstall_clears_the_digest_event_when_data_is_retained(): void {
+		delete_option( 'aafm_delete_data_on_uninstall' );
+		wp_schedule_event( time(), 'daily', 'aafm_notifications_digest' );
+		$this->assertNotFalse( wp_next_scheduled( 'aafm_notifications_digest' ), 'precondition: the digest event must be scheduled.' );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( wp_next_scheduled( 'aafm_notifications_digest' ), 'the digest event must be cleared even when data is retained.' );
+	}
+
+	public function test_uninstall_clears_the_digest_event_when_data_is_deleted(): void {
+		update_option( 'aafm_delete_data_on_uninstall', true );
+		wp_schedule_event( time(), 'daily', 'aafm_notifications_digest' );
+
+		aafm_uninstall_site_data();
+
+		$this->assertFalse( wp_next_scheduled( 'aafm_notifications_digest' ), 'the digest event must be cleared when data is deleted.' );
+	}
+
+	/**
+	 * The digest event is cleared on a switched-to subsite too.
+	 *
+	 * @group ms-required
+	 */
+	public function test_uninstall_clears_the_digest_event_on_a_switched_multisite_blog(): void {
+		$this->skipWithoutMultisite();
+		$blog_id = (int) self::factory()->blog->create();
+		switch_to_blog( $blog_id );
+		delete_option( 'aafm_delete_data_on_uninstall' );
+		wp_schedule_event( time(), 'daily', 'aafm_notifications_digest' );
+
+		aafm_uninstall_site_data();
+
+		$after = wp_next_scheduled( 'aafm_notifications_digest' );
+		restore_current_blog();
+		$this->assertFalse( $after, 'the digest event must be cleared on the switched-to subsite.' );
+	}
+
 	/**
 	 * Uninstall must delete the FULL configuration option set, not just the hardcoded
 	 * enabled-abilities literal - this proves the pre-existing leak fix (aafm_allowed_meta_keys

@@ -26,7 +26,11 @@ if ( ! defined( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION' ) ) {
 	// indexes so an event-filtered query is index-backed. Bumping this makes
 	// aafm_maybe_upgrade_activity_log() re-run dbDelta so existing installs pick the change up
 	// without a reactivation. Mirrors AAFM_OAUTH_SCHEMA_VERSION in includes/oauth/schema.php.
-	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '5' );
+	// v6 adds the nullable duration_ms column: milliseconds spent inside an ability's execute
+	// callback, NULL for a call that never executed or was never measured, so NULL is never a
+	// fabricated zero. Nullable with no default, so the ALTER is metadata-only on current engines
+	// and every existing row is unaffected.
+	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '6' );
 }
 
 /**
@@ -103,6 +107,7 @@ function aafm_install_activity_log(): void {
 		result_count BIGINT UNSIGNED NULL,
 		event_type VARCHAR(32) NOT NULL DEFAULT 'ability_call',
 		detail TEXT NULL,
+		duration_ms INT UNSIGNED NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		KEY created_at (created_at),
@@ -157,8 +162,8 @@ function aafm_activity_log_finalize_schema(): void {
 /**
  * Whether the activity-log schema is actually present: the table plus its latest columns and index.
  *
- * Verifies the table, the v5 event_type and detail columns, and the event_created index - the most
- * recent migration, so their absence is the signal a dbDelta run did not fully land. Gates the
+ * Verifies the table, the v5 event_type and detail columns, the v6 duration_ms column, and the
+ * event_created index - the most recent migrations, so their absence is the signal a dbDelta run did not fully land. Gates the
  * version stamp in aafm_activity_log_finalize_schema().
  *
  * @return bool
@@ -172,6 +177,7 @@ function aafm_activity_log_schema_verify(): bool {
 
 	return aafm_activity_log_has_column( $table, 'event_type' )
 		&& aafm_activity_log_has_column( $table, 'detail' )
+		&& aafm_activity_log_has_column( $table, 'duration_ms' )
 		&& aafm_activity_log_has_index( $table, 'event_created' );
 }
 
@@ -634,11 +640,13 @@ function aafm_prune_activity_log(): void {
  *                                  leaves the column untouched.
  * @param string|null $detail       Optional note about what the call touched, known only once it
  *                                  resolved. Null (default) leaves the column untouched.
+ * @param int|null    $duration_ms  Milliseconds spent inside the ability's execute callback. Null
+ *                                  (default) leaves the column untouched.
  * @return bool Whether the row was written. False means the query failed, the id was unusable, or
  *              no such row exists any more; a matched row whose columns did not change counts as
  *              written.
  */
-function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): bool {
+function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null, ?string $detail = null, ?int $duration_ms = null ): bool {
 	global $wpdb;
 	if ( $row_id <= 0 ) {
 		return false;
@@ -656,9 +664,26 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 		$format[]       = '%s';
 	}
 
-	$table = aafm_activity_log_table();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$updated = $wpdb->update( $table, $data, array( 'id' => $row_id ), $format, array( '%d' ) );
+	$table   = aafm_activity_log_table();
+	$updated = false;
+
+	// The duration column exists from schema v6. A call that resolves before the upgrade has run
+	// (cron, WP-CLI, or a stamp that failed to persist) would fail this UPDATE, so it is tried
+	// first with errors suppressed and retried without the column on failure: the status must
+	// always resolve, and only the duration is lost. No per-request memo of "unsupported": a
+	// persistent-worker SAPI would keep it across requests.
+	if ( null !== $duration_ms ) {
+		$with_duration                = $data;
+		$with_duration['duration_ms'] = min( 4294967295, max( 0, $duration_ms ) );
+		$suppressed                   = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$updated = $wpdb->update( $table, $with_duration, array( 'id' => $row_id ), array_merge( $format, array( '%d' ) ), array( '%d' ) );
+		$wpdb->suppress_errors( $suppressed );
+	}
+	if ( false === $updated ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$updated = $wpdb->update( $table, $data, array( 'id' => $row_id ), $format, array( '%d' ) );
+	}
 
 	// Only a literal false is a failure. wpdb::update() returns 0 when the row matched and no
 	// column changed, which is a legitimate no-op resolve, and a naive `if ( $updated )` would

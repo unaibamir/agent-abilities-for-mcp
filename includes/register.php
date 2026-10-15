@@ -1206,9 +1206,15 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		// Null on a clean call; the crash's class and throw site once the catch below has written it.
 		$crash_detail = null;
+		// Wall-clock time inside the ability's own execute callback, nothing else: not the permission
+		// phase, not schema validation, not transport, not the row writes. hrtime() is monotonic.
+		$started_at = hrtime( true );
+		$ended_at   = $started_at;
 		try {
-			$result = $original_execute( $input );
+			$result   = $original_execute( $input );
+			$ended_at = hrtime( true );
 		} catch ( \Throwable $e ) {
+			$ended_at = hrtime( true );
 			// One catch for the whole catalog, not per-vendor-call-site. WooCommerce (and other
 			// vendors) routinely use exceptions as ordinary input validation - WC_Data::error()
 			// throws - and this codebase has 103 WooCommerce setter call sites against 2
@@ -1305,11 +1311,13 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// our own wrapper. Without this, the WP_Error branch of
 		// aafm_build_activity_detail_from_result() would overwrite the throw site with that wrapper
 		// code on every crashed call.
-		$written = aafm_update_activity_status(
+		$duration_ms = (int) round( ( $ended_at - $started_at ) / 1000000 );
+		$written     = aafm_update_activity_status(
 			$row_id,
 			$status,
 			$result_count,
-			null !== $crash_detail ? null : $resolved_detail
+			null !== $crash_detail ? null : $resolved_detail,
+			$duration_ms
 		);
 
 		// Announced from here rather than from inside the writer, and exactly once: this is the only

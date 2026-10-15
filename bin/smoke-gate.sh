@@ -1037,6 +1037,79 @@ EOF
 	log_ok logscale '50,000-row log'
 }
 
+# leg_notify: real flips send real (captured) mail, throttle holds, the digest cron sends once, the
+# admin notice shows, and WP_DEBUG stays clean. Mail is captured by a mu-plugin; nothing leaves the box.
+leg_notify() {
+	local mailfile="$SMOKE_ROOT/wp-content/mail.jsonl" mu="$SMOKE_ROOT/wp-content/mu-plugins/smoke-mail.php" jar="$SMOKE_ROOT/jar.txt" n subj
+	mkdir -p "$SMOKE_ROOT/wp-content/mu-plugins"
+	set_state notify 'ours only' "[\"$OURS\"]" true 0 || return 0
+	cat > "$mu" <<'PHP'
+<?php
+// Capture instead of send. Smoke gate only.
+add_filter( 'pre_wp_mail', function ( $pre, $atts ) {
+	file_put_contents( WP_CONTENT_DIR . '/mail.jsonl', wp_json_encode( array( 'to' => $atts['to'], 'subject' => $atts['subject'], 'body' => $atts['message'], 'headers' => $atts['headers'] ) ) . "\n", FILE_APPEND );
+	return true;
+}, 10, 2 );
+PHP
+	rm -f "$mailfile"
+	W eval 'delete_option( "aafm_notify_pending" ); delete_option( "aafm_notify_queue" ); foreach ( array( "aafm_ntf_global" ) as $t ) { delete_transient( $t ); }' >/dev/null 2>&1
+	W option update aafm_notifications '{"mode":"immediate","email":"owner@example.com","triggers":{"new_app":true,"risky_run":true,"denial_burst":true,"switch_flip":true}}' --format=json >/dev/null 2>&1
+
+	W eval 'wp_set_current_user( 1 ); $b = aafm_read_only_mode_stored(); aafm_set_read_only_mode( true ); aafm_log_read_only_switch_change( $b, true, true );' >/dev/null 2>&1
+	n=$(wc -l < "$mailfile" 2>/dev/null | tr -d ' ')
+	subj=$(head -1 "$mailfile" 2>/dev/null | jq -r '.subject' 2>/dev/null)
+	if [ "$n" = 1 ] && echo "$subj" | grep -q 'Read-only mode was turned on'; then
+		pass notify "a real read-only flip sent one mail: $subj"
+	else
+		fail notify "after a read-only flip: $n mail(s), subject '$subj'"
+	fi
+	if head -1 "$mailfile" 2>/dev/null | jq -e '.to == "owner@example.com" and (.body | contains("tab=activity&row=")) and (.body | test("<[a-z]") | not) and (.headers == "" or .headers == [] or .headers == null)' >/dev/null 2>&1; then
+		pass notify "the mail goes to the saved address, links the log row, carries no markup and no custom headers"
+	else
+		fail notify "mail shape: $(head -1 "$mailfile" | head -c 300)"
+	fi
+
+	W eval 'wp_set_current_user( 1 ); aafm_set_read_only_mode( false ); aafm_log_read_only_switch_change( true, false, true ); aafm_set_read_only_mode( true ); aafm_log_read_only_switch_change( false, true, true );' >/dev/null 2>&1
+	n=$(wc -l < "$mailfile" 2>/dev/null | tr -d ' ')
+	if [ "$n" = 2 ]; then
+		pass notify "the off flip mailed, the repeated on flip was throttled (2 mails)"
+	else
+		fail notify "after off then on again: $n mail(s), wanted 2"
+	fi
+	W eval 'aafm_set_read_only_mode( false );' >/dev/null 2>&1
+
+	rm -f "$jar"
+	curl -s -c "$jar" -b 'wordpress_test_cookie=WP+Cookie+check' -o /dev/null \
+		-d "log=admin&pwd=admin&wp-submit=Log+In&redirect_to=$URL/wp-admin/&testcookie=1" "$URL/wp-login.php"
+	curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/page.html" "$URL/wp-admin/index.php"
+	if grep -q 'View in Activity Log' "$SMOKE_ROOT/page.html"; then
+		pass notify "the admin notice shows on the dashboard"
+	else
+		fail notify "no admin notice on the dashboard after two alerts"
+	fi
+
+	W option update aafm_notifications '{"mode":"digest","email":"owner@example.com","triggers":{"new_app":true,"risky_run":true,"denial_burst":true,"switch_flip":true}}' --format=json >/dev/null 2>&1
+	W eval 'aafm_notify_sync_schedule(); aafm_log_high_risk_switch_change( false, true, true );' >/dev/null 2>&1
+	n=$(wc -l < "$mailfile" 2>/dev/null | tr -d ' ')
+	if [ "$n" = 2 ] && [ "$(W eval 'echo count( aafm_notify_queue_list() );' 2>/dev/null)" = 1 ]; then
+		pass notify "digest mode queues instead of mailing"
+	else
+		fail notify "digest mode: $n mail(s), queue '$(W eval 'echo count( aafm_notify_queue_list() );' 2>/dev/null)'"
+	fi
+	W cron event run aafm_notifications_digest >/dev/null 2>&1
+	n=$(wc -l < "$mailfile" 2>/dev/null | tr -d ' ')
+	if [ "$n" = 3 ] && tail -1 "$mailfile" | jq -r '.subject' | grep -q 'daily summary' && [ "$(W eval 'echo count( aafm_notify_queue_list() );' 2>/dev/null)" = 0 ]; then
+		pass notify "the digest cron event sent one summary and cleared the queue"
+	else
+		fail notify "digest run: $n mail(s), last '$(tail -1 "$mailfile" | jq -r '.subject' 2>/dev/null)'"
+	fi
+
+	W option delete aafm_notifications >/dev/null 2>&1
+	W eval 'wp_clear_scheduled_hook( "aafm_notifications_digest" ); delete_option( "aafm_notify_pending" ); delete_option( "aafm_notify_queue" );' >/dev/null 2>&1
+	rm -f "$mu" "$mailfile"
+	log_ok notify 'Notifications'
+}
+
 setup_site || { fail setup "could not build the disposable site at $SMOKE_ROOT"; finish; }
 start_server || finish
 if [ "$SHOTS" = 1 ]; then shots_mode; finish; fi
@@ -1048,4 +1121,5 @@ leg_brief
 leg_doctor
 leg_log
 leg_logscale
+leg_notify
 finish

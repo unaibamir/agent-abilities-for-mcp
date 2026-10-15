@@ -140,7 +140,9 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 		} elseif ( ! empty( $before['triggers']['switch_flip'] ) && empty( $after['triggers']['switch_flip'] ) ) {
 			$kind = 'settings:switch_alerts_off';
 		}
-		if ( '' === $kind || ! aafm_notify_take_slot( $kind )['allowed'] ) {
+		// The throttle key carries a hash of the OLD address, so A to B and then B to C inside the window
+		// still warns B: one address's warning never swallows another's.
+		if ( '' === $kind || ! aafm_notify_take_slot( $kind . ':' . substr( md5( strtolower( (string) $before['email'] ) ), 0, 12 ) )['allowed'] ) {
 			return;
 		}
 		list( $trigger, $subtype ) = explode( ':', $kind, 2 );
@@ -149,9 +151,45 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 			'subtype' => $subtype,
 			'time'    => time(),
 		);
-		$m                         = aafm_notify_build_message( array( $event ), false );
-		$body                      = $m['body'] . "\n\n" . __( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' );
-		wp_mail( (string) $before['email'], $m['subject'], $body );
+		aafm_notify_send_capped(
+			(string) $before['email'],
+			array( $event ),
+			false,
+			__( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' )
+		);
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+
+/**
+ * Settle the digest queue after a save. A save that leaves digest mode, or points the digest at a new
+ * address, hands the queued events (including this very save's read-only or high-risk flip, queued
+ * moments earlier under the old settings) to the OLD address through the capped delivery path, then
+ * clears the queue. A queue left behind a mode that is no longer digest is cleared too, so stale
+ * events never mail weeks later when digest mode comes back.
+ *
+ * @param array<string,mixed> $before Settings before.
+ * @param array<string,mixed> $after  Settings after.
+ * @return void
+ */
+function aafm_notify_settle_queue( array $before, array $after ): void {
+	try {
+		$flush = 'digest' === $before['mode'] && '' !== $before['email']
+			&& ( 'digest' !== $after['mode'] || $before['email'] !== $after['email'] );
+		if ( 'digest' === $after['mode'] && ! $flush ) {
+			return;
+		}
+		$queue = aafm_notify_queue_list();
+		if ( array() === $queue ) {
+			return;
+		}
+		if ( $flush ) {
+			aafm_notify_send_capped( (string) $before['email'], $queue, true );
+		}
+		if ( ! aafm_notify_queue_clear() ) {
+			aafm_notify_log_failure( __( 'The queued notifications could not be cleared', 'agent-abilities-for-mcp' ) );
+		}
 	} catch ( \Throwable $e ) {
 		unset( $e );
 	}

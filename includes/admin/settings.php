@@ -379,6 +379,7 @@ function aafm_ajax_save_settings(): void {
 		}
 		aafm_log_notifications_change( $ntf_before, $clean['aafm_notifications'] );
 		aafm_notify_sync_schedule();
+		aafm_notify_settle_queue( $ntf_before, $clean['aafm_notifications'] );
 		aafm_notify_settings_weakened( $ntf_before, $clean['aafm_notifications'] );
 	} else {
 		$clean['aafm_notifications'] = $ntf_before;

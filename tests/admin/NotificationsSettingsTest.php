@@ -24,9 +24,17 @@ final class NotificationsSettingsTest extends TestCase {
 	 */
 	private array $sent = array();
 
+	/**
+	 * What the mail filter returns: true for sent, false for a failed send.
+	 *
+	 * @var bool
+	 */
+	private bool $mail_ok = true;
+
 	public function set_up(): void {
 		parent::set_up();
-		$this->sent = array();
+		$this->sent    = array();
+		$this->mail_ok = true;
 		add_filter( 'pre_wp_mail', array( $this, 'capture_mail' ), 10, 2 );
 	}
 
@@ -46,7 +54,7 @@ final class NotificationsSettingsTest extends TestCase {
 	public function capture_mail( $pre, array $atts ): bool {
 		unset( $pre );
 		$this->sent[] = $atts;
-		return true;
+		return $this->mail_ok;
 	}
 
 	/**
@@ -367,6 +375,153 @@ final class NotificationsSettingsTest extends TestCase {
 		);
 
 		$this->assertSame( array(), $this->sent );
+	}
+
+	/**
+	 * Store notification settings the way an earlier save left them.
+	 *
+	 * @param string $mode  Stored mode.
+	 * @param string $email Stored address.
+	 */
+	private function store( string $mode, string $email = 'owner@example.com' ): void {
+		$this->assertTrue(
+			aafm_update_option_verified(
+				'aafm_notifications',
+				array(
+					'mode'     => $mode,
+					'email'    => $email,
+					'triggers' => array(
+						'switch_flip' => true,
+						'risky_run'   => true,
+					),
+				),
+				true
+			)
+		);
+	}
+
+	public function test_a_digest_save_that_flips_read_only_and_turns_alerts_off_still_alerts_the_owner(): void {
+		$this->store( 'digest' );
+
+		$json = $this->save(
+			array(
+				'aafm_read_only_mode' => '1',
+				'aafm_notify_mode'    => 'off',
+			)
+		);
+
+		$this->assertTrue( $json['success'] ?? false, wp_json_encode( $json ) );
+		$this->assertCount( 2, $this->sent, implode( ' | ', array_column( $this->sent, 'subject' ) ) );
+		$this->assertSame( array( 'owner@example.com', 'owner@example.com' ), array_column( $this->sent, 'to' ) );
+		$this->assertStringContainsString( 'daily summary', $this->sent[0]['subject'] );
+		$this->assertStringContainsString( 'Read-only mode was turned on', $this->sent[0]['message'], 'The flip reaches the OLD address.' );
+		$this->assertSame( array(), aafm_notify_queue_list(), 'Nothing stays queued behind a mode that is no longer digest.' );
+	}
+
+	public function test_changing_the_address_in_digest_mode_sends_the_queue_to_the_old_address_only(): void {
+		$this->store( 'digest', 'old@example.com' );
+		aafm_notify_event( 'risky_run', 'high_risk', array( 'ability' => 'aafm/delete-user' ) );
+		$this->assertCount( 1, aafm_notify_queue_list(), 'precondition' );
+
+		$this->save(
+			array(
+				'aafm_notify_mode'      => 'digest',
+				'aafm_notify_email'     => 'new@example.com',
+				'aafm_notify_risky_run' => '1',
+			)
+		);
+
+		$this->assertSame( array( 'old@example.com', 'old@example.com' ), array_column( $this->sent, 'to' ) );
+		$this->assertStringContainsString( 'daily summary', $this->sent[0]['subject'] );
+		$this->assertSame( array(), aafm_notify_queue_list() );
+	}
+
+	public function test_leaving_digest_clears_the_queue_even_when_it_cannot_be_mailed(): void {
+		$this->store( 'digest', 'old@example.com' );
+		aafm_notify_event( 'risky_run', 'high_risk', array( 'ability' => 'aafm/delete-user' ) );
+
+		$this->save(
+			array(
+				'aafm_notify_mode'      => 'notice',
+				'aafm_notify_risky_run' => '1',
+			)
+		);
+
+		$this->assertSame( array(), aafm_notify_queue_list(), 'A stale queue must not mail weeks later.' );
+	}
+
+	public function test_a_digest_save_that_changes_nothing_important_keeps_the_queue(): void {
+		$this->store( 'digest' );
+		aafm_notify_event( 'risky_run', 'high_risk', array( 'ability' => 'aafm/delete-user' ) );
+
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'digest',
+				'aafm_notify_email'       => 'owner@example.com',
+				'aafm_notify_switch_flip' => '1',
+				'aafm_notify_risky_run'   => '1',
+			)
+		);
+
+		$this->assertSame( array(), $this->sent );
+		$this->assertCount( 1, aafm_notify_queue_list() );
+	}
+
+	public function test_the_old_address_warning_respects_the_shared_hourly_cap(): void {
+		$this->store( 'immediate', 'old@example.com' );
+		set_transient( 'aafm_ntf_global', AAFM_NOTIFY_GLOBAL_MAX, HOUR_IN_SECONDS );
+
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'immediate',
+				'aafm_notify_email'       => 'new@example.com',
+				'aafm_notify_switch_flip' => '1',
+			)
+		);
+
+		$this->assertSame( array(), $this->sent, 'A warning goes through the same cap as every other message.' );
+	}
+
+	public function test_a_failed_old_address_warning_writes_a_bounded_error_row(): void {
+		$this->store( 'immediate', 'old@example.com' );
+		$this->mail_ok = false;
+
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'immediate',
+				'aafm_notify_email'       => 'new@example.com',
+				'aafm_notify_switch_flip' => '1',
+			)
+		);
+
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm/notifications',
+				'status'  => 'error',
+			)
+		);
+		$this->assertNotEmpty( $rows, 'A mail failure leaves a row.' );
+		$this->assertLessThanOrEqual( AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW, count( $rows ) );
+	}
+
+	public function test_the_recipient_change_throttle_is_per_old_address(): void {
+		$this->store( 'immediate', 'a@example.com' );
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'immediate',
+				'aafm_notify_email'       => 'b@example.com',
+				'aafm_notify_switch_flip' => '1',
+			)
+		);
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'immediate',
+				'aafm_notify_email'       => 'c@example.com',
+				'aafm_notify_switch_flip' => '1',
+			)
+		);
+
+		$this->assertSame( array( 'a@example.com', 'b@example.com' ), array_column( $this->sent, 'to' ), 'B hears that its address was replaced.' );
 	}
 
 	public function test_reset_removes_the_notification_options_and_the_tabs_still_render(): void {

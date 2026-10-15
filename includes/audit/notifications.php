@@ -272,8 +272,8 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 		aafm_notify_pending_push( $event );
 		if ( 'digest' === $settings['mode'] ) {
 			aafm_notify_queue_push( $event );
-		} elseif ( 'immediate' === $settings['mode'] && aafm_notify_global_slot() ) {
-			aafm_notify_deliver( $settings['email'], array( $event ), false );
+		} elseif ( 'immediate' === $settings['mode'] ) {
+			aafm_notify_send_capped( $settings['email'], array( $event ), false );
 		}
 	} catch ( \Throwable $e ) {
 		unset( $e ); // A notification problem must never reach the call or the save that raised it.
@@ -401,28 +401,61 @@ function aafm_notify_build_message( array $events, bool $digest ): array {
 }
 
 /**
+ * Write one bounded error row for a notification that did not go out or could not be stored. The row
+ * goes through aafm_denial_log_within_cap(), so a dead mailer cannot fill the Activity Log.
+ *
+ * @param string $detail The translated row text.
+ * @return void
+ */
+function aafm_notify_log_failure( string $detail ): void {
+	if ( ! aafm_denial_log_within_cap( 'ntf' ) ) {
+		return;
+	}
+	aafm_log_activity(
+		array(
+			'ability'    => 'aafm/notifications',
+			'status'     => 'error',
+			'event_type' => 'setting_changed',
+			'detail'     => $detail,
+		)
+	);
+}
+
+/**
  * Send a message to the owner's address. A failed send writes one bounded error row; the admin
  * notice entry already exists by then.
  *
  * @param string                         $to     The validated address.
  * @param array<int,array<string,mixed>> $events Events to describe.
  * @param bool                           $digest Whether this is the daily summary.
+ * @param string                         $extra  Optional closing paragraph added to the body.
  * @return bool Whether wp_mail() reported success.
  */
-function aafm_notify_deliver( string $to, array $events, bool $digest ): bool {
+function aafm_notify_deliver( string $to, array $events, bool $digest, string $extra = '' ): bool {
 	$message = aafm_notify_build_message( $events, $digest );
-	$sent    = (bool) wp_mail( $to, $message['subject'], $message['body'] );
-	if ( ! $sent && aafm_denial_log_within_cap( 'ntf' ) ) {
-		aafm_log_activity(
-			array(
-				'ability'    => 'aafm/notifications',
-				'status'     => 'error',
-				'event_type' => 'setting_changed',
-				'detail'     => __( 'A notification email could not be sent', 'agent-abilities-for-mcp' ),
-			)
-		);
+	$body    = '' === $extra ? $message['body'] : $message['body'] . "\n\n" . $extra;
+	$sent    = (bool) wp_mail( $to, $message['subject'], $body );
+	if ( ! $sent ) {
+		aafm_notify_log_failure( __( 'A notification email could not be sent', 'agent-abilities-for-mcp' ) );
 	}
 	return $sent;
+}
+
+/**
+ * Send through the shared hourly cap: no slot left means no mail (the admin notice entry exists
+ * regardless). Every message the engine mails except the Settings test email goes through here.
+ *
+ * @param string                         $to     The address.
+ * @param array<int,array<string,mixed>> $events Events to describe.
+ * @param bool                           $digest Whether this is a summary.
+ * @param string                         $extra  Optional closing paragraph added to the body.
+ * @return bool Whether a message was sent.
+ */
+function aafm_notify_send_capped( string $to, array $events, bool $digest, string $extra = '' ): bool {
+	if ( ! aafm_notify_global_slot() ) {
+		return false;
+	}
+	return aafm_notify_deliver( $to, $events, $digest, $extra );
 }
 
 /**

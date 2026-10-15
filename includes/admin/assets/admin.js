@@ -2031,6 +2031,7 @@
 			// In-flight guard: only the newest request may render, so a slow older response can
 			// never clobber a newer filter result.
 			let loadToken = 0;
+			let userLoads = 0;
 
 			// The filters the table currently shows. Set ONLY on Apply, Enter, Reset and at load (from the
 			// server-rendered inputs). Typing in a box changes nothing until then: paging, the Live poll, the
@@ -2054,18 +2055,33 @@
 			// Resolves 'ok', 'failed' or 'stale'.
 			// `filters` is the set this request asks for; it becomes appliedFilters only once the table shows it.
 			const load = async ( page, filter, { withSummary = false, filters = appliedFilters } = {} ) => {
+				// Only Live asks for the summary. A Live tick never supersedes a viewer's own pending request,
+				// or it would show the old filters while the inputs hold the new ones.
+				if ( withSummary && userLoads > 0 ) {
+					return 'stale';
+				}
 				const token = ++loadToken;
 				const values = filters;
 				const pagerStatus = document.querySelector( '.aafm-pager-status' );
 				if ( pagerStatus && ! withSummary ) {
 					pagerStatus.textContent = this.#t( 'loadingPage', 'Loading…' );
 				}
-				const json = await this.#post( 'aafm_get_log_page', {
-					page,
-					filter,
-					...values,
-					...( withSummary ? { with_summary: '1' } : {} ),
-				} );
+				let json;
+				if ( ! withSummary ) {
+					userLoads += 1;
+				}
+				try {
+					json = await this.#post( 'aafm_get_log_page', {
+						page,
+						filter,
+						...values,
+						...( withSummary ? { with_summary: '1' } : {} ),
+					} );
+				} finally {
+					if ( ! withSummary ) {
+						userLoads -= 1;
+					}
+				}
 				if ( token !== loadToken ) {
 					return 'stale';
 				}

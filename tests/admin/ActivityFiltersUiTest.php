@@ -237,6 +237,10 @@ final class ActivityFiltersUiTest extends TestCase {
 		// Paging beyond page 1 stops Live before the page request starts.
 		$this->assertSame( 2, substr_count( $js, 'stopLiveForPaging();' ), 'Prev (beyond page 1) and Next both stop Live.' );
 
+		// A Live tick never supersedes a viewer's own pending Apply, Reset or paging request.
+		$this->assertMatchesRegularExpression( '/if \( withSummary && userLoads > 0 \) \{\s*return \'stale\';/', $js, 'Live yields to a pending user request.' );
+		$this->assertMatchesRegularExpression( '/\} finally \{\s*if \( ! withSummary \) \{\s*userLoads -= 1;/', $js, 'The pending count is released even when the request throws.' );
+
 		// Clearing the log resets the summary card.
 		$this->assertMatchesRegularExpression( '/#bindClearLog\(\).*?this\.#renderLogSummary\( \{ ok: true, total: 0/s', $js );
 

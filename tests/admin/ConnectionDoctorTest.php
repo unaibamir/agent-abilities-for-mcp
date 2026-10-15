@@ -40,6 +40,13 @@ final class ConnectionDoctorTest extends TestCase {
 	private $https;
 
 	/**
+	 * Every probe slot a test armed or the doctor created, by transient name.
+	 *
+	 * @var list<string>
+	 */
+	private $slots_seen = array();
+
+	/**
 	 * The administrator the doctor runs as.
 	 *
 	 * @var int
@@ -54,14 +61,25 @@ final class ConnectionDoctorTest extends TestCase {
 		update_option( 'permalink_structure', '/%postname%/' );
 		// OAuth is off unless a test turns it on; a row leaked by another suite must not decide this one.
 		delete_option( 'aafm_oauth_enabled' );
-		$this->admin_id = $this->acting_as( 'administrator' );
+		$this->admin_id   = $this->acting_as( 'administrator' );
+		$this->slots_seen = array();
+		add_action(
+			'set_transient',
+			function ( $transient ): void {
+				if ( 0 === strpos( (string) $transient, 'aafm_doctor_probe_' ) ) {
+					$this->slots_seen[] = (string) $transient;
+				}
+			}
+		);
 	}
 
 	public function tear_down(): void {
 		remove_all_filters( 'pre_http_request' );
 		remove_all_filters( 'wp_is_application_passwords_available' );
 		remove_all_filters( 'aafm_doctor_known_blockers' );
-		delete_transient( 'aafm_doctor_probe_' . $this->admin_id );
+		foreach ( $this->slots_seen as $slot ) {
+			delete_transient( $slot );
+		}
 		delete_transient( 'aafm_doctor_header_seen' );
 		delete_option( 'aafm_oauth_enabled' );
 		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_COOKIE[ LOGGED_IN_COOKIE ] );
@@ -223,7 +241,31 @@ final class ConnectionDoctorTest extends TestCase {
 	 * @return void
 	 */
 	private function arm( int $user_id, string $token ): void {
-		set_transient( 'aafm_doctor_probe_' . $user_id, hash( 'sha256', $token ), 60 );
+		set_transient( $this->slot( $user_id, $token ), hash( 'sha256', $token ), 60 );
+	}
+
+	/**
+	 * The transient name of one token's slot.
+	 *
+	 * @param int    $user_id The administrator's id.
+	 * @param string $token   The plain token.
+	 * @return string
+	 */
+	private function slot( int $user_id, string $token ): string {
+		return aafm_doctor_probe_key( $user_id, $token );
+	}
+
+	/**
+	 * Assert that no probe slot the test saw is still stored.
+	 *
+	 * @param string $message Failure message.
+	 * @return void
+	 */
+	private function assertNoSlotLeft( string $message ): void {
+		$this->assertNotSame( array(), $this->slots_seen, 'The test saw no slot at all, so this check proves nothing.' );
+		foreach ( $this->slots_seen as $slot ) {
+			$this->assertFalse( get_transient( $slot ), $message );
+		}
 	}
 
 	/**
@@ -296,7 +338,7 @@ final class ConnectionDoctorTest extends TestCase {
 			$response->get_data()
 		);
 		$this->assertNull( aafm_doctor_handle_probe( null, $server, $request ), 'A token is good for one answer.' );
-		$this->assertFalse( get_transient( 'aafm_doctor_probe_' . $this->admin_id ), 'The stored hash is deleted on use.' );
+		$this->assertFalse( get_transient( $this->slot( $this->admin_id, $token ) ), 'The stored hash is deleted on use.' );
 	}
 
 	public function test_probe_answer_never_authenticates_anyone_and_never_echoes_the_token(): void {
@@ -365,9 +407,9 @@ final class ConnectionDoctorTest extends TestCase {
 		$taken = new \WP_REST_Response( array( 'x' => 1 ), 200 );
 		$this->assertSame( $taken, aafm_doctor_handle_probe( $taken, $server, $this->probe_request( $token ) ), 'Never overrides an earlier answer.' );
 
-		$this->assertNotFalse( get_transient( 'aafm_doctor_probe_' . $this->admin_id ), 'None of the refused calls consumed the live token.' );
+		$this->assertNotFalse( get_transient( $this->slot( $this->admin_id, $token ) ), 'None of the refused calls consumed the live token.' );
 
-		delete_transient( 'aafm_doctor_probe_' . $this->admin_id );
+		delete_transient( $this->slot( $this->admin_id, $token ) );
 		$this->assertNull( aafm_doctor_handle_probe( null, $server, $this->probe_request( $token ) ), 'No live token.' );
 	}
 
@@ -379,12 +421,11 @@ final class ConnectionDoctorTest extends TestCase {
 
 		// The same random part presented under another user's id looks up that user's slot, which is empty.
 		$this->assertNull( aafm_doctor_handle_probe( null, $server, $this->probe_request( $this->token_for( $other ) ) ) );
-		$this->assertNotFalse( get_transient( 'aafm_doctor_probe_' . $this->admin_id ), 'The admin\'s own slot is untouched.' );
+		$this->assertNotFalse( get_transient( $this->slot( $this->admin_id, $token ) ), 'The admin\'s own slot is untouched.' );
 
 		// A slot armed for another user does not answer a token carrying a different user id.
 		$this->arm( $other, $this->token_for( $other ) );
 		$this->assertNull( aafm_doctor_handle_probe( null, $server, $this->probe_request( $this->token_for( $this->admin_id, 'abcdefghijklmnopqrstuvwxyz012346' ) ) ) );
-		delete_transient( 'aafm_doctor_probe_' . $other );
 	}
 
 	public function test_a_token_of_a_user_who_lost_manage_options_is_refused_and_burned(): void {
@@ -393,7 +434,7 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->arm( $demoted, $token );
 
 		$this->assertNull( aafm_doctor_handle_probe( null, $this->rest_server( true ), $this->probe_request( $token ) ) );
-		$this->assertFalse( get_transient( 'aafm_doctor_probe_' . $demoted ), 'A refused token is still spent.' );
+		$this->assertFalse( get_transient( $this->slot( $demoted, $token ) ), 'A refused token is still spent.' );
 	}
 
 	public function test_the_token_is_compared_in_constant_time_and_never_written_to_a_log(): void {
@@ -407,6 +448,27 @@ final class ConnectionDoctorTest extends TestCase {
 		$whole = implode( '', (array) file( (string) $reflection->getFileName() ) );
 		$this->assertStringNotContainsString( 'aafm_log_activity', $whole, 'The Doctor never writes an activity row.' );
 		$this->assertStringNotContainsString( 'error_log', $whole );
+	}
+
+	public function test_two_runs_by_the_same_admin_keep_separate_slots(): void {
+		$first  = $this->token_for( $this->admin_id, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' );
+		$second = $this->token_for( $this->admin_id, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' );
+		$this->assertNotSame( $this->slot( $this->admin_id, $first ), $this->slot( $this->admin_id, $second ) );
+		$server = $this->rest_server( true );
+
+		// Run one is in flight (its slot is armed) while run two starts, finishes and cleans up.
+		$this->arm( $this->admin_id, $first );
+		$this->arm( $this->admin_id, $second );
+		$this->assertInstanceOf( \WP_REST_Response::class, aafm_doctor_handle_probe( null, $server, $this->probe_request( $second ) ) );
+		$this->assertNotFalse( get_transient( $this->slot( $this->admin_id, $first ) ), 'Run two spending its token leaves run one\'s slot alone.' );
+		$this->assertInstanceOf( \WP_REST_Response::class, aafm_doctor_handle_probe( null, $server, $this->probe_request( $first ) ), 'Run one is still answered.' );
+
+		// A whole second doctor run (arm, request, delete) in the middle of a pending first run.
+		$this->arm( $this->admin_id, $first );
+		$this->respond( $this->endpoint_ok() );
+		aafm_doctor_run_checks();
+		$this->assertNotFalse( get_transient( $this->slot( $this->admin_id, $first ) ), 'A finished run deletes only its own slot.' );
+		$this->assertInstanceOf( \WP_REST_Response::class, aafm_doctor_handle_probe( null, $server, $this->probe_request( $first ) ) );
 	}
 
 	public function test_the_doctor_row_is_not_labelled_like_the_rail_row(): void {
@@ -442,8 +504,8 @@ final class ConnectionDoctorTest extends TestCase {
 		add_filter( 'wp_is_application_passwords_available', '__return_true' );
 		$stored = array();
 		$this->respond(
-			function ( string $url ) use ( &$stored ) {
-				$stored[] = get_transient( 'aafm_doctor_probe_' . $this->admin_id );
+			function ( string $url, array $args ) use ( &$stored ) {
+				$stored[] = get_transient( $this->slot( $this->admin_id, (string) $args['headers']['X-AAFM-Doctor'] ) );
 				return $this->endpoint_ok()( $url );
 			}
 		);
@@ -467,19 +529,21 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertCount( 1, $stored );
 		$this->assertSame( hash( 'sha256', $token ), $stored[0], 'Only a hash of the token is stored.' );
 		$this->assertNotSame( $token, $stored[0] );
-		$this->assertFalse( get_transient( 'aafm_doctor_probe_' . $this->admin_id ), 'The token does not outlive the run.' );
+		$this->assertNoSlotLeft( 'The token does not outlive the run.' );
 	}
 
 	public function test_the_stored_token_has_a_short_lifetime(): void {
 		$ttl = null;
 		add_action(
-			'set_transient_aafm_doctor_probe_' . $this->admin_id,
-			static function ( $value, $expiration ) use ( &$ttl ): void {
+			'set_transient',
+			static function ( $transient, $value, $expiration ) use ( &$ttl ): void {
 				unset( $value );
-				$ttl = $expiration;
+				if ( 0 === strpos( (string) $transient, 'aafm_doctor_probe_' ) ) {
+					$ttl = $expiration;
+				}
 			},
 			10,
-			2
+			3
 		);
 		$this->respond( $this->endpoint_ok() );
 
@@ -565,7 +629,7 @@ final class ConnectionDoctorTest extends TestCase {
 		$report = aafm_doctor_build_report( $rows );
 		$this->assertStringContainsString( 'http_request_failed', $report );
 		$this->assertStringNotContainsString( 'secret-host.internal', $report );
-		$this->assertFalse( get_transient( 'aafm_doctor_probe_' . $this->admin_id ), 'A failed request still spends the token.' );
+		$this->assertNoSlotLeft( 'A failed request still spends the token.' );
 	}
 
 	public function test_a_blocked_request_is_explained_and_the_header_row_is_not_blamed(): void {

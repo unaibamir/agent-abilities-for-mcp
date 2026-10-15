@@ -16,10 +16,11 @@
  *
  * The probe token is a security boundary, and these rules are what keep it one:
  * - Bound to the administrator who started the run: the token is "<user id>.<32 random characters>"
- *   and is stored under a per-user key, and the handler re-checks that user still has
+ *   and is stored under a key made of that id and a fragment of the token's hash (one slot per run,
+ *   so two runs never touch each other's), and the handler re-checks that user still has
  *   manage_options. Nobody runs a probe without that capability either.
- * - Single use: the stored hash is deleted the moment a token matches (and again after the request,
- *   whatever the outcome).
+ * - Single use: the stored hash is deleted the moment a token matches (and the run deletes only its
+ *   own slot after the request, whatever the outcome).
  * - Short lived: the hash expires after AAFM_DOCTOR_PROBE_TTL seconds even if the request never arrives.
  * - Never stored or logged in clear: only sha256(token) is stored, compared with hash_equals(), and
  *   the token appears in no response body, no log row and no report.
@@ -149,13 +150,16 @@ function aafm_doctor_authorization_seen(): bool {
 }
 
 /**
- * The per-user transient key holding the hash of a pending probe token.
+ * The transient key holding the hash of one pending probe token: the administrator's id plus the
+ * first 8 characters of the token's hash, so two runs by the same administrator (two tabs) each
+ * keep their own slot and neither can overwrite or delete the other's.
  *
- * @param int $user_id The administrator who started the run.
+ * @param int    $user_id The administrator who started the run.
+ * @param string $token   The probe token.
  * @return string
  */
-function aafm_doctor_probe_key( int $user_id ): string {
-	return AAFM_DOCTOR_PROBE_PREFIX . $user_id;
+function aafm_doctor_probe_key( int $user_id, string $token ): string {
+	return AAFM_DOCTOR_PROBE_PREFIX . $user_id . '_' . substr( hash( 'sha256', $token ), 0, 8 );
 }
 
 /**
@@ -200,7 +204,7 @@ function aafm_doctor_handle_probe( $result, $server = null, $request = null ) {
 		return $result;
 	}
 	$user_id = (int) $parts[1];
-	$key     = aafm_doctor_probe_key( $user_id );
+	$key     = aafm_doctor_probe_key( $user_id, $token );
 	$want    = get_transient( $key );
 	if ( ! is_string( $want ) || '' === $want || ! hash_equals( $want, hash( 'sha256', $token ) ) ) {
 		return $result;
@@ -250,7 +254,7 @@ function aafm_doctor_probe(): array {
 	}
 
 	$token = $user_id . '.' . wp_generate_password( 32, false, false );
-	$key   = aafm_doctor_probe_key( $user_id );
+	$key   = aafm_doctor_probe_key( $user_id, $token );
 	set_transient( $key, hash( 'sha256', $token ), AAFM_DOCTOR_PROBE_TTL );
 
 	$response = wp_remote_post(

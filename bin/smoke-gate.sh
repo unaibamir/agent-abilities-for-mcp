@@ -855,13 +855,13 @@ leg_doctor() {
 	# The probe token over the wire: answered once, then never; a wrong or unarmed token is never answered;
 	# the answer never carries the token, and none of it writes an activity row.
 	token="1.$(printf 'a%.0s' $(seq 1 32))"
-	W eval "set_transient( 'aafm_doctor_probe_1', hash( 'sha256', '$token' ), 30 );" >/dev/null 2>&1
+	W eval "set_transient( aafm_doctor_probe_key( 1, '$token' ), hash( 'sha256', '$token' ), 30 );" >/dev/null 2>&1
 	before=$(W eval 'echo aafm_activity_count();' 2>/dev/null)
 	doctor_wire 'armed token' "$token" answer
 	doctor_wire 'the same token again' "$token" silence
 	doctor_wire 'a token nobody armed' "1.$(printf 'b%.0s' $(seq 1 32))" silence
 	after=$(W eval 'echo aafm_activity_count();' 2>/dev/null)
-	if [ "$(W eval 'echo false === get_transient( "aafm_doctor_probe_1" ) ? "gone" : "stored";' 2>/dev/null)" = gone ]; then
+	if [ "$(W eval "echo false === get_transient( aafm_doctor_probe_key( 1, '$token' ) ) ? 'gone' : 'stored';" 2>/dev/null)" = gone ]; then
 		pass doctor "the spent token is gone from storage"
 	else
 		fail doctor "a probe token is still stored after it was used"

@@ -627,6 +627,9 @@ function aafm_reset_plugin(): bool {
 		}
 	}
 
+	// The Connection Doctor's header-seen memo is configuration-adjacent state; reset clears it too.
+	delete_transient( 'aafm_doctor_header_seen' );
+
 	if ( ! aafm_clear_activity_log() ) {
 		$ok = false;
 	} elseif ( ! aafm_log_activity_cleared_marker() ) {

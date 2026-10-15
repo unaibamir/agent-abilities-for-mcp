@@ -42,6 +42,20 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
+	 * Final review M1: the Connection Doctor's header-seen memo goes with a reset.
+	 */
+	public function test_reset_clears_the_doctor_header_seen_memo(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		$this->assertSame( 'aafm_doctor_header_seen', AAFM_DOCTOR_HEADER_SEEN );
+		set_transient( AAFM_DOCTOR_HEADER_SEEN, 1, 300 );
+
+		aafm_reset_plugin();
+
+		$this->assertFalse( get_transient( AAFM_DOCTOR_HEADER_SEEN ) );
+	}
+
+	/**
 	 * The one-time agent-user marker backfill guard is part of the reset set, so a reset clears it
 	 * (letting the backfill re-run) and uninstall-with-delete-data removes the row rather than
 	 * orphaning it. The marker USER META is intentionally out of scope - uninstall keeps the agent

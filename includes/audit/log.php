@@ -1091,6 +1091,8 @@ function aafm_uninstall_site(): void {
 	delete_transient( 'aafm_detected_meta_keys' );
 	// The review notice's five-minute count memo, same data class.
 	delete_transient( 'aafm_review_request_count' );
+	// The Connection Doctor's header-seen memo, same data class.
+	delete_transient( 'aafm_doctor_header_seen' );
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );

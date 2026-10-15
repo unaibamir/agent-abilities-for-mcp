@@ -1963,6 +1963,32 @@
 		}
 	}
 
+	/* ---------- Needs review inbox (Dashboard) ---------- */
+	.aafm-review-inbox {
+		margin-block-end: var(--aafm-space-4);
+
+		.aafm-review-count { margin-inline-start: auto; }
+		.aafm-review-list { margin: 0; padding: 0; list-style: none; }
+
+		.aafm-review-row {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			justify-content: space-between;
+			gap: var(--aafm-space-3);
+			padding-block: var(--aafm-space-3);
+			border-block-end: 1px solid var(--aafm-border);
+
+			&:last-child { border-block-end: 0; }
+		}
+
+		.aafm-review-main { min-inline-size: 0; flex: 1 1 320px; }
+		.aafm-review-title { font-size: var(--aafm-fs-body); }
+		.aafm-review-meta { color: var(--aafm-text-muted); font-size: var(--aafm-fs-sm); margin-block-start: 2px; }
+		.aafm-review-status { color: var(--aafm-red-text); font-size: var(--aafm-fs-sm); }
+		.aafm-review-actions { display: flex; flex-wrap: wrap; gap: var(--aafm-space-2); }
+	}
+
 	.aafm-status {
 		font-weight: 600;
 

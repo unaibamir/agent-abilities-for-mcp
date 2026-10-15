@@ -71,6 +71,8 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * that has it (this plugin's 7.1 ceiling and beyond), the branch below is a no-op and
  * wp_ability_invoked keeps doing this exact job exactly as before - zero behavior change there.
  *
+ * It also keeps the executing-ability stack (includes/review-origin.php) so a post an ability creates can be stamped.
+ *
  * Stuck-row gap closed (found in the 1.7.1 CI review, 2026-08-28): a call core itself refuses at
  * WP_Ability::validate_input() - malformed input failing the ability's own JSON Schema - never
  * reaches either decorated callback, on EITHER version this plugin supports, and used to leave its
@@ -106,10 +108,12 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 		// uncaught Throwable from an unwrapped core filter) - aafm_core_input_rejection_code()
 		// treats null as "nothing to recognise", so that path is unaffected by this change.
 		$result = null;
+		aafm_executing_ability_push( $this->get_name() );
 		try {
 			$result = parent::execute( $input );
 			return $result;
 		} finally {
+			aafm_executing_ability_pop();
 			aafm_rate_limit_call_reset( $this->get_name() );
 			aafm_resolve_dangling_invocation_if_mine( $this->get_name(), $invocation_token, $result );
 		}

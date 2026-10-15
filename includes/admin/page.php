@@ -194,6 +194,9 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'doctorWhoPlugin'          => __( 'A security plugin may be the cause', 'agent-abilities-for-mcp' ),
 				'doctorCopySnippet'        => __( 'Copy snippet', 'agent-abilities-for-mcp' ),
 				'doctorError'              => __( 'The check could not run. Reload the page and try again.', 'agent-abilities-for-mcp' ),
+				// Needs review inbox.
+				'reviewDiscardConfirm'     => __( 'Move this item to the Trash?', 'agent-abilities-for-mcp' ),
+				'reviewFailed'             => __( 'That did not work. Reload the page and try again.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: error message returned by the server. */
 				'errorWithMessage'         => __( 'Error: %s', 'agent-abilities-for-mcp' ),
 				'errorUnknown'             => __( 'unknown', 'agent-abilities-for-mcp' ),

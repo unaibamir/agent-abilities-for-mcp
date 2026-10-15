@@ -406,6 +406,8 @@ function aafm_render_dashboard_tab(): void {
 	echo '</div>'; // .aafm-setup-steps
 	echo '</details>';
 
+	aafm_render_review_inbox_card();
+
 	// Stat grid - four cards reusing the counts computed above. The compact mockup
 	// treatment: a value line plus a .stat-sub and/or a small pill, no embedded notices.
 	echo '<div class="aafm-stat-grid">';

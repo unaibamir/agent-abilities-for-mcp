@@ -47,6 +47,8 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/quickconnect.php|aafm_quickconnect_is_dismissed|1' => 'N',
 		'includes/admin/quickconnect.php|aafm_quickconnect_site_looks_configured|1' => 'N',
 		'includes/admin/quickconnect.php|aafm_quickconnect_apply_abilities|1' => 'L',
+		'includes/admin/review-inbox.php|aafm_review_inbox_rows|1' => 'N',
+		'includes/admin/review-inbox.php|aafm_review_inbox_rows|2' => 'N',
 		'includes/admin/review-request.php|aafm_review_request_state|1' => 'N',
 		'includes/admin/settings.php|aafm_ajax_save_settings|1' => 'L',
 		'includes/admin/settings.php|aafm_ajax_save_settings|2' => 'L',
@@ -343,7 +345,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 24,
+				'N' => 26,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

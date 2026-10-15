@@ -342,6 +342,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/default-server.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/review-origin.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/catalog.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integration-manifest.php';
@@ -446,6 +447,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/notices.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-inbox.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/doctor.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/allowlist.php';
@@ -486,6 +488,8 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_quickconnect_finish', 'aafm_ajax_quickconnect_finish' );
 		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );
 		add_action( 'wp_ajax_aafm_review_request', 'aafm_ajax_review_request' );
+		add_action( 'wp_ajax_aafm_review_publish', 'aafm_ajax_review_publish' );
+		add_action( 'wp_ajax_aafm_review_discard', 'aafm_ajax_review_discard' );
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );

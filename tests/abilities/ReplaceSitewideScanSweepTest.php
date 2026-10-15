@@ -38,6 +38,7 @@ final class ReplaceSitewideScanSweepTest extends TestCase {
 		'includes/abilities/woocommerce/coupons.php|aafm_exec_wc_list_coupons|1' => 'READ',
 		'includes/abilities/posts.php|aafm_exec_replace_sitewide|1'     => 'READ',
 		'includes/abilities/posts.php|aafm_exec_replace_sitewide|2'     => 'WRITE-FEED',
+		'includes/admin/review-inbox.php|aafm_review_inbox_ids|1'       => 'READ',
 	);
 
 	/**

@@ -69,6 +69,7 @@
 			this.#bindCreateUser();
 			this.#bindTestConnection();
 			this.#bindDoctor();
+			this.#bindReviewInbox();
 			this.#bindClearLog();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
@@ -1721,6 +1722,52 @@
 						json?.data?.message ?? this.#t( 'errorUnknown', 'unknown' )
 					);
 				}
+			} );
+		}
+
+		/**
+		 * Needs review: Publish and Discard buttons on the Dashboard card. The server re-checks
+		 * everything; a refused or stale click shows its message on the row.
+		 */
+		#bindReviewInbox() {
+			const card = document.querySelector( '#aafm-review-inbox' );
+			if ( ! card ) {
+				return;
+			}
+			card.addEventListener( 'click', async ( event ) => {
+				const btn = event.target.closest( '[data-review-action]' );
+				const row = btn?.closest( '[data-post-id]' );
+				if ( ! btn || ! row ) {
+					return;
+				}
+				const action = btn.dataset.reviewAction;
+				if (
+					'discard' === action &&
+					! window.confirm( this.#t( 'reviewDiscardConfirm', 'Move this item to the Trash?' ) )
+				) {
+					return;
+				}
+				const status = row.querySelector( '.aafm-review-status' );
+				const buttons = row.querySelectorAll( 'button' );
+				buttons.forEach( ( b ) => {
+					b.disabled = true;
+				} );
+				const json = await this.#post(
+					'publish' === action ? 'aafm_review_publish' : 'aafm_review_discard',
+					{ post_id: row.dataset.postId }
+				);
+				if ( json?.success ) {
+					row.remove();
+					if ( ! card.querySelector( '[data-post-id]' ) ) {
+						window.location.reload();
+					}
+					return;
+				}
+				status.textContent =
+					json?.data?.message ?? this.#t( 'reviewFailed', 'That did not work. Reload the page and try again.' );
+				buttons.forEach( ( b ) => {
+					b.disabled = false;
+				} );
 			} );
 		}
 

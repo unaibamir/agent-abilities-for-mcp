@@ -58,12 +58,13 @@ function aafm_activity_statuses( bool $include_started = true ): array {
  * (aafm_reconcile_omitted_abilities() in includes/server.php - also a real ability name, again
  * distinguishable only by type). The ninth, write_outcome, is the write-and-confirm contract's own
  * row (includes/write-contract.php): one per write or delete outcome, carrying identifiers only,
- * never the ability that triggered it. Mirrors aafm_activity_statuses().
+ * never the ability that triggered it. The tenth, review_action, is an owner's Publish or Discard
+ * from the Needs review inbox (includes/admin/review-inbox.php). Mirrors aafm_activity_statuses().
  *
  * @return string[] The allowed event_type values.
  */
 function aafm_activity_event_types(): array {
-	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome' );
+	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome', 'review_action' );
 }
 
 /**

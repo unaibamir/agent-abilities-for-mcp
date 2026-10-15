@@ -18,11 +18,24 @@ final class EventTypeTest extends TestCase {
 		aafm_install_activity_log();
 	}
 
-	public function test_event_type_vocabulary_is_the_documented_nine(): void {
+	public function test_event_type_vocabulary_is_the_documented_ten(): void {
 		$this->assertSame(
-			array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome' ),
+			array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome', 'review_action' ),
 			aafm_activity_event_types()
 		);
+	}
+
+	public function test_review_action_is_a_known_event_type(): void {
+		$id  = aafm_log_activity(
+			array(
+				'ability'    => 'aafm/review-publish',
+				'status'     => 'success',
+				'event_type' => 'review_action',
+				'detail'     => 'Published post 12 written by aafm/create-post',
+			)
+		);
+		$row = $this->fetch_row( $id );
+		$this->assertSame( 'review_action', $row['event_type'] );
 	}
 
 	public function test_write_outcome_is_a_known_event_type(): void {

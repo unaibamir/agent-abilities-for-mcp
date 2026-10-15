@@ -2796,7 +2796,7 @@ function aafm_render_activity_tab(): void {
 /**
  * The words after the entry count: "entry" or "entries", then what the log keeps.
  *
- * admin.js swaps between the one and many forms of this as the count changes, so both are localized
+ * The admin script swaps between the one and many forms of this as the count changes, so both are localized
  * (see the countNoteOne and countNoteMany strings).
  *
  * @param int $total     How many entries the count above shows.

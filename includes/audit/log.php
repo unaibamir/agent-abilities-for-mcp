@@ -507,10 +507,10 @@ function aafm_sanitize_activity_detail( string $detail ): string {
 function aafm_log_activity( array $record ): int {
 	global $wpdb;
 
-	$status   = in_array( $record['status'] ?? '', aafm_activity_statuses(), true ) ? $record['status'] : 'error';
 	// ponytail: an argument key of around 100,000 characters was seen rejected with no audit row. The cause
 	// is believed to be the arg_keys TEXT column (about 64 KB) refusing the insert in strict SQL mode;
 	// not confirmed. Truncate each key here if a call that fails to log ever matters.
+	$status   = in_array( $record['status'] ?? '', aafm_activity_statuses(), true ) ? $record['status'] : 'error';
 	$arg_keys = isset( $record['arg_keys'] ) && is_array( $record['arg_keys'] )
 		? implode( ',', array_map( 'sanitize_key', $record['arg_keys'] ) )
 		: '';

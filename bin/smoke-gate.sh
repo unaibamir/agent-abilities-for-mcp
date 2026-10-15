@@ -666,14 +666,6 @@ ds_scenario() {
 	else
 		ds "$label: our endpoint lists $ours tools, ours-only lists $base"
 	fi
-	# Known, not caused by this plugin's default-server code: our bundled 0.7.0 loading while a standalone
-	# 0.6.1 plugin is also active makes 0.7.0's Plugin::constants() redefine WP_MCP_VERSION, which 0.6.1's
-	# plugin file already defined. Reported once per scenario as KNOWN; any other log line still fails.
-	if [ "$ADAPTER_INSTALLED" = 0.6.1 ] && [ "$want_ver" = 0.7.0 ] && grep -q 'Constant WP_MCP_VERSION already defined' "$LOG" 2>/dev/null; then
-		known default-server "$label: debug.log has 'Constant WP_MCP_VERSION already defined' (bundled 0.7.0 beside an active standalone 0.6.1)"
-		grep -v 'Constant WP_MCP_VERSION already defined' "$LOG" > "$LOG.filtered"
-		mv "$LOG.filtered" "$LOG" # grep -v exits 1 when nothing is left, so no && here
-	fi
 	log_ok default-server "$label"
 }
 

@@ -19,7 +19,17 @@ final class NotificationsTest extends TestCase {
 	 *
 	 * @var list<array<string,mixed>>
 	 */
-	private array $sent = array();
+	private array $mail = array();
+
+	/**
+	 * The captured messages, after the end-of-request flush a real request runs on shutdown.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	private function sent(): array {
+		aafm_notify_flush_outbox();
+		return $this->mail;
+	}
 
 	/**
 	 * What the mail filter returns: true for sent, false for a failed send.
@@ -30,7 +40,8 @@ final class NotificationsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		$this->sent    = array();
+		$this->mail = array();
+		aafm_notify_outbox( 'take' ); // Drop anything an earlier test left queued.
 		$this->mail_ok = true;
 		add_filter( 'pre_wp_mail', array( $this, 'capture_mail' ), 10, 2 );
 	}
@@ -44,7 +55,7 @@ final class NotificationsTest extends TestCase {
 	 */
 	public function capture_mail( $pre, array $atts ): bool {
 		unset( $pre );
-		$this->sent[] = $atts;
+		$this->mail[] = $atts;
 		return $this->mail_ok;
 	}
 
@@ -69,7 +80,7 @@ final class NotificationsTest extends TestCase {
 
 	public function test_default_is_off_and_nothing_happens(): void {
 		aafm_notify_event( 'switch_flip', 'read_only_on', array( 'row_id' => 1 ) );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 		$this->assertSame( array(), aafm_notify_pending_list() );
 		$this->assertSame( array(), aafm_notify_queue_list() );
 		$this->assertSame( 'off', aafm_notifications_settings()['mode'] );
@@ -175,8 +186,8 @@ final class NotificationsTest extends TestCase {
 			)
 		);
 
-		$this->assertCount( 1, $this->sent );
-		$mail = $this->sent[0];
+		$this->assertCount( 1, $this->sent() );
+		$mail = $this->sent()[0];
 		$this->assertSame( 'owner@example.com', $mail['to'] );
 		$this->assertStringContainsString( 'Agent Abilities alert: A high-risk tool ran', $mail['subject'] );
 		$this->assertStringContainsString( 'aafm/wc-create-order-refund', $mail['message'] );
@@ -191,16 +202,54 @@ final class NotificationsTest extends TestCase {
 		aafm_notify_event( 'denial_burst', 'burst', array( 'count' => 10 ) );
 		aafm_notify_event( 'denial_burst', 'burst', array( 'count' => 10 ) );
 		aafm_notify_event( 'denial_burst', 'burst', array( 'count' => 10 ) );
-		$this->assertCount( 1, $this->sent );
-		$this->assertCount( 1, aafm_notify_pending_list(), 'A throttled event adds no notice either.' );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertCount( 3, aafm_notify_pending_list(), 'A throttled event still reaches the admin notice; only the mail is throttled.' );
 
 		// The window passes: the next message reports what it swallowed.
 		$slot = aafm_notify_take_slot( 'denial_burst:burst' );
 		$this->assertFalse( $slot['allowed'] );
 		delete_transient( 'aafm_ntf_' . substr( md5( 'denial_burst:burst' ), 0, 20 ) );
 		aafm_notify_event( 'denial_burst', 'burst', array( 'count' => 10 ) );
-		$this->assertCount( 2, $this->sent );
-		$this->assertStringContainsString( 'plus 3 more', $this->sent[1]['message'] );
+		$this->assertCount( 2, $this->sent() );
+		$this->assertStringContainsString( 'plus 3 more', $this->sent()[1]['message'] );
+	}
+
+	public function test_a_flood_of_denial_alerts_cannot_use_up_the_slots_a_critical_alert_needs(): void {
+		$this->configure();
+		for ( $i = 1; $i <= 8; $i++ ) {
+			aafm_notify_event( 'denial_burst', 'flood' . $i, array( 'count' => 10 ) );
+		}
+		aafm_notify_event( 'risky_run', 'high_risk', array( 'ability' => 'aafm/delete-user' ) );
+		aafm_notify_event( 'new_app', 'app_password', array( 'user_id' => 3 ) );
+		aafm_notify_event( 'switch_flip', 'read_only_off' );
+
+		$subjects = implode( ' | ', array_column( $this->sent(), 'subject' ) );
+		$this->assertSame( AAFM_NOTIFY_DENIAL_MAX, substr_count( $subjects, 'Something needs a look' ), $subjects ); // The flood subtypes have no label of their own.
+		$this->assertStringContainsString( 'A high-risk tool ran', $subjects );
+		$this->assertStringContainsString( 'An Application Password was created', $subjects );
+		$this->assertStringContainsString( 'Read-only mode was turned off', $subjects );
+		$this->assertCount( AAFM_NOTIFY_PENDING_MAX, aafm_notify_pending_list(), 'Every event still reaches the notice list, capped.' );
+	}
+
+	public function test_mail_is_queued_for_the_end_of_the_request_not_sent_inside_the_call(): void {
+		$this->configure();
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+
+		$this->assertSame( array(), $this->mail, 'Nothing is mailed while the call is still running.' );
+		$this->assertNotFalse( has_action( 'shutdown', 'aafm_notify_flush_outbox' ) );
+		$this->assertCount( 1, aafm_notify_pending_list(), 'The notice entry is written inline.' );
+		$this->assertCount( 1, $this->sent(), 'The flush on shutdown sends it.' );
+		$this->assertCount( 1, $this->sent(), 'A flush sends each message once.' );
+	}
+
+	public function test_oauth_grants_are_throttled_per_app(): void {
+		$this->configure();
+		aafm_notify_event( 'new_app', 'oauth_grant', array( 'client_id' => 'app-one' ) );
+		aafm_notify_event( 'new_app', 'oauth_grant', array( 'client_id' => 'app-one' ) );
+		aafm_notify_event( 'new_app', 'oauth_grant', array( 'client_id' => 'app-two' ) );
+
+		$this->assertCount( 2, $this->sent(), 'A second app approved inside the window still alerts.' );
+		$this->assertStringContainsString( 'app-two', $this->sent()[1]['message'] );
 	}
 
 	/**
@@ -211,9 +260,9 @@ final class NotificationsTest extends TestCase {
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
 		aafm_notify_event( 'switch_flip', 'read_only_off' );
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
-		$this->assertCount( 2, $this->sent );
-		$this->assertStringContainsString( 'turned on', $this->sent[0]['subject'] );
-		$this->assertStringContainsString( 'turned off', $this->sent[1]['subject'] );
+		$this->assertCount( 2, $this->sent() );
+		$this->assertStringContainsString( 'turned on', $this->sent()[0]['subject'] );
+		$this->assertStringContainsString( 'turned off', $this->sent()[1]['subject'] );
 	}
 
 	/**
@@ -224,7 +273,7 @@ final class NotificationsTest extends TestCase {
 		for ( $i = 1; $i <= 9; $i++ ) {
 			aafm_notify_event( 'risky_run', 'bucket' . $i, array( 'row_id' => $i ) );
 		}
-		$this->assertCount( AAFM_NOTIFY_GLOBAL_MAX, $this->sent );
+		$this->assertCount( AAFM_NOTIFY_GLOBAL_MAX, $this->sent() );
 		$this->assertCount( 9, aafm_notify_pending_list(), 'Events past the mail cap still reach the admin notice list.' );
 	}
 
@@ -236,7 +285,7 @@ final class NotificationsTest extends TestCase {
 			)
 		);
 		aafm_notify_event( 'switch_flip', 'high_risk_unlocked', array( 'row_id' => 5 ) );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 		$this->assertCount( 1, aafm_notify_pending_list() );
 		$this->assertSame( array(), aafm_notify_queue_list() );
 	}
@@ -253,7 +302,7 @@ final class NotificationsTest extends TestCase {
 			)
 		);
 		aafm_notify_event( 'risky_run', 'high_risk' );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 		$this->assertSame( array(), aafm_notify_pending_list() );
 	}
 
@@ -268,17 +317,17 @@ final class NotificationsTest extends TestCase {
 				'ability' => 'aafm/delete-post',
 			)
 		);
-		$this->assertSame( array(), $this->sent, 'Digest mode sends nothing at event time.' );
+		$this->assertSame( array(), $this->sent(), 'Digest mode sends nothing at event time.' );
 		$this->assertCount( 2, aafm_notify_queue_list() );
 
 		aafm_notify_digest_run();
-		$this->assertCount( 1, $this->sent );
-		$this->assertStringContainsString( 'daily summary', $this->sent[0]['subject'] );
-		$this->assertStringContainsString( 'tab=activity&row=1', $this->sent[0]['message'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertStringContainsString( 'daily summary', $this->sent()[0]['subject'] );
+		$this->assertStringContainsString( 'tab=activity&row=1', $this->sent()[0]['message'] );
 		$this->assertSame( array(), aafm_notify_queue_list(), 'A delivered digest clears the queue.' );
 
 		aafm_notify_digest_run();
-		$this->assertCount( 1, $this->sent, 'An empty queue sends nothing.' );
+		$this->assertCount( 1, $this->sent(), 'An empty queue sends nothing.' );
 	}
 
 	public function test_a_failed_digest_keeps_the_queue_for_the_next_run(): void {
@@ -312,7 +361,7 @@ final class NotificationsTest extends TestCase {
 
 		aafm_notify_digest_run();
 
-		$this->assertCount( 1, $this->sent );
+		$this->assertCount( 1, $this->sent() );
 		$this->assertSame( array( $late ), aafm_notify_queue_list(), 'Only the sent batch is cleared.' );
 	}
 
@@ -378,6 +427,7 @@ final class NotificationsTest extends TestCase {
 		for ( $i = 1; $i <= 8; $i++ ) {
 			aafm_notify_event( 'risky_run', 'bucket' . $i );
 		}
+		aafm_notify_flush_outbox();
 		$this->assertCount( 8, aafm_notify_pending_list() );
 		$rows = aafm_query_activity(
 			array(
@@ -403,6 +453,7 @@ final class NotificationsTest extends TestCase {
 		);
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
 		$this->assertCount( 1, aafm_notify_pending_list(), 'The call returned and the notice was written first.' );
+		aafm_notify_flush_outbox(); // The failing mailer runs at the end of the request and must not escape there either.
 	}
 
 	public function test_the_message_is_sanitized(): void {
@@ -539,8 +590,8 @@ final class NotificationsTest extends TestCase {
 				$_SERVER['REMOTE_ADDR'] = $old_ip;
 			}
 		}
-		$this->assertCount( 2, $this->sent );
-		foreach ( $this->sent as $mail ) {
+		$this->assertCount( 2, $this->sent() );
+		foreach ( $this->sent() as $mail ) {
 			$this->assertStringNotContainsString( 'ana_the_admin', $mail['subject'] . $mail['message'] );
 			$this->assertStringNotContainsString( '203.0.113.77', $mail['subject'] . $mail['message'] );
 		}

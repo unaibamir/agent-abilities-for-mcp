@@ -22,7 +22,17 @@ final class NotificationsSettingsTest extends TestCase {
 	 *
 	 * @var list<array<string,mixed>>
 	 */
-	private array $sent = array();
+	private array $mail = array();
+
+	/**
+	 * The captured messages, after the end-of-request flush a real request runs on shutdown.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	private function sent(): array {
+		aafm_notify_flush_outbox();
+		return $this->mail;
+	}
 
 	/**
 	 * What the mail filter returns: true for sent, false for a failed send.
@@ -33,7 +43,8 @@ final class NotificationsSettingsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		$this->sent    = array();
+		$this->mail = array();
+		aafm_notify_outbox( 'take' ); // Drop anything an earlier test left queued.
 		$this->mail_ok = true;
 		add_filter( 'pre_wp_mail', array( $this, 'capture_mail' ), 10, 2 );
 	}
@@ -53,7 +64,7 @@ final class NotificationsSettingsTest extends TestCase {
 	 */
 	public function capture_mail( $pre, array $atts ): bool {
 		unset( $pre );
-		$this->sent[] = $atts;
+		$this->mail[] = $atts;
 		return $this->mail_ok;
 	}
 
@@ -138,10 +149,10 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertCount( 1, $this->sent );
-		$this->assertSame( 'old@example.com', $this->sent[0]['to'] );
-		$this->assertStringContainsString( 'The notification address was changed', $this->sent[0]['subject'] );
-		$this->assertStringNotContainsString( 'new@example.com', $this->sent[0]['message'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertSame( 'old@example.com', $this->sent()[0]['to'] );
+		$this->assertStringContainsString( 'The notification address was changed', $this->sent()[0]['subject'] );
+		$this->assertStringNotContainsString( 'new@example.com', $this->sent()[0]['message'] );
 	}
 
 	public function test_turning_notifications_off_clears_the_schedule(): void {
@@ -202,13 +213,13 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->post_as( 'administrator', array( 'aafm_notify_email' => 'attacker@example.com' ) );
 		$first = $this->run_handler( 'aafm_ajax_notify_test' );
 		$this->assertTrue( $first['success'] ?? false );
-		$this->assertCount( 1, $this->sent );
-		$this->assertSame( 'owner@example.com', $this->sent[0]['to'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertSame( 'owner@example.com', $this->sent()[0]['to'] );
 
 		$this->post_as( 'administrator' );
 		$second = $this->run_handler( 'aafm_ajax_notify_test' );
 		$this->assertFalse( $second['success'] ?? true );
-		$this->assertCount( 1, $this->sent );
+		$this->assertCount( 1, $this->sent() );
 	}
 
 	public function test_the_test_button_needs_an_address_and_manage_options(): void {
@@ -216,7 +227,7 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->assertFalse( $this->run_handler( 'aafm_ajax_notify_test' )['success'] ?? true );
 		$this->post_as( 'editor' );
 		$this->assertFalse( $this->run_handler( 'aafm_ajax_notify_test' )['success'] ?? true );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 	}
 
 	private function render_notice(): string {
@@ -298,11 +309,11 @@ final class NotificationsSettingsTest extends TestCase {
 
 		$this->assertTrue( $json['success'] ?? false, wp_json_encode( $json ) );
 		$this->assertSame( 'off', aafm_notifications_settings()['mode'] );
-		$subjects = implode( ' | ', array_column( $this->sent, 'subject' ) );
-		$this->assertCount( 2, $this->sent, $subjects );
+		$subjects = implode( ' | ', array_column( $this->sent(), 'subject' ) );
+		$this->assertCount( 2, $this->sent(), $subjects );
 		$this->assertStringContainsString( 'Read-only mode was turned on', $subjects, 'The flip alert uses the settings stored BEFORE the save.' );
 		$this->assertStringContainsString( 'Email alerts were turned off', $subjects );
-		$this->assertSame( array( 'owner@example.com', 'owner@example.com' ), array_column( $this->sent, 'to' ) );
+		$this->assertSame( array( 'owner@example.com', 'owner@example.com' ), array_column( $this->sent(), 'to' ) );
 	}
 
 	public function test_turning_alerts_off_warns_the_old_address(): void {
@@ -323,9 +334,9 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertCount( 1, $this->sent );
-		$this->assertSame( 'old@example.com', $this->sent[0]['to'] );
-		$this->assertStringContainsString( 'Email alerts were turned off', $this->sent[0]['subject'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertSame( 'old@example.com', $this->sent()[0]['to'] );
+		$this->assertStringContainsString( 'Email alerts were turned off', $this->sent()[0]['subject'] );
 	}
 
 	public function test_unticking_the_switch_alert_warns_the_old_address(): void {
@@ -350,8 +361,8 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertCount( 1, $this->sent );
-		$this->assertStringContainsString( 'switch changes were turned off', $this->sent[0]['subject'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertStringContainsString( 'switch changes were turned off', $this->sent()[0]['subject'] );
 	}
 
 	public function test_a_save_that_changes_nothing_important_sends_nothing(): void {
@@ -374,7 +385,7 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 	}
 
 	/**
@@ -411,10 +422,10 @@ final class NotificationsSettingsTest extends TestCase {
 		);
 
 		$this->assertTrue( $json['success'] ?? false, wp_json_encode( $json ) );
-		$this->assertCount( 2, $this->sent, implode( ' | ', array_column( $this->sent, 'subject' ) ) );
-		$this->assertSame( array( 'owner@example.com', 'owner@example.com' ), array_column( $this->sent, 'to' ) );
-		$this->assertStringContainsString( 'daily summary', $this->sent[0]['subject'] );
-		$this->assertStringContainsString( 'Read-only mode was turned on', $this->sent[0]['message'], 'The flip reaches the OLD address.' );
+		$this->assertCount( 2, $this->sent(), implode( ' | ', array_column( $this->sent(), 'subject' ) ) );
+		$this->assertSame( array( 'owner@example.com', 'owner@example.com' ), array_column( $this->sent(), 'to' ) );
+		$this->assertStringContainsString( 'daily summary', $this->sent()[0]['subject'] );
+		$this->assertStringContainsString( 'Read-only mode was turned on', $this->sent()[0]['message'], 'The flip reaches the OLD address.' );
 		$this->assertSame( array(), aafm_notify_queue_list(), 'Nothing stays queued behind a mode that is no longer digest.' );
 	}
 
@@ -431,8 +442,8 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( array( 'old@example.com', 'old@example.com' ), array_column( $this->sent, 'to' ) );
-		$this->assertStringContainsString( 'daily summary', $this->sent[0]['subject'] );
+		$this->assertSame( array( 'old@example.com', 'old@example.com' ), array_column( $this->sent(), 'to' ) );
+		$this->assertStringContainsString( 'daily summary', $this->sent()[0]['subject'] );
 		$this->assertSame( array(), aafm_notify_queue_list() );
 	}
 
@@ -463,8 +474,23 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 		$this->assertCount( 1, aafm_notify_queue_list() );
+	}
+
+	public function test_the_settings_save_queues_its_mail_for_the_end_of_the_request(): void {
+		$this->store( 'immediate', 'old@example.com' );
+
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'immediate',
+				'aafm_notify_email'       => 'new@example.com',
+				'aafm_notify_switch_flip' => '1',
+			)
+		);
+
+		$this->assertSame( array(), $this->mail, 'The save does not wait on the mail host.' );
+		$this->assertCount( 1, $this->sent() );
 	}
 
 	public function test_the_old_address_warning_respects_the_shared_hourly_cap(): void {
@@ -479,7 +505,7 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( array(), $this->sent, 'A warning goes through the same cap as every other message.' );
+		$this->assertSame( array(), $this->sent(), 'A warning goes through the same cap as every other message.' );
 	}
 
 	public function test_a_failed_old_address_warning_writes_a_bounded_error_row(): void {
@@ -494,6 +520,7 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
+		aafm_notify_flush_outbox();
 		$rows = aafm_query_activity(
 			array(
 				'ability' => 'aafm/notifications',
@@ -521,7 +548,7 @@ final class NotificationsSettingsTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( array( 'a@example.com', 'b@example.com' ), array_column( $this->sent, 'to' ), 'B hears that its address was replaced.' );
+		$this->assertSame( array( 'a@example.com', 'b@example.com' ), array_column( $this->sent(), 'to' ), 'B hears that its address was replaced.' );
 	}
 
 	public function test_reset_removes_the_notification_options_and_the_tabs_still_render(): void {

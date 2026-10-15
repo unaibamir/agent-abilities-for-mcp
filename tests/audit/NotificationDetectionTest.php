@@ -19,11 +19,22 @@ final class NotificationDetectionTest extends TestCase {
 	 *
 	 * @var list<array<string,mixed>>
 	 */
-	private array $sent = array();
+	private array $mail = array();
+
+	/**
+	 * The captured messages, after the end-of-request flush a real request runs on shutdown.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	private function sent(): array {
+		aafm_notify_flush_outbox();
+		return $this->mail;
+	}
 
 	public function set_up(): void {
 		parent::set_up();
-		$this->sent = array();
+		$this->mail = array();
+		aafm_notify_outbox( 'take' ); // Drop anything an earlier test left queued.
 		add_filter( 'pre_wp_mail', array( $this, 'capture_mail' ), 10, 2 );
 		aafm_update_option_verified(
 			'aafm_notifications',
@@ -50,7 +61,7 @@ final class NotificationDetectionTest extends TestCase {
 	 */
 	public function capture_mail( $pre, array $atts ): bool {
 		unset( $pre );
-		$this->sent[] = $atts;
+		$this->mail[] = $atts;
 		return true;
 	}
 
@@ -116,28 +127,28 @@ final class NotificationDetectionTest extends TestCase {
 
 	public function test_a_read_only_flip_notifies_with_its_direction_and_row(): void {
 		aafm_log_read_only_switch_change( false, true, true );
-		$this->assertCount( 1, $this->sent );
-		$this->assertStringContainsString( 'Read-only mode was turned on', $this->sent[0]['subject'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertStringContainsString( 'Read-only mode was turned on', $this->sent()[0]['subject'] );
 		$row = aafm_query_activity( array( 'ability' => 'aafm/read-only-mode' ) )[0];
-		$this->assertStringContainsString( 'tab=activity&row=' . $row['id'], $this->sent[0]['message'] );
+		$this->assertStringContainsString( 'tab=activity&row=' . $row['id'], $this->sent()[0]['message'] );
 
 		aafm_log_read_only_switch_change( true, false, true );
-		$this->assertCount( 2, $this->sent );
-		$this->assertStringContainsString( 'turned off', $this->sent[1]['subject'] );
+		$this->assertCount( 2, $this->sent() );
+		$this->assertStringContainsString( 'turned off', $this->sent()[1]['subject'] );
 	}
 
 	public function test_a_flip_that_did_not_persist_or_did_not_change_is_silent(): void {
 		aafm_log_read_only_switch_change( false, true, false );
 		aafm_log_read_only_switch_change( true, true, true );
 		aafm_log_high_risk_switch_change( false, false, true );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 	}
 
 	public function test_a_high_risk_lock_flip_notifies_with_its_direction(): void {
 		aafm_log_high_risk_switch_change( false, true, true );
-		$this->assertStringContainsString( 'The high-risk lock was opened', $this->sent[0]['subject'] );
+		$this->assertStringContainsString( 'The high-risk lock was opened', $this->sent()[0]['subject'] );
 		aafm_log_high_risk_switch_change( true, false, true );
-		$this->assertStringContainsString( 'The high-risk lock was closed', $this->sent[1]['subject'] );
+		$this->assertStringContainsString( 'The high-risk lock was closed', $this->sent()[1]['subject'] );
 	}
 
 	public function test_an_approved_oauth_grant_notifies_but_a_registration_does_not(): void {
@@ -152,7 +163,7 @@ final class NotificationDetectionTest extends TestCase {
 
 		aafm_oauth_log_event( 'register', 'success', array( 'client_id' => $client['client_id'] ) );
 		aafm_oauth_log_event( 'authorize', 'denied', array( 'client_id' => $client['client_id'] ) );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 
 		aafm_oauth_log_event(
 			'authorize',
@@ -163,26 +174,26 @@ final class NotificationDetectionTest extends TestCase {
 				'user_id'       => 1,
 			)
 		);
-		$this->assertCount( 1, $this->sent );
-		$this->assertStringContainsString( 'A new app was approved to connect', $this->sent[0]['subject'] );
-		$this->assertStringContainsString( $client['client_id'], $this->sent[0]['message'] );
-		$this->assertStringContainsString( 'The name the app gave itself: Claude', $this->sent[0]['message'] );
-		$this->assertStringNotContainsString( 'Claude', $this->sent[0]['subject'], 'An app-chosen name is never in the subject.' );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertStringContainsString( 'A new app was approved to connect', $this->sent()[0]['subject'] );
+		$this->assertStringContainsString( $client['client_id'], $this->sent()[0]['message'] );
+		$this->assertStringContainsString( 'The name the app gave itself: Claude', $this->sent()[0]['message'] );
+		$this->assertStringNotContainsString( 'Claude', $this->sent()[0]['subject'], 'An app-chosen name is never in the subject.' );
 	}
 
 	public function test_creating_an_application_password_notifies(): void {
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		\WP_Application_Passwords::create_new_application_password( $user_id, array( 'name' => 'Demo' ) );
-		$this->assertCount( 1, $this->sent );
-		$this->assertStringContainsString( 'An Application Password was created', $this->sent[0]['subject'] );
-		$this->assertStringContainsString( '#' . $user_id, $this->sent[0]['message'] );
-		$this->assertStringNotContainsString( 'Demo', $this->sent[0]['message'], 'The app name is not read.' );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertStringContainsString( 'An Application Password was created', $this->sent()[0]['subject'] );
+		$this->assertStringContainsString( '#' . $user_id, $this->sent()[0]['message'] );
+		$this->assertStringNotContainsString( 'Demo', $this->sent()[0]['message'], 'The app name is not read.' );
 	}
 
 	public function test_an_application_password_for_a_member_who_cannot_edit_is_not_an_alert(): void {
 		$member = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		\WP_Application_Passwords::create_new_application_password( $member, array( 'name' => 'Phone' ) );
-		$this->assertSame( array(), $this->sent, 'Core lets every role make one; a signed-up member must not keep the owner\'s alerts busy.' );
+		$this->assertSame( array(), $this->sent(), 'Core lets every role make one; a signed-up member must not keep the owner\'s alerts busy.' );
 		$this->assertSame( array(), aafm_notify_pending_list() );
 	}
 
@@ -190,7 +201,7 @@ final class NotificationDetectionTest extends TestCase {
 		$agent = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		update_user_meta( $agent, aafm_agent_user_marker_meta_key(), 1 );
 		\WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'Agent' ) );
-		$this->assertCount( 1, $this->sent );
+		$this->assertCount( 1, $this->sent() );
 	}
 
 	public function test_a_bridged_tool_alarms_exactly_when_the_bridge_says_destructive(): void {
@@ -235,11 +246,11 @@ final class NotificationDetectionTest extends TestCase {
 		aafm_notify_ability_finished( 'aafm/delete-post', 'error', 5 );
 		aafm_notify_ability_finished( 'aafm/delete-post', 'denied', 5 );
 		aafm_notify_ability_finished( 'aafm/update-post', 'success', 5 );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 
 		aafm_notify_ability_finished( 'aafm/delete-post', 'success', 5 );
-		$this->assertCount( 1, $this->sent );
-		$this->assertStringContainsString( 'aafm/delete-post', $this->sent[0]['message'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertStringContainsString( 'aafm/delete-post', $this->sent()[0]['message'] );
 	}
 
 	public function test_a_real_high_risk_call_notifies_end_to_end(): void {
@@ -256,22 +267,22 @@ final class NotificationDetectionTest extends TestCase {
 
 		wp_get_ability( 'aafm/get-taxonomies' )->execute( array() );
 
-		$this->assertCount( 1, $this->sent );
+		$this->assertCount( 1, $this->sent() );
 		$row = aafm_query_activity( array( 'ability' => 'aafm/get-taxonomies' ) )[0];
-		$this->assertStringContainsString( 'tab=activity&row=' . $row['id'], $this->sent[0]['message'] );
+		$this->assertStringContainsString( 'tab=activity&row=' . $row['id'], $this->sent()[0]['message'] );
 	}
 
 	public function test_a_denial_burst_fires_once_at_the_threshold(): void {
 		for ( $i = 1; $i < AAFM_NOTIFY_BURST_COUNT; $i++ ) {
 			aafm_announce_ability_resolved( null, 'denied', null, null );
 		}
-		$this->assertSame( array(), $this->sent, 'One short of the threshold is silent.' );
+		$this->assertSame( array(), $this->sent(), 'One short of the threshold is silent.' );
 		aafm_announce_ability_resolved( null, 'denied', null, null );
-		$this->assertCount( 1, $this->sent );
-		$this->assertStringContainsString( 'Many calls were denied', $this->sent[0]['subject'] );
-		$this->assertStringContainsString( 'filter=denied', $this->sent[0]['message'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertStringContainsString( 'Many calls were denied', $this->sent()[0]['subject'] );
+		$this->assertStringContainsString( 'filter=denied', $this->sent()[0]['message'] );
 		aafm_announce_ability_resolved( null, 'success', null, null );
-		$this->assertCount( 1, $this->sent, 'Other statuses are not counted.' );
+		$this->assertCount( 1, $this->sent(), 'Other statuses are not counted.' );
 	}
 
 	public function test_a_rate_limit_trip_notifies(): void {
@@ -280,11 +291,11 @@ final class NotificationDetectionTest extends TestCase {
 		$this->register_enabled( array( 'aafm/get-taxonomies' ) );
 
 		wp_get_ability( 'aafm/get-taxonomies' )->execute( array() );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 		wp_get_ability( 'aafm/get-taxonomies' )->execute( array() );
 
-		$this->assertCount( 1, $this->sent );
-		$this->assertStringContainsString( 'A connection hit the rate limit', $this->sent[0]['subject'] );
+		$this->assertCount( 1, $this->sent() );
+		$this->assertStringContainsString( 'A connection hit the rate limit', $this->sent()[0]['subject'] );
 		$detail = (string) aafm_query_activity(
 			array(
 				'ability' => 'aafm/get-taxonomies',
@@ -299,7 +310,7 @@ final class NotificationDetectionTest extends TestCase {
 		aafm_log_read_only_switch_change( false, true, true );
 		aafm_notify_ability_finished( 'aafm/delete-post', 'success', 5 );
 		aafm_announce_ability_resolved( null, 'denied', null, null );
-		$this->assertSame( array(), $this->sent );
+		$this->assertSame( array(), $this->sent() );
 		$this->assertSame( array(), aafm_notify_pending_list() );
 	}
 }

@@ -26,6 +26,9 @@ if ( ! defined( 'AAFM_NOTIFY_BURST_WINDOW' ) ) {
 if ( ! defined( 'AAFM_NOTIFY_GLOBAL_MAX' ) ) {
 	define( 'AAFM_NOTIFY_GLOBAL_MAX', 6 );
 }
+if ( ! defined( 'AAFM_NOTIFY_DENIAL_MAX' ) ) {
+	define( 'AAFM_NOTIFY_DENIAL_MAX', 2 );
+}
 if ( ! defined( 'AAFM_NOTIFY_QUEUE_MAX' ) ) {
 	define( 'AAFM_NOTIFY_QUEUE_MAX', 200 );
 }
@@ -189,17 +192,22 @@ function aafm_notify_take_slot( string $bucket ): array {
 }
 
 /**
- * Claim one of the hourly email slots shared by every bucket.
+ * Claim one of the hourly email slots. Most events share one pool; denial bursts, which any
+ * authenticated principal can trigger, have a small pool of their own so a flood of them can never use
+ * up the slots a risky run, a new app or a switch flip needs.
  *
+ * @param string $pool "global" (the shared pool) or "denial".
  * @return bool
  */
-function aafm_notify_global_slot(): bool {
-	$count = aafm_transient_count( 'aafm_ntf_global' );
-	if ( null === $count || $count >= AAFM_NOTIFY_GLOBAL_MAX ) {
+function aafm_notify_global_slot( string $pool = 'global' ): bool {
+	$key   = 'denial' === $pool ? 'aafm_ntf_global_denial' : 'aafm_ntf_global';
+	$max   = 'denial' === $pool ? AAFM_NOTIFY_DENIAL_MAX : AAFM_NOTIFY_GLOBAL_MAX;
+	$count = aafm_transient_count( $key );
+	if ( null === $count || $count >= $max ) {
 		return false;
 	}
 	// ponytail: the hour slides with each send. A fixed window would need a stored start time.
-	set_transient( 'aafm_ntf_global', $count + 1, HOUR_IN_SECONDS );
+	set_transient( $key, $count + 1, HOUR_IN_SECONDS );
 	return true;
 }
 
@@ -239,7 +247,11 @@ function aafm_notify_site_name(): string {
 }
 
 /**
- * Record an event: throttle, write the admin notice entry, then mail or queue. Never throws.
+ * Record an event: write the admin notice entry, then throttle the mail, then mail or queue. Never throws.
+ *
+ * The notice entry is written before the throttle is asked, so a throttled event still reaches the
+ * admin notice; the throttle only limits mail. Grants are throttled per app, so a second app approved
+ * inside the window still alerts.
  *
  * @param string              $trigger A key of aafm_notify_triggers().
  * @param string              $subtype Throttle sub-bucket, for example "read_only_off".
@@ -252,18 +264,16 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 		if ( null === $settings ) {
 			return;
 		}
-		$slot = aafm_notify_take_slot( $trigger . ':' . $subtype );
-		if ( ! $slot['allowed'] ) {
-			return;
-		}
-		$event = array(
+		$client_id = isset( $facts['client_id'] ) ? aafm_notify_clean_identifier( (string) $facts['client_id'], 191 ) : '';
+		$slot      = aafm_notify_take_slot( $trigger . ':' . $subtype . ( '' !== $client_id ? ':' . $client_id : '' ) );
+		$event     = array(
 			'id'         => wp_generate_uuid4(),
 			'trigger'    => $trigger,
 			'subtype'    => $subtype,
 			'time'       => time(),
 			'row_id'     => isset( $facts['row_id'] ) ? max( 0, (int) $facts['row_id'] ) : 0,
 			'ability'    => isset( $facts['ability'] ) ? aafm_notify_clean_identifier( (string) $facts['ability'] ) : '',
-			'client_id'  => isset( $facts['client_id'] ) ? aafm_notify_clean_identifier( (string) $facts['client_id'], 191 ) : '',
+			'client_id'  => $client_id,
 			'host'       => isset( $facts['host'] ) ? aafm_notify_clean_identifier( (string) $facts['host'], 120 ) : '',
 			'app_name'   => isset( $facts['app_name'] ) ? aafm_notify_clean_app_name( (string) $facts['app_name'] ) : '',
 			'count'      => isset( $facts['count'] ) ? max( 0, (int) $facts['count'] ) : 0,
@@ -273,12 +283,15 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 		if ( ! aafm_notify_pending_push( $event ) ) {
 			aafm_notify_log_failure( __( 'A notification could not be saved for the admin notice', 'agent-abilities-for-mcp' ) );
 		}
+		if ( ! $slot['allowed'] ) {
+			return;
+		}
 		if ( 'digest' === $settings['mode'] ) {
 			if ( ! aafm_notify_queue_push( $event ) ) {
 				aafm_notify_log_failure( __( 'A notification could not be queued for the daily email', 'agent-abilities-for-mcp' ) );
 			}
 		} elseif ( 'immediate' === $settings['mode'] ) {
-			aafm_notify_send_capped( $settings['email'], array( $event ), false );
+			aafm_notify_send_later( $settings['email'], array( $event ), false, '', 'denial_burst' === $trigger ? 'denial' : 'global' );
 		}
 	} catch ( \Throwable $e ) {
 		unset( $e ); // A notification problem must never reach the call or the save that raised it.
@@ -447,20 +460,74 @@ function aafm_notify_deliver( string $to, array $events, bool $digest, string $e
 }
 
 /**
- * Send through the shared hourly cap: no slot left means no mail (the admin notice entry exists
- * regardless). Every message the engine mails except the Settings test email goes through here.
+ * Mail waiting for the end of the request. One static list; "add" appends, "take" empties and returns it.
+ *
+ * @param string              $op   "add" or "take".
+ * @param array<string,mixed> $item For "add": to, events, digest, extra.
+ * @return array<int,array<string,mixed>>
+ */
+function aafm_notify_outbox( string $op, array $item = array() ): array {
+	static $box = array();
+	if ( 'add' === $op ) {
+		$box[] = $item;
+		return array();
+	}
+	$taken = $box;
+	$box   = array();
+	return $taken;
+}
+
+/**
+ * Take a slot from the hourly cap and queue the message for the end of the request. No slot left means
+ * no mail (the admin notice entry exists regardless). Everything the engine mails except the Settings
+ * test email and the daily cron summary goes through here, so a slow or dead mail host can never hold
+ * up an agent call or a Settings save.
  *
  * @param string                         $to     The address.
  * @param array<int,array<string,mixed>> $events Events to describe.
  * @param bool                           $digest Whether this is a summary.
  * @param string                         $extra  Optional closing paragraph added to the body.
- * @return bool Whether a message was sent.
+ * @param string                         $pool   Which hourly pool to draw from, see aafm_notify_global_slot().
+ * @return bool Whether a message was queued.
  */
-function aafm_notify_send_capped( string $to, array $events, bool $digest, string $extra = '' ): bool {
-	if ( ! aafm_notify_global_slot() ) {
+function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'global' ): bool {
+	if ( ! aafm_notify_global_slot( $pool ) ) {
 		return false;
 	}
-	return aafm_notify_deliver( $to, $events, $digest, $extra );
+	aafm_notify_outbox(
+		'add',
+		array(
+			'to'     => $to,
+			'events' => $events,
+			'digest' => $digest,
+			'extra'  => $extra,
+		)
+	);
+	add_action( 'shutdown', 'aafm_notify_flush_outbox' );
+	return true;
+}
+
+/**
+ * Send what the request queued. Runs on shutdown, after WordPress has flushed its output buffers; on
+ * PHP-FPM the response is closed first so the caller is not left waiting on the mail host.
+ *
+ * @return void
+ */
+function aafm_notify_flush_outbox(): void {
+	$items = aafm_notify_outbox( 'take' );
+	if ( array() === $items ) {
+		return;
+	}
+	if ( function_exists( 'fastcgi_finish_request' ) ) {
+		fastcgi_finish_request();
+	}
+	foreach ( $items as $item ) {
+		try {
+			aafm_notify_deliver( (string) $item['to'], (array) $item['events'], (bool) $item['digest'], (string) $item['extra'] );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+	}
 }
 
 /**

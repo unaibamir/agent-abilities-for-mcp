@@ -151,7 +151,7 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 			'subtype' => $subtype,
 			'time'    => time(),
 		);
-		aafm_notify_send_capped(
+		aafm_notify_send_later(
 			(string) $before['email'],
 			array( $event ),
 			false,
@@ -185,7 +185,7 @@ function aafm_notify_settle_queue( array $before, array $after ): void {
 			return;
 		}
 		if ( $flush ) {
-			aafm_notify_send_capped( (string) $before['email'], $queue, true );
+			aafm_notify_send_later( (string) $before['email'], $queue, true );
 		}
 		if ( ! aafm_notify_queue_clear() ) {
 			aafm_notify_log_failure( __( 'The queued notifications could not be cleared', 'agent-abilities-for-mcp' ) );

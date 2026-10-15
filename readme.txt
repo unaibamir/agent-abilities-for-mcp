@@ -252,7 +252,7 @@ Yes. Switch on read-only mode and no write tool registers, whatever else is tick
 
 = Do I need to install the MCP Adapter separately? =
 
-No. The official MCP Adapter is bundled with this plugin. If you also run the standalone Adapter plugin, this plugin works with it. While this plugin is active it turns off the Adapter's default server, so only its own governed server exists. Another plugin that relies on that default server to publish its tools will stop serving them.
+No. The official MCP Adapter is bundled with this plugin, and if you also run the standalone Adapter plugin, the two work together. The Adapter has a built-in default server that other plugins can publish tools to. By default this plugin leaves it alone: it switches on only when another active plugin publishes tools there, and you can force it on or off in Settings. This plugin's own tools are never on that server, whatever you choose. They are served only by its governed endpoint. This plugin does not govern the tools that are on the default server.
 
 = I'm on Windows and the config won't start. =
 

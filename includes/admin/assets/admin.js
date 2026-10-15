@@ -1504,6 +1504,7 @@
 				);
 				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
 				const siteBrief = form.querySelector( 'textarea[name="aafm_site_brief"]' );
+				const defaultServer = form.querySelector( 'select[name="aafm_default_server_mode"]' );
 
 				const body = new URLSearchParams();
 				body.append( 'action', 'aafm_save_settings' );
@@ -1538,6 +1539,9 @@
 					body.append( 'aafm_high_risk_abilities_unlocked', '1' );
 				}
 				body.append( 'aafm_ip_allowlist', allowlist?.value ?? '' );
+				if ( defaultServer ) {
+					body.append( 'aafm_default_server_mode', defaultServer.value );
+				}
 				if ( siteBrief ) {
 					body.append( 'aafm_site_brief', siteBrief.value );
 				}

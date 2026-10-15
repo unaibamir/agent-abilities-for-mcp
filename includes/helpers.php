@@ -600,6 +600,7 @@ function aafm_policy_options(): array {
 		'default_role',
 		'aafm_ability_allowlist_overrides',
 		'aafm_delete_data_on_uninstall',
+		'aafm_default_server_mode',
 	);
 }
 

@@ -926,15 +926,18 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		$args['meta']['annotations']['openWorldHint'] = false;
 	}
 
-	// Cheap insurance (WP 7.1 findings, 2026-08-21): the bundled mcp-adapter only ever reads
-	// meta.mcp.public from its DefaultServerFactory discovery path, which this plugin disables
-	// entirely (mcp_adapter_create_default_server returns false, includes/bootstrap.php) in favor
-	// of registering explicitly through create_server(). So this key is inert today - but stamping
-	// it removes an implicit dependency on which discovery path a future bundled adapter version
-	// defaults to. Applies to every ability this choke point registers, native and bridged alike,
-	// and never overwrites a caller's own explicit value.
-	if ( ! isset( $args['meta']['mcp']['public'] ) ) {
-		$args['meta']['mcp']['public'] = true;
+	// Our own tools are served only by the governed server. Registering them public would let the
+	// adapter's default server list and run them with none of this plugin's transport gate, so the
+	// flag is forced off for aafm/* and aafm-bridge/* even when a caller passed true. The hard guard
+	// in includes/default-server.php refuses them on that server regardless of this flag.
+	if ( aafm_is_own_ability_name( $name ) ) {
+		if ( ! isset( $args['meta'] ) || ! is_array( $args['meta'] ) ) {
+			$args['meta'] = array();
+		}
+		if ( ! isset( $args['meta']['mcp'] ) || ! is_array( $args['meta']['mcp'] ) ) {
+			$args['meta']['mcp'] = array();
+		}
+		$args['meta']['mcp']['public'] = false;
 	}
 
 	$original_permission = $args['permission_callback'];

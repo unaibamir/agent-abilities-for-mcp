@@ -177,8 +177,10 @@ function aafm_init_mcp(): bool {
 		return false;
 	}
 
-	// Only our governed server should exist.
-	add_filter( 'mcp_adapter_create_default_server', '__return_false' );
+	// The adapter's default server follows the owner's setting (Settings, "Allow the MCP Adapter's
+	// default server"); our own tools never appear on it in any mode (includes/default-server.php).
+	add_filter( 'mcp_adapter_create_default_server', 'aafm_filter_default_server_enabled' );
+	aafm_register_default_server_guards();
 
 	// The adapter initialises on init (WP-CLI) or rest_api_init; mark our copy loaded just before it does.
 	if ( defined( 'WP_CLI' ) && WP_CLI ) {

@@ -341,6 +341,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/class-aafm-rate-limited-ability.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/default-server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/catalog.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integration-manifest.php';

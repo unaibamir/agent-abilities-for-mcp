@@ -69,6 +69,7 @@ abstract class TestCase extends WP_UnitTestCase {
 		// from the next test's registered set.
 		delete_option( 'aafm_read_only_mode' );
 		delete_option( 'aafm_site_brief' ); // Escapes the per-test rollback for the same TRUNCATE reason as the options above.
+		delete_option( 'aafm_default_server_mode' ); // Same TRUNCATE escape as the options above.
 		// The registry catalog is memoized per request; tests mutate the
 		// aafm_abilities_registry filter set between cases, so start each one with a
 		// fresh build (the next registry read rebuilds).

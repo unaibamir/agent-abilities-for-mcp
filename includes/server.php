@@ -1172,12 +1172,16 @@ function aafm_reject_scalar_mcp_body( $result, $server, $request ) {
  * Defensive: any other shape, or a result that cannot be rebuilt, is returned untouched.
  *
  * @param mixed $result The initialize result from the adapter.
- * @param mixed $server The MCP server instance (unused).
+ * @param mixed $server The MCP server instance; any server other than this plugin's is left alone.
  * @param mixed $schema The selected schema (0.7.0 and later; absent on 0.6.1).
  * @return mixed The (possibly rebuilt) initialize result.
  */
 function aafm_filter_initialize_capabilities( $result, $server = null, $schema = null ) {
-	unset( $server );
+	// Only this plugin's server: the adapter's default server, when it exists, keeps the capabilities
+	// it advertises. Without a server object (a direct call) the strip applies, as before.
+	if ( is_object( $server ) && method_exists( $server, 'get_server_id' ) && 'aafm-server' !== $server->get_server_id() ) {
+		return $result;
+	}
 
 	if ( ! is_object( $result ) ) {
 		return $result;

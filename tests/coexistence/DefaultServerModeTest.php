@@ -1,0 +1,211 @@
+<?php
+/**
+ * The default-server switch: mode reading, what counts as another plugin publishing tools there,
+ * and the create-or-not decision.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+namespace AAFM\Tests\Coexistence;
+
+use AAFM\Tests\TestCase;
+
+final class DefaultServerModeTest extends TestCase {
+
+	/**
+	 * The callback a test put on the adapter's config filter, so tear_down removes only that.
+	 *
+	 * @var callable|null
+	 */
+	private $config_probe = null;
+
+	public function tear_down(): void {
+		delete_option( 'aafm_default_server_mode' );
+		if ( null !== $this->config_probe ) {
+			remove_filter( 'mcp_adapter_default_server_config', $this->config_probe );
+			$this->config_probe = null;
+		}
+		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
+			if ( 0 === strncmp( (string) $slug, 'smokefix/', 9 ) ) {
+				wp_unregister_ability( (string) $slug );
+			}
+		}
+		parent::tear_down();
+	}
+
+	/**
+	 * Build an ability object without registering it.
+	 *
+	 * @param string              $name Ability name.
+	 * @param array<string,mixed> $meta Ability meta.
+	 * @return \WP_Ability
+	 */
+	private function ability( string $name, array $meta ): \WP_Ability {
+		return new \WP_Ability(
+			$name,
+			array(
+				'label'               => 'x',
+				'description'         => 'x',
+				'category'            => 'site',
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+				'meta'                => $meta,
+			)
+		);
+	}
+
+	public function test_mode_defaults_to_auto_and_ignores_garbage(): void {
+		$this->assertSame( 'auto', aafm_default_server_mode() );
+		update_option( 'aafm_default_server_mode', 'maybe' );
+		$this->assertSame( 'auto', aafm_default_server_mode() );
+		update_option( 'aafm_default_server_mode', array( 'on' ) );
+		$this->assertSame( 'auto', aafm_default_server_mode() );
+	}
+
+	public function test_mode_reads_each_stored_value(): void {
+		foreach ( array( 'auto', 'on', 'off' ) as $mode ) {
+			update_option( 'aafm_default_server_mode', $mode );
+			$this->assertSame( $mode, aafm_default_server_mode() );
+		}
+	}
+
+	public function test_core_adapter_and_own_abilities_are_not_publishers(): void {
+		$abilities = array(
+			$this->ability( 'core/get-site-info', array( 'public' => true ) ),
+			$this->ability( 'mcp-adapter/discover-abilities', array( 'mcp' => array( 'public' => true ) ) ),
+			$this->ability( 'aafm/get-posts', array( 'mcp' => array( 'public' => true ) ) ),
+			$this->ability( 'aafm-bridge/demo-echo', array( 'mcp' => array( 'public' => true ) ) ),
+		);
+
+		$this->assertSame( array(), aafm_default_server_publishers( $abilities ) );
+	}
+
+	public function test_a_foreign_ability_publishes_only_when_its_effective_exposure_is_public(): void {
+		$abilities = array(
+			$this->ability( 'acme/explicit', array( 'mcp' => array( 'public' => true ) ) ),
+			$this->ability( 'acme/inherits', array( 'public' => true ) ),
+			$this->ability( 'acme/private', array( 'mcp' => array( 'public' => false ) ) ),
+			$this->ability(
+				'acme/override',
+				array(
+					'public' => true,
+					'mcp'    => array( 'public' => false ),
+				)
+			),
+			$this->ability( 'acme/malformed', array( 'mcp' => 'yes' ) ),
+			$this->ability( 'acme/none', array() ),
+		);
+
+		$this->assertSame( array( 'acme/explicit', 'acme/inherits' ), aafm_default_server_publishers( $abilities ) );
+	}
+
+	public function test_a_callback_on_the_default_server_config_filter_counts_as_a_publisher(): void {
+		$this->config_probe = static fn( $config ) => $config;
+		add_filter( 'mcp_adapter_default_server_config', $this->config_probe ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		$this->assertTrue( aafm_default_server_has_publisher() );
+	}
+
+	/**
+	 * Mode, filter value so far, publisher present, expected decision.
+	 *
+	 * @return array<string,array{0:string,1:bool,2:bool,3:bool}>
+	 */
+	public function decision_table(): array {
+		return array(
+			'off beats everything'           => array( 'off', true, true, false ),
+			'on beats an earlier false'      => array( 'on', false, false, true ),
+			'on with nothing else'           => array( 'on', true, false, true ),
+			'auto with a publisher'          => array( 'auto', true, true, true ),
+			'auto without a publisher'       => array( 'auto', true, false, false ),
+			'auto respects an earlier false' => array( 'auto', false, true, false ),
+		);
+	}
+
+	/**
+	 * The create-or-not decision for each row of the table.
+	 *
+	 * @dataProvider decision_table
+	 * @param string $mode          Mode.
+	 * @param bool   $create        Filter value so far.
+	 * @param bool   $has_publisher Whether another plugin publishes there.
+	 * @param bool   $expected      Expected decision.
+	 */
+	public function test_decision( string $mode, bool $create, bool $has_publisher, bool $expected ): void {
+		$this->assertSame( $expected, aafm_default_server_decision( $mode, $create, static fn(): bool => $has_publisher ) );
+	}
+
+	public function test_auto_does_not_look_for_publishers_when_it_cannot_matter(): void {
+		$asked = false;
+		$probe = static function () use ( &$asked ): bool {
+			$asked = true;
+			return true;
+		};
+		aafm_default_server_decision( 'off', true, $probe );
+		aafm_default_server_decision( 'on', true, $probe );
+		aafm_default_server_decision( 'auto', false, $probe );
+		$this->assertFalse( $asked );
+	}
+
+	public function test_the_filter_is_wired_to_the_adapter_hook_and_follows_the_mode(): void {
+		$this->assertNotFalse( has_filter( 'mcp_adapter_create_default_server', 'aafm_filter_default_server_enabled' ) );
+		$this->assertFalse( has_filter( 'mcp_adapter_create_default_server', '__return_false' ), 'The unconditional off switch must be gone.' );
+
+		update_option( 'aafm_default_server_mode', 'off' );
+		$this->assertFalse( apply_filters( 'mcp_adapter_create_default_server', true ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		update_option( 'aafm_default_server_mode', 'on' );
+		$this->assertTrue( apply_filters( 'mcp_adapter_create_default_server', true ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+	}
+
+	public function test_a_registered_foreign_public_ability_turns_auto_on(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'smokefix' ) ) {
+					wp_register_ability_category(
+						'smokefix',
+						array(
+							'label'       => 'Smoke fixture',
+							'description' => 'Fixture.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'smokefix/ping',
+					array(
+						'label'               => 'Ping',
+						'description'         => 'Foreign plugin ability that publishes itself to the default server.',
+						'category'            => 'smokefix',
+						'execute_callback'    => static fn() => array( 'pong' => true ),
+						'permission_callback' => '__return_true',
+						'meta'                => array( 'mcp' => array( 'public' => true ) ),
+					)
+				);
+			}
+		);
+
+		$this->assertContains( 'smokefix/ping', aafm_default_server_publishers( wp_get_abilities() ) );
+		$this->assertTrue( aafm_default_server_has_publisher() );
+		$this->assertTrue( aafm_filter_default_server_enabled( true ) );
+	}
+
+	public function test_the_mode_option_is_in_the_reset_list(): void {
+		$this->assertContains( 'aafm_default_server_mode', aafm_config_option_names() );
+	}
+
+	/**
+	 * Off mode must resolve the chain to false whatever the incoming value; this is the order-
+	 * independent half of "no default server exists": McpAdapter::init() runs once per process, so
+	 * the registered-server state cannot be asserted reliably from here.
+	 */
+	public function test_off_mode_wins_over_an_earlier_true_through_the_real_filter_chain(): void {
+		update_option( 'aafm_default_server_mode', 'off' );
+		$this->assertFalse( (bool) apply_filters( 'mcp_adapter_create_default_server', true ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+	}
+}

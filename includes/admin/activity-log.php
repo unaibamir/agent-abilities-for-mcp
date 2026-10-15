@@ -153,7 +153,8 @@ function aafm_render_activity_filters( array $filters ): void {
 	$conn   .= '<option value="none"' . selected( $filters['conn'] ?? '', 'none', false ) . '>' . esc_html__( 'App Password or direct', 'agent-abilities-for-mcp' ) . '</option>';
 	$clients = aafm_oauth_list_clients();
 	// Dynamic registration can create many apps, so the select lists the first 50 plus the one currently
-	// filtered on; the Tool and Search boxes reach the rest.
+	// filtered on. The Search box matches the client id shown in brackets here and in the Connection
+	// column, so it reaches the rest.
 	$shown = array_slice( $clients, 0, 50 );
 	foreach ( array_slice( $clients, 50 ) as $client ) {
 		if ( ( $filters['conn'] ?? '' ) === $client['client_id'] ) {
@@ -161,7 +162,7 @@ function aafm_render_activity_filters( array $filters ): void {
 		}
 	}
 	foreach ( $shown as $client ) {
-		$conn .= '<option value="' . esc_attr( $client['client_id'] ) . '"' . selected( $filters['conn'] ?? '', $client['client_id'], false ) . '>' . esc_html( '' !== $client['client_name'] ? $client['client_name'] : substr( $client['client_id'], 0, 8 ) ) . '</option>';
+		$conn .= '<option value="' . esc_attr( $client['client_id'] ) . '"' . selected( $filters['conn'] ?? '', $client['client_id'], false ) . '>' . esc_html( aafm_activity_app_label( $client['client_name'], $client['client_id'] ) ) . '</option>';
 	}
 	$conn .= '</select>';
 	$field( __( 'Connection', 'agent-abilities-for-mcp' ), $conn );
@@ -177,7 +178,7 @@ function aafm_render_activity_filters( array $filters ): void {
 
 	$field( __( 'From (UTC)', 'agent-abilities-for-mcp' ), $text( 'from', '', 'date' ) );
 	$field( __( 'To (UTC)', 'agent-abilities-for-mcp' ), $text( 'to', '', 'date' ) );
-	$field( __( 'Search', 'agent-abilities-for-mcp' ), $text( 'q', __( 'tool, note, user', 'agent-abilities-for-mcp' ) ) );
+	$field( __( 'Search', 'agent-abilities-for-mcp' ), $text( 'q', __( 'tool, note, user, app id', 'agent-abilities-for-mcp' ) ) );
 
 	if ( isset( $filters['row'] ) ) {
 		echo '<input type="hidden" data-filter-key="row" value="' . esc_attr( (string) $filters['row'] ) . '">';

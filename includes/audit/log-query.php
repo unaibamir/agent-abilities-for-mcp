@@ -206,7 +206,8 @@ function aafm_activity_filter_where( array $filters ): array {
 	}
 	if ( isset( $f['q'] ) ) {
 		$like     = '%' . $wpdb->esc_like( (string) $f['q'] ) . '%';
-		$sql     .= ' AND ( ability LIKE %s OR detail LIKE %s OR arg_keys LIKE %s OR principal_login LIKE %s )';
+		$sql     .= ' AND ( ability LIKE %s OR detail LIKE %s OR arg_keys LIKE %s OR principal_login LIKE %s OR client_id LIKE %s )';
+		$params[] = $like;
 		$params[] = $like;
 		$params[] = $like;
 		$params[] = $like;
@@ -398,6 +399,23 @@ function aafm_activity_connection_names( array $client_ids ): array {
 }
 
 /**
+ * An app's name with the start of its client id after it. Apps choose their own names when they
+ * register, so two can share one; the id is what tells them apart, and the Search box matches it.
+ *
+ * @param string $name      The registered name ('' falls back to the id alone).
+ * @param string $client_id The OAuth client id.
+ * @return string
+ */
+function aafm_activity_app_label( string $name, string $client_id ): string {
+	$short = substr( $client_id, 0, 8 );
+	if ( '' === $name ) {
+		return $short;
+	}
+	/* translators: 1: the name an app registered under. 2: the first eight characters of its OAuth client id. */
+	return sprintf( __( '%1$s (%2$s)', 'agent-abilities-for-mcp' ), $name, $short );
+}
+
+/**
  * The Connection column text for one log row.
  *
  * @param array<string,mixed>  $row   A log row.
@@ -408,7 +426,7 @@ function aafm_activity_connection_label( array $row, array $names ): string {
 	$client = (string) ( $row['client_id'] ?? '' );
 	if ( '' !== $client ) {
 		if ( isset( $names[ $client ] ) && '' !== $names[ $client ] ) {
-			return $names[ $client ];
+			return aafm_activity_app_label( $names[ $client ], $client );
 		}
 		/* translators: %s: the first eight characters of an OAuth client id whose app was removed. */
 		return sprintf( __( 'Removed app (%s)', 'agent-abilities-for-mcp' ), substr( $client, 0, 8 ) );

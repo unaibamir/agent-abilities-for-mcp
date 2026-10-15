@@ -65,6 +65,29 @@ final class ActivityFiltersUiTest extends TestCase {
 		$this->assertSame( 9, substr_count( $html, '<td' ) );
 	}
 
+	public function test_the_connection_select_tells_two_apps_with_the_same_name_apart(): void {
+		aafm_install_oauth_tables();
+		$ids = array();
+		foreach ( array( 1, 2 ) as $n ) {
+			$client = aafm_oauth_register_client(
+				array(
+					'redirect_uris' => array( 'https://app' . $n . '.example/cb' ),
+					'client_name'   => 'Claude',
+				)
+			);
+			$this->assertIsArray( $client );
+			$ids[] = $client['client_id'];
+		}
+
+		ob_start();
+		aafm_render_activity_filters( array() );
+		$html = (string) ob_get_clean();
+
+		foreach ( $ids as $id ) {
+			$this->assertStringContainsString( '>Claude (' . substr( $id, 0, 8 ) . ')</option>', $html );
+		}
+	}
+
 	public function test_the_ajax_row_data_has_a_field_for_every_new_column(): void {
 		aafm_log_activity(
 			array(

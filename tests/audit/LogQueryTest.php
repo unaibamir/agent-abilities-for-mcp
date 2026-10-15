@@ -271,7 +271,7 @@ final class LogQueryTest extends TestCase {
 		$this->assertIsArray( $client );
 		$names = aafm_activity_connection_names( array( $client['client_id'], '', 'gone-client-id-1234' ) );
 
-		$this->assertSame( 'Claude', aafm_activity_connection_label( array( 'client_id' => $client['client_id'] ), $names ) );
+		$this->assertSame( 'Claude (' . substr( $client['client_id'], 0, 8 ) . ')', aafm_activity_connection_label( array( 'client_id' => $client['client_id'] ), $names ) );
 		$this->assertSame( 'Removed app (gone-cli)', aafm_activity_connection_label( array( 'client_id' => 'gone-client-id-1234' ), $names ) );
 		$this->assertSame(
 			'App Password or direct',
@@ -296,5 +296,28 @@ final class LogQueryTest extends TestCase {
 			)
 		);
 		$this->assertSame( array(), aafm_activity_connection_names( array( '' ) ) );
+	}
+
+	public function test_two_apps_that_registered_under_the_same_name_get_different_labels(): void {
+		aafm_install_oauth_tables();
+		$ids = array();
+		foreach ( array( 1, 2 ) as $n ) {
+			$client = aafm_oauth_register_client(
+				array(
+					'redirect_uris' => array( 'https://app' . $n . '.example/cb' ),
+					'client_name'   => 'Claude',
+				)
+			);
+			$this->assertIsArray( $client );
+			$ids[] = $client['client_id'];
+		}
+		$names = aafm_activity_connection_names( $ids );
+
+		$first  = aafm_activity_connection_label( array( 'client_id' => $ids[0] ), $names );
+		$second = aafm_activity_connection_label( array( 'client_id' => $ids[1] ), $names );
+
+		$this->assertNotSame( $first, $second );
+		$this->assertStringStartsWith( 'Claude (', $first );
+		$this->assertStringContainsString( substr( $ids[1], 0, 8 ), $second );
 	}
 }

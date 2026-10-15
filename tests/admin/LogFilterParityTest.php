@@ -99,6 +99,7 @@ final class LogFilterParityTest extends TestCase {
 				'filter' => 'denied',
 			),
 			array( 'q' => '100%' ),
+			array( 'q' => 'client-a' ),
 			array( 'q' => 'seed-1' ),
 			array(
 				'from' => '2026-03-01',
@@ -163,6 +164,17 @@ final class LogFilterParityTest extends TestCase {
 		$this->assertSame( 1, $total );
 		$this->assertSame( array( 'agent-row' ), $this->csv_details( $request ), 'The CSV agrees with the table.' );
 		$this->assertSame( 1, aafm_activity_count_matching( $request ) );
+	}
+
+	public function test_the_search_box_matches_the_connection_client_id(): void {
+		$this->seed();
+
+		$request         = array( 'q' => 'client-a' );
+		list( , $total ) = $this->ajax( $request );
+
+		$this->assertSame( 6, $total, 'Six of the thirty seeded rows belong to client-a.' );
+		$this->assertSame( 6, aafm_activity_count_matching( $request ) );
+		$this->assertCount( 6, $this->csv_details( $request ), 'The CSV agrees.' );
 	}
 
 	public function test_the_day_boundary_filter_is_exact(): void {

@@ -147,9 +147,16 @@ function aafm_activity_filter_where( array $filters ): array {
 		$sql     .= ' AND principal_login = %s';
 		$params[] = (string) $f['user'];
 	}
-	if ( isset( $f['conn'] ) ) {
+	if ( isset( $f['conn'] ) && 'none' === $f['conn'] ) {
+		// Only real agent calls, so every listed row shows "App Password or direct" in the Connection
+		// column and never "-" (the same rule aafm_activity_connection_label() applies).
+		$agent    = aafm_agent_call_clause();
+		$sql     .= ' AND client_id = %s AND ' . $agent['sql'];
+		$params[] = '';
+		$params   = array_merge( $params, $agent['params'] );
+	} elseif ( isset( $f['conn'] ) ) {
 		$sql     .= ' AND client_id = %s';
-		$params[] = 'none' === $f['conn'] ? '' : (string) $f['conn'];
+		$params[] = (string) $f['conn'];
 	}
 	if ( isset( $f['tool'] ) ) {
 		$sql     .= ' AND ability = %s';

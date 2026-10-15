@@ -126,6 +126,45 @@ final class LogFilterParityTest extends TestCase {
 		}
 	}
 
+	public function test_conn_none_lists_only_rows_whose_connection_cell_says_direct(): void {
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+				'detail'  => 'agent-row',
+			)
+		);
+		aafm_log_activity(
+			array(
+				'ability' => '(transport)',
+				'status'  => 'denied',
+				'detail'  => 'transport-row',
+			)
+		);
+		aafm_log_activity(
+			array(
+				'ability' => 'oauth:authorize',
+				'status'  => 'success',
+				'detail'  => 'oauth-row',
+			)
+		);
+		aafm_log_activity(
+			array(
+				'ability'    => 'aafm/get-posts',
+				'status'     => 'success',
+				'event_type' => 'setting_changed',
+				'detail'     => 'setting-row',
+			)
+		);
+
+		$request                      = array( 'conn' => 'none' );
+		list( $table, $total, )       = $this->ajax( $request );
+		$this->assertSame( array( 'agent-row' ), $table, 'Only the real agent call has a direct connection.' );
+		$this->assertSame( 1, $total );
+		$this->assertSame( array( 'agent-row' ), $this->csv_details( $request ), 'The CSV agrees with the table.' );
+		$this->assertSame( 1, aafm_activity_count_matching( $request ) );
+	}
+
 	public function test_the_day_boundary_filter_is_exact(): void {
 		$this->seed();
 		list( , $total ) = $this->ajax(

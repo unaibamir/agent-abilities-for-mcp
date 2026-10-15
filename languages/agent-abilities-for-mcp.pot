@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-16T00:50:52+05:00\n"
+"POT-Creation-Date: 2026-10-16T02:37:01+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -3857,56 +3857,56 @@ msgid "login"
 msgstr ""
 
 #: includes/admin/activity-log.php:152
-#: includes/admin/activity-log.php:171
+#: includes/admin/activity-log.php:172
 msgid "Any"
 msgstr ""
 
 #: includes/admin/activity-log.php:153
-#: includes/audit/log-query.php:411
+#: includes/audit/log-query.php:437
 msgid "App Password or direct"
 msgstr ""
 
-#: includes/admin/activity-log.php:167
+#: includes/admin/activity-log.php:168
 #: includes/admin/page.php:1583
 #: includes/admin/page.php:1626
 msgid "Connection"
 msgstr ""
 
-#: includes/admin/activity-log.php:169
+#: includes/admin/activity-log.php:170
 msgid "Tool"
 msgstr ""
 
-#: includes/admin/activity-log.php:176
+#: includes/admin/activity-log.php:177
 #: includes/admin/dashboard.php:561
 msgid "Plugin"
 msgstr ""
 
-#: includes/admin/activity-log.php:178
+#: includes/admin/activity-log.php:179
 msgid "From (UTC)"
 msgstr ""
 
-#: includes/admin/activity-log.php:179
+#: includes/admin/activity-log.php:180
 msgid "To (UTC)"
 msgstr ""
 
-#: includes/admin/activity-log.php:180
+#: includes/admin/activity-log.php:181
 #: includes/admin/page.php:1889
 msgid "Search"
 msgstr ""
 
-#: includes/admin/activity-log.php:180
-msgid "tool, note, user"
-msgstr ""
-
-#: includes/admin/activity-log.php:186
-msgid "Apply"
+#: includes/admin/activity-log.php:181
+msgid "tool, note, user, app id"
 msgstr ""
 
 #: includes/admin/activity-log.php:187
+msgid "Apply"
+msgstr ""
+
+#: includes/admin/activity-log.php:188
 msgid "Reset"
 msgstr ""
 
-#: includes/admin/activity-log.php:189
+#: includes/admin/activity-log.php:190
 msgid "Search and user have no index: add a date range on a very large log. The IP is the address the request came from, so behind a proxy or CDN it is the proxy. Duration is the time inside the tool, not what the agent experienced."
 msgstr ""
 
@@ -3926,8 +3926,8 @@ msgstr ""
 #: includes/admin/connection.php:700
 #: includes/admin/connection.php:762
 #: includes/admin/doctor.php:767
-#: includes/admin/notifications.php:215
-#: includes/admin/notifications.php:274
+#: includes/admin/notifications.php:298
+#: includes/admin/notifications.php:363
 #: includes/admin/page.php:632
 #: includes/admin/page.php:754
 #: includes/admin/page.php:1113
@@ -3946,7 +3946,7 @@ msgstr ""
 #: includes/admin/review-request.php:755
 #: includes/admin/review-request.php:791
 #: includes/admin/settings.php:139
-#: includes/admin/settings.php:698
+#: includes/admin/settings.php:717
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -4053,9 +4053,11 @@ msgstr ""
 
 #. translators: 1: client display name, 2: truncated client id.
 #. translators: 1: section name, for example "Exposed meta keys". 2: name of the sub-tab the section sits in, for example "Content".
+#. translators: 1: the name an app registered under. 2: the first eight characters of its OAuth client id.
 #. translators: 1: ability name, 2: human-readable reason it was left out.
 #: includes/admin/allowlist.php:377
 #: includes/admin/page.php:263
+#: includes/audit/log-query.php:415
 #: includes/server.php:1577
 #, php-format
 msgid "%1$s (%2$s)"
@@ -5807,50 +5809,60 @@ msgid "Notifications"
 msgstr ""
 
 #. translators: %s: the notification mode, for example "Off".
-#: includes/admin/notifications.php:115
+#: includes/admin/notifications.php:109
 #, php-format
 msgid "Notifications set to: %s"
 msgstr ""
 
-#: includes/admin/notifications.php:161
+#. translators: %s: what the alerts covered, for example "new apps and Application Passwords".
+#: includes/admin/notifications.php:116
+#, php-format
+msgid "Notifications: alerts for %s turned off"
+msgstr ""
+
+#: includes/admin/notifications.php:180
 msgid "If you did not make this change, review who can sign in as an administrator."
 msgstr ""
 
-#: includes/admin/notifications.php:194
+#: includes/admin/notifications.php:236
+msgid "If you did not do this, review who can sign in as an administrator."
+msgstr ""
+
+#: includes/admin/notifications.php:277
 msgid "The queued notifications could not be sent and were kept"
 msgstr ""
 
-#: includes/admin/notifications.php:200
+#: includes/admin/notifications.php:283
 msgid "The queued notifications could not be cleared"
 msgstr ""
 
-#: includes/admin/notifications.php:219
+#: includes/admin/notifications.php:302
 msgid "Save a valid email address first, then send the test."
 msgstr ""
 
-#: includes/admin/notifications.php:222
+#: includes/admin/notifications.php:305
 msgid "A test email was sent a moment ago. Wait a minute and try again."
 msgstr ""
 
 #. translators: %s: the site name.
-#: includes/admin/notifications.php:227
+#: includes/admin/notifications.php:310
 #, php-format
 msgid "[%s] Agent Abilities test email"
 msgstr ""
 
-#: includes/admin/notifications.php:228
+#: includes/admin/notifications.php:311
 msgid "This is a test. If you can read it, alerts from Agent Abilities for MCP will reach this address."
 msgstr ""
 
-#: includes/admin/notifications.php:230
+#: includes/admin/notifications.php:313
 msgid "Test email sent. Check the inbox, and the spam folder."
 msgstr ""
 
-#: includes/admin/notifications.php:232
+#: includes/admin/notifications.php:315
 msgid "WordPress could not send the email. Your host may block mail; the admin notice will still show every alert."
 msgstr ""
 
-#: includes/admin/notifications.php:253
+#: includes/admin/notifications.php:336
 #: includes/admin/onboarding-pointer.php:205
 #: includes/admin/page.php:40
 #: includes/admin/page.php:41
@@ -5863,23 +5875,31 @@ msgstr ""
 msgid "Agent Abilities for MCP"
 msgstr ""
 
-#: includes/admin/notifications.php:255
+#. translators: 1: what happened, for example "An Application Password was created". 2: how many times it happened.
+#: includes/admin/notifications.php:342
+#, php-format
+msgid "%1$s (%2$d time)"
+msgid_plural "%1$s (%2$d times)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/admin/notifications.php:344
 msgid "View in Activity Log"
 msgstr ""
 
 #. translators: %d: how many further alerts are waiting, which Dismiss would also clear.
-#: includes/admin/notifications.php:260
+#: includes/admin/notifications.php:349
 #, php-format
 msgid "and %d more alert."
 msgid_plural "and %d more alerts."
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/notifications.php:261
+#: includes/admin/notifications.php:350
 msgid "Open the Activity Log"
 msgstr ""
 
-#: includes/admin/notifications.php:263
+#: includes/admin/notifications.php:352
 #: includes/admin/onboarding-pointer.php:208
 msgid "Dismiss"
 msgstr ""
@@ -6192,7 +6212,7 @@ msgstr ""
 
 #: includes/admin/page.php:251
 #: includes/admin/quickconnect.php:690
-#: includes/admin/settings.php:777
+#: includes/admin/settings.php:796
 msgid "OAuth"
 msgstr ""
 
@@ -7153,14 +7173,14 @@ msgstr ""
 #: includes/admin/settings.php:257
 #: includes/admin/settings.php:261
 #: includes/admin/settings.php:360
-#: includes/admin/settings.php:749
+#: includes/admin/settings.php:768
 msgid "Enable OAuth"
 msgstr ""
 
 #: includes/admin/quickconnect.php:342
 #: includes/admin/settings.php:216
 #: includes/admin/settings.php:350
-#: includes/admin/settings.php:819
+#: includes/admin/settings.php:838
 msgid "Read-only mode"
 msgstr ""
 
@@ -7311,8 +7331,8 @@ msgid "Safety guarantees"
 msgstr ""
 
 #: includes/admin/quickconnect.php:613
-#: includes/admin/settings.php:820
-#: includes/admin/settings.php:868
+#: includes/admin/settings.php:839
+#: includes/admin/settings.php:887
 msgid "Off by default"
 msgstr ""
 
@@ -7523,7 +7543,7 @@ msgstr ""
 #: includes/admin/settings.php:256
 #: includes/admin/settings.php:257
 #: includes/admin/settings.php:367
-#: includes/admin/settings.php:761
+#: includes/admin/settings.php:780
 msgid "Enable dynamic client registration"
 msgstr ""
 
@@ -7540,17 +7560,17 @@ msgid "The activity log retention setting"
 msgstr ""
 
 #: includes/admin/settings.php:275
-#: includes/admin/settings.php:917
+#: includes/admin/settings.php:936
 msgid "Force draft on create"
 msgstr ""
 
 #: includes/admin/settings.php:276
-#: includes/admin/settings.php:928
+#: includes/admin/settings.php:947
 msgid "Strict block validation"
 msgstr ""
 
 #: includes/admin/settings.php:277
-#: includes/admin/settings.php:1009
+#: includes/admin/settings.php:1028
 msgid "Delete data on uninstall"
 msgstr ""
 
@@ -7591,255 +7611,255 @@ msgstr ""
 msgid "High-risk abilities could not be locked: object cache stale"
 msgstr ""
 
-#: includes/admin/settings.php:703
+#: includes/admin/settings.php:722
 msgid "Reset did not fully complete. Some settings, the activity log, or OAuth data may still hold their old state - please try again."
 msgstr ""
 
-#: includes/admin/settings.php:709
+#: includes/admin/settings.php:728
 msgid "Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone."
 msgstr ""
 
-#: includes/admin/settings.php:752
+#: includes/admin/settings.php:771
 msgid "Let agents connect by pasting your site URL."
 msgstr ""
 
-#: includes/admin/settings.php:753
+#: includes/admin/settings.php:772
 msgid "Let agents connect by pasting your site URL. Application Passwords keep working either way."
 msgstr ""
 
-#: includes/admin/settings.php:764
+#: includes/admin/settings.php:783
 msgid "Let agents self-register a client automatically."
 msgstr ""
 
-#: includes/admin/settings.php:765
+#: includes/admin/settings.php:784
 msgid "On by default, so ChatGPT and Claude can connect. Turn it off to require manual client setup."
 msgstr ""
 
-#: includes/admin/settings.php:771
+#: includes/admin/settings.php:790
 msgid "If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it."
 msgstr ""
 
-#: includes/admin/settings.php:790
+#: includes/admin/settings.php:809
 msgid "These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need."
 msgstr ""
 
-#: includes/admin/settings.php:803
+#: includes/admin/settings.php:822
 msgid "Let agents read this site, and nothing else."
 msgstr ""
 
-#: includes/admin/settings.php:804
+#: includes/admin/settings.php:823
 msgid "While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable."
 msgstr ""
 
-#: includes/admin/settings.php:808
+#: includes/admin/settings.php:827
 msgid "That covers this plugin's own abilities and any bridged in from other plugins. It never turns anything on for you: your selections are kept exactly as they are, so switching this back off restores them."
 msgstr ""
 
-#: includes/admin/settings.php:809
+#: includes/admin/settings.php:828
 msgid "A bridged ability counts as a read only when the plugin that wrote it says so. That is the same declaration this plugin already trusts elsewhere, but it is the other plugin making it, not this one."
 msgstr ""
 
-#: includes/admin/settings.php:810
+#: includes/admin/settings.php:829
 msgid "Every flip of this switch is recorded in the activity log, and those entries expire on the same retention schedule as everything else in it."
 msgstr ""
 
-#: includes/admin/settings.php:813
+#: includes/admin/settings.php:832
 msgid "See more about read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:839
+#: includes/admin/settings.php:858
 msgid "Read-only mode is on, so this does nothing right now. Every high-risk ability writes, and read-only mode is already holding all of them. Turn read-only mode off above to use this switch."
 msgstr ""
 
-#: includes/admin/settings.php:853
+#: includes/admin/settings.php:872
 msgid "Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually."
 msgstr ""
 
-#: includes/admin/settings.php:854
+#: includes/admin/settings.php:873
 msgid "While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab."
 msgstr ""
 
-#: includes/admin/settings.php:856
+#: includes/admin/settings.php:875
 msgid "Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart."
 msgstr ""
 
-#: includes/admin/settings.php:857
+#: includes/admin/settings.php:876
 msgid "This switch covers this plugin's own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately."
 msgstr ""
 
-#: includes/admin/settings.php:858
+#: includes/admin/settings.php:877
 msgid "The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting below if you want a longer record of when the category was opened."
 msgstr ""
 
-#: includes/admin/settings.php:861
+#: includes/admin/settings.php:880
 msgid "See more about the high-risk category"
 msgstr ""
 
-#: includes/admin/settings.php:867
+#: includes/admin/settings.php:886
 msgid "Unlock the category"
 msgstr ""
 
-#: includes/admin/settings.php:871
+#: includes/admin/settings.php:890
 msgid "Held by read-only mode"
 msgstr ""
 
-#: includes/admin/settings.php:883
+#: includes/admin/settings.php:902
 msgid "Rate limit"
 msgstr ""
 
-#: includes/admin/settings.php:884
+#: includes/admin/settings.php:903
 msgid "Per minute"
 msgstr ""
 
-#: includes/admin/settings.php:888
+#: includes/admin/settings.php:907
 msgid "Rate limit, per minute"
 msgstr ""
 
-#: includes/admin/settings.php:890
+#: includes/admin/settings.php:909
 msgid "How many agent calls one connection can make per minute. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter."
 msgstr ""
 
-#: includes/admin/settings.php:898
+#: includes/admin/settings.php:917
 msgid "Before you save a list with anything in it, add the IP address your AI client connects from. As soon as this list has one entry, any request from an address that is not on it is blocked, including your own agent. Get it wrong and every agent call stops."
 msgstr ""
 
-#: includes/admin/settings.php:903
+#: includes/admin/settings.php:922
 msgid "IP allowlist"
 msgstr ""
 
-#: includes/admin/settings.php:904
+#: includes/admin/settings.php:923
 msgid "One per line"
 msgstr ""
 
-#: includes/admin/settings.php:908
+#: includes/admin/settings.php:927
 msgid "IP allowlist, one per line"
 msgstr ""
 
-#: includes/admin/settings.php:909
+#: includes/admin/settings.php:928
 msgid "One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped."
 msgstr ""
 
-#: includes/admin/settings.php:919
+#: includes/admin/settings.php:938
 msgid "Save the content an agent creates as a draft, no matter what status the request asked for."
 msgstr ""
 
-#: includes/admin/settings.php:920
+#: includes/admin/settings.php:939
 msgid "Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Things without a draft state (media, menus, terms, comments, users, coupons, orders) and product variations are not affected."
 msgstr ""
 
-#: includes/admin/settings.php:930
+#: includes/admin/settings.php:949
 msgid "Reject an agent write when its block markup would show as invalid content in the editor."
 msgstr ""
 
-#: includes/admin/settings.php:931
+#: includes/admin/settings.php:950
 msgid "When this is off (the default), a write with questionable block markup still saves, and the agent is sent a warning so it can fix its next attempt. Turn it on to refuse the write instead, so nothing that could look broken in the editor is ever stored."
 msgstr ""
 
-#: includes/admin/settings.php:938
+#: includes/admin/settings.php:957
 msgid "Maximum title length"
 msgstr ""
 
-#: includes/admin/settings.php:939
+#: includes/admin/settings.php:958
 msgid "Characters"
 msgstr ""
 
-#: includes/admin/settings.php:943
+#: includes/admin/settings.php:962
 msgid "Maximum title length, in characters"
 msgstr ""
 
-#: includes/admin/settings.php:945
+#: includes/admin/settings.php:964
 msgid "The longest title, in characters, an agent can set. Set it to 0 to leave the limit off."
 msgstr ""
 
-#: includes/admin/settings.php:952
+#: includes/admin/settings.php:971
 msgid "Keep activity log for"
 msgstr ""
 
-#: includes/admin/settings.php:953
+#: includes/admin/settings.php:972
 msgid "Days"
 msgstr ""
 
-#: includes/admin/settings.php:957
+#: includes/admin/settings.php:976
 msgid "Keep activity log for, in days"
 msgstr ""
 
-#: includes/admin/settings.php:959
+#: includes/admin/settings.php:978
 msgid "How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry."
 msgstr ""
 
-#: includes/admin/settings.php:967
+#: includes/admin/settings.php:986
 msgid "Automatic (on only when another plugin publishes tools there)"
 msgstr ""
 
-#: includes/admin/settings.php:968
+#: includes/admin/settings.php:987
 msgid "Always on"
 msgstr ""
 
-#: includes/admin/settings.php:969
+#: includes/admin/settings.php:988
 msgid "Always off"
 msgstr ""
 
-#: includes/admin/settings.php:971
+#: includes/admin/settings.php:990
 msgid "Allow the MCP Adapter default server"
 msgstr ""
 
-#: includes/admin/settings.php:978
+#: includes/admin/settings.php:997
 msgid "Allow the MCP Adapter's default server"
 msgstr ""
 
-#: includes/admin/settings.php:979
+#: includes/admin/settings.php:998
 msgid "Other plugins' tools"
 msgstr ""
 
-#: includes/admin/settings.php:981
+#: includes/admin/settings.php:1000
 msgid "The MCP Adapter has a built-in server that other plugins can publish their tools to. Tools served there are not governed by this plugin: no allowlist, read-only mode or audit log applies to them, and WordPress core's own public abilities are reachable there too. Agent Abilities for MCP's own tools are never on that server, whatever you choose."
 msgstr ""
 
-#: includes/admin/settings.php:1000
+#: includes/admin/settings.php:1019
 msgid "Permanently remove all plugin data when the plugin is deleted."
 msgstr ""
 
-#: includes/admin/settings.php:1001
+#: includes/admin/settings.php:1020
 msgid "When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone."
 msgstr ""
 
-#: includes/admin/settings.php:1003
+#: includes/admin/settings.php:1022
 msgid "See more about deleting data on uninstall"
 msgstr ""
 
-#: includes/admin/settings.php:1004
+#: includes/admin/settings.php:1023
 msgid "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin."
 msgstr ""
 
-#: includes/admin/settings.php:1018
+#: includes/admin/settings.php:1037
 msgid "Safety controls"
 msgstr ""
 
-#: includes/admin/settings.php:1025
+#: includes/admin/settings.php:1044
 msgid "These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests."
 msgstr ""
 
-#: includes/admin/settings.php:1037
+#: includes/admin/settings.php:1056
 msgid "Save settings"
 msgstr ""
 
-#: includes/admin/settings.php:1051
+#: includes/admin/settings.php:1070
 msgid "Danger zone"
 msgstr ""
 
-#: includes/admin/settings.php:1055
+#: includes/admin/settings.php:1074
 msgid "Reset plugin"
 msgstr ""
 
-#: includes/admin/settings.php:1055
+#: includes/admin/settings.php:1074
 msgid "Cannot be undone"
 msgstr ""
 
-#: includes/admin/settings.php:1057
+#: includes/admin/settings.php:1076
 msgid "Reset plugin to defaults"
 msgstr ""
 
-#: includes/admin/settings.php:1058
+#: includes/admin/settings.php:1077
 msgid "Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone."
 msgstr ""
 
@@ -8108,7 +8128,7 @@ msgid "Other plugins (Bridge)"
 msgstr ""
 
 #. translators: %s: the first eight characters of an OAuth client id whose app was removed.
-#: includes/audit/log-query.php:406
+#: includes/audit/log-query.php:432
 #, php-format
 msgid "Removed app (%s)"
 msgstr ""
@@ -8117,198 +8137,220 @@ msgstr ""
 msgid "The activity-log schema version"
 msgstr ""
 
-#: includes/audit/log.php:279
-msgid "Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin retries automatically on the next admin or REST request."
+#: includes/audit/log.php:281
+msgid "Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin tries again on its own, at most once an hour."
 msgstr ""
 
-#: includes/audit/log.php:441
+#: includes/audit/log.php:458
 msgid "Invalid Application Password"
 msgstr ""
 
 #. translators: %s: human-readable label of the option that failed to persist.
-#: includes/audit/log.php:567
+#: includes/audit/log.php:584
 #, php-format
 msgid "%s could not be saved: object cache stale"
 msgstr ""
 
-#: includes/audit/notifications.php:55
+#: includes/audit/notifications.php:58
 msgid "A new app is approved to connect, or an Application Password is created"
 msgstr ""
 
-#: includes/audit/notifications.php:56
+#: includes/audit/notifications.php:59
 msgid "A high-risk tool, or one that deletes permanently, runs"
 msgstr ""
 
-#: includes/audit/notifications.php:57
+#: includes/audit/notifications.php:60
 msgid "A burst of denied calls, or a connection hits the rate limit"
 msgstr ""
 
-#: includes/audit/notifications.php:58
+#: includes/audit/notifications.php:61
 msgid "Read-only mode or the high-risk lock is switched"
 msgstr ""
 
-#: includes/audit/notifications.php:139
+#: includes/audit/notifications.php:72
+msgid "new apps and Application Passwords"
+msgstr ""
+
+#: includes/audit/notifications.php:73
+msgid "high-risk and permanent-delete runs"
+msgstr ""
+
+#: includes/audit/notifications.php:74
+msgid "denied-call bursts and rate limits"
+msgstr ""
+
+#: includes/audit/notifications.php:75
+msgid "read-only and high-risk switch changes"
+msgstr ""
+
+#: includes/audit/notifications.php:166
 msgid "That email address does not look valid. Use one address, for example name@example.com."
 msgstr ""
 
-#: includes/audit/notifications.php:142
+#: includes/audit/notifications.php:169
 msgid "Add a valid email address, or choose \"Admin notice only\"."
 msgstr ""
 
-#: includes/audit/notifications.php:145
+#: includes/audit/notifications.php:172
 msgid "Pick at least one thing to be told about, or choose Off."
 msgstr ""
 
-#: includes/audit/notifications.php:284
+#: includes/audit/notifications.php:339
 msgid "A notification could not be saved for the admin notice"
 msgstr ""
 
-#: includes/audit/notifications.php:299
+#: includes/audit/notifications.php:356
 msgid "A notification could not be queued for the daily email"
 msgstr ""
 
-#: includes/audit/notifications.php:318
+#: includes/audit/notifications.php:375
 msgid "An app was authorized to connect"
 msgstr ""
 
-#: includes/audit/notifications.php:319
+#: includes/audit/notifications.php:376
 msgid "An Application Password was created"
 msgstr ""
 
-#: includes/audit/notifications.php:320
+#: includes/audit/notifications.php:377
 msgid "A high-risk tool ran"
 msgstr ""
 
-#: includes/audit/notifications.php:321
+#: includes/audit/notifications.php:378
 msgid "A tool that deletes permanently ran"
 msgstr ""
 
-#: includes/audit/notifications.php:322
+#: includes/audit/notifications.php:379
 msgid "A destructive tool from another plugin ran"
 msgstr ""
 
-#: includes/audit/notifications.php:323
+#: includes/audit/notifications.php:380
 msgid "Many calls were denied"
 msgstr ""
 
-#: includes/audit/notifications.php:324
+#: includes/audit/notifications.php:381
 msgid "A connection hit the rate limit"
 msgstr ""
 
-#: includes/audit/notifications.php:325
+#: includes/audit/notifications.php:382
 msgid "Read-only mode was turned on"
 msgstr ""
 
-#: includes/audit/notifications.php:326
+#: includes/audit/notifications.php:383
 msgid "Read-only mode was turned off"
 msgstr ""
 
-#: includes/audit/notifications.php:327
+#: includes/audit/notifications.php:384
 msgid "The high-risk lock was opened"
 msgstr ""
 
-#: includes/audit/notifications.php:328
+#: includes/audit/notifications.php:385
 msgid "The high-risk lock was closed"
 msgstr ""
 
-#: includes/audit/notifications.php:329
+#: includes/audit/notifications.php:386
 msgid "The notification address was changed"
 msgstr ""
 
-#: includes/audit/notifications.php:330
+#: includes/audit/notifications.php:387
+msgid "The plugin settings were reset"
+msgstr ""
+
+#: includes/audit/notifications.php:388
 msgid "Email alerts were turned off"
 msgstr ""
 
-#: includes/audit/notifications.php:331
-msgid "Alerts for read-only and high-risk switch changes were turned off"
+#. translators: %s: what the alerts covered, for example "new apps and Application Passwords".
+#: includes/audit/notifications.php:392
+#, php-format
+msgid "Alerts for %s were turned off"
 msgstr ""
 
-#: includes/audit/notifications.php:333
+#: includes/audit/notifications.php:394
 msgid "Something needs a look"
 msgstr ""
 
 #. translators: %s: the site name.
-#: includes/audit/notifications.php:367
+#: includes/audit/notifications.php:428
 #, php-format
 msgid "[%s] Agent Abilities daily summary"
 msgstr ""
 
-#: includes/audit/notifications.php:368
+#: includes/audit/notifications.php:429
 msgid "What happened since the last summary:"
 msgstr ""
 
 #. translators: 1: the site name. 2: what happened, for example "Read-only mode was turned off".
-#: includes/audit/notifications.php:384
+#: includes/audit/notifications.php:445
 #, php-format
 msgid "[%1$s] Agent Abilities alert: %2$s"
 msgstr ""
 
 #. translators: %s: a UTC date and time.
-#: includes/audit/notifications.php:387
+#: includes/audit/notifications.php:448
 #, php-format
 msgid "When: %s UTC"
 msgstr ""
 
 #. translators: %s: a tool name such as aafm/delete-post.
-#: includes/audit/notifications.php:390
+#: includes/audit/notifications.php:451
 #, php-format
 msgid "Tool: %s"
 msgstr ""
 
 #. translators: %s: an OAuth client id.
-#: includes/audit/notifications.php:394
+#: includes/audit/notifications.php:455
 #, php-format
 msgid "App id: %s"
 msgstr ""
 
 #. translators: %s: a host name the app redirects to.
-#: includes/audit/notifications.php:398
+#: includes/audit/notifications.php:459
 #, php-format
 msgid "Redirects to: %s"
 msgstr ""
 
 #. translators: %s: the name an app gave itself when it registered.
-#: includes/audit/notifications.php:402
+#: includes/audit/notifications.php:463
 #, php-format
 msgid "The name the app gave itself: %s"
 msgstr ""
 
 #. translators: %d: a WordPress user id.
-#: includes/audit/notifications.php:406
+#: includes/audit/notifications.php:467
 #, php-format
 msgid "For user account #%d"
 msgstr ""
 
 #. translators: %d: how many calls were denied.
-#: includes/audit/notifications.php:410
+#: includes/audit/notifications.php:471
 #, php-format
 msgid "Denied calls counted: %d"
 msgstr ""
 
 #. translators: %d: how many similar alerts were held back.
-#: includes/audit/notifications.php:414
+#: includes/audit/notifications.php:475
 #, php-format
 msgid "Held back since the last message: plus %d more"
 msgstr ""
 
-#: includes/audit/notifications.php:417
+#: includes/audit/notifications.php:478
 msgid "Open the Activity Log:"
 msgstr ""
 
-#: includes/audit/notifications.php:421
+#: includes/audit/notifications.php:482
 msgid "You get this because notifications are switched on under Settings in Agent Abilities for MCP. It never includes the content of a call."
 msgstr ""
 
-#: includes/audit/notifications.php:465
-#: includes/audit/notifications.php:542
+#: includes/audit/notifications.php:526
+#: includes/audit/notifications.php:626
 msgid "A notification email could not be sent"
 msgstr ""
 
-#: includes/audit/notifications.php:538
+#: includes/audit/notifications.php:622
 msgid "The queued notifications went out but could not be cleared"
 msgstr ""
 
-#: includes/audit/notifications.php:678
+#: includes/audit/notifications.php:831
 msgid "The daily summary went out but the queue could not be cleared"
 msgstr ""
 

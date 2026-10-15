@@ -238,7 +238,7 @@ function aafm_log_read_only_switch_change( bool $before, bool $after, bool $pers
 			? __( 'Read-only mode could not be turned on: object cache stale', 'agent-abilities-for-mcp' )
 			: __( 'Read-only mode could not be turned off: object cache stale', 'agent-abilities-for-mcp' );
 	}
-	aafm_log_activity(
+	$row_id = aafm_log_activity(
 		array(
 			'ability'           => 'aafm/read-only-mode',
 			'principal_user_id' => (int) $user->ID,
@@ -248,6 +248,9 @@ function aafm_log_read_only_switch_change( bool $before, bool $after, bool $pers
 			'detail'            => $detail,
 		)
 	);
+	if ( $persisted && $before !== $after && function_exists( 'aafm_notify_switch_flip' ) ) {
+		aafm_notify_switch_flip( $after ? 'read_only_on' : 'read_only_off', $row_id );
+	}
 }
 
 /**

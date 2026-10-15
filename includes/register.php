@@ -1017,6 +1017,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			} else {
 				aafm_announce_ability_resolved( null, 'denied', null, $rate_detail );
 			}
+			if ( function_exists( 'aafm_notify_event' ) ) {
+				aafm_notify_event( 'denial_burst', 'rate_limit', array( 'row_id' => (int) $rate_row_id ) );
+			}
 			return false;
 		}
 
@@ -1353,6 +1356,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// crash detail, so the announcement carries it. This reverses 1.6.1's announce-nothing
 			// decision; the history lives on ResolveHookTest's null-row-id test.
 			aafm_announce_ability_resolved( null, $status, $result_count, $resolved_detail );
+		}
+		if ( function_exists( 'aafm_notify_ability_finished' ) ) {
+			aafm_notify_ability_finished( $name, $status, $written ? $row_id : null );
 		}
 
 		return $result;

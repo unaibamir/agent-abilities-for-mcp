@@ -398,7 +398,7 @@ function aafm_log_high_risk_switch_change( bool $before, bool $after, bool $pers
 			? __( 'High-risk abilities could not be unlocked: object cache stale', 'agent-abilities-for-mcp' )
 			: __( 'High-risk abilities could not be locked: object cache stale', 'agent-abilities-for-mcp' );
 	}
-	aafm_log_activity(
+	$row_id = aafm_log_activity(
 		array(
 			// Both the admin table (page.php's Event column) and the AJAX-paginated re-render put
 			// the raw `ability` value straight into the Event cell - neither reads `event_type` at
@@ -414,6 +414,9 @@ function aafm_log_high_risk_switch_change( bool $before, bool $after, bool $pers
 			'detail'            => $detail,
 		)
 	);
+	if ( $persisted && $before !== $after && function_exists( 'aafm_notify_switch_flip' ) ) {
+		aafm_notify_switch_flip( $after ? 'high_risk_unlocked' : 'high_risk_locked', $row_id );
+	}
 }
 
 /**

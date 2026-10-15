@@ -546,3 +546,172 @@ function aafm_notify_unschedule(): void {
 	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
 }
 register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_notify_unschedule' );
+
+/**
+ * How alarming an ability is: high_risk, permanent_delete, bridged_destructive, or null for the rest.
+ * Recoverable trash and ordinary writes are deliberately not alarming.
+ *
+ * @param string $name Ability name.
+ * @return string|null
+ */
+function aafm_notify_ability_risk( string $name ): ?string {
+	if ( aafm_ability_is_high_risk( $name ) ) {
+		return 'high_risk';
+	}
+	if ( in_array( $name, aafm_permanent_delete_abilities(), true ) ) {
+		return 'permanent_delete';
+	}
+	if ( 0 === strpos( $name, 'aafm-bridge/' ) && function_exists( 'wp_get_ability' ) ) {
+		$ability = wp_get_ability( $name );
+		// One rule for "destructive": the helper the operator's own "can delete data" confirm uses. The
+		// wrapper's annotations are already that helper's normalized output (bridge.php:708-722), so this
+		// agrees with it for an undeclared foreign ability (destructive) and for a contradictory
+		// readonly:true plus destructive:true declaration (destructive), which a local rule would miss.
+		if ( $ability && ! empty( aafm_bridge_risk( $ability )['destructive'] ) ) {
+			return 'bridged_destructive';
+		}
+	}
+	return null;
+}
+
+/**
+ * Called from the execute closure once a call has resolved: a successful high-risk or destructive run
+ * is an event. Anything else returns at once.
+ *
+ * @param string   $ability Ability name.
+ * @param string   $status  The call's final status.
+ * @param int|null $row_id  The activity row, when it landed.
+ * @return void
+ */
+function aafm_notify_ability_finished( string $ability, string $status, ?int $row_id ): void {
+	if ( 'success' !== $status ) {
+		return;
+	}
+	try {
+		if ( null === aafm_notify_settings_for( 'risky_run' ) ) {
+			return;
+		}
+		$kind = aafm_notify_ability_risk( $ability );
+		if ( null !== $kind ) {
+			aafm_notify_event(
+				'risky_run',
+				$kind,
+				array(
+					'row_id'  => (int) $row_id,
+					'ability' => $ability,
+				)
+			);
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+
+/**
+ * Count denied calls; the tenth within five minutes fires one alert and restarts the count.
+ *
+ * The count is a plain integer transient read through aafm_transient_count(), the same reader the
+ * throttle uses: a failed or unreadable read never restarts the count at 1 (an unreadable count skips
+ * this call), so a flaky cache cannot quietly lower the alerts. The window slides: each denial restarts
+ * the five-minute clock, the same bound aafm_denial_log_within_cap() uses.
+ *
+ * @param array<string,mixed> $record The aafm_ability_resolved payload.
+ * @return void
+ */
+function aafm_notify_on_resolved( array $record ): void {
+	if ( 'denied' !== ( $record['status'] ?? '' ) ) {
+		return;
+	}
+	try {
+		if ( null === aafm_notify_settings_for( 'denial_burst' ) ) {
+			return;
+		}
+		$count = aafm_transient_count( 'aafm_ntf_denials' );
+		if ( null === $count ) {
+			return;
+		}
+		++$count;
+		if ( $count >= AAFM_NOTIFY_BURST_COUNT ) {
+			delete_transient( 'aafm_ntf_denials' );
+			aafm_notify_event(
+				'denial_burst',
+				'burst',
+				array(
+					'count'  => $count,
+					'row_id' => isset( $record['row_id'] ) ? (int) $record['row_id'] : 0,
+				)
+			);
+			return;
+		}
+		// ponytail: sliding window. A slow trickle of denials under five minutes apart can still reach ten.
+		// A fixed window needs a stored start time; add it if that ever matters.
+		set_transient( 'aafm_ntf_denials', $count, AAFM_NOTIFY_BURST_WINDOW );
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+add_action( 'aafm_ability_resolved', 'aafm_notify_on_resolved' );
+
+/**
+ * An approved OAuth grant. Resolves the app's name only when the trigger is on.
+ *
+ * @param array<string,mixed> $ctx    The aafm_oauth_log_event() context.
+ * @param int                 $row_id The lifecycle row just written.
+ * @return void
+ */
+function aafm_notify_oauth_grant( array $ctx, int $row_id ): void {
+	try {
+		if ( null === aafm_notify_settings_for( 'new_app' ) ) {
+			return;
+		}
+		$client_id = isset( $ctx['client_id'] ) ? (string) $ctx['client_id'] : '';
+		$client    = '' !== $client_id ? aafm_oauth_get_client( $client_id ) : null;
+		aafm_notify_event(
+			'new_app',
+			'oauth_grant',
+			array(
+				'row_id'    => $row_id,
+				'client_id' => $client_id,
+				'host'      => isset( $ctx['redirect_host'] ) ? (string) $ctx['redirect_host'] : '',
+				'app_name'  => null !== $client ? $client['client_name'] : '',
+			)
+		);
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+
+/**
+ * An Application Password was created for a user. Only the user id is read; never the password or its name.
+ *
+ * Core lets every role create one, so on a membership or LMS site a signed-up member would keep the
+ * owner's alerts busy. Only a user who can edit posts, or the plugin's own agent user, is worth an
+ * alert (spec D25). That is a chosen line, not a proven floor: a lower-privileged user's calls are
+ * still logged in the Activity Log.
+ *
+ * @param mixed $user_id The user the password belongs to.
+ * @return void
+ */
+function aafm_notify_on_app_password( $user_id ): void {
+	try {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 || ( ! user_can( $user_id, 'edit_posts' ) && ! aafm_principal_is_agent_identity( $user_id, null ) ) ) {
+			return;
+		}
+		aafm_notify_event( 'new_app', 'app_password', array( 'user_id' => $user_id ) );
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+add_action( 'wp_create_application_password', 'aafm_notify_on_app_password', 10, 1 );
+
+/**
+ * A governance switch changed and the change persisted.
+ *
+ * @param string $subtype read_only_on, read_only_off, high_risk_unlocked or high_risk_locked.
+ * @param int    $row_id  The log row for the change.
+ * @return void
+ */
+function aafm_notify_switch_flip( string $subtype, int $row_id ): void {
+	aafm_notify_event( 'switch_flip', $subtype, array( 'row_id' => $row_id ) );
+}

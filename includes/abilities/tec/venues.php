@@ -430,7 +430,7 @@ function aafm_exec_tec_update_venue( array $input ) {
 	}
 	$args = aafm_tec_venue_orm_args( $input );
 	if ( isset( $input['status'] ) ) {
-		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_venue_publish_cap() );
+		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_venue_publish_cap(), null, aafm_current_post_status( $id ) );
 		if ( is_wp_error( $status ) ) {
 			return $status;
 		}

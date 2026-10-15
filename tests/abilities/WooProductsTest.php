@@ -387,6 +387,29 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
+	 * Force draft holds back new publishing; it never takes a live product offline. An update that
+	 * repeats the product's current status leaves it live.
+	 */
+	public function test_force_draft_leaves_a_live_product_live_when_the_update_repeats_its_status(): void {
+		$this->acting_as( 'administrator' );
+		$live = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'name' => 'Live Gadget Two' ) );
+		$this->assertSame( 'publish', $live['status'] );
+
+		update_option( 'aafm_force_draft', true );
+		$updated = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => (int) $live['id'],
+				'name'       => 'Live Gadget Renamed',
+				'status'     => 'publish',
+			)
+		);
+		delete_option( 'aafm_force_draft' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $updated );
+		$this->assertSame( 'publish', $updated['status'] );
+	}
+
+	/**
 	 * B7 companion: with force-draft off, nothing changes - the default stays publish.
 	 */
 	public function test_create_product_defaults_to_publish_without_force_draft(): void {

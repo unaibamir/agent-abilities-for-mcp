@@ -670,9 +670,10 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 		$status = sanitize_key( (string) $input['status'] );
 		// The operator's force-draft setting covers products too (B7): an explicit request
 		// for a publish-equivalent status is coerced to draft, mirroring the update-post
-		// behaviour. An update that sends no status field never reaches here, so force-draft
-		// can never retro-unpublish an already-published product.
-		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status ) ) {
+		// behaviour. A request that only repeats the product's current status, or an update with
+		// no status field, leaves a live product live.
+		$is_same = $product->get_id() > 0 && $product->get_status() === $status;
+		if ( aafm_force_draft() && ! $is_same && aafm_status_requires_publish_cap( $status ) ) {
 			$status = 'draft';
 		}
 		$product->set_status( $status );

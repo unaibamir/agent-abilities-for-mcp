@@ -92,15 +92,45 @@ final class ReadmeClaimsTest extends TestCase {
 	}
 
 	/**
-	 * "...unless the edit asks for a publish status again, which is also saved as a draft." The other
-	 * half of the sentence above: force draft treats an explicit publish request as a request to
-	 * publish, even when the post is already live.
+	 * "Edits to a post that is already published still go live." An edit that also sends the
+	 * status the post already has (agents echo it back) is not a request to publish anything, so
+	 * force draft leaves the post live.
 	 */
-	public function test_force_draft_saves_a_repeated_publish_request_as_a_draft(): void {
+	public function test_force_draft_leaves_a_live_post_live_when_the_edit_repeats_its_status(): void {
 		update_option( 'aafm_force_draft', true );
 		$this->register_enabled( array( 'aafm/update-post' ) );
 		$editor_id = $this->acting_as( 'editor' );
 		$post_id   = (int) self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_author' => $editor_id,
+				'post_title'  => 'Before',
+			)
+		);
+
+		$result = wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'After',
+				'status'  => 'publish',
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'publish', $result['post']['status'] );
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+		$this->assertSame( 'After', get_the_title( $post_id ) );
+	}
+
+	/**
+	 * "Any request to publish is saved as a draft." A real move to a public status, from draft to
+	 * publish or from publish to private, is still held back.
+	 */
+	public function test_force_draft_still_holds_back_a_real_change_to_a_public_status(): void {
+		update_option( 'aafm_force_draft', true );
+		$this->register_enabled( array( 'aafm/update-post' ) );
+		$editor_id = $this->acting_as( 'editor' );
+		$live_id   = (int) self::factory()->post->create(
 			array(
 				'post_status' => 'publish',
 				'post_author' => $editor_id,
@@ -109,14 +139,14 @@ final class ReadmeClaimsTest extends TestCase {
 
 		$result = wp_get_ability( 'aafm/update-post' )->execute(
 			array(
-				'post_id' => $post_id,
-				'status'  => 'publish',
+				'post_id' => $live_id,
+				'status'  => 'private',
 			)
 		);
 
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'draft', $result['post']['status'] );
-		$this->assertSame( 'draft', get_post_status( $post_id ) );
+		$this->assertSame( 'draft', get_post_status( $live_id ) );
 	}
 
 	/**

@@ -771,6 +771,18 @@ function aafm_perm_create_draft( array $input ): bool {
 }
 
 /**
+ * The status a post has right now, for the update paths that must not take a live post offline.
+ *
+ * @param int $post_id Post ID.
+ * @return string|null Null when the post does not exist.
+ */
+function aafm_current_post_status( int $post_id ): ?string {
+	$post = aafm_exact_object( 'post', $post_id );
+
+	return $post instanceof WP_Post ? $post->post_status : null;
+}
+
+/**
  * Authorize and validate a requested post status against a specific capability.
  *
  * The single chokepoint every write path (create-draft, create-post, create-page,
@@ -797,9 +809,13 @@ function aafm_perm_create_draft( array $input ): bool {
  *                                       below so this function computes get_post_stati() at
  *                                       most once per call instead of twice. Null (the
  *                                       default) computes it here, unchanged from before.
+ * @param string|null   $current_status  An update's current status for the post being edited, null
+ *                                       for a create. Force draft stops a post from going live; it
+ *                                       never takes one offline, so a request that only repeats the
+ *                                       current status is left as it is.
  * @return string|WP_Error Sanitized status, or WP_Error when unauthorized/unrecognized.
  */
-function aafm_authorize_post_status( string $requested, string $publish_cap, ?array $public_statuses = null ) {
+function aafm_authorize_post_status( string $requested, string $publish_cap, ?array $public_statuses = null, ?string $current_status = null ) {
 	$status = sanitize_key( $requested );
 	if ( null === $public_statuses ) {
 		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
@@ -821,7 +837,7 @@ function aafm_authorize_post_status( string $requested, string $publish_cap, ?ar
 	// check. Applying it here is behaviourally identical to aafm_insert_post()'s existing
 	// separate call for its own callers (same condition, same outcome), so that call is left in
 	// place rather than removed for a fix that does not need it touched.
-	if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status, $public_statuses ) ) {
+	if ( aafm_force_draft() && $status !== $current_status && aafm_status_requires_publish_cap( $status, $public_statuses ) ) {
 		$status = 'draft';
 	}
 	return $status;
@@ -1299,17 +1315,13 @@ function aafm_exec_update_post( array $input ) {
 		$type_object     = get_post_type_object( $post->post_type );
 		$publish_cap     = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->publish_posts : 'publish_posts';
 		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
-		$status          = aafm_authorize_post_status( (string) $input['status'], $publish_cap, $public_statuses );
+		// Force draft is applied inside aafm_authorize_post_status(): a request to move the post to
+		// a publicly visible status becomes 'draft'. A request that only repeats the post's current
+		// status, or an edit with no 'status' field, is left alone, so a live post is never taken
+		// offline.
+		$status = aafm_authorize_post_status( (string) $input['status'], $publish_cap, $public_statuses, $post->post_status );
 		if ( is_wp_error( $status ) ) {
 			return $status;
-		}
-		// Mirror the create-path force-draft guard: when the operator has force-draft on, an
-		// explicit request for a status that would make the post publicly visible now or later
-		// is coerced to 'draft'. This only fires on such an explicit request - an edit-only
-		// update with no 'status' field never reaches here, so force-draft can never
-		// retro-unpublish an already-published post.
-		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status, $public_statuses ) ) {
-			$status = 'draft';
 		}
 		$postarr['post_status'] = $status;
 	}

@@ -96,7 +96,7 @@ function aafm_activity_summary_view( array $summary ): array {
 function aafm_render_activity_summary( array $summary ): void {
 	$v = aafm_activity_summary_view( $summary );
 	// A failed summary query is not "zero calls": show a hyphen and say so.
-	$num   = static function ( int $n ) use ( $v ): string {
+	$num = static function ( int $n ) use ( $v ): string {
 		return $v['ok'] ? number_format_i18n( $n ) : '-';
 	};
 	echo '<section class="aafm-log-summary" id="aafm-log-summary" aria-label="' . esc_attr__( 'Last 7 days', 'agent-abilities-for-mcp' ) . '">';

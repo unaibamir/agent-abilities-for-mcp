@@ -157,8 +157,8 @@ final class LogFilterParityTest extends TestCase {
 			)
 		);
 
-		$request                      = array( 'conn' => 'none' );
-		list( $table, $total, )       = $this->ajax( $request );
+		$request                = array( 'conn' => 'none' );
+		list( $table, $total, ) = $this->ajax( $request );
 		$this->assertSame( array( 'agent-row' ), $table, 'Only the real agent call has a direct connection.' );
 		$this->assertSame( 1, $total );
 		$this->assertSame( array( 'agent-row' ), $this->csv_details( $request ), 'The CSV agrees with the table.' );

@@ -74,7 +74,7 @@ function aafm_split_denied_detail( string $detail ): ?array {
 	if ( 1 !== preg_match( '/\A(?:(.*)\. )?Refused: ([a-z_]*)\z/su', $detail, $m ) ) {
 		return null;
 	}
-	return array( $m[1] ?? '', $m[2] );
+	return array( $m[1], $m[2] );
 }
 
 /**

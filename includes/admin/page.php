@@ -1503,8 +1503,8 @@ function aafm_ajax_get_log_page(): void {
 	$total       = aafm_activity_count_matching( $filters );
 	$total_pages = max( 1, (int) ceil( $total / $per_page ) );
 
-	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$page = isset( $_POST['page'] ) ? absint( wp_unslash( (string) $_POST['page'] ) ) : 1;
+	// An array or other non-string value is ignored rather than cast.
+	$page = isset( $posted['page'] ) && is_string( $posted['page'] ) ? absint( $posted['page'] ) : 1;
 	$page = min( max( 1, $page ), $total_pages );
 
 	$rows = aafm_query_activity(

@@ -435,6 +435,26 @@ final class ActivityTabTest extends TestCase {
 		$this->assertSame( 'started', $json['data']['rows'][0]['status'] ?? null );
 	}
 
+	public function test_the_ajax_page_handler_ignores_an_array_page_parameter(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+			)
+		);
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$_POST['page']     = array( 'x' );
+
+		$json = $this->run_handler( 'aafm_ajax_get_log_page' );
+
+		$this->assertTrue( (bool) ( $json['success'] ?? false ), 'An array page is ignored, not a PHP warning.' );
+		$this->assertSame( 1, $json['data']['page'] ?? null );
+	}
+
 	/**
 	 * Render the activity tab as an administrator and return its markup.
 	 *

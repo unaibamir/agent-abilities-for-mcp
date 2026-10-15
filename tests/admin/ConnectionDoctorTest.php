@@ -690,6 +690,20 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertSame( 'you', $row['who'] );
 	}
 
+	/**
+	 * Final review M4: behind a TLS-terminating proxy the home URL is https while the request is
+	 * not, so "this site is on plain HTTP" would be wrong. The wording must name the proxy header.
+	 * (The row itself is unreachable in a local environment, which core treats as supported.)
+	 */
+	public function test_unsupported_application_passwords_behind_a_tls_proxy_blame_the_forwarded_header(): void {
+		$proxy = aafm_doctor_unsupported_detail( 'https' );
+		$plain = aafm_doctor_unsupported_detail( 'http' );
+
+		$this->assertStringContainsString( 'X-Forwarded-Proto', $proxy );
+		$this->assertStringNotContainsString( 'plain HTTP', $proxy );
+		$this->assertStringContainsString( 'plain HTTP', $plain );
+	}
+
 	public function test_http_and_https_site_urls(): void {
 		$this->respond( $this->endpoint_ok() );
 		update_option( 'home', 'http://example.org' );

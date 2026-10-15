@@ -467,6 +467,23 @@ function aafm_doctor_filter_owners( string $hook ): array {
 }
 
 /**
+ * Why Application Passwords are unsupported on a site core considers neither HTTPS nor local.
+ *
+ * A home URL that already says https means a proxy or load balancer ends TLS and WordPress is not
+ * told, so "plain HTTP" would send the owner to fix the wrong thing.
+ *
+ * @param string $home_scheme The scheme of the home URL.
+ * @return string
+ */
+function aafm_doctor_unsupported_detail( string $home_scheme ): string {
+	if ( 'https' === $home_scheme ) {
+		return __( 'Your site address is HTTPS, but WordPress does not see this request as HTTPS, so Application Passwords stay off. Behind a proxy or load balancer, make it forward the X-Forwarded-Proto header and have WordPress trust it.', 'agent-abilities-for-mcp' );
+	}
+
+	return __( 'Application Passwords need HTTPS, or a local environment type. This site is on plain HTTP.', 'agent-abilities-for-mcp' );
+}
+
+/**
  * Row: are Application Passwords available.
  *
  * @return array<string,mixed>
@@ -477,7 +494,7 @@ function aafm_doctor_check_app_passwords(): array {
 		return aafm_doctor_row( 'app_passwords', $label, 'pass', '', __( 'Application Passwords are available.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( function_exists( 'wp_is_application_passwords_supported' ) && ! wp_is_application_passwords_supported() ) {
-		return aafm_doctor_row( 'app_passwords', $label, 'fail', 'you', __( 'Application Passwords need HTTPS, or a local environment type. This site is on plain HTTP.', 'agent-abilities-for-mcp' ) );
+		return aafm_doctor_row( 'app_passwords', $label, 'fail', 'you', aafm_doctor_unsupported_detail( (string) wp_parse_url( (string) get_option( 'home' ), PHP_URL_SCHEME ) ) );
 	}
 	$owners = aafm_doctor_filter_owners( 'wp_is_application_passwords_available' );
 	if ( array() === $owners ) {

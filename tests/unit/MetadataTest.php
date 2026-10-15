@@ -172,6 +172,9 @@ final class MetadataTest extends TestCase {
 			$this->assertStringNotContainsString( 'including tools from your other plugins', $text, $file );
 			$this->assertStringNotContainsString( 'abilities from other plugins included', $text, $file );
 			$this->assertStringNotContainsString( 'updates never silently widen access', $text, $file );
+			foreach ( array( 'Nothing is exposed until you turn it on', 'governed and off by default', 'logs every call including', 'every call is logged', 'writes every ability call', 'Every ability call, whether', 'capability-gated on every call, and logged', 'Every write is capability-checked' ) as $unscoped ) {
+				$this->assertStringNotContainsString( $unscoped, $text, "{$file}: '{$unscoped}' claims more than this plugin's own endpoint delivers." );
+			}
 			$this->assertSame( 1, preg_match( '/Do I need to install the MCP Adapter separately\?[ =]*\n\n([^\n]+)/', $text, $faq ), $file );
 			$this->assertStringContainsString( 'Always on', $faq[1], $file );
 			$this->assertStringContainsString( 'read-only mode', $faq[1], $file );
@@ -201,7 +204,7 @@ final class MetadataTest extends TestCase {
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
 		$this->assertSame( 1, preg_match( '/== Description ==(.+?)== Installation ==/s', $readme, $description ) );
 		$this->assertSame( 1, preg_match( '/== External Services ==(.+?)== Screenshots ==/s', $readme, $external ) );
-		$words = str_word_count( $description[1] ) + str_word_count( $external[1] );
+		$words = count( preg_split( '/\s+/', trim( $description[1] . ' ' . $external[1] ) ) );
 		$this->assertLessThanOrEqual( 2450, $words, 'Description plus External Services is over the wordpress.org cap margin.' );
 	}
 

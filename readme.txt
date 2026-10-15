@@ -4,7 +4,7 @@ Tags: chatgpt, claude, ai-agent, mcp, mcp-server
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.7.10
+Stable tag: 1.8.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -337,6 +337,14 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==
+
+= 1.8.0 =
+
+* **Feature:** A Site Brief box on the Settings tab lets you describe your site in a few lines. Every agent that connects to this plugin reads it.
+* **Feature:** The Connection tab has a Connection Doctor. One click checks the connection from your own server and tells you what to fix, for example a host that strips the Authorization header.
+* **Feature:** A Needs review card on the Dashboard lists the drafts your agents wrote, with Preview, Open in editor, Publish and Discard buttons. Discard moves the post to the Trash.
+* **Fix:** Other plugins' tools on the MCP Adapter's default server stopped working while this plugin was active. A new Settings switch (Automatic, Always on, Always off) brings that server back, and existing sites move to Automatic, which starts it only when another plugin publishes tools there. This plugin's own tools never appear on it, so a site that used it only for WordPress core abilities should pick Always on.
+* **Fix:** With Force draft on, an agent that sent "publish" again for a post that was already live took it offline. The post now stays live. A "WP_MCP_VERSION already defined" warning next to the standalone MCP Adapter 0.6.x and a Settings crash with an older adapter copy are also fixed, and the plugin title now names Claude and ChatGPT.
 
 = 1.7.10 =
 

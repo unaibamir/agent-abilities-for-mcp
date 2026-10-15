@@ -665,11 +665,27 @@ function aafm_notify_sync_schedule(): void {
 add_action( 'admin_init', 'aafm_notify_sync_schedule' );
 
 /**
- * Clear the digest event on deactivation.
+ * Clear the digest event on deactivation. A network-wide deactivation clears it on every site, the same
+ * get_sites() walk network activation and uninstall.php use; a per-site deactivation clears this site.
  *
+ * @param bool $network_wide True when the plugin is being deactivated network-wide.
  * @return void
  */
-function aafm_notify_unschedule(): void {
+function aafm_notify_unschedule( bool $network_wide = false ): void {
+	if ( is_multisite() && $network_wide ) {
+		$site_ids = get_sites(
+			array(
+				'fields' => 'ids',
+				'number' => 0,
+			)
+		);
+		foreach ( $site_ids as $site_id ) {
+			switch_to_blog( (int) $site_id );
+			wp_clear_scheduled_hook( 'aafm_notifications_digest' );
+			restore_current_blog();
+		}
+		return;
+	}
 	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
 }
 register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_notify_unschedule' );

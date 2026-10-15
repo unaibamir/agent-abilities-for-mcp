@@ -55,6 +55,7 @@ require_once AAFM_PLUGIN_DIR . 'includes/text.php';
 // Audit log is required early so the activation hook can install its table.
 require_once AAFM_PLUGIN_DIR . 'includes/option-cache.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
+require_once AAFM_PLUGIN_DIR . 'includes/audit/log-query.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/detail.php';
 // The write-and-confirm contract: readers, writer, delete, the checked-read scope, the option
 // rule, the post-field wrapper, and the write-outcome log observer it registers on load. Required

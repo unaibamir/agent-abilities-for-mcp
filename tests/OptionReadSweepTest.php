@@ -118,6 +118,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/doctor.php|aafm_doctor_last_header_result|1',
 		'includes/admin/page.php|aafm_detected_meta_keys|1',
 		'includes/admin/review-request.php|aafm_review_request_display_count|1',
+		'includes/audit/log-query.php|aafm_activity_summary|1',
 		'includes/audit/log.php|aafm_activity_log_schema_admin_notice|1',
 		'includes/audit/log.php|aafm_denial_log_within_cap|1',
 		'includes/helpers.php|aafm_transient_count|1',
@@ -383,7 +384,7 @@ final class OptionReadSweepTest extends TestCase {
 	public function test_every_get_transient_call_is_listed_exactly_once(): void {
 		$found = $this->plugin_calls();
 
-		$this->assertCount( 10, $found['get_transient'] );
+		$this->assertCount( 11, $found['get_transient'] );
 		$this->assertSame( $this->sorted( self::GET_TRANSIENT ), $this->keys_of( $found, 'get_transient' ) );
 	}
 

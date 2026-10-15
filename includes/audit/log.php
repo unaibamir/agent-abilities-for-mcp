@@ -615,8 +615,11 @@ function aafm_prune_activity_log(): void {
 	// retention window, which takes most of the log out on the next daily run. The heading would
 	// go on quoting the pre-prune number, and the render guard that exists to stop an ask the log
 	// cannot back reads the same memo, so it would pass on it too.
-	if ( $total_deleted > 0 && function_exists( 'aafm_review_request_flush_display_count' ) ) {
-		aafm_review_request_flush_display_count();
+	if ( $total_deleted > 0 ) {
+		if ( function_exists( 'aafm_review_request_flush_display_count' ) ) {
+			aafm_review_request_flush_display_count();
+		}
+		aafm_activity_summary_flush();
 	}
 }
 
@@ -827,7 +830,9 @@ function aafm_log_ability_exception( int $row_id, \Throwable $e ): string {
 /**
  * Query activity rows, most recent first.
  *
- * @param array<string,mixed> $args Query arguments: per_page, page, status, ability, max_id.
+ * @param array<string,mixed> $args Query arguments: per_page, page, and the filters status, ability
+ *                                  (or tool), user, conn, plugin, from, to, q, row and max_id, which
+ *                                  aafm_activity_filters_normalize() cleans.
  *                                  max_id (optional) bounds the result to id <= max_id - a
  *                                  caller paginating across multiple calls (the CSV exporter)
  *                                  uses it to pin every page to a snapshot taken before the
@@ -867,33 +872,15 @@ function aafm_query_activity_result( array $args ): array {
 	// never user input; the leading %i placeholder below quotes/escapes the identifier.
 	$table = aafm_activity_log_table();
 
-	$where  = '1=1';
-	$params = array();
-	if ( ! empty( $args['status'] ) ) {
-		$where   .= ' AND status = %s';
-		$params[] = (string) $args['status'];
-	}
-	if ( ! empty( $args['ability'] ) ) {
-		$where   .= ' AND ability = %s';
-		$params[] = (string) $args['ability'];
-	}
-	if ( ! empty( $args['max_id'] ) ) {
-		$where   .= ' AND id <= %d';
-		$params[] = (int) $args['max_id'];
-	}
-
+	$where    = aafm_activity_filter_where( $args );
+	$params   = $where['params'];
 	$params[] = $per_page;
 	$params[] = $offset;
-
-	// Bind the table identifier via the leading %i placeholder, so it is the first arg to
-	// $wpdb->prepare(). The %s fragments in {$where} are BOUND placeholders - their values
-	// (status, ability) were pushed onto $params above and are substituted by prepare(), never
-	// interpolated literals. The only interpolation into the SQL string is the static {$where}
-	// scaffolding (the "1=1 AND status = %s …" shape), which carries no user input.
 	array_unshift( $params, $table );
 
+	// The fragment is fixed text and placeholders from aafm_activity_filter_where(); every value is bound.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$sql = "SELECT * FROM %i WHERE {$where} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
+	$sql = "SELECT * FROM %i WHERE {$where['sql']} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
 	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
 	// a failed query here could otherwise return an EARLIER, unrelated query's rows (see
 	// aafm_oauth_list_clients()'s docblock for the mechanism), silently showing the admin a
@@ -911,26 +898,14 @@ function aafm_query_activity_result( array $args ): array {
  * Count activity rows, optionally narrowed to a single status.
  *
  * Mirrors the WHERE clause of aafm_query_activity() (minus paging) so a filtered view can
- * compute its own total and page count. A null or empty status counts every row. Runs as one
- * prepared, index-backed COUNT(*) against this plugin's own audit table.
+ * compute its own total and page count. A null or empty status counts every row. Delegates to the
+ * shared builder, aafm_activity_count_matching().
  *
  * @param string|null $status One of started|success|error|denied, or null/empty for all rows.
  * @return int Non-negative row count for the (optionally filtered) set.
  */
 function aafm_activity_count_filtered( ?string $status = null ): int {
-	global $wpdb;
-	$table = aafm_activity_log_table();
-
-	// Codex round 7, R7-2: both reads routed through aafm_wpdb_scalar() - see
-	// aafm_activity_count()'s docblock for why a bare get_var() risks displaying an adjacent
-	// count's stale value when this one's own query fails.
-	if ( null === $status || '' === $status ) {
-		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
-		return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
-	}
-
-	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE status = %s', $table, $status ) );
-	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
+	return aafm_activity_count_matching( null === $status || '' === $status ? array() : array( 'status' => $status ) );
 }
 
 /**
@@ -979,34 +954,9 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
  */
 function aafm_agent_call_count( ?string $status = null ): int {
 	global $wpdb;
-	$table = aafm_activity_log_table();
-
-	// One WHERE clause for every caller: the base exclusion set, plus an optional bound
-	// status narrowing. All %-placeholders are bound via $params; nothing user-supplied is
-	// ever interpolated into the SQL string itself.
-	$sql    = 'SELECT COUNT(*) FROM %i WHERE event_type = %s AND ability <> %s AND ability <> %s AND ability NOT LIKE %s';
-	$params = array(
-		$table,
-		'ability_call',
-		'(transport)',
-		'aafm/activity-log-cleared',
-		$wpdb->esc_like( 'oauth:' ) . '%',
-	);
-	if ( null !== $status && '' !== $status ) {
-		$sql     .= ' AND status = %s';
-		$params[] = $status;
-	}
-
-	// The PluginCheck token matches the one on the identical construct in aafm_query_activity().
-	// Plugin Check cannot follow $sql across the conditional append above, so it reports the
-	// prepare() call as carrying an unescaped parameter. It does not: the base string is a literal
-	// whose every value is a placeholder, the only thing ever appended is the constant literal
-	// ' AND status = %s', and all five or six values reach the query through $params - the table
-	// name via %i, and $status, the one caller-influenced value, via %s. Nothing is interpolated.
-	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
-	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
+	$clause = aafm_agent_call_clause( $status );
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-	$view = aafm_wpdb_scalar( $wpdb->prepare( $sql, $params ) );
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE ' . $clause['sql'], array_merge( array( aafm_activity_log_table() ), $clause['params'] ) ) );
 	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
@@ -1085,6 +1035,7 @@ function aafm_clear_activity_log(): bool {
 	if ( function_exists( 'aafm_review_request_flush_display_count' ) ) {
 		aafm_review_request_flush_display_count();
 	}
+	aafm_activity_summary_flush();
 
 	return true;
 }
@@ -1118,6 +1069,8 @@ function aafm_uninstall_site(): void {
 	delete_transient( 'aafm_review_request_count' );
 	// The Connection Doctor's header-seen memo, same data class.
 	delete_transient( 'aafm_doctor_header_seen' );
+	// The Activity tab's 7-day summary memo, same data class.
+	delete_transient( 'aafm_activity_summary' );
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );

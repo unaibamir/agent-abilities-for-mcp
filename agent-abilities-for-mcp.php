@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name:       Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
+ * Plugin Name:       Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
- * Description:       WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission controls, off by default, and a full audit log.
- * Version:           1.7.10
+ * Description:       WordPress MCP server for Claude and ChatGPT. Run one site or many with limited access, read-only mode, drafts you approve and an audit log.
+ * Version:           1.8.0
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.7.10' );
+define( 'AAFM_VERSION', '1.8.0' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -332,6 +332,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/helpers.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/wpml.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/safety.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/site-brief.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/block-guard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/page-builder-guard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/allowlist.php';
@@ -340,6 +341,8 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/class-aafm-rate-limited-ability.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/default-server.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/review-origin.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/catalog.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integration-manifest.php';
@@ -368,6 +371,9 @@ function aafm_bootstrap() {
 	// never-reached-WP). Pure observability - reads the response, changes no status. Priority 11 so
 	// it runs AFTER the governed-status rewrite above and records the final HTTP status the client sees.
 	add_filter( 'rest_post_dispatch', 'aafm_log_mcp_transport_outcome', 11, 3 );
+
+	// The Connection Doctor's own probe: answered before any MCP code runs, only for a live single-use token.
+	add_filter( 'rest_pre_dispatch', 'aafm_doctor_handle_probe', 1, 3 );
 
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/pages.php';
@@ -441,7 +447,9 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/notices.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-inbox.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/doctor.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/allowlist.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
@@ -471,6 +479,7 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_reset_plugin', 'aafm_ajax_reset_plugin' );
 		add_action( 'wp_ajax_aafm_create_agent_user', 'aafm_ajax_create_agent_user' );
 		add_action( 'wp_ajax_aafm_test_connection', 'aafm_ajax_test_connection' );
+		add_action( 'wp_ajax_aafm_run_doctor', 'aafm_ajax_run_doctor' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
 		add_action( 'wp_ajax_aafm_set_client_agent_identity', 'aafm_ajax_set_client_agent_identity' );
@@ -479,6 +488,8 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_quickconnect_finish', 'aafm_ajax_quickconnect_finish' );
 		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );
 		add_action( 'wp_ajax_aafm_review_request', 'aafm_ajax_review_request' );
+		add_action( 'wp_ajax_aafm_review_publish', 'aafm_ajax_review_publish' );
+		add_action( 'wp_ajax_aafm_review_discard', 'aafm_ajax_review_discard' );
 		// The same answer, arriving as a plain link when the notice's footer script never ran.
 		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );

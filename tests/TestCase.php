@@ -42,6 +42,15 @@ abstract class TestCase extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
+		// The wire tests host this plugin's tools on throwaway servers whose ids start with "aafm-";
+		// the default-server guards must treat those like the governed server. WP_UnitTestCase
+		// restores the hook table after each test, so nothing here leaks.
+		add_filter(
+			'aafm_server_is_governed',
+			static fn( $governed, $id ): bool => (bool) $governed || 0 === strpos( (string) $id, 'aafm-' ),
+			10,
+			2
+		);
 		// Policy reads are memoised per request; each test is a fresh request. With
 		// AAFM_TEST_POLICY_PATH=batched every test runs as an MCP REST request that WordPress has
 		// already routed, so policy reads take the batched path; unset, they take the front-end path.
@@ -68,6 +77,9 @@ abstract class TestCase extends WP_UnitTestCase {
 		// TRUNCATE reason. A suite that leaves it on would silently subtract every write ability
 		// from the next test's registered set.
 		delete_option( 'aafm_read_only_mode' );
+		delete_option( 'aafm_site_brief' ); // Escapes the per-test rollback for the same TRUNCATE reason as the options above.
+		delete_option( 'aafm_default_server_mode' ); // Same TRUNCATE escape as the options above.
+		delete_option( 'aafm_default_server_auto_noted' );
 		// The registry catalog is memoized per request; tests mutate the
 		// aafm_abilities_registry filter set between cases, so start each one with a
 		// fresh build (the next registry read rebuilds).

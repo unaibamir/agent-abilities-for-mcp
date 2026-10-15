@@ -58,12 +58,13 @@ function aafm_activity_statuses( bool $include_started = true ): array {
  * (aafm_reconcile_omitted_abilities() in includes/server.php - also a real ability name, again
  * distinguishable only by type). The ninth, write_outcome, is the write-and-confirm contract's own
  * row (includes/write-contract.php): one per write or delete outcome, carrying identifiers only,
- * never the ability that triggered it. Mirrors aafm_activity_statuses().
+ * never the ability that triggered it. The tenth, review_action, is an owner's Publish or Discard
+ * from the Needs review inbox (includes/admin/review-inbox.php). Mirrors aafm_activity_statuses().
  *
  * @return string[] The allowed event_type values.
  */
 function aafm_activity_event_types(): array {
-	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome' );
+	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed', 'ability_omitted', 'write_outcome', 'review_action' );
 }
 
 /**
@@ -357,7 +358,9 @@ if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
  *                       'fa' (failed Application Password auth), 'ipb' (IP-blocked transport),
  *                       'br' (an invalid OAuth bearer that still matched a real stored token),
  *                       'tx' (an MCP-route JSON-RPC error the transport-outcome logger records),
- *                       or 'ssl' (an aafm_oat_ bearer presented over http where HTTPS is required).
+ *                       'ssl' (an aafm_oat_ bearer presented over http where HTTPS is required),
+ *                       'rv' (a refused Needs review Publish or Discard click),
+ *                       or 'dsg' (a refused call naming this plugin's tool on the adapter default server).
  * @return bool True when the caller may write its row (the slot is consumed), false when this
  *              IP has used up its cap for the current window.
  */
@@ -1088,6 +1091,8 @@ function aafm_uninstall_site(): void {
 	delete_transient( 'aafm_detected_meta_keys' );
 	// The review notice's five-minute count memo, same data class.
 	delete_transient( 'aafm_review_request_count' );
+	// The Connection Doctor's header-seen memo, same data class.
+	delete_transient( 'aafm_doctor_header_seen' );
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );

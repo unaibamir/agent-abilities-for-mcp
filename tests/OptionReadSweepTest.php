@@ -36,6 +36,11 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/connection.php|aafm_format_admin_datetime|1' => 'N',
 		'includes/admin/connection.php|aafm_format_admin_datetime|2' => 'N',
 		'includes/admin/dashboard.php|aafm_render_dashboard_tab|1' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_build_report|1' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_build_report|2' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_check_app_passwords|1' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_check_https|1' => 'N',
+		'includes/admin/doctor.php|aafm_doctor_check_permalinks|1' => 'N',
 		'includes/admin/onboarding-pointer.php|aafm_quickconnect_pointer_should_show|1' => 'N',
 		'includes/admin/onboarding-pointer.php|aafm_maybe_enqueue_menu_pointer|1' => 'N',
 		'includes/admin/page.php|aafm_get_stored_enabled_abilities_raw|1' => 'G',
@@ -43,6 +48,8 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/quickconnect.php|aafm_quickconnect_is_dismissed|1' => 'N',
 		'includes/admin/quickconnect.php|aafm_quickconnect_site_looks_configured|1' => 'N',
 		'includes/admin/quickconnect.php|aafm_quickconnect_apply_abilities|1' => 'L',
+		'includes/admin/review-inbox.php|aafm_review_inbox_rows|1' => 'N',
+		'includes/admin/review-inbox.php|aafm_review_inbox_rows|2' => 'N',
 		'includes/admin/review-request.php|aafm_review_request_state|1' => 'N',
 		'includes/admin/settings.php|aafm_ajax_save_settings|1' => 'L',
 		'includes/admin/settings.php|aafm_ajax_save_settings|2' => 'L',
@@ -52,6 +59,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/audit/read-only.php|aafm_read_only_mode_stored|1' => 'G',
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => 'G',
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => 'G',
+		'includes/default-server.php|aafm_default_server_mode|1' => 'G',
 		'includes/helpers.php|aafm_allowed_post_types|1'   => 'G',
 		'includes/helpers.php|aafm_scoped_allowed_meta_keys|1' => 'G',
 		'includes/helpers.php|aafm_scoped_deny_option_raw|1' => 'G',
@@ -68,6 +76,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/safety.php|aafm_log_retention_days|1'    => 'G',
 		'includes/server.php|aafm_reconcile_omitted_abilities|1' => 'N',
 		'includes/server.php|aafm_notice_omitted_abilities|1' => 'N',
+		'includes/site-brief.php|aafm_site_brief|1'        => 'N',
 	);
 
 	/**
@@ -84,6 +93,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/audit/read-only.php|aafm_read_only_mode_stored|1' => array( 'aafm_read_only_mode' ),
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => array( 'aafm_block_guard_strict' ),
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => array( 'aafm_enabled_bridged_abilities' ),
+		'includes/default-server.php|aafm_default_server_mode|1' => array( 'aafm_default_server_mode' ),
 		'includes/helpers.php|aafm_allowed_post_types|1'   => array( 'aafm_allowed_post_types' ),
 		'includes/helpers.php|aafm_scoped_allowed_meta_keys|1' => array( 'aafm_allowed_meta_keys', 'aafm_exposed_term_meta_keys', 'aafm_exposed_user_meta_keys' ),
 		'includes/helpers.php|aafm_scoped_deny_option_raw|1' => array( 'aafm_denied_meta_keys', 'aafm_denied_term_meta_keys', 'aafm_denied_user_meta_keys' ),
@@ -104,6 +114,8 @@ final class OptionReadSweepTest extends TestCase {
 	 * @var list<string>
 	 */
 	private const GET_TRANSIENT = array(
+		'includes/admin/doctor.php|aafm_doctor_handle_probe|1',
+		'includes/admin/doctor.php|aafm_doctor_last_header_result|1',
 		'includes/admin/page.php|aafm_detected_meta_keys|1',
 		'includes/admin/review-request.php|aafm_review_request_display_count|1',
 		'includes/audit/log.php|aafm_activity_log_schema_admin_notice|1',
@@ -332,9 +344,9 @@ final class OptionReadSweepTest extends TestCase {
 		$this->assertSame( $this->sorted( array_keys( self::GET_OPTION ) ), $this->keys_of( $found, 'get_option' ), 'A get_option() call was added, moved or removed; classify it in GET_OPTION.' );
 		$this->assertSame(
 			array(
-				'G' => 20,
+				'G' => 21,
 				'L' => 3,
-				'N' => 19,
+				'N' => 27,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),
@@ -364,14 +376,14 @@ final class OptionReadSweepTest extends TestCase {
 			$options = array_merge( $options, $list );
 		}
 
-		$this->assertCount( 24, aafm_policy_options() );
+		$this->assertCount( 25, aafm_policy_options() );
 		$this->assertSame( $this->sorted( aafm_policy_options() ), $this->sorted( array_values( array_unique( $options ) ) ) );
 	}
 
 	public function test_every_get_transient_call_is_listed_exactly_once(): void {
 		$found = $this->plugin_calls();
 
-		$this->assertCount( 8, $found['get_transient'] );
+		$this->assertCount( 10, $found['get_transient'] );
 		$this->assertSame( $this->sorted( self::GET_TRANSIENT ), $this->keys_of( $found, 'get_transient' ) );
 	}
 

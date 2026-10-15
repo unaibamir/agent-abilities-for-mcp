@@ -106,6 +106,41 @@ final class InitializeCapabilitiesFilterTest extends TestCase {
 		$this->assertSame( 'Use the tools.', $data['instructions'] );
 	}
 
+	private function server_with_id( string $id ): object {
+		return new class( $id ) {
+			/**
+			 * Held value.
+			 *
+			 * @var string
+			 */
+			private $id;
+
+			public function __construct( string $id ) {
+				$this->id = $id;
+			}
+
+			public function get_server_id(): string {
+				return $this->id;
+			}
+		};
+	}
+
+	/**
+	 * The restored default server keeps its own resources and prompts capabilities: the strip applies
+	 * to this plugin's server only.
+	 */
+	public function test_another_servers_capabilities_are_left_alone(): void {
+		$schema = Schemas::create()->forVersion( '2025-11-25' );
+		$result = $schema->fromArray( InitializeResult::class, self::default_result() );
+
+		$other = aafm_filter_initialize_capabilities( $result, $this->server_with_id( 'mcp-adapter-default-server' ), $schema );
+		$this->assertSame( $result, $other, 'Another server\'s result must come back untouched.' );
+
+		$ours = aafm_filter_initialize_capabilities( $result, $this->server_with_id( 'aafm-server' ), $schema );
+		$data = json_decode( (string) wp_json_encode( $ours ), true );
+		$this->assertSame( array( 'tools' ), array_keys( $data['capabilities'] ) );
+	}
+
 	public function test_unrecognised_shapes_are_returned_untouched(): void {
 		$this->assertSame( 'text', aafm_filter_initialize_capabilities( 'text', null ) );
 

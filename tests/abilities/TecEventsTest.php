@@ -246,6 +246,34 @@ final class TecEventsTest extends TestCase {
 		$this->assertTrue( aafm_tec_perm_edit_event( array( 'event_id' => $event_id ) ) );
 	}
 
+	/**
+	 * Force draft never takes a live event offline: an update that repeats the status the event
+	 * already has leaves it live, while a draft event asked to publish is held as a draft.
+	 */
+	public function test_update_event_force_draft_spares_a_repeated_status_and_holds_a_real_publish(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$live  = $this->create_event();
+		$draft = $this->create_event( array( 'post_status' => 'draft' ) );
+
+		update_option( 'aafm_force_draft', true );
+		$kept = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $live,
+				'status'   => 'publish',
+			)
+		);
+		$held = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $draft,
+				'status'   => 'publish',
+			)
+		);
+		delete_option( 'aafm_force_draft' );
+
+		$this->assertSame( 'publish', $kept['event']['status'] );
+		$this->assertSame( 'draft', $held['event']['status'] );
+	}
+
 	public function test_update_event_changes_only_the_fields_given(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$event_id = $this->create_event( array( 'post_title' => 'Original' ) );

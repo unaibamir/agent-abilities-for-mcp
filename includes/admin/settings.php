@@ -37,7 +37,7 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -56,6 +56,11 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	$raw   = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
 	$lines = array_values( array_filter( aafm_split_and_trim_lines( $raw ), 'aafm_is_valid_ip_or_cidr' ) );
 
+	$brief_raw = isset( $posted['aafm_site_brief'] ) && is_scalar( $posted['aafm_site_brief'] ) ? (string) $posted['aafm_site_brief'] : '';
+
+	$mode_raw = isset( $posted['aafm_default_server_mode'] ) && is_string( $posted['aafm_default_server_mode'] ) ? $posted['aafm_default_server_mode'] : 'auto';
+	$mode     = in_array( $mode_raw, aafm_default_server_modes(), true ) ? $mode_raw : 'auto';
+
 	return array(
 		'aafm_rate_limit_per_min'           => $rate,
 		'aafm_max_title_len'                => $title,
@@ -67,6 +72,8 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_read_only_mode'               => $read_only,
 		'aafm_oauth_enabled'                => $oauth,
 		'aafm_oauth_dcr_enabled'            => $oauth_dcr,
+		'aafm_site_brief'                   => aafm_clean_site_brief( $brief_raw ),
+		'aafm_default_server_mode'          => $mode,
 		'aafm_ip_allowlist'                 => array_values( array_unique( $lines ) ),
 	);
 }
@@ -132,6 +139,15 @@ function aafm_ajax_save_settings(): void {
 	}
 	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$clean  = aafm_sanitize_settings_input( $posted );
+
+	// Free-text field: a save that does not carry it (a stale cached admin.js, a script) leaves the
+	// stored brief alone instead of clearing it, and so does a value that is not text (an array).
+	// Checkboxes in this form read "absent" as off; this is not a checkbox. The default-server mode
+	// is a select with the same rule: no field, or a field that is not text, leaves it alone.
+	$brief_posted = isset( $posted['aafm_site_brief'] ) && is_scalar( $posted['aafm_site_brief'] );
+	$brief_before = aafm_site_brief();
+	$mode_posted  = isset( $posted['aafm_default_server_mode'] ) && is_string( $posted['aafm_default_server_mode'] );
+	$mode_before  = aafm_default_server_mode();
 
 	$raw_allowlist = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
 	$dropped       = aafm_count_dropped_ip_lines( $raw_allowlist );
@@ -252,9 +268,16 @@ function aafm_ajax_save_settings(): void {
 		// turn on.
 		'aafm_ip_allowlist'             => array( $clean['aafm_ip_allowlist'], __( 'The IP allowlist', 'agent-abilities-for-mcp' ) ),
 	);
+	if ( $brief_posted ) {
+		// Never autoloaded: the text is read when the MCP server is built, not on every request.
+		$verified_settings['aafm_site_brief'] = array( $clean['aafm_site_brief'], __( 'The site brief', 'agent-abilities-for-mcp' ), false );
+	}
+	if ( $mode_posted ) {
+		$verified_settings['aafm_default_server_mode'] = array( $clean['aafm_default_server_mode'], __( 'The default server setting', 'agent-abilities-for-mcp' ) );
+	}
 	foreach ( $verified_settings as $verified_option => $verified_pair ) {
 		list( $verified_value, $verified_label ) = $verified_pair;
-		if ( ! aafm_update_option_verified( $verified_option, $verified_value ) ) {
+		if ( ! aafm_update_option_verified( $verified_option, $verified_value, $verified_pair[2] ?? null ) ) {
 			// The requested restrictive posture above already persisted and is not being undone by
 			// this failure, so it still needs its own audit row before the save reports the error - but
 			// only for a switch that was actually attempted. A deferred permissive transition (see the
@@ -268,6 +291,17 @@ function aafm_ajax_save_settings(): void {
 			}
 			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $verified_label ) ) );
 		}
+	}
+
+	if ( $brief_posted ) {
+		aafm_log_site_brief_change( $brief_before, $clean['aafm_site_brief'] );
+	} else {
+		$clean['aafm_site_brief'] = $brief_before; // The response reports what is stored, not the empty default.
+	}
+	if ( $mode_posted ) {
+		aafm_log_default_server_mode_change( $mode_before, $clean['aafm_default_server_mode'] );
+	} else {
+		$clean['aafm_default_server_mode'] = $mode_before;
 	}
 
 	// Every requested restrictive change is safely in place and every ordinary setting verified, so
@@ -325,8 +359,10 @@ function aafm_ajax_save_settings(): void {
 		array_merge(
 			$clean,
 			array(
-				'aafm_ip_allowlist_text' => implode( "\n", $clean['aafm_ip_allowlist'] ),
-				'aafm_ip_dropped'        => $dropped,
+				'aafm_ip_allowlist_text'    => implode( "\n", $clean['aafm_ip_allowlist'] ),
+				'aafm_ip_dropped'           => $dropped,
+				// Plain text for the "Currently running" line beside the select; reflects the saved mode.
+				'aafm_default_server_state' => aafm_default_server_state_label(),
 			)
 		)
 	);
@@ -448,6 +484,12 @@ function aafm_config_option_names(): array {
 		// because uninstall.php loads this file but NOT server.php, so the constant is not defined in
 		// the uninstall context. A drift guard in OmittedAbilitiesPreflightTest keeps the two in step.
 		'aafm_omitted_abilities',
+		// The owner's standing rules for every agent; reset and delete-data uninstall clear it.
+		'aafm_site_brief',
+		// The adapter default-server mode; a reset returns it to Automatic (the absent row).
+		'aafm_default_server_mode',
+		// The once-only marker for the "started automatically" log row; a reset logs it afresh.
+		'aafm_default_server_auto_noted',
 	);
 }
 
@@ -585,6 +627,9 @@ function aafm_reset_plugin(): bool {
 		}
 	}
 
+	// The Connection Doctor's header-seen memo is configuration-adjacent state; reset clears it too.
+	delete_transient( 'aafm_doctor_header_seen' );
+
 	if ( ! aafm_clear_activity_log() ) {
 		$ok = false;
 	} elseif ( ! aafm_log_activity_cleared_marker() ) {
@@ -693,6 +738,8 @@ function aafm_render_settings_tab(): void {
 			'body'  => $oauth_body,
 		)
 	);
+
+	aafm_render_site_brief_section();
 
 	// Caption for the card immediately below it. It names the safety controls outright, so it
 	// travelled down with them when OAuth took the top of the tab rather than staying at the head
@@ -869,6 +916,28 @@ function aafm_render_settings_tab(): void {
 				esc_attr__( 'Keep activity log for, in days', 'agent-abilities-for-mcp' )
 			),
 			'help'    => __( 'How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry.', 'agent-abilities-for-mcp' ),
+		)
+	);
+
+	// The adapter's default server. Three-way select, not a switch: Automatic is the default and
+	// the only mode that needs explaining. Our own tools are never on it in any mode.
+	$default_server_mode    = aafm_default_server_mode();
+	$default_server_options = array(
+		'auto' => __( 'Automatic (on only when another plugin publishes tools there)', 'agent-abilities-for-mcp' ),
+		'on'   => __( 'Always on', 'agent-abilities-for-mcp' ),
+		'off'  => __( 'Always off', 'agent-abilities-for-mcp' ),
+	);
+	$default_server_select  = '<select id="aafm-default-server-mode" name="aafm_default_server_mode" aria-label="' . esc_attr__( 'Allow the MCP Adapter default server', 'agent-abilities-for-mcp' ) . '">';
+	foreach ( $default_server_options as $value => $label ) {
+		$default_server_select .= '<option value="' . esc_attr( $value ) . '"' . selected( $default_server_mode, $value, false ) . '>' . esc_html( $label ) . '</option>';
+	}
+	$default_server_select .= '</select> <span id="aafm-default-server-state" class="aafm-default-server-state" role="status">' . esc_html( aafm_default_server_state_label() ) . '</span>';
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Allow the MCP Adapter\'s default server', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Other plugins\' tools', 'agent-abilities-for-mcp' ),
+			'control' => $default_server_select,
+			'help'    => __( 'The MCP Adapter has a built-in server that other plugins can publish their tools to. Tools served there are not governed by this plugin: no allowlist, read-only mode or audit log applies to them, and WordPress core\'s own public abilities are reachable there too. Agent Abilities for MCP\'s own tools are never on that server, whatever you choose.', 'agent-abilities-for-mcp' ),
 		)
 	);
 

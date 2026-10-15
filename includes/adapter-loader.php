@@ -208,6 +208,25 @@ function aafm_adapter_is_plugin_shell_class( string $fqcn ): bool {
 }
 
 /**
+ * Whether the on-demand autoloader must leave a class alone.
+ *
+ * The standalone adapter plugin's main file (0.6.x) defines WP_MCP_VERSION and then asks for
+ * WP\MCP\Plugin. Our prepended autoloader would answer with the bundled 0.7 Plugin.php, whose
+ * Plugin::constants() defines WP_MCP_VERSION a second time: a PHP warning on every request, in the
+ * log and in Query Monitor. A defined WP_MCP_VERSION means another adapter plugin owns the plugin
+ * shell, so we decline and that plugin's own request for the class simply finds nothing. Our
+ * McpAdapter is started by aafm_init_mcp() either way. With the constant undefined (a standalone
+ * 0.7 plugin, or none) nothing changes.
+ *
+ * @param string $class_name       Fully-qualified class name being autoloaded.
+ * @param bool   $version_defined  Whether WP_MCP_VERSION is already defined.
+ * @return bool True to decline the class.
+ */
+function aafm_adapter_autoload_should_skip( string $class_name, bool $version_defined ): bool {
+	return $version_defined && 'WP\\MCP\\Plugin' === $class_name;
+}
+
+/**
  * Register a prepended SPL autoloader that resolves the WP\MCP\ namespace from our bundled copy.
  *
  * Idempotent: a static guard ensures at most one loader is ever registered, no matter how many
@@ -237,8 +256,9 @@ function aafm_register_adapter_autoloader(): void {
 		static function ( string $class_name ): void {
 			$path = aafm_adapter_class_to_path( $class_name );
 
-			// On a miss, do nothing and let the next autoloader try. Never error.
-			if ( null === $path ) {
+			// On a miss, or a class that must stay with another plugin's copy, do nothing and let the
+			// next autoloader try. Never error.
+			if ( null === $path || aafm_adapter_autoload_should_skip( $class_name, defined( 'WP_MCP_VERSION' ) ) ) {
 				return;
 			}
 

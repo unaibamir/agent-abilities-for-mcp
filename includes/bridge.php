@@ -487,7 +487,10 @@ function aafm_discover_foreign_abilities(): array {
 		$slug = (string) $slug;
 		$pos  = strpos( $slug, '/' );
 		$ns   = false !== $pos ? substr( $slug, 0, $pos ) : 'core';
-		if ( 'aafm' === $ns || AAFM_BRIDGE_NAMESPACE === $ns ) {
+		// The adapter's own meta abilities (discover/get-info/execute) are skipped too: on 0.7.x
+		// they exist whenever the registries start in Automatic mode, even with no default server,
+		// and bridging the adapter's own executor makes no sense.
+		if ( 'aafm' === $ns || AAFM_BRIDGE_NAMESPACE === $ns || 'mcp-adapter' === $ns ) {
 			continue;
 		}
 		$risk                         = aafm_bridge_risk( $ability );

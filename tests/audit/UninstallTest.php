@@ -39,6 +39,19 @@ final class UninstallTest extends TestCase {
 	}
 
 	/**
+	 * Final review M1: the Connection Doctor's header-seen memo is removed with the site's data.
+	 */
+	public function test_uninstall_site_removes_the_doctor_header_seen_memo(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		set_transient( 'aafm_doctor_header_seen', 1, 300 );
+
+		aafm_uninstall_site();
+
+		$this->assertFalse( get_transient( 'aafm_doctor_header_seen' ) );
+	}
+
+	/**
 	 * Codex round 7, R7-2: aafm_uninstall_should_delete_data() used to read the flag with a bare
 	 * $wpdb->get_var(), which returns the PREVIOUS query's row when the current query itself
 	 * fails. Plant a positive scalar from an unrelated query, then force the flag's own SELECT to

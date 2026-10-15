@@ -103,23 +103,36 @@ function aafm_log_notifications_change( array $before, array $after ): void {
 	if ( $before === $after ) {
 		return;
 	}
-	$user = wp_get_current_user();
-	aafm_log_activity(
-		array(
-			'ability'           => 'aafm/notifications',
-			'principal_user_id' => (int) $user->ID,
-			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
-			'status'            => 'success',
-			'event_type'        => 'setting_changed',
-			/* translators: %s: the notification mode, for example "Off". */
-			'detail'            => sprintf( __( 'Notifications set to: %s', 'agent-abilities-for-mcp' ), aafm_notify_mode_label( (string) $after['mode'] ) ),
-		)
+	$user    = wp_get_current_user();
+	$details = array(
+		/* translators: %s: the notification mode, for example "Off". */
+		sprintf( __( 'Notifications set to: %s', 'agent-abilities-for-mcp' ), aafm_notify_mode_label( (string) $after['mode'] ) ),
 	);
+	// Every trigger that went from on to off gets a row of its own that names it, so unticking one is
+	// visible in the log and not only as a changed mode line.
+	foreach ( aafm_notify_trigger_phrases() as $slug => $phrase ) {
+		if ( ! empty( $before['triggers'][ $slug ] ) && empty( $after['triggers'][ $slug ] ) ) {
+			/* translators: %s: what the alerts covered, for example "new apps and Application Passwords". */
+			$details[] = sprintf( __( 'Notifications: alerts for %s turned off', 'agent-abilities-for-mcp' ), $phrase );
+		}
+	}
+	foreach ( $details as $detail ) {
+		aafm_log_activity(
+			array(
+				'ability'           => 'aafm/notifications',
+				'principal_user_id' => (int) $user->ID,
+				'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+				'status'            => 'success',
+				'event_type'        => 'setting_changed',
+				'detail'            => $detail,
+			)
+		);
+	}
 }
 
 /**
  * Warn the OLD address when a save redirects or weakens alerts: the address changed, email alerts were
- * switched off (mode Off or Admin notice only), or the read-only and high-risk switch alert was unticked.
+ * switched off (mode Off or Admin notice only), or any trigger was unticked.
  * A hijacked admin session would do exactly one of these before doing harm, so the previous recipient
  * hears about it. Reads the settings captured BEFORE the save; the new address is never named. One
  * message per kind, throttled like any other bucket, and only when the old mode could send email.
@@ -135,35 +148,41 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 			return;
 		}
 		$still_emailing = in_array( $after['mode'], array( 'immediate', 'digest' ), true );
-		$kind           = '';
+		$kinds          = array();
 		if ( ! $still_emailing ) {
-			$kind = 'settings:alerts_off';
+			$kinds[] = 'settings:alerts_off';
 		} elseif ( $before['email'] !== $after['email'] ) {
-			$kind = 'recipient:changed';
-		} elseif ( ! empty( $before['triggers']['switch_flip'] ) && empty( $after['triggers']['switch_flip'] ) ) {
-			$kind = 'settings:switch_alerts_off';
+			$kinds[] = 'recipient:changed';
+		} else {
+			foreach ( array_keys( aafm_notify_trigger_phrases() ) as $slug ) {
+				if ( ! empty( $before['triggers'][ $slug ] ) && empty( $after['triggers'][ $slug ] ) ) {
+					$kinds[] = 'settings:' . aafm_notify_trigger_off_subtype( $slug );
+				}
+			}
 		}
-		// The throttle key carries a hash of the OLD address, so A to B and then B to C inside the window
-		// still warns B: one address's warning never swallows another's.
-		$bucket = $kind . ':' . substr( md5( strtolower( (string) $before['email'] ) ), 0, 12 );
-		if ( '' === $kind || ! aafm_notify_take_slot( $bucket )['allowed'] ) {
-			return;
+		foreach ( $kinds as $kind ) {
+			// The throttle key carries a hash of the OLD address, so A to B and then B to C inside the window
+			// still warns B: one address's warning never swallows another's.
+			$bucket = $kind . ':' . substr( md5( strtolower( (string) $before['email'] ) ), 0, 12 );
+			if ( ! aafm_notify_take_slot( $bucket )['allowed'] ) {
+				continue;
+			}
+			list( $trigger, $subtype ) = explode( ':', $kind, 2 );
+			$event                     = array(
+				'trigger' => $trigger,
+				'subtype' => $subtype,
+				'time'    => time(),
+			);
+			aafm_notify_send_later(
+				(string) $before['email'],
+				array( $event ),
+				false,
+				__( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
+				'critical',
+				array(),
+				$bucket
+			);
 		}
-		list( $trigger, $subtype ) = explode( ':', $kind, 2 );
-		$event                     = array(
-			'trigger' => $trigger,
-			'subtype' => $subtype,
-			'time'    => time(),
-		);
-		aafm_notify_send_later(
-			(string) $before['email'],
-			array( $event ),
-			false,
-			__( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
-			'critical',
-			array(),
-			$bucket
-		);
 	} catch ( \Throwable $e ) {
 		unset( $e );
 	}

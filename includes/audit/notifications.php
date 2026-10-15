@@ -63,6 +63,30 @@ function aafm_notify_triggers(): array {
 }
 
 /**
+ * What each trigger covers, as a phrase for "alerts for ...": slug => phrase.
+ *
+ * @return array<string,string>
+ */
+function aafm_notify_trigger_phrases(): array {
+	return array(
+		'new_app'      => __( 'new apps and Application Passwords', 'agent-abilities-for-mcp' ),
+		'risky_run'    => __( 'high-risk and permanent-delete runs', 'agent-abilities-for-mcp' ),
+		'denial_burst' => __( 'denied-call bursts and rate limits', 'agent-abilities-for-mcp' ),
+		'switch_flip'  => __( 'read-only and high-risk switch changes', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
+ * The event subtype for "alerts for this trigger were turned off".
+ *
+ * @param string $slug A key of aafm_notify_triggers().
+ * @return string
+ */
+function aafm_notify_trigger_off_subtype( string $slug ): string {
+	return 'switch_flip' === $slug ? 'switch_alerts_off' : $slug . '_off';
+}
+
+/**
  * Coerce any stored value to the settings shape. A bad address becomes '' (never repaired).
  *
  * @param mixed $stored Whatever the option held.
@@ -361,8 +385,11 @@ function aafm_notify_event_label( array $event ): string {
 		'switch_flip:high_risk_locked'   => __( 'The high-risk lock was closed', 'agent-abilities-for-mcp' ),
 		'recipient:changed'              => __( 'The notification address was changed', 'agent-abilities-for-mcp' ),
 		'settings:alerts_off'            => __( 'Email alerts were turned off', 'agent-abilities-for-mcp' ),
-		'settings:switch_alerts_off'     => __( 'Alerts for read-only and high-risk switch changes were turned off', 'agent-abilities-for-mcp' ),
 	);
+	foreach ( aafm_notify_trigger_phrases() as $slug => $phrase ) {
+		/* translators: %s: what the alerts covered, for example "new apps and Application Passwords". */
+		$labels[ 'settings:' . aafm_notify_trigger_off_subtype( $slug ) ] = sprintf( __( 'Alerts for %s were turned off', 'agent-abilities-for-mcp' ), $phrase );
+	}
 	return $labels[ $key ] ?? __( 'Something needs a look', 'agent-abilities-for-mcp' );
 }
 

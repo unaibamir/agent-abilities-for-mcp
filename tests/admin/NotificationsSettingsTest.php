@@ -429,6 +429,62 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->assertStringContainsString( 'switch changes were turned off', $this->sent()[0]['subject'] );
 	}
 
+	public function test_unticking_any_trigger_warns_the_old_address_and_names_it_in_the_log(): void {
+		aafm_update_option_verified(
+			'aafm_notifications',
+			array(
+				'mode'     => 'immediate',
+				'email'    => 'owner@example.com',
+				'triggers' => array(
+					'new_app'      => true,
+					'risky_run'    => true,
+					'denial_burst' => true,
+					'switch_flip'  => true,
+				),
+			),
+			true
+		);
+
+		$this->save(
+			array(
+				'aafm_notify_mode'         => 'immediate',
+				'aafm_notify_email'        => 'owner@example.com',
+				'aafm_notify_switch_flip'  => '1',
+				'aafm_notify_denial_burst' => '1',
+			)
+		);
+
+		$subjects = implode( ' | ', array_column( $this->sent(), 'subject' ) );
+		$this->assertCount( 2, $this->sent(), $subjects );
+		$this->assertStringContainsString( 'Alerts for new apps', $subjects );
+		$this->assertStringContainsString( 'Alerts for high-risk', $subjects );
+		foreach ( $this->sent() as $mail ) {
+			$this->assertSame( 'owner@example.com', $mail['to'] );
+		}
+		$details = implode( ' | ', array_column( aafm_query_activity( array( 'ability' => 'aafm/notifications' ) ), 'detail' ) );
+		$this->assertStringContainsString( 'Notifications: alerts for new apps', $details );
+		$this->assertStringContainsString( 'turned off', $details );
+		$this->assertStringNotContainsString( 'owner@example.com', $details );
+	}
+
+	public function test_ticking_a_trigger_on_sends_no_warning_and_no_off_row(): void {
+		$this->store( 'immediate' );
+
+		$this->save(
+			array(
+				'aafm_notify_mode'        => 'immediate',
+				'aafm_notify_email'       => 'owner@example.com',
+				'aafm_notify_switch_flip' => '1',
+				'aafm_notify_risky_run'   => '1',
+				'aafm_notify_new_app'     => '1',
+			)
+		);
+
+		$this->assertSame( array(), $this->sent() );
+		$details = implode( ' | ', array_column( aafm_query_activity( array( 'ability' => 'aafm/notifications' ) ), 'detail' ) );
+		$this->assertStringNotContainsString( 'turned off', $details );
+	}
+
 	public function test_a_save_that_changes_nothing_important_sends_nothing(): void {
 		aafm_update_option_verified(
 			'aafm_notifications',

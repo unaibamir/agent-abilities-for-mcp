@@ -835,9 +835,12 @@ function aafm_args_create_term(): array {
  * parent to the target taxonomy themselves, so left unchecked a caller could
  * reparent a term under an ID borrowed from a different taxonomy entirely.
  *
- * @param int    $parent_id Candidate parent term ID (0 means "no parent").
+ * @param int    $parent_id Candidate parent term ID (0 means "no parent"); callers pass absint().
  * @param string $taxonomy  Target taxonomy, already allow-list validated.
  * @return int|WP_Error Sanitized parent ID (possibly 0), or error.
+ *
+ * @phpstan-param int<0, max> $parent_id
+ * @phpstan-return int<0, max>|WP_Error
  */
 function aafm_validate_term_parent( int $parent_id, string $taxonomy ) {
 	if ( 0 === $parent_id ) {

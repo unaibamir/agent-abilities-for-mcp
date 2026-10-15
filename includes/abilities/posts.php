@@ -1966,7 +1966,7 @@ function aafm_exec_replace_sitewide( array $input ) {
 			if ( null !== $posts || $query_marker !== $query->get( 'aafm_query_marker' ) ) {
 				return $posts;
 			}
-			$ids = aafm_wpdb_col( $query->request );
+			$ids = aafm_wpdb_col( (string) $query->request );
 			if ( ! $ids['ok'] ) {
 				$scan_failed = true;
 				return array();

@@ -95,7 +95,8 @@ final class HelpTabTest extends TestCase {
 
 		// The #1 support cluster: the request never reaches WordPress (WAF / CDN / cache / redirect).
 		$this->assertStringContainsString( '403 / 406 / 429', $html );
-		$this->assertStringContainsString( 'Block AI Bots', $html );
+		$this->assertStringContainsString( 'Configure AI bot policies', $html );
+		$this->assertStringContainsString( 'Edge traffic rules', $html );
 		$this->assertStringContainsString( 'ModSecurity', $html );
 		$this->assertStringContainsString( 'Zero Trust', $html );
 		// Page/edge cache exclusion and the wildcard allow path for the MCP route.

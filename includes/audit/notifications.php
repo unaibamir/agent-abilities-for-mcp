@@ -608,6 +608,10 @@ function aafm_notify_flush_outbox(): void {
 	if ( array() === $items ) {
 		return;
 	}
+	// ponytail: without fastcgi_finish_request() (mod_php, some CGI setups) the response is not closed
+	// first, so a slow mail host holds the visitor's request until wp_mail() returns. Accepted: at most
+	// the hourly caps' worth of messages per hour. Upgrade path is a queued send (cron or Action
+	// Scheduler) that mails outside the request.
 	if ( function_exists( 'fastcgi_finish_request' ) ) {
 		fastcgi_finish_request();
 	}

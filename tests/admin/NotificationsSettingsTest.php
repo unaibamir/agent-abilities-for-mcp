@@ -294,6 +294,27 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->assertStringContainsString( 'and 3 more', $this->render_notice() );
 	}
 
+	public function test_the_admin_notice_says_how_many_times_a_folded_alert_happened(): void {
+		aafm_update_option_verified(
+			'aafm_notifications',
+			array(
+				'mode'     => 'notice',
+				'email'    => '',
+				'triggers' => array( 'new_app' => true ),
+			),
+			true
+		);
+		for ( $i = 1; $i <= 4; $i++ ) {
+			aafm_notify_event( 'new_app', 'app_password', array( 'user_id' => 3 ) );
+		}
+		$this->acting_as( 'administrator' );
+
+		$html = $this->render_notice();
+
+		$this->assertSame( 1, substr_count( $html, 'View in Activity Log' ) );
+		$this->assertStringContainsString( 'An Application Password was created (4 times)', $html );
+	}
+
 	public function test_the_admin_notice_has_no_more_line_for_three_or_fewer_alerts(): void {
 		aafm_update_option_verified(
 			'aafm_notifications',

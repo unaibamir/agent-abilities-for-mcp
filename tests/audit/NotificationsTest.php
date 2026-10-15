@@ -203,7 +203,7 @@ final class NotificationsTest extends TestCase {
 		aafm_notify_event( 'denial_burst', 'burst', array( 'count' => 10 ) );
 		aafm_notify_event( 'denial_burst', 'burst', array( 'count' => 10 ) );
 		$this->assertCount( 1, $this->sent() );
-		$this->assertCount( 3, aafm_notify_pending_list(), 'A throttled event still reaches the admin notice; only the mail is throttled.' );
+		$this->assertCount( 1, aafm_notify_pending_list(), 'A repeat of a listed burst folds into its entry; only the mail is throttled.' );
 
 		// The window passes: the next message reports what it swallowed.
 		$slot = aafm_notify_take_slot( 'denial_burst:burst' );
@@ -265,6 +265,78 @@ final class NotificationsTest extends TestCase {
 		$sent = $this->sent();
 		$this->assertCount( 1, $sent );
 		$this->assertStringContainsString( 'plus 1 more', $sent[0]['message'] );
+	}
+
+	/**
+	 * The pending list holds ten entries. A contributor creating ten Application Passwords used to push
+	 * an earlier switch flip off it.
+	 */
+	public function test_a_run_of_application_passwords_cannot_push_a_switch_flip_off_the_notice_list(): void {
+		$this->configure( array( 'mode' => 'notice' ) );
+		aafm_notify_event( 'switch_flip', 'read_only_off', array( 'row_id' => 7 ) );
+		for ( $i = 1; $i <= 12; $i++ ) {
+			aafm_notify_event( 'new_app', 'app_password', array( 'user_id' => 3 ) );
+		}
+
+		$list = aafm_notify_pending_list();
+		$this->assertCount( 1, wp_list_filter( $list, array( 'trigger' => 'switch_flip' ) ), 'The flip is still listed.' );
+		$apps = array_values( wp_list_filter( $list, array( 'trigger' => 'new_app' ) ) );
+		$this->assertCount( 1, $apps, 'Twelve passwords make one entry.' );
+		$this->assertSame( 11, $apps[0]['repeat'], 'The entry counts the eleven further passwords.' );
+	}
+
+	public function test_new_app_entries_are_capped_at_three_and_never_evict_the_critical_ones(): void {
+		$this->configure( array( 'mode' => 'notice' ) );
+		foreach ( array( 'read_only_on', 'read_only_off', 'high_risk_unlocked', 'high_risk_locked' ) as $subtype ) {
+			aafm_notify_event( 'switch_flip', $subtype );
+		}
+		foreach ( array( 'high_risk', 'permanent_delete', 'bridged_destructive' ) as $subtype ) {
+			aafm_notify_event( 'risky_run', $subtype, array( 'ability' => 'aafm/delete-user' ) );
+		}
+		for ( $i = 1; $i <= 6; $i++ ) {
+			aafm_notify_event( 'new_app', 'oauth_grant', array( 'client_id' => 'dcr-' . $i ) );
+			aafm_notify_event( 'denial_burst', 'flood' . $i, array( 'count' => 10 ) );
+		}
+
+		$list = aafm_notify_pending_list();
+		$this->assertLessThanOrEqual( AAFM_NOTIFY_PENDING_MAX, count( $list ) );
+		$this->assertCount( 4, wp_list_filter( $list, array( 'trigger' => 'switch_flip' ) ) );
+		$this->assertCount( 3, wp_list_filter( $list, array( 'trigger' => 'risky_run' ) ) );
+		$this->assertCount( 3, wp_list_filter( $list, array( 'trigger' => 'new_app' ) ), 'New app entries are capped at three.' );
+	}
+
+	public function test_the_same_oauth_app_coalesces_but_a_second_app_gets_its_own_entry(): void {
+		$this->configure( array( 'mode' => 'notice' ) );
+		aafm_notify_event( 'new_app', 'oauth_grant', array( 'client_id' => 'app-one' ) );
+		aafm_notify_event( 'new_app', 'oauth_grant', array( 'client_id' => 'app-one' ) );
+		aafm_notify_event( 'new_app', 'oauth_grant', array( 'client_id' => 'app-two' ) );
+
+		$list = aafm_notify_pending_list();
+		$this->assertCount( 2, $list );
+		$this->assertSame( 'app-two', $list[0]['client_id'], 'Newest first.' );
+		$this->assertSame( 1, $list[1]['repeat'] );
+	}
+
+	/**
+	 * Every rate-limited call fires the event. A repeat inside the window must cost a read, not a write.
+	 */
+	public function test_a_repeated_rate_limit_event_does_not_write_the_pending_option(): void {
+		$this->configure( array( 'mode' => 'notice' ) );
+		aafm_notify_event( 'denial_burst', 'rate_limit', array( 'row_id' => 1 ) );
+
+		$writes = 0;
+		$count  = static function ( $value ) use ( &$writes ) {
+			++$writes;
+			return $value;
+		};
+		add_filter( 'pre_update_option_aafm_notify_pending', $count );
+		for ( $i = 2; $i <= 20; $i++ ) {
+			aafm_notify_event( 'denial_burst', 'rate_limit', array( 'row_id' => $i ) );
+		}
+		remove_filter( 'pre_update_option_aafm_notify_pending', $count );
+
+		$this->assertSame( 0, $writes );
+		$this->assertCount( 1, aafm_notify_pending_list() );
 	}
 
 	public function test_mail_is_queued_for_the_end_of_the_request_not_sent_inside_the_call(): void {

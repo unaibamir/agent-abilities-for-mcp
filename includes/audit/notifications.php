@@ -616,34 +616,103 @@ function aafm_notify_pending_list(): array {
 }
 
 /**
- * Add one admin-notice entry, newest first, capped. Denial bursts, which any authenticated principal can
- * trigger, keep at most three entries, oldest dropped first, and past the overall cap a denial goes
- * before any other entry does, so a flood of them can never push out a switch flip, a risky run or a new app.
+ * How much an admin-notice entry matters when the list is full: 0 is kept longest (a switch flip, a
+ * risky run), 1 is a new app, 2 is a denial burst, which any authenticated principal can trigger.
+ *
+ * @param array<string,mixed> $entry A pending entry.
+ * @return int
+ */
+function aafm_notify_pending_rank( array $entry ): int {
+	$ranks = array(
+		'new_app'      => 1,
+		'denial_burst' => 2,
+	);
+	return $ranks[ (string) ( $entry['trigger'] ?? '' ) ] ?? 0;
+}
+
+/**
+ * Add one admin-notice entry, newest first, capped.
+ *
+ * An entry with the same trigger, subtype and app (one client id; Application Passwords have none) as
+ * one already listed is folded into it: the entry moves to the front and its "repeat" count goes up, so
+ * ten Application Passwords or a run of grants from one app make one line, not ten. A denial burst is
+ * folded without a count and only touches the stored list again once its time is older than the mail
+ * window, so every rate-limited call after the first costs a read, not a write.
+ *
+ * New apps keep at most three entries and denial bursts at most three, oldest dropped first. Past the
+ * overall cap, denial bursts go first, then new apps, so neither can push out a switch flip or a risky run.
  *
  * @param array<string,mixed> $event The event.
- * @return bool Whether the write was certified.
+ * @return bool Whether the list is stored as intended (true without a write when nothing changed).
  */
 function aafm_notify_pending_push( array $event ): bool {
-	$list = aafm_notify_pending_list();
-	array_unshift( $list, $event );
-	$is_denial = static function ( array $e ): bool {
-		return 'denial_burst' === ( $e['trigger'] ?? '' );
+	$stored = aafm_notify_pending_list();
+	$list   = $stored;
+	$same   = static function ( array $a, array $b ): bool {
+		foreach ( array( 'trigger', 'subtype', 'client_id' ) as $field ) {
+			if ( (string) ( $a[ $field ] ?? '' ) !== (string) ( $b[ $field ] ?? '' ) ) {
+				return false;
+			}
+		}
+		return true;
 	};
-	$kept      = 0;
+	$found  = null;
 	foreach ( $list as $i => $e ) {
-		if ( $is_denial( $e ) && ++$kept > 3 ) {
-			unset( $list[ $i ] );
+		if ( $same( $e, $event ) ) {
+			$found = $i;
+			break;
+		}
+	}
+	if ( null === $found ) {
+		array_unshift( $list, $event );
+	} elseif ( 'denial_burst' === $event['trigger'] ) {
+		if ( (int) ( $event['time'] ?? 0 ) - (int) ( $list[ $found ]['time'] ?? 0 ) < AAFM_NOTIFY_WINDOW ) {
+			return true;
+		}
+		$list[ $found ]['time'] = $event['time'];
+	} else {
+		$entry           = $list[ $found ];
+		$entry['repeat'] = (int) ( $entry['repeat'] ?? 0 ) + 1;
+		foreach ( array( 'time', 'row_id', 'ability' ) as $field ) {
+			$entry[ $field ] = $event[ $field ] ?? $entry[ $field ] ?? '';
+		}
+		unset( $list[ $found ] );
+		array_unshift( $list, $entry );
+	}
+	$list = array_values( $list );
+
+	// Per-trigger caps, oldest (last) dropped first.
+	foreach ( array(
+		'new_app'      => 3,
+		'denial_burst' => 3,
+	) as $trigger => $cap ) {
+		$kept = 0;
+		foreach ( $list as $i => $e ) {
+			if ( ( $e['trigger'] ?? '' ) === $trigger && ++$kept > $cap ) {
+				unset( $list[ $i ] );
+			}
 		}
 	}
 	$list = array_values( $list );
-	$over = count( $list ) - AAFM_NOTIFY_PENDING_MAX;
-	for ( $i = count( $list ) - 1; $over > 0 && $i >= 0; $i-- ) {
-		if ( $is_denial( $list[ $i ] ) ) {
-			unset( $list[ $i ] );
-			--$over;
+
+	// Past the overall cap, drop the least important entry, oldest first. Rank 0 is never reached in
+	// practice: four switch subtypes and three risky ones come to seven.
+	$size = count( $list );
+	while ( $size > AAFM_NOTIFY_PENDING_MAX ) {
+		$drop = $size - 1;
+		for ( $i = $size - 1; $i >= 0; $i-- ) {
+			if ( aafm_notify_pending_rank( $list[ $i ] ) > aafm_notify_pending_rank( $list[ $drop ] ) ) {
+				$drop = $i;
+			}
 		}
+		unset( $list[ $drop ] );
+		$list = array_values( $list );
+		$size = count( $list );
 	}
-	$list = array_slice( array_values( $list ), 0, AAFM_NOTIFY_PENDING_MAX );
+
+	if ( $list === $stored ) {
+		return true;
+	}
 	return aafm_update_option_verified( 'aafm_notify_pending', $list, false );
 }
 

@@ -23,8 +23,11 @@ if ( ! defined( 'AAFM_NOTIFY_BURST_COUNT' ) ) {
 if ( ! defined( 'AAFM_NOTIFY_BURST_WINDOW' ) ) {
 	define( 'AAFM_NOTIFY_BURST_WINDOW', 5 * MINUTE_IN_SECONDS );
 }
-if ( ! defined( 'AAFM_NOTIFY_GLOBAL_MAX' ) ) {
-	define( 'AAFM_NOTIFY_GLOBAL_MAX', 6 );
+if ( ! defined( 'AAFM_NOTIFY_CRITICAL_MAX' ) ) {
+	define( 'AAFM_NOTIFY_CRITICAL_MAX', 6 );
+}
+if ( ! defined( 'AAFM_NOTIFY_APP_MAX' ) ) {
+	define( 'AAFM_NOTIFY_APP_MAX', 2 );
 }
 if ( ! defined( 'AAFM_NOTIFY_DENIAL_MAX' ) ) {
 	define( 'AAFM_NOTIFY_DENIAL_MAX', 2 );
@@ -165,6 +168,16 @@ function aafm_notify_settings_for( string $trigger ): ?array {
 }
 
 /**
+ * The transient name of a throttle bucket.
+ *
+ * @param string $bucket Trigger and subtype, for example "switch_flip:read_only_off".
+ * @return string
+ */
+function aafm_notify_bucket_key( string $bucket ): string {
+	return 'aafm_ntf_' . substr( md5( $bucket ), 0, 20 );
+}
+
+/**
  * Claim the one send allowed per bucket per window. An event inside the window only increments a
  * counter that the next send reports. An unreadable counter counts as "inside the window".
  *
@@ -172,7 +185,7 @@ function aafm_notify_settings_for( string $trigger ): ?array {
  * @return array{allowed:bool,suppressed:int}
  */
 function aafm_notify_take_slot( string $bucket ): array {
-	$key   = 'aafm_ntf_' . substr( md5( $bucket ), 0, 20 );
+	$key   = aafm_notify_bucket_key( $bucket );
 	$count = aafm_transient_count( $key );
 	if ( null === $count || $count > 0 ) {
 		$swallowed = (int) aafm_transient_count( $key . '_n' );
@@ -192,23 +205,41 @@ function aafm_notify_take_slot( string $bucket ): array {
 }
 
 /**
- * Claim one of the hourly email slots. Most events share one pool; denial bursts, which any
- * authenticated principal can trigger, have a small pool of their own so a flood of them can never use
- * up the slots a risky run, a new app or a switch flip needs.
+ * Claim one of the hourly email slots. Each kind of mail draws from a pool of its own, so one kind can
+ * never use up another's slots: "critical" (a switch flip, a high-risk run, and the warnings sent to the
+ * old address) is reserved, and new apps and denial bursts, which a contributor or any authenticated
+ * principal can trigger, each get a small pool.
  *
- * @param string $pool "global" (the shared pool) or "denial".
+ * @param string $pool "critical", "new_app" or "denial".
  * @return bool
  */
-function aafm_notify_global_slot( string $pool = 'global' ): bool {
-	$key   = 'denial' === $pool ? 'aafm_ntf_global_denial' : 'aafm_ntf_global';
-	$max   = 'denial' === $pool ? AAFM_NOTIFY_DENIAL_MAX : AAFM_NOTIFY_GLOBAL_MAX;
-	$count = aafm_transient_count( $key );
+function aafm_notify_global_slot( string $pool = 'critical' ): bool {
+	$pools             = array(
+		'critical' => array( 'aafm_ntf_global_critical', AAFM_NOTIFY_CRITICAL_MAX ),
+		'new_app'  => array( 'aafm_ntf_global_new_app', AAFM_NOTIFY_APP_MAX ),
+		'denial'   => array( 'aafm_ntf_global_denial', AAFM_NOTIFY_DENIAL_MAX ),
+	);
+	list( $key, $max ) = $pools[ $pool ] ?? $pools['critical'];
+	$count             = aafm_transient_count( $key );
 	if ( null === $count || $count >= $max ) {
 		return false;
 	}
 	// ponytail: the hour slides with each send. A fixed window would need a stored start time.
 	set_transient( $key, $count + 1, HOUR_IN_SECONDS );
 	return true;
+}
+
+/**
+ * The pool an event's mail draws from.
+ *
+ * @param string $trigger A key of aafm_notify_triggers().
+ * @return string
+ */
+function aafm_notify_pool_for( string $trigger ): string {
+	if ( 'denial_burst' === $trigger ) {
+		return 'denial';
+	}
+	return 'new_app' === $trigger ? 'new_app' : 'critical';
 }
 
 /**
@@ -284,8 +315,10 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 			aafm_notify_log_failure( __( 'A notification could not be saved for the admin notice', 'agent-abilities-for-mcp' ) );
 			return;
 		}
+		$bucket = '';
 		try {
-			$slot = aafm_notify_take_slot( $trigger . ':' . $subtype . ( '' !== $client_id ? ':' . $client_id : '' ) );
+			$bucket = $trigger . ':' . $subtype . ( '' !== $client_id ? ':' . $client_id : '' );
+			$slot   = aafm_notify_take_slot( $bucket );
 		} catch ( \Throwable $e ) {
 			unset( $e ); // A throttle that cannot answer means no mail; the notice entry already exists.
 			return;
@@ -299,7 +332,7 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 				aafm_notify_log_failure( __( 'A notification could not be queued for the daily email', 'agent-abilities-for-mcp' ) );
 			}
 		} elseif ( 'immediate' === $settings['mode'] ) {
-			aafm_notify_send_later( $settings['email'], array( $event ), false, '', 'denial_burst' === $trigger ? 'denial' : 'global' );
+			aafm_notify_send_later( $settings['email'], array( $event ), false, '', aafm_notify_pool_for( $trigger ), array(), $bucket );
 		}
 	} catch ( \Throwable $e ) {
 		unset( $e ); // A notification problem must never reach the call or the save that raised it.
@@ -487,9 +520,10 @@ function aafm_notify_outbox( string $op, array $item = array() ): array {
 
 /**
  * Take a slot from the hourly cap and queue the message for the end of the request. No slot left means
- * no mail (the admin notice entry exists regardless). Everything the engine mails except the Settings
- * test email and the daily cron summary goes through here, so a slow or dead mail host can never hold
- * up an agent call or a Settings save.
+ * no mail (the admin notice entry exists regardless), and the bucket's held-back count goes up so the
+ * next message says how many it missed. Everything the engine mails except the Settings test email and
+ * the daily cron summary goes through here, so a slow or dead mail host can never hold up an agent call
+ * or a Settings save.
  *
  * @param string                         $to     The address.
  * @param array<int,array<string,mixed>> $events Events to describe.
@@ -497,10 +531,14 @@ function aafm_notify_outbox( string $op, array $item = array() ): array {
  * @param string                         $extra  Optional closing paragraph added to the body.
  * @param string                         $pool   Which hourly pool to draw from, see aafm_notify_global_slot().
  * @param array<int,array<string,mixed>> $drain  Digest queue events to remove once, and only if, wp_mail() reports success.
+ * @param string                         $bucket The throttle bucket whose slot this message already took, so a refusal can be counted against it.
  * @return bool Whether a message was queued.
  */
-function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'global', array $drain = array() ): bool {
+function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'critical', array $drain = array(), string $bucket = '' ): bool {
 	if ( ! aafm_notify_global_slot( $pool ) ) {
+		if ( '' !== $bucket ) {
+			aafm_notify_hold_back( $bucket, (int) ( $events[0]['suppressed'] ?? 0 ) );
+		}
 		return false;
 	}
 	aafm_notify_outbox(
@@ -515,6 +553,20 @@ function aafm_notify_send_later( string $to, array $events, bool $digest, string
 	);
 	add_action( 'shutdown', 'aafm_notify_flush_outbox' );
 	return true;
+}
+
+/**
+ * Count one message the pool refused against its bucket, plus what the refused event was already
+ * carrying, so the next message that does go out reports all of it as "plus N more".
+ *
+ * @param string $bucket  The throttle bucket.
+ * @param int    $carried How many earlier events the refused event had been going to report.
+ * @return void
+ */
+function aafm_notify_hold_back( string $bucket, int $carried ): void {
+	$key  = aafm_notify_bucket_key( $bucket ) . '_n';
+	$held = (int) aafm_transient_count( $key );
+	set_transient( $key, $held + $carried + 1, DAY_IN_SECONDS );
 }
 
 /**

@@ -145,7 +145,8 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 		}
 		// The throttle key carries a hash of the OLD address, so A to B and then B to C inside the window
 		// still warns B: one address's warning never swallows another's.
-		if ( '' === $kind || ! aafm_notify_take_slot( $kind . ':' . substr( md5( strtolower( (string) $before['email'] ) ), 0, 12 ) )['allowed'] ) {
+		$bucket = $kind . ':' . substr( md5( strtolower( (string) $before['email'] ) ), 0, 12 );
+		if ( '' === $kind || ! aafm_notify_take_slot( $bucket )['allowed'] ) {
 			return;
 		}
 		list( $trigger, $subtype ) = explode( ':', $kind, 2 );
@@ -158,7 +159,10 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 			(string) $before['email'],
 			array( $event ),
 			false,
-			__( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' )
+			__( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
+			'critical',
+			array(),
+			$bucket
 		);
 	} catch ( \Throwable $e ) {
 		unset( $e );
@@ -190,7 +194,7 @@ function aafm_notify_settle_queue( array $before, array $after ): void {
 			return;
 		}
 		if ( $flush ) {
-			if ( ! aafm_notify_send_later( (string) $before['email'], $queue, true, '', 'global', $queue ) ) {
+			if ( ! aafm_notify_send_later( (string) $before['email'], $queue, true, '', 'critical', $queue ) ) {
 				aafm_notify_log_failure( __( 'The queued notifications could not be sent and were kept', 'agent-abilities-for-mcp' ) );
 			}
 			return;

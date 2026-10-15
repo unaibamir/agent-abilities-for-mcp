@@ -24,10 +24,12 @@ final class NotificationClaimsTest extends TestCase {
 		$faq = $this->faq_entry();
 		$this->assertSame( 900, AAFM_NOTIFY_WINDOW );
 		$this->assertStringContainsString( '15 minutes', $faq );
-		$this->assertSame( 6, AAFM_NOTIFY_GLOBAL_MAX );
-		$this->assertStringContainsString( 'six emails an hour', $faq );
+		$this->assertSame( 6, AAFM_NOTIFY_CRITICAL_MAX );
+		$this->assertStringContainsString( 'reserved six emails an hour', $faq );
+		$this->assertSame( 2, AAFM_NOTIFY_APP_MAX );
+		$this->assertStringContainsString( 'New apps get two more an hour', $faq );
 		$this->assertSame( 2, AAFM_NOTIFY_DENIAL_MAX );
-		$this->assertStringContainsString( 'two more an hour for bursts of denied calls', $faq );
+		$this->assertStringContainsString( 'bursts of denied calls get two of their own', $faq );
 	}
 
 	public function test_the_faq_says_alerts_are_off_by_default_and_they_are(): void {

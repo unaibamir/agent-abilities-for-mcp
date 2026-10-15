@@ -233,6 +233,40 @@ final class NotificationsTest extends TestCase {
 		$this->assertCount( 3, wp_list_filter( $list, array( 'trigger' => 'denial_burst' ) ) );
 	}
 
+	/**
+	 * A run of app approvals (anyone who can register a client, or one Application Password every few
+	 * minutes) used to drain the one shared pool, so a later switch flip sent nothing.
+	 */
+	public function test_app_approvals_cannot_use_up_the_pool_a_switch_flip_needs(): void {
+		$this->configure();
+		for ( $i = 1; $i <= 8; $i++ ) {
+			aafm_notify_event( 'new_app', 'oauth_grant', array( 'client_id' => 'dcr-app-' . $i ) );
+		}
+		aafm_notify_event( 'switch_flip', 'read_only_off' );
+		aafm_notify_event( 'risky_run', 'high_risk', array( 'ability' => 'aafm/delete-user' ) );
+
+		$subjects = implode( ' | ', array_column( $this->sent(), 'subject' ) );
+		$this->assertSame( 2, substr_count( $subjects, 'An app was authorized to connect' ), $subjects );
+		$this->assertStringContainsString( 'Read-only mode was turned off', $subjects );
+		$this->assertStringContainsString( 'A high-risk tool ran', $subjects );
+	}
+
+	public function test_a_mail_refused_for_lack_of_pool_room_is_counted_as_held_back(): void {
+		$this->configure();
+		set_transient( 'aafm_ntf_global_critical', 99, HOUR_IN_SECONDS );
+
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+		$this->assertSame( array(), $this->sent(), 'The pool is full, so no mail.' );
+
+		// The next window opens and the pool has room: the message says what it missed.
+		delete_transient( 'aafm_ntf_global_critical' );
+		delete_transient( 'aafm_ntf_' . substr( md5( 'switch_flip:read_only_on' ), 0, 20 ) );
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+		$sent = $this->sent();
+		$this->assertCount( 1, $sent );
+		$this->assertStringContainsString( 'plus 1 more', $sent[0]['message'] );
+	}
+
 	public function test_mail_is_queued_for_the_end_of_the_request_not_sent_inside_the_call(): void {
 		$this->configure();
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
@@ -275,7 +309,7 @@ final class NotificationsTest extends TestCase {
 		for ( $i = 1; $i <= 9; $i++ ) {
 			aafm_notify_event( 'risky_run', 'bucket' . $i, array( 'row_id' => $i ) );
 		}
-		$this->assertCount( AAFM_NOTIFY_GLOBAL_MAX, $this->sent() );
+		$this->assertCount( AAFM_NOTIFY_CRITICAL_MAX, $this->sent() );
 		$this->assertCount( 9, aafm_notify_pending_list(), 'Events past the mail cap still reach the admin notice list.' );
 	}
 
@@ -497,7 +531,7 @@ final class NotificationsTest extends TestCase {
 		aafm_notify_event( 'switch_flip', 'read_only_on' );
 
 		$this->assertFalse( get_transient( 'aafm_ntf_' . substr( md5( 'switch_flip:read_only_on' ), 0, 20 ) ), 'The bucket slot is untouched.' );
-		$this->assertFalse( get_transient( 'aafm_ntf_global' ), 'The shared hourly pool is untouched.' );
+		$this->assertFalse( get_transient( 'aafm_ntf_global_critical' ), 'The hourly pool is untouched.' );
 	}
 
 	public function test_a_denial_flood_never_evicts_a_critical_notice(): void {

@@ -525,7 +525,7 @@ final class NotificationsSettingsTest extends TestCase {
 	public function test_leaving_digest_keeps_the_queue_and_logs_a_row_when_the_hourly_cap_is_full(): void {
 		$this->store( 'digest', 'old@example.com' );
 		aafm_notify_event( 'switch_flip', 'read_only_on', array( 'row_id' => 1 ) );
-		set_transient( 'aafm_ntf_global', AAFM_NOTIFY_GLOBAL_MAX, HOUR_IN_SECONDS );
+		set_transient( 'aafm_ntf_global_critical', AAFM_NOTIFY_CRITICAL_MAX, HOUR_IN_SECONDS );
 
 		$this->save(
 			array(
@@ -606,7 +606,7 @@ final class NotificationsSettingsTest extends TestCase {
 
 	public function test_the_old_address_warning_respects_the_shared_hourly_cap(): void {
 		$this->store( 'immediate', 'old@example.com' );
-		set_transient( 'aafm_ntf_global', AAFM_NOTIFY_GLOBAL_MAX, HOUR_IN_SECONDS );
+		set_transient( 'aafm_ntf_global_critical', AAFM_NOTIFY_CRITICAL_MAX, HOUR_IN_SECONDS );
 
 		$this->save(
 			array(

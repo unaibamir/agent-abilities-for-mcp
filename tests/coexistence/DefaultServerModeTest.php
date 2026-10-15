@@ -23,6 +23,7 @@ final class DefaultServerModeTest extends TestCase {
 
 	public function tear_down(): void {
 		delete_option( 'aafm_default_server_mode' );
+		delete_option( 'aafm_default_server_auto_noted' );
 		if ( null !== $this->config_probe ) {
 			remove_filter( 'mcp_adapter_default_server_config', $this->config_probe );
 			$this->config_probe = null;
@@ -207,5 +208,104 @@ final class DefaultServerModeTest extends TestCase {
 	public function test_off_mode_wins_over_an_earlier_true_through_the_real_filter_chain(): void {
 		update_option( 'aafm_default_server_mode', 'off' );
 		$this->assertFalse( (bool) apply_filters( 'mcp_adapter_create_default_server', true ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+	}
+
+	public function test_a_later_filter_cannot_override_always_off_or_always_on(): void {
+		$this->assertGreaterThan( 100, has_filter( 'mcp_adapter_create_default_server', 'aafm_filter_default_server_enabled' ), 'The mode runs late.' );
+
+		update_option( 'aafm_default_server_mode', 'off' );
+		add_filter( 'mcp_adapter_create_default_server', '__return_true', 100 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		$off = apply_filters( 'mcp_adapter_create_default_server', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		remove_filter( 'mcp_adapter_create_default_server', '__return_true', 100 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		$this->assertFalse( $off );
+
+		update_option( 'aafm_default_server_mode', 'on' );
+		add_filter( 'mcp_adapter_create_default_server', '__return_false', 100 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		$on = apply_filters( 'mcp_adapter_create_default_server', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		remove_filter( 'mcp_adapter_create_default_server', '__return_false', 100 ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		$this->assertTrue( $on );
+	}
+
+	/**
+	 * The guards must be registered before aafm_init_mcp() can return early on a missing or
+	 * incompatible adapter, because they need no adapter classes.
+	 */
+	public function test_the_guards_are_registered_before_the_adapter_compatibility_returns(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/bootstrap.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local source file in a test.
+		$start  = (int) strpos( $source, 'function aafm_init_mcp(): bool {' );
+		$guards = (int) strpos( $source, 'aafm_register_default_server_guards();', $start );
+		$early  = (int) strpos( $source, 'return false;', $start );
+
+		$this->assertGreaterThan( $start, $guards );
+		$this->assertLessThan( $early, $guards, 'The guards are registered after an early return.' );
+	}
+
+	public function test_the_state_line_follows_the_mode(): void {
+		update_option( 'aafm_default_server_mode', 'off' );
+		$this->assertFalse( aafm_default_server_running() );
+		$this->assertSame( 'Currently not running', aafm_default_server_state_label() );
+
+		update_option( 'aafm_default_server_mode', 'on' );
+		$this->assertTrue( aafm_default_server_running() );
+		$this->assertSame( 'Currently running', aafm_default_server_state_label() );
+
+		update_option( 'aafm_default_server_mode', 'auto' );
+		$this->config_probe = static fn( $config ) => $config;
+		add_filter( 'mcp_adapter_default_server_config', $this->config_probe ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		$this->assertSame( 'Currently running', aafm_default_server_state_label() );
+	}
+
+	/**
+	 * A recording adapter that says whether the default server exists.
+	 *
+	 * @param bool $has_default Whether get_server() finds the default server.
+	 * @return object
+	 */
+	private function adapter( bool $has_default ): object {
+		return new class( $has_default ) {
+			/**
+			 * Whether the default server exists.
+			 *
+			 * @var bool
+			 */
+			private $has_default;
+
+			public function __construct( bool $has_default ) {
+				$this->has_default = $has_default;
+			}
+
+			public function get_server( string $id ) {
+				return ( $this->has_default && 'mcp-adapter-default-server' === $id ) ? new \stdClass() : null;
+			}
+		};
+	}
+
+	public function test_automatic_start_is_logged_once_and_only_when_the_server_exists(): void {
+		$this->config_probe = static fn( $config ) => $config;
+		add_filter( 'mcp_adapter_default_server_config', $this->config_probe ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook.
+		$query              = array( 'ability' => 'aafm/default-server-mode' );
+
+		aafm_note_automatic_default_server( $this->adapter( false ) );
+		$this->assertSame( array(), aafm_query_activity( $query ), 'No server, no row.' );
+
+		aafm_note_automatic_default_server( $this->adapter( true ) );
+		aafm_note_automatic_default_server( $this->adapter( true ) );
+		$rows = aafm_query_activity( $query );
+		$this->assertCount( 1, $rows, 'Logged once, not per request.' );
+		$this->assertStringContainsString( 'automatically', (string) $rows[0]['detail'] );
+	}
+
+	public function test_explicit_modes_do_not_log_an_automatic_start(): void {
+		foreach ( array( 'on', 'off' ) as $mode ) {
+			update_option( 'aafm_default_server_mode', $mode );
+			aafm_note_automatic_default_server( $this->adapter( true ) );
+		}
+
+		$this->assertSame( array(), aafm_query_activity( array( 'ability' => 'aafm/default-server-mode' ) ) );
+		$this->assertFalse( get_option( 'aafm_default_server_auto_noted' ) );
+	}
+
+	public function test_the_automatic_start_marker_is_in_the_reset_list(): void {
+		$this->assertContains( 'aafm_default_server_auto_noted', aafm_config_option_names() );
 	}
 }

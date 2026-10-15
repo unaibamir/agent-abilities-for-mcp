@@ -104,4 +104,26 @@ final class DefaultServerSaveTest extends TestCase {
 		$autoload = $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", 'aafm_site_brief' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- reading the stored autoload flag.
 		$this->assertContains( $autoload, array( 'off', 'no' ), 'The brief must not be autoloaded.' );
 	}
+
+	public function test_the_settings_tab_says_whether_the_default_server_is_running(): void {
+		$this->acting_as( 'administrator' );
+		foreach ( array(
+			'on'  => 'Currently running',
+			'off' => 'Currently not running',
+		) as $mode => $label ) {
+			update_option( 'aafm_default_server_mode', $mode );
+			ob_start();
+			aafm_render_settings_tab();
+			$html = (string) ob_get_clean();
+			$this->assertStringContainsString( '>' . $label . '</span>', $html );
+		}
+	}
+
+	public function test_the_save_response_carries_the_new_state_line(): void {
+		$this->post_as( 'administrator', array( 'aafm_default_server_mode' => 'off' ) );
+
+		$json = $this->run_handler( 'aafm_ajax_save_settings' );
+
+		$this->assertSame( 'Currently not running', $json['data']['aafm_default_server_state'] );
+	}
 }

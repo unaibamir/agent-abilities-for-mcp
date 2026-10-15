@@ -1573,6 +1573,10 @@
 								'Could not save - your previous settings are still in effect.'
 							);
 					} else {
+						const serverState = form.querySelector( '#aafm-default-server-state' );
+						if ( serverState && 'string' === typeof json.data?.aafm_default_server_state ) {
+							serverState.textContent = json.data.aafm_default_server_state;
+						}
 						if ( siteBrief && 'string' === typeof json.data?.aafm_site_brief ) {
 							siteBrief.value = json.data.aafm_site_brief; // Show what was actually kept.
 						}

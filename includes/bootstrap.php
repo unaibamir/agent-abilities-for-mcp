@@ -162,6 +162,10 @@ function aafm_loaded_adapter_version(): ?string {
  * @return bool True when initialization proceeded.
  */
 function aafm_init_mcp(): bool {
+	// The guards need no adapter classes, so they go in before any compatibility return: whichever
+	// adapter copy loads first, our tools are refused on every server but our own.
+	aafm_register_default_server_guards();
+
 	$version = aafm_loaded_adapter_version();
 
 	if ( null === $version ) {
@@ -178,9 +182,10 @@ function aafm_init_mcp(): bool {
 	}
 
 	// The adapter's default server follows the owner's setting (Settings, "Allow the MCP Adapter's
-	// default server"); our own tools never appear on it in any mode (includes/default-server.php).
-	add_filter( 'mcp_adapter_create_default_server', 'aafm_filter_default_server_enabled' );
-	aafm_register_default_server_guards();
+	// default server"), resolved late so no other plugin's filter overrides it. Our own tools never
+	// appear on it in any mode (guards registered at the top of this function).
+	add_filter( 'mcp_adapter_create_default_server', 'aafm_filter_default_server_enabled', AAFM_DEFAULT_SERVER_FILTER_PRIORITY );
+	add_action( 'mcp_adapter_init', 'aafm_note_automatic_default_server', 20 );
 
 	// The adapter initialises on init (WP-CLI) or rest_api_init; mark our copy loaded just before it does.
 	if ( defined( 'WP_CLI' ) && WP_CLI ) {

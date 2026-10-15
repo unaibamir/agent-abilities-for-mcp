@@ -19,6 +19,19 @@ defined( 'ABSPATH' ) || exit;
 
 const AAFM_DEFAULT_SERVER_MODE_OPTION = 'aafm_default_server_mode';
 const AAFM_ADAPTER_DEFAULT_SERVER_ID  = 'mcp-adapter-default-server';
+const AAFM_OWN_SERVER_ID              = 'aafm-server';
+
+/**
+ * Set once, the first time Automatic mode actually starts the default server on a site, so the
+ * activity log records that moment and not every request.
+ */
+const AAFM_DEFAULT_SERVER_NOTED_OPTION = 'aafm_default_server_auto_noted';
+
+/**
+ * Run the mode filter late, so a later `__return_true` or `__return_false` from another plugin
+ * cannot silently override the owner's "Always on" or "Always off".
+ */
+const AAFM_DEFAULT_SERVER_FILTER_PRIORITY = PHP_INT_MAX - 10;
 
 /**
  * The accepted modes, in the order the Settings select shows them.
@@ -142,6 +155,63 @@ function aafm_filter_default_server_enabled( $create ): bool {
 }
 
 /**
+ * Whether the default server is running on this site right now, resolved the way the adapter does
+ * at start-up: the stored mode, then (in Automatic) whether another plugin publishes tools there.
+ *
+ * @return bool
+ */
+function aafm_default_server_running(): bool {
+	return aafm_default_server_decision( aafm_default_server_mode(), true, 'aafm_default_server_has_publisher' );
+}
+
+/**
+ * The plain-text state shown beside the Settings select.
+ *
+ * @return string
+ */
+function aafm_default_server_state_label(): string {
+	return aafm_default_server_running()
+		? __( 'Currently running', 'agent-abilities-for-mcp' )
+		: __( 'Currently not running', 'agent-abilities-for-mcp' );
+}
+
+/**
+ * Record the first time Automatic mode actually starts the default server on this site.
+ *
+ * Hooked on mcp_adapter_init after the adapter has created its servers. Once only: the flag is a
+ * certified option write and is checked against the database row, so a stale object cache cannot
+ * make it log again. A flag that cannot be written means no row, never a row per request.
+ *
+ * @param mixed $adapter The McpAdapter instance.
+ * @return void
+ */
+function aafm_note_automatic_default_server( $adapter = null ): void {
+	if ( ! is_object( $adapter ) || ! method_exists( $adapter, 'get_server' ) || 'auto' !== aafm_default_server_mode() ) {
+		return;
+	}
+	if ( null === $adapter->get_server( AAFM_ADAPTER_DEFAULT_SERVER_ID ) ) {
+		return;
+	}
+	$row = aafm_option_row( AAFM_DEFAULT_SERVER_NOTED_OPTION );
+	if ( ! $row['ok'] || $row['found'] || ! aafm_update_option_verified( AAFM_DEFAULT_SERVER_NOTED_OPTION, '1', false ) ) {
+		return;
+	}
+
+	$publishers = array_slice( aafm_default_server_publishers( wp_get_abilities() ), 0, 3 );
+	aafm_log_activity(
+		array(
+			'ability'    => 'aafm/default-server-mode',
+			'status'     => 'success',
+			'event_type' => 'setting_changed',
+			'detail'     => array() === $publishers
+				? __( 'Default server started automatically because another plugin asked for it', 'agent-abilities-for-mcp' )
+				/* translators: %s: up to three ability names, comma separated. */
+				: sprintf( __( 'Default server started automatically because other plugins publish tools there, for example %s', 'agent-abilities-for-mcp' ), implode( ', ', $publishers ) ),
+		)
+	);
+}
+
+/**
  * Whether a handler's server object is the adapter's default server.
  *
  * @param mixed $server The McpServer a handler filter passes.
@@ -152,6 +222,65 @@ function aafm_is_adapter_default_server( $server ): bool {
 }
 
 /**
+ * Whether a handler's server object is any server other than this plugin's governed one. The
+ * guards apply to all of them, so a custom server another plugin registers is covered too.
+ * No server object (a direct call) is not a known other server and passes through.
+ *
+ * @param mixed $server The McpServer a handler filter passes.
+ * @return bool
+ */
+function aafm_is_other_server( $server ): bool {
+	if ( ! is_object( $server ) || ! method_exists( $server, 'get_server_id' ) ) {
+		return false;
+	}
+	$id = (string) $server->get_server_id();
+
+	/**
+	 * Whether a server is this plugin's own governed server, which the default-server guards leave
+	 * alone. True only for `aafm-server`. Internal: the test suite widens it to the throwaway servers
+	 * its wire tests build around this plugin's tools. Nothing else should hook it.
+	 *
+	 * @param bool   $governed Whether the id is `aafm-server`.
+	 * @param string $id       The server id.
+	 */
+	return ! (bool) apply_filters( 'aafm_server_is_governed', AAFM_OWN_SERVER_ID === $id, $id );
+}
+
+/**
+ * Whether a wire tool name is one of this plugin's tools.
+ *
+ * Tool names are ability names with the slash turned into a dash, so `aafm-x-ping` is ambiguous on
+ * its own: it is ours only when no registered foreign ability (`aafm-x/ping`) maps to it. A name
+ * that starts with `aafm-` and matches no foreign ability is treated as ours (fails closed).
+ *
+ * @param string $tool_name Wire tool name.
+ * @return bool
+ */
+function aafm_is_own_tool_name( string $tool_name ): bool {
+	if ( ! str_starts_with( $tool_name, 'aafm-' ) ) {
+		return false;
+	}
+	if ( function_exists( 'wp_get_abilities' ) ) {
+		foreach ( wp_get_abilities() as $ability ) {
+			$name = $ability->get_name();
+			if ( aafm_is_own_ability_name( $name ) ) {
+				continue;
+			}
+			if ( aafm_mcp_tool_name( $name ) === $tool_name ) {
+				return false;
+			}
+			/** This filter is defined by the MCP adapter (RegisterAbilityAsMcpTool::resolve_tool_name). */
+			$renamed = apply_filters( 'mcp_adapter_tool_name', aafm_mcp_tool_name( $name ), $ability ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook; applied to match its tool-name derivation.
+			if ( is_string( $renamed ) && $renamed === $tool_name ) {
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+/**
  * Guard 1: drop any of our tools from a tools/list on the default server.
  *
  * @param mixed $tools  Tool objects.
@@ -159,7 +288,7 @@ function aafm_is_adapter_default_server( $server ): bool {
  * @return mixed
  */
 function aafm_guard_default_server_tools_list( $tools, $server = null ) {
-	if ( ! is_array( $tools ) || ! aafm_is_adapter_default_server( $server ) ) {
+	if ( ! is_array( $tools ) || ! aafm_is_other_server( $server ) ) {
 		return $tools;
 	}
 
@@ -168,7 +297,7 @@ function aafm_guard_default_server_tools_list( $tools, $server = null ) {
 			$tools,
 			static function ( $tool ): bool {
 				$name = ( is_object( $tool ) && method_exists( $tool, 'getName' ) ) ? (string) $tool->getName() : '';
-				return ! str_starts_with( $name, 'aafm-' );
+				return ! aafm_is_own_tool_name( $name );
 			}
 		)
 	);
@@ -186,12 +315,12 @@ function aafm_guard_default_server_tools_list( $tools, $server = null ) {
  */
 function aafm_guard_default_server_tool_call( $args, $tool_name = '', $mcp_tool = null, $server = null ) {
 	unset( $mcp_tool );
-	if ( ! aafm_is_adapter_default_server( $server ) ) {
+	if ( ! aafm_is_other_server( $server ) ) {
 		return $args;
 	}
 
 	$target = ( is_array( $args ) && isset( $args['ability_name'] ) && is_string( $args['ability_name'] ) ) ? $args['ability_name'] : '';
-	$direct = is_string( $tool_name ) && str_starts_with( $tool_name, 'aafm-' );
+	$direct = is_string( $tool_name ) && aafm_is_own_tool_name( $tool_name );
 	if ( ! $direct && ! aafm_is_own_ability_name( $target ) ) {
 		return $args;
 	}
@@ -225,7 +354,7 @@ function aafm_guard_default_server_tool_call( $args, $tool_name = '', $mcp_tool 
  */
 function aafm_guard_default_server_call_result( $result, $args = array(), $tool_name = '', $mcp_tool = null, $server = null ) {
 	unset( $args, $tool_name, $mcp_tool );
-	if ( ! aafm_is_adapter_default_server( $server ) || ! is_array( $result ) || ! isset( $result['abilities'] ) || ! is_array( $result['abilities'] ) ) {
+	if ( ! aafm_is_other_server( $server ) || ! is_array( $result ) || ! isset( $result['abilities'] ) || ! is_array( $result['abilities'] ) ) {
 		return $result;
 	}
 

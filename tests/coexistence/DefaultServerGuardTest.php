@@ -26,8 +26,10 @@ final class DefaultServerGuardTest extends TestCase {
 			remove_filter( 'wp_register_ability_args', $this->stamp_filter, PHP_INT_MAX );
 			$this->stamp_filter = null;
 		}
-		if ( wp_has_ability( 'aafm/guard-fixture' ) ) {
-			wp_unregister_ability( 'aafm/guard-fixture' );
+		foreach ( array( 'aafm/guard-fixture', 'aafm-x/ping' ) as $slug ) {
+			if ( wp_has_ability( $slug ) ) {
+				wp_unregister_ability( $slug );
+			}
 		}
 		parent::tear_down();
 	}
@@ -247,5 +249,73 @@ final class DefaultServerGuardTest extends TestCase {
 		$this->assertSame( 'aafm-server', $recorder->args[0] ?? null );
 		$this->assertSame( aafm_server_description(), $recorder->args[4] ?? null );
 		$this->assertStringContainsString( 'Never publish without asking.', (string) ( $recorder->args[4] ?? '' ) );
+	}
+
+	/**
+	 * Register a foreign ability whose namespace merely starts with "aafm-".
+	 *
+	 * @return void
+	 */
+	private function register_lookalike(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'smokefix' ) ) {
+					wp_register_ability_category(
+						'smokefix',
+						array(
+							'label'       => 'Smoke fixture',
+							'description' => 'Fixture.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'aafm-x/ping',
+					array(
+						'label'               => 'Ping',
+						'description'         => 'A foreign ability in a namespace that only starts with aafm-.',
+						'category'            => 'smokefix',
+						'execute_callback'    => static fn() => array( 'pong' => true ),
+						'permission_callback' => '__return_true',
+						'meta'                => array( 'mcp' => array( 'public' => true ) ),
+					)
+				);
+			}
+		);
+	}
+
+	public function test_a_foreign_aafm_prefixed_namespace_is_not_refused(): void {
+		$this->register_lookalike();
+		$default = $this->server( 'mcp-adapter-default-server' );
+
+		$tools = array( $this->tool( 'aafm-x-ping' ), $this->tool( 'aafm-get-posts' ) );
+		$this->assertSame( array( 'aafm-x-ping' ), $this->names( aafm_guard_default_server_tools_list( $tools, $default ) ) );
+
+		$direct = aafm_guard_default_server_tool_call( array( 'x' => 1 ), 'aafm-x-ping', null, $default );
+		$this->assertSame( array( 'x' => 1 ), $direct );
+		$named = array( 'ability_name' => 'aafm-x/ping' );
+		$this->assertSame( $named, aafm_guard_default_server_tool_call( $named, 'mcp-adapter-execute-ability', null, $default ) );
+
+		$result = array( 'abilities' => array( array( 'name' => 'aafm-x/ping' ) ) );
+		$this->assertSame( $result, aafm_guard_default_server_call_result( $result, array(), 'mcp-adapter-discover-abilities', null, $default ) );
+
+		$refused = aafm_guard_default_server_tool_call( array(), 'aafm-get-posts', null, $default );
+		$this->assertWPError( $refused, 'A tool that is ours is still refused.' );
+	}
+
+	public function test_the_guards_apply_to_every_server_but_ours(): void {
+		$tools  = array( $this->tool( 'aafm-get-posts' ), $this->tool( 'acme-ping' ) );
+		$custom = $this->server( 'acme-custom-server' );
+
+		$this->assertSame( array( 'acme-ping' ), $this->names( aafm_guard_default_server_tools_list( $tools, $custom ) ) );
+		$this->assertWPError( aafm_guard_default_server_tool_call( array( 'ability_name' => 'aafm/get-posts' ), 'x', null, $custom ) );
+		$filtered = aafm_guard_default_server_call_result( array( 'abilities' => array( array( 'name' => 'aafm/get-posts' ) ) ), array(), 'x', null, $custom );
+		$this->assertSame( array(), $filtered['abilities'] );
+		$this->assertSame( $tools, aafm_guard_default_server_tools_list( $tools, $this->server( 'aafm-server' ) ) );
 	}
 }

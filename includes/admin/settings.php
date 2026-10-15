@@ -359,8 +359,10 @@ function aafm_ajax_save_settings(): void {
 		array_merge(
 			$clean,
 			array(
-				'aafm_ip_allowlist_text' => implode( "\n", $clean['aafm_ip_allowlist'] ),
-				'aafm_ip_dropped'        => $dropped,
+				'aafm_ip_allowlist_text'    => implode( "\n", $clean['aafm_ip_allowlist'] ),
+				'aafm_ip_dropped'           => $dropped,
+				// Plain text for the "Currently running" line beside the select; reflects the saved mode.
+				'aafm_default_server_state' => aafm_default_server_state_label(),
 			)
 		)
 	);
@@ -486,6 +488,8 @@ function aafm_config_option_names(): array {
 		'aafm_site_brief',
 		// The adapter default-server mode; a reset returns it to Automatic (the absent row).
 		'aafm_default_server_mode',
+		// The once-only marker for the "started automatically" log row; a reset logs it afresh.
+		'aafm_default_server_auto_noted',
 	);
 }
 
@@ -924,7 +928,7 @@ function aafm_render_settings_tab(): void {
 	foreach ( $default_server_options as $value => $label ) {
 		$default_server_select .= '<option value="' . esc_attr( $value ) . '"' . selected( $default_server_mode, $value, false ) . '>' . esc_html( $label ) . '</option>';
 	}
-	$default_server_select .= '</select>';
+	$default_server_select .= '</select> <span id="aafm-default-server-state" class="aafm-default-server-state" role="status">' . esc_html( aafm_default_server_state_label() ) . '</span>';
 	aafm_render_set_row(
 		array(
 			'label'   => __( 'Allow the MCP Adapter\'s default server', 'agent-abilities-for-mcp' ),

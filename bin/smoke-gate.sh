@@ -199,7 +199,8 @@ start_server() {
 		fail setup "port 8070 busy"
 		return 1
 	fi
-	(php -S localhost:8070 -t "$SMOKE_ROOT" > "$SMOKE_ROOT/server.log" 2>&1 &)
+	# Four workers so the built-in server can answer a request that a command it is serving makes to itself.
+	(PHP_CLI_SERVER_WORKERS=4 php -S localhost:8070 -t "$SMOKE_ROOT" > "$SMOKE_ROOT/server.log" 2>&1 &)
 	local i
 	for i in $(seq 1 20); do
 		[ "$(curl -s --max-time 3 -o /dev/null -w '%{http_code}' "$URL/")" != 000 ] && return 0
@@ -806,6 +807,73 @@ leg_brief() {
 	log_ok brief 'Site Brief'
 }
 
+doctor_status() { echo "$DOCTOR_OUT" | jq -r --arg id "$1" '.[] | select(.id==$id) | .status'; }
+# doctor_wire <label> <token> <want>: POST the probe headers over the wire; want is "answer" or "silence".
+doctor_wire() {
+	local code
+	code=$(curl -s --max-time 20 -o "$SMOKE_ROOT/body.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+		-H "X-AAFM-Doctor: $2" -H "Authorization: AAFM-Doctor $2" -d '{}' "$URL/index.php?rest_route=/$ROUTE_OURS")
+	if [ "$3" = answer ]; then
+		if [ "$code" = 200 ] && [ "$(jq -c . "$SMOKE_ROOT/body.json" 2>/dev/null)" = '{"aafm_doctor":{"authorization_seen":true,"route_registered":true}}' ]; then
+			pass doctor "$1: HTTP 200 with exactly the two booleans"
+		else
+			fail doctor "$1: HTTP $code $(head -c 200 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
+		fi
+	elif grep -q 'aafm_doctor' "$SMOKE_ROOT/body.json" 2>/dev/null; then
+		fail doctor "$1: the probe answered when it must not have"
+	else
+		pass doctor "$1: not answered (HTTP $code)"
+	fi
+	if grep -q -F "$2" "$SMOKE_ROOT/body.json" 2>/dev/null; then
+		fail doctor "$1: the token was echoed in the response body"
+	fi
+}
+leg_doctor() {
+	local before after id want token
+	set_state doctor 'ours only' "[\"$OURS\"]" true 0 || return 0
+	before=$(W eval 'echo aafm_activity_count();' 2>/dev/null)
+	DOCTOR_OUT=$(W eval 'wp_set_current_user( 1 ); echo wp_json_encode( aafm_doctor_run_checks() );' 2>/dev/null)
+	after=$(W eval 'echo aafm_activity_count();' 2>/dev/null)
+	if ! echo "$DOCTOR_OUT" | jq -e 'type == "array"' >/dev/null 2>&1; then
+		fail doctor "aafm_doctor_run_checks() did not return rows: $(echo "$DOCTOR_OUT" | head -c 200)"
+		return 0
+	fi
+	# The disposable site is plain HTTP on plain permalinks with a local environment type.
+	for want in endpoint:pass auth_header:pass app_passwords:pass https:warn permalinks:warn security_plugins:pass; do
+		id=${want%%:*}
+		if [ "$(doctor_status "$id")" = "${want##*:}" ]; then
+			pass doctor "$id is ${want##*:}"
+		else
+			fail doctor "$id is '$(doctor_status "$id")', wanted ${want##*:}"
+		fi
+	done
+	if [ "$before" = "$after" ]; then
+		pass doctor "a run wrote no activity rows ($before before and after)"
+	else
+		fail doctor "activity rows went from $before to $after during a run"
+	fi
+	# The probe token over the wire: answered once, then never; a wrong or unarmed token is never answered;
+	# the answer never carries the token, and none of it writes an activity row.
+	token="1.$(printf 'a%.0s' $(seq 1 32))"
+	W eval "set_transient( 'aafm_doctor_probe_1', hash( 'sha256', '$token' ), 30 );" >/dev/null 2>&1
+	before=$(W eval 'echo aafm_activity_count();' 2>/dev/null)
+	doctor_wire 'armed token' "$token" answer
+	doctor_wire 'the same token again' "$token" silence
+	doctor_wire 'a token nobody armed' "1.$(printf 'b%.0s' $(seq 1 32))" silence
+	after=$(W eval 'echo aafm_activity_count();' 2>/dev/null)
+	if [ "$(W eval 'echo false === get_transient( "aafm_doctor_probe_1" ) ? "gone" : "stored";' 2>/dev/null)" = gone ]; then
+		pass doctor "the spent token is gone from storage"
+	else
+		fail doctor "a probe token is still stored after it was used"
+	fi
+	if [ "$before" = "$after" ]; then
+		pass doctor "the wire probes wrote no activity rows ($before before and after)"
+	else
+		fail doctor "activity rows went from $before to $after across the wire probes"
+	fi
+	log_ok doctor 'Connection Doctor'
+}
+
 setup_site || { fail setup "could not build the disposable site at $SMOKE_ROOT"; finish; }
 start_server || finish
 leg_matrix
@@ -813,4 +881,5 @@ leg_qm
 leg_upgrade
 leg_default_server
 leg_brief
+leg_doctor
 finish

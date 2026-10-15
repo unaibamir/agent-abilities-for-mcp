@@ -224,7 +224,8 @@ function aafm_ajax_notify_test(): void {
 }
 
 /**
- * The admin notice: the three newest alerts with a link to each Activity Log entry and a Dismiss link.
+ * The admin notice: the three newest alerts with a link to each Activity Log entry, a count of any
+ * further alerts (Dismiss clears them all), and a Dismiss link.
  *
  * @return void
  */
@@ -243,6 +244,12 @@ function aafm_notify_admin_notice(): void {
 	echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</strong></p><ul>';
 	foreach ( array_slice( $pending, 0, 3 ) as $event ) {
 		echo '<li>' . esc_html( aafm_notify_event_label( $event ) ) . ' (' . esc_html( gmdate( 'Y-m-d H:i', (int) ( $event['time'] ?? 0 ) ) ) . ' UTC) <a href="' . esc_url( aafm_notify_event_link( $event ) ) . '">' . esc_html__( 'View in Activity Log', 'agent-abilities-for-mcp' ) . '</a></li>';
+	}
+	$more = count( $pending ) - 3;
+	if ( $more > 0 ) {
+		/* translators: %d: how many further alerts are waiting, which Dismiss would also clear. */
+		$more_text = sprintf( _n( 'and %d more alert.', 'and %d more alerts.', $more, 'agent-abilities-for-mcp' ), $more );
+		echo '<li>' . esc_html( $more_text ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=agent-abilities-for-mcp&tab=activity' ) ) . '">' . esc_html__( 'Open the Activity Log', 'agent-abilities-for-mcp' ) . '</a></li>';
 	}
 	echo '</ul><p><a href="' . esc_url( $dismiss ) . '">' . esc_html__( 'Dismiss', 'agent-abilities-for-mcp' ) . '</a></p></div>';
 }

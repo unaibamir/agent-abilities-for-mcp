@@ -269,6 +269,49 @@ final class NotificationsSettingsTest extends TestCase {
 		$this->assertSame( '', $this->render_notice() );
 	}
 
+	public function test_the_admin_notice_says_how_many_more_alerts_wait_in_the_log(): void {
+		aafm_update_option_verified(
+			'aafm_notifications',
+			array(
+				'mode'     => 'notice',
+				'email'    => '',
+				'triggers' => array( 'switch_flip' => true ),
+			),
+			true
+		);
+		for ( $i = 1; $i <= 5; $i++ ) {
+			aafm_notify_event( 'switch_flip', 'bucket' . $i, array( 'row_id' => 20 + $i ) );
+		}
+		$this->acting_as( 'administrator' );
+
+		$html = $this->render_notice();
+
+		$this->assertSame( 3, substr_count( $html, 'View in Activity Log' ), 'Three entries are listed.' );
+		$this->assertStringContainsString( 'and 2 more', $html, 'Dismiss clears all five, so the other two are counted, not hidden.' );
+		$this->assertStringContainsString( 'tab=activity"', $html );
+
+		aafm_notify_event( 'switch_flip', 'bucket6', array( 'row_id' => 30 ) );
+		$this->assertStringContainsString( 'and 3 more', $this->render_notice() );
+	}
+
+	public function test_the_admin_notice_has_no_more_line_for_three_or_fewer_alerts(): void {
+		aafm_update_option_verified(
+			'aafm_notifications',
+			array(
+				'mode'     => 'notice',
+				'email'    => '',
+				'triggers' => array( 'switch_flip' => true ),
+			),
+			true
+		);
+		for ( $i = 1; $i <= 3; $i++ ) {
+			aafm_notify_event( 'switch_flip', 'bucket' . $i, array( 'row_id' => 20 + $i ) );
+		}
+		$this->acting_as( 'administrator' );
+
+		$this->assertStringNotContainsString( ' more', $this->render_notice() );
+	}
+
 	public function test_the_dismiss_link_needs_a_nonce_and_clears_the_list(): void {
 		aafm_update_option_verified(
 			'aafm_notifications',

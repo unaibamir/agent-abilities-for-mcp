@@ -203,7 +203,17 @@ function aafm_filter_default_server_enabled( $create ): bool {
  * `mcp_adapter_init` ahead of the adapter's own callback). By now every ability is registered, so
  * "does another plugin publish tools here" has an answer: when none does, the adapter's one
  * create callback is taken off the hook and its leftover category and meta abilities are removed.
- * Only that single callback is removed, found by identity; nothing else on the hook is touched.
+ *
+ * This removes a callback that is not ours, an explicit exception to the rule against touching
+ * other plugins' callbacks on adapter hooks. The reason: adapter 0.6.x evaluates the create-server
+ * filter once, before it attaches its registration hooks, and looking up abilities at that moment
+ * would start the registries without them, so the filter cannot decide in time. Only that single
+ * callback is removed, found by identity; nothing else on the hook is touched.
+ *
+ * Only REST and WP-CLI requests fire `mcp_adapter_init`. In any other request (admin, front end,
+ * cron) the registries can start with the adapter's meta abilities registered and nothing removes
+ * them, so code that lists registered abilities must skip the `mcp-adapter` namespace itself, as
+ * the Bridge directory does.
  *
  * @return void
  */

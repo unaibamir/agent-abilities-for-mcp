@@ -26,6 +26,7 @@ final class BridgeDirectoryMergeTest extends TestCase {
 			if ( 0 === strncmp( $slug, 'aioseo-posts/', 13 )
 				|| 0 === strncmp( $slug, 'aioseo-settings/', 16 )
 				|| 0 === strncmp( $slug, 'demo-other/', 11 )
+				|| 0 === strncmp( $slug, 'mcp-adapter/', 12 )
 				|| 0 === strncmp( $slug, 'wordpress-seo/', 14 )
 				|| 0 === strncmp( $slug, 'rank-math/', 10 )
 			) {
@@ -131,6 +132,20 @@ final class BridgeDirectoryMergeTest extends TestCase {
 			$groups,
 			'A namespace absent from aafm_bridge_known_plugin_labels() must keep its own, unmerged group.'
 		);
+	}
+
+	/**
+	 * The adapter's own meta abilities can be registered with no default server running (Automatic
+	 * mode, a request that never fires mcp_adapter_init), so discovery must not offer them.
+	 */
+	public function test_discovery_skips_the_adapters_own_namespace(): void {
+		$this->register_foreign( 'mcp-adapter/execute-ability', 'Execute ability' );
+		$this->register_foreign( 'demo-other/one', 'One' );
+
+		$groups = aafm_discover_foreign_abilities();
+
+		$this->assertArrayNotHasKey( 'mcp-adapter', $groups );
+		$this->assertArrayHasKey( 'demo-other', $groups );
 	}
 
 	/**

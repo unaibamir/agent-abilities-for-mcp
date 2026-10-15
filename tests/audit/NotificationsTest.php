@@ -458,43 +458,38 @@ final class NotificationsTest extends TestCase {
 		aafm_notify_flush_outbox(); // The failing mailer runs at the end of the request and must not escape there either.
 	}
 
-	public function test_a_denial_flood_never_evicts_a_critical_notice(): void {
-		$this->configure(
-			array(
-				'mode'  => 'notice',
-				'email' => '',
-			)
+	public function test_a_throwing_throttle_cannot_stop_the_notice_being_written(): void {
+		$this->configure();
+		$bucket = 'switch_flip:read_only_on';
+		add_filter(
+			'pre_transient_aafm_ntf_' . substr( md5( $bucket ), 0, 20 ),
+			static function () {
+				throw new \RuntimeException( 'transient exploded' );
+			}
 		);
-		aafm_notify_event( 'switch_flip', 'read_only_on', array( 'row_id' => 1 ) );
-		aafm_notify_event( 'risky_run', 'high_risk', array( 'row_id' => 2 ) );
-		aafm_notify_event( 'new_app', 'oauth_grant', array( 'row_id' => 3 ) );
-		for ( $i = 1; $i <= 15; $i++ ) {
-			aafm_notify_event( 'denial_burst', 'bucket' . $i, array( 'row_id' => 100 + $i ) );
-		}
 
-		$list    = aafm_notify_pending_list();
-		$denials = array_values( wp_list_filter( $list, array( 'trigger' => 'denial_burst' ) ) );
-		$this->assertCount( 3, $denials, 'At most three denial entries are kept.' );
-		$this->assertSame( 115, $denials[0]['row_id'], 'The newest denials win.' );
-		$this->assertSame( array( 1, 2, 3 ), array_column( array_reverse( array_values( wp_list_filter( $list, array( 'trigger' => 'denial_burst' ), 'NOT' ) ) ), 'row_id' ) );
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+
+		$this->assertCount( 1, aafm_notify_pending_list(), 'The notice is written before the throttle is asked.' );
+		$this->assertSame( array(), $this->sent(), 'A broken throttle means no mail.' );
 	}
 
-	public function test_a_denial_cannot_push_a_critical_notice_out_of_a_full_list(): void {
-		$this->configure(
-			array(
-				'mode'  => 'notice',
-				'email' => '',
-			)
+	public function test_a_pending_write_that_fails_does_not_use_up_a_mail_slot(): void {
+		$this->configure();
+		add_filter(
+			'pre_update_option_aafm_notify_pending',
+			static function ( $value, $old ) {
+				unset( $value );
+				return $old;
+			},
+			10,
+			2
 		);
-		for ( $i = 1; $i <= AAFM_NOTIFY_PENDING_MAX; $i++ ) {
-			aafm_notify_event( 'risky_run', 'bucket' . $i, array( 'row_id' => $i ) );
-		}
-		aafm_notify_event( 'denial_burst', 'flood', array( 'row_id' => 99 ) );
 
-		$list = aafm_notify_pending_list();
-		$this->assertCount( AAFM_NOTIFY_PENDING_MAX, $list );
-		$this->assertSame( array(), wp_list_filter( $list, array( 'trigger' => 'denial_burst' ) ), 'The full list of critical entries is untouched.' );
-		$this->assertSame( 1, $list[ AAFM_NOTIFY_PENDING_MAX - 1 ]['row_id'] );
+		aafm_notify_event( 'switch_flip', 'read_only_on' );
+
+		$this->assertFalse( get_transient( 'aafm_ntf_' . substr( md5( 'switch_flip:read_only_on' ), 0, 20 ) ), 'The bucket slot is untouched.' );
+		$this->assertFalse( get_transient( 'aafm_ntf_global' ), 'The shared hourly pool is untouched.' );
 	}
 
 	public function test_the_message_is_sanitized(): void {

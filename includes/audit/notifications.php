@@ -249,9 +249,10 @@ function aafm_notify_site_name(): string {
 /**
  * Record an event: write the admin notice entry, then throttle the mail, then mail or queue. Never throws.
  *
- * The notice entry is written before the throttle is asked, so a throttled event still reaches the
- * admin notice; the throttle only limits mail. Grants are throttled per app, so a second app approved
- * inside the window still alerts.
+ * The notice entry is written before the throttle is asked, so a throttled event, or a throttle that
+ * throws, still reaches the admin notice; the throttle only limits mail. A notice entry that could not
+ * be written ends the call before the throttle, so it never uses up a mail slot. Grants are throttled
+ * per app, so a second app approved inside the window still alerts.
  *
  * @param string              $trigger A key of aafm_notify_triggers().
  * @param string              $subtype Throttle sub-bucket, for example "read_only_off".
@@ -265,7 +266,6 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 			return;
 		}
 		$client_id = isset( $facts['client_id'] ) ? aafm_notify_clean_identifier( (string) $facts['client_id'], 191 ) : '';
-		$slot      = aafm_notify_take_slot( $trigger . ':' . $subtype . ( '' !== $client_id ? ':' . $client_id : '' ) );
 		$event     = array(
 			'id'         => wp_generate_uuid4(),
 			'trigger'    => $trigger,
@@ -278,14 +278,22 @@ function aafm_notify_event( string $trigger, string $subtype, array $facts = arr
 			'app_name'   => isset( $facts['app_name'] ) ? aafm_notify_clean_app_name( (string) $facts['app_name'] ) : '',
 			'count'      => isset( $facts['count'] ) ? max( 0, (int) $facts['count'] ) : 0,
 			'user_id'    => isset( $facts['user_id'] ) ? max( 0, (int) $facts['user_id'] ) : 0,
-			'suppressed' => $slot['suppressed'],
+			'suppressed' => 0,
 		);
 		if ( ! aafm_notify_pending_push( $event ) ) {
 			aafm_notify_log_failure( __( 'A notification could not be saved for the admin notice', 'agent-abilities-for-mcp' ) );
+			return;
+		}
+		try {
+			$slot = aafm_notify_take_slot( $trigger . ':' . $subtype . ( '' !== $client_id ? ':' . $client_id : '' ) );
+		} catch ( \Throwable $e ) {
+			unset( $e ); // A throttle that cannot answer means no mail; the notice entry already exists.
+			return;
 		}
 		if ( ! $slot['allowed'] ) {
 			return;
 		}
+		$event['suppressed'] = $slot['suppressed'];
 		if ( 'digest' === $settings['mode'] ) {
 			if ( ! aafm_notify_queue_push( $event ) ) {
 				aafm_notify_log_failure( __( 'A notification could not be queued for the daily email', 'agent-abilities-for-mcp' ) );

@@ -95,21 +95,27 @@ function aafm_activity_summary_view( array $summary ): array {
  */
 function aafm_render_activity_summary( array $summary ): void {
 	$v = aafm_activity_summary_view( $summary );
+	// A failed summary query is not "zero calls": show a hyphen and say so.
+	$num   = static function ( int $n ) use ( $v ): string {
+		return $v['ok'] ? number_format_i18n( $n ) : '-';
+	};
 	echo '<section class="aafm-log-summary" id="aafm-log-summary" aria-label="' . esc_attr__( 'Last 7 days', 'agent-abilities-for-mcp' ) . '">';
 	$stats = array(
-		'total'  => array( __( 'Calls, last 7 days', 'agent-abilities-for-mcp' ), number_format_i18n( $v['total'] ) ),
-		'rate'   => array( __( 'Success rate', 'agent-abilities-for-mcp' ), $v['rate'] ),
-		'denied' => array( __( 'Denied', 'agent-abilities-for-mcp' ), number_format_i18n( $v['denied'] ) ),
-		'errors' => array( __( 'Errors', 'agent-abilities-for-mcp' ), number_format_i18n( $v['error'] ) ),
+		'total'  => array( __( 'Calls, last 7 days', 'agent-abilities-for-mcp' ), $num( $v['total'] ) ),
+		'rate'   => array( __( 'Success rate', 'agent-abilities-for-mcp' ), $v['ok'] ? $v['rate'] : '-' ),
+		'denied' => array( __( 'Denied', 'agent-abilities-for-mcp' ), $num( $v['denied'] ) ),
+		'errors' => array( __( 'Errors', 'agent-abilities-for-mcp' ), $num( $v['error'] ) ),
 	);
 	foreach ( $stats as $key => $stat ) {
 		echo '<div class="aafm-log-stat"><div class="aafm-log-stat-num" data-summary="' . esc_attr( $key ) . '">' . esc_html( $stat[1] ) . '</div><div class="aafm-log-stat-label">' . esc_html( $stat[0] ) . '</div></div>';
 	}
 	echo '<div class="aafm-log-top"><div class="aafm-log-stat-label">' . esc_html__( 'Top tools', 'agent-abilities-for-mcp' ) . '</div><ol data-summary="top">';
-	if ( array() === $v['top'] ) {
+	if ( ! $v['ok'] ) {
+		echo '<li>' . esc_html__( 'Summary unavailable.', 'agent-abilities-for-mcp' ) . '</li>';
+	} elseif ( array() === $v['top'] ) {
 		echo '<li>' . esc_html__( 'No calls in the last 7 days.', 'agent-abilities-for-mcp' ) . '</li>';
 	}
-	foreach ( $v['top'] as $tool ) {
+	foreach ( $v['ok'] ? $v['top'] : array() as $tool ) {
 		echo '<li><code>' . esc_html( (string) $tool['ability'] ) . '</code> ' . esc_html( number_format_i18n( (int) $tool['count'] ) ) . '</li>';
 	}
 	echo '</ol></div>';

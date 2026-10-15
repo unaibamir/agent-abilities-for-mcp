@@ -196,4 +196,65 @@ final class ActivityFiltersUiTest extends TestCase {
 		// and a slice from the first '#bindLogPaginationAndFilters()' is the CALL at admin.js:74, which runs to the end of the file.
 		$this->assertDoesNotMatchRegularExpression( '/\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML\s*\(/', $js, 'The admin script builds DOM with textContent only.' );
 	}
+
+	public function test_a_failed_summary_query_renders_hyphens_not_zero_calls(): void {
+		ob_start();
+		aafm_render_activity_summary(
+			array(
+				'ok'    => false,
+				'total' => 0,
+			)
+		);
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'Summary unavailable.', $html );
+		$this->assertStringNotContainsString( 'No calls in the last 7 days.', $html );
+		$this->assertMatchesRegularExpression( '/data-summary="total">-</', $html );
+		$this->assertMatchesRegularExpression( '/data-summary="denied">-</', $html );
+		$this->assertMatchesRegularExpression( '/data-summary="errors">-</', $html );
+
+		ob_start();
+		aafm_render_activity_summary(
+			array(
+				'ok'    => true,
+				'total' => 0,
+			)
+		);
+		$this->assertMatchesRegularExpression( '/data-summary="total">0</', (string) ob_get_clean(), 'A successful empty summary still says 0.' );
+	}
+
+	/**
+	 * The Live and filter state logic has no JS test runner in this repo, so these pin the source shape of
+	 * each fix. They go red if the behaviour is reverted to the earlier wiring.
+	 */
+	public function test_admin_js_keeps_the_log_state_fixes(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+
+		// Applied filters change only after the request succeeded, never when Apply or Reset is clicked.
+		$this->assertDoesNotMatchRegularExpression( '/(?<!let )appliedFilters = (this\.#logFilterValues\(\)|\{\});/', substr( $js, strpos( $js, '#bindLogPaginationAndFilters() {' ) ), 'Apply and Reset must not pre-commit filters.' );
+		$this->assertMatchesRegularExpression( '/return \'failed\';\s*\}.*?appliedFilters = values;/s', $js, 'appliedFilters is assigned after the failed-return.' );
+
+		// Paging beyond page 1 stops Live before the page request starts.
+		$this->assertSame( 2, substr_count( $js, 'stopLiveForPaging();' ), 'Prev (beyond page 1) and Next both stop Live.' );
+
+		// Clearing the log resets the summary card.
+		$this->assertMatchesRegularExpression( '/#bindClearLog\(\).*?this\.#renderLogSummary\( \{ ok: true, total: 0/s', $js );
+
+		// A failed summary shows a hyphen, not zero.
+		$this->assertStringContainsString( "this.#t( 'summaryUnavailable'", $js );
+
+		// The deep-link note goes with the row filter.
+		$this->assertStringContainsString( "document.querySelector( '.aafm-log-row-note' )?.remove();", $js );
+
+		// Live is switched off for a search or user filter with no date range, with a hint.
+		$this->assertStringContainsString( 'appliedFilters.q || appliedFilters.user', $js );
+		$this->assertStringContainsString( 'liveBtn.disabled = blocked;', $js );
+		$this->assertStringContainsString( 'ponytail:', $js );
+
+		// Both new strings reach the script through the localized bag.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$page = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/page.php' );
+		$this->assertStringContainsString( "'summaryUnavailable'", $page );
+		$this->assertStringContainsString( "'liveNeedsRange'", $page );
+	}
 }

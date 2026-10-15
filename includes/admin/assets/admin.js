@@ -1912,6 +1912,7 @@
 						wrap.dataset.totalPages = '1';
 						this.#updatePager( 1, 1 );
 					}
+					this.#renderLogSummary( { ok: true, total: 0, success: 0, error: 0, denied: 0, rate: '-', top: [] } );
 				}
 			} );
 		}
@@ -1975,17 +1976,22 @@
 					el.textContent = text;
 				}
 			};
-			set( 'total', fmt.format( s.total ?? 0 ) );
-			set( 'rate', s.rate ?? '-' );
-			set( 'denied', fmt.format( s.denied ?? 0 ) );
-			set( 'errors', fmt.format( s.error ?? 0 ) );
+			// A failed summary query is not "zero calls": show a hyphen and say so.
+			const failed = s.ok === false;
+			const num = ( value ) => ( failed ? '-' : fmt.format( value ?? 0 ) );
+			set( 'total', num( s.total ) );
+			set( 'rate', failed ? '-' : s.rate ?? '-' );
+			set( 'denied', num( s.denied ) );
+			set( 'errors', num( s.error ) );
 			const list = root.querySelector( 'ol[data-summary="top"]' );
 			if ( list ) {
 				list.replaceChildren();
-				const top = Array.isArray( s.top ) ? s.top : [];
+				const top = ! failed && Array.isArray( s.top ) ? s.top : [];
 				if ( ! top.length ) {
 					const li = document.createElement( 'li' );
-					li.textContent = this.#t( 'noCalls', 'No calls in the last 7 days.' );
+					li.textContent = failed
+						? this.#t( 'summaryUnavailable', 'Summary unavailable.' )
+						: this.#t( 'noCalls', 'No calls in the last 7 days.' );
 					list.append( li );
 				}
 				top.forEach( ( tool ) => {
@@ -2032,6 +2038,10 @@
 			// (spec 3.7: filters apply on Apply or Enter, never per keystroke).
 			let appliedFilters = this.#logFilterValues();
 
+			// Set by the Live block below; load() calls them. No-ops when the page has no Live button.
+			let syncLive = () => {};
+			let stopLiveForPaging = () => {};
+
 			const setActiveFilterButton = ( filter ) => {
 				segButtons.forEach( ( b ) => {
 					const on = b.dataset.filter === filter;
@@ -2042,9 +2052,10 @@
 			};
 
 			// Resolves 'ok', 'failed' or 'stale'.
-			const load = async ( page, filter, { withSummary = false } = {} ) => {
+			// `filters` is the set this request asks for; it becomes appliedFilters only once the table shows it.
+			const load = async ( page, filter, { withSummary = false, filters = appliedFilters } = {} ) => {
 				const token = ++loadToken;
-				const values = appliedFilters;
+				const values = filters;
 				const pagerStatus = document.querySelector( '.aafm-pager-status' );
 				if ( pagerStatus && ! withSummary ) {
 					pagerStatus.textContent = this.#t( 'loadingPage', 'Loading…' );
@@ -2077,7 +2088,13 @@
 				if ( num && typeof data.total === 'number' ) {
 					num.textContent = new Intl.NumberFormat().format( data.total );
 				}
+				appliedFilters = values;
 				this.#syncExportLinkFilter( wrap.dataset.filter, values );
+				// The deep-link note describes the row filter, so it goes when that filter does.
+				if ( ! values.row ) {
+					document.querySelector( '.aafm-log-row-note' )?.remove();
+				}
+				syncLive();
 				if ( data.summary ) {
 					this.#renderLogSummary( data.summary );
 				}
@@ -2092,10 +2109,7 @@
 
 			const applyBtn = document.querySelector( '#aafm-log-apply' );
 			const resetBtn = document.querySelector( '#aafm-log-reset' );
-			const applyFilters = () => {
-				appliedFilters = this.#logFilterValues();
-				return load( 1, wrap.dataset.filter ?? 'all' );
-			};
+			const applyFilters = () => load( 1, wrap.dataset.filter ?? 'all', { filters: this.#logFilterValues() } );
 			applyBtn?.addEventListener( 'click', applyFilters );
 			resetBtn?.addEventListener( 'click', () => {
 				// Every input goes, including the hidden "row" field a notification link fills in,
@@ -2105,8 +2119,7 @@
 					.forEach( ( el ) => {
 						el.value = '';
 					} );
-				appliedFilters = {};
-				load( 1, wrap.dataset.filter ?? 'all' );
+				load( 1, wrap.dataset.filter ?? 'all', { filters: {} } );
 			} );
 			document.querySelectorAll( '.aafm-log-filters input' ).forEach( ( input ) => {
 				input.addEventListener( 'keydown', ( e ) => {
@@ -2120,6 +2133,9 @@
 			prev?.addEventListener( 'click', () => {
 				const page = ( Number( wrap.dataset.page ) || 1 ) - 1;
 				if ( page >= 1 ) {
+					if ( page > 1 ) {
+						stopLiveForPaging();
+					}
 					load( page, wrap.dataset.filter ?? 'all' );
 				}
 			} );
@@ -2127,6 +2143,7 @@
 				const page = ( Number( wrap.dataset.page ) || 1 ) + 1;
 				const totalPages = Number( wrap.dataset.totalPages ) || 1;
 				if ( page <= totalPages ) {
+					stopLiveForPaging();
 					load( page, wrap.dataset.filter ?? 'all' );
 				}
 			} );
@@ -2153,6 +2170,33 @@
 						liveNote.textContent = why;
 					}
 				};
+				// Leaving page 1 ends Live now, so the next poll cannot supersede the page request in flight.
+				stopLiveForPaging = () => {
+					if ( liveOn ) {
+						stopLive( this.#t( 'livePage', 'Live view only follows page 1.' ) );
+					}
+				};
+				// ponytail: every Live tick re-runs the COUNT and the page query. A text search or a user filter
+				// with no date range cannot use the date index, so Live is off for those. Narrow the poll
+				// (cheaper count, or a since-id probe) if Live should work with them.
+				syncLive = () => {
+					const blocked =
+						Boolean( appliedFilters.q || appliedFilters.user ) &&
+						! appliedFilters.from &&
+						! appliedFilters.to;
+					const hint = this.#t(
+						'liveNeedsRange',
+						'Live view needs a date range when a search or user filter is applied.'
+					);
+					if ( blocked && liveOn ) {
+						stopLive( hint );
+					} else if ( liveNote && ! liveOn && ( blocked || liveNote.textContent === hint ) ) {
+						liveNote.textContent = blocked ? hint : '';
+					}
+					liveBtn.disabled = blocked;
+					liveBtn.title = blocked ? hint : '';
+				};
+				syncLive();
 				const scheduleLive = () => {
 					clearTimeout( liveTimer );
 					if ( liveOn && ! document.hidden ) {

@@ -187,6 +187,8 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'livePage'                 => __( 'Live view only follows page 1.', 'agent-abilities-for-mcp' ),
 				'liveFailed'               => __( 'Live view stopped after repeated errors. Reload the page.', 'agent-abilities-for-mcp' ),
 				'noCalls'                  => __( 'No calls in the last 7 days.', 'agent-abilities-for-mcp' ),
+				'summaryUnavailable'       => __( 'Summary unavailable.', 'agent-abilities-for-mcp' ),
+				'liveNeedsRange'           => __( 'Live view needs a date range when a search or user filter is applied.', 'agent-abilities-for-mcp' ),
 				/* translators: 1: HTTP status code, 2: number of tools visible in the admin view. */
 				'connectionOk'             => __( 'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: HTTP status code returned by the endpoint. */

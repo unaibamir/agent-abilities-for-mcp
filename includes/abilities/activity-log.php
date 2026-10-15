@@ -115,7 +115,8 @@ function aafm_args_get_activity_log(): array {
  * Passes the (validated) filters straight to aafm_query_activity(), which caps per_page at
  * 200 and orders most-recent-first, then redacts each row to the safe field set - never
  * source_ip. Rows about the owner's notification settings (ability aafm/notifications, including the
- * rows for an alert that failed to send) are left out, from the entries and from the total. The
+ * rows for an alert that failed to send, and the write-outcome rows for any aafm_notif* option) are left
+ * out, from the entries and from the total. The
  * refusal reason a denied row carries is not returned either: any manage_options principal can call
  * this, including an agent, and the reason would let it map the allowlist and deny list that every
  * other path keeps opaque.

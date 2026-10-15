@@ -216,6 +216,11 @@ function aafm_activity_filter_where( array $filters ): array {
 	if ( isset( $f['hide_notifications'] ) ) {
 		$sql     .= ' AND ability <> %s';
 		$params[] = 'aafm/notifications';
+		// Also the write-outcome rows about any aafm_notif* option (the settings and the alert bookkeeping),
+		// which would give an agent the same view of the alert settings by another route.
+		$sql     .= ' AND NOT ( ability = %s AND detail LIKE %s )';
+		$params[] = 'aafm/write-outcome';
+		$params[] = '%' . $wpdb->esc_like( '"key":"aafm_notif' ) . '%';
 	}
 	if ( isset( $f['row'] ) ) {
 		$sql     .= ' AND id = %d';

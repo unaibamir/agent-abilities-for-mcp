@@ -61,6 +61,34 @@ final class ActivityLogNotificationRowsTest extends TestCase {
 		$this->assertSame( 0, aafm_exec_get_activity_log( array( 'status' => 'error' ) )['total'] );
 	}
 
+	public function test_the_ability_hides_write_outcome_rows_for_the_alert_options_only(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		foreach ( array( 'aafm_notify_pending', 'aafm_notifications', 'aafm_notify_queue', 'aafm_enabled_abilities' ) as $key ) {
+			aafm_log_activity(
+				array(
+					'ability'    => 'aafm/write-outcome',
+					'status'     => 'success',
+					'event_type' => 'write_outcome',
+					'detail'     => wp_json_encode(
+						array(
+							'kind'   => 'option',
+							'key'    => $key,
+							'status' => 'written',
+						)
+					),
+				)
+			);
+		}
+
+		$out = aafm_exec_get_activity_log( array() );
+
+		$this->assertCount( 1, $out['entries'], 'Only the row about an unrelated option is left.' );
+		$this->assertStringContainsString( 'aafm_enabled_abilities', (string) $out['entries'][0]['detail'] );
+		$this->assertSame( 1, $out['total'] );
+		$this->assertCount( 1, aafm_exec_get_activity_log( array( 'ability' => 'aafm/write-outcome' ) )['entries'] );
+		$this->assertSame( 4, aafm_activity_count_matching( array() ), 'The admin screen and the CSV keep every row.' );
+	}
+
 	public function test_the_admin_screen_query_still_sees_them(): void {
 		$this->seed();
 

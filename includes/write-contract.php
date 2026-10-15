@@ -1762,6 +1762,14 @@ function aafm_activity_log_write_outcome( array $result, array $target ): void {
 		return;
 	}
 
+	// The alert engine rewrites these two options on every alert it records. Logging each write would
+	// let one contributor creating Application Passwords flood the log, and would show an
+	// administrator-level agent when alerts fire. They hold no setting an owner chose; the
+	// aafm_notifications settings row is the one that stays logged.
+	if ( 'option' === ( $target['kind'] ?? null ) && in_array( $target['key'] ?? null, array( 'aafm_notify_pending', 'aafm_notify_queue' ), true ) ) {
+		return;
+	}
+
 	$status = (string) ( $result['status'] ?? '' );
 
 	$success_statuses = array( AAFM_WRITE_WRITTEN, AAFM_WRITE_UNCHANGED, AAFM_WRITE_DELETED, AAFM_WRITE_ABSENT, AAFM_WRITE_ACCEPTED );

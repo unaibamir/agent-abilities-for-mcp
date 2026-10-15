@@ -155,7 +155,7 @@ function aafm_exec_get_activity_log( array $input ): array {
 			// string". Safe to expose only because includes/audit/detail.php constrains every
 			// writer to identifiers.
 			'detail'            => isset( $row['detail'] ) ? aafm_redact_denial_reason( (string) $row['detail'] ) : null,
-			// source_ip is deliberately NOT returned (network PII, not shown in the admin panel).
+			// source_ip is deliberately NOT returned: it is network PII, and the agent-readable ability does not need it. The admin table and CSV show it.
 		);
 	}
 

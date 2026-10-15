@@ -1,6 +1,6 @@
 # Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
 
-MCP server for WordPress. Let an AI agent work on one site or many, with limited access, read-only mode, drafts and an audit log.
+WordPress MCP server for AI agents. Run one site or many with limited access, read-only mode, drafts you approve and an audit log.
 
 | | |
 |---|---|
@@ -14,11 +14,11 @@ MCP server for WordPress. Let an AI agent work on one site or many, with limited
 
 ## Description
 
-### WordPress MCP server for AI agents, with governed tools that are off by default
+### WordPress MCP server for ChatGPT and Claude, with limited access and an audit log
 
-Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 179 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install and no custom server or transport to trust.
+Agent Abilities for MCP connects ChatGPT, Claude, Cursor and other AI agents to your WordPress site over the Model Context Protocol (MCP), through 179 curated WordPress abilities (tools). The agent acts as a real WordPress user you choose, never with an admin key, so it can only do what that user's role allows. Run it on one site or on several, each with its own user, switches and audit log. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install.
 
-Nothing this plugin serves is exposed until you turn it on. The agent never gets an admin key: it acts as the WordPress user you pick, so an Editor account can write and publish posts but cannot install plugins or change settings. Every call to this plugin's tools is checked against that user's permissions and written to the audit log before it runs, denied attempts included. You add reach as you build trust, not all at once. See External Services below for exactly what the plugin can reach on its own.
+Nothing this plugin serves is exposed until you turn it on. Every call to this plugin's tools is checked against the chosen user's permissions and written to the audit log before it runs, denied attempts included. An Editor account can write and publish posts but cannot install plugins or change settings, so you add reach as you build trust. To approve new posts before they go live, switch on Force draft and review what the agent wrote on the Needs review card on the Dashboard. See External Services below for exactly what the plugin can reach on its own.
 
 Model Context Protocol (MCP) is an open specification originally developed by Anthropic. Claude, ChatGPT, Cursor, VS Code, Gemini, and other product names are trademarks of their respective owners. Agent Abilities for MCP is a third-party plugin and is not affiliated with, endorsed by, or sponsored by any of them.
 
@@ -28,9 +28,7 @@ Model Context Protocol (MCP) is an open specification originally developed by An
 
 A WordPress MCP server lets an AI assistant work on your site directly, instead of copying text between a chat window and wp-admin. MCP (Model Context Protocol) is an open standard that tells an AI client which tools a service offers and how to call them, so Claude, ChatGPT, or any other MCP client can list your posts, draft one, or update a WooCommerce order.
 
-An MCP server hands a language model the ability to change your live site, so how far it can reach and whether you can audit it afterwards both matter - exactly what Agent Abilities for MCP governs for its own tools, off by default and logged.
-
-Prefer to watch first? Here is a short walkthrough of the plugin in action.
+Short walkthrough:
 
 [![Agent Abilities for MCP walkthrough](https://img.youtube.com/vi/Raih7X4QgP0/hqdefault.jpg)](https://www.youtube.com/watch?v=Raih7X4QgP0)
 
@@ -38,9 +36,11 @@ Prefer to watch first? Here is a short walkthrough of the plugin in action.
 
 * **Run several sites from one AI chat.** Install it on each site and add each one to ChatGPT or Claude as its own connector. Each site keeps its own user, its own switches and its own audit log, so an agency can hand one client's site to the agent without touching the others.
 * **Let ChatGPT or Claude write and edit posts without admin access.** Connect the agent as an Editor, Author or Contributor account. It can only do what that role can do in wp-admin.
-* **Have the agent save drafts for you to approve.** Turn on Force draft on create and anything the agent creates or tries to publish is saved as a draft. To stop it changing posts that are already live as well, connect it as a Contributor.
+* **Have the agent save drafts for you to approve.** Turn on Force draft on create and anything the agent creates or tries to publish is saved as a draft. The Needs review card on the Dashboard lists the drafts and pending posts an agent starts, with Preview, Open in editor, Publish and Discard (Discard moves the post to the Trash). To stop it changing posts that are already live as well, connect it as a Contributor.
 * **Let AI read your site without changing anything.** Read-only mode stops every write tool from loading, including write tools you have bridged from your other plugins.
-* **Fix typos and refresh old posts.** The agent can search your posts, read one and update it, and every step is logged.
+* **Tell the agent about your site once.** Write a few lines in Site Brief on the Settings tab, for example your house style or what to leave alone. This plugin sends it to every agent that connects, when its session starts.
+* **Find out why an agent cannot connect.** Connection Doctor on the Connection tab checks the connection from your own server and names the fix, for example a host that strips the Authorization header.
+* **Fix typos and refresh old posts.** The agent can search your posts, read one and update it, and every step through this plugin is logged.
 * **Use your other plugins through the agent.** Plugins that register WordPress abilities, such as WPForms, show up on the Other plugins screen and stay off until you switch them on.
 
 ### 🛡️ Permission controls and an audit log on every call
@@ -58,7 +58,7 @@ Prefer to watch first? Here is a short walkthrough of the plugin in action.
 
 ### 🤖 Built on the WordPress Abilities API and MCP Adapter
 
-WordPress 6.9 ships the Abilities API. The official MCP Adapter (`wordpress/mcp-adapter`) comes bundled with this plugin, so you do not install it separately. If the standalone Adapter plugin is active too, this plugin works with whichever copy loads first, from 0.6.1 through 0.7.x. Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or server, so there's no bespoke transport to trust.
+WordPress 6.9 ships the Abilities API. The official MCP Adapter (`wordpress/mcp-adapter`) comes bundled with this plugin, so you do not install it separately. If the standalone Adapter plugin is active too, this plugin works with whichever copy loads first, from 0.6.1 through 0.7.x. Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or server, so there's no bespoke transport to trust. A Settings switch (Automatic, Always on, Always off) controls the Adapter's default server, which other plugins can publish tools to. Automatic, the default, starts it only when another plugin publishes tools there, and this plugin's own tools never appear on it.
 
 ### 📦 179 governed abilities
 
@@ -91,8 +91,6 @@ The plugin ships **179 governed abilities: 85 across WordPress core and 94 from 
 * **🎨 Avada / Fusion Builder (2 abilities):** read a page's raw Fusion Builder markup and replace text without disturbing the shortcode layout.
 * **📍 GeoDirectory (4 abilities, off by default):** read and manage business and place listings; stays off even when active, turn it on in the Integrations tab.
 
-More integrations are planned.
-
 ### 🔗 Abilities from your other plugins (new in 1.1.0)
 
 WordPress 6.9 lets any plugin register its own abilities, not just this one, and Agent Abilities for MCP can bring those in too. Abilities from other active plugins appear on a dedicated **Other plugins** screen, grouped by plugin, every one off until you enable it - then it becomes a governed MCP tool under the same rules as the built-in catalog: scoped, capability-checked, rate-limited, and logged with identifiers only.
@@ -101,7 +99,7 @@ One limit worth knowing: since it's the other plugin's code doing the work, Word
 
 Some plugins skip this screen and publish tools straight to the Adapter's default server. Those tools are outside this plugin's controls (see the FAQ on the default server).
 
-So you are not limited to the integrations shipped here: any plugin that speaks the Abilities API can be handed to your agent, with a whole plugin's set toggled at once. The bundled WP-CLI command `wp aafm catalog export` prints a site's discoverable abilities as JSON.
+Any plugin that speaks the Abilities API can be handed to your agent, with a whole plugin's set toggled at once. The bundled WP-CLI command `wp aafm catalog export` prints a site's discoverable abilities as JSON.
 
 ### Page builder pages: refused, not silently broken
 
@@ -113,7 +111,7 @@ Install the plugin, switch on the abilities you want Claude to have, add your si
 
 ### Connect ChatGPT to WordPress
 
-Turn on Developer Mode in ChatGPT (Settings, then Connectors, then Advanced), add your site's MCP endpoint as a custom connector, and approve it once over OAuth - a beta feature on ChatGPT's paid plans, not the plugin's limit. ChatGPT then reaches only the abilities you switched on, acting as the WordPress user that approved the connection.
+Turn on Developer Mode in ChatGPT (Settings, then Connectors, then Advanced), add your site's MCP endpoint as a custom connector, and approve it once over OAuth - a beta feature on ChatGPT's paid plans, not the plugin's limit. If it will not connect, run Connection Doctor on the Connection tab. ChatGPT then reaches only the abilities you switched on, acting as the WordPress user that approved the connection.
 
 ### 🔌 Connect ChatGPT, Claude, Cursor and other MCP clients
 

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-15T16:37:14+05:00\n"
+"POT-Creation-Date: 2026-10-15T17:23:19+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -26,7 +26,7 @@ msgstr ""
 
 #. Description of the plugin
 #: agent-abilities-for-mcp.php
-msgid "MCP server for WordPress. Let an AI agent work on one site or many, with limited access, read-only mode, drafts and an audit log."
+msgid "WordPress MCP server for AI agents. Run one site or many with limited access, read-only mode, drafts you approve and an audit log."
 msgstr ""
 
 #. Author of the plugin

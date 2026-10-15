@@ -8,8 +8,11 @@
 # Exit 0 = every hard check passed. Lines are PASS / FAIL / KNOWN <leg>: <detail>, then
 # a final "SMOKE: <n> pass, <n> fail, <n> known".
 #
-# Env: SMOKE_DEFAULT_SERVER_STRICT=1  default-server leg becomes a hard check.
+# Env: SMOKE_DEFAULT_SERVER_STRICT=0  downgrades default-server findings from FAIL to KNOWN
+#                                      (strict is the default since 1.8.0).
 #      SMOKE_INJECT_FAULT=1           drops a PHP-warning mu-plugin (proves the gate goes red).
+#      SMOKE_INJECT_LEAK=1            makes our abilities public again and removes the default-server
+#                                      guards (proves the default-server leg goes red).
 #      SMOKE_DB / SMOKE_ROOT          override the disposable site; only to test the guard.
 #      SMOKE_PLUGIN_SRC               plugin tree to symlink in (under /var/www/plugin-src); only to
 #                                     run the gate against an older release export.
@@ -23,7 +26,6 @@ PLUGIN_SRC="${SMOKE_PLUGIN_SRC:-$REPO_SRC}"
 SMOKE_DB="${SMOKE_DB:-aafm_smoke}"
 SMOKE_ROOT="${SMOKE_ROOT:-/tmp/aafm-smoke}"
 URL=http://localhost:8070
-ADAPTER_URL=https://github.com/WordPress/mcp-adapter/releases/download/v0.7.0/mcp-adapter.zip
 INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}'
 OURS='agent-abilities-for-mcp/agent-abilities-for-mcp.php'
 ADAPTER='mcp-adapter/mcp-adapter.php'
@@ -120,8 +122,8 @@ K=0
 pass() { P=$((P + 1)); echo "PASS $1: $2"; }
 fail() { F=$((F + 1)); echo "FAIL $1: $2"; }
 known() { K=$((K + 1)); echo "KNOWN $1: $2"; }
-# default-server findings are KNOWN until the fix lands; strict mode makes them hard.
-ds() { if [ "${SMOKE_DEFAULT_SERVER_STRICT:-0}" = 1 ]; then fail default-server "$1"; else known default-server "$1"; fi; }
+# default-server findings are hard failures; SMOKE_DEFAULT_SERVER_STRICT=0 makes them KNOWN.
+ds() { if [ "${SMOKE_DEFAULT_SERVER_STRICT:-1}" = 1 ]; then fail default-server "$1"; else known default-server "$1"; fi; }
 
 LOG="$SMOKE_ROOT/wp-content/debug.log"
 W() { wp --allow-root --quiet --path="$SMOKE_ROOT" "$@"; }
@@ -170,6 +172,23 @@ add_action( 'admin_init', function () {
 } );
 PHP
 	fi
+	if [ "${SMOKE_INJECT_LEAK:-0}" = 1 ]; then
+		cat > "$SMOKE_ROOT/wp-content/mu-plugins/inject-leak.php" <<'PHP'
+<?php
+// Proof-of-red for the default-server leg: make our abilities public again and strip the guards.
+add_filter( 'wp_register_ability_args', function ( $args, $name ) {
+	if ( 0 === strpos( (string) $name, 'aafm/' ) || 0 === strpos( (string) $name, 'aafm-bridge/' ) ) {
+		$args['meta']['mcp']['public'] = true;
+	}
+	return $args;
+}, PHP_INT_MAX, 2 );
+add_action( 'plugins_loaded', function () {
+	remove_filter( 'mcp_adapter_tools_list', 'aafm_guard_default_server_tools_list', 1 );
+	remove_filter( 'mcp_adapter_pre_tool_call', 'aafm_guard_default_server_tool_call', 1 );
+	remove_filter( 'mcp_adapter_tool_call_result', 'aafm_guard_default_server_call_result', 1 );
+}, 99 );
+PHP
+	fi
 	return 0
 }
 
@@ -190,19 +209,24 @@ start_server() {
 	return 1
 }
 
-# Download the standalone adapter once; every leg that needs it asks here.
-ADAPTER_STATE=''
-fetch_adapter() {
-	if [ -z "$ADAPTER_STATE" ]; then
-		ADAPTER_STATE=bad
-		if curl -fsSL --max-time 60 -o "$SMOKE_ROOT/mcp-adapter.zip" "$ADAPTER_URL" \
-			&& unzip -q -o "$SMOKE_ROOT/mcp-adapter.zip" -d "$SMOKE_ROOT/wp-content/plugins" \
-			&& [ -f "$SMOKE_ROOT/wp-content/plugins/$ADAPTER" ]; then
-			ADAPTER_STATE=ok
-		fi
+# Install the standalone adapter plugin at a version (default 0.7.0), downloading each release once.
+# Only one version is installed at a time, so legs can compare 0.6.1 and 0.7.0 on the same site.
+ADAPTER_INSTALLED=''
+fetch_adapter() { # <leg> [version]
+	local leg="$1" ver="${2:-0.7.0}"
+	local zip="$SMOKE_ROOT/mcp-adapter-$ver.zip" url="https://github.com/WordPress/mcp-adapter/releases/download/v$ver/mcp-adapter.zip"
+	[ "$ADAPTER_INSTALLED" = "$ver" ] && return 0
+	if [ ! -s "$zip" ] && ! curl -fsSL --max-time 60 -o "$zip" "$url"; then
+		rm -f "$zip"
+		fail "$leg" "download $url"
+		return 1
 	fi
-	[ "$ADAPTER_STATE" = ok ] && return 0
-	fail "$1" "download $ADAPTER_URL"
+	rm -rf "$SMOKE_ROOT/wp-content/plugins/mcp-adapter"
+	if unzip -q -o "$zip" -d "$SMOKE_ROOT/wp-content/plugins" && [ -f "$SMOKE_ROOT/wp-content/plugins/$ADAPTER" ]; then
+		ADAPTER_INSTALLED="$ver"
+		return 0
+	fi
+	fail "$leg" "unpack $url"
 	return 1
 }
 
@@ -436,9 +460,211 @@ tools_list() {
 	return 0
 }
 
+# tools_call <route> <tool> <args json>: initialize, then call one tool. Prints the HTTP status of
+# the call (or an error line); the JSON-RPC response is left in body.json. Returns 1 unless both
+# requests answered 200.
+tools_call() {
+	local code sid
+	code=$(mcp_post "$1" "$INIT")
+	if [ "$code" != 200 ]; then echo "initialize /$1 HTTP $code"; return 1; fi
+	sid=$(grep -i '^mcp-session-id:' "$SMOKE_ROOT/head.txt" | tr -d '\r' | awk '{print $2}')
+	code=$(mcp_post "$1" "$(jq -nc --arg n "$2" --argjson a "$3" '{jsonrpc:"2.0",id:3,method:"tools/call",params:{name:$n,arguments:$a}}')" "$sid")
+	echo "$code"
+	[ "$code" = 200 ]
+}
+
+# call_verdict: classifies the JSON-RPC answer left in body.json by the last tools_call.
+#   refused  an isError result or a JSON-RPC error object
+#   ran      a result object that is not an error
+#   broken   anything else (not JSON, not a JSON-RPC answer): a transport problem proves nothing
+call_verdict() {
+	local b="$SMOKE_ROOT/body.json"
+	if ! jq -e 'type == "object" and .jsonrpc == "2.0"' "$b" >/dev/null 2>&1; then echo broken; return; fi
+	if jq -e '(.error | type) == "object" or .result.isError == true' "$b" >/dev/null 2>&1; then
+		echo refused
+	elif jq -e '(.result | type) == "object"' "$b" >/dev/null 2>&1; then
+		echo ran
+	else
+		echo broken
+	fi
+}
+
+# refusal_check <label> <tool> <args json> <what>: a call on the default server that must be refused.
+# A positive refusal (isError or a JSON-RPC error) is a PASS: the adapter itself refuses an ability
+# whose meta.mcp.public is false, and this plugin's guard refuses one that is stamped public. While
+# REQUIRE_GUARD=1 (our abilities re-stamped public) only the guard's message counts. An answer that
+# ran is a default-server finding; a transport error or non-JSON body is a hard FAIL.
+REQUIRE_GUARD=0
+refusal_check() {
+	local verdict msg
+	if tools_call "$ROUTE_DEFAULT" "$2" "$3" >/dev/null; then verdict=$(call_verdict); else verdict=broken; fi
+	case "$verdict" in
+		refused)
+			msg=$(jq -r '[.error.message?, (.result.content // [])[]?.text?] | map(select(type == "string")) | join(" ")' "$SMOKE_ROOT/body.json")
+			case "$msg" in
+				*"only available through the Agent Abilities for MCP endpoint"*) pass default-server "$1: $4 is refused by the guard" ;;
+				*)
+					if [ "$REQUIRE_GUARD" = 1 ]; then
+						fail default-server "$1: $4 was refused, but not by the guard: $(echo "$msg" | head -c 150)"
+					else
+						pass default-server "$1: $4 is refused ($(echo "$msg" | head -c 80))"
+					fi
+					;;
+			esac
+			;;
+		ran) ds "$1: $4 was answered through the default server: $(head -c 120 "$SMOKE_ROOT/body.json" | tr '\n' ' ')" ;;
+		*) fail default-server "$1: $4 gave no usable JSON-RPC answer: $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')" ;;
+	esac
+}
+
+# A stand-in for another plugin that publishes a tool to the adapter's default server.
+PUBLISHER="$SMOKE_ROOT/wp-content/mu-plugins/smoke-foreign-publisher.php"
+publisher() { # on|off
+	if [ "$1" = on ]; then
+		cat > "$PUBLISHER" <<'PHP'
+<?php
+add_action( 'wp_abilities_api_categories_init', function () {
+	if ( ! wp_has_ability_category( 'smokefix' ) ) {
+		wp_register_ability_category( 'smokefix', array( 'label' => 'Smoke fixture', 'description' => 'Smoke fixture category.' ) );
+	}
+} );
+add_action( 'wp_abilities_api_init', function () {
+	wp_register_ability( 'smokefix/ping', array(
+		'label'               => 'Smoke ping',
+		'description'         => 'A foreign plugin ability that publishes itself to the default server.',
+		'category'            => 'smokefix',
+		'execute_callback'    => function () { return array( 'pong' => true ); },
+		'permission_callback' => '__return_true',
+		'meta'                => array( 'mcp' => array( 'public' => true ) ),
+	) );
+} );
+PHP
+	else
+		rm -f "$PUBLISHER"
+	fi
+}
+
+# A stand-in for a plugin or a future adapter that re-stamps our abilities public after we register
+# them (a late wp_register_ability_args filter). The guards must hold with the stamp undone.
+RESTAMP="$SMOKE_ROOT/wp-content/mu-plugins/smoke-restamp.php"
+restamp() { # on|off
+	if [ "$1" = on ]; then
+		cat > "$RESTAMP" <<'PHP'
+<?php
+add_filter( 'wp_register_ability_args', function ( $args, $name ) {
+	if ( 0 === strpos( (string) $name, 'aafm/' ) || 0 === strpos( (string) $name, 'aafm-bridge/' ) ) {
+		$args['meta']['mcp']['public'] = true;
+	}
+	return $args;
+}, PHP_INT_MAX, 2 );
+PHP
+	else
+		rm -f "$RESTAMP"
+	fi
+}
+
+# set_mode <auto|on|off|unset>: the owner's default-server setting. WP-CLI exits 1 on an unchanged value.
+set_mode() {
+	if [ "$1" = unset ]; then
+		W option delete aafm_default_server_mode >/dev/null 2>&1
+	else
+		W option update aafm_default_server_mode "$1" >/dev/null 2>&1
+	fi
+	return 0
+}
+
+# ds_route_state <leg label>: sets DS_STATE to up|down and fills names.txt when up.
+DS_STATE=''
+ds_route_state() {
+	local msg
+	if msg=$(tools_list "$ROUTE_DEFAULT" "$SMOKE_ROOT/names.txt"); then
+		DS_STATE=up
+	else
+		DS_STATE=down
+		case "$msg" in *"not registered"*) ;; *) fail default-server "$1: $msg" ;; esac
+	fi
+}
+
+# ds_up_checks <label> <expect publisher listed: 1|0>: the default server is up. Assert the three
+# guarantees on tool CALLS, plus a control call so a refusal means something.
+ds_up_checks() {
+	local label="$1" want_pub="$2" names="$SMOKE_ROOT/names.txt" disc exe info found leaked
+	disc=$(grep 'discover-abilities$' "$names" | head -1)
+	exe=$(grep 'execute-ability$' "$names" | head -1)
+	info=$(grep 'get-ability-info$' "$names" | head -1)
+	if [ -z "$disc" ] || [ -z "$exe" ] || [ -z "$info" ]; then
+		fail default-server "$label: default server lists [$(tr '\n' ' ' < "$names")], expected its three meta tools"
+		return
+	fi
+	if [ "$(grep -c '^aafm-' "$names")" != 0 ]; then
+		ds "$label: our tools in the default server's tools/list: $(grep '^aafm-' "$names" | head -3 | tr '\n' ' ')"
+	fi
+	if tools_call "$ROUTE_DEFAULT" "$disc" '{}' >/dev/null && [ "$(call_verdict)" = ran ]; then
+		found=$(jq -r '(.result.structuredContent.abilities // [])[].name' "$SMOKE_ROOT/body.json")
+		leaked=$(echo "$found" | grep -c -E '^(aafm|aafm-bridge)/')
+		if [ "$leaked" = 0 ]; then
+			pass default-server "$label: discover-abilities lists none of our abilities"
+		else
+			ds "$label: discover-abilities lists $leaked of our abilities, e.g. $(echo "$found" | grep -E '^(aafm|aafm-bridge)/' | head -3 | tr '\n' ' ')"
+		fi
+		if [ "$want_pub" = 1 ]; then
+			if echo "$found" | grep -qx 'smokefix/ping'; then
+				pass default-server "$label: discover-abilities lists the foreign plugin's public ability"
+			else
+				fail default-server "$label: discover-abilities does not list smokefix/ping"
+			fi
+		fi
+	else
+		fail default-server "$label: discover-abilities call failed: $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
+	fi
+	if [ "$want_pub" = 1 ]; then
+		if tools_call "$ROUTE_DEFAULT" "$exe" '{"ability_name":"smokefix/ping","parameters":{}}' >/dev/null \
+			&& jq -e '.result.isError == false and .result.structuredContent.success == true' "$SMOKE_ROOT/body.json" >/dev/null 2>&1; then
+			pass default-server "$label: control, the foreign ability executes through the default server"
+		else
+			fail default-server "$label: control call to smokefix/ping did not succeed: $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
+		fi
+	fi
+	refusal_check "$label" "$exe" '{"ability_name":"aafm/get-posts","parameters":{}}' 'execute-ability for aafm/get-posts'
+	refusal_check "$label" "$info" '{"ability_name":"aafm/get-posts"}' 'get-ability-info for aafm/get-posts'
+}
+
+# ds_scenario <label> <plugins json> <publisher on|off> <mode> <expect: up|down> <base tool count>
+ds_scenario() {
+	local label="$1" plugins="$2" pub="$3" mode="$4" expect="$5" base="$6" ours msg
+	publisher "$pub"
+	set_mode "$mode"
+	set_state default-server "$label" "$plugins" true 0 || return 0
+	ds_route_state "$label"
+	if [ "$expect" = up ]; then
+		if [ "$DS_STATE" = up ]; then
+			ds_up_checks "$label" "$([ "$pub" = on ] && echo 1 || echo 0)"
+		else
+			fail default-server "$label: the default server should be up and is not registered"
+		fi
+	elif [ "$DS_STATE" = down ]; then
+		pass default-server "$label: default server not registered, as expected"
+	else
+		ds "$label: default server is registered but should not be"
+	fi
+	if ! msg=$(tools_list "$ROUTE_OURS" "$SMOKE_ROOT/ours.txt"); then
+		fail default-server "$label: $msg"
+		return 0
+	fi
+	ours=$(grep -c . "$SMOKE_ROOT/ours.txt")
+	if [ "$ours" = "$base" ]; then
+		pass default-server "$label: our endpoint lists $ours tools, same as ours-only"
+	else
+		ds "$label: our endpoint lists $ours tools, ours-only lists $base"
+	fi
+}
+
 leg_default_server() {
-	local names="$SMOKE_ROOT/names.txt" base ours leaked msg label plugins want missing t
-	fetch_adapter default-server || return 0
+	local names="$SMOKE_ROOT/names.txt" base msg ver order plugins want missing t found disc exe stamped
+	fetch_adapter default-server 0.7.0 || return 0
+	publisher off
+	restamp off
+	set_mode unset
 	set_state default-server 'ours-only baseline' "[\"$OURS\"]" true 0 || return 0
 	if ! msg=$(tools_list "$ROUTE_OURS" "$names"); then
 		fail default-server "ours-only baseline: $msg"
@@ -453,40 +679,99 @@ leg_default_server() {
 		return 0
 	fi
 	pass default-server "ours-only baseline: $base tools on /$ROUTE_OURS, including every enabled tool"
-	# Control: the standalone adapter alone must serve its default server, or a 404 below proves nothing.
+	# Control: the standalone adapter alone must serve its default server, or a "down" below proves nothing.
 	set_state default-server 'control' "[\"$ADAPTER\"]" true 0 || return 0
 	if msg=$(tools_list "$ROUTE_DEFAULT" "$names"); then
 		pass default-server "control: standalone alone serves /$ROUTE_DEFAULT ($(grep -c . "$names") tools)"
 	else
 		fail default-server "control: standalone alone: $msg"
 	fi
-	for label in 'ours first' 'standalone first'; do
-		if [ "$label" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; else plugins="[\"$ADAPTER\",\"$OURS\"]"; fi
-		set_state default-server "$label" "$plugins" true 0 || continue
-		msg=$(tools_list "$ROUTE_DEFAULT" "$names")
-		case $? in
-			0)
-				leaked=$(grep -c '^aafm-' "$names")
-				if [ "$leaked" = 0 ]; then
-					pass default-server "$label: no aafm- tools on /$ROUTE_DEFAULT ($(grep -c . "$names") tools)"
-				else
-					ds "$label: $leaked aafm- tools on /$ROUTE_DEFAULT, e.g. $(grep '^aafm-' "$names" | head -3 | tr '\n' ' ')"
-				fi
-				;;
-			3) pass default-server "$label: $msg (rest_no_route), so none of our tools can be listed there" ;;
-			*) fail default-server "$label: $msg" ;;
-		esac
-		if ! msg=$(tools_list "$ROUTE_OURS" "$names"); then
-			fail default-server "$label: $msg"
-			continue
-		fi
-		ours=$(grep -c . "$names")
-		if [ "$ours" = "$base" ]; then
-			pass default-server "$label: our endpoint lists $ours tools, same as ours-only"
-		else
-			ds "$label: our endpoint lists $ours tools, ours-only lists $base"
+	for ver in 0.7.0 0.6.1; do
+		fetch_adapter default-server "$ver" || continue
+		for order in 'ours first' 'standalone first'; do
+			if [ "$order" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; else plugins="[\"$ADAPTER\",\"$OURS\"]"; fi
+			ds_scenario "adapter $ver, $order, another plugin publishes, Automatic" "$plugins" on unset up "$base"
+			ds_scenario "adapter $ver, $order, another plugin publishes, Always off" "$plugins" on off down "$base"
+			ds_scenario "adapter $ver, $order, nobody publishes, Automatic" "$plugins" off unset down "$base"
+			ds_scenario "adapter $ver, $order, nobody publishes, Always on" "$plugins" off on up "$base"
+		done
+	done
+	# Our abilities re-stamped public by a late filter: the guards alone must keep them off the default server.
+	fetch_adapter default-server 0.7.0 || return 0
+	restamp on
+	REQUIRE_GUARD=1
+	for order in 'ours first' 'standalone first'; do
+		if [ "$order" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; else plugins="[\"$ADAPTER\",\"$OURS\"]"; fi
+		if set_state default-server "re-stamped public, $order" "$plugins" true 0; then
+			stamped=$(W eval '$a = wp_get_ability( "aafm/get-posts" ); echo $a ? var_export( $a->get_meta()["mcp"]["public"] ?? null, true ) : "missing";' 2>/dev/null)
+			if [ "$stamped" = true ]; then
+				pass default-server "re-stamped public, $order: aafm/get-posts reads meta.mcp.public = true, so the guards are what is under test"
+				ds_scenario "adapter 0.7.0, $order, re-stamped public, another plugin publishes, Automatic" "$plugins" on unset up "$base"
+			else
+				fail default-server "re-stamped public, $order: the fixture did not take effect (meta.mcp.public reads '$stamped')"
+			fi
 		fi
 	done
+	# A bridged copy of the foreign public ability is ours and must stay off the default server.
+	publisher on
+	set_mode unset
+	W option update aafm_enabled_bridged_abilities '["smokefix/ping"]' --format=json >/dev/null 2>&1
+	if set_state default-server 'bridged copy' "[\"$OURS\",\"$ADAPTER\"]" true 0; then
+		if tools_list "$ROUTE_OURS" "$names" >/dev/null && grep -qx 'aafm-bridge-smokefix-ping' "$names"; then
+			pass default-server "bridged copy: aafm-bridge-smokefix-ping is on our endpoint"
+		else
+			fail default-server "bridged copy: aafm-bridge-smokefix-ping is missing from our endpoint, so the next checks prove nothing"
+		fi
+		ds_route_state 'bridged copy'
+		if [ "$DS_STATE" = up ]; then
+			disc=$(grep 'discover-abilities$' "$names" | head -1)
+			exe=$(grep 'execute-ability$' "$names" | head -1)
+			if tools_call "$ROUTE_DEFAULT" "$disc" '{}' >/dev/null && [ "$(call_verdict)" = ran ]; then
+				found=$(jq -r '(.result.structuredContent.abilities // [])[].name' "$SMOKE_ROOT/body.json")
+				if echo "$found" | grep -qx 'aafm-bridge/smokefix-ping'; then
+					ds "bridged copy: discover-abilities lists aafm-bridge/smokefix-ping"
+				else
+					pass default-server "bridged copy: discover-abilities does not list the bridged copy"
+				fi
+			else
+				fail default-server "bridged copy: discover-abilities call failed"
+			fi
+			refusal_check 'bridged copy' "$exe" '{"ability_name":"aafm-bridge/smokefix-ping","parameters":{}}' 'execute-ability for aafm-bridge/smokefix-ping'
+		else
+			fail default-server "bridged copy: the default server should be up (another plugin publishes) and is not"
+		fi
+	fi
+	W option delete aafm_enabled_bridged_abilities >/dev/null 2>&1
+	REQUIRE_GUARD=0
+	restamp off
+	publisher off
+	set_mode unset
+}
+
+leg_brief() {
+	local brief='Smoke rule: always answer in British spelling.' got
+	set_state brief 'ours only' "[\"$OURS\"]" true 0 || return 0
+	W option update aafm_site_brief "$brief" >/dev/null 2>&1
+	if [ "$(mcp_post "$ROUTE_OURS" "$INIT")" = 200 ]; then
+		got=$(jq -r '.result.instructions // empty' "$SMOKE_ROOT/body.json")
+		case "$got" in
+			*"$brief") pass brief "initialize instructions end with the Site Brief" ;;
+			*) fail brief "initialize instructions were: $(echo "$got" | head -c 200)" ;;
+		esac
+	else
+		fail brief "initialize /$ROUTE_OURS did not answer 200"
+	fi
+	W option delete aafm_site_brief >/dev/null 2>&1
+	if [ "$(mcp_post "$ROUTE_OURS" "$INIT")" = 200 ]; then
+		got=$(jq -r '.result.instructions // empty' "$SMOKE_ROOT/body.json")
+		case "$got" in
+			*"$brief"*) fail brief "the brief is still in the instructions after it was deleted" ;;
+			*) pass brief "instructions carry no brief once it is deleted" ;;
+		esac
+	else
+		fail brief "initialize /$ROUTE_OURS did not answer 200 after the brief was deleted"
+	fi
+	log_ok brief 'Site Brief'
 }
 
 setup_site || { fail setup "could not build the disposable site at $SMOKE_ROOT"; finish; }
@@ -495,4 +780,5 @@ leg_matrix
 leg_qm
 leg_upgrade
 leg_default_server
+leg_brief
 finish

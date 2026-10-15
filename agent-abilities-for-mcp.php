@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
- * Description:       WordPress MCP server for AI agents. Run one site or many with limited access, read-only mode, drafts you approve and an audit log.
+ * Description:       WordPress MCP server for Claude and ChatGPT. Run one site or many with limited access, read-only mode, drafts you approve and an audit log.
  * Version:           1.8.0
  * Requires at least: 6.9
  * Requires PHP:      7.4

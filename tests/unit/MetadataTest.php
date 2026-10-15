@@ -122,10 +122,10 @@ final class MetadataTest extends TestCase {
 	}
 
 	/**
-	 * The short description names no AI brand, is short enough for wordpress.org, reads the same in
-	 * both readmes, and is the plugin header's Description too.
+	 * The short description is short enough for wordpress.org, reads the same in both readmes, and
+	 * is the plugin header's Description too.
 	 */
-	public function test_short_description_is_brand_free_and_identical_everywhere_it_appears(): void {
+	public function test_short_description_fits_the_limit_and_is_identical_everywhere_it_appears(): void {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
@@ -136,7 +136,6 @@ final class MetadataTest extends TestCase {
 
 		$this->assertSame( $txt[1], $short[1] );
 		$this->assertSame( $txt[1], $this->plugin_headers()['Description'] );
-		$this->assertSame( 0, preg_match( '/chatgpt|claude|openai|anthropic|gemini/i', $txt[1] ) );
 		$this->assertLessThanOrEqual( 150, strlen( $txt[1] ) );
 	}
 

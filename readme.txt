@@ -8,7 +8,7 @@ Stable tag: 1.8.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-WordPress MCP server for AI agents. Run one site or many with limited access, read-only mode, drafts you approve and an audit log.
+WordPress MCP server for Claude and ChatGPT. Run one site or many with limited access, read-only mode, drafts you approve and an audit log.
 
 == Description ==
 
@@ -243,7 +243,19 @@ Connect it as a WordPress user with a smaller role. An Editor can write, edit an
 
 = Can the agent only save drafts so I approve before anything goes live? =
 
-Yes. Turn on Force draft on create in Settings. Anything the agent creates, and any request to publish, is saved as a draft instead. Edits to a post that is already published still go live, so if you want every change reviewed, connect the agent as a Contributor, who cannot edit published posts at all.
+Yes. Turn on Force draft on create in Settings. Anything the agent creates, and any request to publish, is saved as a draft instead. Edits to a post that is already published still go live, so if you want every change reviewed, connect the agent as a Contributor, who cannot edit published posts at all. The Needs review card on the Dashboard lists those drafts so you can preview, publish or discard them.
+
+= Why can't ChatGPT or Claude connect to my WordPress site? =
+
+Open the Connection tab and click Check my connection (the Connection Doctor). It runs the checks from your own server and names the fix, for example a host that strips the Authorization header. The other usual causes are a CDN or firewall blocking the /mcp path and a local site with a self-signed certificate, and both have their own answers below.
+
+= Can I tell the AI agent about my site, such as my house style or what to leave alone? =
+
+Yes. Site Brief on the Settings tab takes a few lines about your site, up to 1,500 characters. The plugin sends it to every agent that connects when its session starts. Whether the agent follows it depends on the client. Only you can change it.
+
+= Where do I review what the agent wrote before it goes live? =
+
+The Needs review card on the Dashboard lists the drafts and pending posts an agent starts, with Preview, Open in editor, Publish and Discard buttons. Discard moves the post to the Trash, and is unavailable when the Trash is off. Turn on Force draft on create in Settings to hold new posts, and requests to publish, as drafts so they land there.
 
 = Can AI read my site without being able to change anything? =
 
@@ -439,6 +451,10 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 Full release history: https://agentabilitieswp.com/changelog/
 
 == Upgrade Notice ==
+
+= 1.8.0 =
+
+Other plugins' MCP tools on the Adapter's default server work again, through a new Settings switch that starts on Automatic. Adds Site Brief, Connection Doctor and a Needs review card. A site using only WordPress core abilities should pick Always on.
 
 = 1.7.6 =
 

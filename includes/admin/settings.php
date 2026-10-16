@@ -37,7 +37,7 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_notifications:array{mode:string,email:string,triggers:array<string,bool>},aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -74,6 +74,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_oauth_dcr_enabled'            => $oauth_dcr,
 		'aafm_site_brief'                   => aafm_clean_site_brief( $brief_raw ),
 		'aafm_default_server_mode'          => $mode,
+		'aafm_notifications'                => aafm_notifications_sanitize( $posted ),
 		'aafm_ip_allowlist'                 => array_values( array_unique( $lines ) ),
 	);
 }
@@ -139,6 +140,19 @@ function aafm_ajax_save_settings(): void {
 	}
 	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$clean  = aafm_sanitize_settings_input( $posted );
+
+	// Notifications are posted-only, like the Site Brief: a save that does not carry the mode (a stale
+	// cached script) leaves them alone. A bad address or an empty trigger list is refused HERE, before
+	// any write, so one bad field never half-saves the form.
+	$ntf_posted = isset( $posted['aafm_notify_mode'] ) && is_string( $posted['aafm_notify_mode'] );
+	$ntf_before = aafm_notifications_settings();
+	if ( $ntf_posted ) {
+		$ntf_raw   = isset( $posted['aafm_notify_email'] ) && is_string( $posted['aafm_notify_email'] ) ? trim( $posted['aafm_notify_email'] ) : '';
+		$ntf_error = aafm_notifications_validate( $clean['aafm_notifications'], $ntf_raw );
+		if ( null !== $ntf_error ) {
+			wp_send_json_error( array( 'message' => $ntf_error ) );
+		}
+	}
 
 	// Free-text field: a save that does not carry it (a stale cached admin.js, a script) leaves the
 	// stored brief alone instead of clearing it, and so does a value that is not text (an array).
@@ -355,6 +369,22 @@ function aafm_ajax_save_settings(): void {
 		);
 	}
 
+	// Notification settings are written last. The flip alerts above (the two aafm_log_*_switch_change()
+	// calls) read the settings that were stored when this request ARRIVED, so a save that flips read-only
+	// mode and turns alerts off at once still tells the owner about the flip. A save that returned an
+	// error earlier never reaches this point and leaves the notification settings as they were.
+	if ( $ntf_posted ) {
+		if ( ! aafm_update_option_verified( 'aafm_notifications', $clean['aafm_notifications'], true ) ) {
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The notification settings', 'agent-abilities-for-mcp' ) ) ) );
+		}
+		aafm_log_notifications_change( $ntf_before, $clean['aafm_notifications'] );
+		aafm_notify_sync_schedule();
+		aafm_notify_settle_queue( $ntf_before, $clean['aafm_notifications'] );
+		aafm_notify_settings_weakened( $ntf_before, $clean['aafm_notifications'] );
+	} else {
+		$clean['aafm_notifications'] = $ntf_before;
+	}
+
 	wp_send_json_success(
 		array_merge(
 			$clean,
@@ -398,7 +428,7 @@ function aafm_log_high_risk_switch_change( bool $before, bool $after, bool $pers
 			? __( 'High-risk abilities could not be unlocked: object cache stale', 'agent-abilities-for-mcp' )
 			: __( 'High-risk abilities could not be locked: object cache stale', 'agent-abilities-for-mcp' );
 	}
-	aafm_log_activity(
+	$row_id = aafm_log_activity(
 		array(
 			// Both the admin table (page.php's Event column) and the AJAX-paginated re-render put
 			// the raw `ability` value straight into the Event cell - neither reads `event_type` at
@@ -414,6 +444,9 @@ function aafm_log_high_risk_switch_change( bool $before, bool $after, bool $pers
 			'detail'            => $detail,
 		)
 	);
+	if ( $persisted && $before !== $after ) {
+		aafm_notify_switch_flip( $after ? 'high_risk_unlocked' : 'high_risk_locked', $row_id );
+	}
 }
 
 /**
@@ -490,6 +523,12 @@ function aafm_config_option_names(): array {
 		'aafm_default_server_mode',
 		// The once-only marker for the "started automatically" log row; a reset logs it afresh.
 		'aafm_default_server_auto_noted',
+		// Owner notification settings; off is the absent row.
+		'aafm_notifications',
+		// Digest events waiting to be sent.
+		'aafm_notify_queue',
+		// Admin-notice entries for the Notifications card.
+		'aafm_notify_pending',
 	);
 }
 
@@ -533,7 +572,7 @@ function aafm_uninstall_should_delete_data(): bool {
 /**
  * Remove this plugin's data for the current blog.
  *
- * Clears this site's cron registrations FIRST, unconditionally - cron registrations are
+ * Clears this site's cron registrations (prune, OAuth cleanup, notification digest) FIRST, unconditionally - cron registrations are
  * executable plugin machinery, not retained user data, so they go regardless of the
  * data-retention choice below them. Without this, a default (retain-data) uninstall left both
  * daily events behind: their callbacks no longer exist once the plugin is gone, so WordPress
@@ -558,6 +597,7 @@ function aafm_uninstall_should_delete_data(): bool {
 function aafm_uninstall_site_data(): void {
 	wp_clear_scheduled_hook( 'aafm_prune_activity_log_daily' );
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
+	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
 
 	if ( ! aafm_uninstall_should_delete_data() ) {
 		return;
@@ -604,6 +644,9 @@ function aafm_uninstall_site_data(): void {
  * trail, and OAuth state only. The activity-log and OAuth tables themselves are kept (rows cleared)
  * so the plugin keeps working immediately afterwards. This cannot be undone.
  *
+ * The old notification address is warned before anything is deleted (aafm_notify_reset_warning()), and the
+ * two governance switches a reset moves back are logged after the clear so their rows survive it.
+ *
  * Wiping the activity log is itself security-relevant, so a tamper-evident marker is written
  * after the clear (L4, shared with the direct "Clear log" action in
  * aafm_ajax_clear_log()) - the emptied log always shows who reset the plugin and when.
@@ -618,6 +661,14 @@ function aafm_uninstall_site_data(): void {
  */
 function aafm_reset_plugin(): bool {
 	$ok = true;
+
+	// A reset quietly weakens the alerts: it deletes the notification settings and the queue, empties the
+	// log, and moves the two governance switches back to their defaults. Capture what is about to go and
+	// warn the old address first, while the settings that name it still exist.
+	$ntf_before    = aafm_notifications_settings();
+	$was_read_only = aafm_read_only_mode_stored();
+	$was_unlocked  = aafm_high_risk_unlocked();
+	aafm_notify_reset_warning( $ntf_before, $was_read_only, $was_unlocked, aafm_notify_queue_list() );
 
 	// Cache-safe on purpose: reset is what an operator reaches for when a setting looks stuck, and
 	// a stale persistent object cache is one way a setting gets stuck (aafm_forget_option_caches()).
@@ -634,6 +685,14 @@ function aafm_reset_plugin(): bool {
 		$ok = false;
 	} elseif ( ! aafm_log_activity_cleared_marker() ) {
 		$ok = false;
+	}
+
+	// Written after the clear so these rows survive it: the log shows the reset and what it changed.
+	if ( $was_read_only && ! aafm_read_only_mode_stored() ) {
+		aafm_log_read_only_switch_change( true, false );
+	}
+	if ( $was_unlocked && ! aafm_high_risk_unlocked() ) {
+		aafm_log_high_risk_switch_change( true, false );
 	}
 
 	if ( ! aafm_truncate_oauth_tables() ) {
@@ -740,6 +799,7 @@ function aafm_render_settings_tab(): void {
 	);
 
 	aafm_render_site_brief_section();
+	aafm_render_notifications_section();
 
 	// Caption for the card immediately below it. It names the safety controls outright, so it
 	// travelled down with them when OAuth took the top of the tab rather than staying at the head

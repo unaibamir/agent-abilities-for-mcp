@@ -4,7 +4,7 @@ Tags: chatgpt, claude, ai-agent, mcp, mcp-server
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.8.1
+Stable tag: 1.9.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -161,9 +161,15 @@ Agent Abilities for MCP gives you three layers for its own tools. Every ability 
 
 Yes. Beyond the site-wide list of enabled abilities, you can add a per-role allowlist, a per-connection allowlist, or both, on the Connections screen. Either one only narrows what was already enabled: an ability still has to clear the global list, then the matching role's list, then the matching connection's list, before an agent can call it. There is no finer-grained scoping below role and OAuth connection - an Application Password inherits its user's whole role, with no separate per-password limit. Leave the screen alone and nothing changes; every existing connection keeps working exactly as it did before.
 
+= How do I find what an agent did? =
+
+Open the Activity Log tab. You can filter by user, connection, tool, plugin, date and text. Each row shows the connection name, the source IP address and how long the tool ran. A summary at the top covers the last 7 days, and a Live view keeps the first page current while you watch (it needs a date range when a text search or a user filter is applied). Export CSV downloads exactly the rows the filters show.
+
+The IP is the address the request came from, so behind a proxy or CDN it is the proxy's address. Duration is the time spent inside the tool, not what the agent experienced. A denied call never runs, so it has no duration.
+
 = Is there an audit log of what the agent did? =
 
-Yes. Agent Abilities for MCP writes every call to one of its abilities to an audit log in your own database, denied attempts included. Each entry records the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. For a failed call to another plugin's bridged ability, it also records that plugin's error code, never its message. Free-text argument content, a post body or an email address, is never stored. You can clear the log from the admin screen.
+Yes. Agent Abilities for MCP writes every call to one of its abilities to an audit log in your own database, denied attempts included. Each entry records the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. For a failed call to another plugin's bridged ability, it also records that plugin's error code, never its message. Free-text argument content, a post body or an email address, is never stored. Each entry also records the source IP address and the time the tool took, and a denied call records why it was refused. That reason is in the log, not in the message the agent sees. You can clear the log from the admin screen.
 
 = Is it safe to connect an AI agent to my WordPress site? =
 
@@ -291,11 +297,19 @@ To check, request https://your-site/.well-known/oauth-protected-resource. A work
 
 = My agent can't connect and my site is behind Cloudflare or another CDN. =
 
-A CDN or firewall in front of WordPress can stop the agent before its request reaches your site. The common culprit is Cloudflare's "Block AI Bots" setting (and Super Bot Fight Mode): the agent finishes signing in, but its MCP request is blocked at the edge because it comes from the AI client's servers with an AI User-Agent. The sign-in shows up in the Activity Log, and no ability calls follow it.
+A CDN or firewall in front of WordPress can stop the agent before its request reaches your site. The common culprit is Cloudflare's AI bot blocking (and Super Bot Fight Mode): the agent finishes signing in, but its MCP request is blocked at the edge because it comes from the AI client's servers with an AI User-Agent. The sign-in shows up in the Activity Log, and no ability calls follow it.
 
 To confirm, open your CDN's firewall or security event log and look for a blocked request to the plugin's MCP endpoint (its path ends in /mcp) from the AI client's IP range, around the time you tried to connect. The entry names the rule that blocked it.
 
-The fix is to let that endpoint through. On Cloudflare, either turn off "Block AI Bots" under Security, Bots, or add a rule that skips bot protection for the /mcp path so the rest of your site stays covered. Other CDNs and security plugins have the same kind of allowlist or exception.
+The fix is to let that endpoint through. In the Cloudflare dashboard open Security Settings and use "Configure AI bot policies" to allow the AI client's traffic: set the policy that matches the block you see in your security events to Allow. Cloudflare has deprecated the older "Block AI bots" switch (September 15, 2026), so if you still use it, turn it off. If you cannot allow the traffic across the whole zone, add a custom rule with the Skip action for the /mcp path that skips Super Bot Fight Mode rules, so the rest of your site stays covered (Cloudflare does not let a Skip rule skip Bot Fight Mode on the Free plan). Other CDNs and security plugins have the same kind of allowlist or exception.
+
+On WP Engine, check Global Edge Security first if your site uses it: in the User Portal open the environment's Insights menu, go to Traffic and Security, then the Settings tab, and look at Edge traffic rules. A rule for a bot category blocks that traffic before it reaches WordPress, so remove the one that covers your AI client. WP Engine also rate-limits some AI bots across its platform, and you cannot turn that off yourself. If the agent's calls fail with HTTP 429 errors on WP Engine, contact WP Engine support and ask them to review the limit for your site.
+
+= Can I get an email when something important happens? =
+
+Yes, but it is off by default. Under Settings, Notifications, choose an admin notice only, an email right away (plus the notice) or one daily email (plus the notice), then tick the events you want to hear about: an app being authorized to connect, an Application Password created for a user who can edit posts or for the agent user, a high-risk tool, a permanent delete or a destructive tool from another plugin running, a burst of denied calls or a connection hitting the rate limit, and read-only mode or the high-risk lock being switched.
+
+Each type of event sends at most one email every 15 minutes, so turning read-only mode on and turning it off count separately, as does each app that is authorized. Switch changes and the warnings sent to the old address get a reserved six emails an hour that nothing else can use up. High-risk runs get four an hour of their own, new apps get two, and bursts of denied calls get two. When the limit holds a message back, the next one says how many it missed. Emails say what happened and link to the Activity Log. They never include the content of a call, a user name or an IP address. They go out through WordPress's own mail, so on a host where mail is unreliable the admin notice is the dependable option. The daily email needs WP-Cron.
 
 = Is there rate limiting? =
 
@@ -311,7 +325,7 @@ No AI provider and no telemetry. Your agent talks directly to your site. The one
 
 = What does the audit log record? =
 
-Every call to one of this plugin's abilities, whether it started, succeeded, errored, or was denied, with the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. For a failed call to another plugin's bridged ability, it also records that plugin's error code, never its message. Free-text argument content, a post body or an email address, is never stored. The activity log lives in your own database and can be cleared from the admin screen.
+Every call to one of this plugin's abilities, whether it started, succeeded, errored, or was denied, with the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. For a failed call to another plugin's bridged ability, it also records that plugin's error code, never its message. Free-text argument content, a post body or an email address, is never stored. It also records the source IP address of the request and the time the tool took, and a denied call records why it was refused (in the log, not in the message the agent sees). The activity log lives in your own database and can be cleared from the admin screen.
 
 = Does uninstalling the plugin revoke my agent's access? =
 
@@ -342,13 +356,21 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 6. Each integration has a card that says whether its plugin is active and how many of its abilities are on. WooCommerce and Yoast SEO are active here, Rank Math, All in One SEO, ACF and the rest are marked Not installed, and every ability starts off until you turn it on.
 7. Abilities that other plugins register for themselves, grouped by the plugin that declared them and off until you turn them on. A warning reminds you that this plugin does not filter what a bridged ability returns.
 8. The Connection tab shows your MCP endpoint, a Check my connection button, and the OAuth route: pick your operating system and client, paste the endpoint into your agent, and approve it in the browser, with no secret to put in a config file.
-9. The activity log records what happened and who did it, with filters for successes, errors, denials and calls that never finished, and a CSV export. A denied row says what the agent tried to do.
+9. The Activity Log with a 7-day summary, filters for user, connection, tool, plugin, date and text, the connection and IP of each call, the duration of calls that ran, a Live view, and a CSV export that follows the filters.
 10. The dashboard opens with a setup checklist that ticks off as you go, then the Needs review card and, further down, enabled abilities, recent agents, audit history, your endpoint and the versions in play.
 11. The Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.
 12. The Connection Doctor checks the connection from your own server and says what to fix. Each finding says whether you or your host can fix it, and some come with a snippet to paste.
 13. Needs review: drafts and pending posts your agents wrote wait here, with Preview, Open in editor, Publish and Discard.
+14. Notifications, off until you choose how to be told: an admin notice, an email right away or a daily email, for the events you tick.
 
 == Changelog ==
+
+= 1.9.0 =
+
+* **Feature:** The Activity Log can be searched and filtered by user, connection, tool, plugin, date and text. Each call shows its connection and IP address, and its duration when it ran; the log adds a 7-day summary and a Live view. The CSV export follows your filters.
+* **Feature:** Optional alerts, off by default: an admin notice, an email right away or a daily email when an app is authorized to connect, an Application Password is created for a user who can edit posts or for the agent user, a high-risk tool or permanent delete runs, calls are denied in a burst, or read-only mode or the high-risk lock is switched.
+* **Fix:** A denied call now records why in the Activity Log, for example "key is not on the allowlist"; the message the agent sees is unchanged. Reading a meta key now logs a note the way writing one does.
+* **Chore:** The Cloudflare advice in the FAQ, README and Help tab now points to "Configure AI bot policies" instead of the deprecated "Block AI bots" switch, and adds steps for WP Engine edge traffic rules and HTTP 429 limits.
 
 = 1.8.1 =
 
@@ -458,6 +480,10 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 [Full release history](https://agentabilitieswp.com/changelog/).
 
 == Upgrade Notice ==
+
+= 1.9.0 =
+
+Adds a searchable Activity Log and optional alerts, both safe to ignore: alerts stay off until you turn them on. The log table gets one new column the first time an admin page or an MCP request loads after the update. The CSV export has two new columns at the end.
 
 = 1.8.1 =
 

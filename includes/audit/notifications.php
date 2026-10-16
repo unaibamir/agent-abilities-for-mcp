@@ -1,0 +1,1062 @@
+<?php
+/**
+ * Owner notifications: opt-in email, daily digest and admin notice for four kinds of event.
+ *
+ * Off by default (the option row is absent). Nothing here carries the content of a call: events are
+ * identifiers (a trigger, a tool name, an app id and host, a count, a row id). Detection is by direct,
+ * guarded calls from the places that already know the facts; every entry point swallows its own
+ * failures, so a notification bug can never change an agent call or an admin save.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+defined( 'ABSPATH' ) || exit;
+
+if ( ! defined( 'AAFM_NOTIFY_WINDOW' ) ) {
+	define( 'AAFM_NOTIFY_WINDOW', 15 * MINUTE_IN_SECONDS );
+}
+if ( ! defined( 'AAFM_NOTIFY_BURST_COUNT' ) ) {
+	define( 'AAFM_NOTIFY_BURST_COUNT', 10 );
+}
+if ( ! defined( 'AAFM_NOTIFY_BURST_WINDOW' ) ) {
+	define( 'AAFM_NOTIFY_BURST_WINDOW', 5 * MINUTE_IN_SECONDS );
+}
+if ( ! defined( 'AAFM_NOTIFY_GOVERNANCE_MAX' ) ) {
+	define( 'AAFM_NOTIFY_GOVERNANCE_MAX', 6 );
+}
+if ( ! defined( 'AAFM_NOTIFY_RISKY_MAX' ) ) {
+	define( 'AAFM_NOTIFY_RISKY_MAX', 4 );
+}
+if ( ! defined( 'AAFM_NOTIFY_APP_MAX' ) ) {
+	define( 'AAFM_NOTIFY_APP_MAX', 2 );
+}
+if ( ! defined( 'AAFM_NOTIFY_DENIAL_MAX' ) ) {
+	define( 'AAFM_NOTIFY_DENIAL_MAX', 2 );
+}
+if ( ! defined( 'AAFM_NOTIFY_QUEUE_MAX' ) ) {
+	define( 'AAFM_NOTIFY_QUEUE_MAX', 200 );
+}
+if ( ! defined( 'AAFM_NOTIFY_PENDING_MAX' ) ) {
+	define( 'AAFM_NOTIFY_PENDING_MAX', 10 );
+}
+
+/**
+ * The delivery modes, in the order the Settings select shows them: slug => plain, translated name.
+ *
+ * @return array<string,string>
+ */
+function aafm_notify_modes(): array {
+	return array(
+		'off'       => __( 'Off', 'agent-abilities-for-mcp' ),
+		'notice'    => __( 'Admin notice only', 'agent-abilities-for-mcp' ),
+		'immediate' => __( 'Email right away, plus an admin notice', 'agent-abilities-for-mcp' ),
+		'digest'    => __( 'One email a day, plus an admin notice', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
+ * The four trigger switches: slug => the Settings label and the phrase for "alerts for ...".
+ * The event subtype for "alerts for this trigger were turned off" is the slug plus "_off".
+ *
+ * @return array<string,array{label:string,phrase:string}>
+ */
+function aafm_notify_triggers(): array {
+	return array(
+		'new_app'      => array(
+			'label'  => __( 'A new app is approved to connect, or an Application Password is created', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'new apps and Application Passwords', 'agent-abilities-for-mcp' ),
+		),
+		'risky_run'    => array(
+			'label'  => __( 'A high-risk tool, or one that deletes permanently, runs', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'high-risk and permanent-delete runs', 'agent-abilities-for-mcp' ),
+		),
+		'denial_burst' => array(
+			'label'  => __( 'A burst of denied calls, or a connection hits the rate limit', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'denied-call bursts and rate limits', 'agent-abilities-for-mcp' ),
+		),
+		'switch_flip'  => array(
+			'label'  => __( 'Read-only mode or the high-risk lock is switched', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'read-only and high-risk switch changes', 'agent-abilities-for-mcp' ),
+		),
+	);
+}
+
+/**
+ * Coerce any stored value to the settings shape. A bad address becomes '' (never repaired).
+ *
+ * @param mixed $stored Whatever the option held.
+ * @return array{mode:string,email:string,triggers:array<string,bool>}
+ */
+function aafm_notifications_normalize( $stored ): array {
+	$out = array(
+		'mode'     => 'off',
+		'email'    => '',
+		'triggers' => array_fill_keys( array_keys( aafm_notify_triggers() ), false ),
+	);
+	if ( ! is_array( $stored ) ) {
+		return $out;
+	}
+	if ( isset( $stored['mode'] ) && is_string( $stored['mode'] ) && array_key_exists( $stored['mode'], aafm_notify_modes() ) ) {
+		$out['mode'] = $stored['mode'];
+	}
+	if ( isset( $stored['email'] ) && is_string( $stored['email'] ) ) {
+		// is_email() on the value exactly as stored, never sanitize_email() first: that function strips bad
+		// characters from each part instead of failing, so "a@b.co, c@d.co" would become the one valid-looking
+		// address "a@b.cocd.co", a different recipient from anything the owner typed.
+		$email        = trim( $stored['email'] );
+		$out['email'] = is_email( $email ) ? $email : '';
+	}
+	$triggers = isset( $stored['triggers'] ) && is_array( $stored['triggers'] ) ? $stored['triggers'] : array();
+	foreach ( array_keys( $out['triggers'] ) as $slug ) {
+		$out['triggers'][ $slug ] = ! empty( $triggers[ $slug ] );
+	}
+	return $out;
+}
+
+/**
+ * The stored notification settings. Absent row means off.
+ *
+ * @return array{mode:string,email:string,triggers:array<string,bool>}
+ */
+function aafm_notifications_settings(): array {
+	return aafm_notifications_normalize( get_option( 'aafm_notifications', array() ) );
+}
+
+/**
+ * Settings from the posted Settings form (flat field names), in the stored shape.
+ *
+ * @param array<string,mixed> $posted Unslashed form fields.
+ * @return array{mode:string,email:string,triggers:array<string,bool>}
+ */
+function aafm_notifications_sanitize( array $posted ): array {
+	$mode = isset( $posted['aafm_notify_mode'] ) && is_string( $posted['aafm_notify_mode'] ) && array_key_exists( $posted['aafm_notify_mode'], aafm_notify_modes() )
+		? $posted['aafm_notify_mode']
+		: 'off';
+	// The address exactly as typed, trimmed. Never sanitize_email(): see aafm_notifications_normalize(). A value is stored only if is_email() approves it unchanged.
+	$email = isset( $posted['aafm_notify_email'] ) && is_string( $posted['aafm_notify_email'] ) ? trim( $posted['aafm_notify_email'] ) : '';
+	$flags = array();
+	foreach ( array_keys( aafm_notify_triggers() ) as $slug ) {
+		$flags[ $slug ] = ! empty( $posted[ 'aafm_notify_' . $slug ] );
+	}
+	return array(
+		'mode'     => $mode,
+		'email'    => is_email( $email ) ? $email : '',
+		'triggers' => $flags,
+	);
+}
+
+/**
+ * The reason a settings change cannot be saved, or null. Runs before any write, so a rejected save
+ * changes nothing.
+ *
+ * @param array{mode:string,email:string,triggers:array<string,bool>} $clean     Result of aafm_notifications_sanitize().
+ * @param string                                                      $raw_email What the owner typed, trimmed.
+ * @return string|null
+ */
+function aafm_notifications_validate( array $clean, string $raw_email ): ?string {
+	if ( 'off' === $clean['mode'] ) {
+		return null;
+	}
+	if ( '' !== $raw_email && '' === $clean['email'] ) {
+		return __( 'That email address does not look valid. Use one address, for example name@example.com.', 'agent-abilities-for-mcp' );
+	}
+	if ( in_array( $clean['mode'], array( 'immediate', 'digest' ), true ) && '' === $clean['email'] ) {
+		return __( 'Add a valid email address, or choose "Admin notice only".', 'agent-abilities-for-mcp' );
+	}
+	if ( ! in_array( true, $clean['triggers'], true ) ) {
+		return __( 'Pick at least one thing to be told about, or choose Off.', 'agent-abilities-for-mcp' );
+	}
+	return null;
+}
+
+/**
+ * The settings when notifications are on for this trigger and deliverable, else null.
+ *
+ * @param string $trigger A key of aafm_notify_triggers().
+ * @return array{mode:string,email:string,triggers:array<string,bool>}|null
+ */
+function aafm_notify_settings_for( string $trigger ): ?array {
+	$s = aafm_notifications_settings();
+	if ( 'off' === $s['mode'] || empty( $s['triggers'][ $trigger ] ) ) {
+		return null;
+	}
+	if ( 'notice' !== $s['mode'] && '' === $s['email'] ) {
+		return null;
+	}
+	return $s;
+}
+
+/**
+ * The transient name of a throttle bucket.
+ *
+ * @param string $bucket Trigger and subtype, for example "switch_flip:read_only_off".
+ * @return string
+ */
+function aafm_notify_bucket_key( string $bucket ): string {
+	return 'aafm_ntf_' . substr( md5( $bucket ), 0, 20 );
+}
+
+/**
+ * Claim the one send allowed per bucket per window. An event inside the window only increments a
+ * counter that the next send reports. An unreadable counter counts as "inside the window".
+ *
+ * @param string $bucket Trigger and subtype, for example "switch_flip:read_only_off".
+ * @return array{allowed:bool,suppressed:int}
+ */
+function aafm_notify_take_slot( string $bucket ): array {
+	$key   = aafm_notify_bucket_key( $bucket );
+	$count = aafm_transient_count( $key );
+	if ( null === $count || $count > 0 ) {
+		$swallowed = (int) aafm_transient_count( $key . '_n' );
+		set_transient( $key . '_n', $swallowed + 1, DAY_IN_SECONDS );
+		return array(
+			'allowed'    => false,
+			'suppressed' => 0,
+		);
+	}
+	set_transient( $key, 1, AAFM_NOTIFY_WINDOW );
+	$suppressed = (int) aafm_transient_count( $key . '_n' );
+	delete_transient( $key . '_n' );
+	return array(
+		'allowed'    => true,
+		'suppressed' => $suppressed,
+	);
+}
+
+/**
+ * Claim one of the hourly email slots. Each kind of mail draws from a pool of its own, so one kind can
+ * never use up another's slots: "governance" (a switch flip and the warnings sent to the old address)
+ * is reserved for the changes only an administrator can make, and risky runs, new apps and denial
+ * bursts, which an agent, a contributor or any authenticated principal can trigger, each get a smaller
+ * pool.
+ *
+ * @param string $pool "governance", "risky", "new_app" or "denial".
+ * @return bool
+ */
+function aafm_notify_global_slot( string $pool = 'governance' ): bool {
+	$pools             = array(
+		'governance' => array( 'aafm_ntf_global_governance', AAFM_NOTIFY_GOVERNANCE_MAX ),
+		'risky'      => array( 'aafm_ntf_global_risky', AAFM_NOTIFY_RISKY_MAX ),
+		'new_app'    => array( 'aafm_ntf_global_new_app', AAFM_NOTIFY_APP_MAX ),
+		'denial'     => array( 'aafm_ntf_global_denial', AAFM_NOTIFY_DENIAL_MAX ),
+	);
+	list( $key, $max ) = $pools[ $pool ] ?? $pools['governance'];
+	$count             = aafm_transient_count( $key );
+	if ( null === $count || $count >= $max ) {
+		return false;
+	}
+	// ponytail: the hour slides with each send. A fixed window would need a stored start time.
+	set_transient( $key, $count + 1, HOUR_IN_SECONDS );
+	return true;
+}
+
+/**
+ * The pool an event's mail draws from.
+ *
+ * @param string $trigger A key of aafm_notify_triggers().
+ * @return string
+ */
+function aafm_notify_pool_for( string $trigger ): string {
+	$pools = array(
+		'denial_burst' => 'denial',
+		'new_app'      => 'new_app',
+		'risky_run'    => 'risky',
+	);
+	return $pools[ $trigger ] ?? 'governance';
+}
+
+/**
+ * A short identifier: letters, digits and the few characters tool names and ids use.
+ *
+ * @param string $value Raw value.
+ * @param int    $max   Maximum length.
+ * @return string
+ */
+function aafm_notify_clean_identifier( string $value, int $max = 120 ): string {
+	return substr( (string) preg_replace( '/[^A-Za-z0-9_\/.\-]/', '', $value ), 0, $max );
+}
+
+/**
+ * An app name as it goes into a message: letters, digits, space and a few marks, at most 40
+ * characters. The name is chosen by whoever registered the app, so it is bounded and never used in a
+ * subject.
+ *
+ * @param string $value Raw name.
+ * @return string
+ */
+function aafm_notify_clean_app_name( string $value ): string {
+	$clean = preg_replace( '/\s+/u', ' ', aafm_sanitize_plain_text( $value ) );
+	$clean = preg_replace( '/[^\p{L}\p{N} .,_()\-]/u', '', null === $clean ? '' : $clean );
+	return mb_substr( trim( null === $clean ? '' : $clean ), 0, 40 );
+}
+
+/**
+ * The site name as it goes into a subject: control characters stripped, 60 characters at most.
+ *
+ * @return string
+ */
+function aafm_notify_site_name(): string {
+	$site = (string) preg_replace( '/[\x00-\x1F\x7F]+/', ' ', wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ) );
+	return mb_substr( trim( $site ), 0, 60 );
+}
+
+/**
+ * Record an event: write the admin notice entry, then throttle the mail, then mail or queue. Never throws.
+ *
+ * The notice entry is written before the throttle is asked, so a throttled event, or a throttle that
+ * throws, still reaches the admin notice; the throttle only limits mail. A notice entry that could not
+ * be written ends the call before the throttle, so it never uses up a mail slot. Grants are throttled
+ * per app, so a second app approved inside the window still alerts.
+ *
+ * @param string              $trigger A key of aafm_notify_triggers().
+ * @param string              $subtype Throttle sub-bucket, for example "read_only_off".
+ * @param array<string,mixed> $facts   Optional: row_id, ability, client_id, host, app_name, count, user_id.
+ * @return void
+ */
+function aafm_notify_event( string $trigger, string $subtype, array $facts = array() ): void {
+	try {
+		$settings = aafm_notify_settings_for( $trigger );
+		if ( null === $settings ) {
+			return;
+		}
+		$client_id = isset( $facts['client_id'] ) ? aafm_notify_clean_identifier( (string) $facts['client_id'], 191 ) : '';
+		$event     = array(
+			'id'         => wp_generate_uuid4(),
+			'trigger'    => $trigger,
+			'subtype'    => $subtype,
+			'time'       => time(),
+			'row_id'     => isset( $facts['row_id'] ) ? max( 0, (int) $facts['row_id'] ) : 0,
+			'ability'    => isset( $facts['ability'] ) ? aafm_notify_clean_identifier( (string) $facts['ability'] ) : '',
+			'client_id'  => $client_id,
+			'host'       => isset( $facts['host'] ) ? aafm_notify_clean_identifier( (string) $facts['host'], 120 ) : '',
+			'app_name'   => isset( $facts['app_name'] ) ? aafm_notify_clean_app_name( (string) $facts['app_name'] ) : '',
+			'count'      => isset( $facts['count'] ) ? max( 0, (int) $facts['count'] ) : 0,
+			'user_id'    => isset( $facts['user_id'] ) ? max( 0, (int) $facts['user_id'] ) : 0,
+			'suppressed' => 0,
+		);
+		if ( ! aafm_notify_pending_push( $event ) ) {
+			aafm_notify_log_failure( __( 'A notification could not be saved for the admin notice', 'agent-abilities-for-mcp' ) );
+			return;
+		}
+		$bucket = '';
+		try {
+			$bucket = $trigger . ':' . $subtype . ( '' !== $client_id ? ':' . $client_id : '' );
+			$slot   = aafm_notify_take_slot( $bucket );
+		} catch ( \Throwable $e ) {
+			unset( $e ); // A throttle that cannot answer means no mail; the notice entry already exists.
+			return;
+		}
+		if ( ! $slot['allowed'] ) {
+			return;
+		}
+		$event['suppressed'] = $slot['suppressed'];
+		if ( 'digest' === $settings['mode'] ) {
+			if ( ! aafm_notify_queue_push( $event ) ) {
+				aafm_notify_log_failure( __( 'A notification could not be queued for the daily email', 'agent-abilities-for-mcp' ) );
+			}
+		} elseif ( 'immediate' === $settings['mode'] ) {
+			aafm_notify_send_later( $settings['email'], array( $event ), false, '', aafm_notify_pool_for( $trigger ), array(), $bucket );
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e ); // A notification problem must never reach the call or the save that raised it.
+	}
+}
+
+/**
+ * The fixed, translated sentence for an event. Never contains anything from a call.
+ *
+ * @param array<string,mixed> $event An event record.
+ * @return string
+ */
+function aafm_notify_event_label( array $event ): string {
+	$key    = (string) ( $event['trigger'] ?? '' ) . ':' . (string) ( $event['subtype'] ?? '' );
+	$labels = array(
+		'new_app:oauth_grant'            => __( 'An app was authorized to connect', 'agent-abilities-for-mcp' ),
+		'new_app:app_password'           => __( 'An Application Password was created', 'agent-abilities-for-mcp' ),
+		'risky_run:high_risk'            => __( 'A high-risk tool ran', 'agent-abilities-for-mcp' ),
+		'risky_run:permanent_delete'     => __( 'A tool that deletes permanently ran', 'agent-abilities-for-mcp' ),
+		'risky_run:bridged_destructive'  => __( 'A destructive tool from another plugin ran', 'agent-abilities-for-mcp' ),
+		'denial_burst:burst'             => __( 'Many calls were denied', 'agent-abilities-for-mcp' ),
+		'denial_burst:rate_limit'        => __( 'A connection hit the rate limit', 'agent-abilities-for-mcp' ),
+		'switch_flip:read_only_on'       => __( 'Read-only mode was turned on', 'agent-abilities-for-mcp' ),
+		'switch_flip:read_only_off'      => __( 'Read-only mode was turned off', 'agent-abilities-for-mcp' ),
+		'switch_flip:high_risk_unlocked' => __( 'The high-risk lock was opened', 'agent-abilities-for-mcp' ),
+		'switch_flip:high_risk_locked'   => __( 'The high-risk lock was closed', 'agent-abilities-for-mcp' ),
+		'recipient:changed'              => __( 'The notification address was changed', 'agent-abilities-for-mcp' ),
+		'settings:plugin_reset'          => __( 'The plugin settings were reset', 'agent-abilities-for-mcp' ),
+		'settings:alerts_off'            => __( 'Email alerts were turned off', 'agent-abilities-for-mcp' ),
+	);
+	foreach ( aafm_notify_triggers() as $slug => $trigger ) {
+		/* translators: %s: what the alerts covered, for example "new apps and Application Passwords". */
+		$labels[ 'settings:' . $slug . '_off' ] = sprintf( __( 'Alerts for %s were turned off', 'agent-abilities-for-mcp' ), $trigger['phrase'] );
+	}
+	return $labels[ $key ] ?? __( 'Something needs a look', 'agent-abilities-for-mcp' );
+}
+
+/**
+ * The Activity Log link for an event: its row, or the denied view for a burst, or the tab.
+ *
+ * @param array<string,mixed> $event An event record.
+ * @return string
+ */
+function aafm_notify_event_link( array $event ): string {
+	$base = 'admin.php?page=agent-abilities-for-mcp&tab=activity';
+	if ( ! empty( $event['row_id'] ) ) {
+		return admin_url( $base . '&row=' . (int) $event['row_id'] );
+	}
+	if ( 'denial_burst' === ( $event['trigger'] ?? '' ) ) {
+		return admin_url( $base . '&filter=denied' );
+	}
+	return admin_url( $base );
+}
+
+/**
+ * Build the subject and plain-text body. Identifiers only, cleaned again at render time (a queued
+ * event is stored data); the subject is a fixed label plus the site name with control characters
+ * stripped and 60 characters at most.
+ *
+ * @param array<int,array<string,mixed>> $events Events (one for an alert, many for a digest).
+ * @param bool                           $digest Whether this is the daily summary.
+ * @return array{subject:string,body:string}
+ */
+function aafm_notify_build_message( array $events, bool $digest ): array {
+	$site = aafm_notify_site_name();
+
+	if ( $digest ) {
+		/* translators: %s: the site name. */
+		$subject = sprintf( __( '[%s] Agent Abilities daily summary', 'agent-abilities-for-mcp' ), $site );
+		$lines   = array( __( 'What happened since the last summary:', 'agent-abilities-for-mcp' ), '' );
+		$counts  = array();
+		foreach ( $events as $event ) {
+			$label            = aafm_notify_event_label( $event );
+			$counts[ $label ] = ( $counts[ $label ] ?? 0 ) + 1;
+		}
+		foreach ( $counts as $label => $n ) {
+			$lines[] = $label . ': ' . $n;
+		}
+		$lines[] = '';
+		foreach ( array_slice( $events, -10 ) as $event ) {
+			$lines[] = aafm_notify_event_label( $event ) . ' (' . gmdate( 'Y-m-d H:i:s', (int) ( $event['time'] ?? 0 ) ) . ' UTC): ' . aafm_notify_event_link( $event );
+		}
+	} else {
+		$event = (array) ( $events[0] ?? array() );
+		/* translators: 1: the site name. 2: what happened, for example "Read-only mode was turned off". */
+		$subject = sprintf( __( '[%1$s] Agent Abilities alert: %2$s', 'agent-abilities-for-mcp' ), $site, aafm_notify_event_label( $event ) );
+		$lines   = array( aafm_notify_event_label( $event ), '' );
+		/* translators: %s: a UTC date and time. */
+		$lines[] = sprintf( __( 'When: %s UTC', 'agent-abilities-for-mcp' ), gmdate( 'Y-m-d H:i:s', (int) ( $event['time'] ?? 0 ) ) );
+		if ( ! empty( $event['ability'] ) ) {
+			/* translators: %s: a tool name such as aafm/delete-post. */
+			$lines[] = sprintf( __( 'Tool: %s', 'agent-abilities-for-mcp' ), aafm_notify_clean_identifier( (string) $event['ability'] ) );
+		}
+		if ( ! empty( $event['client_id'] ) ) {
+			/* translators: %s: an OAuth client id. */
+			$lines[] = sprintf( __( 'App id: %s', 'agent-abilities-for-mcp' ), aafm_notify_clean_identifier( (string) $event['client_id'], 191 ) );
+		}
+		if ( ! empty( $event['host'] ) ) {
+			/* translators: %s: a host name the app redirects to. */
+			$lines[] = sprintf( __( 'Redirects to: %s', 'agent-abilities-for-mcp' ), aafm_notify_clean_identifier( (string) $event['host'], 120 ) );
+		}
+		if ( ! empty( $event['app_name'] ) ) {
+			/* translators: %s: the name an app gave itself when it registered. */
+			$lines[] = sprintf( __( 'The name the app gave itself: %s', 'agent-abilities-for-mcp' ), aafm_notify_clean_app_name( (string) $event['app_name'] ) );
+		}
+		if ( ! empty( $event['user_id'] ) ) {
+			/* translators: %d: a WordPress user id. */
+			$lines[] = sprintf( __( 'For user account #%d', 'agent-abilities-for-mcp' ), (int) $event['user_id'] );
+		}
+		if ( ! empty( $event['count'] ) ) {
+			/* translators: %d: how many calls were denied. */
+			$lines[] = sprintf( __( 'Denied calls counted: %d', 'agent-abilities-for-mcp' ), (int) $event['count'] );
+		}
+		if ( ! empty( $event['suppressed'] ) ) {
+			/* translators: %d: how many similar alerts were held back. */
+			$lines[] = sprintf( __( 'Held back since the last message: plus %d more', 'agent-abilities-for-mcp' ), (int) $event['suppressed'] );
+		}
+		if ( count( $events ) > 1 ) {
+			// A settings save that did several things at once: the first event is the headline, the rest follow.
+			$lines[] = '';
+			$lines[] = __( 'The same save also did this:', 'agent-abilities-for-mcp' );
+			foreach ( array_slice( $events, 1 ) as $more ) {
+				$lines[] = '- ' . aafm_notify_event_label( (array) $more );
+			}
+		}
+		$lines[] = '';
+		$lines[] = __( 'Open the Activity Log:', 'agent-abilities-for-mcp' );
+		$lines[] = aafm_notify_event_link( $event );
+	}
+	$lines[] = '';
+	$lines[] = __( 'You get this because notifications are switched on under Settings in Agent Abilities for MCP. It never includes the content of a call.', 'agent-abilities-for-mcp' );
+
+	return array(
+		'subject' => $subject,
+		'body'    => implode( "\n", $lines ),
+	);
+}
+
+/**
+ * Write one bounded error row for a notification that did not go out or could not be stored. The row
+ * goes through aafm_denial_log_within_cap(), so a dead mailer cannot fill the Activity Log.
+ *
+ * @param string $detail The translated row text.
+ * @return void
+ */
+function aafm_notify_log_failure( string $detail ): void {
+	if ( ! aafm_denial_log_within_cap( 'ntf' ) ) {
+		return;
+	}
+	aafm_log_activity(
+		array(
+			'ability'    => 'aafm/notifications',
+			'status'     => 'error',
+			'event_type' => 'setting_changed',
+			'detail'     => $detail,
+		)
+	);
+}
+
+/**
+ * Send a message to the owner's address. A failed send writes one bounded error row; the admin
+ * notice entry already exists by then.
+ *
+ * @param string                         $to     The validated address.
+ * @param array<int,array<string,mixed>> $events Events to describe.
+ * @param bool                           $digest Whether this is the daily summary.
+ * @param string                         $extra  Optional closing paragraph added to the body.
+ * @return bool Whether wp_mail() reported success.
+ */
+function aafm_notify_deliver( string $to, array $events, bool $digest, string $extra = '' ): bool {
+	$message = aafm_notify_build_message( $events, $digest );
+	$body    = '' === $extra ? $message['body'] : $message['body'] . "\n\n" . $extra;
+	$sent    = (bool) wp_mail( $to, $message['subject'], $body );
+	if ( ! $sent ) {
+		aafm_notify_log_failure( __( 'A notification email could not be sent', 'agent-abilities-for-mcp' ) );
+	}
+	return $sent;
+}
+
+/**
+ * Mail waiting for the end of the request. One static list; "add" appends, "take" empties and returns it.
+ *
+ * @param string              $op   "add" or "take".
+ * @param array<string,mixed> $item For "add": to, events, digest, extra.
+ * @return array<int,array<string,mixed>>
+ */
+function aafm_notify_outbox( string $op, array $item = array() ): array {
+	static $box = array();
+	if ( 'add' === $op ) {
+		$box[] = $item;
+		return array();
+	}
+	$taken = $box;
+	$box   = array();
+	return $taken;
+}
+
+/**
+ * Take a slot from the hourly cap and queue the message for the end of the request. No slot left means
+ * no mail (the admin notice entry exists regardless), and the bucket's held-back count goes up so the
+ * next message says how many it missed. Everything the engine mails except the Settings test email and
+ * the daily cron summary goes through here, so a slow or dead mail host can never hold up an agent call
+ * or a Settings save.
+ *
+ * @param string                         $to     The address.
+ * @param array<int,array<string,mixed>> $events Events to describe.
+ * @param bool                           $digest Whether this is a summary.
+ * @param string                         $extra  Optional closing paragraph added to the body.
+ * @param string                         $pool   Which hourly pool to draw from, see aafm_notify_global_slot().
+ * @param array<int,array<string,mixed>> $drain  Digest queue events to remove once, and only if, wp_mail() reports success.
+ * @param string                         $bucket The throttle bucket whose slot this message already took, so a refusal can be counted against it.
+ * @return bool Whether a message was queued.
+ */
+function aafm_notify_send_later( string $to, array $events, bool $digest, string $extra = '', string $pool = 'governance', array $drain = array(), string $bucket = '' ): bool {
+	if ( ! aafm_notify_global_slot( $pool ) ) {
+		if ( '' !== $bucket ) {
+			aafm_notify_hold_back( $bucket, (int) ( $events[0]['suppressed'] ?? 0 ) );
+		}
+		return false;
+	}
+	aafm_notify_outbox(
+		'add',
+		array(
+			'to'     => $to,
+			'events' => $events,
+			'digest' => $digest,
+			'extra'  => $extra,
+			'drain'  => $drain,
+		)
+	);
+	add_action( 'shutdown', 'aafm_notify_flush_outbox' );
+	return true;
+}
+
+/**
+ * Count one message the pool refused against its bucket, plus what the refused event was already
+ * carrying, so the next message that does go out reports all of it as "plus N more".
+ *
+ * @param string $bucket  The throttle bucket.
+ * @param int    $carried How many earlier events the refused event had been going to report.
+ * @return void
+ */
+function aafm_notify_hold_back( string $bucket, int $carried ): void {
+	$key  = aafm_notify_bucket_key( $bucket ) . '_n';
+	$held = (int) aafm_transient_count( $key );
+	set_transient( $key, $held + $carried + 1, DAY_IN_SECONDS );
+}
+
+/**
+ * Send what the request queued. Runs on shutdown, after WordPress has flushed its output buffers; on
+ * PHP-FPM the response is closed first so the caller is not left waiting on the mail host.
+ *
+ * @return void
+ */
+function aafm_notify_flush_outbox(): void {
+	$items = aafm_notify_outbox( 'take' );
+	if ( array() === $items ) {
+		return;
+	}
+	// ponytail: without fastcgi_finish_request() (mod_php, some CGI setups) the response is not closed
+	// first, so a slow mail host holds the visitor's request until wp_mail() returns. Accepted: at most
+	// the hourly caps' worth of messages per hour. Upgrade path is a queued send (cron or Action
+	// Scheduler) that mails outside the request.
+	if ( function_exists( 'fastcgi_finish_request' ) ) {
+		fastcgi_finish_request();
+	}
+	foreach ( $items as $item ) {
+		try {
+			$sent = aafm_notify_deliver( (string) $item['to'], (array) $item['events'], (bool) $item['digest'], (string) $item['extra'] );
+			if ( $sent && ! empty( $item['drain'] ) && ! aafm_notify_queue_remove( (array) $item['drain'] ) ) {
+				aafm_notify_log_failure( __( 'The queued notifications went out but could not be cleared', 'agent-abilities-for-mcp' ) );
+			}
+		} catch ( \Throwable $e ) {
+			unset( $e );
+			aafm_notify_log_failure( __( 'A notification email could not be sent', 'agent-abilities-for-mcp' ) );
+		}
+	}
+}
+
+/**
+ * A stored list option as a list, or an empty list when it holds anything else.
+ *
+ * @param mixed $stored The option value.
+ * @return array<int,array<string,mixed>>
+ */
+function aafm_notify_as_list( $stored ): array {
+	return is_array( $stored ) ? array_values( array_filter( $stored, 'is_array' ) ) : array();
+}
+
+/**
+ * The admin-notice entries, newest first.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function aafm_notify_pending_list(): array {
+	return aafm_notify_as_list( get_option( 'aafm_notify_pending', array() ) );
+}
+
+/**
+ * How much an admin-notice entry matters when the list is full: 0 is kept longest (a switch flip, a
+ * risky run), 1 is a new app, 2 is a denial burst, which any authenticated principal can trigger.
+ *
+ * @param array<string,mixed> $entry A pending entry.
+ * @return int
+ */
+function aafm_notify_pending_rank( array $entry ): int {
+	$ranks = array(
+		'new_app'      => 1,
+		'denial_burst' => 2,
+	);
+	return $ranks[ (string) ( $entry['trigger'] ?? '' ) ] ?? 0;
+}
+
+/**
+ * Add one admin-notice entry, newest first, capped.
+ *
+ * An entry with the same trigger, subtype and app (one client id; Application Passwords have none) as
+ * one already listed is folded into it: the entry moves to the front and its "repeat" count goes up, so
+ * ten Application Passwords or a run of grants from one app make one line, not ten. A denial burst is
+ * folded without a count and only touches the stored list again once its time is older than the mail
+ * window, so every rate-limited call after the first costs a read, not a write.
+ *
+ * New apps keep at most three entries and denial bursts at most three, oldest dropped first. Past the
+ * overall cap, denial bursts go first, then new apps, so neither can push out a switch flip or a risky run.
+ *
+ * @param array<string,mixed> $event The event.
+ * @return bool Whether the list is stored as intended (true without a write when nothing changed).
+ */
+function aafm_notify_pending_push( array $event ): bool {
+	$stored = aafm_notify_pending_list();
+	$list   = $stored;
+	$same   = static function ( array $a, array $b ): bool {
+		foreach ( array( 'trigger', 'subtype', 'client_id' ) as $field ) {
+			if ( (string) ( $a[ $field ] ?? '' ) !== (string) ( $b[ $field ] ?? '' ) ) {
+				return false;
+			}
+		}
+		return true;
+	};
+	$found  = null;
+	foreach ( $list as $i => $e ) {
+		if ( $same( $e, $event ) ) {
+			$found = $i;
+			break;
+		}
+	}
+	if ( null === $found ) {
+		array_unshift( $list, $event );
+	} elseif ( 'denial_burst' === $event['trigger'] ) {
+		if ( (int) ( $event['time'] ?? 0 ) - (int) ( $list[ $found ]['time'] ?? 0 ) < AAFM_NOTIFY_WINDOW ) {
+			return true;
+		}
+		$list[ $found ]['time'] = $event['time'];
+	} else {
+		// ponytail: a folded entry keeps only the newest row id, so its notice link opens the latest
+		// run and earlier ones are found in the Activity Log by tool and time. Keep a list of row ids if
+		// the older links matter.
+		$entry           = $list[ $found ];
+		$entry['repeat'] = (int) ( $entry['repeat'] ?? 0 ) + 1;
+		foreach ( array( 'time', 'row_id', 'ability' ) as $field ) {
+			$entry[ $field ] = $event[ $field ] ?? $entry[ $field ] ?? '';
+		}
+		unset( $list[ $found ] );
+		array_unshift( $list, $entry );
+	}
+	$list = array_values( $list );
+
+	// Per-trigger caps, oldest (last) dropped first.
+	foreach ( array(
+		'new_app'      => 3,
+		'denial_burst' => 3,
+	) as $trigger => $cap ) {
+		$kept = 0;
+		foreach ( $list as $i => $e ) {
+			if ( ( $e['trigger'] ?? '' ) === $trigger && ++$kept > $cap ) {
+				unset( $list[ $i ] );
+			}
+		}
+	}
+	$list = array_values( $list );
+
+	// Past the overall cap, drop the least important entry, oldest first. Rank 0 is never reached in
+	// practice: four switch subtypes and three risky ones come to seven.
+	$size = count( $list );
+	while ( $size > AAFM_NOTIFY_PENDING_MAX ) {
+		$drop = $size - 1;
+		for ( $i = $size - 1; $i >= 0; $i-- ) {
+			if ( aafm_notify_pending_rank( $list[ $i ] ) > aafm_notify_pending_rank( $list[ $drop ] ) ) {
+				$drop = $i;
+			}
+		}
+		unset( $list[ $drop ] );
+		$list = array_values( $list );
+		$size = count( $list );
+	}
+
+	if ( $list === $stored ) {
+		return true;
+	}
+	return aafm_update_option_verified( 'aafm_notify_pending', $list, false );
+}
+
+/**
+ * Clear the admin-notice entries.
+ *
+ * @return bool
+ */
+function aafm_notify_pending_clear(): bool {
+	return aafm_delete_option_cache_safe( 'aafm_notify_pending' );
+}
+
+/**
+ * The digest queue, oldest first.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function aafm_notify_queue_list(): array {
+	return aafm_notify_as_list( get_option( 'aafm_notify_queue', array() ) );
+}
+
+/**
+ * Append one event to the digest queue, dropping the oldest past the cap.
+ *
+ * @param array<string,mixed> $event The event.
+ * @return bool Whether the write was certified.
+ */
+function aafm_notify_queue_push( array $event ): bool {
+	$queue   = aafm_notify_queue_list();
+	$queue[] = $event;
+	return aafm_update_option_verified( 'aafm_notify_queue', array_slice( $queue, -AAFM_NOTIFY_QUEUE_MAX ), false );
+}
+
+/**
+ * Clear the digest queue.
+ *
+ * @return bool
+ */
+function aafm_notify_queue_clear(): bool {
+	return aafm_delete_option_cache_safe( 'aafm_notify_queue' );
+}
+
+/**
+ * Remove the events that were sent from the digest queue and keep the rest. The queue is read again
+ * first, so an event appended while the mail was in flight survives.
+ *
+ * This is an unlocked read-modify-write, see the ponytail note in the body.
+ *
+ * @param array<int,array<string,mixed>> $sent The events the summary described.
+ * @return bool Whether the queue now holds exactly the unsent events.
+ */
+function aafm_notify_queue_remove( array $sent ): bool {
+	// ponytail: unlocked read-modify-write. An append from a concurrent request landing between the read
+	// and the write is lost. Upgrade path is an atomic store (one row per event, or a lock around the
+	// option) if that ever shows up.
+	$left = array();
+	foreach ( aafm_notify_queue_list() as $event ) {
+		if ( ! in_array( $event, $sent, true ) ) {
+			$left[] = $event;
+		}
+	}
+	if ( array() === $left ) {
+		return aafm_notify_queue_clear();
+	}
+	return aafm_update_option_verified( 'aafm_notify_queue', $left, false );
+}
+
+/**
+ * Cron: send the daily summary, then drop only the events it described.
+ *
+ * @return void
+ */
+function aafm_notify_digest_run(): void {
+	try {
+		$s = aafm_notifications_settings();
+		if ( 'digest' !== $s['mode'] || '' === $s['email'] ) {
+			return;
+		}
+		$queue = aafm_notify_queue_list();
+		if ( array() === $queue ) {
+			return;
+		}
+		if ( aafm_notify_deliver( $s['email'], $queue, true ) && ! aafm_notify_queue_remove( $queue ) ) {
+			aafm_notify_log_failure( __( 'The daily summary went out but the queue could not be cleared', 'agent-abilities-for-mcp' ) );
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+add_action( 'aafm_notifications_digest', 'aafm_notify_digest_run' );
+
+/**
+ * Schedule the daily digest when the mode needs it and clear it when not. Idempotent, so it runs
+ * after a settings save and self-heals on admin_init like the plugin's other events.
+ *
+ * @return void
+ */
+function aafm_notify_sync_schedule(): void {
+	$s    = aafm_notifications_settings();
+	$want = 'digest' === $s['mode'] && '' !== $s['email'] && in_array( true, $s['triggers'], true );
+	$next = wp_next_scheduled( 'aafm_notifications_digest' );
+	if ( $want && ! $next ) {
+		wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', 'aafm_notifications_digest' );
+	} elseif ( ! $want && $next ) {
+		wp_clear_scheduled_hook( 'aafm_notifications_digest' );
+	}
+}
+add_action( 'admin_init', 'aafm_notify_sync_schedule' );
+
+/**
+ * Clear the digest event on deactivation. A network-wide deactivation clears it on every site, the same
+ * get_sites() walk network activation and uninstall.php use; a per-site deactivation clears this site.
+ *
+ * @param bool $network_wide True when the plugin is being deactivated network-wide.
+ * @return void
+ */
+function aafm_notify_unschedule( bool $network_wide = false ): void {
+	if ( is_multisite() && $network_wide ) {
+		$site_ids = get_sites(
+			array(
+				'fields' => 'ids',
+				'number' => 0,
+			)
+		);
+		foreach ( $site_ids as $site_id ) {
+			switch_to_blog( (int) $site_id );
+			wp_clear_scheduled_hook( 'aafm_notifications_digest' );
+			restore_current_blog();
+		}
+		return;
+	}
+	wp_clear_scheduled_hook( 'aafm_notifications_digest' );
+}
+register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_notify_unschedule' );
+
+/**
+ * How alarming an ability is: high_risk, permanent_delete, bridged_destructive, or null for the rest.
+ * Recoverable trash and ordinary writes are deliberately not alarming.
+ *
+ * @param string $name Ability name.
+ * @return string|null
+ */
+function aafm_notify_ability_risk( string $name ): ?string {
+	if ( aafm_ability_is_high_risk( $name ) ) {
+		return 'high_risk';
+	}
+	if ( in_array( $name, aafm_permanent_delete_abilities(), true ) ) {
+		return 'permanent_delete';
+	}
+	if ( 0 === strpos( $name, 'aafm-bridge/' ) && function_exists( 'wp_get_ability' ) ) {
+		$ability = wp_get_ability( $name );
+		// One rule for "destructive": the helper the operator's own "can delete data" confirm uses. The
+		// wrapper's annotations are already that helper's normalized output (bridge.php:708-722), so this
+		// agrees with it for an undeclared foreign ability (destructive) and for a contradictory
+		// readonly:true plus destructive:true declaration (destructive), which a local rule would miss.
+		if ( $ability && ! empty( aafm_bridge_risk( $ability )['destructive'] ) ) {
+			return 'bridged_destructive';
+		}
+	}
+	return null;
+}
+
+/**
+ * Called from the execute closure once a call has resolved: a successful high-risk or destructive run
+ * is an event. Anything else returns at once.
+ *
+ * @param string   $ability Ability name.
+ * @param string   $status  The call's final status.
+ * @param int|null $row_id  The activity row, when it landed.
+ * @return void
+ */
+function aafm_notify_ability_finished( string $ability, string $status, ?int $row_id ): void {
+	if ( 'success' !== $status ) {
+		return;
+	}
+	try {
+		if ( null === aafm_notify_settings_for( 'risky_run' ) ) {
+			return;
+		}
+		$kind = aafm_notify_ability_risk( $ability );
+		if ( null !== $kind ) {
+			aafm_notify_event(
+				'risky_run',
+				$kind,
+				array(
+					'row_id'  => (int) $row_id,
+					'ability' => $ability,
+				)
+			);
+		}
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+
+/**
+ * Count denied calls; the tenth within five minutes fires one alert and restarts the count.
+ *
+ * The count is a plain integer transient read through aafm_transient_count(), the same reader the
+ * throttle uses: a failed or unreadable read never restarts the count at 1 (an unreadable count skips
+ * this call), so a flaky cache cannot quietly lower the alerts. The window slides: each denial restarts
+ * the five-minute clock, the same bound aafm_denial_log_within_cap() uses.
+ *
+ * @param array<string,mixed> $record The aafm_ability_resolved payload.
+ * @return void
+ */
+function aafm_notify_on_resolved( array $record ): void {
+	if ( 'denied' !== ( $record['status'] ?? '' ) ) {
+		return;
+	}
+	try {
+		if ( null === aafm_notify_settings_for( 'denial_burst' ) ) {
+			return;
+		}
+		$count = aafm_transient_count( 'aafm_ntf_denials' );
+		if ( null === $count ) {
+			return;
+		}
+		++$count;
+		if ( $count >= AAFM_NOTIFY_BURST_COUNT ) {
+			delete_transient( 'aafm_ntf_denials' );
+			aafm_notify_event(
+				'denial_burst',
+				'burst',
+				array(
+					'count'  => $count,
+					'row_id' => isset( $record['row_id'] ) ? (int) $record['row_id'] : 0,
+				)
+			);
+			return;
+		}
+		// ponytail: sliding window. A slow trickle of denials under five minutes apart can still reach ten.
+		// A fixed window needs a stored start time; add it if that ever matters.
+		set_transient( 'aafm_ntf_denials', $count, AAFM_NOTIFY_BURST_WINDOW );
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+add_action( 'aafm_ability_resolved', 'aafm_notify_on_resolved' );
+
+/**
+ * An approved OAuth grant. Resolves the app's name only when the trigger is on.
+ *
+ * @param array<string,mixed> $ctx    The aafm_oauth_log_event() context.
+ * @param int                 $row_id The lifecycle row just written.
+ * @return void
+ */
+function aafm_notify_oauth_grant( array $ctx, int $row_id ): void {
+	try {
+		if ( null === aafm_notify_settings_for( 'new_app' ) ) {
+			return;
+		}
+		$client_id = isset( $ctx['client_id'] ) ? (string) $ctx['client_id'] : '';
+		$client    = '' !== $client_id ? aafm_oauth_get_client( $client_id ) : null;
+		aafm_notify_event(
+			'new_app',
+			'oauth_grant',
+			array(
+				'row_id'    => $row_id,
+				'client_id' => $client_id,
+				'host'      => isset( $ctx['redirect_host'] ) ? (string) $ctx['redirect_host'] : '',
+				'app_name'  => null !== $client ? $client['client_name'] : '',
+			)
+		);
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+
+/**
+ * An Application Password was created for a user. Only the user id is read; never the password or its name.
+ *
+ * Core lets every role create one, so on a membership or LMS site a signed-up member would keep the
+ * owner's alerts busy. Only a user who can edit posts, or the plugin's own agent user, is worth an
+ * alert (spec D25). That is a chosen line, not a proven floor: a lower-privileged user's calls are
+ * still logged in the Activity Log.
+ *
+ * @param mixed $user_id The user the password belongs to.
+ * @return void
+ */
+function aafm_notify_on_app_password( $user_id ): void {
+	try {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 || ( ! user_can( $user_id, 'edit_posts' ) && ! aafm_principal_is_agent_identity( $user_id, null ) ) ) {
+			return;
+		}
+		aafm_notify_event( 'new_app', 'app_password', array( 'user_id' => $user_id ) );
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+}
+add_action( 'wp_create_application_password', 'aafm_notify_on_app_password', 10, 1 );
+
+/**
+ * A governance switch changed and the change persisted.
+ *
+ * @param string $subtype read_only_on, read_only_off, high_risk_unlocked or high_risk_locked.
+ * @param int    $row_id  The log row for the change.
+ * @return void
+ */
+function aafm_notify_switch_flip( string $subtype, int $row_id ): void {
+	aafm_notify_event( 'switch_flip', $subtype, array( 'row_id' => $row_id ) );
+}

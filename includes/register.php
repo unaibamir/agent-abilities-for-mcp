@@ -984,7 +984,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// The call is refused, so start the next one on a fresh token rather than leaving this
 			// denial memoized for the rest of the request.
 			aafm_rate_limit_call_reset( $name );
-			$rate_detail = aafm_build_activity_detail( $name, $call_args, 'denied' );
+			$rate_detail = aafm_compose_denied_detail( aafm_build_activity_detail( $name, $call_args, 'denied' ), 'rate_limit' );
 			// WP 7.1+: when this fire is core's internal re-check inside execute(), a 'started' row
 			// is already pending from aafm_log_ability_invocation() (wp_ability_invoked fires before
 			// ANY permission check). Resolve that same row instead of inserting a second one for the
@@ -1017,6 +1017,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			} else {
 				aafm_announce_ability_resolved( null, 'denied', null, $rate_detail );
 			}
+			aafm_notify_event( 'denial_burst', 'rate_limit', array( 'row_id' => (int) $rate_row_id ) );
 			return false;
 		}
 
@@ -1065,15 +1066,21 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			? ( aafm_unreachable_meta_key_error( $name, $call_args ) ?? aafm_unreachable_user_meta_key_error( $name, $call_args ) )
 			: null;
 
+		// Why the call is refused, when something below knows. One of the closed codes in
+		// includes/audit/denial-reason.php; it lands in the admin-only detail and never on the wire.
+		$reason = null;
+
 		if ( array() !== $missing ) {
 			// No try/catch around this one: building the refusal cannot crash, and it falls through
 			// to the shared non-true branch below, so the denial is audited, announced and has its
 			// rate memo released exactly as every other refusal does rather than growing a second
 			// copy of that bookkeeping.
 			$allowed = aafm_missing_input_error( $name, $missing );
+			$reason  = 'missing_argument';
 		} elseif ( null !== $unreachable ) {
 			// Same bookkeeping route as the branch above, and for the same reason.
 			$allowed = $unreachable;
+			$reason  = 'reserved_key';
 		} else {
 			try {
 				$allowed = $original_permission( $input );
@@ -1107,6 +1114,11 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			}
 		}
 
+		// The permission callback (or the diagnostic below) answered "no" without a reason of its own.
+		if ( true !== $allowed && null === $reason && null === $crash_detail ) {
+			$reason = aafm_denial_reason_for_permission( $name, $call_args );
+		}
+
 		// Allowlist scope check: an ADDITIONAL AND condition, never a replacement of the
 		// capability check above - it can only narrow what the underlying WordPress capability
 		// already permits, never widen it. Only runs when the capability check itself already
@@ -1114,6 +1126,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// as exactly one 'denied' row, not two.
 		if ( true === $allowed ) {
 			$allowed = aafm_ability_allowed_for_principal( $name, get_current_user_id(), aafm_oauth_current_client_id() );
+			if ( true !== $allowed ) {
+				$reason = 'scope_list';
+			}
 		}
 
 		// The WP Abilities API admits ONLY a strict true; every other return (false, WP_Error,
@@ -1127,7 +1142,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// A crashed check records the throw site instead of the ability's mapped argument
 			// detail: the defect is what matters on this row, and the mapped detail is already on
 			// the ordinary-denial rows.
-			$denied_detail = null !== $crash_detail ? $crash_detail : aafm_build_activity_detail( $name, $call_args, 'denied' );
+			$denied_detail = null !== $crash_detail ? $crash_detail : aafm_compose_denied_detail( aafm_build_activity_detail( $name, $call_args, 'denied' ), $reason );
 			// WP 7.1+: when this fire is core's internal re-check inside execute(), a 'started' row
 			// is already pending from aafm_log_ability_invocation() (wp_ability_invoked fires before
 			// ANY permission check, including this one). Resolve that same row instead of inserting
@@ -1206,9 +1221,15 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		// Null on a clean call; the crash's class and throw site once the catch below has written it.
 		$crash_detail = null;
+		// Wall-clock time inside the ability's own execute callback, nothing else: not the permission
+		// phase, not schema validation, not transport, not the row writes. hrtime() is monotonic.
+		$started_at = hrtime( true );
+		$ended_at   = $started_at;
 		try {
-			$result = $original_execute( $input );
+			$result   = $original_execute( $input );
+			$ended_at = hrtime( true );
 		} catch ( \Throwable $e ) {
+			$ended_at = hrtime( true );
 			// One catch for the whole catalog, not per-vendor-call-site. WooCommerce (and other
 			// vendors) routinely use exceptions as ordinary input validation - WC_Data::error()
 			// throws - and this codebase has 103 WooCommerce setter call sites against 2
@@ -1305,11 +1326,13 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// our own wrapper. Without this, the WP_Error branch of
 		// aafm_build_activity_detail_from_result() would overwrite the throw site with that wrapper
 		// code on every crashed call.
-		$written = aafm_update_activity_status(
+		$duration_ms = (int) round( ( $ended_at - $started_at ) / 1000000 );
+		$written     = aafm_update_activity_status(
 			$row_id,
 			$status,
 			$result_count,
-			null !== $crash_detail ? null : $resolved_detail
+			null !== $crash_detail ? null : $resolved_detail,
+			$duration_ms
 		);
 
 		// Announced from here rather than from inside the writer, and exactly once: this is the only
@@ -1332,6 +1355,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// decision; the history lives on ResolveHookTest's null-row-id test.
 			aafm_announce_ability_resolved( null, $status, $result_count, $resolved_detail );
 		}
+		aafm_notify_ability_finished( $name, $status, $written ? $row_id : null );
 
 		return $result;
 	};

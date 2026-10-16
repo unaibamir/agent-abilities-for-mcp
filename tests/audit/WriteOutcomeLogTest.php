@@ -52,6 +52,24 @@ final class WriteOutcomeLogTest extends TestCase {
 		);
 	}
 
+	public function test_the_alert_bookkeeping_options_write_no_outcome_row_but_other_options_still_do(): void {
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notify_pending', array( array( 'trigger' => 'switch_flip' ) ), false ) );
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notify_queue', array( array( 'trigger' => 'risky_run' ) ), false ) );
+		$this->assertTrue( aafm_delete_option_cache_safe( 'aafm_notify_pending' ) );
+		$this->assertTrue( aafm_delete_option_cache_safe( 'aafm_notify_queue' ) );
+		$this->assertSame( array(), $this->write_outcome_rows(), 'An alert must not add log rows of its own.' );
+
+		$this->assertTrue( aafm_update_option_verified( 'aafm_notifications', array( 'mode' => 'notice' ), true ) );
+		$this->assertTrue( aafm_update_option_verified( 'aafm_wol_other', 'x', false ) );
+		$keys = array_map(
+			static function ( array $row ): string {
+				return (string) ( json_decode( (string) $row['detail'], true )['key'] ?? '' );
+			},
+			$this->write_outcome_rows()
+		);
+		$this->assertSame( array( 'aafm_notifications', 'aafm_wol_other' ), $keys, 'Every other option keeps its row.' );
+	}
+
 	public function test_a_refused_call_inserts_one_error_row(): void {
 		$post_id = self::factory()->post->create();
 		update_post_meta( $post_id, 'aafm_wol_key', 'old' );

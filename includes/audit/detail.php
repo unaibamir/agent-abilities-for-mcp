@@ -184,6 +184,51 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/get-post-meta'               => array(
+			/* translators: 1: meta key name. 2: the post's numeric ID. */
+			'template' => __( 'Read meta key `%1$s` on post #%2$s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'meta_key',
+					'type' => 'key',
+				),
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/get-term-meta'               => array(
+			/* translators: 1: meta key name. 2: the term's numeric ID. */
+			'template' => __( 'Read meta key `%1$s` on term #%2$s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'meta_key',
+					'type' => 'key',
+				),
+				array(
+					'key'  => 'term_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'term',
+		),
+		'aafm/get-user-meta'               => array(
+			/* translators: 1: meta key name. 2: the user's numeric ID. */
+			'template' => __( 'Read meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'key',
+					'type' => 'key',
+				),
+				array(
+					'key'  => 'user_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'user',
+		),
 		'aafm/create-page'                 => array(
 			/* translators: %s: the new page's numeric ID. */
 			'template'  => __( 'Created page #%s', 'agent-abilities-for-mcp' ),

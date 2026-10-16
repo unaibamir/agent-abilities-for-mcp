@@ -73,8 +73,8 @@ final class AbilityToggleAuditTest extends TestCase {
 	}
 
 	public function test_saving_without_changing_it_writes_nothing(): void {
-		$before = aafm_activity_count_filtered();
+		$before = aafm_activity_count();
 		aafm_log_high_risk_switch_change( true, true );
-		$this->assertSame( $before, aafm_activity_count_filtered() );
+		$this->assertSame( $before, aafm_activity_count() );
 	}
 }

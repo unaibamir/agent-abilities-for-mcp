@@ -35,6 +35,7 @@ CONTRIBUTING.md
 README.md
 glama.json
 server.json
+context7.json
 composer.lock
 phpcs.xml.dist
 phpstan.neon.dist

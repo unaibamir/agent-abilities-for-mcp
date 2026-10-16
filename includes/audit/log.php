@@ -26,7 +26,11 @@ if ( ! defined( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION' ) ) {
 	// indexes so an event-filtered query is index-backed. Bumping this makes
 	// aafm_maybe_upgrade_activity_log() re-run dbDelta so existing installs pick the change up
 	// without a reactivation. Mirrors AAFM_OAUTH_SCHEMA_VERSION in includes/oauth/schema.php.
-	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '5' );
+	// v6 adds the nullable duration_ms column: milliseconds spent inside an ability's execute
+	// callback, NULL for a call that never executed or was never measured, so NULL is never a
+	// fabricated zero. Nullable with no default, so the ALTER is metadata-only on current engines
+	// and every existing row is unaffected.
+	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '6' );
 }
 
 /**
@@ -82,9 +86,9 @@ function aafm_activity_log_table(): string {
  *
  * Idempotent: dbDelta() only applies the diff. Mirrors aafm_install_oauth_tables().
  *
- * @return void
+ * @return bool Whether the schema verified and its version was stamped.
  */
-function aafm_install_activity_log(): void {
+function aafm_install_activity_log(): bool {
 	global $wpdb;
 	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
@@ -103,6 +107,7 @@ function aafm_install_activity_log(): void {
 		result_count BIGINT UNSIGNED NULL,
 		event_type VARCHAR(32) NOT NULL DEFAULT 'ability_call',
 		detail TEXT NULL,
+		duration_ms INT UNSIGNED NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		KEY created_at (created_at),
@@ -113,7 +118,7 @@ function aafm_install_activity_log(): void {
 
 	dbDelta( $sql );
 
-	aafm_activity_log_finalize_schema();
+	return aafm_activity_log_finalize_schema();
 }
 
 /**
@@ -128,9 +133,9 @@ function aafm_install_activity_log(): void {
  * its latest columns/index are present. On failure leave the prior version so the next admin or
  * REST request retries, and raise a bounded admin notice.
  *
- * @return void
+ * @return bool Whether the schema verified and the version stamp was certified.
  */
-function aafm_activity_log_finalize_schema(): void {
+function aafm_activity_log_finalize_schema(): bool {
 	if ( aafm_activity_log_schema_verify() ) {
 		delete_transient( 'aafm_activity_log_schema_error' );
 		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_activity_log()
@@ -145,20 +150,22 @@ function aafm_activity_log_finalize_schema(): void {
 			// visible instead of silent.
 			set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
 			aafm_log_ability_persist_failure( 'aafm_activity_log_schema_version', __( 'The activity-log schema version', 'agent-abilities-for-mcp' ) );
+			return false;
 		}
-		return;
+		return true;
 	}
 
 	// Bounded: a day-long flag the next successful verify clears, so the notice shows only while the
 	// schema is genuinely behind and disappears the moment the self-heal lands.
 	set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
+	return false;
 }
 
 /**
  * Whether the activity-log schema is actually present: the table plus its latest columns and index.
  *
- * Verifies the table, the v5 event_type and detail columns, and the event_created index - the most
- * recent migration, so their absence is the signal a dbDelta run did not fully land. Gates the
+ * Verifies the table, the v5 event_type and detail columns, the v6 duration_ms column, and the
+ * event_created index - the most recent migrations, so their absence is the signal a dbDelta run did not fully land. Gates the
  * version stamp in aafm_activity_log_finalize_schema().
  *
  * @return bool
@@ -172,6 +179,7 @@ function aafm_activity_log_schema_verify(): bool {
 
 	return aafm_activity_log_has_column( $table, 'event_type' )
 		&& aafm_activity_log_has_column( $table, 'detail' )
+		&& aafm_activity_log_has_column( $table, 'duration_ms' )
 		&& aafm_activity_log_has_index( $table, 'event_created' );
 }
 
@@ -270,7 +278,7 @@ function aafm_activity_log_schema_admin_notice(): void {
 		return;
 	}
 	echo '<div class="notice notice-error"><p>';
-	echo esc_html__( 'Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin retries automatically on the next admin or REST request.', 'agent-abilities-for-mcp' );
+	echo esc_html__( 'Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin tries again on its own, at most once an hour.', 'agent-abilities-for-mcp' );
 	echo '</p></div>';
 }
 add_action( 'admin_notices', 'aafm_activity_log_schema_admin_notice' );
@@ -293,7 +301,22 @@ function aafm_maybe_upgrade_activity_log(): void {
 		return;
 	}
 
-	aafm_install_activity_log();
+	// One request upgrades at a time, and a failed upgrade waits an hour before the next try, so a
+	// refused ALTER does not rerun dbDelta() on every admin and REST request. The lock is held for a
+	// minute while the installer runs, released on success, and kept for an hour on failure.
+	// ponytail: a transient is get-then-set, not atomic, so two requests landing in the same instant
+	// can both pass. dbDelta() is idempotent, so that costs a repeat, not damage. Upgrade path is an
+	// add_option() row with its own expiry if it ever shows up. An unreadable lock counts as held.
+	$held = aafm_transient_count( 'aafm_activity_log_upgrade_lock' );
+	if ( null === $held || $held > 0 ) {
+		return;
+	}
+	set_transient( 'aafm_activity_log_upgrade_lock', 1, MINUTE_IN_SECONDS );
+	if ( aafm_install_activity_log() ) {
+		delete_transient( 'aafm_activity_log_upgrade_lock' );
+		return;
+	}
+	set_transient( 'aafm_activity_log_upgrade_lock', 1, HOUR_IN_SECONDS );
 }
 
 // Keep the activity-log schema current on real upgrades. The guard above early-returns once
@@ -360,7 +383,8 @@ if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
  *                       'tx' (an MCP-route JSON-RPC error the transport-outcome logger records),
  *                       'ssl' (an aafm_oat_ bearer presented over http where HTTPS is required),
  *                       'rv' (a refused Needs review Publish or Discard click),
- *                       or 'dsg' (a refused call naming this plugin's tool on the adapter default server).
+ *                       'dsg' (a refused call naming this plugin's tool on the adapter default server),
+ *                       or 'ntf' (a notification email that could not be sent).
  * @return bool True when the caller may write its row (the slot is consumed), false when this
  *              IP has used up its cap for the current window.
  */
@@ -483,6 +507,9 @@ function aafm_sanitize_activity_detail( string $detail ): string {
 function aafm_log_activity( array $record ): int {
 	global $wpdb;
 
+	// ponytail: an argument key of around 100,000 characters was seen rejected with no audit row. The cause
+	// is believed to be the arg_keys TEXT column (about 64 KB) refusing the insert in strict SQL mode;
+	// not confirmed. Truncate each key here if a call that fails to log ever matters.
 	$status   = in_array( $record['status'] ?? '', aafm_activity_statuses(), true ) ? $record['status'] : 'error';
 	$arg_keys = isset( $record['arg_keys'] ) && is_array( $record['arg_keys'] )
 		? implode( ',', array_map( 'sanitize_key', $record['arg_keys'] ) )
@@ -609,8 +636,11 @@ function aafm_prune_activity_log(): void {
 	// retention window, which takes most of the log out on the next daily run. The heading would
 	// go on quoting the pre-prune number, and the render guard that exists to stop an ask the log
 	// cannot back reads the same memo, so it would pass on it too.
-	if ( $total_deleted > 0 && function_exists( 'aafm_review_request_flush_display_count' ) ) {
-		aafm_review_request_flush_display_count();
+	if ( $total_deleted > 0 ) {
+		if ( function_exists( 'aafm_review_request_flush_display_count' ) ) {
+			aafm_review_request_flush_display_count();
+		}
+		aafm_activity_summary_flush();
 	}
 }
 
@@ -634,11 +664,13 @@ function aafm_prune_activity_log(): void {
  *                                  leaves the column untouched.
  * @param string|null $detail       Optional note about what the call touched, known only once it
  *                                  resolved. Null (default) leaves the column untouched.
+ * @param int|null    $duration_ms  Milliseconds spent inside the ability's execute callback. Null
+ *                                  (default) leaves the column untouched.
  * @return bool Whether the row was written. False means the query failed, the id was unusable, or
  *              no such row exists any more; a matched row whose columns did not change counts as
  *              written.
  */
-function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): bool {
+function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null, ?string $detail = null, ?int $duration_ms = null ): bool {
 	global $wpdb;
 	if ( $row_id <= 0 ) {
 		return false;
@@ -656,9 +688,26 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 		$format[]       = '%s';
 	}
 
-	$table = aafm_activity_log_table();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$updated = $wpdb->update( $table, $data, array( 'id' => $row_id ), $format, array( '%d' ) );
+	$table   = aafm_activity_log_table();
+	$updated = false;
+
+	// The duration column exists from schema v6. A call that resolves before the upgrade has run
+	// (cron, WP-CLI, or a stamp that failed to persist) would fail this UPDATE, so it is tried
+	// first with errors suppressed and retried without the column on failure: the status must
+	// always resolve, and only the duration is lost. No per-request memo of "unsupported": a
+	// persistent-worker SAPI would keep it across requests.
+	if ( null !== $duration_ms ) {
+		$with_duration                = $data;
+		$with_duration['duration_ms'] = min( 4294967295, max( 0, $duration_ms ) );
+		$suppressed                   = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$updated = $wpdb->update( $table, $with_duration, array( 'id' => $row_id ), array_merge( $format, array( '%d' ) ), array( '%d' ) );
+		$wpdb->suppress_errors( $suppressed );
+	}
+	if ( false === $updated ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$updated = $wpdb->update( $table, $data, array( 'id' => $row_id ), $format, array( '%d' ) );
+	}
 
 	// Only a literal false is a failure. wpdb::update() returns 0 when the row matched and no
 	// column changed, which is a legitimate no-op resolve, and a naive `if ( $updated )` would
@@ -802,7 +851,9 @@ function aafm_log_ability_exception( int $row_id, \Throwable $e ): string {
 /**
  * Query activity rows, most recent first.
  *
- * @param array<string,mixed> $args Query arguments: per_page, page, status, ability, max_id.
+ * @param array<string,mixed> $args Query arguments: per_page, page, and the filters status, ability
+ *                                  (or tool), user, conn, plugin, from, to, q, row and max_id, which
+ *                                  aafm_activity_filters_normalize() cleans.
  *                                  max_id (optional) bounds the result to id <= max_id - a
  *                                  caller paginating across multiple calls (the CSV exporter)
  *                                  uses it to pin every page to a snapshot taken before the
@@ -842,33 +893,15 @@ function aafm_query_activity_result( array $args ): array {
 	// never user input; the leading %i placeholder below quotes/escapes the identifier.
 	$table = aafm_activity_log_table();
 
-	$where  = '1=1';
-	$params = array();
-	if ( ! empty( $args['status'] ) ) {
-		$where   .= ' AND status = %s';
-		$params[] = (string) $args['status'];
-	}
-	if ( ! empty( $args['ability'] ) ) {
-		$where   .= ' AND ability = %s';
-		$params[] = (string) $args['ability'];
-	}
-	if ( ! empty( $args['max_id'] ) ) {
-		$where   .= ' AND id <= %d';
-		$params[] = (int) $args['max_id'];
-	}
-
+	$where    = aafm_activity_filter_where( $args );
+	$params   = $where['params'];
 	$params[] = $per_page;
 	$params[] = $offset;
-
-	// Bind the table identifier via the leading %i placeholder, so it is the first arg to
-	// $wpdb->prepare(). The %s fragments in {$where} are BOUND placeholders - their values
-	// (status, ability) were pushed onto $params above and are substituted by prepare(), never
-	// interpolated literals. The only interpolation into the SQL string is the static {$where}
-	// scaffolding (the "1=1 AND status = %s …" shape), which carries no user input.
 	array_unshift( $params, $table );
 
+	// The fragment is fixed text and placeholders from aafm_activity_filter_where(); every value is bound.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$sql = "SELECT * FROM %i WHERE {$where} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
+	$sql = "SELECT * FROM %i WHERE {$where['sql']} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
 	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
 	// a failed query here could otherwise return an EARLIER, unrelated query's rows (see
 	// aafm_oauth_list_clients()'s docblock for the mechanism), silently showing the admin a
@@ -880,32 +913,6 @@ function aafm_query_activity_result( array $args ): array {
 		'ok'   => $view['ok'],
 		'rows' => ( $view['ok'] && is_array( $view['value'] ) ) ? $view['value'] : array(),
 	);
-}
-
-/**
- * Count activity rows, optionally narrowed to a single status.
- *
- * Mirrors the WHERE clause of aafm_query_activity() (minus paging) so a filtered view can
- * compute its own total and page count. A null or empty status counts every row. Runs as one
- * prepared, index-backed COUNT(*) against this plugin's own audit table.
- *
- * @param string|null $status One of started|success|error|denied, or null/empty for all rows.
- * @return int Non-negative row count for the (optionally filtered) set.
- */
-function aafm_activity_count_filtered( ?string $status = null ): int {
-	global $wpdb;
-	$table = aafm_activity_log_table();
-
-	// Codex round 7, R7-2: both reads routed through aafm_wpdb_scalar() - see
-	// aafm_activity_count()'s docblock for why a bare get_var() risks displaying an adjacent
-	// count's stale value when this one's own query fails.
-	if ( null === $status || '' === $status ) {
-		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
-		return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
-	}
-
-	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE status = %s', $table, $status ) );
-	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
 /**
@@ -954,34 +961,9 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
  */
 function aafm_agent_call_count( ?string $status = null ): int {
 	global $wpdb;
-	$table = aafm_activity_log_table();
-
-	// One WHERE clause for every caller: the base exclusion set, plus an optional bound
-	// status narrowing. All %-placeholders are bound via $params; nothing user-supplied is
-	// ever interpolated into the SQL string itself.
-	$sql    = 'SELECT COUNT(*) FROM %i WHERE event_type = %s AND ability <> %s AND ability <> %s AND ability NOT LIKE %s';
-	$params = array(
-		$table,
-		'ability_call',
-		'(transport)',
-		'aafm/activity-log-cleared',
-		$wpdb->esc_like( 'oauth:' ) . '%',
-	);
-	if ( null !== $status && '' !== $status ) {
-		$sql     .= ' AND status = %s';
-		$params[] = $status;
-	}
-
-	// The PluginCheck token matches the one on the identical construct in aafm_query_activity().
-	// Plugin Check cannot follow $sql across the conditional append above, so it reports the
-	// prepare() call as carrying an unescaped parameter. It does not: the base string is a literal
-	// whose every value is a placeholder, the only thing ever appended is the constant literal
-	// ' AND status = %s', and all five or six values reach the query through $params - the table
-	// name via %i, and $status, the one caller-influenced value, via %s. Nothing is interpolated.
-	// Codex round 7, R7-2: routed through aafm_wpdb_scalar() - see aafm_activity_count()'s
-	// docblock for why a bare get_var() risks displaying an adjacent count's stale value.
+	$clause = aafm_agent_call_clause( $status );
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-	$view = aafm_wpdb_scalar( $wpdb->prepare( $sql, $params ) );
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE ' . $clause['sql'], array_merge( array( aafm_activity_log_table() ), $clause['params'] ) ) );
 	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
@@ -1060,6 +1042,7 @@ function aafm_clear_activity_log(): bool {
 	if ( function_exists( 'aafm_review_request_flush_display_count' ) ) {
 		aafm_review_request_flush_display_count();
 	}
+	aafm_activity_summary_flush();
 
 	return true;
 }
@@ -1093,6 +1076,8 @@ function aafm_uninstall_site(): void {
 	delete_transient( 'aafm_review_request_count' );
 	// The Connection Doctor's header-seen memo, same data class.
 	delete_transient( 'aafm_doctor_header_seen' );
+	// The Activity tab's 7-day summary memo, same data class.
+	delete_transient( 'aafm_activity_summary' );
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );

@@ -422,7 +422,7 @@ final class DetailTest extends TestCase {
 
 		$row = $this->latest_row();
 		$this->assertSame( 'denied', $row['status'] );
-		$this->assertSame( "Attempted: Updated meta key `subtitle` on post #{$post_id}", $row['detail'] );
+		$this->assertSame( "Attempted: Updated meta key `subtitle` on post #{$post_id}. Refused: object_not_editable", $row['detail'] );
 		$this->assertStringContainsString( 'value', (string) $row['arg_keys'] );
 		$this->assertRowIsFreeOfTheValue( $row );
 		$this->assertSame( '', get_post_meta( $post_id, 'subtitle', true ), 'The denied write must not have happened.' );
@@ -1221,7 +1221,7 @@ final class DetailTest extends TestCase {
 
 		$row = $this->latest_row();
 		$this->assertSame( 'denied', $row['status'], 'A refused write must never read as a successful one.' );
-		$this->assertSame( "Attempted: Updated meta key `session_tokens` on user #{$user_id}", $row['detail'] );
+		$this->assertSame( "Attempted: Updated meta key `session_tokens` on user #{$user_id}. Refused: key_protected", $row['detail'] );
 		$this->assertRowIsFreeOfTheValue( $row );
 	}
 
@@ -1258,7 +1258,7 @@ final class DetailTest extends TestCase {
 
 		$row = $this->latest_row();
 		$this->assertSame( 'denied', $row['status'] );
-		$this->assertSame( "Attempted: Deleted meta key `subtitle` on post #{$post_id}", $row['detail'] );
+		$this->assertSame( "Attempted: Deleted meta key `subtitle` on post #{$post_id}. Refused: object_not_editable", $row['detail'] );
 	}
 
 	public function test_wc_delete_product_detail_renders_the_template(): void {

@@ -23,6 +23,7 @@ phpstan-polyfill-stubs.stub export-ignore
 README.md       export-ignore
 glama.json      export-ignore
 server.json     export-ignore
+/context7.json  export-ignore
 composer.lock   export-ignore
 /vendor/bin              export-ignore
 /vendor/dealerdirect     export-ignore

@@ -89,6 +89,7 @@ final class ActivityTabTest extends TestCase {
 		$json = $this->run_handler( 'aafm_ajax_clear_log' );
 
 		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+		$this->assertSame( aafm_activity_count_note( 0, aafm_log_retention_days() ), $json['data']['count_note'] ?? null );
 
 		// Exactly one row survives: the marker, not the seeded call.
 		$this->assertSame( 1, aafm_activity_count() );
@@ -205,9 +206,9 @@ final class ActivityTabTest extends TestCase {
 		$this->assertSame( 'aafm/get-posts', $rows[0]['ability'], 'No tamper marker must be written when the clear could never be confirmed.' );
 	}
 
-	public function test_the_header_row_is_the_v5_six(): void {
+	public function test_the_header_row_keeps_the_v5_labels(): void {
 		$html = $this->render_activity_tab();
-		foreach ( array( 'Time (UTC)', 'Principal', 'Event', 'Detail', 'Status', 'Arg keys' ) as $header ) {
+		foreach ( array( 'Time (UTC)', 'Principal', 'Connection', 'Event', 'Detail', 'Status', 'Duration', 'IP', 'Arg keys' ) as $header ) {
 			$this->assertStringContainsString( '<th scope="col">' . $header, $html );
 		}
 		$this->assertStringNotContainsString( '<th scope="col">Ability', $html );
@@ -231,11 +232,11 @@ final class ActivityTabTest extends TestCase {
 		$html = aafm_activity_rows_html( aafm_query_activity( array( 'per_page' => 1 ) ) );
 		$this->assertStringContainsString( 'aafm/get-posts', $html );
 		$this->assertStringContainsString( 'per_page', $html );
-		$this->assertSame( 6, substr_count( $html, '<td' ) );
+		$this->assertSame( 9, substr_count( $html, '<td' ) );
 	}
 
-	public function test_the_empty_state_spans_all_six_columns(): void {
-		$this->assertStringContainsString( 'colspan="6"', aafm_activity_rows_html( array() ) );
+	public function test_the_empty_state_spans_all_nine_columns(): void {
+		$this->assertStringContainsString( 'colspan="9"', aafm_activity_rows_html( array() ) );
 	}
 
 	public function test_a_detail_bearing_row_renders_its_detail(): void {
@@ -375,8 +376,8 @@ final class ActivityTabTest extends TestCase {
 		$rows = aafm_activity_rows_data( aafm_query_activity( array( 'per_page' => 1 ) ) );
 		$this->assertCount( 1, $rows );
 
-		// One field per header column - Time, Principal, Event, Detail, Status, Arg keys.
-		foreach ( array( 'time', 'principal', 'ability', 'detail', 'status', 'arg_keys' ) as $key ) {
+		// One field per header column - Time, Principal, Connection, Event, Detail, Status, Duration, IP, Arg keys.
+		foreach ( array( 'time', 'principal', 'connection', 'ability', 'detail', 'status', 'duration', 'ip', 'arg_keys' ) as $key ) {
 			$this->assertArrayHasKey(
 				$key,
 				$rows[0],
@@ -387,23 +388,10 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
-	 * The mapper half of the Started filter: aafm_activity_filter_status() must pass 'started'
-	 * through as a query status, not map it to null (= all rows). This is the innermost of the
-	 * THREE allowlists the value crosses; the AJAX test below covers the outermost, because a
-	 * green here with the AJAX gate still rewriting 'started' to 'all' is a passing test over a
-	 * dead button.
-	 */
-	public function test_the_filter_mapper_passes_started_through(): void {
-		$this->assertSame( 'started', aafm_activity_filter_status( 'started' ) );
-		$this->assertNull( aafm_activity_filter_status( 'all' ) );
-		$this->assertNull( aafm_activity_filter_status( 'bogus' ) );
-	}
-
-	/**
-	 * The end-to-end half: posting filter=started through the real AJAX handler must return only
-	 * the started rows. Without this, the handler's own allowlist coerces the unknown value to
-	 * 'all' and the operator silently gets every row while the mapper unit test above sits green -
-	 * the JS/PHP boundary class that shipped in 1.6.0 past every gate.
+	 * Posting filter=started through the real AJAX handler must return only the started rows.
+	 * Without this, the handler's own allowlist coerces the unknown value to 'all' and the
+	 * operator silently gets every row - the JS/PHP boundary class that shipped in 1.6.0 past
+	 * every gate.
 	 */
 	public function test_the_ajax_page_handler_honours_the_started_filter_end_to_end(): void {
 		$this->acting_as( 'administrator' );
@@ -433,6 +421,71 @@ final class ActivityTabTest extends TestCase {
 		$this->assertSame( 1, $json['data']['total'] ?? null );
 		$this->assertCount( 1, $json['data']['rows'] ?? array() );
 		$this->assertSame( 'started', $json['data']['rows'][0]['status'] ?? null );
+	}
+
+	public function test_the_ajax_page_handler_says_whether_filters_emptied_the_table(): void {
+		$this->acting_as( 'administrator' );
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+
+		$this->assertFalse( $this->run_handler( 'aafm_ajax_get_log_page' )['data']['filtered'] ?? null, 'No filter, so an empty log is just empty.' );
+
+		$_POST['filter'] = 'denied';
+		$this->assertTrue( $this->run_handler( 'aafm_ajax_get_log_page' )['data']['filtered'] ?? null );
+	}
+
+	public function test_the_ajax_page_handler_sends_the_count_note_pluralized_for_the_count(): void {
+		$this->acting_as( 'administrator' );
+		for ( $i = 0; $i < 2; $i++ ) {
+			aafm_log_activity(
+				array(
+					'ability' => 'aafm/get-posts',
+					'status'  => 'success',
+				)
+			);
+		}
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+
+		// A language with a third plural form: the script only knows one and many, so the word has to come from the server.
+		$few = static function ( $translation, $single, $plural, $number ) {
+			return 'entry' === $single && 2 === $number ? 'few-form' : $translation;
+		};
+		add_filter( 'ngettext', $few, 10, 4 );
+		try {
+			$json     = $this->run_handler( 'aafm_ajax_get_log_page' );
+			$expected = aafm_activity_count_note( 2, aafm_log_retention_days() );
+		} finally {
+			remove_filter( 'ngettext', $few, 10 );
+		}
+
+		$this->assertSame( 2, $json['data']['total'] ?? null );
+		$this->assertSame( $expected, $json['data']['count_note'] ?? null );
+		$this->assertStringStartsWith( 'few-form', (string) ( $json['data']['count_note'] ?? '' ) );
+	}
+
+	public function test_the_ajax_page_handler_ignores_an_array_page_parameter(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+			)
+		);
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$_POST['page']     = array( 'x' );
+
+		$json = $this->run_handler( 'aafm_ajax_get_log_page' );
+
+		$this->assertTrue( (bool) ( $json['success'] ?? false ), 'An array page is ignored, not a PHP warning.' );
+		$this->assertSame( 1, $json['data']['page'] ?? null );
 	}
 
 	/**

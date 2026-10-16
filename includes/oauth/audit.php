@@ -89,7 +89,7 @@ function aafm_oauth_log_event( string $event, string $status, array $ctx = array
 		}
 	}
 
-	aafm_log_activity(
+	$row_id = aafm_log_activity(
 		array(
 			'ability'           => 'oauth:' . $event,
 			'principal_user_id' => isset( $ctx['user_id'] ) ? (int) $ctx['user_id'] : 0,
@@ -98,6 +98,9 @@ function aafm_oauth_log_event( string $event, string $status, array $ctx = array
 			'arg_keys'          => $keys,
 		)
 	);
+	if ( 'authorize' === $event && 'success' === $status ) {
+		aafm_notify_oauth_grant( $ctx, $row_id );
+	}
 }
 
 /**

@@ -56,6 +56,9 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/settings.php|aafm_render_settings_tab|1' => 'G',
 		'includes/admin/settings.php|aafm_render_settings_tab|2' => 'G',
 		'includes/audit/high-risk.php|aafm_high_risk_unlocked|1' => 'G',
+		'includes/audit/notifications.php|aafm_notifications_settings|1' => 'N',
+		'includes/audit/notifications.php|aafm_notify_pending_list|1' => 'N',
+		'includes/audit/notifications.php|aafm_notify_queue_list|1' => 'N',
 		'includes/audit/read-only.php|aafm_read_only_mode_stored|1' => 'G',
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => 'G',
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => 'G',
@@ -118,6 +121,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/doctor.php|aafm_doctor_last_header_result|1',
 		'includes/admin/page.php|aafm_detected_meta_keys|1',
 		'includes/admin/review-request.php|aafm_review_request_display_count|1',
+		'includes/audit/log-query.php|aafm_activity_summary|1',
 		'includes/audit/log.php|aafm_activity_log_schema_admin_notice|1',
 		'includes/audit/log.php|aafm_denial_log_within_cap|1',
 		'includes/helpers.php|aafm_transient_count|1',
@@ -346,7 +350,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 27,
+				'N' => 30,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),
@@ -383,7 +387,7 @@ final class OptionReadSweepTest extends TestCase {
 	public function test_every_get_transient_call_is_listed_exactly_once(): void {
 		$found = $this->plugin_calls();
 
-		$this->assertCount( 10, $found['get_transient'] );
+		$this->assertCount( 11, $found['get_transient'] );
 		$this->assertSame( $this->sorted( self::GET_TRANSIENT ), $this->keys_of( $found, 'get_transient' ) );
 	}
 

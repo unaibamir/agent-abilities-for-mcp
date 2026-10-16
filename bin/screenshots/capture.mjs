@@ -86,7 +86,7 @@ const SHOTS = [
 		},
 	},
 	{ n: 13, url: plugin( 'tab=dashboard' ), prep: ( page ) => top( page, '#aafm-review-inbox' ) },
-	// Part C adds: { n: 14, url: plugin( 'tab=settings' ), prep: ( page ) => top( page, '#aafm-notify-mode' ) }
+	{ n: 14, url: plugin( 'tab=settings' ), prep: ( page ) => top( page, '#aafm-notify-mode', 130 ) },
 ];
 
 mkdirSync( outDir, { recursive: true } );

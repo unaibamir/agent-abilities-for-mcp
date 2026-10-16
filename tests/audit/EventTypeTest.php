@@ -56,8 +56,8 @@ final class EventTypeTest extends TestCase {
 		$this->assertSame( 'ability_call', $types[0] );
 	}
 
-	public function test_schema_version_is_five(): void {
-		$this->assertSame( '5', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
+	public function test_schema_version_is_six(): void {
+		$this->assertSame( '6', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
 	}
 
 	public function test_table_carries_both_new_columns(): void {

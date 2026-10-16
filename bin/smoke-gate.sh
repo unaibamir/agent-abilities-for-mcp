@@ -298,12 +298,17 @@ init_ok() {
 	fi
 }
 
+# admin_login <jar>: sign the disposable admin in and leave the cookies in <jar>.
+admin_login() {
+	rm -f "$1"
+	curl -s --max-time 60 -c "$1" -b 'wordpress_test_cookie=WP+Cookie+check' -o /dev/null \
+		-d "log=admin&pwd=admin&wp-submit=Log+In&redirect_to=$URL/wp-admin/&testcookie=1" "$URL/wp-login.php"
+}
+
 # pages_ok <leg> <label>: three admin pages and the front page, logged in as the disposable admin.
 pages_ok() {
 	local jar="$SMOKE_ROOT/jar.txt" p code hits bad=''
-	rm -f "$jar"
-	curl -s --max-time 60 -c "$jar" -b 'wordpress_test_cookie=WP+Cookie+check' -o /dev/null \
-		-d "log=admin&pwd=admin&wp-submit=Log+In&redirect_to=$URL/wp-admin/&testcookie=1" "$URL/wp-login.php"
+	admin_login "$jar"
 	for p in "${PAGES[@]}"; do
 		code=$(curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/page.html" -w '%{http_code}' "$URL/$p")
 		hits=$(grep -c -i -E "$BAD_BODY" "$SMOKE_ROOT/page.html")
@@ -442,6 +447,14 @@ leg_upgrade() {
 	init_ok upgrade "$FROM to $cur" "$ROUTE_OURS"
 	pages_ok upgrade "$FROM to $cur"
 	log_ok upgrade "$FROM to $cur"
+	local schema col
+	schema=$(W eval 'echo aafm_read_option_views( "aafm_activity_log_schema_version" )["db_value"];' 2>/dev/null)
+	col=$(W eval 'echo aafm_activity_log_has_column( aafm_activity_log_table(), "duration_ms" ) ? "yes" : "no";' 2>/dev/null)
+	if [ "$schema" = 6 ] && [ "$col" = yes ]; then
+		pass upgrade "after $FROM to $cur the activity log is schema 6 and has duration_ms"
+	else
+		fail upgrade "after $FROM to $cur: schema '$schema', duration_ms '$col' (wanted 6 and yes)"
+	fi
 }
 
 # tools_list <route> <outfile>: initialize, then page through tools/list; one tool name per line.
@@ -917,6 +930,187 @@ shots_mode() {
 	known shots "timed out waiting for $SMOKE_ROOT/shots.done"
 }
 
+# leg_log: duration on a real call, filtered CSV equals the filtered table and count, the tab pages.
+leg_log() {
+	local dur parity jar="$SMOKE_ROOT/jar.txt" q code hits
+	set_state log 'ours only' "[\"$OURS\"]" true 0 || return 0
+	W eval 'aafm_clear_activity_log();' >/dev/null 2>&1 # the disposable database only
+	if tools_call "$ROUTE_OURS" aafm-get-pages '{}' >/dev/null && [ "$(call_verdict)" = ran ]; then
+		dur=$(W eval '$r = aafm_query_activity( array( "ability" => "aafm/get-pages", "per_page" => 1 ) ); echo ( isset( $r[0] ) && null !== $r[0]["duration_ms"] ) ? "ok:" . $r[0]["duration_ms"] : "null";' 2>/dev/null)
+		case "$dur" in
+			ok:*) pass log "a real tools/call recorded duration_ms ${dur#ok:}" ;;
+			*) fail log "no duration on the row for a real tools/call ('$dur')" ;;
+		esac
+	else
+		fail log "tools/call aafm-get-pages did not run"
+	fi
+	W eval 'for ( $i = 1; $i <= 24; $i++ ) { aafm_log_activity( array( "ability" => ( 0 === $i % 3 ? "aafm/trash-post" : "aafm/get-posts" ), "status" => ( 0 === $i % 4 ? "denied" : "success" ), "principal_login" => ( 0 === $i % 2 ? "ana" : "bo" ), "detail" => "smoke-" . $i ) ); }' >/dev/null 2>&1
+	parity=$(W eval '
+		wp_set_current_user( 1 );
+		$sets = array( array( "status" => "denied" ), array( "user" => "ana", "tool" => "aafm/trash-post" ), array( "q" => "smoke-1" ), array( "from" => gmdate( "Y-m-d" ), "status" => "success" ) );
+		$bad  = array();
+		foreach ( $sets as $f ) {
+			$count = aafm_activity_count_matching( $f );
+			$rows  = aafm_query_activity( array_merge( $f, array( "per_page" => 200 ) ) );
+			ob_start();
+			aafm_export_activity_csv( $f );
+			$csv   = (string) ob_get_clean();
+			$lines = count( array_filter( explode( "\n", trim( $csv ) ) ) ) - 1;
+			if ( $count !== count( $rows ) || $count !== $lines ) {
+				$bad[] = wp_json_encode( $f ) . ":" . $count . "/" . count( $rows ) . "/" . $lines;
+			}
+		}
+		echo $bad ? "BAD " . implode( " ", $bad ) : "OK";' 2>/dev/null)
+	if [ "$parity" = OK ]; then
+		pass log "filtered count, table query and CSV agree on four filter sets"
+	else
+		fail log "filtered count, table and CSV disagree: $parity"
+	fi
+	admin_login "$jar"
+	for q in 'tab=activity' 'tab=activity&filter=denied&q=smoke&from=2020-01-01&user=ana&plugin=core&conn=none' 'tab=activity&row=1' 'tab=activity&q=%25%5C%27%22'; do
+		code=$(curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/page.html" -w '%{http_code}' "$URL/wp-admin/admin.php?page=agent-abilities-for-mcp&$q")
+		hits=$(grep -c -i -E "$BAD_BODY" "$SMOKE_ROOT/page.html")
+		if [ "$code" = 200 ] && [ "$hits" = 0 ] && grep -q 'id="aafm-log-summary"' "$SMOKE_ROOT/page.html"; then
+			pass log "Activity tab ?$q answers 200 with the summary card and no error text"
+		else
+			fail log "Activity tab ?$q: HTTP $code, $hits error strings, summary card present: $(grep -c 'id="aafm-log-summary"' "$SMOKE_ROOT/page.html")"
+		fi
+	done
+	log_ok log 'Activity Log'
+}
+
+# leg_logscale: 50,000 rows, time every filter class and the 7-day summary, and the v6 upgrade itself.
+# Soft limit 1000 ms (KNOWN), hard limit 5000 ms (FAIL). The disposable database only.
+leg_logscale() {
+	local out name ms
+	set_state logscale 'ours only' "[\"$OURS\"]" true 0 || return 0
+	out=$(W eval '
+		global $wpdb;
+		$t = aafm_activity_log_table();
+		aafm_clear_activity_log();
+		for ( $b = 0; $b < 50; $b++ ) {
+			$vals = array();
+			for ( $i = 0; $i < 1000; $i++ ) {
+				$vals[] = $wpdb->prepare( "(%s,%d,%s,%s,%s,%s,%s,%s,%s,%s)", "aafm/tool-" . mt_rand( 0, 149 ), 1, "user" . mt_rand( 0, 4 ), array( "success", "error", "denied" )[ mt_rand( 0, 2 ) ], "post_id", "203.0.113.9", mt_rand( 0, 1 ) ? "client-a" : "", "ability_call", "scale seed", gmdate( "Y-m-d H:i:s", time() - mt_rand( 0, 30 * 86400 ) ) );
+			}
+			$wpdb->query( "INSERT INTO {$t} (ability,principal_user_id,principal_login,status,arg_keys,source_ip,client_id,event_type,detail,created_at) VALUES " . implode( ",", $vals ) );
+		}
+		$sets = array(
+			"none"   => array(),
+			"status" => array( "status" => "denied" ),
+			"tool"   => array( "tool" => "aafm/tool-7" ),
+			"user"   => array( "user" => "user3" ),
+			"conn"   => array( "conn" => "client-a" ),
+			"date"   => array( "from" => gmdate( "Y-m-d", time() - 3 * 86400 ) ),
+			"q"      => array( "q" => "tool-7" ),
+			"combo"  => array( "user" => "user2", "status" => "error", "from" => gmdate( "Y-m-d", time() - 10 * 86400 ) ),
+		);
+		foreach ( $sets as $name => $f ) {
+			$t0 = microtime( true );
+			aafm_activity_count_matching( $f );
+			aafm_query_activity( array_merge( $f, array( "per_page" => 50 ) ) );
+			echo $name . "=" . round( ( microtime( true ) - $t0 ) * 1000 ) . "\n";
+		}
+		$t0 = microtime( true );
+		aafm_activity_summary( true );
+		echo "summary=" . round( ( microtime( true ) - $t0 ) * 1000 ) . "\n";
+		$wpdb->query( $wpdb->prepare( "ALTER TABLE %i DROP COLUMN duration_ms", $t ) );
+		$t0 = microtime( true );
+		aafm_install_activity_log();
+		echo "upgrade=" . round( ( microtime( true ) - $t0 ) * 1000 ) . "\n";
+		echo "schema_ok=" . ( aafm_activity_log_schema_verify() ? "1" : "0" ) . "\n";' 2>/dev/null)
+	if [ -z "$out" ]; then
+		fail logscale "the 50,000-row seed and timing run produced no output"
+		return 0
+	fi
+	while IFS== read -r name ms; do
+		[ -n "$name" ] || continue
+		if [ "$name" = schema_ok ]; then
+			if [ "$ms" = 1 ]; then pass logscale "schema verifies after the timed v6 upgrade"; else fail logscale "schema did not verify after the timed upgrade"; fi
+		elif [ "$ms" -gt 5000 ] 2>/dev/null; then
+			fail logscale "$name took ${ms} ms on 50,000 rows (hard limit 5000)"
+		elif [ "$ms" -gt 1000 ] 2>/dev/null; then
+			known logscale "$name took ${ms} ms on 50,000 rows (soft limit 1000)"
+		else
+			pass logscale "$name took ${ms} ms on 50,000 rows"
+		fi
+	done <<EOF
+$out
+EOF
+	log_ok logscale '50,000-row log'
+}
+
+# leg_notify: real flips send real (captured) mail, throttle holds, the digest cron sends once, the
+# admin notice shows, and WP_DEBUG stays clean. Mail is captured by a mu-plugin; nothing leaves the box.
+leg_notify() {
+	local mailfile="$SMOKE_ROOT/wp-content/mail.jsonl" mu="$SMOKE_ROOT/wp-content/mu-plugins/smoke-mail.php" jar="$SMOKE_ROOT/jar.txt" n subj
+	mkdir -p "$SMOKE_ROOT/wp-content/mu-plugins"
+	set_state notify 'ours only' "[\"$OURS\"]" true 0 || return 0
+	cat > "$mu" <<'PHP'
+<?php
+// Capture instead of send. Smoke gate only.
+add_filter( 'pre_wp_mail', function ( $pre, $atts ) {
+	file_put_contents( WP_CONTENT_DIR . '/mail.jsonl', wp_json_encode( array( 'to' => $atts['to'], 'subject' => $atts['subject'], 'body' => $atts['message'], 'headers' => $atts['headers'] ) ) . "\n", FILE_APPEND );
+	return true;
+}, 10, 2 );
+PHP
+	rm -f "$mailfile"
+	W eval 'delete_option( "aafm_notify_pending" ); delete_option( "aafm_notify_queue" ); foreach ( array( "aafm_ntf_global" ) as $t ) { delete_transient( $t ); }' >/dev/null 2>&1
+	W option update aafm_notifications '{"mode":"immediate","email":"owner@example.com","triggers":{"new_app":true,"risky_run":true,"denial_burst":true,"switch_flip":true}}' --format=json >/dev/null 2>&1
+
+	W eval 'wp_set_current_user( 1 ); $b = aafm_read_only_mode_stored(); aafm_set_read_only_mode( true ); aafm_log_read_only_switch_change( $b, true, true );' >/dev/null 2>&1
+	n=$(wc -l < "$mailfile" 2>/dev/null | tr -d ' ')
+	subj=$(head -1 "$mailfile" 2>/dev/null | jq -r '.subject' 2>/dev/null)
+	if [ "$n" = 1 ] && echo "$subj" | grep -q 'Read-only mode was turned on'; then
+		pass notify "a real read-only flip sent one mail: $subj"
+	else
+		fail notify "after a read-only flip: $n mail(s), subject '$subj'"
+	fi
+	if head -1 "$mailfile" 2>/dev/null | jq -e '.to == "owner@example.com" and (.body | contains("tab=activity&row=")) and (.body | test("<[a-z]") | not) and (.headers == "" or .headers == [] or .headers == null)' >/dev/null 2>&1; then
+		pass notify "the mail goes to the saved address, links the log row, carries no markup and no custom headers"
+	else
+		fail notify "mail shape: $(head -1 "$mailfile" | head -c 300)"
+	fi
+
+	W eval 'wp_set_current_user( 1 ); aafm_set_read_only_mode( false ); aafm_log_read_only_switch_change( true, false, true ); aafm_set_read_only_mode( true ); aafm_log_read_only_switch_change( false, true, true );' >/dev/null 2>&1
+	n=$(wc -l < "$mailfile" 2>/dev/null | tr -d ' ')
+	if [ "$n" = 2 ]; then
+		pass notify "the off flip mailed, the repeated on flip was throttled (2 mails)"
+	else
+		fail notify "after off then on again: $n mail(s), wanted 2"
+	fi
+	W eval 'aafm_set_read_only_mode( false );' >/dev/null 2>&1
+
+	admin_login "$jar"
+	curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/page.html" "$URL/wp-admin/index.php"
+	if grep -q 'View in Activity Log' "$SMOKE_ROOT/page.html"; then
+		pass notify "the admin notice shows on the dashboard"
+	else
+		fail notify "no admin notice on the dashboard after two alerts"
+	fi
+
+	W option update aafm_notifications '{"mode":"digest","email":"owner@example.com","triggers":{"new_app":true,"risky_run":true,"denial_burst":true,"switch_flip":true}}' --format=json >/dev/null 2>&1
+	W eval 'aafm_notify_sync_schedule(); aafm_log_high_risk_switch_change( false, true, true );' >/dev/null 2>&1
+	n=$(wc -l < "$mailfile" 2>/dev/null | tr -d ' ')
+	if [ "$n" = 2 ] && [ "$(W eval 'echo count( aafm_notify_queue_list() );' 2>/dev/null)" = 1 ]; then
+		pass notify "digest mode queues instead of mailing"
+	else
+		fail notify "digest mode: $n mail(s), queue '$(W eval 'echo count( aafm_notify_queue_list() );' 2>/dev/null)'"
+	fi
+	W cron event run aafm_notifications_digest >/dev/null 2>&1
+	n=$(wc -l < "$mailfile" 2>/dev/null | tr -d ' ')
+	if [ "$n" = 3 ] && tail -1 "$mailfile" | jq -r '.subject' | grep -q 'daily summary' && [ "$(W eval 'echo count( aafm_notify_queue_list() );' 2>/dev/null)" = 0 ]; then
+		pass notify "the digest cron event sent one summary and cleared the queue"
+	else
+		fail notify "digest run: $n mail(s), last '$(tail -1 "$mailfile" | jq -r '.subject' 2>/dev/null)'"
+	fi
+
+	W option delete aafm_notifications >/dev/null 2>&1
+	W eval 'wp_clear_scheduled_hook( "aafm_notifications_digest" ); delete_option( "aafm_notify_pending" ); delete_option( "aafm_notify_queue" );' >/dev/null 2>&1
+	rm -f "$mu" "$mailfile"
+	log_ok notify 'Notifications'
+}
+
 setup_site || { fail setup "could not build the disposable site at $SMOKE_ROOT"; finish; }
 start_server || finish
 if [ "$SHOTS" = 1 ]; then shots_mode; finish; fi
@@ -926,4 +1120,7 @@ leg_upgrade
 leg_default_server
 leg_brief
 leg_doctor
+leg_log
+leg_logscale
+leg_notify
 finish

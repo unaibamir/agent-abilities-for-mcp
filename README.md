@@ -338,7 +338,7 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 ## Changelog
 ### 1.8.1
 
-* **Fix:** Bridged tools whose dates carry no timezone, such as WooCommerce orders, failed in strict clients like Claude. Bridged tools no longer advertise a strict date format, and the dates themselves are unchanged.
+* **Fix:** Bridged tools such as WooCommerce orders and products failed in strict clients like Claude when a value didn't match the format the source plugin declared, for example a date without a timezone or an empty URL. Bridged tools no longer advertise strict formats; the values are unchanged.
 
 ### 1.8.0
 

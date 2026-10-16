@@ -46,10 +46,12 @@ function aafm_activity_plugin_groups(): array {
  * @return string|null
  */
 function aafm_activity_valid_date( $value ): ?string {
-	if ( ! is_string( $value ) || 1 !== preg_match( '/^(\d{4})-(\d{2})-(\d{2})\z/', $value, $m ) || ! checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ) {
+	if ( ! is_string( $value ) ) {
 		return null;
 	}
-	return $value;
+	// The format round trip rejects 2024-1-5, 2024-02-30 and trailing text; year 0000 is not a date.
+	$date = \DateTime::createFromFormat( '!Y-m-d', $value );
+	return $date && $date->format( 'Y-m-d' ) === $value && '0000' !== substr( $value, 0, 4 ) ? $value : null;
 }
 
 /**
@@ -174,23 +176,13 @@ function aafm_activity_filter_where( array $filters ): array {
 		} elseif ( 'core' === $f['plugin'] ) {
 			$sql     .= ' AND ability LIKE %s';
 			$params[] = $wpdb->esc_like( 'aafm/' ) . '%';
-			$members  = array();
-			foreach ( $integration as $rows ) {
-				foreach ( $rows as $row ) {
-					$members[] = (string) $row['name'];
-				}
-			}
+			$members  = array_merge( array(), ...array_values( array_map( static fn( array $rows ): array => array_column( $rows, 'name' ), $integration ) ) );
 			if ( array() !== $members ) {
 				$sql   .= ' AND ability NOT IN (' . implode( ',', array_fill( 0, count( $members ), '%s' ) ) . ')';
 				$params = array_merge( $params, $members );
 			}
 		} elseif ( isset( $integration[ $f['plugin'] ] ) ) {
-			$members = array_map(
-				static function ( array $row ): string {
-					return (string) $row['name'];
-				},
-				$integration[ $f['plugin'] ]
-			);
+			$members = array_column( $integration[ $f['plugin'] ], 'name' );
 			$sql    .= ' AND ability IN (' . implode( ',', array_fill( 0, count( $members ), '%s' ) ) . ')';
 			$params  = array_merge( $params, $members );
 		}

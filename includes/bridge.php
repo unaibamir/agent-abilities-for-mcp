@@ -334,10 +334,10 @@ function aafm_bridge_permission_state( string $foreign_slug, $input ): string {
 }
 
 /**
- * The foreign ability's output schema as it declared it, minus date formats - or null when it exposes none.
+ * The foreign ability's output schema as it declared it, minus `format` keywords - or null when it exposes none.
  *
- * Date, time and date-time `format` keywords are stripped from the advertised copy (see
- * aafm_strip_date_formats()); nothing else is rewritten.
+ * Every `format` keyword is stripped from the advertised copy (see aafm_strip_output_formats());
+ * nothing else is rewritten.
  *
  * Deliberately NOT routed through aafm_normalize_json_schema(). That function is INPUT-oriented:
  * a call's arguments are always a JSON object, so it defaults a typeless schema to type:object. An
@@ -369,46 +369,70 @@ function aafm_bridge_output_schema( $ability ): ?array {
 	if ( ! is_array( $schema ) || array() === $schema ) {
 		return null;
 	}
-	return aafm_strip_date_formats( aafm_prepare_bridge_schema_for_client( $schema ) );
+	return aafm_strip_output_formats( aafm_prepare_bridge_schema_for_client( $schema ) );
 }
 
 /**
- * Drop the date, time and date-time `format` keywords from a foreign OUTPUT schema, at any depth.
+ * Drop every `format` keyword from a foreign OUTPUT schema, at any depth.
  *
- * Third-party abilities often return date strings without a UTC offset (WooCommerce's order dates are
- * Y-m-d\TH:i:s) while declaring format:date-time. Core validates `format` leniently, so the call works in
- * process, but strict MCP clients check structuredContent against the advertised outputSchema with
- * ajv-formats and reject the whole result. Only the advertised copy is rewritten: the source ability keeps
- * its schema, so core's server-side validation is unchanged, and the values themselves are not touched.
+ * Third-party abilities declare formats their own data does not honour: WooCommerce's order dates are
+ * Y-m-d\TH:i:s under format:date-time, and a product's external_url is format:uri yet may be empty, a
+ * relative path or a unicode URL. Core validates `format` leniently, so the call works in process, but
+ * strict MCP clients check structuredContent against the advertised outputSchema with a format-aware
+ * validator and reject the whole result over one field. We do not control that data and a format is only
+ * advisory on output, so none is advertised. Only the advertised copy is rewritten: the source ability
+ * keeps its schema, so core's server-side validation is unchanged, the values are not touched, and the
+ * input schema keeps its formats.
+ *
+ * A node left empty by the strip (it held only a format) cannot stay an empty PHP array, because
+ * json_encode() writes that as `[]`, which is not a schema and crashes validators such as Python
+ * jsonschema. It cannot be a stdClass either: the vendored adapter casts every object in a schema back to
+ * an array (SchemaTransformer::convert_objects_to_arrays()), so `{}` never reaches the wire, and core
+ * reads schema nodes with array syntax, which fatals on an object. So it becomes a node that holds only
+ * a description, which constrains nothing and survives as a JSON object. Maps that are not schemas
+ * themselves (`properties` and the like), enum values, defaults and boolean schemas are never converted.
  *
  * @param mixed $node A schema node, or any value found where one may sit (a boolean additionalProperties).
- * @return mixed The node with those formats removed.
+ * @return mixed The node with its formats removed; a node left empty comes back as a description-only schema.
  */
-function aafm_strip_date_formats( $node ) {
+function aafm_strip_output_formats( $node ) {
 	if ( ! is_array( $node ) ) {
 		return $node;
 	}
-	if ( isset( $node['format'] ) && in_array( $node['format'], array( 'date-time', 'date', 'time' ), true ) ) {
-		unset( $node['format'] );
-	}
-	// Keywords holding a map or a list of subschemas: strip each child.
-	foreach ( array( 'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'anyOf', 'oneOf', 'allOf', 'prefixItems' ) as $key ) {
+	unset( $node['format'] );
+	// Keywords holding a map of subschemas keyed by name: strip each child, keep the map an array.
+	foreach ( array( 'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas' ) as $key ) {
 		if ( isset( $node[ $key ] ) && is_array( $node[ $key ] ) ) {
-			$node[ $key ] = array_map( 'aafm_strip_date_formats', $node[ $key ] );
+			$node[ $key ] = array_map( 'aafm_strip_output_formats', $node[ $key ] );
 		}
 	}
-	// Keywords holding one subschema. `items` may also be a tuple-form list (a schema never has key 0).
+	// draft-07 `dependencies`: each value is a subschema or a list of property names. Only a schema is walked.
+	if ( isset( $node['dependencies'] ) && is_array( $node['dependencies'] ) ) {
+		foreach ( $node['dependencies'] as $name => $dependency ) {
+			if ( is_array( $dependency ) && array() !== $dependency && ! isset( $dependency[0] ) ) {
+				$node['dependencies'][ $name ] = aafm_strip_output_formats( $dependency );
+			}
+		}
+	}
+	// Keywords holding a list of subschemas.
+	foreach ( array( 'anyOf', 'oneOf', 'allOf', 'prefixItems' ) as $key ) {
+		if ( isset( $node[ $key ] ) && is_array( $node[ $key ] ) ) {
+			$node[ $key ] = array_map( 'aafm_strip_output_formats', $node[ $key ] );
+		}
+	}
+	// `items` is one subschema, or a tuple-form list (a schema never has key 0).
 	if ( isset( $node['items'] ) && is_array( $node['items'] ) && isset( $node['items'][0] ) ) {
-		$node['items'] = array_map( 'aafm_strip_date_formats', $node['items'] );
+		$node['items'] = array_map( 'aafm_strip_output_formats', $node['items'] );
 	} elseif ( isset( $node['items'] ) ) {
-		$node['items'] = aafm_strip_date_formats( $node['items'] );
+		$node['items'] = aafm_strip_output_formats( $node['items'] );
 	}
-	foreach ( array( 'additionalProperties', 'not', 'if', 'then', 'else', 'contains', 'propertyNames', 'additionalItems' ) as $key ) {
+	// Keywords holding one subschema (or a boolean, which passes through).
+	foreach ( array( 'additionalProperties', 'unevaluatedProperties', 'unevaluatedItems', 'additionalItems', 'contentSchema', 'not', 'if', 'then', 'else', 'contains', 'propertyNames' ) as $key ) {
 		if ( isset( $node[ $key ] ) ) {
-			$node[ $key ] = aafm_strip_date_formats( $node[ $key ] );
+			$node[ $key ] = aafm_strip_output_formats( $node[ $key ] );
 		}
 	}
-	return $node;
+	return array() === $node ? array( 'description' => 'Any value.' ) : $node;
 }
 
 /**

@@ -1407,12 +1407,12 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * A third-party ability that declares format:date-time but returns a date with no offset (WooCommerce does
-	 * this) is rejected by strict MCP clients validating structuredContent against the advertised schema. The
-	 * advertised schema drops date-ish formats at any depth, keeps type and every other format, and the call
-	 * itself still succeeds with the value unchanged.
+	 * A third-party ability that declares a format its data does not honour (WooCommerce returns dates with no
+	 * offset under format:date-time, and a product URL that may be empty under format:uri) is rejected by strict
+	 * MCP clients validating structuredContent against the advertised schema. The advertised schema drops every
+	 * format at any depth, keeps type, and the call itself still succeeds with the value unchanged.
 	 */
-	public function test_advertised_output_schema_drops_date_formats_but_keeps_type_and_other_formats(): void {
+	public function test_advertised_output_schema_drops_every_format_but_keeps_type(): void {
 		$this->acting_as( 'administrator' );
 		$this->register_foreign_with_schema(
 			'vendor/orders-query',
@@ -1444,6 +1444,10 @@ final class BridgeWrapperTest extends TestCase {
 									'type'   => 'string',
 									'format' => 'email',
 								),
+								'custom'       => array(
+									'type'   => 'string',
+									'format' => 'x-vendor-sku',
+								),
 								'either'       => array(
 									'anyOf' => array(
 										array(
@@ -1466,6 +1470,7 @@ final class BridgeWrapperTest extends TestCase {
 						'at_time'      => '09:30:00',
 						'link'         => 'https://example.com/o/1',
 						'email'        => 'a@example.com',
+						'custom'       => 'SKU-1',
 						'either'       => '2026-10-16T09:30:00',
 					),
 				),
@@ -1484,8 +1489,9 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertArrayNotHasKey( 'format', $props['at_time'] );
 		$this->assertArrayNotHasKey( 'format', $props['either']['anyOf'][0] );
 		$this->assertSame( 'string', $props['either']['anyOf'][0]['type'] );
-		$this->assertSame( 'uri', $props['link']['format'], 'Non-date formats are left alone.' );
-		$this->assertSame( 'email', $props['email']['format'], 'Non-date formats are left alone.' );
+		$this->assertSame( array( 'type' => 'string' ), $props['link'], 'A uri format is dropped.' );
+		$this->assertSame( array( 'type' => 'string' ), $props['email'], 'An email format is dropped.' );
+		$this->assertSame( array( 'type' => 'string' ), $props['custom'], 'An unknown custom format is dropped.' );
 
 		$result = $wrapper->execute( array() );
 		$this->assertIsArray( $result, 'The call still succeeds.' );
@@ -1499,10 +1505,10 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * Every container keyword a date field can sit under is walked, and a later sibling with a format that is
-	 * not a date is never collateral.
+	 * Every container keyword a formatted field can sit under is walked, and a sibling's own format is
+	 * stripped too.
 	 */
-	public function test_date_formats_are_stripped_under_every_schema_container_keyword(): void {
+	public function test_formats_are_stripped_under_every_schema_container_keyword(): void {
 		$date = array(
 			'type'   => 'string',
 			'format' => 'date-time',
@@ -1511,7 +1517,7 @@ final class BridgeWrapperTest extends TestCase {
 			'type'   => 'string',
 			'format' => 'uri',
 		);
-		$out  = aafm_strip_date_formats(
+		$out  = aafm_strip_output_formats(
 			array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -1543,7 +1549,7 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( array( 'type' => 'string' ), $out['additionalProperties'] );
 		$this->assertSame( array( 'type' => 'string' ), $out['items'] );
 		$this->assertSame( array( 'type' => 'string' ), $out['prefixItems'][0] );
-		$this->assertSame( 'uri', $out['prefixItems'][1]['format'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['prefixItems'][1] );
 		$this->assertSame( array( 'type' => 'string' ), $out['oneOf'][0] );
 		$this->assertSame( array( 'type' => 'string' ), $out['allOf'][0]['properties']['deep']['items'] );
 		$this->assertSame( array( 'type' => 'string' ), $out['anyOf'][0] );
@@ -1554,17 +1560,17 @@ final class BridgeWrapperTest extends TestCase {
 		foreach ( array( 'not', 'if', 'then', 'else', 'contains', 'propertyNames', 'additionalItems' ) as $single ) {
 			$this->assertSame( array( 'type' => 'string' ), $out[ $single ], "{$single} is walked." );
 		}
-		$this->assertSame( 'uri', $out['properties']['link']['format'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['properties']['link'] );
 
 		// Tuple-form items, and a boolean additionalProperties, pass through without error.
-		$tuple = aafm_strip_date_formats(
+		$tuple = aafm_strip_output_formats(
 			array(
 				'items'                => array( $date, $kept ),
 				'additionalProperties' => false,
 			)
 		);
 		$this->assertSame( array( 'type' => 'string' ), $tuple['items'][0] );
-		$this->assertSame( 'uri', $tuple['items'][1]['format'] );
+		$this->assertSame( array( 'type' => 'string' ), $tuple['items'][1] );
 		$this->assertFalse( $tuple['additionalProperties'] );
 	}
 
@@ -1612,10 +1618,10 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * Only the OUTPUT schema is rewritten. An input schema is what the agent must send, so its date-time
-	 * format is left exactly as the foreign ability declared it.
+	 * Only the OUTPUT schema is rewritten. An input schema is what the agent must send, so its formats are
+	 * left exactly as the foreign ability declared them.
 	 */
-	public function test_wrapper_input_schema_keeps_its_date_time_format(): void {
+	public function test_wrapper_input_schema_keeps_its_formats(): void {
 		$this->acting_as( 'administrator' );
 		$this->register_foreign_with_schema(
 			'vendor/dated-input',
@@ -1631,6 +1637,14 @@ final class BridgeWrapperTest extends TestCase {
 						'type'   => 'string',
 						'format' => 'date-time',
 					),
+					'link'  => array(
+						'type'   => 'string',
+						'format' => 'uri',
+					),
+					'mail'  => array(
+						'type'   => 'string',
+						'format' => 'email',
+					),
 				),
 			)
 		);
@@ -1640,6 +1654,131 @@ final class BridgeWrapperTest extends TestCase {
 		$input = wp_get_ability( 'aafm-bridge/vendor-dated-input' )->get_input_schema();
 
 		$this->assertSame( 'date-time', $input['properties']['since']['format'] );
+		$this->assertSame( 'uri', $input['properties']['link']['format'] );
+		$this->assertSame( 'email', $input['properties']['mail']['format'] );
+	}
+
+	/**
+	 * A node whose only keyword was `format` is emptied, and an empty PHP array would json-encode as `[]`, which
+	 * is not a schema and crashes validators such as Python jsonschema. It must come out as a JSON object, in
+	 * items, in an anyOf entry, in additionalProperties and as a property schema. The vendored adapter casts
+	 * any stdClass back to an array, so the node is a description-only schema, not an empty object. A boolean
+	 * schema, a property map and a default or enum value are never converted.
+	 */
+	public function test_an_emptied_node_encodes_as_an_object_never_an_array(): void {
+		$out  = aafm_strip_output_formats(
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'list'   => array(
+						'type'  => 'array',
+						'items' => array( 'format' => 'date-time' ),
+					),
+					'either' => array(
+						'anyOf' => array( array( 'format' => 'date-time' ), array( 'type' => 'null' ) ),
+					),
+					'map'    => array(
+						'type'                 => 'object',
+						'additionalProperties' => array( 'format' => 'uri' ),
+					),
+					'closed' => array(
+						'type'                 => 'object',
+						'additionalProperties' => false,
+					),
+					'bare'   => array( 'format' => 'email' ),
+					'kept'   => array(
+						'type'    => 'array',
+						'default' => array(),
+						'enum'    => array( array(), array( 'format' => 'uri' ) ),
+					),
+				),
+			)
+		);
+		$json = (string) wp_json_encode( $out );
+
+		$placeholder = '{"description":"Any value."}';
+		$this->assertStringContainsString( '"items":' . $placeholder, $json );
+		$this->assertStringContainsString( '"anyOf":[' . $placeholder . ',{"type":"null"}]', $json );
+		$this->assertStringContainsString( '"additionalProperties":' . $placeholder, $json );
+		$this->assertStringContainsString( '"bare":' . $placeholder, $json );
+		$this->assertStringContainsString( '"additionalProperties":false', $json, 'A boolean schema is not converted.' );
+		$this->assertStringContainsString( '"default":[]', $json, 'A default value is data, not a schema.' );
+		$this->assertStringContainsString( '"enum":[[],{"format":"uri"}]', $json, 'Enum values are data, not schemas.' );
+		$this->assertStringNotContainsString( '"properties":[]', $json );
+		$this->assertStringNotContainsString( '"items":[]', $json );
+		$this->assertStringNotContainsString( '"anyOf":[[]', $json );
+	}
+
+	/**
+	 * The emptied-node rule holds on the schema a registered wrapper actually advertises, not only in the helper.
+	 */
+	public function test_wrapper_advertises_emptied_nodes_as_objects(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/only-formats',
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'dates' => array(
+						'type'  => 'array',
+						'items' => array( 'format' => 'date-time' ),
+					),
+				),
+			),
+			// Empty list: core's own validator warns on a typeless items schema, which the fixture is not about.
+			static fn(): array => array( 'dates' => array() )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/only-formats' ) );
+		$this->register_wrappers();
+
+		$wrapper = wp_get_ability( 'aafm-bridge/vendor-only-formats' );
+		$this->assertNotNull( $wrapper );
+		$json = (string) wp_json_encode( $wrapper->get_output_schema() );
+		$this->assertStringContainsString( '"items":{"description":"Any value."}', $json );
+		$this->assertStringNotContainsString( '"items":[]', $json );
+		$this->assertIsArray( $wrapper->execute( array() ), 'The call still succeeds.' );
+	}
+
+	/**
+	 * A draft-07 `dependencies` value is a subschema or a list of property names; only a schema is walked.
+	 * unevaluatedProperties, unevaluatedItems and contentSchema each hold a subschema and are walked too.
+	 */
+	public function test_dependencies_and_unevaluated_keywords_are_walked(): void {
+		$out = aafm_strip_output_formats(
+			array(
+				'type'                  => 'object',
+				'dependencies'          => array(
+					'names'  => array( 'b', 'c' ),
+					'schema' => array(
+						'properties' => array(
+							'z' => array(
+								'type'   => 'string',
+								'format' => 'date-time',
+							),
+						),
+					),
+					'bare'   => array( 'format' => 'uri' ),
+					'none'   => array(),
+				),
+				'unevaluatedProperties' => array(
+					'type'   => 'string',
+					'format' => 'date-time',
+				),
+				'unevaluatedItems'      => array( 'format' => 'uri' ),
+				'contentSchema'         => array(
+					'type'   => 'string',
+					'format' => 'email',
+				),
+			)
+		);
+
+		$this->assertSame( array( 'b', 'c' ), $out['dependencies']['names'], 'A list of property names is left alone.' );
+		$this->assertSame( array(), $out['dependencies']['none'], 'An empty names list is left alone.' );
+		$this->assertSame( array( 'type' => 'string' ), $out['dependencies']['schema']['properties']['z'] );
+		$this->assertSame( array( 'description' => 'Any value.' ), $out['dependencies']['bare'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['unevaluatedProperties'] );
+		$this->assertSame( array( 'description' => 'Any value.' ), $out['unevaluatedItems'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['contentSchema'] );
 	}
 
 	/**

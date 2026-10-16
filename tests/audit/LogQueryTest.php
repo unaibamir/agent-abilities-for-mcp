@@ -195,12 +195,12 @@ final class LogQueryTest extends TestCase {
 		}
 	}
 
-	public function test_the_legacy_wrappers_keep_their_contract(): void {
+	public function test_the_count_takes_a_status_or_nothing(): void {
 		$this->log( 'aafm/get-posts', 'denied' );
 		$this->log( 'aafm/get-posts', 'success' );
-		$this->assertSame( 1, aafm_activity_count_filtered( 'denied' ) );
-		$this->assertSame( 2, aafm_activity_count_filtered( null ) );
-		$this->assertSame( 2, aafm_activity_count_filtered( '' ) );
+		$this->assertSame( 1, aafm_activity_count_matching( array( 'status' => 'denied' ) ) );
+		$this->assertSame( 2, aafm_activity_count_matching( array() ) );
+		$this->assertSame( 2, aafm_activity_count_matching( array( 'status' => '' ) ) );
 		$this->assertCount(
 			1,
 			aafm_query_activity(

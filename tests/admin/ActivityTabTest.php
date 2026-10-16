@@ -387,23 +387,10 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
-	 * The mapper half of the Started filter: aafm_activity_filter_status() must pass 'started'
-	 * through as a query status, not map it to null (= all rows). This is the innermost of the
-	 * THREE allowlists the value crosses; the AJAX test below covers the outermost, because a
-	 * green here with the AJAX gate still rewriting 'started' to 'all' is a passing test over a
-	 * dead button.
-	 */
-	public function test_the_filter_mapper_passes_started_through(): void {
-		$this->assertSame( 'started', aafm_activity_filter_status( 'started' ) );
-		$this->assertNull( aafm_activity_filter_status( 'all' ) );
-		$this->assertNull( aafm_activity_filter_status( 'bogus' ) );
-	}
-
-	/**
-	 * The end-to-end half: posting filter=started through the real AJAX handler must return only
-	 * the started rows. Without this, the handler's own allowlist coerces the unknown value to
-	 * 'all' and the operator silently gets every row while the mapper unit test above sits green -
-	 * the JS/PHP boundary class that shipped in 1.6.0 past every gate.
+	 * Posting filter=started through the real AJAX handler must return only the started rows.
+	 * Without this, the handler's own allowlist coerces the unknown value to 'all' and the
+	 * operator silently gets every row - the JS/PHP boundary class that shipped in 1.6.0 past
+	 * every gate.
 	 */
 	public function test_the_ajax_page_handler_honours_the_started_filter_end_to_end(): void {
 		$this->acting_as( 'administrator' );

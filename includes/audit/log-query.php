@@ -240,31 +240,21 @@ function aafm_activity_filter_where( array $filters ): array {
 }
 
 /**
- * Count the rows a filter set matches, honest about a failed query.
+ * Count the rows a filter set matches. A failed query counts as 0.
  *
- * @param array<string,mixed> $filters Filters.
- * @return array{ok:bool,value:int}
- */
-function aafm_activity_count_matching_result( array $filters ): array {
-	global $wpdb;
-	$where = aafm_activity_filter_where( $filters );
-	// The fragment holds only fixed text and placeholders; every value is bound below.
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
-	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE ' . $where['sql'], array_merge( array( aafm_activity_log_table() ), $where['params'] ) ) );
-	return array(
-		'ok'    => $view['ok'],
-		'value' => $view['ok'] ? max( 0, (int) $view['value'] ) : 0,
-	);
-}
-
-/**
- * Count the rows a filter set matches.
+ * Routed through aafm_wpdb_scalar() rather than a bare get_var(), so a failed query cannot inherit an
+ * earlier query's value and show a plausible but wrong number.
  *
  * @param array<string,mixed> $filters Filters.
  * @return int
  */
 function aafm_activity_count_matching( array $filters ): int {
-	return aafm_activity_count_matching_result( $filters )['value'];
+	global $wpdb;
+	$where = aafm_activity_filter_where( $filters );
+	// The fragment holds only fixed text and placeholders; every value is bound below.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
+	$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE ' . $where['sql'], array_merge( array( aafm_activity_log_table() ), $where['params'] ) ) );
+	return $view['ok'] ? max( 0, (int) $view['value'] ) : 0;
 }
 
 /**

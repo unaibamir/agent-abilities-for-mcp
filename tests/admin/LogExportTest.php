@@ -134,7 +134,7 @@ final class LogExportTest extends TestCase {
 			)
 		);
 
-		$csv = $this->capture_export( 'denied' );
+		$csv = $this->capture_export( array( 'status' => 'denied' ) );
 		$this->assertStringContainsString( 'a/no', $csv );
 		$this->assertStringNotContainsString( 'a/ok', $csv );
 	}
@@ -372,12 +372,12 @@ final class LogExportTest extends TestCase {
 	/**
 	 * Capture aafm_export_activity_csv()'s streamed output.
 	 *
-	 * @param string|null $status Optional status filter, mirrored to the tested call.
+	 * @param array<string,mixed> $filters Optional filter set, passed to the tested call.
 	 * @return string
 	 */
-	private function capture_export( ?string $status = null ): string {
+	private function capture_export( array $filters = array() ): string {
 		ob_start();
-		aafm_export_activity_csv( $status );
+		aafm_export_activity_csv( $filters );
 		return (string) ob_get_clean();
 	}
 

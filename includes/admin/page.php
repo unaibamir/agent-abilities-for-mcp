@@ -185,7 +185,6 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'countNoteOne'             => aafm_activity_count_note( 1, aafm_log_retention_days() ),
 				'countNoteMany'            => aafm_activity_count_note( 2, aafm_log_retention_days() ),
 				// Activity Log: Live view and summary.
-				'liveOn'                   => __( 'Live', 'agent-abilities-for-mcp' ),
 				'liveStopped'              => __( 'Live view stopped.', 'agent-abilities-for-mcp' ),
 				'liveTimedOut'             => __( 'Live view paused after 15 minutes. Turn it on again to keep watching.', 'agent-abilities-for-mcp' ),
 				'livePage'                 => __( 'Live view only follows page 1.', 'agent-abilities-for-mcp' ),
@@ -2833,16 +2832,6 @@ function aafm_activity_page_size(): int {
 }
 
 /**
- * Map a status-filter segment slug to a query status (or null for "all").
- *
- * @param string $filter One of all|started|success|error|denied (anything else falls back to all).
- * @return string|null The status to query on, or null for no status filter.
- */
-function aafm_activity_filter_status( string $filter ): ?string {
-	return in_array( $filter, array( 'started', 'success', 'error', 'denied' ), true ) ? $filter : null;
-}
-
-/**
  * Neutralise a spreadsheet formula prefix in one CSV cell.
  *
  * Every field the log stores is a constrained identifier, so this is defence in depth rather than
@@ -2908,14 +2897,11 @@ function aafm_write_export_failure_row( $out ): void {
  * still looks complete is worse than the request failing outright, so each batch is flushed to
  * the client as soon as it is written rather than held until the whole export finishes.
  *
- * @param array<string,mixed>|string|null $filters Filter set matching the tab's current view; a bare status string or null still works.
+ * @param array<string,mixed> $filters Filter set matching the tab's current view.
  * @return void
  */
-function aafm_export_activity_csv( $filters = null ): void {
-	if ( is_string( $filters ) && '' !== $filters ) {
-		$filters = array( 'status' => $filters );
-	}
-	$filters = is_array( $filters ) ? aafm_activity_filters_normalize( $filters ) : array();
+function aafm_export_activity_csv( array $filters = array() ): void {
+	$filters = aafm_activity_filters_normalize( $filters );
 
 	$columns = array(
 		'created_at',

@@ -212,29 +212,6 @@ final class LogFilterParityTest extends TestCase {
 		$this->assertStringContainsString( 'Removed app (gone-cli)', $csv );
 	}
 
-	public function test_a_status_string_or_null_still_works_for_the_exporter(): void {
-		aafm_log_activity(
-			array(
-				'ability' => 'aafm/get-posts',
-				'status'  => 'denied',
-			)
-		);
-		aafm_log_activity(
-			array(
-				'ability' => 'aafm/get-posts',
-				'status'  => 'success',
-			)
-		);
-		ob_start();
-		aafm_export_activity_csv( 'denied' );
-		$denied = (string) ob_get_clean();
-		ob_start();
-		aafm_export_activity_csv( null );
-		$all = (string) ob_get_clean();
-		$this->assertSame( 2, substr_count( $denied, "\n" ) );
-		$this->assertSame( 3, substr_count( $all, "\n" ) );
-	}
-
 	public function test_the_ajax_handler_refuses_a_user_without_manage_options(): void {
 		$this->post_as( 'editor', array( 'page' => '1' ) );
 		$json = $this->run_handler( 'aafm_ajax_get_log_page' );

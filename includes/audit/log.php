@@ -916,20 +916,6 @@ function aafm_query_activity_result( array $args ): array {
 }
 
 /**
- * Count activity rows, optionally narrowed to a single status.
- *
- * Mirrors the WHERE clause of aafm_query_activity() (minus paging) so a filtered view can
- * compute its own total and page count. A null or empty status counts every row. Delegates to the
- * shared builder, aafm_activity_count_matching().
- *
- * @param string|null $status One of started|success|error|denied, or null/empty for all rows.
- * @return int Non-negative row count for the (optionally filtered) set.
- */
-function aafm_activity_count_filtered( ?string $status = null ): int {
-	return aafm_activity_count_matching( null === $status || '' === $status ? array() : array( 'status' => $status ) );
-}
-
-/**
  * Count rows recording a genuine agent tool call - the "made your first call" signal.
  *
  * The event_type = 'ability_call' filter narrows out every event that carries its own type:

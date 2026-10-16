@@ -40,7 +40,7 @@ final class NotificationClaimsTest extends TestCase {
 	}
 
 	public function test_the_faq_names_the_four_triggers_and_three_modes_the_settings_card_offers(): void {
-		$this->assertSame( array( 'off', 'notice', 'immediate', 'digest' ), aafm_notify_modes() );
+		$this->assertSame( array( 'off', 'notice', 'immediate', 'digest' ), array_keys( aafm_notify_modes() ) );
 		$this->assertCount( 4, aafm_notify_triggers() );
 		$faq = strtolower( $this->faq_entry() );
 		foreach ( array( 'admin notice only', 'email right away', 'daily email', 'application password', 'permanent delete', 'denied calls', 'read-only mode' ) as $phrase ) {

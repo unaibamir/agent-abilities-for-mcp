@@ -104,7 +104,7 @@ final class NotificationsTest extends TestCase {
 			),
 		) as $stored ) {
 			$n = aafm_notifications_normalize( $stored );
-			$this->assertContains( $n['mode'], aafm_notify_modes() );
+			$this->assertArrayHasKey( $n['mode'], aafm_notify_modes() );
 			$this->assertSame( array( 'new_app', 'risky_run', 'denial_burst', 'switch_flip' ), array_keys( $n['triggers'] ) );
 			$this->assertSame( '', $n['email'] );
 		}

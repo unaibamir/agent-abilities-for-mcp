@@ -11,19 +11,19 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Plain, translated name of a mode for the log row and the card.
+ * The slugs of the triggers that went from ticked to unticked between two settings arrays.
  *
- * @param string $mode One of aafm_notify_modes().
- * @return string
+ * @param array<string,mixed> $before Settings before.
+ * @param array<string,mixed> $after  Settings after.
+ * @return list<string>
  */
-function aafm_notify_mode_label( string $mode ): string {
-	$labels = array(
-		'off'       => __( 'Off', 'agent-abilities-for-mcp' ),
-		'notice'    => __( 'Admin notice only', 'agent-abilities-for-mcp' ),
-		'immediate' => __( 'Email right away, plus an admin notice', 'agent-abilities-for-mcp' ),
-		'digest'    => __( 'One email a day, plus an admin notice', 'agent-abilities-for-mcp' ),
+function aafm_notify_triggers_turned_off( array $before, array $after ): array {
+	return array_values(
+		array_filter(
+			array_keys( aafm_notify_triggers() ),
+			static fn( string $slug ): bool => ! empty( $before['triggers'][ $slug ] ) && empty( $after['triggers'][ $slug ] )
+		)
 	);
-	return $labels[ $mode ] ?? $labels['off'];
 }
 
 /**
@@ -36,8 +36,8 @@ function aafm_render_notifications_section(): void {
 
 	ob_start();
 	$select = '<select id="aafm-notify-mode" name="aafm_notify_mode" aria-label="' . esc_attr__( 'How to be told', 'agent-abilities-for-mcp' ) . '">';
-	foreach ( aafm_notify_modes() as $mode ) {
-		$select .= '<option value="' . esc_attr( $mode ) . '"' . selected( $s['mode'], $mode, false ) . '>' . esc_html( aafm_notify_mode_label( $mode ) ) . '</option>';
+	foreach ( aafm_notify_modes() as $mode => $mode_label ) {
+		$select .= '<option value="' . esc_attr( $mode ) . '"' . selected( $s['mode'], $mode, false ) . '>' . esc_html( $mode_label ) . '</option>';
 	}
 	$select .= '</select>';
 	aafm_render_set_row(
@@ -63,7 +63,8 @@ function aafm_render_notifications_section(): void {
 		)
 	);
 
-	foreach ( aafm_notify_triggers() as $slug => $label ) {
+	foreach ( aafm_notify_triggers() as $slug => $trigger ) {
+		$label = $trigger['label'];
 		aafm_render_set_row(
 			array(
 				'label'   => $label,
@@ -103,18 +104,17 @@ function aafm_log_notifications_change( array $before, array $after ): void {
 	if ( $before === $after ) {
 		return;
 	}
-	$user    = wp_get_current_user();
-	$details = array(
+	$user     = wp_get_current_user();
+	$triggers = aafm_notify_triggers();
+	$details  = array(
 		/* translators: %s: the notification mode, for example "Off". */
-		sprintf( __( 'Notifications set to: %s', 'agent-abilities-for-mcp' ), aafm_notify_mode_label( (string) $after['mode'] ) ),
+		sprintf( __( 'Notifications set to: %s', 'agent-abilities-for-mcp' ), aafm_notify_modes()[ $after['mode'] ] ?? '' ),
 	);
 	// Every trigger that went from on to off gets a row of its own that names it, so unticking one is
 	// visible in the log and not only as a changed mode line.
-	foreach ( aafm_notify_trigger_phrases() as $slug => $phrase ) {
-		if ( ! empty( $before['triggers'][ $slug ] ) && empty( $after['triggers'][ $slug ] ) ) {
-			/* translators: %s: what the alerts covered, for example "new apps and Application Passwords". */
-			$details[] = sprintf( __( 'Notifications: alerts for %s turned off', 'agent-abilities-for-mcp' ), $phrase );
-		}
+	foreach ( aafm_notify_triggers_turned_off( $before, $after ) as $slug ) {
+		/* translators: %s: what the alerts covered, for example "new apps and Application Passwords". */
+		$details[] = sprintf( __( 'Notifications: alerts for %s turned off', 'agent-abilities-for-mcp' ), $triggers[ $slug ]['phrase'] );
 	}
 	foreach ( $details as $detail ) {
 		aafm_log_activity(
@@ -128,6 +128,30 @@ function aafm_log_notifications_change( array $before, array $after ): void {
 			)
 		);
 	}
+}
+
+/**
+ * Mail one warning to the old address, throttled per kind, through the governance pool.
+ *
+ * @param string                         $email        The old address.
+ * @param string                         $kind         "trigger:subtype" of the warning.
+ * @param string                         $closing      The closing paragraph.
+ * @param bool                           $per_address  Whether the throttle key carries a hash of the address.
+ * @param array<int,array<string,mixed>> $rides_along  Further events that ride in the same message.
+ * @return void
+ */
+function aafm_notify_warn_old_address( string $email, string $kind, string $closing, bool $per_address, array $rides_along = array() ): void {
+	$bucket = $per_address ? $kind . ':' . substr( md5( strtolower( $email ) ), 0, 12 ) : $kind;
+	if ( ! aafm_notify_take_slot( $bucket )['allowed'] ) {
+		return;
+	}
+	list( $trigger, $subtype ) = explode( ':', $kind, 2 );
+	$event                     = array(
+		'trigger' => $trigger,
+		'subtype' => $subtype,
+		'time'    => time(),
+	);
+	aafm_notify_send_later( $email, array_merge( array( $event ), $rides_along ), false, $closing, 'governance', array(), $bucket );
 }
 
 /**
@@ -150,14 +174,12 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 		$still_emailing = in_array( $after['mode'], array( 'immediate', 'digest' ), true );
 		$kinds          = array();
 		$turned_off     = array();
-		foreach ( array_keys( aafm_notify_trigger_phrases() ) as $slug ) {
-			if ( ! empty( $before['triggers'][ $slug ] ) && empty( $after['triggers'][ $slug ] ) ) {
-				$turned_off[] = array(
-					'trigger' => 'settings',
-					'subtype' => aafm_notify_trigger_off_subtype( $slug ),
-					'time'    => time(),
-				);
-			}
+		foreach ( aafm_notify_triggers_turned_off( $before, $after ) as $slug ) {
+			$turned_off[] = array(
+				'trigger' => 'settings',
+				'subtype' => $slug . '_off',
+				'time'    => time(),
+			);
 		}
 		// An address or mode change would otherwise be the only thing the old address hears about, so the
 		// triggers unticked in the same save ride in the same message.
@@ -176,24 +198,12 @@ function aafm_notify_settings_weakened( array $before, array $after ): void {
 		foreach ( $kinds as $kind ) {
 			// The throttle key carries a hash of the OLD address, so A to B and then B to C inside the window
 			// still warns B: one address's warning never swallows another's.
-			$bucket = $kind . ':' . substr( md5( strtolower( (string) $before['email'] ) ), 0, 12 );
-			if ( ! aafm_notify_take_slot( $bucket )['allowed'] ) {
-				continue;
-			}
-			list( $trigger, $subtype ) = explode( ':', $kind, 2 );
-			$event                     = array(
-				'trigger' => $trigger,
-				'subtype' => $subtype,
-				'time'    => time(),
-			);
-			aafm_notify_send_later(
+			aafm_notify_warn_old_address(
 				(string) $before['email'],
-				array_merge( array( $event ), $rides_along ),
-				false,
+				$kind,
 				__( 'If you did not make this change, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
-				'governance',
-				array(),
-				$bucket
+				true,
+				$rides_along
 			);
 		}
 	} catch ( \Throwable $e ) {
@@ -234,25 +244,11 @@ function aafm_notify_reset_warning( array $before, bool $read_only, bool $unlock
 		}
 		foreach ( $kinds as $kind ) {
 			// The flip kinds use the buckets a live flip uses, so a flip already mailed this window is not repeated.
-			$bucket = 'settings:plugin_reset' === $kind ? $kind . ':' . substr( md5( strtolower( (string) $before['email'] ) ), 0, 12 ) : $kind;
-			if ( ! aafm_notify_take_slot( $bucket )['allowed'] ) {
-				continue;
-			}
-			list( $trigger, $subtype ) = explode( ':', $kind, 2 );
-			aafm_notify_send_later(
+			aafm_notify_warn_old_address(
 				(string) $before['email'],
-				array(
-					array(
-						'trigger' => $trigger,
-						'subtype' => $subtype,
-						'time'    => time(),
-					),
-				),
-				false,
+				$kind,
 				__( 'If you did not do this, review who can sign in as an administrator.', 'agent-abilities-for-mcp' ),
-				'governance',
-				array(),
-				$bucket
+				'settings:plugin_reset' === $kind
 			);
 		}
 		if ( array() !== $queue ) {

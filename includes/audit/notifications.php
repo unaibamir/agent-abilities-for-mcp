@@ -43,50 +43,44 @@ if ( ! defined( 'AAFM_NOTIFY_PENDING_MAX' ) ) {
 }
 
 /**
- * The delivery modes, in the order the Settings select shows them.
+ * The delivery modes, in the order the Settings select shows them: slug => plain, translated name.
  *
- * @return list<string>
+ * @return array<string,string>
  */
 function aafm_notify_modes(): array {
-	return array( 'off', 'notice', 'immediate', 'digest' );
+	return array(
+		'off'       => __( 'Off', 'agent-abilities-for-mcp' ),
+		'notice'    => __( 'Admin notice only', 'agent-abilities-for-mcp' ),
+		'immediate' => __( 'Email right away, plus an admin notice', 'agent-abilities-for-mcp' ),
+		'digest'    => __( 'One email a day, plus an admin notice', 'agent-abilities-for-mcp' ),
+	);
 }
 
 /**
- * The four trigger switches: slug => label.
+ * The four trigger switches: slug => the Settings label and the phrase for "alerts for ...".
+ * The event subtype for "alerts for this trigger were turned off" is the slug plus "_off".
  *
- * @return array<string,string>
+ * @return array<string,array{label:string,phrase:string}>
  */
 function aafm_notify_triggers(): array {
 	return array(
-		'new_app'      => __( 'A new app is approved to connect, or an Application Password is created', 'agent-abilities-for-mcp' ),
-		'risky_run'    => __( 'A high-risk tool, or one that deletes permanently, runs', 'agent-abilities-for-mcp' ),
-		'denial_burst' => __( 'A burst of denied calls, or a connection hits the rate limit', 'agent-abilities-for-mcp' ),
-		'switch_flip'  => __( 'Read-only mode or the high-risk lock is switched', 'agent-abilities-for-mcp' ),
+		'new_app'      => array(
+			'label'  => __( 'A new app is approved to connect, or an Application Password is created', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'new apps and Application Passwords', 'agent-abilities-for-mcp' ),
+		),
+		'risky_run'    => array(
+			'label'  => __( 'A high-risk tool, or one that deletes permanently, runs', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'high-risk and permanent-delete runs', 'agent-abilities-for-mcp' ),
+		),
+		'denial_burst' => array(
+			'label'  => __( 'A burst of denied calls, or a connection hits the rate limit', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'denied-call bursts and rate limits', 'agent-abilities-for-mcp' ),
+		),
+		'switch_flip'  => array(
+			'label'  => __( 'Read-only mode or the high-risk lock is switched', 'agent-abilities-for-mcp' ),
+			'phrase' => __( 'read-only and high-risk switch changes', 'agent-abilities-for-mcp' ),
+		),
 	);
-}
-
-/**
- * What each trigger covers, as a phrase for "alerts for ...": slug => phrase.
- *
- * @return array<string,string>
- */
-function aafm_notify_trigger_phrases(): array {
-	return array(
-		'new_app'      => __( 'new apps and Application Passwords', 'agent-abilities-for-mcp' ),
-		'risky_run'    => __( 'high-risk and permanent-delete runs', 'agent-abilities-for-mcp' ),
-		'denial_burst' => __( 'denied-call bursts and rate limits', 'agent-abilities-for-mcp' ),
-		'switch_flip'  => __( 'read-only and high-risk switch changes', 'agent-abilities-for-mcp' ),
-	);
-}
-
-/**
- * The event subtype for "alerts for this trigger were turned off".
- *
- * @param string $slug A key of aafm_notify_triggers().
- * @return string
- */
-function aafm_notify_trigger_off_subtype( string $slug ): string {
-	return 'switch_flip' === $slug ? 'switch_alerts_off' : $slug . '_off';
 }
 
 /**
@@ -104,7 +98,7 @@ function aafm_notifications_normalize( $stored ): array {
 	if ( ! is_array( $stored ) ) {
 		return $out;
 	}
-	if ( isset( $stored['mode'] ) && is_string( $stored['mode'] ) && in_array( $stored['mode'], aafm_notify_modes(), true ) ) {
+	if ( isset( $stored['mode'] ) && is_string( $stored['mode'] ) && array_key_exists( $stored['mode'], aafm_notify_modes() ) ) {
 		$out['mode'] = $stored['mode'];
 	}
 	if ( isset( $stored['email'] ) && is_string( $stored['email'] ) ) {
@@ -137,7 +131,7 @@ function aafm_notifications_settings(): array {
  * @return array{mode:string,email:string,triggers:array<string,bool>}
  */
 function aafm_notifications_sanitize( array $posted ): array {
-	$mode = isset( $posted['aafm_notify_mode'] ) && is_string( $posted['aafm_notify_mode'] ) && in_array( $posted['aafm_notify_mode'], aafm_notify_modes(), true )
+	$mode = isset( $posted['aafm_notify_mode'] ) && is_string( $posted['aafm_notify_mode'] ) && array_key_exists( $posted['aafm_notify_mode'], aafm_notify_modes() )
 		? $posted['aafm_notify_mode']
 		: 'off';
 	// The address exactly as typed, trimmed. Never sanitize_email(): see aafm_notifications_normalize(). A value is stored only if is_email() approves it unchanged.
@@ -394,9 +388,9 @@ function aafm_notify_event_label( array $event ): string {
 		'settings:plugin_reset'          => __( 'The plugin settings were reset', 'agent-abilities-for-mcp' ),
 		'settings:alerts_off'            => __( 'Email alerts were turned off', 'agent-abilities-for-mcp' ),
 	);
-	foreach ( aafm_notify_trigger_phrases() as $slug => $phrase ) {
+	foreach ( aafm_notify_triggers() as $slug => $trigger ) {
 		/* translators: %s: what the alerts covered, for example "new apps and Application Passwords". */
-		$labels[ 'settings:' . aafm_notify_trigger_off_subtype( $slug ) ] = sprintf( __( 'Alerts for %s were turned off', 'agent-abilities-for-mcp' ), $phrase );
+		$labels[ 'settings:' . $slug . '_off' ] = sprintf( __( 'Alerts for %s were turned off', 'agent-abilities-for-mcp' ), $trigger['phrase'] );
 	}
 	return $labels[ $key ] ?? __( 'Something needs a look', 'agent-abilities-for-mcp' );
 }

@@ -305,7 +305,8 @@ function aafm_activity_summary( bool $refresh = false ): array {
 	global $wpdb;
 	if ( ! $refresh ) {
 		$memo = get_transient( 'aafm_activity_summary' );
-		if ( is_array( $memo ) && isset( $memo['total'], $memo['top_tools'] ) ) {
+		// A memo with fewer keys than we write now (an older release's) is a miss; success_rate may legitimately be null.
+		if ( is_array( $memo ) && array() === array_diff_key( array_flip( array( 'ok', 'since', 'total', 'success', 'error', 'denied', 'success_rate', 'top_tools' ) ), $memo ) ) {
 			// Our own shape, written by the set_transient() below.
 			// phpcs:ignore Generic.Commenting.DocComment.MissingShort
 			/** @var array{ok:bool,since:string,total:int,success:int,error:int,denied:int,success_rate:?float,top_tools:list<array{ability:string,count:int}>} $memo */

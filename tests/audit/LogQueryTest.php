@@ -288,6 +288,23 @@ final class LogQueryTest extends TestCase {
 		$this->assertSame( 0, aafm_activity_summary()['total'], 'A clear drops the memo.' );
 	}
 
+	public function test_a_cached_summary_with_fewer_keys_is_recomputed(): void {
+		$this->log( 'aafm/get-posts', 'success' );
+		set_transient(
+			'aafm_activity_summary',
+			array(
+				'total'     => 99,
+				'top_tools' => array(),
+			),
+			60
+		);
+		$s = aafm_activity_summary();
+		$this->assertSame( 1, $s['total'], 'A partial memo is a miss.' );
+		foreach ( array( 'ok', 'since', 'success', 'error', 'denied', 'success_rate' ) as $key ) {
+			$this->assertArrayHasKey( $key, $s );
+		}
+	}
+
 	public function test_connection_names_and_labels(): void {
 		aafm_install_oauth_tables();
 		$client = aafm_oauth_register_client(

@@ -137,11 +137,15 @@ final class LogTest extends TestCase {
 	}
 
 	/**
-	 * Count the ALTER and CREATE statements the installer tries, and optionally break the schema check
-	 * (the duration_ms column probe fails) while refusing them, so a test can see how often dbDelta()
-	 * ran and can force a failed upgrade without issuing any DDL of its own.
+	 * Count how often dbDelta() runs the installer, and optionally break the schema check (the
+	 * duration_ms column probe fails) while refusing its ALTER and CREATE statements, so a test can force
+	 * a failed upgrade without issuing any DDL of its own.
 	 *
-	 * @param int  $attempts Receives the number of statements seen.
+	 * The count is the DESCRIBE that dbDelta() always issues for an existing table. Counting its ALTER and
+	 * CREATE statements instead depends on the database engine: on MariaDB dbDelta() alters an already
+	 * current table, on MySQL 8 it issues no DDL for one, and the count stays at zero.
+	 *
+	 * @param int  $attempts Receives the number of dbDelta() runs seen.
 	 * @param bool $sabotage    Whether to refuse them and fail the column probe.
 	 * @return callable The filter, to remove afterwards.
 	 */
@@ -150,8 +154,10 @@ final class LogTest extends TestCase {
 			if ( ! is_string( $query ) ) {
 				return $query;
 			}
-			if ( 1 === preg_match( '/^\s*(ALTER|CREATE)\s+(TEMPORARY\s+)?TABLE\s/i', $query ) ) {
+			if ( 1 === preg_match( '/^\s*DESCRIBE\s/i', $query ) ) {
 				++$attempts;
+			}
+			if ( 1 === preg_match( '/^\s*(ALTER|CREATE)\s+(TEMPORARY\s+)?TABLE\s/i', $query ) ) {
 				return $sabotage ? '' : $query;
 			}
 			if ( $sabotage && 1 === preg_match( '/^\s*SHOW\s+COLUMNS\s.*duration_ms/i', $query ) ) {

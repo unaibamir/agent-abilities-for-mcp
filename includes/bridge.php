@@ -334,7 +334,10 @@ function aafm_bridge_permission_state( string $foreign_slug, $input ): string {
 }
 
 /**
- * The foreign ability's output schema exactly as it declared it - or null when it exposes none.
+ * The foreign ability's output schema as it declared it, minus date formats - or null when it exposes none.
+ *
+ * Date, time and date-time `format` keywords are stripped from the advertised copy (see
+ * aafm_strip_date_formats()); nothing else is rewritten.
  *
  * Deliberately NOT routed through aafm_normalize_json_schema(). That function is INPUT-oriented:
  * a call's arguments are always a JSON object, so it defaults a typeless schema to type:object. An
@@ -389,7 +392,7 @@ function aafm_strip_date_formats( $node ) {
 		unset( $node['format'] );
 	}
 	// Keywords holding a map or a list of subschemas: strip each child.
-	foreach ( array( 'properties', 'patternProperties', 'anyOf', 'oneOf', 'allOf', 'prefixItems' ) as $key ) {
+	foreach ( array( 'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'anyOf', 'oneOf', 'allOf', 'prefixItems' ) as $key ) {
 		if ( isset( $node[ $key ] ) && is_array( $node[ $key ] ) ) {
 			$node[ $key ] = array_map( 'aafm_strip_date_formats', $node[ $key ] );
 		}
@@ -400,8 +403,10 @@ function aafm_strip_date_formats( $node ) {
 	} elseif ( isset( $node['items'] ) ) {
 		$node['items'] = aafm_strip_date_formats( $node['items'] );
 	}
-	if ( isset( $node['additionalProperties'] ) ) {
-		$node['additionalProperties'] = aafm_strip_date_formats( $node['additionalProperties'] );
+	foreach ( array( 'additionalProperties', 'not', 'if', 'then', 'else', 'contains', 'propertyNames', 'additionalItems' ) as $key ) {
+		if ( isset( $node[ $key ] ) ) {
+			$node[ $key ] = aafm_strip_date_formats( $node[ $key ] );
+		}
 	}
 	return $node;
 }

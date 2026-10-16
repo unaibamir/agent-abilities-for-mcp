@@ -471,12 +471,13 @@ final class BridgeWrapperTest extends TestCase {
 	 * bridge schema-validation tests. Uses the same 'demo-things' category ensure_categories()
 	 * already wires, so no extra category registration is needed here.
 	 *
-	 * @param string              $slug     The foreign ability slug.
-	 * @param array<string,mixed> $schema   The declared output_schema.
-	 * @param callable            $execute  The execute_callback, called with the ability input.
+	 * @param string                   $slug     The foreign ability slug.
+	 * @param array<string,mixed>      $schema   The declared output_schema.
+	 * @param callable                 $execute  The execute_callback, called with the ability input.
+	 * @param array<string,mixed>|null $input_schema The declared input_schema, or null for an empty object schema.
 	 * @return void
 	 */
-	private function register_foreign_with_schema( string $slug, array $schema, callable $execute ): void {
+	private function register_foreign_with_schema( string $slug, array $schema, callable $execute, ?array $input_schema = null ): void {
 		$this->in_action(
 			'wp_abilities_api_categories_init',
 			static function (): void {
@@ -493,14 +494,14 @@ final class BridgeWrapperTest extends TestCase {
 		);
 		$this->in_action(
 			'wp_abilities_api_init',
-			static function () use ( $slug, $schema, $execute ): void {
+			static function () use ( $slug, $schema, $execute, $input_schema ): void {
 				wp_register_ability(
 					$slug,
 					array(
 						'label'               => $slug,
 						'description'         => 'Bridge schema-validation fixture.',
 						'category'            => 'demo-things',
-						'input_schema'        => array(
+						'input_schema'        => $input_schema ?? array(
 							'type'       => 'object',
 							'properties' => array(),
 						),
@@ -1524,6 +1525,16 @@ final class BridgeWrapperTest extends TestCase {
 				'oneOf'                => array( $date ),
 				'allOf'                => array( array( 'properties' => array( 'deep' => array( 'items' => $date ) ) ) ),
 				'anyOf'                => array( $date ),
+				'$defs'                => array( 'when' => $date ),
+				'definitions'          => array( 'when' => $date ),
+				'dependentSchemas'     => array( 'a' => $date ),
+				'not'                  => $date,
+				'if'                   => $date,
+				'then'                 => $date,
+				'else'                 => $date,
+				'contains'             => $date,
+				'propertyNames'        => $date,
+				'additionalItems'      => $date,
 			)
 		);
 
@@ -1536,6 +1547,13 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( array( 'type' => 'string' ), $out['oneOf'][0] );
 		$this->assertSame( array( 'type' => 'string' ), $out['allOf'][0]['properties']['deep']['items'] );
 		$this->assertSame( array( 'type' => 'string' ), $out['anyOf'][0] );
+		foreach ( array( '$defs', 'definitions', 'dependentSchemas' ) as $map ) {
+			$child = reset( $out[ $map ] );
+			$this->assertSame( array( 'type' => 'string' ), $child, "{$map} is walked." );
+		}
+		foreach ( array( 'not', 'if', 'then', 'else', 'contains', 'propertyNames', 'additionalItems' ) as $single ) {
+			$this->assertSame( array( 'type' => 'string' ), $out[ $single ], "{$single} is walked." );
+		}
 		$this->assertSame( 'uri', $out['properties']['link']['format'] );
 
 		// Tuple-form items, and a boolean additionalProperties, pass through without error.
@@ -1548,6 +1566,80 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( array( 'type' => 'string' ), $tuple['items'][0] );
 		$this->assertSame( 'uri', $tuple['items'][1]['format'] );
 		$this->assertFalse( $tuple['additionalProperties'] );
+	}
+
+	/**
+	 * A property that is literally NAMED format sits in a properties map, not at a schema node, so it is
+	 * neither mistaken for the keyword nor lost, and its own schema is walked as usual.
+	 */
+	public function test_a_property_named_format_survives_with_its_schema_intact(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/has-format-prop',
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'format' => array(
+						'type'        => 'string',
+						'description' => 'The export format.',
+						'enum'        => array( 'csv', 'json' ),
+					),
+					'when'   => array(
+						'type'   => 'string',
+						'format' => 'date-time',
+					),
+				),
+			),
+			static fn(): array => array(
+				'format' => 'csv',
+				'when'   => '2026-10-16T09:30:00',
+			)
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/has-format-prop' ) );
+		$this->register_wrappers();
+
+		$props = wp_get_ability( 'aafm-bridge/vendor-has-format-prop' )->get_output_schema()['properties'];
+
+		$this->assertSame(
+			array(
+				'type'        => 'string',
+				'description' => 'The export format.',
+				'enum'        => array( 'csv', 'json' ),
+			),
+			$props['format']
+		);
+		$this->assertSame( array( 'type' => 'string' ), $props['when'] );
+	}
+
+	/**
+	 * Only the OUTPUT schema is rewritten. An input schema is what the agent must send, so its date-time
+	 * format is left exactly as the foreign ability declared it.
+	 */
+	public function test_wrapper_input_schema_keeps_its_date_time_format(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/dated-input',
+			array(
+				'type'       => 'object',
+				'properties' => array(),
+			),
+			static fn(): array => array(),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'since' => array(
+						'type'   => 'string',
+						'format' => 'date-time',
+					),
+				),
+			)
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/dated-input' ) );
+		$this->register_wrappers();
+
+		$input = wp_get_ability( 'aafm-bridge/vendor-dated-input' )->get_input_schema();
+
+		$this->assertSame( 'date-time', $input['properties']['since']['format'] );
 	}
 
 	/**

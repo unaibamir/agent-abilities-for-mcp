@@ -471,12 +471,13 @@ final class BridgeWrapperTest extends TestCase {
 	 * bridge schema-validation tests. Uses the same 'demo-things' category ensure_categories()
 	 * already wires, so no extra category registration is needed here.
 	 *
-	 * @param string              $slug     The foreign ability slug.
-	 * @param array<string,mixed> $schema   The declared output_schema.
-	 * @param callable            $execute  The execute_callback, called with the ability input.
+	 * @param string                   $slug     The foreign ability slug.
+	 * @param array<string,mixed>      $schema   The declared output_schema.
+	 * @param callable                 $execute  The execute_callback, called with the ability input.
+	 * @param array<string,mixed>|null $input_schema The declared input_schema, or null for an empty object schema.
 	 * @return void
 	 */
-	private function register_foreign_with_schema( string $slug, array $schema, callable $execute ): void {
+	private function register_foreign_with_schema( string $slug, array $schema, callable $execute, ?array $input_schema = null ): void {
 		$this->in_action(
 			'wp_abilities_api_categories_init',
 			static function (): void {
@@ -493,14 +494,14 @@ final class BridgeWrapperTest extends TestCase {
 		);
 		$this->in_action(
 			'wp_abilities_api_init',
-			static function () use ( $slug, $schema, $execute ): void {
+			static function () use ( $slug, $schema, $execute, $input_schema ): void {
 				wp_register_ability(
 					$slug,
 					array(
 						'label'               => $slug,
 						'description'         => 'Bridge schema-validation fixture.',
 						'category'            => 'demo-things',
-						'input_schema'        => array(
+						'input_schema'        => $input_schema ?? array(
 							'type'       => 'object',
 							'properties' => array(),
 						),
@@ -1403,5 +1404,441 @@ final class BridgeWrapperTest extends TestCase {
 		$result = wp_get_ability( 'aafm-bridge/vendor-returns-a-user-again' )->execute( array() );
 
 		$this->assertStringStartsWith( 'This bridged ability ran', $result->get_error_message() );
+	}
+
+	/**
+	 * A third-party ability that declares a format its data does not honour (WooCommerce returns dates with no
+	 * offset under format:date-time, and a product URL that may be empty under format:uri) is rejected by strict
+	 * MCP clients validating structuredContent against the advertised schema. The advertised schema drops every
+	 * format at any depth, keeps type, and the call itself still succeeds with the value unchanged.
+	 */
+	public function test_advertised_output_schema_drops_every_format_but_keeps_type(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/orders-query',
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'orders' => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'date_created' => array(
+									'type'   => array( 'string', 'null' ),
+									'format' => 'date-time',
+								),
+								'due_date'     => array(
+									'type'   => 'string',
+									'format' => 'date',
+								),
+								'at_time'      => array(
+									'type'   => 'string',
+									'format' => 'time',
+								),
+								'link'         => array(
+									'type'   => 'string',
+									'format' => 'uri',
+								),
+								'email'        => array(
+									'type'   => 'string',
+									'format' => 'email',
+								),
+								'custom'       => array(
+									'type'   => 'string',
+									'format' => 'x-vendor-sku',
+								),
+								'either'       => array(
+									'anyOf' => array(
+										array(
+											'type'   => 'string',
+											'format' => 'date-time',
+										),
+										array( 'type' => 'null' ),
+									),
+								),
+							),
+						),
+					),
+				),
+			),
+			static fn(): array => array(
+				'orders' => array(
+					array(
+						'date_created' => '2026-10-16T09:30:00',
+						'due_date'     => '2026-10-16',
+						'at_time'      => '09:30:00',
+						'link'         => 'https://example.com/o/1',
+						'email'        => 'a@example.com',
+						'custom'       => 'SKU-1',
+						'either'       => '2026-10-16T09:30:00',
+					),
+				),
+			)
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/orders-query' ) );
+		$this->register_wrappers();
+
+		$wrapper = wp_get_ability( 'aafm-bridge/vendor-orders-query' );
+		$this->assertNotNull( $wrapper );
+		$props = $wrapper->get_output_schema()['properties']['orders']['items']['properties'];
+
+		$this->assertArrayNotHasKey( 'format', $props['date_created'] );
+		$this->assertSame( array( 'string', 'null' ), $props['date_created']['type'], 'type survives.' );
+		$this->assertArrayNotHasKey( 'format', $props['due_date'] );
+		$this->assertArrayNotHasKey( 'format', $props['at_time'] );
+		$this->assertArrayNotHasKey( 'format', $props['either']['anyOf'][0] );
+		$this->assertSame( 'string', $props['either']['anyOf'][0]['type'] );
+		$this->assertSame( array( 'type' => 'string' ), $props['link'], 'A uri format is dropped.' );
+		$this->assertSame( array( 'type' => 'string' ), $props['email'], 'An email format is dropped.' );
+		$this->assertSame( array( 'type' => 'string' ), $props['custom'], 'An unknown custom format is dropped.' );
+
+		$result = $wrapper->execute( array() );
+		$this->assertIsArray( $result, 'The call still succeeds.' );
+		$this->assertSame( '2026-10-16T09:30:00', $result['orders'][0]['date_created'], 'The value itself is unchanged.' );
+
+		$this->assertSame(
+			'date-time',
+			wp_get_ability( 'vendor/orders-query' )->get_output_schema()['properties']['orders']['items']['properties']['date_created']['format'],
+			'The source ability keeps its own schema, so core server-side validation is untouched.'
+		);
+	}
+
+	/**
+	 * Every container keyword a formatted field can sit under is walked, and a sibling's own format is
+	 * stripped too.
+	 */
+	public function test_formats_are_stripped_under_every_schema_container_keyword(): void {
+		$date = array(
+			'type'   => 'string',
+			'format' => 'date-time',
+		);
+		$kept = array(
+			'type'   => 'string',
+			'format' => 'uri',
+		);
+		$out  = aafm_strip_output_formats(
+			array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'a'    => $date,
+					'link' => $kept,
+				),
+				'patternProperties'    => array( '^x' => $date ),
+				'additionalProperties' => $date,
+				'items'                => $date,
+				'prefixItems'          => array( $date, $kept ),
+				'oneOf'                => array( $date ),
+				'allOf'                => array( array( 'properties' => array( 'deep' => array( 'items' => $date ) ) ) ),
+				'anyOf'                => array( $date ),
+				'$defs'                => array( 'when' => $date ),
+				'definitions'          => array( 'when' => $date ),
+				'dependentSchemas'     => array( 'a' => $date ),
+				'not'                  => $date,
+				'if'                   => $date,
+				'then'                 => $date,
+				'else'                 => $date,
+				'contains'             => $date,
+				'propertyNames'        => $date,
+				'additionalItems'      => $date,
+			)
+		);
+
+		$this->assertSame( array( 'type' => 'string' ), $out['properties']['a'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['patternProperties']['^x'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['additionalProperties'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['items'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['prefixItems'][0] );
+		$this->assertSame( array( 'type' => 'string' ), $out['prefixItems'][1] );
+		$this->assertSame( array( 'type' => 'string' ), $out['oneOf'][0] );
+		$this->assertSame( array( 'type' => 'string' ), $out['allOf'][0]['properties']['deep']['items'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['anyOf'][0] );
+		foreach ( array( '$defs', 'definitions', 'dependentSchemas' ) as $map ) {
+			$child = reset( $out[ $map ] );
+			$this->assertSame( array( 'type' => 'string' ), $child, "{$map} is walked." );
+		}
+		foreach ( array( 'not', 'if', 'then', 'else', 'contains', 'propertyNames', 'additionalItems' ) as $single ) {
+			$this->assertSame( array( 'type' => 'string' ), $out[ $single ], "{$single} is walked." );
+		}
+		$this->assertSame( array( 'type' => 'string' ), $out['properties']['link'] );
+
+		// Tuple-form items, and a boolean additionalProperties, pass through without error.
+		$tuple = aafm_strip_output_formats(
+			array(
+				'items'                => array( $date, $kept ),
+				'additionalProperties' => false,
+			)
+		);
+		$this->assertSame( array( 'type' => 'string' ), $tuple['items'][0] );
+		$this->assertSame( array( 'type' => 'string' ), $tuple['items'][1] );
+		$this->assertFalse( $tuple['additionalProperties'] );
+	}
+
+	/**
+	 * A property that is literally NAMED format sits in a properties map, not at a schema node, so it is
+	 * neither mistaken for the keyword nor lost, and its own schema is walked as usual.
+	 */
+	public function test_a_property_named_format_survives_with_its_schema_intact(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/has-format-prop',
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'format' => array(
+						'type'        => 'string',
+						'description' => 'The export format.',
+						'enum'        => array( 'csv', 'json' ),
+					),
+					'when'   => array(
+						'type'   => 'string',
+						'format' => 'date-time',
+					),
+				),
+			),
+			static fn(): array => array(
+				'format' => 'csv',
+				'when'   => '2026-10-16T09:30:00',
+			)
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/has-format-prop' ) );
+		$this->register_wrappers();
+
+		$props = wp_get_ability( 'aafm-bridge/vendor-has-format-prop' )->get_output_schema()['properties'];
+
+		$this->assertSame(
+			array(
+				'type'        => 'string',
+				'description' => 'The export format.',
+				'enum'        => array( 'csv', 'json' ),
+			),
+			$props['format']
+		);
+		$this->assertSame( array( 'type' => 'string' ), $props['when'] );
+	}
+
+	/**
+	 * Only the OUTPUT schema is rewritten. An input schema is what the agent must send, so its formats are
+	 * left exactly as the foreign ability declared them.
+	 */
+	public function test_wrapper_input_schema_keeps_its_formats(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/dated-input',
+			array(
+				'type'       => 'object',
+				'properties' => array(),
+			),
+			static fn(): array => array(),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'since' => array(
+						'type'   => 'string',
+						'format' => 'date-time',
+					),
+					'link'  => array(
+						'type'   => 'string',
+						'format' => 'uri',
+					),
+					'mail'  => array(
+						'type'   => 'string',
+						'format' => 'email',
+					),
+				),
+			)
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/dated-input' ) );
+		$this->register_wrappers();
+
+		$input = wp_get_ability( 'aafm-bridge/vendor-dated-input' )->get_input_schema();
+
+		$this->assertSame( 'date-time', $input['properties']['since']['format'] );
+		$this->assertSame( 'uri', $input['properties']['link']['format'] );
+		$this->assertSame( 'email', $input['properties']['mail']['format'] );
+	}
+
+	/**
+	 * A node whose only keyword was `format` is emptied, and an empty PHP array would json-encode as `[]`, which
+	 * is not a schema and crashes validators such as Python jsonschema. It must come out as a JSON object, in
+	 * items, in an anyOf entry, in additionalProperties and as a property schema. The vendored adapter casts
+	 * any stdClass back to an array, so the node is a description-only schema, not an empty object. A boolean
+	 * schema, a property map and a default or enum value are never converted.
+	 */
+	public function test_an_emptied_node_encodes_as_an_object_never_an_array(): void {
+		$out  = aafm_strip_output_formats(
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'list'   => array(
+						'type'  => 'array',
+						'items' => array( 'format' => 'date-time' ),
+					),
+					'either' => array(
+						'anyOf' => array( array( 'format' => 'date-time' ), array( 'type' => 'null' ) ),
+					),
+					'map'    => array(
+						'type'                 => 'object',
+						'additionalProperties' => array( 'format' => 'uri' ),
+					),
+					'closed' => array(
+						'type'                 => 'object',
+						'additionalProperties' => false,
+					),
+					'bare'   => array( 'format' => 'email' ),
+					'kept'   => array(
+						'type'    => 'array',
+						'default' => array(),
+						'enum'    => array( array(), array( 'format' => 'uri' ) ),
+					),
+				),
+			)
+		);
+		$json = (string) wp_json_encode( $out );
+
+		$placeholder = '{"description":"Any value."}';
+		$this->assertStringContainsString( '"items":' . $placeholder, $json );
+		$this->assertStringContainsString( '"anyOf":[' . $placeholder . ',{"type":"null"}]', $json );
+		$this->assertStringContainsString( '"additionalProperties":' . $placeholder, $json );
+		$this->assertStringContainsString( '"bare":' . $placeholder, $json );
+		$this->assertStringContainsString( '"additionalProperties":false', $json, 'A boolean schema is not converted.' );
+		$this->assertStringContainsString( '"default":[]', $json, 'A default value is data, not a schema.' );
+		$this->assertStringContainsString( '"enum":[[],{"format":"uri"}]', $json, 'Enum values are data, not schemas.' );
+		$this->assertStringNotContainsString( '"properties":[]', $json );
+		$this->assertStringNotContainsString( '"items":[]', $json );
+		$this->assertStringNotContainsString( '"anyOf":[[]', $json );
+	}
+
+	/**
+	 * The emptied-node rule holds on the schema a registered wrapper actually advertises, not only in the helper.
+	 */
+	public function test_wrapper_advertises_emptied_nodes_as_objects(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/only-formats',
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'dates' => array(
+						'type'  => 'array',
+						'items' => array( 'format' => 'date-time' ),
+					),
+				),
+			),
+			// Empty list: core's own validator warns on a typeless items schema, which the fixture is not about.
+			static fn(): array => array( 'dates' => array() )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/only-formats' ) );
+		$this->register_wrappers();
+
+		$wrapper = wp_get_ability( 'aafm-bridge/vendor-only-formats' );
+		$this->assertNotNull( $wrapper );
+		$json = (string) wp_json_encode( $wrapper->get_output_schema() );
+		$this->assertStringContainsString( '"items":{"description":"Any value."}', $json );
+		$this->assertStringNotContainsString( '"items":[]', $json );
+		$this->assertIsArray( $wrapper->execute( array() ), 'The call still succeeds.' );
+	}
+
+	/**
+	 * A draft-07 `dependencies` value is a subschema or a list of property names; only a schema is walked.
+	 * unevaluatedProperties, unevaluatedItems and contentSchema each hold a subschema and are walked too.
+	 */
+	public function test_dependencies_and_unevaluated_keywords_are_walked(): void {
+		$out = aafm_strip_output_formats(
+			array(
+				'type'                  => 'object',
+				'dependencies'          => array(
+					'names'  => array( 'b', 'c' ),
+					'schema' => array(
+						'properties' => array(
+							'z' => array(
+								'type'   => 'string',
+								'format' => 'date-time',
+							),
+						),
+					),
+					'bare'   => array( 'format' => 'uri' ),
+					'none'   => array(),
+				),
+				'unevaluatedProperties' => array(
+					'type'   => 'string',
+					'format' => 'date-time',
+				),
+				'unevaluatedItems'      => array( 'format' => 'uri' ),
+				'contentSchema'         => array(
+					'type'   => 'string',
+					'format' => 'email',
+				),
+			)
+		);
+
+		$this->assertSame( array( 'b', 'c' ), $out['dependencies']['names'], 'A list of property names is left alone.' );
+		$this->assertSame( array(), $out['dependencies']['none'], 'An empty names list is left alone.' );
+		$this->assertSame( array( 'type' => 'string' ), $out['dependencies']['schema']['properties']['z'] );
+		$this->assertSame( array( 'description' => 'Any value.' ), $out['dependencies']['bare'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['unevaluatedProperties'] );
+		$this->assertSame( array( 'description' => 'Any value.' ), $out['unevaluatedItems'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['contentSchema'] );
+	}
+
+	/**
+	 * Date values a third-party plugin might return, each with whether it must validate once the format is gone.
+	 *
+	 * @return array<string,array{0:mixed,1:bool}>
+	 */
+	public function date_value_cases(): array {
+		return array(
+			'no offset (WooCommerce)' => array( '2026-10-15T10:00:00', true ),
+			'numeric offset'          => array( '2026-10-15T10:00:00+00:00', true ),
+			'Z suffix'                => array( '2026-10-15T10:00:00Z', true ),
+			'date only'               => array( '2026-10-15', true ),
+			'mysql datetime'          => array( '2026-10-15 10:00:00', true ),
+			'null'                    => array( null, true ),
+			'integer, the wrong type' => array( 1760522400, false ),
+			'array, the wrong type'   => array( array( '2026-10-15' ), false ),
+			'boolean, the wrong type' => array( true, false ),
+		);
+	}
+
+	/**
+	 * With the format gone, every date shape a third-party plugin returns validates against the schema a
+	 * client is shown, at depth and for a nullable field, while a value of the wrong TYPE still fails.
+	 *
+	 * @dataProvider date_value_cases
+	 *
+	 * @param mixed $value    The date field's value.
+	 * @param bool  $expected Whether it must validate.
+	 */
+	public function test_every_date_shape_validates_against_the_advertised_schema( $value, bool $expected ): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/dates',
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'rows' => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'when' => array(
+									'type'   => array( 'string', 'null' ),
+									'format' => 'date-time',
+								),
+							),
+						),
+					),
+				),
+			),
+			static fn(): array => array( 'rows' => array() )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/dates' ) );
+		$this->register_wrappers();
+
+		$schema = wp_get_ability( 'aafm-bridge/vendor-dates' )->get_output_schema();
+		$this->assertArrayNotHasKey( 'format', $schema['properties']['rows']['items']['properties']['when'] );
+
+		$valid = rest_validate_value_from_schema( array( 'rows' => array( array( 'when' => $value ) ) ), $schema );
+		$this->assertSame( $expected, true === $valid, 'Validation of the advertised schema.' );
 	}
 }

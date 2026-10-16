@@ -4,7 +4,7 @@ Tags: chatgpt, claude, ai-agent, mcp, mcp-server
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.8.0
+Stable tag: 1.8.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -350,6 +350,10 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 == Changelog ==
 
+= 1.8.1 =
+
+* **Fix:** Bridged tools such as WooCommerce orders and products failed in strict clients like Claude when a value didn't match the format the source plugin declared, for example a date without a timezone or an empty URL. Bridged tools no longer advertise strict formats; the values are unchanged.
+
 = 1.8.0 =
 
 * **Feature:** A Site Brief box on the Settings tab lets you describe your site in a few lines. Every agent that connects to this plugin reads it.
@@ -451,9 +455,13 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 * **Chore:** Condensed the changelog so the full release history fits within the wordpress.org listing's length limit, in both readmes. Same releases, fewer lines, with the security and data-integrity fixes still called out one by one.
 * **Chore:** Corrected a code comment that slightly overstated when a consumer plugin's short-circuit is visible to the rate-limit release hook.
 
-Full release history: https://agentabilitieswp.com/changelog/
+[Full release history](https://agentabilitieswp.com/changelog/).
 
 == Upgrade Notice ==
+
+= 1.8.1 =
+
+Fixes bridged tools, such as WooCommerce orders and products, that failed in strict clients like Claude when a value didn't match its declared format. No settings change needed.
 
 = 1.8.0 =
 

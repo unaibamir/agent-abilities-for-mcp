@@ -69,7 +69,7 @@ function aafm_activity_row_view( array $row, array $names ): array {
 /**
  * The summary as plain values for the card and the AJAX payload.
  *
- * @param array<string,mixed> $summary Result of aafm_activity_summary().
+ * @param array{ok:bool,since:string,total:int,success:int,error:int,denied:int,success_rate:?float,top_tools:list<array{ability:string,count:int}>} $summary Result of aafm_activity_summary().
  * @return array{ok:bool,total:int,success:int,error:int,denied:int,rate:string,top:list<array{ability:string,count:int}>}
  */
 function aafm_activity_summary_view( array $summary ): array {
@@ -77,20 +77,20 @@ function aafm_activity_summary_view( array $summary ): array {
 		? number_format_i18n( (float) $summary['success_rate'], 1 ) . '%'
 		: '-';
 	return array(
-		'ok'      => ! empty( $summary['ok'] ),
-		'total'   => (int) ( $summary['total'] ?? 0 ),
-		'success' => (int) ( $summary['success'] ?? 0 ),
-		'error'   => (int) ( $summary['error'] ?? 0 ),
-		'denied'  => (int) ( $summary['denied'] ?? 0 ),
+		'ok'      => $summary['ok'],
+		'total'   => $summary['total'],
+		'success' => $summary['success'],
+		'error'   => $summary['error'],
+		'denied'  => $summary['denied'],
 		'rate'    => $rate,
-		'top'     => isset( $summary['top_tools'] ) && is_array( $summary['top_tools'] ) ? array_values( $summary['top_tools'] ) : array(),
+		'top'     => $summary['top_tools'],
 	);
 }
 
 /**
  * Render the 7-day summary card. admin.js fills the same [data-summary] nodes on Live refresh.
  *
- * @param array<string,mixed> $summary Result of aafm_activity_summary().
+ * @param array{ok:bool,since:string,total:int,success:int,error:int,denied:int,success_rate:?float,top_tools:list<array{ability:string,count:int}>} $summary Result of aafm_activity_summary().
  * @return void
  */
 function aafm_render_activity_summary( array $summary ): void {

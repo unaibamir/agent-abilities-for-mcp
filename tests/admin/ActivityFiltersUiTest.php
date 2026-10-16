@@ -258,8 +258,13 @@ final class ActivityFiltersUiTest extends TestCase {
 		ob_start();
 		aafm_render_activity_summary(
 			array(
-				'ok'    => false,
-				'total' => 0,
+				'ok'           => false,
+				'total'        => 0,
+				'success'      => 0,
+				'error'        => 0,
+				'denied'       => 0,
+				'success_rate' => null,
+				'top_tools'    => array(),
 			)
 		);
 		$html = (string) ob_get_clean();
@@ -272,8 +277,13 @@ final class ActivityFiltersUiTest extends TestCase {
 		ob_start();
 		aafm_render_activity_summary(
 			array(
-				'ok'    => true,
-				'total' => 0,
+				'ok'           => true,
+				'total'        => 0,
+				'success'      => 0,
+				'error'        => 0,
+				'denied'       => 0,
+				'success_rate' => null,
+				'top_tools'    => array(),
 			)
 		);
 		$this->assertMatchesRegularExpression( '/data-summary="total">0</', (string) ob_get_clean(), 'A successful empty summary still says 0.' );

@@ -99,52 +99,6 @@ function aafm_localize_denied_detail( string $detail ): string {
 }
 
 /**
- * The nine meta abilities and where their key comes from: ability => scope and input parameter.
- *
- * @return array<string,array{scope:string,key:string}>
- */
-function aafm_meta_ability_scopes(): array {
-	return array(
-		'aafm/get-post-meta'    => array(
-			'scope' => 'post',
-			'key'   => 'meta_key',
-		),
-		'aafm/update-post-meta' => array(
-			'scope' => 'post',
-			'key'   => 'meta_key',
-		),
-		'aafm/delete-post-meta' => array(
-			'scope' => 'post',
-			'key'   => 'meta_key',
-		),
-		'aafm/get-term-meta'    => array(
-			'scope' => 'term',
-			'key'   => 'meta_key',
-		),
-		'aafm/update-term-meta' => array(
-			'scope' => 'term',
-			'key'   => 'meta_key',
-		),
-		'aafm/delete-term-meta' => array(
-			'scope' => 'term',
-			'key'   => 'meta_key',
-		),
-		'aafm/get-user-meta'    => array(
-			'scope' => 'user',
-			'key'   => 'key',
-		),
-		'aafm/update-user-meta' => array(
-			'scope' => 'user',
-			'key'   => 'key',
-		),
-		'aafm/delete-user-meta' => array(
-			'scope' => 'user',
-			'key'   => 'key',
-		),
-	);
-}
-
-/**
  * Why the production meta-key gate refuses a key, or null when it does not.
  *
  * Re-runs aafm_validate_scoped_meta_key() with substituted callables: first as the gate does; then
@@ -216,11 +170,11 @@ function aafm_meta_key_refusal_code( string $scope, string $key ): ?string {
  * @return string A reason code.
  */
 function aafm_denial_reason_for_permission( string $name, array $input ): string {
-	$map = aafm_meta_ability_scopes();
-	if ( isset( $map[ $name ] ) ) {
-		$param = $map[ $name ]['key'];
+	// The nine meta abilities: aafm/{get|update|delete}-{post|term|user}-meta. The user ones name their key `key`, the rest `meta_key`.
+	if ( 1 === preg_match( '#^aafm/(?:get|update|delete)-(post|term|user)-meta$#', $name, $m ) ) {
+		$param = 'user' === $m[1] ? 'key' : 'meta_key';
 		$key   = isset( $input[ $param ] ) && is_scalar( $input[ $param ] ) ? (string) $input[ $param ] : '';
-		$code  = aafm_meta_key_refusal_code( $map[ $name ]['scope'], $key );
+		$code  = aafm_meta_key_refusal_code( $m[1], $key );
 		return null !== $code ? $code : 'object_not_editable';
 	}
 	if ( 0 === strpos( $name, 'aafm-bridge/' ) ) {

@@ -9,7 +9,7 @@ WordPress MCP server for Claude and ChatGPT. Run one site or many with limited a
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.8.0 |
+| **Stable tag** | 1.8.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -336,6 +336,10 @@ It makes two kinds of outbound HTTP request on its own: the Connection tab's che
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), run on your own machine and not bundled with this plugin.
 
 ## Changelog
+### 1.8.1
+
+* **Fix:** Bridged WooCommerce order tools failed in strict clients such as Claude, because WooCommerce dates carry no timezone. Bridged tools no longer advertise a strict date format, and the dates are unchanged.
+
 ### 1.8.0
 
 * **Feature:** A Site Brief box on the Settings tab lets you describe your site in a few lines. Every agent that connects to this plugin reads it.

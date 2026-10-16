@@ -171,7 +171,7 @@ function aafm_meta_key_refusal_code( string $scope, string $key ): ?string {
  */
 function aafm_denial_reason_for_permission( string $name, array $input ): string {
 	// The nine meta abilities: aafm/{get|update|delete}-{post|term|user}-meta. The user ones name their key `key`, the rest `meta_key`.
-	if ( 1 === preg_match( '#^aafm/(?:get|update|delete)-(post|term|user)-meta$#', $name, $m ) ) {
+	if ( 1 === preg_match( '#^aafm/(?:get|update|delete)-(post|term|user)-meta\z#', $name, $m ) ) {
 		$param = 'user' === $m[1] ? 'key' : 'meta_key';
 		$key   = isset( $input[ $param ] ) && is_scalar( $input[ $param ] ) ? (string) $input[ $param ] : '';
 		$code  = aafm_meta_key_refusal_code( $m[1], $key );

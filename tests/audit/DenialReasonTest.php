@@ -202,6 +202,12 @@ final class DenialReasonTest extends TestCase {
 		$this->assertStringContainsString( 'Refused: capability', $this->denied_detail( 'aafm/get-activity-log' ) );
 	}
 
+	public function test_a_name_with_a_trailing_newline_is_not_a_meta_ability(): void {
+		$input = array( 'meta_key' => '_edit_lock' );
+		$this->assertNotSame( 'capability', aafm_denial_reason_for_permission( 'aafm/get-post-meta', $input ) );
+		$this->assertSame( 'capability', aafm_denial_reason_for_permission( "aafm/get-post-meta\n", $input ) );
+	}
+
 	public function test_the_wire_message_is_unchanged_and_carries_no_reason(): void {
 		update_option( 'aafm_allowed_meta_keys', array( 'listed_key' ) );
 		$this->acting_as( 'administrator' );

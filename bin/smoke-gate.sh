@@ -298,12 +298,17 @@ init_ok() {
 	fi
 }
 
+# admin_login <jar>: sign the disposable admin in and leave the cookies in <jar>.
+admin_login() {
+	rm -f "$1"
+	curl -s --max-time 60 -c "$1" -b 'wordpress_test_cookie=WP+Cookie+check' -o /dev/null \
+		-d "log=admin&pwd=admin&wp-submit=Log+In&redirect_to=$URL/wp-admin/&testcookie=1" "$URL/wp-login.php"
+}
+
 # pages_ok <leg> <label>: three admin pages and the front page, logged in as the disposable admin.
 pages_ok() {
 	local jar="$SMOKE_ROOT/jar.txt" p code hits bad=''
-	rm -f "$jar"
-	curl -s --max-time 60 -c "$jar" -b 'wordpress_test_cookie=WP+Cookie+check' -o /dev/null \
-		-d "log=admin&pwd=admin&wp-submit=Log+In&redirect_to=$URL/wp-admin/&testcookie=1" "$URL/wp-login.php"
+	admin_login "$jar"
 	for p in "${PAGES[@]}"; do
 		code=$(curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/page.html" -w '%{http_code}' "$URL/$p")
 		hits=$(grep -c -i -E "$BAD_BODY" "$SMOKE_ROOT/page.html")
@@ -961,9 +966,7 @@ leg_log() {
 	else
 		fail log "filtered count, table and CSV disagree: $parity"
 	fi
-	rm -f "$jar"
-	curl -s -c "$jar" -b 'wordpress_test_cookie=WP+Cookie+check' -o /dev/null \
-		-d "log=admin&pwd=admin&wp-submit=Log+In&redirect_to=$URL/wp-admin/&testcookie=1" "$URL/wp-login.php"
+	admin_login "$jar"
 	for q in 'tab=activity' 'tab=activity&filter=denied&q=smoke&from=2020-01-01&user=ana&plugin=core&conn=none' 'tab=activity&row=1' 'tab=activity&q=%25%5C%27%22'; do
 		code=$(curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/page.html" -w '%{http_code}' "$URL/wp-admin/admin.php?page=agent-abilities-for-mcp&$q")
 		hits=$(grep -c -i -E "$BAD_BODY" "$SMOKE_ROOT/page.html")
@@ -1078,9 +1081,7 @@ PHP
 	fi
 	W eval 'aafm_set_read_only_mode( false );' >/dev/null 2>&1
 
-	rm -f "$jar"
-	curl -s -c "$jar" -b 'wordpress_test_cookie=WP+Cookie+check' -o /dev/null \
-		-d "log=admin&pwd=admin&wp-submit=Log+In&redirect_to=$URL/wp-admin/&testcookie=1" "$URL/wp-login.php"
+	admin_login "$jar"
 	curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/page.html" "$URL/wp-admin/index.php"
 	if grep -q 'View in Activity Log' "$SMOKE_ROOT/page.html"; then
 		pass notify "the admin notice shows on the dashboard"

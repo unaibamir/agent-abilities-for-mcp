@@ -352,7 +352,7 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 = 1.8.1 =
 
-* **Fix:** Bridged WooCommerce order tools failed in strict clients such as Claude, because WooCommerce dates carry no timezone. Bridged tools no longer advertise a strict date format, and the dates are unchanged.
+* **Fix:** Bridged tools whose dates carry no timezone, such as WooCommerce orders, failed in strict clients like Claude. Bridged tools no longer advertise a strict date format, and the dates themselves are unchanged.
 
 = 1.8.0 =
 
@@ -461,7 +461,7 @@ Full release history: https://agentabilitieswp.com/changelog/
 
 = 1.8.1 =
 
-Fixes bridged WooCommerce order tools failing in strict clients such as Claude. No settings change needed.
+Fixes bridged tools, such as WooCommerce orders, that failed in strict clients like Claude when their dates carry no timezone. No settings change needed.
 
 = 1.8.0 =
 

@@ -1404,4 +1404,210 @@ final class BridgeWrapperTest extends TestCase {
 
 		$this->assertStringStartsWith( 'This bridged ability ran', $result->get_error_message() );
 	}
+
+	/**
+	 * A third-party ability that declares format:date-time but returns a date with no offset (WooCommerce does
+	 * this) is rejected by strict MCP clients validating structuredContent against the advertised schema. The
+	 * advertised schema drops date-ish formats at any depth, keeps type and every other format, and the call
+	 * itself still succeeds with the value unchanged.
+	 */
+	public function test_advertised_output_schema_drops_date_formats_but_keeps_type_and_other_formats(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/orders-query',
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'orders' => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'date_created' => array(
+									'type'   => array( 'string', 'null' ),
+									'format' => 'date-time',
+								),
+								'due_date'     => array(
+									'type'   => 'string',
+									'format' => 'date',
+								),
+								'at_time'      => array(
+									'type'   => 'string',
+									'format' => 'time',
+								),
+								'link'         => array(
+									'type'   => 'string',
+									'format' => 'uri',
+								),
+								'email'        => array(
+									'type'   => 'string',
+									'format' => 'email',
+								),
+								'either'       => array(
+									'anyOf' => array(
+										array(
+											'type'   => 'string',
+											'format' => 'date-time',
+										),
+										array( 'type' => 'null' ),
+									),
+								),
+							),
+						),
+					),
+				),
+			),
+			static fn(): array => array(
+				'orders' => array(
+					array(
+						'date_created' => '2026-10-16T09:30:00',
+						'due_date'     => '2026-10-16',
+						'at_time'      => '09:30:00',
+						'link'         => 'https://example.com/o/1',
+						'email'        => 'a@example.com',
+						'either'       => '2026-10-16T09:30:00',
+					),
+				),
+			)
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/orders-query' ) );
+		$this->register_wrappers();
+
+		$wrapper = wp_get_ability( 'aafm-bridge/vendor-orders-query' );
+		$this->assertNotNull( $wrapper );
+		$props = $wrapper->get_output_schema()['properties']['orders']['items']['properties'];
+
+		$this->assertArrayNotHasKey( 'format', $props['date_created'] );
+		$this->assertSame( array( 'string', 'null' ), $props['date_created']['type'], 'type survives.' );
+		$this->assertArrayNotHasKey( 'format', $props['due_date'] );
+		$this->assertArrayNotHasKey( 'format', $props['at_time'] );
+		$this->assertArrayNotHasKey( 'format', $props['either']['anyOf'][0] );
+		$this->assertSame( 'string', $props['either']['anyOf'][0]['type'] );
+		$this->assertSame( 'uri', $props['link']['format'], 'Non-date formats are left alone.' );
+		$this->assertSame( 'email', $props['email']['format'], 'Non-date formats are left alone.' );
+
+		$result = $wrapper->execute( array() );
+		$this->assertIsArray( $result, 'The call still succeeds.' );
+		$this->assertSame( '2026-10-16T09:30:00', $result['orders'][0]['date_created'], 'The value itself is unchanged.' );
+
+		$this->assertSame(
+			'date-time',
+			wp_get_ability( 'vendor/orders-query' )->get_output_schema()['properties']['orders']['items']['properties']['date_created']['format'],
+			'The source ability keeps its own schema, so core server-side validation is untouched.'
+		);
+	}
+
+	/**
+	 * Every container keyword a date field can sit under is walked, and a later sibling with a format that is
+	 * not a date is never collateral.
+	 */
+	public function test_date_formats_are_stripped_under_every_schema_container_keyword(): void {
+		$date = array(
+			'type'   => 'string',
+			'format' => 'date-time',
+		);
+		$kept = array(
+			'type'   => 'string',
+			'format' => 'uri',
+		);
+		$out  = aafm_strip_date_formats(
+			array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'a'    => $date,
+					'link' => $kept,
+				),
+				'patternProperties'    => array( '^x' => $date ),
+				'additionalProperties' => $date,
+				'items'                => $date,
+				'prefixItems'          => array( $date, $kept ),
+				'oneOf'                => array( $date ),
+				'allOf'                => array( array( 'properties' => array( 'deep' => array( 'items' => $date ) ) ) ),
+				'anyOf'                => array( $date ),
+			)
+		);
+
+		$this->assertSame( array( 'type' => 'string' ), $out['properties']['a'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['patternProperties']['^x'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['additionalProperties'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['items'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['prefixItems'][0] );
+		$this->assertSame( 'uri', $out['prefixItems'][1]['format'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['oneOf'][0] );
+		$this->assertSame( array( 'type' => 'string' ), $out['allOf'][0]['properties']['deep']['items'] );
+		$this->assertSame( array( 'type' => 'string' ), $out['anyOf'][0] );
+		$this->assertSame( 'uri', $out['properties']['link']['format'] );
+
+		// Tuple-form items, and a boolean additionalProperties, pass through without error.
+		$tuple = aafm_strip_date_formats(
+			array(
+				'items'                => array( $date, $kept ),
+				'additionalProperties' => false,
+			)
+		);
+		$this->assertSame( array( 'type' => 'string' ), $tuple['items'][0] );
+		$this->assertSame( 'uri', $tuple['items'][1]['format'] );
+		$this->assertFalse( $tuple['additionalProperties'] );
+	}
+
+	/**
+	 * Date values a third-party plugin might return, each with whether it must validate once the format is gone.
+	 *
+	 * @return array<string,array{0:mixed,1:bool}>
+	 */
+	public function date_value_cases(): array {
+		return array(
+			'no offset (WooCommerce)' => array( '2026-10-15T10:00:00', true ),
+			'numeric offset'          => array( '2026-10-15T10:00:00+00:00', true ),
+			'Z suffix'                => array( '2026-10-15T10:00:00Z', true ),
+			'date only'               => array( '2026-10-15', true ),
+			'mysql datetime'          => array( '2026-10-15 10:00:00', true ),
+			'null'                    => array( null, true ),
+			'integer, the wrong type' => array( 1760522400, false ),
+			'array, the wrong type'   => array( array( '2026-10-15' ), false ),
+			'boolean, the wrong type' => array( true, false ),
+		);
+	}
+
+	/**
+	 * With the format gone, every date shape a third-party plugin returns validates against the schema a
+	 * client is shown, at depth and for a nullable field, while a value of the wrong TYPE still fails.
+	 *
+	 * @dataProvider date_value_cases
+	 *
+	 * @param mixed $value    The date field's value.
+	 * @param bool  $expected Whether it must validate.
+	 */
+	public function test_every_date_shape_validates_against_the_advertised_schema( $value, bool $expected ): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema(
+			'vendor/dates',
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'rows' => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'when' => array(
+									'type'   => array( 'string', 'null' ),
+									'format' => 'date-time',
+								),
+							),
+						),
+					),
+				),
+			),
+			static fn(): array => array( 'rows' => array() )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/dates' ) );
+		$this->register_wrappers();
+
+		$schema = wp_get_ability( 'aafm-bridge/vendor-dates' )->get_output_schema();
+		$this->assertArrayNotHasKey( 'format', $schema['properties']['rows']['items']['properties']['when'] );
+
+		$valid = rest_validate_value_from_schema( array( 'rows' => array( array( 'when' => $value ) ) ), $schema );
+		$this->assertSame( $expected, true === $valid, 'Validation of the advertised schema.' );
+	}
 }

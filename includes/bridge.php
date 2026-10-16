@@ -366,7 +366,44 @@ function aafm_bridge_output_schema( $ability ): ?array {
 	if ( ! is_array( $schema ) || array() === $schema ) {
 		return null;
 	}
-	return aafm_prepare_bridge_schema_for_client( $schema );
+	return aafm_strip_date_formats( aafm_prepare_bridge_schema_for_client( $schema ) );
+}
+
+/**
+ * Drop the date, time and date-time `format` keywords from a foreign OUTPUT schema, at any depth.
+ *
+ * Third-party abilities often return date strings without a UTC offset (WooCommerce's order dates are
+ * Y-m-d\TH:i:s) while declaring format:date-time. Core validates `format` leniently, so the call works in
+ * process, but strict MCP clients check structuredContent against the advertised outputSchema with
+ * ajv-formats and reject the whole result. Only the advertised copy is rewritten: the source ability keeps
+ * its schema, so core's server-side validation is unchanged, and the values themselves are not touched.
+ *
+ * @param mixed $node A schema node, or any value found where one may sit (a boolean additionalProperties).
+ * @return mixed The node with those formats removed.
+ */
+function aafm_strip_date_formats( $node ) {
+	if ( ! is_array( $node ) ) {
+		return $node;
+	}
+	if ( isset( $node['format'] ) && in_array( $node['format'], array( 'date-time', 'date', 'time' ), true ) ) {
+		unset( $node['format'] );
+	}
+	// Keywords holding a map or a list of subschemas: strip each child.
+	foreach ( array( 'properties', 'patternProperties', 'anyOf', 'oneOf', 'allOf', 'prefixItems' ) as $key ) {
+		if ( isset( $node[ $key ] ) && is_array( $node[ $key ] ) ) {
+			$node[ $key ] = array_map( 'aafm_strip_date_formats', $node[ $key ] );
+		}
+	}
+	// Keywords holding one subschema. `items` may also be a tuple-form list (a schema never has key 0).
+	if ( isset( $node['items'] ) && is_array( $node['items'] ) && isset( $node['items'][0] ) ) {
+		$node['items'] = array_map( 'aafm_strip_date_formats', $node['items'] );
+	} elseif ( isset( $node['items'] ) ) {
+		$node['items'] = aafm_strip_date_formats( $node['items'] );
+	}
+	if ( isset( $node['additionalProperties'] ) ) {
+		$node['additionalProperties'] = aafm_strip_date_formats( $node['additionalProperties'] );
+	}
+	return $node;
 }
 
 /**

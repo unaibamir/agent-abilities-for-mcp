@@ -79,6 +79,27 @@ final class NotificationsSettingsTest extends TestCase {
 		return $this->run_handler( 'aafm_ajax_save_settings' );
 	}
 
+	/**
+	 * The save script reads the trigger boxes with one prefix selector instead of a hard-coded slug
+	 * list, so a fifth trigger saves without a script change. That is only safe while every checkbox
+	 * the card renders under the prefix is a trigger and every trigger is rendered under it.
+	 */
+	public function test_the_save_script_reads_the_trigger_boxes_by_prefix_and_the_card_matches_it(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$this->assertStringContainsString( 'input[type="checkbox"][name^="aafm_notify_"]:checked', $js );
+		$this->assertStringNotContainsString( "'new_app', 'risky_run'", $js );
+
+		ob_start();
+		aafm_render_notifications_section();
+		$html = (string) ob_get_clean();
+		preg_match_all( '/<input type="checkbox" name="aafm_notify_([a-z_]+)"/', $html, $boxes );
+		$this->assertSame( array_keys( aafm_notify_triggers() ), $boxes[1] );
+		// The mode select and the address are not checkboxes, so the prefix selector cannot sweep them in.
+		$this->assertStringContainsString( '<select id="aafm-notify-mode" name="aafm_notify_mode"', $html );
+		$this->assertStringContainsString( '<input type="email" id="aafm-notify-email" name="aafm_notify_email"', $html );
+	}
+
 	public function test_a_valid_save_stores_the_settings_and_schedules_the_digest(): void {
 		$json = $this->save(
 			array(

@@ -1553,10 +1553,8 @@
 				if ( notifyMode ) {
 					body.append( 'aafm_notify_mode', notifyMode.value );
 					body.append( 'aafm_notify_email', notifyEmail?.value ?? '' );
-					[ 'new_app', 'risky_run', 'denial_burst', 'switch_flip' ].forEach( ( slug ) => {
-						if ( form.querySelector( `input[name="aafm_notify_${ slug }"]` )?.checked ) {
-							body.append( `aafm_notify_${ slug }`, '1' );
-						}
+					form.querySelectorAll( 'input[type="checkbox"][name^="aafm_notify_"]:checked' ).forEach( ( box ) => {
+						body.append( box.name, '1' );
 					} );
 				}
 

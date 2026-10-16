@@ -2160,6 +2160,12 @@
 				// The deep-link note describes the row filter, so it goes when that filter does.
 				if ( ! values.row ) {
 					document.querySelector( '.aafm-log-row-note' )?.remove();
+					// The address bar goes with it, or a reload brings the single-row view back.
+					const pageUrl = new URL( window.location.href );
+					if ( pageUrl.searchParams.has( 'row' ) ) {
+						pageUrl.searchParams.delete( 'row' );
+						history.replaceState( history.state, '', pageUrl );
+					}
 				}
 				syncLive();
 				if ( data.summary ) {

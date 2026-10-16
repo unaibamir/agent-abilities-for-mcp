@@ -307,6 +307,9 @@ final class ActivityFiltersUiTest extends TestCase {
 		// The deep-link note goes with the row filter.
 		$this->assertStringContainsString( "document.querySelector( '.aafm-log-row-note' )?.remove();", $js );
 
+		// The address bar drops "row" with the filter, keeping every other query arg.
+		$this->assertMatchesRegularExpression( '/! values\.row \) \{.*?new URL\( window\.location\.href \).*?searchParams\.delete\( \'row\' \).*?history\.replaceState\(/s', $js );
+
 		// Live is switched off for a search or user filter with no date range, with a hint.
 		$this->assertStringContainsString( 'appliedFilters.q || appliedFilters.user', $js );
 		$this->assertStringContainsString( 'liveBtn.disabled = blocked;', $js );

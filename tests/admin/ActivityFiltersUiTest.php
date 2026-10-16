@@ -331,11 +331,9 @@ final class ActivityFiltersUiTest extends TestCase {
 		// A one-character search is not sent; the viewer gets the browser's own validation bubble.
 		$this->assertStringContainsString( "this.#t( 'searchTooShort'", $js );
 		$this->assertStringContainsString( 'reportValidity()', $js );
-		// The empty row and the count note come from the localized bag.
+		// The empty row comes from the localized bag.
 		$this->assertStringContainsString( "this.#t( 'noMatches'", $js );
-		$this->assertStringContainsString( "'countNoteOne'", $js );
-		$this->assertStringContainsString( "'countNoteMany'", $js );
-		// The server's pluralized note wins; the one/many pair is only the fallback.
+		// The count note is the server's pluralized one.
 		$this->assertStringContainsString( 'this.#renderLogCount( data.total, data.count_note );', $js );
 	}
 }

@@ -89,6 +89,7 @@ final class ActivityTabTest extends TestCase {
 		$json = $this->run_handler( 'aafm_ajax_clear_log' );
 
 		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+		$this->assertSame( aafm_activity_count_note( 0, aafm_log_retention_days() ), $json['data']['count_note'] ?? null );
 
 		// Exactly one row survives: the marker, not the seeded call.
 		$this->assertSame( 1, aafm_activity_count() );

@@ -1931,7 +1931,7 @@
 				if ( json?.success ) {
 					// Empty the table, reset the count, and collapse the pager to page 1 of 1.
 					this.#renderLogRows( [] );
-					this.#renderLogCount( 0 );
+					this.#renderLogCount( 0, json.data?.count_note );
 					const wrap = document.querySelector( '#aafm-log-table-wrap' );
 					if ( wrap ) {
 						wrap.dataset.page = '1';
@@ -1946,12 +1946,10 @@
 		/**
 		 * Show the entry count and its note.
 		 *
-		 * The server sends the note already pluralized for the count. The one/many pair is only the
-		 * fallback for a response without it, and it knows two forms, so a language with more would
-		 * get the many form there.
+		 * The server sends the note already pluralized for the count.
 		 *
 		 * @param {number} total How many entries match.
-		 * @param {*}      note  The server's pluralized note, when the response carries one.
+		 * @param {string} note  The server's pluralized note.
 		 */
 		#renderLogCount( total, note ) {
 			const num = document.querySelector( '.aafm-count-num' );
@@ -1960,12 +1958,7 @@
 			}
 			const noteEl = document.querySelector( '.aafm-count-note' );
 			if ( noteEl ) {
-				noteEl.textContent =
-					typeof note === 'string' && note !== ''
-						? note
-						: total === 1
-							? this.#t( 'countNoteOne', 'entry' )
-							: this.#t( 'countNoteMany', 'entries' );
+				noteEl.textContent = note ?? '';
 			}
 		}
 

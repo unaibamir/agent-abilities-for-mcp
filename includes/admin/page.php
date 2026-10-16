@@ -182,8 +182,6 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'noActivity'               => __( 'No activity recorded yet.', 'agent-abilities-for-mcp' ),
 				'noMatches'                => __( 'No entries match these filters.', 'agent-abilities-for-mcp' ),
 				'searchTooShort'           => __( 'Type at least 2 characters to search.', 'agent-abilities-for-mcp' ),
-				'countNoteOne'             => aafm_activity_count_note( 1, aafm_log_retention_days() ),
-				'countNoteMany'            => aafm_activity_count_note( 2, aafm_log_retention_days() ),
 				// Activity Log: Live view and summary.
 				'liveStopped'              => __( 'Live view stopped.', 'agent-abilities-for-mcp' ),
 				'liveTimedOut'             => __( 'Live view paused after 15 minutes. Turn it on again to keep watching.', 'agent-abilities-for-mcp' ),
@@ -1329,7 +1327,8 @@ function aafm_ajax_clear_log(): void {
 	if ( ! aafm_log_activity_cleared_marker() ) {
 		wp_send_json_error( array( 'message' => __( 'The activity log was cleared, but the clear could not be recorded. Please try again.', 'agent-abilities-for-mcp' ) ) );
 	}
-	wp_send_json_success();
+	// The emptied view shows "entries, keeping ..." under its zero count; the server words it.
+	wp_send_json_success( array( 'count_note' => aafm_activity_count_note( 0, aafm_log_retention_days() ) ) );
 }
 
 /**
@@ -2796,8 +2795,8 @@ function aafm_render_activity_tab(): void {
 /**
  * The words after the entry count: "entry" or "entries", then what the log keeps.
  *
- * The AJAX page response carries this string for the count it returns, so the plural form is chosen by
- * _n() and not by the script. The countNoteOne and countNoteMany strings stay as the script's fallback.
+ * The AJAX page and clear-log responses carry this string for the count they return, so the plural form
+ * is chosen by _n() and not by the script.
  *
  * @param int $total     How many entries the count above shows.
  * @param int $retention Days the log keeps entries, 0 for everything.

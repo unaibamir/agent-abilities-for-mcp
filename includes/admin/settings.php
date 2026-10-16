@@ -444,7 +444,7 @@ function aafm_log_high_risk_switch_change( bool $before, bool $after, bool $pers
 			'detail'            => $detail,
 		)
 	);
-	if ( $persisted && $before !== $after && function_exists( 'aafm_notify_switch_flip' ) ) {
+	if ( $persisted && $before !== $after ) {
 		aafm_notify_switch_flip( $after ? 'high_risk_unlocked' : 'high_risk_locked', $row_id );
 	}
 }

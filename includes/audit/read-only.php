@@ -248,7 +248,7 @@ function aafm_log_read_only_switch_change( bool $before, bool $after, bool $pers
 			'detail'            => $detail,
 		)
 	);
-	if ( $persisted && $before !== $after && function_exists( 'aafm_notify_switch_flip' ) ) {
+	if ( $persisted && $before !== $after ) {
 		aafm_notify_switch_flip( $after ? 'read_only_on' : 'read_only_off', $row_id );
 	}
 }

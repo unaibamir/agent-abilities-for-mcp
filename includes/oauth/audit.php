@@ -98,7 +98,7 @@ function aafm_oauth_log_event( string $event, string $status, array $ctx = array
 			'arg_keys'          => $keys,
 		)
 	);
-	if ( 'authorize' === $event && 'success' === $status && function_exists( 'aafm_notify_oauth_grant' ) ) {
+	if ( 'authorize' === $event && 'success' === $status ) {
 		aafm_notify_oauth_grant( $ctx, $row_id );
 	}
 }

@@ -455,7 +455,7 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 * **Chore:** Condensed the changelog so the full release history fits within the wordpress.org listing's length limit, in both readmes. Same releases, fewer lines, with the security and data-integrity fixes still called out one by one.
 * **Chore:** Corrected a code comment that slightly overstated when a consumer plugin's short-circuit is visible to the rate-limit release hook.
 
-Full release history: https://agentabilitieswp.com/changelog/
+[Full release history](https://agentabilitieswp.com/changelog/).
 
 == Upgrade Notice ==
 

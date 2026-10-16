@@ -63,6 +63,34 @@ final class LogQueryTest extends TestCase {
 		);
 	}
 
+	public function test_a_malformed_date_is_dropped_never_thrown(): void {
+		$this->log( 'aafm/get-posts', 'success' );
+		$junk = array( "2026-01-01\0", "2026-01-01\n", '2026-1-5', '2026-02-30', '0000-01-01', '2026-01-01 ', '', '..', "\0", array( '2026-01-01' ) );
+		foreach ( $junk as $value ) {
+			$this->assertSame(
+				array(),
+				aafm_activity_filters_normalize(
+					array(
+						'from' => $value,
+						'to'   => $value,
+					)
+				),
+				'Dropped: ' . wp_json_encode( $value )
+			);
+			$this->assertSame(
+				$this->ids( array() ),
+				$this->ids(
+					array(
+						'from' => $value,
+						'to'   => $value,
+					)
+				),
+				'The query ignores it.'
+			);
+		}
+		$this->assertSame( array( 'from' => '2026-01-01' ), aafm_activity_filters_normalize( array( 'from' => '2026-01-01' ) ) );
+	}
+
 	public function test_normalize_is_idempotent(): void {
 		$once = aafm_activity_filters_normalize(
 			array(

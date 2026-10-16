@@ -49,7 +49,11 @@ function aafm_activity_valid_date( $value ): ?string {
 	if ( ! is_string( $value ) ) {
 		return null;
 	}
-	// The format round trip rejects 2024-1-5, 2024-02-30 and trailing text; year 0000 is not a date.
+	// The shape check comes first: PHP 8 throws on a NUL byte in createFromFormat(), and \z (not $) refuses a trailing newline.
+	if ( 1 !== preg_match( '/\A\d{4}-\d{2}-\d{2}\z/', $value ) ) {
+		return null;
+	}
+	// The round trip rejects 2024-02-30; year 0000 is not a date.
 	$date = \DateTime::createFromFormat( '!Y-m-d', $value );
 	return $date && $date->format( 'Y-m-d' ) === $value && '0000' !== substr( $value, 0, 4 ) ? $value : null;
 }

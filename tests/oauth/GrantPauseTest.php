@@ -150,6 +150,13 @@ class GrantPauseTest extends TestCase {
 		$log      = wp_tempnam( 'aafm-pause-log' );
 		$previous = ini_set( 'error_log', $log ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- capture the adapter's log line, if any.
 
+		if ( ! isset( rest_get_server()->get_routes()[ aafm_mcp_rest_route() ] ) ) {
+			// An earlier test rebuilt the REST server after the adapter registered its route; put the real
+			// transport's route back, permission callback included.
+			$server = \WP\MCP\Core\McpAdapter::instance()->get_server( 'aafm-server' );
+			$this->assertNotNull( $server );
+			( new \WP\MCP\Transport\HttpTransport( $server->create_transport_context() ) )->register_routes();
+		}
 		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );

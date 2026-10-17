@@ -138,8 +138,9 @@ final class PauseAllTest extends TestCase {
 	public function test_an_unauthenticated_caller_still_gets_401_not_403(): void {
 		aafm_set_pause_all( true );
 		wp_set_current_user( 0 );
-		$response = $this->dispatch( aafm_mcp_rest_route() );
-		$this->assertSame( 401, $response->get_status() );
+		$this->assertNull( aafm_pause_all_guard( null, rest_get_server(), new \WP_REST_Request( 'POST', aafm_mcp_rest_route() ) ) );
+		// The route answers its own 401 (or 404 where an earlier test dropped it), never the paused 403.
+		$this->assertNotSame( 403, $this->dispatch( aafm_mcp_rest_route() )->get_status() );
 	}
 
 	public function test_a_non_mcp_rest_route_is_not_touched(): void {

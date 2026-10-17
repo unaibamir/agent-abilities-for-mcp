@@ -765,7 +765,7 @@ function aafm_connection_app_passwords_data(): array {
 	$doctor = aafm_doctor_check_app_passwords();
 	return array(
 		'title'       => __( 'Application Passwords', 'agent-abilities-for-mcp' ),
-		'rule'        => __( 'An Application Password is a whole-site credential for the agent user. Revoke any you no longer use.', 'agent-abilities-for-mcp' ),
+		'rule'        => __( 'Application Passwords on the agent users this plugin created. Revoke any you no longer use.', 'agent-abilities-for-mcp' ),
 		'available'   => 'pass' === $doctor['status'],
 		'unavailable' => 'pass' === $doctor['status'] ? '' : (string) $doctor['detail'],
 		'users'       => $users,
@@ -827,7 +827,7 @@ function aafm_render_app_passwords_card( array $data ): void {
 		array(
 			'id'          => 'aafm-card-app-passwords',
 			'class'       => 'aafm-app-passwords-card',
-			'icon'        => 'lock',
+			'icon'        => 'key',
 			'title'       => $data['title'],
 			'description' => $data['rule'],
 			'body'        => $body,

@@ -609,11 +609,15 @@
 		margin-block-end: 8px;
 	}
 
+	/* Each row's label sits on its own line above its text, so the two never run together. */
 	.aafm-os-note {
-		max-inline-size: 760px;
+		.aafm-os-note-label {
+			display: block;
+			font-weight: 600;
+		}
 
 		.aafm-os-note-row + .aafm-os-note-row {
-			margin-block-start: 6px;
+			margin-block-start: var(--aafm-space-2);
 		}
 
 		code {
@@ -700,19 +704,15 @@
 	/* ---------- Accordion content contract ----------
 	   An accordion in this plugin comes in two shapes. Most wrap their content in a body
 	   element that supplies the horizontal inset (.aafm-section-body, .aafm-integration-body,
-	   .aafm-set-more-body, .aafm-help-body). Three do not, and put content directly inside
-	   the <details>: the app-password fallback, the bridge alternative, and the dashboard
-	   setup card. In those, anything dropped in ran edge to edge, which is how the
-	   app-password warning notice ended up flush against the card border while its sibling
-	   .aafm-step rows looked correct (they carried their own margin-inline, so the gap was
-	   invisible until something without one landed there).
+	   .aafm-set-more-body, .aafm-help-body). Two do not, and put content directly inside
+	   the <details>: the bridge alternative and the dashboard setup card. In those, anything
+	   dropped in would run edge to edge.
 
 	   Rather than patch the one component that showed the symptom, give the bare shape the
 	   same gutter contract a body wrapper provides. Any direct child gets it, so a notice,
 	   a table or a plain paragraph added later lands correctly with no wrapper markup and no
 	   author having to know. Children that already supply their own inset are normalised onto
 	   the token below rather than left to double it. */
-	.aafm-app-password-fallback,
 	.aafm-bridge-alt,
 	.aafm-setup {
 		> *:not(summary) {
@@ -1705,15 +1705,15 @@
 			font-size: 13px;
 		}
 
-		h2 {
+		h3 {
 			margin: 0;
-			font-size: 16px;
+			font-size: var(--aafm-fs-body);
 			font-weight: 600;
 		}
 
 		.sub {
 			color: var(--aafm-text-subtle);
-			font-size: 12.5px;
+			font-size: var(--aafm-fs-sm);
 			margin-block: 1px 0;
 		}
 	}
@@ -2810,23 +2810,6 @@
 		}
 	}
 
-	/* Application Passwords tab panel: a bordered box around the warning and Steps 1 to 3. No display
-	   rule here: the panel is toggled with the hidden attribute. */
-	.aafm-app-password-fallback {
-		margin-block-start: 4px;
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border);
-		border-radius: var(--aafm-radius);
-
-		/* Inner steps take the same gutter as every other direct child (see the accordion
-		   content contract above); only their vertical rhythm is special here. */
-		.aafm-step {
-			margin-inline: var(--aafm-space-5);
-
-			&:first-of-type { margin-block-start: 18px; }
-			&:last-of-type  { margin-block-end: 18px; }
-		}
-	}
 }
 
 @media (prefers-reduced-motion: reduce) {

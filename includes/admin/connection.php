@@ -1118,6 +1118,14 @@ function aafm_render_app_password_steps(): void {
 	$is_local  = aafm_site_is_local();
 	$kses_code = array( 'code' => array() );
 
+	aafm_render_app_passwords_card( aafm_connection_app_passwords_data() );
+
+	// One card for the three steps, headed like the OAuth card. The steps sit straight in its body:
+	// no card inside a card.
+	echo '<section class="aafm-card aafm-app-password-steps">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'terminal', __( 'Connect with an Application Password', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
+
 	// Whole-site-credential caution. An Application Password is a core WordPress feature this
 	// plugin cannot scope: it authenticates the connected user everywhere in WordPress, not only
 	// through this plugin's MCP endpoint. Said once, here, where an operator is about to generate
@@ -1126,8 +1134,6 @@ function aafm_render_app_password_steps(): void {
 		'warning',
 		__( "An Application Password is a whole-site WordPress credential, not something this plugin can scope down. It authenticates the connected user across all of WordPress, including the REST API and XML-RPC, with everything that user's role allows, not only the abilities you turn on below. The allowlist, the high-risk floor, and the activity log on this plugin's tabs all apply to calls made through this MCP endpoint only, never to anything done with the same password elsewhere. OAuth above does not have this limit: a token this plugin issues only ever authenticates this one endpoint.", 'agent-abilities-for-mcp' )
 	);
-
-	aafm_render_app_passwords_card( aafm_connection_app_passwords_data() );
 
 	// ---- Step 1: create a dedicated agent user ----
 	// Done-ness keys off the plugin-created marker (any dedicated agent user this plugin made),
@@ -1158,10 +1164,10 @@ function aafm_render_app_password_steps(): void {
 		echo '1';
 	}
 	echo '</span><div>';
-	echo '<h2>' . esc_html__( 'Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h3>' . esc_html__( 'Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="sub">' . esc_html__( 'Give the agent its own user with the least privilege it needs. It can only do what that user\'s role allows, and every ability is off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
-	echo '<div class="aafm-step-rail"><div class="aafm-card aafm-card-pad">';
+	echo '<div class="aafm-step-rail">';
 	wp_nonce_field( 'aafm_admin', 'aafm_conn_nonce' );
 	if ( $agent_exists ) {
 		$edit_url = (string) get_edit_user_link( $existing_agent_id );
@@ -1188,25 +1194,25 @@ function aafm_render_app_password_steps(): void {
 		// wizard's equivalent input (quickconnect.php) is labelled the same way.
 		echo '<p><input type="text" id="aafm-agent-login" value="' . esc_attr( $default_agent_login ) . '" class="regular-text" aria-label="' . esc_attr__( 'Agent username', 'agent-abilities-for-mcp' ) . '"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
 	}
-	echo '</div></div>';
+	echo '</div>'; // .aafm-step-rail
 	echo '</div>';
 
 	// ---- Step 2: connect your client (App Password path) ----
 	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">2</span><div>';
-	echo '<h2>' . esc_html__( 'Connect your client', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h3>' . esc_html__( 'Connect your client', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="sub">' . esc_html__( 'Generate an Application Password for the agent user (Users → Profile → Application Passwords), pick your client, then copy the config.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	echo '<div class="aafm-step-rail"><div class="aafm-card">';
+	echo '<div class="aafm-step-rail">';
 
 	// OS toggle + client picker row.
-	echo '<div class="aafm-card-pad aafm-connect-controls">';
+	echo '<div class="aafm-connect-controls">';
 	aafm_render_client_picker( 'aafm-os-label-bridge', 'aafm-clients', aafm_config_snippet_clients() );
 	echo '</div>'; // .aafm-connect-controls
 
 	// Primary config block: the default (first) client, one .aafm-codeblock per OS.
-	echo '<div class="aafm-card-pad">';
+	echo '<div class="aafm-connect-config">';
 
 	// Use the first client in the config-snippet grid (claude-code) for the default block. Seed the
 	// username from the actual marked agent login when one exists (the admin may have created the
@@ -1243,9 +1249,8 @@ function aafm_render_app_password_steps(): void {
 		'info',
 		$os_note_body,
 		array(
-			'html'   => true,
-			'inline' => true,
-			'class'  => 'aafm-os-note',
+			'html'  => true,
+			'class' => 'aafm-os-note',
 		)
 	);
 
@@ -1266,20 +1271,20 @@ function aafm_render_app_password_steps(): void {
 	echo '</div>';
 	echo '</div>';
 
-	echo '</div>'; // .aafm-card-pad config block
+	echo '</div>'; // .aafm-connect-config
 
-	echo '</div></div>'; // .aafm-card / .aafm-step-rail
+	echo '</div>'; // .aafm-step-rail
 	echo '</div>'; // .aafm-step 2
 
 	// ---- Step 3: check the endpoint is reachable ----
 	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">3</span><div>';
-	echo '<h2>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h3>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view - your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	echo '<div class="aafm-step-rail"><div class="aafm-card">';
-	echo '<div class="aafm-card-pad aafm-connect-check">';
+	echo '<div class="aafm-step-rail">';
+	echo '<div class="aafm-connect-check">';
 	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-test-connection">';
 	echo wp_kses( aafm_icon( 'check' ), aafm_svg_allowed_html() );
 	echo esc_html__( 'Check endpoint', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-test-status" aria-live="polite"></span>';
@@ -1303,6 +1308,8 @@ function aafm_render_app_password_steps(): void {
 		);
 	}
 	echo '</div>';
-	echo '</div></div>'; // .aafm-card / .aafm-step-rail
+	echo '</div>'; // .aafm-step-rail
 	echo '</div>'; // .aafm-step 3
+
+	echo '</div></section>'; // .aafm-card-pad, .aafm-app-password-steps
 }

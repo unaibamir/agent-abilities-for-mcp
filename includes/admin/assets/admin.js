@@ -479,11 +479,21 @@
 					t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
 				} );
 				this.#rovingTabindex( list, tab );
+				// "all" shows every panel under its subject label; any other tab shows one panel.
+				const all = 'all' === subject;
 				document
 					.querySelectorAll( '.aafm-subject-panel[data-subject]' )
 					.forEach( ( panel ) => {
-						panel.hidden = panel.dataset.subject !== subject;
+						panel.hidden = ! all && panel.dataset.subject !== subject;
+						const label = this.#abilitiesPanelLabel( panel );
+						if ( label ) {
+							label.hidden = ! all;
+						}
 					} );
+				const allPanel = document.getElementById( 'aafm-subject-panel-all' );
+				if ( allPanel ) {
+					allPanel.hidden = ! all;
+				}
 				// Codex admin-ui-r1 M2: a click and an Arrow/Home/End key both land here (the
 				// keydown handler wired by #wireTablistKeys() calls this same function), so
 				// dispatching from one place lets #bindAbilitiesSearch() clear a stale query on
@@ -568,11 +578,19 @@
 					btn.disabled = disabled;
 				} );
 			};
+			// The All tab's bulk controls act on the whole form, hidden rows included, so a
+			// query hides and disables them the same way it does each panel's own.
+			const allPanel = form.querySelector( '.aafm-subject-all' );
 
 			const clear = () => {
 				const subject = activeSubject();
+				const all = 'all' === subject;
+				if ( allPanel ) {
+					allPanel.hidden = ! all;
+					setBulkButtonsDisabled( allPanel, false );
+				}
 				panels.forEach( ( panel ) => {
-					panel.hidden = panel.dataset.subject !== subject;
+					panel.hidden = ! all && panel.dataset.subject !== subject;
 					panel.querySelectorAll( '.aafm-ability-row' ).forEach( ( row ) => {
 						row.hidden = false;
 					} );
@@ -585,7 +603,7 @@
 					setBulkButtonsDisabled( panel, false );
 					const label = panel.querySelector( ':scope > .aafm-subject-search-label' );
 					if ( label ) {
-						label.hidden = true;
+						label.hidden = ! all;
 					}
 				} );
 				if ( savebar ) {
@@ -603,6 +621,10 @@
 					return;
 				}
 
+				if ( allPanel ) {
+					allPanel.hidden = true;
+					setBulkButtonsDisabled( allPanel, true );
+				}
 				let matchCount = 0;
 				panels.forEach( ( panel ) => {
 					let panelMatches = 0;
@@ -807,8 +829,9 @@
 		#bindEnableReads() {
 			document.querySelectorAll( '.aafm-enable-reads' ).forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
+					// The All tab's controls sit outside every panel, so they reach the form.
 					const scope = btn.closest(
-						'.aafm-subject-panel, .aafm-integration-card'
+						'.aafm-subject-panel, .aafm-integration-card, #aafm-abilities-form'
 					);
 					if ( ! scope ) {
 						return;
@@ -849,8 +872,9 @@
 		#bindEnableWrites() {
 			document.querySelectorAll( '.aafm-enable-writes' ).forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
+					// The All tab's controls sit outside every panel, so they reach the form.
 					const scope = btn.closest(
-						'.aafm-subject-panel, .aafm-integration-card'
+						'.aafm-subject-panel, .aafm-integration-card, #aafm-abilities-form'
 					);
 					if ( ! scope ) {
 						return;
@@ -875,9 +899,10 @@
 			buttons.forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
 					const subject = btn.dataset.subject;
-					const panel = document.querySelector(
-						`.aafm-subject-panel[data-subject="${ subject }"]`
-					);
+					const panel =
+						'all' === subject
+							? btn.closest( '#aafm-abilities-form' )
+							: document.querySelector( `.aafm-subject-panel[data-subject="${ subject }"]` );
 					if ( ! panel ) {
 						return;
 					}

@@ -2035,9 +2035,19 @@ function aafm_render_abilities_tab(): void {
 	// Full WAI-ARIA tabs pattern: each tab carries a stable id + aria-controls pointing at its
 	// panel, roving tabindex (only the active tab is in the tab sequence), and the JS adds
 	// Arrow/Home/End handling. Each panel below carries the matching id + aria-labelledby.
-	$first = array_key_first( $display_tabs );
+	// "All" comes first and is the default view. It is not a second copy of the rows: it shows
+	// every subject panel at once under its subject label, so each checkbox still renders once.
+	$all_rows = array();
+	foreach ( $display_tabs as $tab ) {
+		$all_rows = array_merge( $all_rows, $tab['rows'] );
+	}
+	$first   = 'all';
+	$all_tab = array(
+		'label' => __( 'All', 'agent-abilities-for-mcp' ),
+		'rows'  => $all_rows,
+	);
 	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist" aria-label="' . esc_attr__( 'Ability subjects', 'agent-abilities-for-mcp' ) . '">';
-	foreach ( $display_tabs as $slug => $tab ) {
+	foreach ( array( 'all' => $all_tab ) + $display_tabs as $slug => $tab ) {
 		$is_active = ( $slug === $first );
 		$tab_id    = 'aafm-subject-tab-' . $slug;
 		$panel_id  = 'aafm-subject-panel-' . $slug;
@@ -2055,20 +2065,22 @@ function aafm_render_abilities_tab(): void {
 	}
 	echo '</div>';
 
+	// The All tab's own panel holds only its bulk controls; the rows are the subject panels below.
+	echo '<div class="aafm-subject-all" role="tabpanel" id="aafm-subject-panel-all" aria-labelledby="aafm-subject-tab-all">';
+	aafm_render_abilities_bulk_toolbar( 'all', $all_rows );
+	echo '</div>';
+
 	foreach ( $display_tabs as $slug => $tab ) {
-		$is_active = ( $slug === $first );
-		$tab_rows  = $tab['rows'];
-		// data-subject-label: the panel's own heading below is just a count ("27 / 27 enabled"),
-		// never the subject name, so there is nothing on the panel itself to reuse when the
-		// abilities search reveals several panels at once. admin.js reads this to show which
-		// sub-tab a given panel is while more than one is visible.
+		$tab_rows = $tab['rows'];
+		// The panel's own heading below is just a count ("27 / 27 enabled"), never the subject name,
+		// so the subject label names the group whenever several panels show at once: the All tab
+		// and a cross-tab search. admin.js hides it while a single subject tab is open.
 		printf(
-			'<div class="aafm-subject-panel" data-subject="%1$s" data-subject-label="%2$s" role="tabpanel" id="%3$s" aria-labelledby="%4$s" tabindex="0"%5$s>',
+			'<div class="aafm-subject-panel" data-subject="%1$s" data-subject-label="%2$s" role="tabpanel" id="%3$s" aria-labelledby="%4$s" tabindex="0"><p class="aafm-subject-search-label">%2$s</p>',
 			esc_attr( $slug ),
 			esc_attr( $tab['label'] ),
 			esc_attr( 'aafm-subject-panel-' . $slug ),
-			esc_attr( 'aafm-subject-tab-' . $slug ),
-			$is_active ? '' : ' hidden'
+			esc_attr( 'aafm-subject-tab-' . $slug )
 		);
 
 		// Per-tab count badge: how many of this tab's abilities are enabled.
@@ -2090,56 +2102,7 @@ function aafm_render_abilities_tab(): void {
 			esc_html__( 'enabled', 'agent-abilities-for-mcp' )
 		);
 
-		// Per-section enable/disable-all control. JS scopes by .aafm-subject-panel[data-subject]
-		// and toggles every checkbox in this panel; data-has-destructive tells it to confirm before
-		// bulk-enabling a section that contains a destructive ability.
-		$has_destructive = false;
-		foreach ( $tab_rows as $ability ) {
-			if ( 'destructive' === (string) ( $ability['risk'] ?? '' ) ) {
-				$has_destructive = true;
-				break;
-			}
-		}
-		// "Enable all writes" only renders where it can actually do something. A section with no
-		// ordinary write row, or one where every write is currently locked (read-only mode on, or
-		// the high-risk category shut), would render a button guaranteed to tick nothing - the
-		// failure mode that looks exactly like success. aafm_ability_lock_reason() covers both lock
-		// causes; the explicit high-risk test covers the UNLOCKED high-risk ability, which the lock
-		// predicate lets through but this control still refuses to touch.
-		$has_enableable_write = false;
-		foreach ( $tab_rows as $ability ) {
-			$write_name = (string) ( $ability['name'] ?? '' );
-			if ( 'write' !== (string) ( $ability['risk'] ?? '' ) ) {
-				continue;
-			}
-			if ( aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
-				continue;
-			}
-			$has_enableable_write = true;
-			break;
-		}
-
-		// The note is not decoration: "writes" on its own reads as "everything that changes the
-		// site", and this control deliberately stops short of deletes and the high-risk category.
-		// aria-describedby hangs it off the button so a screen reader announces the caveat with the
-		// control rather than only sighted users seeing it.
-		$write_note_id = 'aafm-write-note-' . sanitize_key( $slug );
-
-		printf(
-			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
-			esc_attr( $slug ),
-			$has_destructive ? ' data-has-destructive="1"' : '',
-			esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
-			esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
-			$has_enableable_write
-				? sprintf(
-					' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
-					esc_attr( $write_note_id ),
-					esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
-					esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
-				)
-				: ''
-		);
+		aafm_render_abilities_bulk_toolbar( $slug, $tab_rows );
 
 		if ( 'content' === $slug ) {
 			aafm_render_post_types_selector();
@@ -2206,6 +2169,70 @@ function aafm_render_abilities_tab(): void {
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
 	// feature - it would filter $enabled per principal here rather than at render time.
+}
+
+/**
+ * Echo the bulk controls for a set of ability rows: Enable all / Disable all, Enable all reads and,
+ * where it can tick something, Enable all writes.
+ *
+ * Used once per subject panel and once for the All tab, where `$slug` is 'all' and `$tab_rows` is
+ * every row, so the All tab's buttons act on the whole form through the same JS bindings.
+ *
+ * @param string                         $slug     Display-tab slug, or 'all'.
+ * @param array<int,array<string,mixed>> $tab_rows The ability entries the controls act on.
+ * @return void
+ */
+function aafm_render_abilities_bulk_toolbar( string $slug, array $tab_rows ): void {
+	// Per-section enable/disable-all control. JS scopes by .aafm-subject-panel[data-subject]
+	// (the whole form for 'all') and toggles every checkbox in it; data-has-destructive tells it to confirm before
+	// bulk-enabling a section that contains a destructive ability.
+	$has_destructive = false;
+	foreach ( $tab_rows as $ability ) {
+		if ( 'destructive' === (string) ( $ability['risk'] ?? '' ) ) {
+			$has_destructive = true;
+			break;
+		}
+	}
+	// "Enable all writes" only renders where it can actually do something. A section with no
+	// ordinary write row, or one where every write is currently locked (read-only mode on, or
+	// the high-risk category shut), would render a button guaranteed to tick nothing - the
+	// failure mode that looks exactly like success. aafm_ability_lock_reason() covers both lock
+	// causes; the explicit high-risk test covers the UNLOCKED high-risk ability, which the lock
+	// predicate lets through but this control still refuses to touch.
+	$has_enableable_write = false;
+	foreach ( $tab_rows as $ability ) {
+		$write_name = (string) ( $ability['name'] ?? '' );
+		if ( 'write' !== (string) ( $ability['risk'] ?? '' ) ) {
+			continue;
+		}
+		if ( aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
+			continue;
+		}
+		$has_enableable_write = true;
+		break;
+	}
+
+	// The note is not decoration: "writes" on its own reads as "everything that changes the
+	// site", and this control deliberately stops short of deletes and the high-risk category.
+	// aria-describedby hangs it off the button so a screen reader announces the caveat with the
+	// control rather than only sighted users seeing it.
+	$write_note_id = 'aafm-write-note-' . sanitize_key( $slug );
+
+	printf(
+		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
+		esc_attr( $slug ),
+		$has_destructive ? ' data-has-destructive="1"' : '',
+		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
+		esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
+		$has_enableable_write
+			? sprintf(
+				' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
+				esc_attr( $write_note_id ),
+				esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
+				esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
+			)
+			: ''
+	);
 }
 
 /**

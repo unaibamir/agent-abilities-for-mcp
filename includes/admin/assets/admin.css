@@ -1212,15 +1212,15 @@
 		}
 	}
 
-	/* Shown above a panel's own heading only while a cross-tab search leaves more than one
-	   .aafm-subject-panel visible at once, naming which sub-tab that panel is. */
+	/* Shown above a panel's own heading while more than one .aafm-subject-panel is visible (the
+	   All tab, or a cross-tab search), naming which sub-tab that panel is. */
 	.aafm-subject-search-label {
-		margin-block: 0 4px;
-		font-size: 12px;
+		margin-block: var(--aafm-space-6) var(--aafm-space-2);
+		padding-block-start: var(--aafm-space-4);
+		border-block-start: 1px solid var(--aafm-border);
+		font-size: var(--aafm-fs-lg);
 		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.02em;
-		color: var(--aafm-text-subtle);
+		color: var(--aafm-text);
 	}
 
 	/* ---------- Integration cards (Integrations tab) ---------- */

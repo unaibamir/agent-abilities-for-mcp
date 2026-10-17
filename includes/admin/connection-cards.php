@@ -852,7 +852,7 @@ function aafm_ajax_revoke_app_password(): void {
 	$uuid     = isset( $_POST['uuid'] ) ? wp_unslash( $_POST['uuid'] ) : null;
 	// phpcs:enable
 	$user_id = is_string( $raw_user ) ? absint( $raw_user ) : 0;
-	if ( $user_id <= 0 || ! is_string( $uuid ) || ! wp_is_uuid( $uuid ) || ! in_array( $user_id, array_map( 'intval', aafm_created_agent_users() ), true ) || ! current_user_can( 'delete_app_password', $user_id, $uuid ) ) {
+	if ( $user_id <= 0 || ! is_string( $uuid ) || ! wp_is_uuid( $uuid ) || ! in_array( $user_id, array_map( 'intval', aafm_created_agent_users() ), true ) || ! aafm_user_can_checked( 'delete_app_password', $user_id, 'user' ) ) {
 		wp_send_json_error( array( 'message' => __( 'That Application Password cannot be revoked here.', 'agent-abilities-for-mcp' ) ) );
 	}
 	$deleted = WP_Application_Passwords::delete_application_password( $user_id, $uuid );

@@ -40,6 +40,9 @@ class AppPasswordsTabTest extends TestCase {
 	}
 
 	public function tear_down(): void {
+		// wp_authenticate_application_password() records its result in globals the REST API reads
+		// on every later request in this process.
+		unset( $GLOBALS['wp_rest_application_password_status'], $GLOBALS['wp_rest_application_password_uuid'] );
 		$this->reset_ajax_harness();
 		parent::tear_down();
 	}

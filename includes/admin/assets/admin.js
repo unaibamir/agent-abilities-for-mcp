@@ -856,6 +856,8 @@
 					boxes.forEach( ( b ) => {
 						b.checked = true;
 					} );
+					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
@@ -898,6 +900,8 @@
 					boxes.forEach( ( b ) => {
 						b.checked = true;
 					} );
+					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
@@ -935,6 +939,8 @@
 					boxes.forEach( ( b ) => {
 						b.checked = enabling;
 					} );
+					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
@@ -975,6 +981,8 @@
 					boxes.forEach( ( b ) => {
 						b.checked = enabling;
 					} );
+					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
@@ -1358,6 +1366,7 @@
 								confirm.hidden = true;
 							}
 						} );
+					this.#refreshDirty?.();
 				} );
 			} );
 		}

@@ -520,4 +520,15 @@ final class IntegrationsTabTest extends TestCase {
 		aafm_render_integration_abilities( 'demo', $rows, array(), array(), true );
 		$this->assertStringNotContainsString( 'aafm-enable-writes', (string) ob_get_clean() );
 	}
+
+	public function test_every_bulk_button_refreshes_the_unsaved_dot(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		foreach ( array( '#bindEnableReads() {', '#bindEnableWrites() {', '#bindSectionToggles() {', '#bindIntegrationToggles() {', '#bindBridgeBulk() {' ) as $method ) {
+			$start = strpos( $js, $method );
+			$this->assertNotFalse( $start, $method );
+			$body = substr( $js, (int) $start, (int) strpos( $js, "\n\t\t#", (int) $start + 1 ) - (int) $start );
+			$this->assertStringContainsString( 'this.#refreshDirty?.();', $body, $method . ' ticks boxes without an event, so it must refresh the dot itself.' );
+		}
+	}
 }

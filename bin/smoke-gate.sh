@@ -832,10 +832,11 @@ doctor_status() { echo "$DOCTOR_OUT" | jq -r --arg id "$1" '.[] | select(.id==$i
 doctor_wire() {
 	local code
 	code=$(curl -s --max-time 20 -o "$SMOKE_ROOT/body.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
-		-H "X-AAFM-Doctor: $2" -H "Authorization: AAFM-Doctor $2" -d '{}' "$URL/index.php?rest_route=/$ROUTE_OURS")
+		-H "X-AAFM-Doctor: $2" -H "Authorization: AAFM-Doctor $2" -H 'MCP-Protocol-Version: 2025-06-18' -H 'Mcp-Session-Id: aafm-doctor' \
+		-d '{"aafm_doctor":"json"}' "$URL/index.php?rest_route=/$ROUTE_OURS")
 	if [ "$3" = answer ]; then
-		if [ "$code" = 200 ] && [ "$(jq -c . "$SMOKE_ROOT/body.json" 2>/dev/null)" = '{"aafm_doctor":{"authorization_seen":true,"route_registered":true}}' ]; then
-			pass doctor "$1: HTTP 200 with exactly the two booleans"
+		if [ "$code" = 200 ] && [ "$(jq -c . "$SMOKE_ROOT/body.json" 2>/dev/null)" = '{"aafm_doctor":{"authorization_seen":true,"route_registered":true,"transport_headers_seen":true,"json_body_seen":true}}' ]; then
+			pass doctor "$1: HTTP 200 with exactly the four booleans, MCP headers and JSON body seen"
 		else
 			fail doctor "$1: HTTP $code $(head -c 200 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
 		fi

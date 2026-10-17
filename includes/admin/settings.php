@@ -529,6 +529,11 @@ function aafm_config_option_names(): array {
 		'aafm_notify_queue',
 		// Admin-notice entries for the Notifications card.
 		'aafm_notify_pending',
+		// 1.10.0 access controls: pause-all, roles that can connect, trusted proxy, consent default preset.
+		'aafm_pause_all',
+		'aafm_oauth_connect_roles',
+		'aafm_trusted_proxy',
+		'aafm_oauth_default_preset',
 	);
 }
 

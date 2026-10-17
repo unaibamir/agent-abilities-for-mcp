@@ -1336,4 +1336,18 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringContainsString( 'code=', (string) $post['redirect'] );
 		$this->assertSame( aafm_oauth_grant_defaults(), aafm_oauth_grant_state( $user, $client ) );
 	}
+
+	public function test_authorize_and_the_consent_post_refuse_while_paused_all(): void {
+		$user   = $this->acting_as( 'administrator' );
+		$client = $this->register_client();
+		$codes  = $this->code_count();
+		aafm_set_pause_all( true );
+
+		$this->assertSame( 403, $this->run_authorize_get( $this->valid_params( $client ) )['status'] );
+		$post = $this->approve( $client );
+		$this->assertNull( $post['redirect'] );
+		$this->assertSame( 403, $post['status'] );
+		$this->assertSame( $codes, $this->code_count() );
+		$this->assertFalse( aafm_oauth_has_consent( $user, $client ) );
+	}
 }

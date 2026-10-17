@@ -761,6 +761,9 @@ function aafm_ajax_test_connection(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
+	if ( aafm_pause_all() ) {
+		wp_send_json_error( array( 'message' => __( 'Access to this site is paused. Resume it on this tab, then check again.', 'agent-abilities-for-mcp' ) ) );
+	}
 
 	// Forward only the current admin's WordPress auth cookies on the self-call (admin-eye
 	// reachability check). The self-request is same-origin and already nonce + cap gated, but it

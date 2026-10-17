@@ -17,7 +17,7 @@ use AAFM\Tests\TestCase;
 final class DenialReasonTest extends TestCase {
 
 	public function test_every_code_has_a_label_without_a_hash_digit_sequence(): void {
-		foreach ( array( 'not_allowlisted', 'key_denied', 'key_protected', 'reserved_key', 'object_not_editable', 'scope_list', 'rate_limit', 'missing_argument', 'capability', 'source_plugin', 'connection_paused' ) as $code ) {
+		foreach ( array( 'not_allowlisted', 'key_denied', 'key_protected', 'reserved_key', 'object_not_editable', 'scope_list', 'rate_limit', 'missing_argument', 'capability', 'source_plugin', 'connection_paused', 'access_paused' ) as $code ) {
 			$label = aafm_denial_reason_label( $code );
 			$this->assertIsString( $label, $code );
 			$this->assertSame( 0, preg_match( '/#\d/', $label ), 'A label must not look like an object id to the detail linker.' );

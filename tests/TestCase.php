@@ -84,6 +84,11 @@ abstract class TestCase extends WP_UnitTestCase {
 		delete_option( 'aafm_site_brief' ); // Escapes the per-test rollback for the same TRUNCATE reason as the options above.
 		delete_option( 'aafm_default_server_mode' ); // Same TRUNCATE escape as the options above.
 		delete_option( 'aafm_default_server_auto_noted' );
+		// The 1.10.0 access options escape the rollback for the same TRUNCATE reason.
+		delete_option( 'aafm_pause_all' );
+		delete_option( 'aafm_oauth_connect_roles' );
+		delete_option( 'aafm_trusted_proxy' );
+		delete_option( 'aafm_oauth_default_preset' );
 		aafm_oauth_current_grant( null, true );
 		// The registry catalog is memoized per request; tests mutate the
 		// aafm_abilities_registry filter set between cases, so start each one with a

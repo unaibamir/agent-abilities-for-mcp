@@ -34,6 +34,7 @@ function aafm_denial_reason_labels(): array {
 		'capability'          => __( 'WordPress capability check failed', 'agent-abilities-for-mcp' ),
 		'source_plugin'       => __( 'the source plugin check refused', 'agent-abilities-for-mcp' ),
 		'connection_paused'   => __( 'this connection is paused', 'agent-abilities-for-mcp' ),
+		'access_paused'       => __( 'all access is paused', 'agent-abilities-for-mcp' ),
 	);
 }
 

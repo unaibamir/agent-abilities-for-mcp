@@ -732,6 +732,11 @@ function aafm_oauth_handle_authorize(): void {
 		);
 	}
 
+	// Pause-all refuses the screen and the consent POST alike: nothing is approved while it is on.
+	if ( aafm_pause_all() ) {
+		aafm_oauth_render_local_error( 403, __( 'Access to this site is paused by its owner. Try again after they resume it.', 'agent-abilities-for-mcp' ) );
+	}
+
 	$is_post = isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === $_SERVER['REQUEST_METHOD'];
 
 	// On POST, verify the consent nonce BEFORE trusting any submitted field. A bad

@@ -601,6 +601,10 @@ function aafm_policy_options(): array {
 		'aafm_ability_allowlist_overrides',
 		'aafm_delete_data_on_uninstall',
 		'aafm_default_server_mode',
+		'aafm_pause_all',
+		'aafm_oauth_connect_roles',
+		'aafm_trusted_proxy',
+		'aafm_oauth_default_preset',
 	);
 }
 

@@ -59,6 +59,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/audit/notifications.php|aafm_notifications_settings|1' => 'N',
 		'includes/audit/notifications.php|aafm_notify_pending_list|1' => 'N',
 		'includes/audit/notifications.php|aafm_notify_queue_list|1' => 'N',
+		'includes/access.php|aafm_pause_all|1'             => 'G',
 		'includes/audit/read-only.php|aafm_read_only_mode_stored|1' => 'G',
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => 'G',
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => 'G',
@@ -93,6 +94,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/settings.php|aafm_render_settings_tab|1' => array( 'aafm_high_risk_abilities_unlocked' ),
 		'includes/admin/settings.php|aafm_render_settings_tab|2' => array( 'aafm_delete_data_on_uninstall' ),
 		'includes/audit/high-risk.php|aafm_high_risk_unlocked|1' => array( 'aafm_high_risk_abilities_unlocked' ),
+		'includes/access.php|aafm_pause_all|1'             => array( 'aafm_pause_all' ),
 		'includes/audit/read-only.php|aafm_read_only_mode_stored|1' => array( 'aafm_read_only_mode' ),
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => array( 'aafm_block_guard_strict' ),
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => array( 'aafm_enabled_bridged_abilities' ),
@@ -348,7 +350,7 @@ final class OptionReadSweepTest extends TestCase {
 		$this->assertSame( $this->sorted( array_keys( self::GET_OPTION ) ), $this->keys_of( $found, 'get_option' ), 'A get_option() call was added, moved or removed; classify it in GET_OPTION.' );
 		$this->assertSame(
 			array(
-				'G' => 21,
+				'G' => 22,
 				'L' => 3,
 				'N' => 30,
 			),
@@ -375,12 +377,13 @@ final class OptionReadSweepTest extends TestCase {
 	}
 
 	public function test_the_policy_reads_cover_exactly_the_batched_options(): void {
-		$options = array( 'aafm_ability_allowlist_overrides' );
+		// Read only through aafm_policy_row(), never get_option().
+		$options = array( 'aafm_ability_allowlist_overrides', 'aafm_oauth_connect_roles', 'aafm_trusted_proxy', 'aafm_oauth_default_preset' );
 		foreach ( self::G_OPTIONS as $list ) {
 			$options = array_merge( $options, $list );
 		}
 
-		$this->assertCount( 25, aafm_policy_options() );
+		$this->assertCount( 29, aafm_policy_options() );
 		$this->assertSame( $this->sorted( aafm_policy_options() ), $this->sorted( array_values( array_unique( $options ) ) ) );
 	}
 

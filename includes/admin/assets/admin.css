@@ -74,9 +74,8 @@
 
 .aafm-wrap {
 	--aafm-mono: Menlo, Consolas, Monaco, "Courier New", monospace;
-	/* ponytail: the outer ring is 25% alpha, so keyboard focus is faint on some backgrounds. Darken the
-	   alpha (or add a solid outline) if an accessibility audit flags the contrast. */
-	--aafm-ring: 0 0 0 2px #fff, 0 0 0 4px rgba(34, 113, 177, 0.25);
+	/* The one keyboard focus ring: a white gap, then a solid accent ring. */
+	--aafm-ring: 0 0 0 2px #fff, 0 0 0 4px var(--aafm-accent);
 	--aafm-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.07);
 	/* The large display figure on the dashboard/abilities stat cards. A named token
 	   instead of a bare 28px so every stat card shares one type size. */
@@ -85,6 +84,12 @@
 	color: var(--aafm-text);
 	font-size: 14px;
 	line-height: 1.5;
+
+	/* Core colours checked checkboxes and radios with the admin theme colour; point it at the
+	   plugin accent so they match the toggles and buttons beside them. */
+	--wp-admin-theme-color: var(--aafm-accent);
+	--wp-admin-theme-color-darker-10: var(--aafm-accent-hover);
+	--wp-admin-theme-color-darker-20: #0a4b78;
 
 	/* Base size for every inline SVG icon. Specific contexts (pills, card-heads,
 	   stat cards, client cards, buttons) override this with their own dimensions;
@@ -144,9 +149,10 @@
 	   admin output. The icon inside a button is sized 15px to match the mockup. */
 	.aafm-btn {
 		display: inline-flex;
+		box-sizing: border-box;
 		align-items: center;
 		gap: 7px;
-		block-size: 34px;
+		block-size: var(--aafm-control-h);
 		padding-inline: 14px;
 		border-radius: var(--aafm-radius-sm);
 		font-size: 13px;
@@ -238,6 +244,7 @@
 	input[type="password"],
 	input[type="tel"],
 	input[type="number"],
+	input[type="date"],
 	select,
 	textarea {
 		/* WP core pins these to a 40px floor via `min-height`, a different property from
@@ -250,7 +257,9 @@
 		padding-inline: var(--aafm-space-3);
 		border: 1px solid var(--aafm-border-strong);
 		border-radius: var(--aafm-radius-sm);
-		background: var(--aafm-surface);
+		/* background-color, never the shorthand: core draws the select chevron as a
+		   background-image, and the shorthand would wipe it. */
+		background-color: var(--aafm-surface);
 		color: inherit;
 		font-size: var(--aafm-fs-base);
 
@@ -261,8 +270,16 @@
 		}
 	}
 
+	/* Disclosure summaries take the same focus ring as buttons and tabs, not the browser outline. */
+	summary:focus-visible {
+		outline: none;
+		box-shadow: var(--aafm-ring);
+	}
+
 	select {
 		font-family: inherit;
+		/* Room for core's chevron, as core's own select padding leaves. */
+		padding-inline-end: var(--aafm-space-6);
 	}
 
 	/* Textareas size by rows, not the fixed control height; they still share the

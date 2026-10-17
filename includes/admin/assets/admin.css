@@ -2648,10 +2648,28 @@
 		.aafm-grants-table,
 		.aafm-clients-table {
 			min-inline-size: 960px;
+
+			/* The app name keeps a readable width when the table scrolls on a phone. */
+			th:nth-child(3) { inline-size: 8em; }
 		}
 
 		.aafm-grant-last-used {
 			white-space: nowrap;
+		}
+
+		/* Sized so the grants table fits the card at 1440: the controls take a fixed width and
+		   Save, Pause and Revoke stack in a narrow column. */
+		.aafm-grant-preset { inline-size: 16em; }
+		.aafm-grant-expires { inline-size: 10em; }
+
+		.aafm-grant-actions .aafm-btn {
+			display: flex;
+			justify-content: center;
+			inline-size: 100%;
+
+			& + .aafm-btn {
+				margin-block-start: 6px;
+			}
 		}
 
 		.aafm-table-wrap {
@@ -2668,7 +2686,7 @@
 		}
 
 		/* Phones: the wide tables scroll inside their wrapper, so pin the last column (the row's actions)
-		   where it can always be reached, and stack the grant buttons to keep it narrow. */
+		   where it can always be reached. */
 		@media (max-width: 600px) {
 			.aafm-grants-table,
 			.aafm-clients-table {
@@ -2684,15 +2702,6 @@
 				/* Match the striped row so the scrolled cells never show through. */
 				tbody tr:nth-child(odd) td:last-child {
 					background: var(--aafm-surface-2);
-				}
-			}
-
-			.aafm-grant-actions .aafm-btn {
-				display: block;
-				inline-size: 100%;
-
-				& + .aafm-btn {
-					margin-block-start: 6px;
 				}
 			}
 		}

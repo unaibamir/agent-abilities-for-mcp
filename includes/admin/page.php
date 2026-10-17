@@ -2068,6 +2068,22 @@ function aafm_render_abilities_tab(): void {
 	// The All tab's own panel holds only its bulk controls; the rows are the subject panels below.
 	echo '<div class="aafm-subject-all" role="tabpanel" id="aafm-subject-panel-all" aria-labelledby="aafm-subject-tab-all">';
 	aafm_render_abilities_bulk_toolbar( 'all', $all_rows );
+	// The Total abilities card above counts integration and other-plugin abilities too; say where
+	// the difference lives so the two numbers do not look like they disagree.
+	$elsewhere = $ability_total - count( $all_rows );
+	if ( $elsewhere > 0 ) {
+		printf(
+			'<p class="aafm-card-desc aafm-subject-all-note">%s</p>',
+			esc_html(
+				sprintf(
+					/* translators: 1: number of built-in abilities listed here, 2: number of abilities listed on other tabs. */
+					_n( 'All lists the %1$s built-in abilities. The other %2$s is on the Integrations and Other plugins tabs.', 'All lists the %1$s built-in abilities. The other %2$s are on the Integrations and Other plugins tabs.', $elsewhere, 'agent-abilities-for-mcp' ),
+					number_format_i18n( count( $all_rows ) ),
+					number_format_i18n( $elsewhere )
+				)
+			)
+		);
+	}
 	echo '</div>';
 
 	foreach ( $display_tabs as $slug => $tab ) {
@@ -2193,46 +2209,49 @@ function aafm_render_abilities_bulk_toolbar( string $slug, array $tab_rows ): vo
 			break;
 		}
 	}
-	// "Enable all writes" only renders where it can actually do something. A section with no
-	// ordinary write row, or one where every write is currently locked (read-only mode on, or
-	// the high-risk category shut), would render a button guaranteed to tick nothing - the
-	// failure mode that looks exactly like success. aafm_ability_lock_reason() covers both lock
-	// causes; the explicit high-risk test covers the UNLOCKED high-risk ability, which the lock
-	// predicate lets through but this control still refuses to touch.
-	$has_enableable_write = false;
-	foreach ( $tab_rows as $ability ) {
-		$write_name = (string) ( $ability['name'] ?? '' );
-		if ( 'write' !== (string) ( $ability['risk'] ?? '' ) ) {
-			continue;
-		}
-		if ( aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
-			continue;
-		}
-		$has_enableable_write = true;
-		break;
-	}
-
-	// The note is not decoration: "writes" on its own reads as "everything that changes the
-	// site", and this control deliberately stops short of deletes and the high-risk category.
-	// aria-describedby hangs it off the button so a screen reader announces the caveat with the
-	// control rather than only sighted users seeing it.
-	$write_note_id = 'aafm-write-note-' . sanitize_key( $slug );
-
 	printf(
 		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
 		esc_attr( $slug ),
 		$has_destructive ? ' data-has-destructive="1"' : '',
 		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
 		esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
-		$has_enableable_write
-			? sprintf(
-				' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
-				esc_attr( $write_note_id ),
-				esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
-				esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
-			)
-			: ''
+		wp_kses( aafm_enable_writes_button_html( $slug, $tab_rows ), aafm_admin_allowed_html() )
 	);
+}
+
+/**
+ * The "Enable all writes" button and its caveat, or '' when no row in the set is an ordinary
+ * write that can be ticked. Shared by the Abilities and Integrations bulk controls.
+ *
+ * "Enable all writes" only renders where it can actually do something. A set with no ordinary
+ * write row, or one where every write is currently locked (read-only mode on, or the high-risk
+ * category shut), would render a button guaranteed to tick nothing - the failure mode that looks
+ * exactly like success. aafm_ability_lock_reason() covers both lock causes; the explicit high-risk
+ * test covers the UNLOCKED high-risk ability, which the lock predicate lets through but this
+ * control still refuses to touch.
+ *
+ * @param string                         $slug Scope slug, used for the caveat's id.
+ * @param array<int,array<string,mixed>> $rows The ability entries the button acts on.
+ * @return string Escaped HTML, starting with a space.
+ */
+function aafm_enable_writes_button_html( string $slug, array $rows ): string {
+	foreach ( $rows as $ability ) {
+		$write_name = (string) ( $ability['name'] ?? '' );
+		if ( 'write' !== (string) ( $ability['risk'] ?? '' ) || aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
+			continue;
+		}
+		// The note is not decoration: "writes" on its own reads as "everything that changes the
+		// site", and this control deliberately stops short of deletes and the high-risk category.
+		// aria-describedby hangs it off the button so a screen reader announces the caveat with
+		// the control rather than only sighted users seeing it.
+		return sprintf(
+			' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
+			esc_attr( 'aafm-write-note-' . sanitize_key( $slug ) ),
+			esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
+			esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
+		);
+	}
+	return '';
 }
 
 /**

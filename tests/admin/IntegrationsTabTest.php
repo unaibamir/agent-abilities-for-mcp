@@ -497,4 +497,27 @@ final class IntegrationsTabTest extends TestCase {
 
 		$this->assertSame( 1, substr_count( $html, '<form' ), 'The Integrations tab must render exactly one <form>.' );
 	}
+
+	public function test_a_card_with_an_ordinary_write_offers_enable_all_writes_and_a_disabled_card_does_not(): void {
+		$rows = array(
+			array(
+				'name'  => 'aafm/demo-read',
+				'label' => 'Demo read',
+				'risk'  => 'read',
+			),
+			array(
+				'name'  => 'aafm/demo-write',
+				'label' => 'Demo write',
+				'risk'  => 'write',
+			),
+		);
+		ob_start();
+		aafm_render_integration_abilities( 'demo', $rows, array(), array() );
+		$html = (string) ob_get_clean();
+		$this->assertMatchesRegularExpression( '/<button[^>]*aafm-enable-writes[^>]*aria-describedby="aafm-write-note-integration-demo"/', $html );
+
+		ob_start();
+		aafm_render_integration_abilities( 'demo', $rows, array(), array(), true );
+		$this->assertStringNotContainsString( 'aafm-enable-writes', (string) ob_get_clean() );
+	}
 }

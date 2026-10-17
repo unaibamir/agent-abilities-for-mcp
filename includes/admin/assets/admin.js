@@ -847,7 +847,7 @@
 		}
 
 		/**
-		 * "Enable all writes" on the Abilities tab.
+		 * "Enable all writes" on the Abilities and Integrations tabs.
 		 *
 		 * The write-side counterpart to #bindEnableReads, and it exists because the bulk
 		 * affordance used to cover only the safe half: an operator who wanted reads plus a
@@ -865,9 +865,8 @@
 		 * are already unreachable here. That leaves nothing destructive or high-risk in range,
 		 * which is why this control needs no confirm where "Enable all" does.
 		 *
-		 * Only the Abilities tab renders the button today, so only aafm_abilities[] is matched;
-		 * the scope roots mirror #bindEnableReads so the binding still works if the control is
-		 * ever placed on an integration card.
+		 * The Abilities and Integrations tabs render the button, both posting aafm_abilities[],
+		 * so only that name is matched; the scope roots mirror #bindEnableReads.
 		 */
 		#bindEnableWrites() {
 			document.querySelectorAll( '.aafm-enable-writes' ).forEach( ( btn ) => {

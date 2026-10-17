@@ -903,6 +903,31 @@
 		margin-block-start: 4px;
 	}
 
+	/* Bulk controls (Abilities and Integrations): one row of buttons, then the "Enable all
+	   writes" caveat, which wraps below on a narrow screen. The caveat is the button's
+	   aria-describedby target, so it stays rendered and readable at every width. */
+	.aafm-section-toggle {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--aafm-space-2);
+
+		/* The abilities search hides panel chrome with the hidden attribute. */
+		&[hidden] { display: none; }
+
+		> .aafm-section-toggle-note {
+			margin-inline-start: var(--aafm-space-1);
+			font-size: var(--aafm-fs-sm);
+			color: var(--aafm-text-subtle);
+		}
+	}
+
+	/* In the All view the All tab's own bulk controls cover every panel, so each panel's
+	   copy is hidden rather than shown again under every category. */
+	.aafm-abilities:has(> .aafm-subject-all:not([hidden])) .aafm-subject-panel .aafm-section-toggle {
+		display: none;
+	}
+
 	.aafm-subject-heading {
 		display: flex;
 		align-items: center;

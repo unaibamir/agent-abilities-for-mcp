@@ -226,6 +226,7 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/pkce.php';
 // which calls into them and the audit log's aafm_source_ip().
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/http.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/clients.php';
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/grants.php';
 
 // OAuth lifecycle audit logging: one activity-log row per register/authorize/token/refresh/revoke
 // event (non-secret context only). Writes through the audit log module, required earlier.

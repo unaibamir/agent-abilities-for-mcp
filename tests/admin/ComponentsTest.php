@@ -63,7 +63,7 @@ final class ComponentsTest extends TestCase {
 		$html = aafm_card_head_html( 'clock', '<i>Title</i>', 'title-id', '<span class="aafm-pill">P</span>' );
 		$this->assertStringStartsWith( '<span class="aafm-card-head-ic"><svg', $html );
 		$this->assertStringContainsString( '<div class="aafm-card-head-text"><h2 class="aafm-card-head-title" id="title-id">&lt;i&gt;Title&lt;/i&gt;</h2></div><span class="aafm-pill">P</span>', $html );
-		$this->assertStringContainsString( '<h3 class="aafm-card-head-title">T</h3>', aafm_card_head_html( '', 'T', '', '', 'h3' ) );
+		$this->assertStringStartsWith( '<div class="aafm-card-head-text"><h2', aafm_card_head_html( '', 'T' ) );
 	}
 
 	public function test_render_section_puts_the_description_in_the_body_not_the_head(): void {

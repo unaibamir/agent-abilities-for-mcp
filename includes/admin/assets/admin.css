@@ -440,8 +440,10 @@
 		/* aafm_render_section() wraps the title (and optional description) in a
 		   text column so a pill can sit at the row end; the head still lays the
 		   icon + text out in a row. */
-		/* At least a pill tall, so a head with a pill or badge is no taller than one without. */
-		.aafm-card-head-text {
+		/* At least a pill tall, so a head with a pill or badge is no taller than one without. The
+		   bare h2 covers the Integrations and Other plugins summaries, which have no text column. */
+		.aafm-card-head-text,
+		> h2 {
 			display: flex;
 			flex-direction: column;
 			justify-content: center;
@@ -2316,7 +2318,7 @@
 
 	/* ---------- Detected meta-key chips ---------- */
 	.aafm-meta-keys {
-		h4 {
+		h3 {
 			margin-block: var(--aafm-space-4) var(--aafm-space-2);
 			font-size: var(--aafm-fs-body);
 		}

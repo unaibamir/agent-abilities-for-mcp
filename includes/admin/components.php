@@ -42,15 +42,12 @@ function aafm_sanitize_html_classes( string $extra_class ): string {
  * @param string $title    Title text, escaped here.
  * @param string $title_id Optional id for the title element.
  * @param string $after    Pre-escaped HTML for the row end (a pill or badge), echoed verbatim.
- * @param string $level    Title tag, 'h2' or 'h3'.
  * @return string HTML for the caller to place inside its `.aafm-card-head` element.
  */
-function aafm_card_head_html( string $icon, string $title, string $title_id = '', string $after = '', string $level = 'h2' ): string {
-	$tag = 'h3' === $level ? 'h3' : 'h2';
+function aafm_card_head_html( string $icon, string $title, string $title_id = '', string $after = '' ): string {
 	return sprintf(
-		'%1$s<div class="aafm-card-head-text"><%2$s class="aafm-card-head-title"%3$s>%4$s</%2$s></div>%5$s',
+		'%1$s<div class="aafm-card-head-text"><h2 class="aafm-card-head-title"%2$s>%3$s</h2></div>%4$s',
 		'' === $icon ? '' : '<span class="aafm-card-head-ic">' . aafm_icon( $icon ) . '</span>',
-		$tag,
 		'' === $title_id ? '' : ' id="' . esc_attr( $title_id ) . '"',
 		esc_html( $title ),
 		$after
@@ -75,8 +72,7 @@ function aafm_card_head_html( string $icon, string $title, string $title_id = ''
  * head glyph), `description` (one muted paragraph that opens the body, escaped), `pill` (pre-built pill HTML, echoed
  * verbatim), `collapsible` (bool, default false), `open` (bool, default true, honored only
  * when collapsible), `badge` (count-badge text for the summary, escaped), and `body`
- * (pre-escaped inner HTML, echoed verbatim), and `level` (title tag, 'h2' by default, 'h3' for a card
- * nested under a section heading).
+ * (pre-escaped inner HTML, echoed verbatim).
  *
  * @param array<string,mixed> $args Section args (see the recognised keys above).
  * @return void
@@ -104,8 +100,7 @@ function aafm_render_section( array $args ): void {
 		$icon,
 		$title,
 		'',
-		$pill . ( '' === $badge ? '' : sprintf( ' <span class="aafm-count-badge">%s</span>', esc_html( $badge ) ) ),
-		isset( $args['level'] ) ? (string) $args['level'] : 'h2'
+		$pill . ( '' === $badge ? '' : sprintf( ' <span class="aafm-count-badge">%s</span>', esc_html( $badge ) ) )
 	);
 
 	if ( $collapsible ) {

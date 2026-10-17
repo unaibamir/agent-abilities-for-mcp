@@ -355,7 +355,11 @@ function aafm_oauth_finalize_schema( bool $engine_ok ): bool {
 		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_oauth_tables()
 		// below trusts this stamp to decide whether the installer needs to run again, so a write
 		// that a persistent cache silently no-ops must not be allowed to look like it landed.
-		$stamped = aafm_update_option_verified( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+		// A fresh install is seeded with Administrators as the only approvers before its first stamp,
+		// and the stamp waits for the seed: an unstamped install is the one state the seed can still
+		// recognise as fresh (aafm_seed_fresh_install_defaults()).
+		$seeded  = aafm_seed_fresh_install_defaults();
+		$stamped = $seeded && aafm_update_option_verified( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
 		if ( ! $stamped ) {
 			// Codex round 8 R8-3: this return value used to be discarded. The schema itself is
 			// genuinely fine, but with the version left un-stamped, aafm_maybe_upgrade_oauth_tables()
@@ -363,7 +367,11 @@ function aafm_oauth_finalize_schema( bool $engine_ok ): bool {
 			// was already cleared on the strength of $schema_ok alone, hiding the persist failure
 			// from the admin notice. Re-set the transient and log the failure so it is visible.
 			set_transient( 'aafm_oauth_schema_error', time(), DAY_IN_SECONDS );
-			aafm_log_ability_persist_failure( 'aafm_oauth_schema_version', __( 'The OAuth schema version', 'agent-abilities-for-mcp' ) );
+			if ( $seeded ) {
+				aafm_log_ability_persist_failure( 'aafm_oauth_schema_version', __( 'The OAuth schema version', 'agent-abilities-for-mcp' ) );
+			} else {
+				aafm_log_ability_persist_failure( 'aafm_oauth_connect_roles', __( 'The roles that can connect apps', 'agent-abilities-for-mcp' ) );
+			}
 		}
 	}
 	return $stamped;
@@ -488,6 +496,10 @@ add_action( 'admin_notices', 'aafm_oauth_schema_admin_notice' );
  * R7-2): a stale cached current version over an old/absent database row would skip a genuinely
  * needed install, and this file's own docblocks identify missing tables/columns as the failure
  * this guard exists to catch.
+ *
+ * Retry policy: activation takes no lock, so the first admin or REST request after a failed
+ * activation retries at once; a failed retry holds aafm_oauth_upgrade_lock for an hour; deactivating
+ * and reactivating the plugin retries immediately.
  *
  * @return void
  */

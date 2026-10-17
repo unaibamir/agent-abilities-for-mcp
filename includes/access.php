@@ -153,7 +153,7 @@ function aafm_oauth_user_still_may_connect( int $user_id ): bool {
 	if ( null === aafm_oauth_connect_roles() ) {
 		return true;
 	}
-	$user = get_userdata( $user_id );
+	$user = aafm_exact_object( 'user', $user_id );
 	return $user instanceof WP_User && aafm_oauth_user_may_connect( $user );
 }
 
@@ -194,6 +194,44 @@ function aafm_oauth_install_is_fresh(): ?bool {
 	}
 	$wpdb->suppress_errors( $suppressed );
 	return $fresh;
+}
+
+/**
+ * Fresh install only: Administrators may connect apps.
+ *
+ * "Fresh" is aafm_oauth_install_is_fresh() and nothing else, so nothing the owner does in the
+ * meantime (a Settings save, enabling OAuth) can change the verdict, and an upgraded site, stamped
+ * or not, is never seeded: its Editors' grants keep working. Do NOT widen the probe to "any aafm_
+ * option" (a Settings save during a failed first attempt would read a fresh install as upgraded) and
+ * do NOT narrow it to the schema row alone (an unstamped 1.9.0 site would be seeded and lose its
+ * Editors' grants). An unstamped 1.9.0 site with no client and no consent rows cannot be told apart
+ * from a new install and is seeded too: it has no grants to lose, and the owner can widen the list.
+ *
+ * Called from aafm_oauth_finalize_schema() immediately before the first-ever schema stamp, so
+ * activation and the lazy upgrade share one path. While it keeps failing,
+ * aafm_oauth_user_may_connect() applies Administrators only to a provably fresh store and the legacy
+ * floor otherwise. Never overwrites a saved list.
+ *
+ * @return bool True when the roles list is certified in place or the install shows prior use
+ *              (nothing written); false when a fresh install could not be seeded or a probe could not
+ *              be read, in which case the caller must NOT stamp the schema.
+ */
+function aafm_seed_fresh_install_defaults(): bool {
+	$roles = aafm_read_option_views( 'aafm_oauth_connect_roles' );
+	if ( $roles['db_error'] ) {
+		return false;
+	}
+	if ( $roles['db_found'] ) {
+		return true; // The owner's list, or an earlier seed: never overwritten.
+	}
+	$fresh = aafm_oauth_install_is_fresh();
+	if ( null === $fresh ) {
+		return false; // Could not tell: write nothing, withhold the stamp, retry.
+	}
+	if ( ! $fresh ) {
+		return true; // Prior OAuth use: an upgraded install keeps the edit_posts floor.
+	}
+	return aafm_update_option_verified( 'aafm_oauth_connect_roles', array( 'administrator' ), false );
 }
 
 /**

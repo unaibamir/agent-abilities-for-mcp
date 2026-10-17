@@ -92,4 +92,31 @@ trait AjaxHarness {
 		$_POST = array();
 		unset( $_REQUEST['nonce'] );
 	}
+
+	/**
+	 * Run a real Settings save as an administrator, then put back every setting it wrote except the
+	 * roles list. A test that runs the OAuth installer afterwards commits through its DDL, so the
+	 * save's other writes would otherwise outlive the test.
+	 *
+	 * @param array<string,mixed> $fields POST fields.
+	 * @return void
+	 */
+	protected function run_settings_save( array $fields ): void {
+		$options = array_diff( array_unique( array_merge( aafm_config_option_names(), aafm_policy_options() ) ), array( 'aafm_oauth_connect_roles' ) );
+		$before  = array();
+		foreach ( $options as $option ) {
+			$before[ $option ] = aafm_read_option_views( $option );
+		}
+		$this->post_as( 'administrator', $fields );
+		$this->run_handler( 'aafm_ajax_save_settings' );
+		$this->reset_ajax_harness();
+		foreach ( $before as $option => $view ) {
+			if ( $view['db_found'] ) {
+				update_option( $option, $view['db_value'] );
+			} else {
+				delete_option( $option );
+			}
+		}
+		aafm_policy_reset_request_state();
+	}
 }

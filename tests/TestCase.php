@@ -89,6 +89,10 @@ abstract class TestCase extends WP_UnitTestCase {
 		delete_option( 'aafm_oauth_connect_roles' );
 		delete_option( 'aafm_trusted_proxy' );
 		delete_option( 'aafm_oauth_default_preset' );
+		// Every test runs as an install that has already stamped its OAuth schema. The suite's database
+		// is rebuilt each run, so without this the first install of the run would look brand new and be
+		// seeded Administrators only (aafm_seed_fresh_install_defaults()). Fresh-install tests drop the row.
+		update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
 		aafm_oauth_current_grant( null, true );
 		// The registry catalog is memoized per request; tests mutate the
 		// aafm_abilities_registry filter set between cases, so start each one with a

@@ -250,22 +250,17 @@ class ConnectRolesTest extends TestCase {
 
 		$steps = array(
 			'unrelated save' => function () use ( $legacy ): void {
-				$this->post_as(
-					'administrator',
+				$this->run_settings_save(
 					array(
 						'aafm_oauth_enabled'               => '1', // The site already uses OAuth; its checkbox posts as ticked.
 						'aafm_oauth_connect_roles_present' => '1',
 						'aafm_oauth_connect_roles'         => $legacy,
 					)
 				);
-				$this->run_handler( 'aafm_ajax_save_settings' );
-				$this->reset_ajax_harness();
 			},
 			'oauth on save'  => function (): void {
-				$this->post_as( 'administrator', array( 'aafm_oauth_enabled' => '1' ) );
-				$this->run_handler( 'aafm_ajax_save_settings' );
-				$this->run_handler( 'aafm_ajax_save_settings' );
-				$this->reset_ajax_harness();
+				$this->run_settings_save( array( 'aafm_oauth_enabled' => '1' ) );
+				$this->run_settings_save( array( 'aafm_oauth_enabled' => '1' ) );
 			},
 			'activate'       => static function (): void {
 				aafm_activate();

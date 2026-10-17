@@ -331,8 +331,10 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertSame(
 			array(
 				'aafm_doctor' => array(
-					'authorization_seen' => true,
-					'route_registered'   => true,
+					'authorization_seen'     => true,
+					'route_registered'       => true,
+					'transport_headers_seen' => false,
+					'json_body_seen'         => false,
 				),
 			),
 			$response->get_data()
@@ -350,7 +352,8 @@ final class ConnectionDoctorTest extends TestCase {
 		$response = aafm_doctor_handle_probe( null, $this->rest_server( true ), $this->probe_request( $token ) );
 
 		$this->assertSame( 0, get_current_user_id(), 'Answering the probe does not log anyone in.' );
-		$this->assertSame( array( 'authorization_seen', 'route_registered' ), array_keys( $response->get_data()['aafm_doctor'] ) );
+		$this->assertSame( array( 'authorization_seen', 'route_registered', 'transport_headers_seen', 'json_body_seen' ), array_keys( $response->get_data()['aafm_doctor'] ) );
+		$this->assertContainsOnly( 'bool', $response->get_data()['aafm_doctor'], true, 'Booleans and nothing else.' );
 		$this->assertStringNotContainsString( $token, (string) wp_json_encode( $response->get_data() ) );
 		$this->assertSame( array(), $response->get_headers(), 'No cookie or token header in the answer.' );
 	}
@@ -762,7 +765,7 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertSame( 'host', $row['who'] );
 		$this->assertStringContainsString( 'location ^~ /.well-known/', $row['fix'] );
 		$this->assertSame( 404, $row['http'] );
-		$this->assertCount( 3, $this->requests, 'One probe plus the two discovery documents.' );
+		$this->assertCount( 4, $this->requests, 'One probe, the two discovery documents, and the REST copy.' );
 	}
 
 	public function test_oauth_discovery_passes_when_both_documents_answer_json(): void {
@@ -838,7 +841,7 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertSame( 1, substr_count( $html, 'Authorization header reaches WordPress' ) );
 	}
 
-	public function test_the_report_holds_no_secret_and_only_the_site_host(): void {
+	public function test_the_report_holds_no_secret_and_no_site_host(): void {
 		$admin_id = self::factory()->user->create(
 			array(
 				'role'       => 'administrator',
@@ -865,7 +868,7 @@ final class ConnectionDoctorTest extends TestCase {
 		$this->assertStringNotContainsString( 'http://', $report, 'No URLs.' );
 		$this->assertStringNotContainsString( 'https://', $report, 'No URLs.' );
 		$this->assertStringNotContainsString( 'wp-json', $report, 'No endpoint path.' );
-		$this->assertStringContainsString( 'Site host: example.org', $report );
+		$this->assertStringNotContainsString( 'example.org', $report, 'No host name.' );
 		$this->assertStringContainsString( 'Plugin: ' . AAFM_VERSION, $report );
 		$this->assertStringContainsString( '- endpoint: pass HTTP 200', $report );
 		$this->assertStringContainsString( 'Active plugins (', $report );

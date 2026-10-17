@@ -218,8 +218,11 @@ function aafm_doctor_handle_probe( $result, $server = null, $request = null ) {
 	return new WP_REST_Response(
 		array(
 			'aafm_doctor' => array(
-				'authorization_seen' => aafm_doctor_authorization_seen(),
-				'route_registered'   => aafm_doctor_route_registered( $server ),
+				'authorization_seen'     => aafm_doctor_authorization_seen(),
+				'route_registered'       => aafm_doctor_route_registered( $server ),
+				// Whether the host passed the MCP transport headers and the JSON body through.
+				'transport_headers_seen' => '' !== (string) $request->get_header( 'mcp-protocol-version' ) && '' !== (string) $request->get_header( 'mcp-session-id' ),
+				'json_body_seen'         => is_array( $request->get_json_params() ) && isset( $request->get_json_params()['aafm_doctor'] ),
 			),
 		),
 		200
@@ -240,17 +243,20 @@ function aafm_doctor_ssl_verify(): bool {
  * active plugin), the same trust aafm_ajax_test_connection() already extends; no cookies are sent.
  * Refused outright unless the current user is an administrator, so no token is minted for anyone else.
  *
- * @return array{error:string,code:int,seen:bool|null,route:bool|null} error is a WP_Error code, '' when a response came back.
+ * @return array{error:string,code:int,seen:bool|null,route:bool|null,headers:bool|null,json:bool|null,redirect:string} error is a WP_Error code, '' when a response came back; redirect is the Location of a 3xx (UI only, never reported).
  */
 function aafm_doctor_probe(): array {
+	$none    = array(
+		'code'     => 0,
+		'seen'     => null,
+		'route'    => null,
+		'headers'  => null,
+		'json'     => null,
+		'redirect' => '',
+	);
 	$user_id = get_current_user_id();
 	if ( $user_id < 1 || ! current_user_can( 'manage_options' ) ) {
-		return array(
-			'error' => 'aafm_doctor_forbidden',
-			'code'  => 0,
-			'seen'  => null,
-			'route' => null,
-		);
+		return array( 'error' => 'aafm_doctor_forbidden' ) + $none;
 	}
 
 	$token = $user_id . '.' . wp_generate_password( 32, false, false );
@@ -264,23 +270,20 @@ function aafm_doctor_probe(): array {
 			'redirection' => 0,
 			'sslverify'   => aafm_doctor_ssl_verify(),
 			'headers'     => array(
-				'Content-Type'  => 'application/json',
-				'X-AAFM-Doctor' => $token,
-				'Authorization' => AAFM_DOCTOR_SCHEME . ' ' . $token,
+				'Content-Type'         => 'application/json',
+				'X-AAFM-Doctor'        => $token,
+				'Authorization'        => AAFM_DOCTOR_SCHEME . ' ' . $token,
+				'MCP-Protocol-Version' => '2025-06-18',
+				'Mcp-Session-Id'       => 'aafm-doctor',
 			),
-			'body'        => '{}',
+			'body'        => '{"aafm_doctor":"json"}',
 		)
 	);
 	delete_transient( $key );
 
 	if ( is_wp_error( $response ) ) {
-		return array(
-			// The code only, never the message: it can name an internal host.
-			'error' => (string) substr( sanitize_key( (string) $response->get_error_code() ), 0, 64 ),
-			'code'  => 0,
-			'seen'  => null,
-			'route' => null,
-		);
+		// The code only, never the message: it can name an internal host.
+		return array( 'error' => (string) substr( sanitize_key( (string) $response->get_error_code() ), 0, 64 ) ) + $none;
 	}
 
 	$code   = (int) wp_remote_retrieve_response_code( $response );
@@ -288,18 +291,51 @@ function aafm_doctor_probe(): array {
 	$answer = ( 200 === $code && is_array( $body ) && isset( $body['aafm_doctor'] ) && is_array( $body['aafm_doctor'] ) ) ? $body['aafm_doctor'] : array();
 
 	return array(
-		'error' => '',
-		'code'  => $code,
-		'seen'  => isset( $answer['authorization_seen'] ) ? (bool) $answer['authorization_seen'] : null,
-		'route' => isset( $answer['route_registered'] ) ? (bool) $answer['route_registered'] : null,
+		'error'    => '',
+		'code'     => $code,
+		'seen'     => isset( $answer['authorization_seen'] ) ? (bool) $answer['authorization_seen'] : null,
+		'route'    => isset( $answer['route_registered'] ) ? (bool) $answer['route_registered'] : null,
+		'headers'  => isset( $answer['transport_headers_seen'] ) ? (bool) $answer['transport_headers_seen'] : null,
+		'json'     => isset( $answer['json_body_seen'] ) ? (bool) $answer['json_body_seen'] : null,
+		'redirect' => $code >= 300 && $code < 400 ? implode( '', (array) wp_remote_retrieve_header( $response, 'location' ) ) : '',
 	);
+}
+
+/**
+ * Name a redirect from one address to another, comparing scheme, then host (with and without a
+ * leading www.), then path (with and without a trailing slash).
+ *
+ * @param string $from The endpoint address.
+ * @param string $to   The Location the server answered with.
+ * @return string One of http_to_https, https_to_http, www_added, www_removed, trailing_slash, other_host, other_path, unknown.
+ */
+function aafm_doctor_describe_redirect( string $from, string $to ): string {
+	$a = wp_parse_url( $from );
+	$b = 0 === strpos( $to, '//' ) ? false : wp_parse_url( $to );
+	if ( ! is_array( $a ) || ! is_array( $b ) || empty( $b['scheme'] ) || empty( $b['host'] ) || empty( $a['host'] ) ) {
+		return 'unknown';
+	}
+	$host_a = strtolower( (string) $a['host'] );
+	$host_b = strtolower( (string) $b['host'] );
+	if ( $host_a === $host_b && ( $a['scheme'] ?? '' ) !== $b['scheme'] ) {
+		return 'https' === $b['scheme'] ? 'http_to_https' : 'https_to_http';
+	}
+	if ( $host_a !== $host_b ) {
+		if ( 'www.' . $host_a === $host_b ) {
+			return 'www_added';
+		}
+		return 'www.' . $host_b === $host_a ? 'www_removed' : 'other_host';
+	}
+	$path_a = (string) ( $a['path'] ?? '' );
+	$path_b = (string) ( $b['path'] ?? '' );
+	return untrailingslashit( $path_a ) === untrailingslashit( $path_b ) ? 'trailing_slash' : 'other_path';
 }
 
 /**
  * Row: does the endpoint answer.
  *
- * @param array{error:string,code:int,seen:bool|null,route:bool|null} $probe    The probe result.
- * @param bool                                                        $oauth_on Whether OAuth is on.
+ * @param array{error:string,code:int,seen:bool|null,route:bool|null,headers:bool|null,json:bool|null,redirect:string} $probe    The probe result.
+ * @param bool                                                                                                         $oauth_on Whether OAuth is on.
  * @return array<string,mixed>
  */
 function aafm_doctor_check_endpoint( array $probe, bool $oauth_on ): array {
@@ -316,6 +352,21 @@ function aafm_doctor_check_endpoint( array $probe, bool $oauth_on ): array {
 		return aafm_doctor_row( 'endpoint', $label, 'pass', '', __( 'The endpoint answered the test request.', 'agent-abilities-for-mcp' ), '', 200 );
 	}
 	$read = aafm_doctor_interpret_http_status( $probe['code'], $oauth_on );
+	if ( '' !== $probe['redirect'] ) {
+		$kinds = array(
+			'http_to_https'  => __( 'The endpoint redirects from http to https.', 'agent-abilities-for-mcp' ),
+			'https_to_http'  => __( 'The endpoint redirects from https to plain http.', 'agent-abilities-for-mcp' ),
+			'www_added'      => __( 'The endpoint redirects to the www address.', 'agent-abilities-for-mcp' ),
+			'www_removed'    => __( 'The endpoint redirects away from the www address.', 'agent-abilities-for-mcp' ),
+			'trailing_slash' => __( 'The endpoint redirects to add or remove a trailing slash.', 'agent-abilities-for-mcp' ),
+			'other_host'     => __( 'The endpoint redirects to a different site address.', 'agent-abilities-for-mcp' ),
+			'other_path'     => __( 'The endpoint redirects to a different path.', 'agent-abilities-for-mcp' ),
+			'unknown'        => __( 'The endpoint redirects to an address this check could not read.', 'agent-abilities-for-mcp' ),
+		);
+		$kind  = aafm_doctor_describe_redirect( aafm_endpoint_url(), $probe['redirect'] );
+		$fix   = 'unknown' === $kind ? '' : $probe['redirect'];
+		return aafm_doctor_row( 'endpoint', $label, $read['status'], $read['who'], $kinds[ $kind ] . ' ' . __( 'Agents do not follow redirects on a POST, so use the final address in your agent.', 'agent-abilities-for-mcp' ), $fix, $probe['code'] );
+	}
 
 	return aafm_doctor_row( 'endpoint', $label, $read['status'], $read['who'], $read['detail'], '', $probe['code'] );
 }
@@ -361,7 +412,7 @@ function aafm_doctor_header_snippet(): string {
 /**
  * Row: does PHP receive the Authorization header. Application Passwords and OAuth both need it.
  *
- * @param array{error:string,code:int,seen:bool|null,route:bool|null} $probe The probe result.
+ * @param array{error:string,code:int,seen:bool|null,route:bool|null,headers:bool|null,json:bool|null,redirect:string} $probe The probe result.
  * @return array<string,mixed>
  */
 function aafm_doctor_check_auth_header( array $probe ): array {
@@ -380,6 +431,32 @@ function aafm_doctor_check_auth_header( array $probe ): array {
 		'host',
 		__( 'The server removed the Authorization header before PHP saw it, so Application Passwords and OAuth tokens cannot work. Your host can pass it through; the snippet below is the usual fix.', 'agent-abilities-for-mcp' ),
 		aafm_doctor_header_snippet()
+	);
+}
+
+/**
+ * Rows: did the host pass the MCP transport headers and a JSON POST body through to PHP.
+ *
+ * @param array{error:string,code:int,seen:bool|null,route:bool|null,headers:bool|null,json:bool|null,redirect:string} $probe The probe result.
+ * @return list<array<string,mixed>>
+ */
+function aafm_doctor_check_transport( array $probe ): array {
+	$headers = __( 'MCP request headers', 'agent-abilities-for-mcp' );
+	$json    = __( 'JSON request body', 'agent-abilities-for-mcp' );
+	if ( null === $probe['headers'] || null === $probe['json'] ) {
+		$skip = __( 'Could not test: the test request did not reach this plugin. See the endpoint check above.', 'agent-abilities-for-mcp' );
+		return array(
+			aafm_doctor_row( 'transport_headers', $headers, 'skip', '', $skip ),
+			aafm_doctor_row( 'json_post', $json, 'skip', '', $skip ),
+		);
+	}
+	return array(
+		$probe['headers']
+			? aafm_doctor_row( 'transport_headers', $headers, 'pass', '', __( 'PHP received the MCP-Protocol-Version and Mcp-Session-Id headers.', 'agent-abilities-for-mcp' ) )
+			: aafm_doctor_row( 'transport_headers', $headers, 'warn', 'host', __( 'The server or a firewall removed the MCP-Protocol-Version or Mcp-Session-Id header before PHP saw it. Agents that rely on a session can fail. Ask your host to allow these headers through.', 'agent-abilities-for-mcp' ) ),
+		$probe['json']
+			? aafm_doctor_row( 'json_post', $json, 'pass', '', __( 'PHP received the JSON body of the test request.', 'agent-abilities-for-mcp' ) )
+			: aafm_doctor_row( 'json_post', $json, 'warn', 'host', __( 'The JSON body of the test request did not reach PHP. A firewall or security rule may be stripping POST bodies, so agent calls would arrive empty.', 'agent-abilities-for-mcp' ) ),
 	);
 }
 
@@ -536,7 +613,7 @@ function aafm_doctor_check_https(): array {
 function aafm_doctor_check_permalinks(): array {
 	$label = __( 'Permalinks', 'agent-abilities-for-mcp' );
 	if ( '' === (string) get_option( 'permalink_structure', '' ) ) {
-		return aafm_doctor_row( 'permalinks', $label, 'warn', 'you', __( 'Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks.', 'agent-abilities-for-mcp' ) );
+		return aafm_doctor_row( 'permalinks', $label, 'warn', 'you', __( 'Permalinks are set to Plain. The endpoint address then carries ?rest_route= and some clients and discovery documents fail. Pick any other structure under Settings, Permalinks. Use this exact endpoint address in your agent:', 'agent-abilities-for-mcp' ), aafm_endpoint_url() );
 	}
 
 	return aafm_doctor_row( 'permalinks', $label, 'pass', '', __( 'Pretty permalinks are on.', 'agent-abilities-for-mcp' ) );
@@ -594,24 +671,46 @@ function aafm_doctor_check_security_plugins(): array {
 }
 
 /**
- * Row: are the two OAuth discovery documents reachable. Only meaningful, and only asked, when OAuth is on.
+ * Whether a static file sits at /.well-known/<name> in the WordPress root, where it would shadow
+ * WordPress's own answer. Filterable, so tests never write into the WordPress root.
  *
- * @return array<string,mixed>
+ * @param string $name File name under .well-known/.
+ * @return bool
+ */
+function aafm_doctor_wellknown_file_exists( string $name ): bool {
+	/**
+	 * Whether a static discovery file shadows WordPress's answer.
+	 *
+	 * @param bool   $exists Whether ABSPATH/.well-known/<name> exists.
+	 * @param string $name   File name.
+	 */
+	return (bool) apply_filters( 'aafm_doctor_wellknown_file_exists', file_exists( ABSPATH . '.well-known/' . $name ), $name );
+}
+
+/**
+ * Rows: are the two OAuth discovery documents reachable, current, and, when they are blocked, is
+ * the REST copy there. Only meaningful, and only asked, when OAuth is on.
+ *
+ * @return list<array<string,mixed>>
  */
 function aafm_doctor_check_oauth_discovery(): array {
 	$label   = __( 'OAuth discovery', 'agent-abilities-for-mcp' );
+	$args    = array(
+		'timeout'     => 5,
+		'redirection' => 0,
+		'sslverify'   => aafm_doctor_ssl_verify(),
+		'headers'     => array( 'Accept' => 'application/json' ),
+	);
 	$bad     = array();
 	$skipped = false;
-	foreach ( array( '.well-known/oauth-protected-resource', '.well-known/oauth-authorization-server' ) as $path ) {
-		$response = wp_remote_get(
-			home_url( '/' . $path ),
-			array(
-				'timeout'     => 5,
-				'redirection' => 0,
-				'sslverify'   => aafm_doctor_ssl_verify(),
-				'headers'     => array( 'Accept' => 'application/json' ),
-			)
-		);
+	$stale   = false;
+	$expect  = array(
+		'oauth-protected-resource'   => array( 'resource', aafm_endpoint_url() ),
+		'oauth-authorization-server' => array( 'issuer', aafm_oauth_issuer() ),
+	);
+	foreach ( $expect as $name => $field ) {
+		$stale    = $stale || aafm_doctor_wellknown_file_exists( $name );
+		$response = wp_remote_get( home_url( '/.well-known/' . $name ), $args );
 		if ( is_wp_error( $response ) ) {
 			$skipped = true;
 			continue;
@@ -619,11 +718,16 @@ function aafm_doctor_check_oauth_discovery(): array {
 		$code = (int) wp_remote_retrieve_response_code( $response );
 		$json = json_decode( (string) wp_remote_retrieve_body( $response ), true );
 		if ( 200 !== $code || ! is_array( $json ) ) {
-			$bad[ $path ] = $code;
+			$bad[ $name ] = $code; // 401, 403, 406 or non-JSON: blocked; 404: missing; 5xx: error.
+			continue;
 		}
+		$named = isset( $json[ $field[0] ] ) && is_string( $json[ $field[0] ] ) ? wp_parse_url( $json[ $field[0] ], PHP_URL_HOST ) : null;
+		$stale = $stale || strtolower( (string) $named ) !== strtolower( (string) wp_parse_url( $field[1], PHP_URL_HOST ) );
 	}
+
+	$rows = array();
 	if ( array() !== $bad ) {
-		$fix = implode(
+		$fix    = implode(
 			"\n",
 			array(
 				'# Nginx: put this above the dotfile deny rule',
@@ -632,8 +736,7 @@ function aafm_doctor_check_oauth_discovery(): array {
 				'}',
 			)
 		);
-
-		return aafm_doctor_row(
+		$rows[] = aafm_doctor_row(
 			'oauth_discovery',
 			$label,
 			'fail',
@@ -642,12 +745,23 @@ function aafm_doctor_check_oauth_discovery(): array {
 			$fix,
 			(int) reset( $bad )
 		);
+		// The same data also answers through the REST API; say whether that copy is there.
+		$rest     = rest_url( aafm_oauth_rest_namespace() . '/protected-resource' );
+		$response = wp_remote_get( $rest, $args );
+		$code     = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		$rows[]   = 200 === $code && is_array( json_decode( (string) wp_remote_retrieve_body( $response ), true ) )
+			? aafm_doctor_row( 'oauth_discovery_rest', __( 'OAuth discovery through the REST API', 'agent-abilities-for-mcp' ), 'pass', 'host', __( 'The same discovery data answers through the REST API, so WordPress is fine. The host must still allow /.well-known/ for ChatGPT and Claude.ai to find it.', 'agent-abilities-for-mcp' ), implode( "\n", array( $rest, rest_url( aafm_oauth_rest_namespace() . '/authorization-server' ) ) ), 200 )
+			: aafm_doctor_row( 'oauth_discovery_rest', __( 'OAuth discovery through the REST API', 'agent-abilities-for-mcp' ), 'fail', 'host', __( 'The REST copy of the discovery data did not answer either. Something is blocking the REST API itself.', 'agent-abilities-for-mcp' ), '', $code );
+	} elseif ( $skipped ) {
+		$rows[] = aafm_doctor_row( 'oauth_discovery', $label, 'skip', '', __( 'Could not test: this site could not request its own discovery documents.', 'agent-abilities-for-mcp' ) );
+	} else {
+		$rows[] = aafm_doctor_row( 'oauth_discovery', $label, 'pass', '', __( 'Both OAuth discovery documents are reachable.', 'agent-abilities-for-mcp' ) );
 	}
-	if ( $skipped ) {
-		return aafm_doctor_row( 'oauth_discovery', $label, 'skip', '', __( 'Could not test: this site could not request its own discovery documents.', 'agent-abilities-for-mcp' ) );
+	if ( $stale ) {
+		$rows[] = aafm_doctor_row( 'oauth_discovery_stale', __( 'OAuth discovery is current', 'agent-abilities-for-mcp' ), 'warn', 'you', __( 'A discovery document names a different site address than this endpoint, or a static file under /.well-known/ answers instead of WordPress. Clients that read it connect to the wrong place. Remove the static file, or clear the cache that serves the old copy.', 'agent-abilities-for-mcp' ) );
 	}
 
-	return aafm_doctor_row( 'oauth_discovery', $label, 'pass', '', __( 'Both OAuth discovery documents are reachable.', 'agent-abilities-for-mcp' ) );
+	return $rows;
 }
 
 /**
@@ -688,16 +802,21 @@ function aafm_doctor_run_checks(): array {
 	$oauth_on = aafm_oauth_enabled();
 	$probe    = aafm_doctor_probe();
 	aafm_doctor_remember_header_result( $probe['seen'] );
-	$rows = array(
-		aafm_doctor_check_endpoint( $probe, $oauth_on ),
-		aafm_doctor_check_auth_header( $probe ),
-		aafm_doctor_check_app_passwords(),
-		aafm_doctor_check_https(),
-		aafm_doctor_check_permalinks(),
-		aafm_doctor_check_security_plugins(),
+	$rows = array_merge(
+		array(
+			aafm_doctor_check_endpoint( $probe, $oauth_on ),
+			aafm_doctor_check_auth_header( $probe ),
+		),
+		aafm_doctor_check_transport( $probe ),
+		array(
+			aafm_doctor_check_app_passwords(),
+			aafm_doctor_check_https(),
+			aafm_doctor_check_permalinks(),
+			aafm_doctor_check_security_plugins(),
+		)
 	);
 	if ( $oauth_on ) {
-		$rows[] = aafm_doctor_check_oauth_discovery();
+		$rows = array_merge( $rows, aafm_doctor_check_oauth_discovery() );
 	}
 
 	return $rows;
@@ -706,8 +825,8 @@ function aafm_doctor_run_checks(): array {
 /**
  * The plain-text report an owner can paste into a support thread.
  *
- * Holds versions, the site host, active plugin names, and each check's result and HTTP code. It
- * never holds a key, password, cookie, user name, URL or request error text.
+ * Holds versions, active plugin names, and each check's result and HTTP code. It never holds a
+ * key, password, cookie, user name, host name, URL or request error text.
  *
  * @param list<array<string,mixed>> $rows Rows from aafm_doctor_run_checks().
  * @return string
@@ -725,7 +844,6 @@ function aafm_doctor_build_report( array $rows ): string {
 	}
 	sort( $names );
 
-	$host     = wp_parse_url( home_url(), PHP_URL_HOST );
 	$software = isset( $_SERVER['SERVER_SOFTWARE'] ) ? (string) preg_replace( '/[^A-Za-z0-9._-].*$/', '', (string) wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- reduced to the product name by the regex.
 	$scheme   = wp_parse_url( (string) get_option( 'home' ), PHP_URL_SCHEME );
 	$adapter  = aafm_loaded_adapter_version();
@@ -733,7 +851,7 @@ function aafm_doctor_build_report( array $rows ): string {
 	$lines = array(
 		'Agent Abilities for MCP connection report',
 		'Plugin: ' . AAFM_VERSION . ' | WordPress: ' . get_bloginfo( 'version' ) . ' | PHP: ' . PHP_VERSION . ' | MCP adapter: ' . ( null === $adapter ? 'not loaded' : $adapter ),
-		'Site host: ' . ( is_string( $host ) ? $host : 'unknown' ) . ' | Environment: ' . wp_get_environment_type() . ' | Server: ' . ( '' !== $software ? $software : 'unknown' ),
+		'Environment: ' . wp_get_environment_type() . ' | Server: ' . ( '' !== $software ? $software : 'unknown' ),
 		'Permalinks: ' . ( '' === (string) get_option( 'permalink_structure', '' ) ? 'plain' : 'pretty' ) . ' | HTTPS: ' . ( 'https' === $scheme ? 'yes' : 'no' ) . ' | OAuth: ' . ( aafm_oauth_enabled() ? 'on' : 'off' ),
 		'Active plugins (' . count( $names ) . '): ' . implode( ', ', $names ),
 		'',

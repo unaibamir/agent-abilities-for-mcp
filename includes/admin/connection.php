@@ -947,6 +947,7 @@ function aafm_render_connection_tab(): void {
 	$is_local = aafm_site_is_local();
 
 	echo '<div class="aafm-connection">';
+	aafm_render_pause_all_notice();
 
 	// ---- 1. Endpoint card (the single canonical endpoint display) ----
 	echo '<section class="aafm-card aafm-card-pad aafm-endpoint-card">';
@@ -1099,6 +1100,7 @@ function aafm_render_connection_tab(): void {
 
 	echo '</section>';
 
+	aafm_render_pause_all_card();
 	aafm_render_connection_tabs( $oauth_on );
 
 	// After the tabs: the allowlist governs both roles and OAuth clients, whichever method is in use.

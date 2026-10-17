@@ -304,6 +304,10 @@
 
 	/* ---------- Pills / status ---------- */
 	.aafm-pill {
+		/* Pills toggled with the hidden attribute (the "Access paused" header pill) need this:
+		   an author display rule beats the user agent's [hidden] { display: none }. */
+		&[hidden] { display: none; }
+
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;

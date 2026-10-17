@@ -78,6 +78,7 @@
 			this.#bindLifetimesCard();
 			this.#bindGrantControls();
 			this.#bindAppPasswordRevoke();
+			this.#bindPauseAll();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
 			this.#bindClientAgentToggle();
@@ -2677,6 +2678,60 @@
 				const empty = card.querySelector( '.aafm-empty-state' );
 				if ( empty && ! card.querySelector( '.aafm-app-passwords-table' ) ) {
 					empty.hidden = false;
+				}
+			} );
+		}
+
+		/**
+		 * Wire the pause-all button: confirm before pausing, then flip the button, the Connection
+		 * tab notice and the page-header pill without a reload.
+		 */
+		#bindPauseAll() {
+			const btn = document.getElementById( 'aafm-pause-all' );
+			if ( ! btn ) {
+				return;
+			}
+			const status = btn.parentElement?.querySelector( '.aafm-pause-all-status' );
+			btn.addEventListener( 'click', async () => {
+				const pausing = 'true' !== btn.getAttribute( 'aria-pressed' );
+				if (
+					pausing &&
+					! window.confirm(
+						this.#t(
+							'pauseAllConfirm',
+							'Pause all MCP access through this site? Every connected agent is refused until you resume.'
+						)
+					)
+				) {
+					return;
+				}
+				btn.disabled = true;
+				const json = await this.#post( 'aafm_set_pause_all', { paused: pausing ? '1' : '0' } );
+				btn.disabled = false;
+				if ( ! json?.success ) {
+					if ( status ) {
+						status.textContent =
+							json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					}
+					return;
+				}
+				const paused = Boolean( json.data?.paused );
+				btn.setAttribute( 'aria-pressed', paused ? 'true' : 'false' );
+				btn.classList.toggle( 'aafm-btn-primary', paused );
+				btn.classList.toggle( 'aafm-btn-secondary', ! paused );
+				btn.textContent = paused
+					? this.#t( 'resumeAll', 'Resume all access' )
+					: this.#t( 'pauseAll', 'Pause all access' );
+				const notice = document.querySelector( '.aafm-pause-all-notice' );
+				if ( notice ) {
+					notice.hidden = ! paused;
+				}
+				const pill = document.querySelector( '.aafm-status-pill[data-posture="paused"]' );
+				if ( pill ) {
+					pill.hidden = ! paused;
+				}
+				if ( status ) {
+					status.textContent = '';
 				}
 			} );
 		}

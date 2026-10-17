@@ -868,3 +868,64 @@ function aafm_ajax_revoke_app_password(): void {
 		)
 	);
 }
+
+/**
+ * The warning shown at the top of the Connection tab; hidden while access is not paused, so the
+ * script can reveal it without a reload.
+ *
+ * @return void
+ */
+function aafm_render_pause_all_notice(): void {
+	echo '<div class="aafm-pause-all-notice"' . ( aafm_pause_all() ? '' : ' hidden' ) . '>';
+	aafm_render_notice( 'warning', __( 'All MCP access through this site is paused. Agents get a refusal until you resume it below.', 'agent-abilities-for-mcp' ) );
+	echo '</div>';
+}
+
+/**
+ * Render the "Pause all access" card.
+ *
+ * @return void
+ */
+function aafm_render_pause_all_card(): void {
+	$paused = aafm_pause_all();
+	aafm_render_section(
+		array(
+			'id'          => 'aafm-card-pause-all',
+			'icon'        => 'shield',
+			'title'       => __( 'Pause all access', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Stops all MCP access through this site at once: this plugin\'s endpoint and the MCP adapter\'s default server, for OAuth apps and Application Passwords alike. Nothing is deleted; resume to carry on. Application Passwords still work with the rest of the WordPress REST API; this switch does not close that.', 'agent-abilities-for-mcp' ),
+			'body'        => sprintf(
+				'<p><button type="button" class="aafm-btn %1$s" id="aafm-pause-all" aria-pressed="%2$s">%3$s</button> <span class="aafm-pause-all-status" role="status"></span></p>',
+				$paused ? 'aafm-btn-primary' : 'aafm-btn-secondary',
+				$paused ? 'true' : 'false',
+				$paused ? esc_html__( 'Resume all access', 'agent-abilities-for-mcp' ) : esc_html__( 'Pause all access', 'agent-abilities-for-mcp' )
+			),
+		)
+	);
+}
+
+/**
+ * AJAX: turn pause-all on or off.
+ *
+ * @return void
+ */
+function aafm_ajax_set_pause_all(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; only '0' or '1' is accepted.
+	$raw = isset( $_POST['paused'] ) ? wp_unslash( $_POST['paused'] ) : null;
+	if ( ! in_array( $raw, array( '0', '1' ), true ) ) {
+		wp_send_json_error( array( 'message' => __( 'That value is not allowed.', 'agent-abilities-for-mcp' ) ) );
+	}
+	$on     = '1' === $raw;
+	$before = aafm_pause_all();
+	if ( ! aafm_set_pause_all( $on ) ) {
+		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Pause all access', 'agent-abilities-for-mcp' ) ) ) );
+	}
+	if ( $before !== $on ) {
+		aafm_log_setting_change( 'aafm/pause-all-access', $on ? __( 'All access paused', 'agent-abilities-for-mcp' ) : __( 'All access resumed', 'agent-abilities-for-mcp' ) );
+	}
+	wp_send_json_success( array( 'paused' => $on ) );
+}

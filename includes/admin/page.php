@@ -180,6 +180,9 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'grantResumeFor'           => __( 'Resume %s', 'agent-abilities-for-mcp' ),
 				'grantNothingChanged'      => __( 'Nothing to save.', 'agent-abilities-for-mcp' ),
 				'appPasswordRevokeConfirm' => __( 'Revoke this Application Password? Anything using it stops working right away.', 'agent-abilities-for-mcp' ),
+				'pauseAll'                 => __( 'Pause all access', 'agent-abilities-for-mcp' ),
+				'resumeAll'                => __( 'Resume all access', 'agent-abilities-for-mcp' ),
+				'pauseAllConfirm'          => __( 'Pause all MCP access through this site? Every connected agent is refused until you resume.', 'agent-abilities-for-mcp' ),
 				'dcrOffConfirm'            => __( 'Turn off dynamic client registration? ChatGPT and Claude can no longer register themselves, so new connections from them will fail until you turn it back on.', 'agent-abilities-for-mcp' ),
 				'settingsNotSaved'         => __( 'Could not save - your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
 				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
@@ -1695,6 +1698,11 @@ function aafm_render_admin_page(): void {
 	// is the one element on the page whose scope is unambiguously everything.
 	$posture = aafm_exposure_posture();
 	echo '<span class="aafm-page-head-pills">';
+	printf(
+		'<span class="aafm-status-pill aafm-pill aafm-pill-warn" data-posture="paused"%1$s>%2$s</span>',
+		aafm_pause_all() ? '' : ' hidden',
+		esc_html__( 'Access paused', 'agent-abilities-for-mcp' )
+	);
 	printf(
 		'<span class="aafm-status-pill aafm-pill aafm-pill-%1$s" data-posture="%2$s">%3$s</span>',
 		esc_attr( $posture['variant'] ),

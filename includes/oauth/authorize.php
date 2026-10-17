@@ -619,7 +619,7 @@ function aafm_oauth_show_consent( array $valid ): void {
 		'redirect_host'  => $redirect_host,
 		'high_privilege' => aafm_oauth_user_is_high_privilege( $user ),
 		'action_url'     => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
-		'nonce_field'    => wp_nonce_field( 'aafm_oauth_consent', '_wpnonce', true, false ),
+		'nonce_field'    => wp_nonce_field( 'aafm_oauth_consent|' . $valid['client_id'], '_wpnonce', true, false ),
 		'hidden_inputs'  => $hidden_inputs,
 	);
 
@@ -736,10 +736,14 @@ function aafm_oauth_handle_authorize(): void {
 
 	// On POST, verify the consent nonce BEFORE trusting any submitted field. A bad
 	// nonce is a local failure (render a local 403), never a redirect to the client.
+	// The nonce is bound to the client: the client id is read raw here only to name the
+	// action; the full parameter validation still runs below.
 	if ( $is_post ) {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- explicit verification on the next line.
 		$nonce = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
-		if ( ! wp_verify_nonce( $nonce, 'aafm_oauth_consent' ) ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- this read names the nonce action.
+		$nonce_client = isset( $_POST['client_id'] ) && is_string( $_POST['client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) : '';
+		if ( ! wp_verify_nonce( $nonce, 'aafm_oauth_consent|' . $nonce_client ) ) {
 			aafm_oauth_render_local_error(
 				403,
 				__( 'Your authorization session expired. Please start again.', 'agent-abilities-for-mcp' )
@@ -769,6 +773,21 @@ function aafm_oauth_handle_authorize(): void {
 
 	$user_id = get_current_user_id();
 
+	// Per-connection state. An unreadable row never reaches consent or a code; a paused grant gets a
+	// local page (no consent screen, no code); an expired grant is renewed only by a site owner.
+	$grant = aafm_oauth_grant_state( $user_id, $valid['client_id'] );
+	if ( null === $grant ) {
+		aafm_oauth_render_local_error( 500, __( 'This connection could not be checked. Please try again.', 'agent-abilities-for-mcp' ) );
+	}
+	$has_consent = aafm_oauth_has_consent( $user_id, $valid['client_id'] );
+	if ( $has_consent && $grant['paused'] ) {
+		aafm_oauth_render_local_error( 403, __( 'The site owner has paused this connection. Ask them to resume it, then try again.', 'agent-abilities-for-mcp' ) );
+	}
+	$renewing = $has_consent && $grant['expired'];
+	if ( $renewing && ! current_user_can( 'manage_options' ) ) {
+		aafm_oauth_render_local_error( 403, __( 'This connection has ended. Ask the site owner to renew it.', 'agent-abilities-for-mcp' ) );
+	}
+
 	if ( $is_post ) {
 		// Default-deny: only an explicit 'approve' grants a code. Treat anything else -
 		// a blank field, 'deny', or any unexpected value - as a denial and hand
@@ -783,7 +802,12 @@ function aafm_oauth_handle_authorize(): void {
 
 		// Approve: persist consent, then issue the code. A code must never be minted over a
 		// consent write that did not actually take - redemption would only fail it later as a
-		// dead invalid_grant after the client was already told approval succeeded.
+		// dead invalid_grant after the client was already told approval succeeded. Renewing an
+		// expired grant clears its end date first; the writer revokes the old tokens and certifies
+		// none is left, so old credentials never come back.
+		if ( $renewing && ! aafm_oauth_grant_update( $user_id, $valid['client_id'], array( 'expires_at' => null ) ) ) {
+			aafm_oauth_render_local_error( 500, __( 'Could not renew this connection. Please try again.', 'agent-abilities-for-mcp' ) );
+		}
 		if ( ! aafm_oauth_record_consent( $user_id, $valid['client_id'] ) ) {
 			aafm_oauth_render_local_error(
 				500,
@@ -793,8 +817,9 @@ function aafm_oauth_handle_authorize(): void {
 		aafm_oauth_issue_code_and_redirect( $valid, $user_id );
 	}
 
-	// GET: a prior consent issues a code immediately; otherwise show the screen.
-	if ( aafm_oauth_has_consent( $user_id, $valid['client_id'] ) ) {
+	// GET: a prior consent issues a code immediately; otherwise (or for an expired grant its owner
+	// is renewing) show the screen.
+	if ( $has_consent && ! $renewing ) {
 		aafm_oauth_issue_code_and_redirect( $valid, $user_id );
 	}
 

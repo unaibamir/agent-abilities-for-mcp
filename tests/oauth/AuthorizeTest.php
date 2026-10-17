@@ -545,7 +545,7 @@ class AuthorizeTest extends TestCase {
 
 		global $wpdb;
 		$params                        = $this->valid_params( $client );
-		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent' );
+		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent|' . $client );
 		$params['aafm_oauth_decision'] = 'approve';
 		$result                        = QueryFaultInjector::break_query_with_real_error(
 			'INSERT INTO `' . $wpdb->prefix . 'aafm_oauth_consents`',
@@ -1135,5 +1135,205 @@ class AuthorizeTest extends TestCase {
 		// for the fixed (non-CSP) consent-flow headers.
 		$this->assertSame( 'DENY', $headers['X-Frame-Options'] );
 		$this->assertSame( 'no-referrer', $headers['Referrer-Policy'] );
+	}
+
+	/**
+	 * Number of authorization codes stored.
+	 *
+	 * @return int
+	 */
+	private function code_count(): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $wpdb->prefix . 'aafm_oauth_codes' ) );
+	}
+
+	/**
+	 * An approve POST for a client, carrying the client-bound nonce.
+	 *
+	 * @param string $client Client id.
+	 * @return array{redirect:?string,status:?int}
+	 */
+	private function approve( string $client ): array {
+		$params                        = $this->valid_params( $client );
+		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent|' . $client );
+		$params['aafm_oauth_decision'] = 'approve';
+		return $this->run_authorize_post( $params );
+	}
+
+	/**
+	 * Set columns on the current user's consent row for a client.
+	 *
+	 * @param int                 $user   User id.
+	 * @param string              $client Client id.
+	 * @param array<string,mixed> $data   Columns.
+	 * @return void
+	 */
+	private function set_grant( int $user, string $client, array $data ): void {
+		global $wpdb;
+		aafm_oauth_record_consent( $user, $client );
+		$wpdb->update(
+			$wpdb->prefix . 'aafm_oauth_consents',
+			$data,
+			array(
+				'wp_user_id' => $user,
+				'client_id'  => $client,
+			)
+		);
+	}
+
+	/**
+	 * Redeem a code from a captured redirect through the token handler.
+	 *
+	 * @param string $client   Client id.
+	 * @param string $redirect Captured redirect URL carrying the code.
+	 * @return array<string,mixed> The token response body.
+	 */
+	private function redeem( string $client, string $redirect ): array {
+		$query = array();
+		wp_parse_str( (string) wp_parse_url( $redirect, PHP_URL_QUERY ), $query );
+		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
+		$request->set_body_params(
+			array(
+				'grant_type'    => 'authorization_code',
+				'code'          => (string) ( $query['code'] ?? '' ),
+				'redirect_uri'  => 'https://app.example/cb',
+				'client_id'     => $client,
+				'code_verifier' => 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk',
+			)
+		);
+		return (array) aafm_oauth_rest_token_authorization_code( $request )->get_data();
+	}
+
+	public function test_a_paused_grant_gets_a_local_page_and_no_code(): void {
+		$user   = $this->acting_as( 'administrator' );
+		$client = $this->register_client();
+		$this->set_grant( $user, $client, array( 'paused_at' => '2026-10-01 00:00:00' ) );
+		$codes = $this->code_count();
+
+		$get = $this->run_authorize_get( $this->valid_params( $client ) );
+		$this->assertNull( $get['redirect'] );
+		$this->assertSame( 403, $get['status'] );
+
+		$post = $this->approve( $client );
+		$this->assertNull( $post['redirect'] );
+		$this->assertSame( 403, $post['status'] );
+		$this->assertSame( $codes, $this->code_count(), 'No code is minted for a paused grant.' );
+		$this->assertTrue( aafm_oauth_grant_state( $user, $client )['paused'] );
+	}
+
+	public function test_an_expired_grant_cannot_be_renewed_by_a_non_owner(): void {
+		$user   = $this->acting_as( 'editor' );
+		$client = $this->register_client();
+		$this->set_grant( $user, $client, array( 'expires_at' => '2020-01-01 00:00:00' ) );
+
+		$this->assertSame( 403, $this->run_authorize_get( $this->valid_params( $client ) )['status'] );
+		$this->assertSame( 403, $this->approve( $client )['status'] );
+		$this->assertSame( '2020-01-01 00:00:00', aafm_oauth_grant_state( $user, $client )['expires_at'] );
+	}
+
+	public function test_the_authorize_shortcut_does_not_skip_consent_for_an_expired_grant(): void {
+		$user   = $this->acting_as( 'administrator' );
+		$client = $this->register_client();
+		$this->set_grant( $user, $client, array( 'expires_at' => '2020-01-01 00:00:00' ) );
+		$codes = $this->code_count();
+
+		$get = $this->run_authorize_get( $this->valid_params( $client ) );
+		$this->assertNull( $get['redirect'], 'An expired grant never takes the consent shortcut.' );
+		$this->assertSame( 200, $get['status'], 'Its owner sees the consent screen.' );
+		$this->assertSame( $codes, $this->code_count() );
+	}
+
+	public function test_the_owner_renews_an_expired_grant_with_the_same_access(): void {
+		$user   = $this->acting_as( 'administrator' );
+		$client = $this->register_client();
+		$this->set_grant(
+			$user,
+			$client,
+			array(
+				'expires_at'   => '2020-01-01 00:00:00',
+				'preset'       => 'read_only',
+				'rate_per_min' => 5,
+			)
+		);
+
+		$post = $this->approve( $client );
+		$this->assertNotNull( $post['redirect'] );
+		$state = aafm_oauth_grant_state( $user, $client );
+		$this->assertNull( $state['expires_at'] );
+		$this->assertSame( 'read_only', $state['preset'] );
+		$this->assertSame( 5, $state['rate'] );
+	}
+
+	public function test_old_tokens_stay_dead_after_the_owner_renews(): void {
+		$user   = $this->acting_as( 'administrator' );
+		$client = $this->register_client();
+		$this->set_grant( $user, $client, array( 'expires_at' => '2020-01-01 00:00:00' ) );
+		$old = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $user,
+				'client_id'  => $client,
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->assertIsArray( $old );
+
+		$post = $this->approve( $client );
+		$this->assertNotNull( $post['redirect'] );
+		$this->assertFalse( aafm_oauth_validate_access_token( $old['access_token'] ) );
+		$this->assertWPError( aafm_oauth_rotate_refresh( $old['refresh_token'], $client ) );
+
+		$fresh = $this->redeem( $client, (string) $post['redirect'] );
+		$this->assertArrayHasKey( 'access_token', $fresh );
+		$this->assertSame( $user, aafm_oauth_validate_access_token( (string) $fresh['access_token'] ) );
+	}
+
+	public function test_an_unreadable_grant_state_never_reaches_consent_or_a_code(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$client = $this->register_client();
+		$codes  = $this->code_count();
+		$result = QueryFaultInjector::fail_query(
+			'FROM `' . $wpdb->prefix . 'aafm_oauth_consents`',
+			fn() => $this->run_authorize_get( $this->valid_params( $client ) )
+		);
+		$this->assertNull( $result['redirect'] );
+		$this->assertSame( 500, $result['status'] );
+		$this->assertSame( $codes, $this->code_count() );
+	}
+
+	public function test_the_consent_nonce_is_bound_to_the_client(): void {
+		$user     = $this->acting_as( 'administrator' );
+		$client_a = $this->register_client();
+		$client_b = $this->register_client();
+
+		$params                        = $this->valid_params( $client_b );
+		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent|' . $client_a );
+		$params['aafm_oauth_decision'] = 'approve';
+		$result                        = $this->run_authorize_post( $params );
+		$this->assertSame( 403, $result['status'], 'A nonce for client A does not approve client B.' );
+		$this->assertFalse( aafm_oauth_has_consent( $user, $client_b ) );
+	}
+
+	public function test_a_nonce_minted_for_the_old_action_is_refused_once(): void {
+		$user   = $this->acting_as( 'administrator' );
+		$client = $this->register_client();
+
+		$params                        = $this->valid_params( $client );
+		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent' );
+		$params['aafm_oauth_decision'] = 'approve';
+		$this->assertSame( 403, $this->run_authorize_post( $params )['status'] );
+		$this->assertFalse( aafm_oauth_has_consent( $user, $client ) );
+
+		$this->assertNotNull( $this->approve( $client )['redirect'], 'The next page load carries the new nonce and works.' );
+	}
+
+	public function test_approving_with_no_preset_field_behaves_as_before(): void {
+		$user   = $this->acting_as( 'administrator' );
+		$client = $this->register_client();
+		$post   = $this->approve( $client );
+		$this->assertNotNull( $post['redirect'] );
+		$this->assertStringContainsString( 'code=', (string) $post['redirect'] );
+		$this->assertSame( aafm_oauth_grant_defaults(), aafm_oauth_grant_state( $user, $client ) );
 	}
 }

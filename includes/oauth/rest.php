@@ -669,15 +669,18 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// step slips through. Without this, that orphaned code would redeem into a usable token after
 	// the UI reported the revoke landed. The code is already consumed above (a legitimate one-time
 	// use), so COMMIT the burn and yield invalid_grant.
+	// A grant past its end date is refused the same way (the code burns); one whose state cannot be
+	// read rolls back like a failed consent read.
 	$consent = aafm_oauth_consent_view( (int) $row['wp_user_id'], (string) $row['client_id'] );
-	if ( ! $consent['ok'] || ! $consent['value'] ) {
+	$gate    = $consent['ok'] && $consent['value'] ? aafm_oauth_grant_gate( (int) $row['wp_user_id'], (string) $row['client_id'] ) : 'ok';
+	if ( ! $consent['ok'] || ! $consent['value'] || 'ok' !== $gate ) {
 		// R6-2, then R7-2: a failed read must fail closed (report no consent) but must not be told
 		// to the client as "your grant is invalid" - that permanently burns an otherwise-valid,
 		// unexpired code over a transient read failure that says nothing real about consent. Roll
 		// back instead so the code survives, and report the fault honestly. aafm_oauth_consent_view()
 		// answers both "is there a consent row" and "could this even be checked" from the one read
 		// (Codex round 7, R7-2), replacing the query-per-decision pair this site used to run.
-		if ( ! $consent['ok'] ) {
+		if ( ! $consent['ok'] || 'unknown' === $gate ) {
 			if ( ! aafm_oauth_txn( 'ROLLBACK' ) ) {
 				do_action( 'aafm_oauth_rollback_failed', 'token_check_consent', $client_id );
 			}

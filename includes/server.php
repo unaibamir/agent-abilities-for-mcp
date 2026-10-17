@@ -1049,17 +1049,7 @@ function aafm_transport_permission_callback( $request ) {
 		// VALID credential from a blocked address hits this branch on every request, so an
 		// uncapped row per denial lets one address flood the 30-day activity table. Only the
 		// row is capped - the denial below is returned every time regardless.
-		if ( aafm_denial_log_within_cap( 'ipb' ) ) {
-			$user = wp_get_current_user();
-			aafm_log_activity(
-				array(
-					'ability'           => '(transport)',
-					'status'            => 'denied',
-					'principal_user_id' => (int) $user->ID,
-					'principal_login'   => (string) $user->user_login,
-				)
-			);
-		}
+		aafm_log_transport_denial( 'ipb' );
 		return new WP_Error( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
 	}
 
@@ -1068,19 +1058,7 @@ function aafm_transport_permission_callback( $request ) {
 	// error_log line, whereas a returned WP_Error is logged by HttpTransport::check_permission() on every request.
 	$grant = aafm_oauth_current_grant();
 	if ( $grant['paused'] ) {
-		if ( aafm_denial_log_within_cap( 'cpa' ) ) {
-			$user = wp_get_current_user();
-			aafm_log_activity(
-				array(
-					'ability'           => '(transport)',
-					'status'            => 'denied',
-					'principal_user_id' => (int) $user->ID,
-					'principal_login'   => (string) $user->user_login,
-					'client_id'         => (string) $grant['client_id'],
-					'detail'            => aafm_compose_denied_detail( null, 'connection_paused' ),
-				)
-			);
-		}
+		aafm_log_transport_denial( 'cpa', 'connection_paused', (string) $grant['client_id'] );
 		return false;
 	}
 

@@ -407,6 +407,34 @@ function aafm_denial_log_within_cap( string $bucket ): bool {
 }
 
 /**
+ * Write one "(transport)" denied row for the current user, inside the per-IP cap of its bucket.
+ *
+ * @param string $bucket    Cap bucket, as aafm_denial_log_within_cap() takes it: 'ipb', 'cpa' or 'pau' here.
+ * @param string $reason    Refusal reason for the detail column, or '' for a row without detail.
+ * @param string $client_id OAuth client id the call carried, or '' when it was not a bearer call.
+ * @return void
+ */
+function aafm_log_transport_denial( string $bucket, string $reason = '', string $client_id = '' ): void {
+	if ( ! aafm_denial_log_within_cap( $bucket ) ) {
+		return;
+	}
+	$user   = wp_get_current_user();
+	$record = array(
+		'ability'           => '(transport)',
+		'status'            => 'denied',
+		'principal_user_id' => (int) $user->ID,
+		'principal_login'   => (string) $user->user_login,
+	);
+	if ( '' !== $client_id ) {
+		$record['client_id'] = $client_id;
+	}
+	if ( '' !== $reason ) {
+		$record['detail'] = aafm_compose_denied_detail( null, $reason );
+	}
+	aafm_log_activity( $record );
+}
+
+/**
  * Log a failed Application Password authentication attempt against the MCP endpoint.
  *
  * Hooked on WordPress core's `application_password_failed_authentication` action. Core fires it

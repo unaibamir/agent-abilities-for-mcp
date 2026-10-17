@@ -67,18 +67,7 @@ function aafm_pause_all_guard( $result, $server, $request ) {
 	if ( ! aafm_pause_all() ) {
 		return $result;
 	}
-	if ( aafm_denial_log_within_cap( 'pau' ) ) {
-		$user = wp_get_current_user();
-		aafm_log_activity(
-			array(
-				'ability'           => '(transport)',
-				'status'            => 'denied',
-				'principal_user_id' => (int) $user->ID,
-				'principal_login'   => (string) $user->user_login,
-				'detail'            => aafm_compose_denied_detail( null, 'access_paused' ),
-			)
-		);
-	}
+	aafm_log_transport_denial( 'pau', 'access_paused' );
 	return new WP_Error( 'aafm_access_paused', __( 'Access to this site is paused by its owner.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
 }
 // Priority 0: ahead of the plugin's own MCP body filters at 10, so a paused site never parses an MCP body.

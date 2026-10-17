@@ -106,3 +106,150 @@ function aafm_oauth_grant_from_row( array $row ): array {
 		'last_used_ip' => isset( $row['last_used_ip'] ) ? (string) $row['last_used_ip'] : '',
 	);
 }
+
+if ( ! defined( 'AAFM_OAUTH_LAST_USED_WINDOW' ) ) {
+	// Seconds a last-used stamp stays fresh: inside the window the hot path writes nothing.
+	define( 'AAFM_OAUTH_LAST_USED_WINDOW', 300 );
+}
+
+/**
+ * Change an owner-controlled field on one grant and certify it against a fresh read.
+ *
+ * Moving an EXPIRED grant to a cleared or future end date first revokes the user's tokens for that
+ * app and certifies none is still active, so an expired grant never revives its old credentials.
+ *
+ * @param int                 $user_id   Approving user.
+ * @param string              $client_id OAuth client id.
+ * @param array<string,mixed> $changes   Any of paused (bool), expires_at (?string UTC Y-m-d H:i:s, null clears),
+ *                                       preset (string, '' is Custom), rate (int, 0 inherits).
+ * @return bool True only when a fresh read shows every requested value.
+ */
+function aafm_oauth_grant_update( int $user_id, string $client_id, array $changes ): bool {
+	global $wpdb;
+	$data = array();
+	$fmt  = array();
+	if ( array_key_exists( 'paused', $changes ) ) {
+		$data['paused_at'] = $changes['paused'] ? gmdate( 'Y-m-d H:i:s' ) : null;
+		$fmt[]             = '%s';
+	}
+	if ( array_key_exists( 'expires_at', $changes ) ) {
+		$data['expires_at'] = null === $changes['expires_at'] ? null : (string) $changes['expires_at'];
+		$fmt[]              = '%s';
+	}
+	if ( array_key_exists( 'preset', $changes ) ) {
+		$data['preset'] = '' === (string) $changes['preset'] ? null : (string) $changes['preset'];
+		$fmt[]          = '%s';
+	}
+	if ( array_key_exists( 'rate', $changes ) ) {
+		$data['rate_per_min'] = (int) $changes['rate'] > 0 ? (int) $changes['rate'] : null;
+		$fmt[]                = '%d';
+	}
+	if ( $user_id <= 0 || '' === $client_id || array() === $data ) {
+		return false;
+	}
+	aafm_maybe_upgrade_oauth_tables(); // A write needs the columns; reads tolerate their absence.
+
+	// An expired grant is over. Moving its end date (or clearing it) must not bring its old credentials back to
+	// life, so the tokens go first and the write stops if they cannot be certified gone.
+	$before = aafm_oauth_grant_state( $user_id, $client_id );
+	if ( null === $before ) {
+		return false;
+	}
+	$renews = $before['expired'] && array_key_exists( 'expires_at', $changes )
+		&& ( null === $changes['expires_at'] || (string) $changes['expires_at'] > gmdate( 'Y-m-d H:i:s' ) );
+	if ( $renews && ( -1 === aafm_oauth_revoke_user_client_tokens( $user_id, $client_id ) || aafm_oauth_user_client_has_active_tokens( $user_id, $client_id ) ) ) {
+		return false;
+	}
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->update(
+		$wpdb->prefix . 'aafm_oauth_consents',
+		$data,
+		array(
+			'wp_user_id' => $user_id,
+			'client_id'  => $client_id,
+		),
+		$fmt,
+		array( '%d', '%s' )
+	);
+
+	// Certify against a fresh read, not the UPDATE's affected-row count (same rule as aafm_oauth_deactivate_client()).
+	// No matching row reads as the defaults, so a pause asked of a grant that is gone fails here.
+	$state = aafm_oauth_grant_state( $user_id, $client_id );
+	if ( null === $state ) {
+		return false;
+	}
+	return ( ! array_key_exists( 'paused', $changes ) || (bool) $changes['paused'] === $state['paused'] )
+		&& ( ! array_key_exists( 'expires_at', $changes ) || ( $data['expires_at'] ?? null ) === $state['expires_at'] )
+		&& ( ! array_key_exists( 'preset', $changes ) || (string) $changes['preset'] === $state['preset'] )
+		&& ( ! array_key_exists( 'rate', $changes ) || max( 0, (int) $changes['rate'] ) === $state['rate'] );
+}
+
+/**
+ * Stamp the grant's last use, at most once per AAFM_OAUTH_LAST_USED_WINDOW. Never fails the caller.
+ *
+ * @param int         $user_id      Approving user.
+ * @param string      $client_id    OAuth client id.
+ * @param string|null $last_used_at The stamp the caller already read, or null.
+ * @return void
+ */
+function aafm_oauth_grant_touch( int $user_id, string $client_id, ?string $last_used_at ): void {
+	global $wpdb;
+	$cutoff = gmdate( 'Y-m-d H:i:s', time() - AAFM_OAUTH_LAST_USED_WINDOW );
+	if ( null !== $last_used_at && $last_used_at > $cutoff ) {
+		return; // Fresh enough: no write on the hot path.
+	}
+	$suppressed = $wpdb->suppress_errors( true );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query(
+		$wpdb->prepare(
+			'UPDATE %i SET last_used_at = %s, last_used_ip = %s WHERE wp_user_id = %d AND client_id = %s AND ( last_used_at IS NULL OR last_used_at <= %s )',
+			$wpdb->prefix . 'aafm_oauth_consents',
+			gmdate( 'Y-m-d H:i:s' ),
+			substr( aafm_source_ip(), 0, 45 ),
+			$user_id,
+			$client_id,
+			$cutoff
+		)
+	);
+	$wpdb->suppress_errors( $suppressed );
+}
+
+/**
+ * Whether a grant may mint or use a credential: 'ok', 'expired', or 'unknown' (the state could not
+ * be read; the caller denies).
+ *
+ * @param int    $user_id   Approving user.
+ * @param string $client_id OAuth client id.
+ * @return string
+ */
+function aafm_oauth_grant_gate( int $user_id, string $client_id ): string {
+	$state = aafm_oauth_grant_state( $user_id, $client_id );
+	if ( null === $state ) {
+		return 'unknown';
+	}
+	return $state['expired'] ? 'expired' : 'ok';
+}
+
+/**
+ * The grant the current request's bearer resolved to: a per-request store, cleared at shutdown.
+ *
+ * @param array<string,mixed>|null $grant  The grant to remember, or null to read.
+ * @param bool                     $forget Drop the stored grant.
+ * @return array<string,mixed> The defaults plus client_id and user_id.
+ */
+function aafm_oauth_current_grant( ?array $grant = null, bool $forget = false ): array {
+	static $stored = null;
+	if ( $forget ) {
+		$stored = null;
+	} elseif ( null !== $grant ) {
+		$stored = $grant;
+	}
+	return $stored ?? array_merge(
+		aafm_oauth_grant_defaults(),
+		array(
+			'client_id' => '',
+			'user_id'   => 0,
+		)
+	);
+}

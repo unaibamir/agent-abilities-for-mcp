@@ -78,6 +78,7 @@ function aafm_oauth_current_client_id( ?string $client_id = null, bool $forget =
  */
 function aafm_oauth_reset_current_client_id(): void {
 	aafm_oauth_current_client_id( null, true );
+	aafm_oauth_current_grant( null, true );
 }
 
 // Registered at include time, beside the store whose contract it enforces, rather than in the

@@ -2049,6 +2049,20 @@
 		}
 	}
 
+	/* ---------- Why is my tool missing (Dashboard) ---------- */
+	#aafm-missing-tools {
+		margin-block-end: var(--aafm-space-4);
+
+		.aafm-missing-tools-list {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+
+			li { padding-block: var(--aafm-space-2); border-block-end: 1px solid var(--aafm-border); overflow-wrap: anywhere; }
+			li:last-child { border-block-end: 0; }
+		}
+	}
+
 	/* ---------- Needs review inbox (Dashboard) ---------- */
 	.aafm-review-inbox {
 		margin-block-end: var(--aafm-space-4);

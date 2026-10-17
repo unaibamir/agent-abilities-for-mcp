@@ -41,6 +41,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/doctor.php|aafm_doctor_check_app_passwords|1' => 'N',
 		'includes/admin/doctor.php|aafm_doctor_check_https|1' => 'N',
 		'includes/admin/doctor.php|aafm_doctor_check_permalinks|1' => 'N',
+		'includes/admin/missing-tools.php|aafm_missing_tools_data|1' => 'N',
 		'includes/admin/onboarding-pointer.php|aafm_quickconnect_pointer_should_show|1' => 'N',
 		'includes/admin/onboarding-pointer.php|aafm_maybe_enqueue_menu_pointer|1' => 'N',
 		'includes/admin/page.php|aafm_get_stored_enabled_abilities_raw|1' => 'G',
@@ -354,7 +355,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 22,
 				'L' => 3,
-				'N' => 30,
+				'N' => 31,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),

@@ -73,6 +73,7 @@ final class SafetyEnforcementTest extends TestCase {
 		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
 
 		for ( $i = 0; $i < AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 3; $i++ ) {
+			aafm_policy_reset_request_state(); // Each pass is a separate request; one request logs one row per bucket.
 			$result = aafm_transport_permission_callback( null );
 			$this->assertInstanceOf( \WP_Error::class, $result );
 			$this->assertSame( 'aafm_ip_blocked', $result->get_error_code(), 'The denial itself must never be capped, only its audit rows.' );
@@ -88,6 +89,7 @@ final class SafetyEnforcementTest extends TestCase {
 		// A different source IP writes its own row: one attacker's flood must not crowd out a
 		// genuine signal from a different address.
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.78';
+		aafm_policy_reset_request_state();
 		$this->assertInstanceOf( \WP_Error::class, aafm_transport_permission_callback( null ) );
 		$rows = aafm_query_activity( array( 'per_page' => 50 ) );
 		$this->assertCount( AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 1, $rows );

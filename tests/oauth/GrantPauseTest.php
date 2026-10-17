@@ -135,9 +135,11 @@ class GrantPauseTest extends TestCase {
 	 * Send a tools/list request through the real REST dispatch, putting the transport's route back if an
 	 * earlier test rebuilt the REST server after the adapter registered it.
 	 *
+	 * @param bool $as_served Also run core's Allow header filter, which calls every handler's
+	 *                        permission callback again once per HTTP method, as serving a request does.
 	 * @return \WP_REST_Response
 	 */
-	private function dispatch(): \WP_REST_Response {
+	private function dispatch( bool $as_served = false ): \WP_REST_Response {
 		if ( ! isset( rest_get_server()->get_routes()[ aafm_mcp_rest_route() ] ) ) {
 			$server = \WP\MCP\Core\McpAdapter::instance()->get_server( 'aafm-server' );
 			$this->assertNotNull( $server );
@@ -146,7 +148,8 @@ class GrantPauseTest extends TestCase {
 		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );
-		return rest_do_request( $request );
+		$response = rest_do_request( $request );
+		return $as_served ? rest_send_allow_header( $response, rest_get_server(), $request ) : $response;
 	}
 
 	public function test_a_paused_grant_still_resolves_a_user_but_the_transport_gate_refuses_it(): void {
@@ -177,6 +180,27 @@ class GrantPauseTest extends TestCase {
 		$this->assertSame( 403, $response->get_status() );
 		$this->assertSame( 'rest_forbidden', $response->as_error()->get_error_code() );
 		$this->assertSame( '', $logged, 'A plain false writes no adapter error_log line.' );
+	}
+
+	public function test_one_refused_request_writes_one_denial_row_although_core_reruns_the_permission_callback(): void {
+		$this->set_paused( '2026-10-01 00:00:00' );
+		$this->resolve();
+		$this->assertSame( 403, $this->dispatch( true )->get_status() );
+		$this->assertSame( 1, $this->paused_rows(), 'The Allow header re-run must not spend the denial cap.' );
+
+		update_option( 'aafm_ip_allowlist', array( '198.51.100.1' ) );
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+		aafm_policy_reset_request_state();
+		$this->set_paused( null );
+		$this->resolve();
+		$this->assertSame( 403, $this->dispatch( true )->get_status() );
+		$rows = aafm_query_activity(
+			array(
+				'ability' => '(transport)',
+				'status'  => 'denied',
+			)
+		);
+		$this->assertCount( 2, $rows, 'One more row for the blocked address, not four.' );
 	}
 
 	public function test_resuming_restores_access_without_a_new_token(): void {

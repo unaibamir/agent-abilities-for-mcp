@@ -239,17 +239,11 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		// here: it keeps a valid login and is answered with a 403 at the transport gate, so a client shows an
 		// error instead of looping through sign-in and refresh. A token with no consent row, and a site that
 		// has not run the v9 installer yet, read as the defaults (aafm_oauth_grant_state()).
-		$grant = aafm_oauth_grant_state( (int) $row['wp_user_id'], (string) $row['client_id'] );
-		if ( null === $grant || $grant['expired'] ) {
-			if ( function_exists( 'aafm_oauth_log_event' ) ) {
-				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
-			}
-			return $user_id;
-		}
-
 		// 10c. Roles that can connect. Narrowing the owner's list ends the grants of users it no longer
 		// covers; a site that never saved a list keeps every grant (aafm_oauth_user_still_may_connect()).
-		if ( ! aafm_oauth_user_still_may_connect( (int) $row['wp_user_id'] ) ) {
+		// Short-circuit order matters: the roles check never runs for a missing or expired grant.
+		$grant = aafm_oauth_grant_state( (int) $row['wp_user_id'], (string) $row['client_id'] );
+		if ( null === $grant || $grant['expired'] || ! aafm_oauth_user_still_may_connect( (int) $row['wp_user_id'] ) ) {
 			if ( function_exists( 'aafm_oauth_log_event' ) ) {
 				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
 			}

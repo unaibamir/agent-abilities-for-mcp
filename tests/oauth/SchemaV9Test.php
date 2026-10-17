@@ -51,6 +51,8 @@ class SchemaV9Test extends TestCase {
 	public static function downgrade_consents_to_v8(): void {
 		global $wpdb;
 		$table = $wpdb->prefix . 'aafm_oauth_consents';
+		// The charset and collation match the real tables (dbDelta uses them): without them MySQL 8 picks utf8mb4_0900_ai_ci
+		// and a join with the clients table fails on mixed collations, which MariaDB does not do.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- test fixture DDL on an internal table.
 		$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
 		$wpdb->query(
@@ -61,7 +63,7 @@ class SchemaV9Test extends TestCase {
 				granted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				PRIMARY KEY  (id),
 				UNIQUE KEY user_client (wp_user_id, client_id)
-			) ENGINE=InnoDB"
+			) ENGINE=InnoDB {$wpdb->get_charset_collate()}"
 		);
 		// phpcs:enable
 	}

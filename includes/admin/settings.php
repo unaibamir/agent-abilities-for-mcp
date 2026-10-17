@@ -37,7 +37,7 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_notifications:array{mode:string,email:string,triggers:array<string,bool>},aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_notifications:array{mode:string,email:string,triggers:array<string,bool>},aafm_ip_allowlist:list<string>,aafm_oauth_connect_roles:?array<int,string>,aafm_trusted_proxy:?array{mode:string,header:string,ranges:list<string>}}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -74,6 +74,8 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_default_server_mode'          => $mode,
 		'aafm_notifications'                => aafm_notifications_sanitize( $posted ),
 		'aafm_ip_allowlist'                 => array_values( array_unique( $lines ) ),
+		'aafm_oauth_connect_roles'          => aafm_sanitize_connect_roles_input( $posted ),
+		'aafm_trusted_proxy'                => aafm_sanitize_proxy_input( $posted ),
 	);
 }
 
@@ -122,6 +124,156 @@ function aafm_split_and_trim_lines( string $raw ): array {
 }
 
 /**
+ * The roles the Settings form ticks for an install that never saved the list: today's edit_posts
+ * floor, plus Administrators. The render and the sanitizer share it so the two cannot drift.
+ *
+ * @return array<int,string>
+ */
+function aafm_oauth_legacy_default_roles(): array {
+	$slugs = array( 'administrator' );
+	foreach ( wp_roles()->role_objects as $slug => $role ) {
+		if ( $role->has_cap( 'edit_posts' ) ) {
+			$slugs[] = (string) $slug;
+		}
+	}
+	return array_values( array_unique( $slugs ) );
+}
+
+/**
+ * Validate the shape of the posted roles list before anything is written.
+ *
+ * @param array<string,mixed> $posted Raw posted fields.
+ * @return string|null A message, or null when the shape is valid or the list is not part of this save.
+ */
+function aafm_connect_roles_input_error( array $posted ): ?string {
+	if ( empty( $posted['aafm_oauth_connect_roles_present'] ) || ! isset( $posted['aafm_oauth_connect_roles'] ) ) {
+		return null; // Not part of this save, or no box ticked (Administrators only): nothing to validate.
+	}
+	$sent = $posted['aafm_oauth_connect_roles'];
+	$ok   = is_array( $sent ) && count( $sent ) <= count( wp_roles()->role_names );
+	if ( $ok ) {
+		foreach ( $sent as $slug ) {
+			if ( ! is_string( $slug ) || strlen( $slug ) > 64 ) {
+				$ok = false;
+				break;
+			}
+		}
+	}
+	return $ok ? null : __( 'The roles list could not be read. Reload this page and try again.', 'agent-abilities-for-mcp' );
+}
+
+/**
+ * The posted roles that can connect, or null when nothing should be written.
+ *
+ * Null when the marker is absent (a stale script), or when the option was never saved and the
+ * submitted list equals the legacy default the form shows: the form always posts the marker, so an
+ * unrelated save must not create the option (and switch on the use-time role check) on an existing
+ * install.
+ *
+ * @param array<string,mixed> $posted Raw posted fields.
+ * @return array<int,string>|null
+ */
+function aafm_sanitize_connect_roles_input( array $posted ): ?array {
+	if ( empty( $posted['aafm_oauth_connect_roles_present'] ) ) {
+		return null;
+	}
+	// aafm_connect_roles_input_error() validated the shape first; this filtering is a second line.
+	$known = array_keys( wp_roles()->role_names );
+	$sent  = isset( $posted['aafm_oauth_connect_roles'] ) && is_array( $posted['aafm_oauth_connect_roles'] ) ? $posted['aafm_oauth_connect_roles'] : array();
+	$roles = array( 'administrator' );
+	foreach ( $sent as $slug ) {
+		if ( is_string( $slug ) && in_array( $slug, $known, true ) ) {
+			$roles[] = $slug;
+		}
+	}
+	$roles = array_values( array_unique( $roles ) );
+	if ( null === aafm_oauth_connect_roles() ) {
+		$default = aafm_oauth_legacy_default_roles();
+		sort( $default );
+		$check = $roles;
+		sort( $check );
+		if ( $check === $default ) {
+			return null;
+		}
+	}
+	return $roles;
+}
+
+/**
+ * The posted trusted-proxy setting, or null when the form did not carry it.
+ *
+ * @param array<string,mixed> $posted Raw posted fields.
+ * @return array{mode:string,header:string,ranges:list<string>}|null
+ */
+function aafm_sanitize_proxy_input( array $posted ): ?array {
+	if ( ! isset( $posted['aafm_proxy_mode'] ) || ! is_string( $posted['aafm_proxy_mode'] ) ) {
+		return null;
+	}
+	$mode = in_array( $posted['aafm_proxy_mode'], array( 'cloudflare', 'custom' ), true ) ? $posted['aafm_proxy_mode'] : 'off';
+	$out  = array(
+		'mode'   => $mode,
+		'header' => '',
+		'ranges' => array(),
+	);
+	if ( 'custom' === $mode ) {
+		$header        = isset( $posted['aafm_proxy_header'] ) && is_string( $posted['aafm_proxy_header'] ) ? $posted['aafm_proxy_header'] : '';
+		$out['header'] = in_array( $header, aafm_proxy_headers(), true ) ? $header : '';
+		$raw           = isset( $posted['aafm_proxy_ranges'] ) && is_string( $posted['aafm_proxy_ranges'] ) ? $posted['aafm_proxy_ranges'] : '';
+		$out['ranges'] = array_values( array_unique( array_filter( aafm_split_and_trim_lines( $raw ), 'aafm_proxy_range_ok' ) ) );
+	}
+	return $out;
+}
+
+/**
+ * Why the posted trusted-proxy setting cannot be saved, or null when it can.
+ *
+ * @param array<string,mixed> $posted Raw posted fields.
+ * @return string|null
+ */
+function aafm_proxy_input_error( array $posted ): ?string {
+	$clean = aafm_sanitize_proxy_input( $posted );
+	if ( null === $clean || 'custom' !== $clean['mode'] ) {
+		return null;
+	}
+	if ( '' === $clean['header'] ) {
+		return __( 'Choose which header your proxy sends the visitor address in.', 'agent-abilities-for-mcp' );
+	}
+	if ( array() === $clean['ranges'] ) {
+		return __( 'Add at least one address or range your proxy connects from. A range wider than /8 (IPv4) or /16 (IPv6) is not accepted.', 'agent-abilities-for-mcp' );
+	}
+	return null;
+}
+
+/**
+ * The connection address of this request (REMOTE_ADDR), validated, or ''.
+ *
+ * @return string
+ */
+function aafm_settings_remote_addr(): string {
+	$remote = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+	return false === filter_var( $remote, FILTER_VALIDATE_IP ) ? '' : $remote;
+}
+
+/**
+ * The sentence that says how a proxy setting reads this request against the allowlist.
+ *
+ * @param array{mode:string,header:string,ranges:list<string>} $proxy     Proxy config to test.
+ * @param array<int,string>                                    $allowlist IP allowlist.
+ * @return string '' when the allowlist is empty.
+ */
+function aafm_proxy_allowlist_sentence( array $proxy, array $allowlist ): string {
+	if ( array() === $allowlist ) {
+		return '';
+	}
+	$seen = aafm_trusted_proxy_visitor( aafm_settings_remote_addr(), aafm_trusted_proxy_normalize( $proxy ) );
+	return aafm_ip_in_ranges( $seen, $allowlist )
+		/* translators: %s: an IP address. */
+		? sprintf( __( 'With this setting the plugin reads this request as %s, which your IP allowlist admits.', 'agent-abilities-for-mcp' ), $seen )
+		/* translators: %s: an IP address. */
+		: sprintf( __( 'With this setting the plugin reads this request as %s, which your IP allowlist does not admit. Saving it could lock your agents out.', 'agent-abilities-for-mcp' ), $seen );
+}
+
+/**
  * AJAX: save the safety settings.
  *
  * Nonce + manage_options gated. The sanitizer bounds every value, so the stored options are
@@ -152,6 +304,13 @@ function aafm_ajax_save_settings(): void {
 			wp_send_json_error( array( 'message' => $ntf_error ) );
 		}
 	}
+	// Roles and proxy are refused here too, before any write.
+	$access_error = aafm_connect_roles_input_error( $posted ) ?? aafm_proxy_input_error( $posted );
+	if ( null !== $access_error ) {
+		wp_send_json_error( array( 'message' => $access_error ) );
+	}
+	$roles_before = aafm_oauth_connect_roles();
+	$proxy_before = aafm_trusted_proxy_config();
 
 	// Free-text field: a save that does not carry it (a stale cached admin.js, a script) leaves the
 	// stored brief alone instead of clearing it, and so does a value that is not text (an array).
@@ -260,6 +419,13 @@ function aafm_ajax_save_settings(): void {
 		// allowlist is always in place before OAuth can turn on.
 		'aafm_ip_allowlist'             => array( $clean['aafm_ip_allowlist'], __( 'The IP allowlist', 'agent-abilities-for-mcp' ) ),
 	);
+	// After the allowlist entry, so a narrowed allowlist is in place before a proxy turns on.
+	if ( null !== $clean['aafm_oauth_connect_roles'] ) {
+		$verified_settings['aafm_oauth_connect_roles'] = array( $clean['aafm_oauth_connect_roles'], __( 'Roles that can connect', 'agent-abilities-for-mcp' ) );
+	}
+	if ( null !== $clean['aafm_trusted_proxy'] ) {
+		$verified_settings['aafm_trusted_proxy'] = array( $clean['aafm_trusted_proxy'], __( 'The visitor address setting', 'agent-abilities-for-mcp' ) );
+	}
 	if ( $brief_posted ) {
 		// Never autoloaded: the text is read when the MCP server is built, not on every request.
 		$verified_settings['aafm_site_brief'] = array( $clean['aafm_site_brief'], __( 'The site brief', 'agent-abilities-for-mcp' ), false );
@@ -285,6 +451,28 @@ function aafm_ajax_save_settings(): void {
 		}
 	}
 
+	if ( null !== $clean['aafm_oauth_connect_roles'] && $roles_before !== $clean['aafm_oauth_connect_roles'] ) {
+		$names = wp_roles()->get_names();
+		aafm_log_setting_change(
+			'aafm/oauth-connect-roles',
+			sprintf(
+				/* translators: %s: comma-separated role names. */
+				__( 'Roles that can connect changed to: %s', 'agent-abilities-for-mcp' ),
+				implode( ', ', array_map( static fn( string $slug ): string => isset( $names[ $slug ] ) ? translate_user_role( $names[ $slug ] ) : $slug, $clean['aafm_oauth_connect_roles'] ) )
+			)
+		);
+	}
+	if ( null !== $clean['aafm_trusted_proxy'] && $proxy_before['mode'] !== $clean['aafm_trusted_proxy']['mode'] ) {
+		aafm_log_setting_change(
+			'aafm/trusted-proxy',
+			sprintf(
+				/* translators: 1: off, cloudflare or custom, 2: number of trusted ranges. */
+				__( 'Visitor address behind a proxy set to %1$s (%2$d ranges)', 'agent-abilities-for-mcp' ),
+				$clean['aafm_trusted_proxy']['mode'],
+				count( $clean['aafm_trusted_proxy']['ranges'] )
+			)
+		);
+	}
 	if ( $brief_posted ) {
 		aafm_log_site_brief_change( $brief_before, $clean['aafm_site_brief'] );
 	} else {
@@ -361,6 +549,8 @@ function aafm_ajax_save_settings(): void {
 				'aafm_ip_dropped'           => $dropped,
 				// Plain text for the "Currently running" line beside the select; reflects the saved mode.
 				'aafm_default_server_state' => aafm_default_server_state_label(),
+				'aafm_source_ip_preview'    => null === $clean['aafm_trusted_proxy'] ? aafm_source_ip() : aafm_trusted_proxy_visitor( aafm_settings_remote_addr(), aafm_trusted_proxy_normalize( $clean['aafm_trusted_proxy'] ) ),
+				'warning'                   => null === $clean['aafm_trusted_proxy'] || 'off' === $clean['aafm_trusted_proxy']['mode'] ? '' : aafm_proxy_allowlist_sentence( $clean['aafm_trusted_proxy'], $clean['aafm_ip_allowlist'] ),
 			)
 		)
 	);
@@ -745,6 +935,33 @@ function aafm_render_settings_tab(): void {
 	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
+	// Roles that can connect. With nothing stored the boxes show today's floor; the marker tells the
+	// save handler this list was part of the form.
+	$connect_roles = aafm_oauth_connect_roles() ?? aafm_oauth_legacy_default_roles();
+	$role_boxes    = '<input type="hidden" name="aafm_oauth_connect_roles_present" value="1"><span class="aafm-role-list">';
+	foreach ( wp_roles()->get_names() as $role_slug => $role_name ) {
+		$is_admin    = 'administrator' === $role_slug;
+		$role_boxes .= sprintf(
+			'<label><input type="checkbox" name="aafm_oauth_connect_roles[]" value="%1$s"%2$s%3$s> %4$s</label> ',
+			esc_attr( (string) $role_slug ),
+			checked( $is_admin || in_array( $role_slug, $connect_roles, true ), true, false ),
+			$is_admin ? ' disabled' : '',
+			esc_html( translate_user_role( $role_name ) )
+		);
+	}
+	$role_boxes .= '</span>';
+	$role_help   = __( 'A connected app never does more than the person who approved it can. Removing a role signs out the connections of users who only had that role.', 'agent-abilities-for-mcp' );
+	if ( has_filter( 'aafm_oauth_min_capability' ) ) {
+		$role_help .= ' ' . __( 'A setting in this site\'s code also controls this and takes priority.', 'agent-abilities-for-mcp' );
+	}
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Roles that can connect', 'agent-abilities-for-mcp' ),
+			'control' => $role_boxes,
+			'help'    => $role_help,
+		)
+	);
+
 	echo '<p class="help">' . wp_kses(
 		sprintf(
 			/* translators: %s: link to the Connection tab. */
@@ -904,6 +1121,48 @@ function aafm_render_settings_tab(): void {
 				esc_textarea( implode( "\n", aafm_ip_allowlist() ) ),
 				esc_attr__( 'IP allowlist, one per line', 'agent-abilities-for-mcp' )
 			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped.', 'agent-abilities-for-mcp' ) . '</p>' . $ip_notice,
+		)
+	);
+
+	// Real visitor address behind a proxy. Off by default; the custom header and ranges show only
+	// for Custom (a wrapper with no display rule, so the hidden attribute works).
+	$proxy   = aafm_trusted_proxy_config();
+	$options = '';
+	foreach ( array(
+		'off'        => __( 'Off', 'agent-abilities-for-mcp' ),
+		'cloudflare' => __( 'Cloudflare', 'agent-abilities-for-mcp' ),
+		'custom'     => __( 'Custom', 'agent-abilities-for-mcp' ),
+	) as $proxy_mode => $proxy_label ) {
+		$options .= sprintf( '<option value="%1$s"%2$s>%3$s</option>', esc_attr( $proxy_mode ), selected( $proxy_mode, $proxy['mode'], false ), esc_html( $proxy_label ) );
+	}
+	$headers = '';
+	foreach ( aafm_proxy_headers() as $proxy_header ) {
+		$headers .= sprintf( '<option value="%1$s"%2$s>%1$s</option>', esc_attr( $proxy_header ), selected( $proxy_header, $proxy['header'], false ) );
+	}
+	$seen_now = sprintf(
+		/* translators: 1: the address the plugin uses, 2: the connection address. */
+		__( 'As this plugin sees it now: %1$s. Connection address: %2$s.', 'agent-abilities-for-mcp' ),
+		'' !== aafm_source_ip() ? aafm_source_ip() : __( 'unknown', 'agent-abilities-for-mcp' ),
+		'' !== aafm_settings_remote_addr() ? aafm_settings_remote_addr() : __( 'unknown', 'agent-abilities-for-mcp' )
+	);
+	$against = aafm_proxy_allowlist_sentence( $proxy, aafm_ip_allowlist() );
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Real visitor address behind a proxy or CDN', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Off by default', 'agent-abilities-for-mcp' ),
+			'control' => sprintf(
+				'<select id="aafm-proxy-mode" name="aafm_proxy_mode" aria-label="%1$s">%2$s</select><div class="aafm-proxy-custom"%3$s><p><label for="aafm-proxy-header">%4$s</label> <select id="aafm-proxy-header" name="aafm_proxy_header">%5$s</select></p><textarea id="aafm-proxy-ranges" name="aafm_proxy_ranges" rows="3" class="large-text code" aria-label="%6$s">%7$s</textarea></div><p class="help aafm-proxy-seen">%8$s</p>%9$s',
+				esc_attr__( 'Real visitor address behind a proxy or CDN', 'agent-abilities-for-mcp' ),
+				$options,
+				'custom' === $proxy['mode'] ? '' : ' hidden',
+				esc_html__( 'Header', 'agent-abilities-for-mcp' ),
+				$headers,
+				esc_attr__( 'Proxy addresses or ranges, one per line', 'agent-abilities-for-mcp' ),
+				esc_textarea( 'custom' === $proxy['mode'] ? implode( "\n", $proxy['ranges'] ) : '' ),
+				esc_html( $seen_now ),
+				'' === $against ? '' : '<p class="help aafm-proxy-against">' . esc_html( $against ) . '</p>'
+			),
+			'help'    => __( 'Off by default. Turn it on only if this site sits behind Cloudflare or another proxy, so the IP allowlist, the Activity Log and the abuse limits see the visitor and not the proxy. The header is believed only when the request really comes from the proxy\'s own addresses, so ranges must be no wider than /8 (IPv4) or /16 (IPv6). Cloudflare\'s address list is built into the plugin and refreshed with each release; if it falls behind, a new Cloudflare address is not trusted and the proxy\'s own address is used. To keep other Cloudflare customers from reaching your server directly, use Authenticated Origin Pulls or accept connections only from the proxy\'s addresses.', 'agent-abilities-for-mcp' ),
 		)
 	);
 

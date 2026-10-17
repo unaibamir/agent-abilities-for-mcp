@@ -1479,6 +1479,13 @@
 		}
 
 		#bindSaveSettings() {
+			const proxyMode = document.getElementById( 'aafm-proxy-mode' );
+			const proxyCustom = document.querySelector( '.aafm-proxy-custom' );
+			proxyMode?.addEventListener( 'change', () => {
+				if ( proxyCustom ) {
+					proxyCustom.hidden = 'custom' !== proxyMode.value;
+				}
+			} );
 			const form = document.querySelector( '#aafm-settings-form' );
 			if ( ! form ) {
 				return;
@@ -1549,6 +1556,17 @@
 				if ( siteBrief ) {
 					body.append( 'aafm_site_brief', siteBrief.value );
 				}
+				if ( form.querySelector( 'input[name="aafm_oauth_connect_roles_present"]' ) ) {
+					body.append( 'aafm_oauth_connect_roles_present', '1' );
+					form.querySelectorAll( 'input[name="aafm_oauth_connect_roles[]"]:checked:not(:disabled)' ).forEach( ( box ) => {
+						body.append( 'aafm_oauth_connect_roles[]', box.value );
+					} );
+				}
+				if ( proxyMode ) {
+					body.append( 'aafm_proxy_mode', proxyMode.value );
+					body.append( 'aafm_proxy_header', form.querySelector( 'select[name="aafm_proxy_header"]' )?.value ?? '' );
+					body.append( 'aafm_proxy_ranges', form.querySelector( 'textarea[name="aafm_proxy_ranges"]' )?.value ?? '' );
+				}
 				if ( notifyMode ) {
 					body.append( 'aafm_notify_mode', notifyMode.value );
 					body.append( 'aafm_notify_email', notifyEmail?.value ?? '' );
@@ -1611,6 +1629,9 @@
 							);
 						} else {
 							status.textContent = this.#t( 'saved', 'Saved' );
+						}
+						if ( json.data?.warning ) {
+							status.textContent = `${ status.textContent } ${ json.data.warning }`;
 						}
 					}
 				}

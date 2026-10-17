@@ -408,8 +408,22 @@ function aafm_trusted_proxy_config(): array {
 	if ( ! $row['ok'] || ! $row['found'] || ! is_array( $row['value'] ) ) {
 		return $off;
 	}
-	$value = $row['value'];
-	$mode  = isset( $value['mode'] ) && is_string( $value['mode'] ) ? $value['mode'] : 'off';
+	return aafm_trusted_proxy_normalize( $row['value'] );
+}
+
+/**
+ * A stored or submitted trusted-proxy value as the config shape. Anything malformed is off.
+ *
+ * @param array<mixed> $value Stored or submitted value.
+ * @return array{mode:string,header:string,ranges:list<string>}
+ */
+function aafm_trusted_proxy_normalize( array $value ): array {
+	$off  = array(
+		'mode'   => 'off',
+		'header' => '',
+		'ranges' => array(),
+	);
+	$mode = isset( $value['mode'] ) && is_string( $value['mode'] ) ? $value['mode'] : 'off';
 	if ( 'cloudflare' === $mode ) {
 		return array(
 			'mode'   => 'cloudflare',
@@ -454,11 +468,12 @@ function aafm_pick_visitor_ip( string $header_value, array $trusted ): string {
 /**
  * The visitor address when $remote is a trusted proxy that named one; otherwise $remote itself.
  *
- * @param string $remote The connection address (REMOTE_ADDR).
+ * @param string                                                    $remote The connection address (REMOTE_ADDR).
+ * @param array{mode:string,header:string,ranges:list<string>}|null $cfg    A config to test instead of the stored one.
  * @return string
  */
-function aafm_trusted_proxy_visitor( string $remote ): string {
-	$cfg = aafm_trusted_proxy_config();
+function aafm_trusted_proxy_visitor( string $remote, ?array $cfg = null ): string {
+	$cfg = $cfg ?? aafm_trusted_proxy_config();
 	if ( 'off' === $cfg['mode'] || ! aafm_ip_in_ranges( aafm_normalize_ip( $remote ), $cfg['ranges'] ) ) {
 		return $remote; // Only a request that really arrives from a trusted proxy may name the visitor; anything else is a forged header.
 	}

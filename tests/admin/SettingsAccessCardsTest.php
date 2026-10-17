@@ -383,7 +383,7 @@ class SettingsAccessCardsTest extends TestCase {
 
 	public function test_an_array_param_is_refused_cleanly(): void {
 		$json = $this->save( array( 'aafm_proxy_mode' => array( 'custom' ) ) );
-		$this->assertTrue( $json['success'] );
+		$this->assertFalse( $json['success'], 'A present but malformed mode is refused, not reported as saved.' );
 		$this->assertFalse( aafm_option_row( 'aafm_trusted_proxy' )['found'] );
 		$json = $this->save(
 			array(

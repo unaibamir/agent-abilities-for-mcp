@@ -231,6 +231,9 @@ function aafm_sanitize_proxy_input( array $posted ): ?array {
  * @return string|null
  */
 function aafm_proxy_input_error( array $posted ): ?string {
+	if ( isset( $posted['aafm_proxy_mode'] ) && ! is_string( $posted['aafm_proxy_mode'] ) ) {
+		return __( 'The proxy setting could not be read. Reload this page and try again.', 'agent-abilities-for-mcp' );
+	}
 	$clean = aafm_sanitize_proxy_input( $posted );
 	if ( null === $clean || 'custom' !== $clean['mode'] ) {
 		return null;

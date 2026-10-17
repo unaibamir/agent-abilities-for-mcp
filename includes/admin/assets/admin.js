@@ -150,6 +150,26 @@
 		}
 
 		/**
+		 * Show the value the server confirmed for a control, unless it was edited while the request was
+		 * in flight: that edit is kept, and the confirmed value becomes the saved baseline either way, so
+		 * the edited control keeps its dot.
+		 *
+		 * @param {Map<Element,string>}                                   sent    The snapshot taken before the request.
+		 * @param {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} control The control the server answered for.
+		 * @param {string}                                                value   The confirmed value ('1' or '0' for a checkbox).
+		 */
+		#applyServerValue( sent, control, value ) {
+			if ( this.#controlValue( control ) === sent.get( control ) ) {
+				if ( 'checkbox' === control.type ) {
+					control.checked = '1' === value;
+				} else {
+					control.value = value;
+				}
+			}
+			sent.set( control, value );
+		}
+
+		/**
 		 * Mark the controls a successful save covered as saved. Callers always pass the element
 		 * they saved, never the document, so an unsaved edit elsewhere on the tab keeps its dot.
 		 * With a snapshot taken before the request, a control edited while it was in flight keeps its dot.
@@ -1724,8 +1744,7 @@
 							serverState.textContent = json.data.aafm_default_server_state;
 						}
 						if ( siteBrief && 'string' === typeof json.data?.aafm_site_brief ) {
-							siteBrief.value = json.data.aafm_site_brief; // Show what was actually kept.
-							sent.set( siteBrief, siteBrief.value );
+							this.#applyServerValue( sent, siteBrief, json.data.aafm_site_brief ); // Show what was actually kept.
 						}
 						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
 						const kept = Array.isArray( json.data?.aafm_ip_allowlist )
@@ -1756,8 +1775,7 @@
 				// Reflect the cleaned allowlist so any dropped (invalid) lines visibly disappear.
 				// Assigned via .value (never innerHTML), so the server echo is never an HTML sink.
 				if ( json?.success && allowlist && typeof json.data?.aafm_ip_allowlist_text === 'string' ) {
-					allowlist.value = json.data.aafm_ip_allowlist_text;
-					sent.set( allowlist, allowlist.value );
+					this.#applyServerValue( sent, allowlist, json.data.aafm_ip_allowlist_text );
 				}
 				if ( json?.success ) {
 					this.#markClean( form, sent );
@@ -2704,9 +2722,8 @@
 					}
 				} );
 				if ( dcr ) {
-					dcr.checked = Boolean( data.dcr );
+					this.#applyServerValue( sent, dcr, data.dcr ? '1' : '0' );
 					dcr.dataset.saved = data.dcr ? '1' : '0';
-					sent.set( dcr, dcr.checked ? '1' : '0' );
 				}
 				status.textContent = this.#t( 'saved', 'Saved' );
 				this.#markClean( card, sent );

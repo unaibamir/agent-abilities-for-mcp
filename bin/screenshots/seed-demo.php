@@ -64,6 +64,39 @@ $gpt       = aafm_oauth_register_client( array( 'redirect_uris' => array( 'https
 $claude_id = is_array( $claude ) ? $claude['client_id'] : '';
 $gpt_id    = is_array( $gpt ) ? $gpt['client_id'] : '';
 
+// Grants and an agent user's Application Password (1.10.0): one active and recently used, one paused,
+// one expired, each with its own access preset. Demo users only; 203.0.113.0/24 is a documentation range.
+if ( function_exists( 'aafm_oauth_grant_update' ) ) {
+	$editor = wp_insert_user( array( 'user_login' => 'demo-editor', 'user_pass' => wp_generate_password(), 'role' => 'editor', 'user_email' => 'editor@example.com' ) );
+	$editor = is_wp_error( $editor ) ? (int) username_exists( 'demo-editor' ) : $editor;
+	$grants = array(
+		array( 1, $claude_id, array( 'preset' => 'content_editor' ) ),
+		array( 1, $gpt_id, array( 'preset' => 'read_only', 'paused' => true ) ),
+		array( $editor, $claude_id, array( 'preset' => 'shop_manager', 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ), 'rate' => 20 ) ),
+	);
+	foreach ( $grants as $g ) {
+		aafm_oauth_record_consent( $g[0], $g[1] );
+		aafm_oauth_grant_update( $g[0], $g[1], $g[2] );
+	}
+	$wpdb->update( $wpdb->prefix . 'aafm_oauth_consents', array( 'last_used_at' => gmdate( 'Y-m-d H:i:s', time() - 25 * MINUTE_IN_SECONDS ), 'last_used_ip' => '203.0.113.24' ), array( 'wp_user_id' => 1, 'client_id' => $claude_id ) );
+
+	$agent = wp_insert_user( array( 'user_login' => 'ai-agent', 'user_pass' => wp_generate_password(), 'role' => 'subscriber', 'user_email' => 'agent@example.com' ) );
+	if ( ! is_wp_error( $agent ) ) {
+		update_user_meta( $agent, aafm_agent_user_marker_meta_key(), 1 );
+		$created = WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'Claude Desktop' ) );
+		if ( ! is_wp_error( $created ) ) {
+			$items = WP_Application_Passwords::get_user_application_passwords( $agent );
+			foreach ( $items as &$item ) {
+				$item['created']   = time() - 3 * DAY_IN_SECONDS;
+				$item['last_used'] = time() - 2 * HOUR_IN_SECONDS;
+				$item['last_ip']   = '203.0.113.31';
+			}
+			unset( $item );
+			update_user_meta( $agent, WP_Application_Passwords::USERMETA_KEY_APPLICATION_PASSWORDS, $items );
+		}
+	}
+}
+
 // Site Brief (1.8.0).
 update_option( 'aafm_site_brief', "Use British spelling.\nNever change the pricing page.\nDrafts only on Fridays." );
 

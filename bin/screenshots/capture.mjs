@@ -73,7 +73,7 @@ const SHOTS = [
 	{ n: 5, url: plugin( 'tab=integrations' ), prep: padlock },
 	{ n: 6, url: plugin( 'tab=integrations' ) },
 	{ n: 7, url: plugin( 'tab=bridge' ) },
-	{ n: 8, url: plugin( 'tab=connection' ) },
+	{ n: 8, url: plugin( 'tab=connection' ), prep: ( page ) => top( page, '#aafm-card-pause-all', 20 ) },
 	{ n: 9, url: plugin( 'tab=activity' ), prep: ( page ) => page.waitForSelector( '.aafm-log-table tbody tr' ) },
 	{ n: 10, url: plugin( 'tab=dashboard' ) },
 	{ n: 11, url: plugin( 'tab=settings' ), prep: ( page ) => top( page, '#aafm-site-brief', 200 ) },
@@ -88,6 +88,15 @@ const SHOTS = [
 	},
 	{ n: 13, url: plugin( 'tab=dashboard' ), prep: ( page ) => top( page, '#aafm-review-inbox' ) },
 	{ n: 14, url: plugin( 'tab=settings' ), prep: ( page ) => top( page, '#aafm-notify-mode', 130 ) },
+	{ n: 15, url: plugin( 'tab=connection' ), prep: ( page ) => top( page, '#aafm-card-grants', 20 ) },
+	{
+		n: 16,
+		url: plugin( 'tab=connection' ),
+		prep: async ( page ) => {
+			await click( page.locator( '[data-conn-tab="app-passwords"]' ) );
+			await top( page, '#aafm-card-pause-all', 20 );
+		},
+	},
 ];
 
 mkdirSync( outDir, { recursive: true } );

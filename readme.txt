@@ -383,13 +383,15 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 5. WooCommerce abilities that change orders, issue refunds, or touch payment settings stay padlocked behind a second switch on the Settings tab, sitting among ordinary writes you can turn on one at a time.
 6. Each integration has a card that says whether its plugin is active and how many of its abilities are on. WooCommerce and Yoast SEO are active here, Rank Math, All in One SEO, ACF and the rest are marked Not installed, and every ability starts off until you turn it on.
 7. Abilities that other plugins register for themselves, grouped by the plugin that declared them and off until you turn them on. A warning reminds you that this plugin does not filter what a bridged ability returns.
-8. The Connection tab shows your MCP endpoint, a Check my connection button, and the OAuth route: pick your operating system and client, paste the endpoint into your agent, and approve it in the browser, with no secret to put in a config file.
+8. The Connection tab: a switch that pauses all MCP access, then OAuth and Application Passwords tabs. The token lifetimes card stays closed until you need it, and the registered clients and active grants follow.
 9. The Activity Log with a 7-day summary, filters for user, connection, tool, plugin, date and text, the connection and IP of each call, the duration of calls that ran, a Live view, and a CSV export that follows the filters.
 10. The dashboard opens with a setup checklist that ticks off as you go, then the Needs review card and, further down, enabled abilities, recent agents, audit history, your endpoint and the versions in play.
 11. The Site Brief: a few plain rules every connected agent reads when its session starts, such as spelling and what to leave alone.
 12. The Connection Doctor checks the connection from your own server and says what to fix. Each finding says whether you or your host can fix it, and some come with a snippet to paste.
 13. Needs review: drafts and pending posts your agents wrote wait here, with Preview, Open in editor, Publish and Discard.
 14. Notifications, off until you choose how to be told: an admin notice, an email right away or a daily email, for the events you tick.
+15. Active grants: each approved connection shows the access it was given, when and from where it was last used, an optional end date and rate limit, and its status, with Pause or Resume next to Revoke.
+16. Application Passwords: the agent users' passwords with when each was created and last used, the address it was last used from, and a Revoke button.
 
 == Changelog ==
 

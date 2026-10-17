@@ -399,16 +399,8 @@ function aafm_cloudflare_ranges(): array {
  * @return array{mode:string,header:string,ranges:list<string>}
  */
 function aafm_trusted_proxy_config(): array {
-	$off = array(
-		'mode'   => 'off',
-		'header' => '',
-		'ranges' => array(),
-	);
 	$row = aafm_policy_row( 'aafm_trusted_proxy' );
-	if ( ! $row['ok'] || ! $row['found'] || ! is_array( $row['value'] ) ) {
-		return $off;
-	}
-	return aafm_trusted_proxy_normalize( $row['value'] );
+	return aafm_trusted_proxy_normalize( $row['ok'] && $row['found'] && is_array( $row['value'] ) ? $row['value'] : array() );
 }
 
 /**

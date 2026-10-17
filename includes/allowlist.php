@@ -12,7 +12,8 @@
  * unrestricted if the user holds no role with a row) AND the matching client row's
  * allowed_abilities (or unrestricted if the connection has no client row, e.g. a cookie/
  * app-password session). Both narrowing layers always apply together; neither can widen past the
- * global list, and neither one alone decides when the other is also present.
+ * global list, and neither one alone decides when the other is also present. A connection's access
+ * preset (includes/presets.php) is a third narrowing layer, checked first, for OAuth requests only.
  *
  * A malformed row (unknown scope_type, or an allowed_abilities value that is neither an array nor
  * the literal string "all") is skipped when evaluating precedence - it degrades to "no additional
@@ -184,6 +185,14 @@ function aafm_allowlist_set_permits( $set, string $ability_name ): bool {
  * @return bool
  */
 function aafm_ability_allowed_for_principal( string $ability_name, int $user_id, ?string $oauth_client_id ): bool {
+	// The connection's access preset can only narrow. It rides on the grant the bearer resolved, so it
+	// never applies to an Application Password or cookie request, and a stale grant for another client
+	// is ignored.
+	$grant = aafm_oauth_current_grant();
+	if ( null !== $oauth_client_id && $grant['client_id'] === $oauth_client_id && '' !== $grant['preset'] && ! aafm_preset_permits( (string) $grant['preset'], $ability_name ) ) {
+		return false;
+	}
+
 	$row = aafm_policy_row( 'aafm_ability_allowlist_overrides' );
 	if ( ! $row['ok'] || ( $row['found'] && ! is_array( $row['value'] ) ) ) {
 		return false; // Cannot certify the restriction state, or it is not a list of rows: deny rather than fail open.

@@ -28,7 +28,7 @@ function aafm_denial_reason_labels(): array {
 		'key_protected'       => __( 'key is protected or reserved', 'agent-abilities-for-mcp' ),
 		'reserved_key'        => __( 'key is reserved by WordPress', 'agent-abilities-for-mcp' ),
 		'object_not_editable' => __( 'item missing or not editable by this user', 'agent-abilities-for-mcp' ),
-		'scope_list'          => __( 'ability is not in this role or connection list', 'agent-abilities-for-mcp' ),
+		'scope_list'          => __( 'ability is outside this role, connection list or access preset', 'agent-abilities-for-mcp' ),
 		'rate_limit'          => __( 'rate limit reached', 'agent-abilities-for-mcp' ),
 		'missing_argument'    => __( 'a required argument was missing', 'agent-abilities-for-mcp' ),
 		'capability'          => __( 'WordPress capability check failed', 'agent-abilities-for-mcp' ),

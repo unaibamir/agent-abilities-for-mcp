@@ -803,6 +803,9 @@ function aafm_doctor_run_checks(): array {
 	$probe    = aafm_doctor_probe();
 	aafm_doctor_remember_header_result( $probe['seen'] );
 	$rows = array_merge(
+		aafm_pause_all()
+			? array( aafm_doctor_row( 'pause_all', __( 'Agent access is not paused', 'agent-abilities-for-mcp' ), 'fail', 'you', __( 'Pause all access is on, so every agent is refused with a 403 Forbidden until you resume it. The endpoint check below uses a test request, not an agent, so it can still pass. Choose Resume all access in the Pause all access card on this tab.', 'agent-abilities-for-mcp' ) ) )
+			: array(),
 		array(
 			aafm_doctor_check_endpoint( $probe, $oauth_on ),
 			aafm_doctor_check_auth_header( $probe ),

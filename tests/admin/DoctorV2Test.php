@@ -362,4 +362,20 @@ final class DoctorV2Test extends TestCase {
 		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
 		$this->assertStringContainsString( "if ( 'pass' !== state && whoLabel[ row.who ] ) {", $js );
 	}
+
+	public function test_pause_all_adds_a_failing_row_the_owner_can_fix(): void {
+		$this->respond( fn() => $this->http( 200, $this->answer() ) );
+		$this->assertNull( $this->row( aafm_doctor_run_checks(), 'pause_all' ), 'No row while access is open.' );
+
+		$this->assertTrue( aafm_set_pause_all( true ) );
+		$rows = aafm_doctor_run_checks();
+		$row  = $this->row( $rows, 'pause_all' );
+		$this->assertNotNull( $row );
+		$this->assertSame( 'fail', $row['status'] );
+		$this->assertSame( 'you', $row['who'] );
+		$this->assertStringContainsString( 'Resume all access', $row['detail'] );
+		$this->assertSame( 'pause_all', $rows[0]['id'], 'It leads the list.' );
+		$this->assertSame( 'pass', $this->row( $rows, 'endpoint' )['status'], 'The unauthenticated probe still passes.' );
+		$this->assertStringContainsString( '- pause_all: fail [you]', aafm_doctor_build_report( $rows ) );
+	}
 }

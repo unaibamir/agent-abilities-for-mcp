@@ -333,14 +333,21 @@ add_action( 'admin_init', 'aafm_maybe_upgrade_activity_log' );
 add_action( 'rest_api_init', 'aafm_maybe_upgrade_activity_log' );
 
 /**
- * Resolve the request source IP from REMOTE_ADDR only (never a spoofable header).
+ * Resolve the request source IP: REMOTE_ADDR, unless the owner opted into a trusted proxy and the
+ * request came from one; never a header from any other source.
  *
  * @return string
  */
 function aafm_source_ip(): string {
 	$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
 	$ip = trim( $ip );
-	return ( '' !== $ip && filter_var( $ip, FILTER_VALIDATE_IP ) ) ? $ip : '';
+	if ( '' === $ip || ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+		return '';
+	}
+	// This file loads at plugin-include time; safety.php, which holds the proxy code, loads on
+	// plugins_loaded. An early caller (activation, a log row written before bootstrap) gets the
+	// connection address, exactly as before.
+	return function_exists( 'aafm_trusted_proxy_visitor' ) ? aafm_trusted_proxy_visitor( $ip ) : $ip;
 }
 
 /**

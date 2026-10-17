@@ -296,13 +296,176 @@ function aafm_ip_is_allowed( string $ip ): bool {
 		return true;
 	}
 
-	foreach ( $list as $entry ) {
-		if ( aafm_cidr_match( $ip, $entry ) ) {
+	return aafm_ip_in_ranges( $ip, $list );
+}
+
+/**
+ * Whether an address falls in any of a list of addresses or CIDR ranges.
+ *
+ * @param string       $ip     Candidate address.
+ * @param array<mixed> $ranges Bare addresses or CIDR ranges.
+ * @return bool
+ */
+function aafm_ip_in_ranges( string $ip, array $ranges ): bool {
+	foreach ( $ranges as $range ) {
+		if ( aafm_cidr_match( $ip, (string) $range ) ) {
 			return true;
 		}
 	}
-
 	return false;
+}
+
+/**
+ * The headers a trusted proxy may name the visitor in. A closed list: anything else is ignored.
+ *
+ * @return array<int,string>
+ */
+function aafm_proxy_headers(): array {
+	return array( 'CF-Connecting-IP', 'True-Client-IP', 'X-Real-IP', 'X-Forwarded-For' );
+}
+
+/**
+ * A valid address or CIDR that does not trust a huge part of the internet: at least /8 for IPv4
+ * and /16 for IPv6.
+ *
+ * @param string $range Address or CIDR.
+ * @return bool
+ */
+function aafm_proxy_range_ok( string $range ): bool {
+	if ( ! aafm_is_valid_ip_or_cidr( $range ) ) {
+		return false;
+	}
+	$pos = strpos( $range, '/' );
+	if ( false === $pos ) {
+		return true;
+	}
+	return (int) substr( $range, $pos + 1 ) >= ( false !== strpos( $range, ':' ) ? 16 : 8 );
+}
+
+/**
+ * Unwrap an IPv4-mapped IPv6 address (::ffff:a.b.c.d) so range tests compare like with like.
+ * ponytail: the hex form ::ffff:c000:201 is not unwrapped; a dual-stack socket reports the dotted form.
+ *
+ * @param string $ip Address.
+ * @return string
+ */
+function aafm_normalize_ip( string $ip ): string {
+	if ( 0 === stripos( $ip, '::ffff:' ) && false !== filter_var( substr( $ip, 7 ), FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+		return substr( $ip, 7 );
+	}
+	return $ip;
+}
+
+/**
+ * Cloudflare's published edge ranges, from https://www.cloudflare.com/ips-v4 and
+ * https://www.cloudflare.com/ips-v6, fetched 2026-10-17. Refreshed by hand each release; the
+ * plugin never fetches them (the readme promises no telemetry). A range missing from a stale list
+ * is not trusted, so the proxy's own address is used: that can lock out an allowlist that holds
+ * visitor addresses, and it can admit everyone behind a proxy when the allowlist holds the proxy's
+ * address.
+ *
+ * @return list<string>
+ */
+function aafm_cloudflare_ranges(): array {
+	return array(
+		'173.245.48.0/20',
+		'103.21.244.0/22',
+		'103.22.200.0/22',
+		'103.31.4.0/22',
+		'141.101.64.0/18',
+		'108.162.192.0/18',
+		'190.93.240.0/20',
+		'188.114.96.0/20',
+		'197.234.240.0/22',
+		'198.41.128.0/17',
+		'162.158.0.0/15',
+		'104.16.0.0/13',
+		'104.24.0.0/14',
+		'172.64.0.0/13',
+		'131.0.72.0/22',
+		'2400:cb00::/32',
+		'2606:4700::/32',
+		'2803:f800::/32',
+		'2405:b500::/32',
+		'2405:8100::/32',
+		'2a06:98c0::/29',
+		'2c0f:f248::/32',
+	);
+}
+
+/**
+ * The trusted-proxy setting. Absent, unreadable or malformed reads as off: today's behaviour.
+ *
+ * @return array{mode:string,header:string,ranges:list<string>}
+ */
+function aafm_trusted_proxy_config(): array {
+	$off = array(
+		'mode'   => 'off',
+		'header' => '',
+		'ranges' => array(),
+	);
+	$row = aafm_policy_row( 'aafm_trusted_proxy' );
+	if ( ! $row['ok'] || ! $row['found'] || ! is_array( $row['value'] ) ) {
+		return $off;
+	}
+	$value = $row['value'];
+	$mode  = isset( $value['mode'] ) && is_string( $value['mode'] ) ? $value['mode'] : 'off';
+	if ( 'cloudflare' === $mode ) {
+		return array(
+			'mode'   => 'cloudflare',
+			'header' => 'CF-Connecting-IP',
+			'ranges' => aafm_cloudflare_ranges(),
+		);
+	}
+	$header = isset( $value['header'] ) && is_string( $value['header'] ) ? $value['header'] : '';
+	if ( 'custom' !== $mode || ! in_array( $header, aafm_proxy_headers(), true ) ) {
+		return $off;
+	}
+	$ranges = array_values( array_filter( (array) ( $value['ranges'] ?? array() ), static fn( $r ): bool => is_string( $r ) && aafm_proxy_range_ok( $r ) ) );
+	return array() === $ranges ? $off : array(
+		'mode'   => 'custom',
+		'header' => $header,
+		'ranges' => $ranges,
+	);
+}
+
+/**
+ * The rightmost address in a header value that is not itself a trusted proxy ('' when there is
+ * none). Bounded to the last 20 entries.
+ *
+ * @param string       $header_value Raw header value, comma separated.
+ * @param array<mixed> $trusted      Trusted proxy ranges.
+ * @return string
+ */
+function aafm_pick_visitor_ip( string $header_value, array $trusted ): string {
+	$parts = array_reverse( array_slice( array_map( 'aafm_trim_unicode', explode( ',', $header_value ) ), -20 ) );
+	foreach ( $parts as $part ) {
+		$part = aafm_normalize_ip( $part );
+		if ( false === filter_var( $part, FILTER_VALIDATE_IP ) ) {
+			return ''; // Anything unparseable on the way in means we cannot say who the visitor is.
+		}
+		if ( ! aafm_ip_in_ranges( $part, $trusted ) ) {
+			return $part;
+		}
+	}
+	return '';
+}
+
+/**
+ * The visitor address when $remote is a trusted proxy that named one; otherwise $remote itself.
+ *
+ * @param string $remote The connection address (REMOTE_ADDR).
+ * @return string
+ */
+function aafm_trusted_proxy_visitor( string $remote ): string {
+	$cfg = aafm_trusted_proxy_config();
+	if ( 'off' === $cfg['mode'] || ! aafm_ip_in_ranges( aafm_normalize_ip( $remote ), $cfg['ranges'] ) ) {
+		return $remote; // Only a request that really arrives from a trusted proxy may name the visitor; anything else is a forged header.
+	}
+	$key   = 'HTTP_' . strtoupper( str_replace( '-', '_', $cfg['header'] ) );
+	$value = isset( $_SERVER[ $key ] ) && is_string( $_SERVER[ $key ] ) ? sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) ) : '';
+	$ip    = aafm_pick_visitor_ip( $value, $cfg['ranges'] );
+	return '' !== $ip ? $ip : $remote;
 }
 
 /**

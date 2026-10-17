@@ -1975,7 +1975,7 @@
 				title.textContent = `${ row.label }: ${ statusLabel[ state ] }`;
 				body.append( title );
 
-				if ( whoLabel[ row.who ] ) {
+				if ( 'pass' !== state && whoLabel[ row.who ] ) {
 					const who = document.createElement( 'div' );
 					who.className = 'd-who';
 					who.textContent = whoLabel[ row.who ];

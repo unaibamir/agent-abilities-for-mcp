@@ -352,4 +352,14 @@ final class DoctorV2Test extends TestCase {
 		update_option( 'aafm_oauth_enabled', '1' );
 		$this->assertContains( 'oauth_discovery', wp_list_pluck( aafm_doctor_run_checks(), 'id' ) );
 	}
+
+	/**
+	 * A row that passed has nothing to fix, so it carries no "who can fix this" badge. There is no JS
+	 * runner here: this pins the renderer's guard in admin.js.
+	 */
+	public function test_a_passing_row_shows_no_owner_badge(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$this->assertStringContainsString( "if ( 'pass' !== state && whoLabel[ row.who ] ) {", $js );
+	}
 }

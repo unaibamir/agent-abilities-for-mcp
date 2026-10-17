@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-18T03:54:45+05:00\n"
+"POT-Creation-Date: 2026-10-18T04:20:27+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -4183,7 +4183,7 @@ msgid "Permission determined by %s"
 msgstr ""
 
 #: includes/admin/bridge-directory.php:690
-#: includes/admin/components.php:174
+#: includes/admin/components.php:169
 msgid "Locked"
 msgstr ""
 
@@ -4204,36 +4204,36 @@ msgstr ""
 msgid "The bridged abilities selection"
 msgstr ""
 
-#: includes/admin/components.php:261
+#: includes/admin/components.php:256
 msgid "See more"
 msgstr ""
 
-#: includes/admin/components.php:278
+#: includes/admin/components.php:273
 #: includes/admin/page.php:1993
 msgid "Search abilities"
 msgstr ""
 
-#: includes/admin/components.php:283
+#: includes/admin/components.php:278
 #: includes/admin/page.php:246
 #: includes/admin/page.php:1997
 msgid "Search abilities…"
 msgstr ""
 
-#: includes/admin/components.php:287
+#: includes/admin/components.php:282
 msgid "Filter by risk"
 msgstr ""
 
-#: includes/admin/components.php:289
+#: includes/admin/components.php:284
 #: includes/admin/page.php:2046
 #: includes/admin/page.php:2758
 msgid "All"
 msgstr ""
 
-#: includes/admin/components.php:290
+#: includes/admin/components.php:285
 msgid "Read Only"
 msgstr ""
 
-#: includes/admin/components.php:291
+#: includes/admin/components.php:286
 msgid "Write"
 msgstr ""
 
@@ -4315,7 +4315,7 @@ msgstr ""
 #: includes/admin/connection.php:924
 #: includes/admin/connection.php:964
 #: includes/admin/connection.php:1026
-#: includes/admin/dashboard.php:524
+#: includes/admin/dashboard.php:525
 #: includes/admin/page.php:3221
 #: includes/admin/quickconnect.php:492
 #: includes/admin/quickconnect.php:556
@@ -5177,7 +5177,7 @@ msgstr ""
 msgid "Plain permalinks"
 msgstr ""
 
-#: includes/admin/dashboard.php:528
+#: includes/admin/dashboard.php:518
 msgid "Point your MCP client here. The Connection tab builds the full client config for you."
 msgstr ""
 
@@ -6204,39 +6204,39 @@ msgid "These tools are switched on, but agents cannot see them right now. Each l
 msgstr ""
 
 #: includes/admin/notifications.php:38
+msgid "The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run \"wp cron event run --due-now\") for the daily email. Admin notice only and Email right away do not depend on cron. If email is unreliable on your host, the admin notice still shows every alert."
+msgstr ""
+
+#: includes/admin/notifications.php:39
 msgid "How to be told"
 msgstr ""
 
-#: includes/admin/notifications.php:45
+#: includes/admin/notifications.php:46
 msgid "Tell me"
 msgstr ""
 
-#: includes/admin/notifications.php:47
+#: includes/admin/notifications.php:48
 msgid "Off by default. Nothing is sent or shown until you choose a mode and tick at least one thing below."
 msgstr ""
 
-#: includes/admin/notifications.php:53
+#: includes/admin/notifications.php:54
 msgid "Email address"
 msgstr ""
 
-#: includes/admin/notifications.php:59
+#: includes/admin/notifications.php:60
 msgid "Email address for alerts"
 msgstr ""
 
-#: includes/admin/notifications.php:60
+#: includes/admin/notifications.php:61
 msgid "Send a test email"
 msgstr ""
 
-#: includes/admin/notifications.php:62
+#: includes/admin/notifications.php:63
 msgid "One address, needed for the two email modes. The grey example is your site admin address; it is not used unless you type it here. Emails say what happened and link to the Activity Log. They never include the content of a call, a user name or an IP address."
 msgstr ""
 
-#: includes/admin/notifications.php:78
+#: includes/admin/notifications.php:79
 msgid "An alert for every app authorization, including an app that already had consent. An Application Password counts only when it is created for a user who can edit posts, or for the agent user."
-msgstr ""
-
-#: includes/admin/notifications.php:84
-msgid "The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run \"wp cron event run --due-now\") for the daily email. Admin notice only and Email right away do not depend on cron. If email is unreliable on your host, the admin notice still shows every alert."
 msgstr ""
 
 #: includes/admin/notifications.php:90
@@ -7644,7 +7644,7 @@ msgstr ""
 #: includes/admin/quickconnect.php:477
 #: includes/admin/settings.php:402
 #: includes/admin/settings.php:526
-#: includes/admin/settings.php:933
+#: includes/admin/settings.php:955
 msgid "Enable OAuth"
 msgstr ""
 
@@ -8088,7 +8088,7 @@ msgid "The IP allowlist"
 msgstr ""
 
 #: includes/admin/settings.php:427
-#: includes/admin/settings.php:961
+#: includes/admin/settings.php:983
 msgid "Roles that can connect"
 msgstr ""
 
@@ -8148,34 +8148,34 @@ msgstr ""
 msgid "Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone."
 msgstr ""
 
-#: includes/admin/settings.php:936
-msgid "Let agents connect by pasting your site URL."
-msgstr ""
-
-#: includes/admin/settings.php:937
-msgid "Application Passwords keep working either way."
-msgstr ""
-
-#: includes/admin/settings.php:955
-msgid "A connected app never does more than the person who approved it can. While a role is off this list, the connections of users who only have that role stop working. Adding the role back lets them work again, though an app that was already refused may need to reconnect."
-msgstr ""
-
-#: includes/admin/settings.php:957
-msgid "A setting in this site's code also controls this and takes priority."
-msgstr ""
-
 #. translators: %s: link to the Connection tab.
-#: includes/admin/settings.php:970
+#: includes/admin/settings.php:930
 #, php-format
 msgid "Token lifetimes and dynamic client registration are on the %s."
 msgstr ""
 
-#: includes/admin/settings.php:979
+#: includes/admin/settings.php:939
 msgid "Connection tab"
 msgstr ""
 
-#: includes/admin/settings.php:987
+#: includes/admin/settings.php:947
 msgid "If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it."
+msgstr ""
+
+#: includes/admin/settings.php:958
+msgid "Let agents connect by pasting your site URL."
+msgstr ""
+
+#: includes/admin/settings.php:959
+msgid "Application Passwords keep working either way."
+msgstr ""
+
+#: includes/admin/settings.php:977
+msgid "A connected app never does more than the person who approved it can. While a role is off this list, the connections of users who only have that role stop working. Adding the role back lets them work again, though an app that was already refused may need to reconnect."
+msgstr ""
+
+#: includes/admin/settings.php:979
+msgid "A setting in this site's code also controls this and takes priority."
 msgstr ""
 
 #: includes/admin/settings.php:1011

@@ -59,11 +59,12 @@ function aafm_rate_limit_per_min(): int {
 /**
  * Consume one token from a principal's per-minute rate-limit bucket.
  *
- * Keyed by the authenticated principal's user id and the current GMT-minute, so
- * each user gets an independent window that naturally rolls over every minute.
- * The transient TTL is 120s - longer than a single minute so the bucket survives
- * its own window, while the GMT-minute embedded in the key is what actually rolls
- * the counter to a fresh bucket on the next minute.
+ * Keyed by the authenticated principal's user id and the current GMT minute, so each user gets an
+ * independent window that naturally rolls over every minute. An OAuth call whose connection carries
+ * a per-app override also counts against a per-app bucket, which can only lower the limit: the
+ * per-user bucket stays the ceiling, and a call refused by either bucket consumes neither. The
+ * transient TTL is 120s - longer than a single minute so the bucket survives its own window, while
+ * the GMT minute embedded in the key is what actually rolls the counter to a fresh bucket.
  *
  * This is a fixed-window counter, so a burst straddling a GMT-minute boundary can
  * briefly allow up to 2x the limit. That is acceptable for a coarse defensive cap.
@@ -74,22 +75,38 @@ function aafm_rate_limit_per_min(): int {
  *
  * Discovery / anonymous callers ($user_id <= 0) are intentionally exempt: there
  * is no real principal to limit, and listing (tools/list) relies on the raw
- * permission check rather than consuming a token. A limit of 0 means off.
+ * permission check rather than consuming a token. A site limit of 0 means off; a per-app
+ * override still caps that app.
  *
  * @param int $user_id Authenticated principal user id. <= 0 is never limited.
- * @return bool True if the request is allowed; false once the limit is exceeded.
+ * @return bool True if the request is allowed; false once a limit is exceeded.
  */
 function aafm_rate_limit_consume( int $user_id ): bool {
-	$limit = aafm_rate_limit_per_min();
-	if ( $limit <= 0 || $user_id <= 0 ) {
-		return true; // Off, or no authenticated principal to limit.
+	if ( $user_id <= 0 ) {
+		return true; // No authenticated principal to limit.
 	}
-	$key   = 'aafm_rl_' . $user_id . '_' . gmdate( 'YmdHi' );
-	$count = aafm_transient_count( $key );
-	if ( null === $count || $count >= $limit ) {
-		return false;
+	$grant  = aafm_oauth_current_grant();
+	$site   = aafm_rate_limit_per_min();
+	$app    = '' !== $grant['client_id'] ? (int) $grant['rate'] : 0; // An Application Password has no client, so no override.
+	$minute = gmdate( 'YmdHi' );
+	$limits = array();
+	if ( $site > 0 ) {
+		$limits[ 'aafm_rl_' . $user_id . '_' . $minute ] = $site; // The per-user ceiling; this key is unchanged from 1.9.0.
 	}
-	set_transient( $key, $count + 1, 2 * MINUTE_IN_SECONDS );
+	if ( $app > 0 ) {
+		$limits[ 'aafm_rla_' . $user_id . '_' . substr( md5( (string) $grant['client_id'] ), 0, 12 ) . '_' . $minute ] = $app;
+	}
+	$counts = array();
+	foreach ( $limits as $key => $limit ) {
+		$count = aafm_transient_count( $key );
+		if ( null === $count || $count >= $limit ) {
+			return false; // Refused by one bucket: neither is consumed.
+		}
+		$counts[ $key ] = $count;
+	}
+	foreach ( $counts as $key => $count ) {
+		set_transient( $key, $count + 1, 2 * MINUTE_IN_SECONDS );
+	}
 	return true;
 }
 

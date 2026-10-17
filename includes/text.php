@@ -132,3 +132,18 @@ function aafm_escape_feed_cdata( $text ): string {
 }
 
 add_filter( 'the_excerpt_rss', 'aafm_escape_feed_cdata' );
+
+/**
+ * Trim ASCII whitespace and the invisible or non-ASCII space characters that trim() leaves alone
+ * (NBSP, the Unicode spaces, zero-width characters, the byte-order mark) from both ends. Works on raw
+ * bytes with no /u flag, so invalid UTF-8 comes back unchanged instead of null, and a lone A0 byte
+ * inside a multibyte character (the letter a-grave) is never touched.
+ *
+ * @param string $text Text to trim.
+ * @return string
+ */
+function aafm_trim_unicode( string $text ): string {
+	$space = '(?:[ \t\n\r\0\x0B\f]|\xC2\xA0|\xE1\x9A\x80|\xE2\x80[\x80-\x8D\xAF]|\xE2\x81[\x9F\xA0]|\xE3\x80\x80|\xEF\xBB\xBF)';
+	$out   = preg_replace( '/\A' . $space . '+|' . $space . '+\z/', '', $text );
+	return null === $out ? trim( $text ) : $out;
+}

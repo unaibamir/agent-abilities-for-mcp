@@ -104,7 +104,8 @@ function aafm_count_dropped_ip_lines( string $raw ): int {
 
 /**
  * Split a raw newline-separated textarea value into cleaned, non-blank lines: split on any
- * line ending, run each through sanitize_text_field(), trim it, and drop anything left blank.
+ * line ending, run each through sanitize_text_field(), trim it (invisible and non-ASCII spaces
+ * included, aafm_trim_unicode()), and drop anything left blank.
  * Shared by aafm_sanitize_settings_input() and aafm_count_dropped_ip_lines(), which each then
  * decide what to do with the result (keep the valid ones vs. count the invalid ones).
  *
@@ -114,7 +115,7 @@ function aafm_count_dropped_ip_lines( string $raw ): int {
 function aafm_split_and_trim_lines( string $raw ): array {
 	$lines = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$line = trim( sanitize_text_field( (string) $line ) );
+		$line = aafm_trim_unicode( sanitize_text_field( (string) $line ) );
 		if ( '' !== $line ) {
 			$lines[] = $line;
 		}

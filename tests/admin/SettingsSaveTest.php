@@ -77,6 +77,11 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertSame( 0, aafm_count_dropped_ip_lines( '' ) );
 	}
 
+	public function test_pasting_only_invisible_lines_is_not_counted_as_dropped_lines(): void {
+		$this->assertSame( 0, aafm_count_dropped_ip_lines( "\xC2\xA0\n\xE2\x80\x8B\n10.0.0.1" ) );
+		$this->assertSame( array( '10.0.0.1' ), aafm_split_and_trim_lines( "\xC2\xA0\n\xE2\x80\x8B\n10.0.0.1" ) );
+	}
+
 	public function test_retention_days_getter_clamps(): void {
 		update_option( 'aafm_log_retention_days', 30 );
 		$this->assertSame( 30, aafm_log_retention_days() );

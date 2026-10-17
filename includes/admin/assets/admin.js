@@ -75,6 +75,7 @@
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
 			this.#bindConnectionTabs();
+			this.#bindLifetimesCard();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
 			this.#bindClientAgentToggle();
@@ -2472,6 +2473,77 @@
 			};
 			tabs.forEach( ( t ) => t.addEventListener( 'click', () => activate( t ) ) );
 			this.#wireTablistKeys( tabs, activate );
+		}
+
+		/**
+		 * Wire the token lifetimes card: Save enables once a lifetime or the registration switch
+		 * differs from what was loaded, confirms before registration is turned off, and resets
+		 * the baselines from the server's answer.
+		 */
+		#bindLifetimesCard() {
+			const save = document.getElementById( 'aafm-lifetimes-save' );
+			const card = save?.closest( '#aafm-oauth-lifetimes' );
+			if ( ! card ) {
+				return;
+			}
+			const dcr = card.querySelector( '#aafm-lifetimes-dcr' );
+			const status = card.querySelector( '.aafm-lifetimes-status' );
+			const seconds = ( kind ) =>
+				Number( card.querySelector( `.aafm-ttl-value[data-ttl="${ kind }"]` )?.value ) *
+				Number( card.querySelector( `.aafm-ttl-unit[data-ttl="${ kind }"]` )?.value );
+			const changed = () =>
+				[ 'access', 'refresh' ].some(
+					( kind ) =>
+						String( seconds( kind ) ) !==
+						card.querySelector( `.aafm-ttl-value[data-ttl="${ kind }"]` )?.dataset.saved
+				) || ( dcr && ( dcr.checked ? '1' : '0' ) !== dcr.dataset.saved );
+			const refresh = () => {
+				save.disabled = ! changed();
+			};
+			card.addEventListener( 'input', refresh );
+			card.addEventListener( 'change', refresh );
+
+			save.addEventListener( 'click', async () => {
+				if (
+					dcr &&
+					'1' === dcr.dataset.saved &&
+					! dcr.checked &&
+					! window.confirm(
+						this.#t(
+							'dcrOffConfirm',
+							'Turn off dynamic client registration? ChatGPT and Claude can no longer register themselves, so new connections from them will fail until you turn it back on.'
+						)
+					)
+				) {
+					return;
+				}
+				save.disabled = true;
+				status.textContent = this.#t( 'saving', 'Saving…' );
+				const json = await this.#post( 'aafm_save_oauth_lifetimes', {
+					aafm_oauth_access_ttl: String( seconds( 'access' ) ),
+					aafm_oauth_refresh_ttl: String( seconds( 'refresh' ) ),
+					aafm_oauth_dcr_enabled: dcr?.checked ? '1' : '0',
+				} );
+				if ( ! json?.success ) {
+					status.textContent =
+						json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					refresh();
+					return;
+				}
+				const data = json.data ?? {};
+				[ 'access', 'refresh' ].forEach( ( kind ) => {
+					const input = card.querySelector( `.aafm-ttl-value[data-ttl="${ kind }"]` );
+					if ( input ) {
+						input.dataset.saved = String( data[ kind ] ?? seconds( kind ) );
+					}
+				} );
+				if ( dcr ) {
+					dcr.checked = Boolean( data.dcr );
+					dcr.dataset.saved = data.dcr ? '1' : '0';
+				}
+				status.textContent = this.#t( 'saved', 'Saved' );
+				refresh();
+			} );
 		}
 
 		/**

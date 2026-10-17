@@ -346,6 +346,7 @@ function aafm_render_connection_tabs( bool $oauth_on ): void {
 	$panel( 'oauth', '' );
 	echo '<div class="aafm-oauth-manage">';
 	wp_nonce_field( 'aafm_admin', 'aafm_oauth_admin_nonce' );
+	aafm_render_lifetimes_card( aafm_connection_lifetimes_data() );
 	if ( $oauth_on ) {
 		aafm_render_clients_card( aafm_connection_clients_data() );
 		aafm_render_grants_card( aafm_connection_grants_data() );
@@ -357,4 +358,189 @@ function aafm_render_connection_tabs( bool $oauth_on ): void {
 	$panel( 'app-passwords', ' aafm-app-password-fallback' );
 	aafm_render_app_password_steps();
 	echo '</div>'; // Application Passwords panel.
+}
+
+/**
+ * The allowed token lifetimes, in seconds: access 5 minutes to 24 hours, refresh 1 hour to 90 days.
+ *
+ * @return array{access:array{0:int,1:int},refresh:array{0:int,1:int}}
+ */
+function aafm_oauth_ttl_bounds(): array {
+	return array(
+		'access'  => array( 5 * MINUTE_IN_SECONDS, DAY_IN_SECONDS ),
+		'refresh' => array( HOUR_IN_SECONDS, 90 * DAY_IN_SECONDS ),
+	);
+}
+
+/**
+ * A stored lifetime as the database holds it, or the default when there is no usable row.
+ *
+ * @param string $option   Lifetime option name.
+ * @param int    $fallback Default lifetime in seconds.
+ * @return int
+ */
+function aafm_oauth_stored_ttl( string $option, int $fallback ): int {
+	$row = aafm_option_row( $option );
+	return $row['ok'] && $row['found'] && is_scalar( $row['value'] ) ? (int) $row['value'] : $fallback;
+}
+
+/**
+ * Data for the "Token lifetimes and client registration" card.
+ *
+ * @return array{access:int,refresh:int,access_default:int,refresh_default:int,bounds:array{access:array{0:int,1:int},refresh:array{0:int,1:int}},dcr:bool,oauth_enabled:bool}
+ */
+function aafm_connection_lifetimes_data(): array {
+	return array(
+		'access'          => aafm_oauth_stored_ttl( 'aafm_oauth_access_ttl', (int) AAFM_OAUTH_ACCESS_TTL ),
+		'refresh'         => aafm_oauth_stored_ttl( 'aafm_oauth_refresh_ttl', (int) AAFM_OAUTH_REFRESH_TTL ),
+		'access_default'  => (int) AAFM_OAUTH_ACCESS_TTL,
+		'refresh_default' => (int) AAFM_OAUTH_REFRESH_TTL,
+		'bounds'          => aafm_oauth_ttl_bounds(),
+		'dcr'             => aafm_oauth_dcr_enabled(),
+		'oauth_enabled'   => aafm_oauth_enabled(),
+	);
+}
+
+/**
+ * The number input and unit select for one lifetime. The unit is the largest that divides the
+ * seconds evenly.
+ *
+ * @param string $kind    'access' or 'refresh'.
+ * @param string $label   Row label.
+ * @param int    $seconds Stored lifetime.
+ * @param int    $fallback Default lifetime.
+ * @return string Escaped HTML.
+ */
+function aafm_connection_ttl_row( string $kind, string $label, int $seconds, int $fallback ): string {
+	$units = array(
+		DAY_IN_SECONDS    => __( 'days', 'agent-abilities-for-mcp' ),
+		HOUR_IN_SECONDS   => __( 'hours', 'agent-abilities-for-mcp' ),
+		MINUTE_IN_SECONDS => __( 'minutes', 'agent-abilities-for-mcp' ),
+	);
+	$unit  = MINUTE_IN_SECONDS;
+	foreach ( array_keys( $units ) as $size ) {
+		if ( $seconds > 0 && 0 === $seconds % $size ) {
+			$unit = $size;
+			break;
+		}
+	}
+	// ponytail: a stored value that is not a whole number of minutes shows rounded; saving the card rewrites it.
+	$options = '';
+	foreach ( $units as $size => $name ) {
+		$options .= sprintf( '<option value="%1$d"%2$s>%3$s</option>', $size, selected( $size, $unit, false ), esc_html( $name ) );
+	}
+	$id = 'aafm-oauth-' . $kind . '-ttl';
+	return sprintf(
+		'<div class="aafm-set-row"><div class="aafm-set-label"><label for="%1$s">%2$s</label></div><div class="aafm-set-control"><input type="number" id="%1$s" class="small-text aafm-ttl-value" data-ttl="%3$s" data-saved="%4$d" min="1" step="1" value="%5$d"> <select class="aafm-ttl-unit" data-ttl="%3$s" aria-label="%6$s">%7$s</select><p class="help">%8$s</p></div></div>',
+		esc_attr( $id ),
+		esc_html( $label ),
+		esc_attr( $kind ),
+		$seconds,
+		(int) round( $seconds / $unit ),
+		/* translators: %s: which lifetime, for example "Access token lifetime". */
+		esc_attr( sprintf( __( '%s unit', 'agent-abilities-for-mcp' ), $label ) ),
+		$options,
+		/* translators: %s: the default lifetime, for example "1 hour". */
+		esc_html( sprintf( __( 'Default: %s', 'agent-abilities-for-mcp' ), human_time_diff( 0, $fallback ) ) )
+	);
+}
+
+/**
+ * Render the "Token lifetimes and client registration" card, collapsed.
+ *
+ * @param array<string,mixed> $data aafm_connection_lifetimes_data().
+ * @return void
+ */
+function aafm_render_lifetimes_card( array $data ): void {
+	$body  = '<p class="help">' . esc_html__( 'Applies to tokens issued from now on. Lowering a lifetime does not shorten tokens already issued; Revoke on the grants card below ends a connection at once.', 'agent-abilities-for-mcp' ) . '</p>';
+	$body .= aafm_connection_ttl_row( 'access', __( 'Access token lifetime', 'agent-abilities-for-mcp' ), (int) $data['access'], (int) $data['access_default'] );
+	$body .= aafm_connection_ttl_row( 'refresh', __( 'Refresh token lifetime', 'agent-abilities-for-mcp' ), (int) $data['refresh'], (int) $data['refresh_default'] );
+	$body .= sprintf(
+		'<div class="aafm-set-row"><div class="aafm-set-label" id="aafm-lifetimes-dcr-title">%1$s</div><div class="aafm-set-control"><label class="aafm-switch"><input type="checkbox" id="aafm-lifetimes-dcr" data-saved="%2$s" aria-labelledby="aafm-lifetimes-dcr-title aafm-lifetimes-dcr-desc"%3$s><span class="aafm-switch-track"></span></label> <label for="aafm-lifetimes-dcr" id="aafm-lifetimes-dcr-desc">%4$s</label><p class="help">%5$s</p></div></div>',
+		esc_html__( 'Dynamic client registration', 'agent-abilities-for-mcp' ),
+		$data['dcr'] ? '1' : '0',
+		checked( (bool) $data['dcr'], true, false ),
+		esc_html__( 'Let agents register themselves. ChatGPT and Claude need this to connect.', 'agent-abilities-for-mcp' ),
+		esc_html__( 'Turning this off closes a public endpoint that anyone can reach without logging in. New connections from apps that register themselves fail until you turn it back on.', 'agent-abilities-for-mcp' )
+	);
+	$body .= sprintf(
+		'<p class="aafm-lifetimes-actions"><button type="button" class="aafm-btn aafm-btn-primary" id="aafm-lifetimes-save" disabled>%1$s</button> <span class="aafm-lifetimes-status" role="status"></span></p>',
+		esc_html__( 'Save', 'agent-abilities-for-mcp' )
+	);
+	aafm_render_section(
+		array(
+			'id'          => 'aafm-oauth-lifetimes',
+			'collapsible' => true,
+			'open'        => false,
+			'title'       => __( 'Token lifetimes and client registration', 'agent-abilities-for-mcp' ),
+			'body'        => $body,
+		)
+	);
+}
+
+/**
+ * AJAX: save the token lifetimes and the dynamic client registration switch.
+ *
+ * Restrictive first: closing registration is written before anything else and opening it after
+ * everything else certified.
+ *
+ * @return void
+ */
+function aafm_ajax_save_oauth_lifetimes(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	// phpcs:disable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; each value is type-checked and matched against a strict pattern below.
+	$whole   = static function ( string $key ): ?int {
+		$raw = isset( $_POST[ $key ] ) ? wp_unslash( $_POST[ $key ] ) : null;
+		return is_string( $raw ) && 1 === preg_match( '/\A[1-9][0-9]{0,9}\z/', $raw ) ? (int) $raw : null;
+	};
+	$access  = $whole( 'aafm_oauth_access_ttl' );
+	$refresh = $whole( 'aafm_oauth_refresh_ttl' );
+	$dcr_raw = isset( $_POST['aafm_oauth_dcr_enabled'] ) ? wp_unslash( $_POST['aafm_oauth_dcr_enabled'] ) : null;
+	// phpcs:enable
+	$bounds = aafm_oauth_ttl_bounds();
+	if ( null === $access || null === $refresh || $access < $bounds['access'][0] || $access > $bounds['access'][1] || $refresh < $bounds['refresh'][0] || $refresh > $bounds['refresh'][1] || $access >= $refresh || ! in_array( $dcr_raw, array( '0', '1' ), true ) ) {
+		wp_send_json_error( array( 'message' => __( 'Use whole numbers inside the allowed range, and keep the access token shorter than the refresh token.', 'agent-abilities-for-mcp' ) ) );
+	}
+	$dcr_on     = '1' === $dcr_raw;
+	$dcr_before = aafm_oauth_dcr_enabled();
+	if ( ! $dcr_on && $dcr_before ) {
+		if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '0' ) ) {
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Dynamic client registration', 'agent-abilities-for-mcp' ) ) ) );
+		}
+		aafm_log_setting_change( 'aafm/oauth-dcr', __( 'Dynamic client registration turned off', 'agent-abilities-for-mcp' ) );
+	}
+	$lifetimes = array(
+		'aafm_oauth_access_ttl'  => array( $access, (int) AAFM_OAUTH_ACCESS_TTL, __( 'Access token lifetime', 'agent-abilities-for-mcp' ) ),
+		'aafm_oauth_refresh_ttl' => array( $refresh, (int) AAFM_OAUTH_REFRESH_TTL, __( 'Refresh token lifetime', 'agent-abilities-for-mcp' ) ),
+	);
+	foreach ( $lifetimes as $option => $lifetime ) {
+		list( $new, $default, $label ) = $lifetime;
+		$old                           = aafm_oauth_stored_ttl( $option, $default ); // The database value, not the cache.
+		if ( $old === $new ) {
+			continue;
+		}
+		if ( ! aafm_update_option_verified( $option, $new ) ) {
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( $label ) ) );
+		}
+		aafm_log_setting_change(
+			'aafm/oauth-lifetimes',
+			sprintf(
+				/* translators: 1: which lifetime, 2: old value, 3: new value. */
+				__( '%1$s changed from %2$s to %3$s', 'agent-abilities-for-mcp' ),
+				$label,
+				human_time_diff( 0, $old ),
+				human_time_diff( 0, $new )
+			)
+		);
+	}
+	if ( $dcr_on && ! $dcr_before ) {
+		if ( ! aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '1' ) ) {
+			wp_send_json_error( array( 'message' => aafm_paired_write_partial_failure_message( __( 'The token lifetimes', 'agent-abilities-for-mcp' ), __( 'Dynamic client registration', 'agent-abilities-for-mcp' ) ) ) );
+		}
+		aafm_log_setting_change( 'aafm/oauth-dcr', __( 'Dynamic client registration turned on', 'agent-abilities-for-mcp' ) );
+	}
+	wp_send_json_success( aafm_connection_lifetimes_data() );
 }

@@ -33,6 +33,7 @@ class KsesAttributesTest extends TestCase {
 			'data-aafm-untracked' => array( 'data-aafm-untracked' ),
 			'data-qc-preset'      => array( 'data-qc-preset' ),
 			'aria-pressed'        => array( 'aria-pressed' ),
+			'data-ttl'            => array( 'data-ttl' ),
 		);
 	}
 

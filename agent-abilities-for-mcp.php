@@ -494,6 +494,7 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_run_doctor', 'aafm_ajax_run_doctor' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
+		add_action( 'wp_ajax_aafm_save_oauth_lifetimes', 'aafm_ajax_save_oauth_lifetimes' );
 		add_action( 'wp_ajax_aafm_set_client_agent_identity', 'aafm_ajax_set_client_agent_identity' );
 		add_action( 'wp_ajax_aafm_save_allowlist', 'aafm_ajax_save_allowlist' );
 		add_action( 'wp_ajax_aafm_quickconnect_oauth', 'aafm_ajax_quickconnect_oauth' );

@@ -1084,6 +1084,11 @@ function aafm_transport_permission_callback( $request ) {
 		return false;
 	}
 
+	// Admitted: only now is the call a use of the grant (refused calls are not stamped).
+	if ( '' !== $grant['client_id'] ) {
+		aafm_oauth_grant_touch( (int) $grant['user_id'], (string) $grant['client_id'], $grant['last_used_at'] );
+	}
+
 	return true;
 }
 

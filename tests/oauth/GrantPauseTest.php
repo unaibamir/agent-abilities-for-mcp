@@ -131,6 +131,24 @@ class GrantPauseTest extends TestCase {
 		return aafm_oauth_grant_state( $this->user, self::CLIENT )['last_used_at'];
 	}
 
+	/**
+	 * Send a tools/list request through the real REST dispatch, putting the transport's route back if an
+	 * earlier test rebuilt the REST server after the adapter registered it.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	private function dispatch(): \WP_REST_Response {
+		if ( ! isset( rest_get_server()->get_routes()[ aafm_mcp_rest_route() ] ) ) {
+			$server = \WP\MCP\Core\McpAdapter::instance()->get_server( 'aafm-server' );
+			$this->assertNotNull( $server );
+			( new \WP\MCP\Transport\HttpTransport( $server->create_transport_context() ) )->register_routes();
+		}
+		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );
+		return rest_do_request( $request );
+	}
+
 	public function test_a_paused_grant_still_resolves_a_user_but_the_transport_gate_refuses_it(): void {
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->assertSame( $this->user, $this->resolve() );
@@ -150,17 +168,7 @@ class GrantPauseTest extends TestCase {
 		$log      = wp_tempnam( 'aafm-pause-log' );
 		$previous = ini_set( 'error_log', $log ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- capture the adapter's log line, if any.
 
-		if ( ! isset( rest_get_server()->get_routes()[ aafm_mcp_rest_route() ] ) ) {
-			// An earlier test rebuilt the REST server after the adapter registered its route; put the real
-			// transport's route back, permission callback included.
-			$server = \WP\MCP\Core\McpAdapter::instance()->get_server( 'aafm-server' );
-			$this->assertNotNull( $server );
-			( new \WP\MCP\Transport\HttpTransport( $server->create_transport_context() ) )->register_routes();
-		}
-		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
-		$request->set_header( 'Content-Type', 'application/json' );
-		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );
-		$response = rest_do_request( $request );
+		$response = $this->dispatch();
 
 		ini_set( 'error_log', (string) $previous ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- restore.
 		$logged = (string) file_get_contents( $log ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local temp file.
@@ -185,10 +193,13 @@ class GrantPauseTest extends TestCase {
 		global $wpdb;
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->resolve();
+		$this->admit();
 		$this->assertNull( $this->last_used() );
 
 		$this->set_paused( null );
 		$this->resolve();
+		$this->assertNull( $this->last_used(), 'Resolving a bearer is not a use: the transport gate admits it.' );
+		$this->admit();
 		$stamp = $this->last_used();
 		$this->assertNotNull( $stamp );
 
@@ -201,6 +212,7 @@ class GrantPauseTest extends TestCase {
 		};
 		add_filter( 'query', $count );
 		$this->resolve();
+		$this->admit();
 		remove_filter( 'query', $count );
 		$this->assertSame( 0, $writes, 'A second call inside five minutes writes nothing.' );
 
@@ -214,5 +226,35 @@ class GrantPauseTest extends TestCase {
 		);
 		$this->assertFalse( $this->resolve() );
 		$this->assertNull( $this->last_used(), 'An expired grant is not stamped either.' );
+	}
+
+	public function test_a_call_from_a_blocked_address_is_not_stamped_as_used(): void {
+		update_option( 'aafm_ip_allowlist', array( '198.51.100.1' ) );
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+		$this->resolve();
+		$result = aafm_transport_permission_callback( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) );
+		$this->assertWPError( $result );
+		$this->assertNull( $this->last_used() );
+
+		$_SERVER['REMOTE_ADDR'] = '198.51.100.1';
+		$this->resolve();
+		$this->admit();
+		$this->assertNotNull( $this->last_used(), 'The same grant from an allowed address is a use.' );
+	}
+
+	public function test_a_call_refused_by_pause_all_is_not_stamped_as_used(): void {
+		$this->assertTrue( aafm_set_pause_all( true ) );
+		$this->resolve();
+		$this->assertSame( 403, $this->dispatch()->get_status() );
+		$this->assertNull( $this->last_used() );
+	}
+
+	/**
+	 * Run the transport gate for the grant the last resolve() loaded and expect it to admit or refuse quietly.
+	 *
+	 * @return void
+	 */
+	private function admit(): void {
+		aafm_transport_permission_callback( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) );
 	}
 }

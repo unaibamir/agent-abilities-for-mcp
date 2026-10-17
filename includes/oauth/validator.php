@@ -273,7 +273,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		// from our bearer. The grant store beside it carries the connection's pause, preset and rate
 		// for the transport gate, the allowlist and the rate limiter. Both are written only after the
 		// token has resolved a user through every guard above, so they cannot change this resolution.
-		// A paused call is not stamped as a use.
+		// Resolving is not using: the transport gate stamps last use once it admits the request.
 		aafm_oauth_current_client_id( (string) $row['client_id'] );
 		aafm_oauth_current_grant(
 			array_merge(
@@ -284,9 +284,6 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 				)
 			)
 		);
-		if ( ! $grant['paused'] ) {
-			aafm_oauth_grant_touch( (int) $row['wp_user_id'], (string) $row['client_id'], $grant['last_used_at'] );
-		}
 
 		return (int) $row['wp_user_id'];
 	} finally {

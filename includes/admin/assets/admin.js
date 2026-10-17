@@ -2557,17 +2557,22 @@
 			const td = document.createElement( 'td' );
 			td.className = 'aafm-log-detail';
 			td.classList.toggle( 'is-json', /^\s*[[{]/.test( row.detail ?? '' ) );
+			// A long detail is clamped to a few lines; the title carries all of it.
+			td.title = row.detail ?? '';
+			const text = document.createElement( 'span' );
+			text.className = 'aafm-log-detail-text';
+			td.append( text );
 			const link = row.detail_link;
 			if ( ! link || typeof link !== 'object' ) {
-				td.textContent = row.detail ?? '';
+				text.textContent = row.detail ?? '';
 				return td;
 			}
-			td.append( document.createTextNode( link.before ?? '' ) );
+			text.append( document.createTextNode( link.before ?? '' ) );
 			const anchor = document.createElement( 'a' );
 			anchor.href = link.url ?? '';
 			anchor.textContent = `#${ link.id ?? '' }`;
-			td.append( anchor );
-			td.append( document.createTextNode( link.after ?? '' ) );
+			text.append( anchor );
+			text.append( document.createTextNode( link.after ?? '' ) );
 			return td;
 		}
 

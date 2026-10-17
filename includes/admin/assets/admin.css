@@ -1279,16 +1279,8 @@
 		}
 
 		.aafm-section-toggle {
-			padding-inline: 20px;
-			margin-block: 12px 0;
-
-			/* Caveat for "Enable all writes". Sits inline after the buttons and wraps below them
-			   on a narrow screen; it is the button's aria-describedby target, so it must stay
-			   rendered and readable rather than being hidden at any breakpoint. */
-			> .aafm-section-toggle-note {
-				font-size: 12px;
-				color: var(--aafm-text-subtle);
-			}
+			padding-inline: var(--aafm-space-5);
+			margin-block: var(--aafm-space-3) 0;
 		}
 
 		/* Each card is a native <details> accordion. The <summary> is the card head; clicking
@@ -1756,46 +1748,28 @@
 
 	/* ---------- Activity log: 7-day summary, filter row, Live view ---------- */
 	.aafm-activity {
-		.aafm-log-summary {
-			display: grid;
-			grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-			gap: 12px;
-			margin-block: 0 16px;
-
-			.aafm-log-stat,
-			.aafm-log-top {
-				border: 1px solid var(--aafm-border);
-				border-radius: 6px;
-				background: var(--aafm-surface);
-				padding: 12px 14px;
-			}
-
-			.aafm-log-stat-num {
-				font-size: 22px;
-				font-weight: 600;
-				line-height: 1.2;
-			}
-
-			.aafm-log-stat-label {
-				color: var(--aafm-text-subtle);
-				font-size: 12px;
-			}
+		/* Four stat cards in the Dashboard's grid, then Top tools across the full width with its
+		   list in one wrapping row, so no card is stretched tall and empty. */
+		.aafm-log-stats {
+			margin-block: 0 var(--aafm-space-2);
 
 			.aafm-log-top {
-				grid-column: span 2;
+				grid-column: 1 / -1;
 
 				ol {
-					margin: 6px 0 0;
-					padding-inline-start: 18px;
+					display: flex;
+					flex-wrap: wrap;
+					gap: var(--aafm-space-2) var(--aafm-space-6);
+					margin: 0;
+					padding: 0;
+					list-style-position: inside;
+					font-size: var(--aafm-fs-base);
 				}
 			}
+		}
 
-			.aafm-log-summary-note {
-				grid-column: 1 / -1;
-				margin: 0;
-				color: var(--aafm-text-subtle);
-				font-size: 12px;
-			}
+		.aafm-log-summary-note {
+			margin-block-end: var(--aafm-space-4);
 		}
 
 		.aafm-log-filters {
@@ -1808,7 +1782,7 @@
 			.aafm-log-filter {
 				display: grid;
 				gap: 4px;
-				font-size: 12px;
+				font-size: var(--aafm-fs-sm);
 
 				input,
 				select {
@@ -1838,11 +1812,14 @@
 	}
 
 	/* ---------- Segmented control ---------- */
+	/* Same outer height as a button or field (--aafm-control-h). */
 	.aafm-seg {
 		display: inline-flex;
+		box-sizing: border-box;
+		block-size: var(--aafm-control-h);
 		background: var(--aafm-surface-2);
 		border: 1px solid var(--aafm-border);
-		border-radius: 7px;
+		border-radius: var(--aafm-radius-sm);
 		padding: 3px;
 		gap: 2px;
 
@@ -2474,6 +2451,15 @@
 
 		.aafm-log-detail {
 			overflow-wrap: break-word;
+
+			/* A long detail stops at four lines; the cell's title holds the full text. */
+			.aafm-log-detail-text {
+				display: -webkit-box;
+				-webkit-box-orient: vertical;
+				-webkit-line-clamp: 4;
+				line-clamp: 4;
+				overflow: hidden;
+			}
 
 			&.is-json {
 				font-family: var(--aafm-mono);

@@ -2727,6 +2727,11 @@ function aafm_render_activity_tab(): void {
 
 	aafm_render_activity_summary( aafm_activity_summary() );
 
+	// The controls, filters, table and pager sit in one card, like every other tab's content.
+	echo '<section class="aafm-card aafm-log-card">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'activity', __( 'Log entries', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
+
 	// Status filter - server-side: each button re-queries page 1 with its status (admin.js).
 	echo '<div class="aafm-activity-toolbar">';
 	echo '<div class="aafm-seg" role="group" aria-label="' . esc_attr__( 'Filter by status', 'agent-abilities-for-mcp' ) . '">';
@@ -2836,6 +2841,7 @@ function aafm_render_activity_tab(): void {
 	);
 	echo '</div>';
 
+	echo '</div></section>'; // .aafm-card-pad, .aafm-log-card
 	echo '</div>';
 }
 
@@ -3060,7 +3066,7 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 		$v     = aafm_activity_row_view( $row, $names );
 		$html .= sprintf(
 			// The short columns clip with an ellipsis, so each carries its full text as a title.
-			'<tr><td>%1$s</td><td title="%2$s">%2$s</td><td title="%3$s">%3$s</td><td title="%4$s">%4$s</td><td class="aafm-log-detail%12$s">%5$s</td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td title="%10$s">%10$s</td><td title="%11$s">%11$s</td></tr>',
+			'<tr><td>%1$s</td><td title="%2$s">%2$s</td><td title="%3$s">%3$s</td><td title="%4$s">%4$s</td><td class="aafm-log-detail%12$s" title="%13$s"><span class="aafm-log-detail-text">%5$s</span></td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td title="%10$s">%10$s</td><td title="%11$s">%11$s</td></tr>',
 			esc_html( $v['time'] ),
 			esc_html( $v['principal'] ),
 			esc_html( $v['connection'] ),
@@ -3072,7 +3078,8 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 			esc_html( $v['duration'] ),
 			esc_html( $v['ip'] ),
 			esc_html( $v['arg_keys'] ),
-			1 === preg_match( '/^\s*[\[{]/', (string) $v['detail'] ) ? ' is-json' : ''
+			1 === preg_match( '/^\s*[\[{]/', (string) $v['detail'] ) ? ' is-json' : '',
+			esc_attr( (string) $v['detail'] )
 		);
 	}
 	return $html;

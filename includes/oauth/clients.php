@@ -550,7 +550,9 @@ function aafm_oauth_list_clients(): array {
  * consent screen's own administrator warning, so "high privilege" means the same
  * thing in both places.
  *
- * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string,user_roles:list<string>,is_high_privilege:bool}>
+ * Each row also carries the grant's per-connection state (aafm_oauth_grant_from_row()).
+ *
+ * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string,user_roles:list<string>,is_high_privilege:bool,paused:bool,expired:bool,expires_at:?string,preset:string,rate:int,last_used_at:?string,last_used_ip:string}>
  */
 function aafm_oauth_list_grants(): array {
 	global $wpdb;
@@ -563,13 +565,17 @@ function aafm_oauth_list_grants(): array {
 	// Codex round 7, R7-2: routed through aafm_wpdb_results() rather than a bare get_results() -
 	// see aafm_oauth_list_clients()'s docblock for why a failed query must not be allowed to
 	// return an earlier, unrelated query's rows here.
+	// In the update window, before the installer adds the v9 columns, list without them so the
+	// table never errors; the missing fields read as their defaults.
+	$columns    = aafm_oauth_grant_columns_absent() ? '' : ', c.paused_at, c.expires_at, c.last_used_at, c.last_used_ip, c.preset, c.rate_per_min';
 	$suppressed = $wpdb->suppress_errors();
 	$view       = aafm_wpdb_results(
 		$wpdb->prepare(
-			'SELECT c.wp_user_id, c.client_id, c.granted_at, cl.client_name
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $columns is one of two fixed column lists.
+			"SELECT c.wp_user_id, c.client_id, c.granted_at, cl.client_name{$columns}
 			 FROM %i c
 			 LEFT JOIN %i cl ON cl.client_id = c.client_id
-			 ORDER BY c.granted_at DESC, c.id DESC',
+			 ORDER BY c.granted_at DESC, c.id DESC",
 			$consents_table,
 			$clients_table
 		)
@@ -583,6 +589,7 @@ function aafm_oauth_list_grants(): array {
 	$out = array();
 	foreach ( $view['value'] as $row ) {
 		$user_id = (int) $row['wp_user_id'];
+		$state   = aafm_oauth_grant_from_row( $row );
 		// The user and their privilege are read inside the checked-read scope, so a caps load that
 		// fails shows the fallback row below instead of a real account with no role.
 		$loaded = aafm_with_checked_reads(
@@ -613,7 +620,7 @@ function aafm_oauth_list_grants(): array {
 				'granted_at'        => (string) $row['granted_at'],
 				'user_roles'        => array(),
 				'is_high_privilege' => true,
-			);
+			) + $state;
 			continue;
 		}
 
@@ -626,7 +633,7 @@ function aafm_oauth_list_grants(): array {
 			'granted_at'        => (string) $row['granted_at'],
 			'user_roles'        => $loaded['user_roles'],
 			'is_high_privilege' => $loaded['is_high_privilege'],
-		);
+		) + $state;
 	}
 
 	return $out;

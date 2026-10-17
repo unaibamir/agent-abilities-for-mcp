@@ -241,38 +241,58 @@ function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
 }
 
 /**
- * Record (or refresh) the user's consent for a client.
+ * Record (or refresh) the user's consent. The first approval stores the preset; a repeat approval
+ * changes only `granted_at` (pause, end date, last use, rate override and preset belong to the owner
+ * and survive it). The existing row keeps its `id`.
  *
- * The consents table has a UNIQUE (wp_user_id, client_id) key, so $wpdb->replace()
- * makes this an idempotent upsert: a repeat approval refreshes granted_at on the
- * single existing row rather than inserting a duplicate.
+ * This is an INSERT ... ON DUPLICATE KEY UPDATE on the UNIQUE (wp_user_id, client_id) key, not a
+ * REPLACE: REPLACE deletes and reinserts, which would wipe every owner setting on the row.
+ * $wpdb->prepare() cannot bind NULL, so a Custom approval simply names no preset column, which
+ * also keeps it working on a v8 table whose v9 columns have not installed yet.
  *
  * @param int    $user_id   WordPress user ID.
  * @param string $client_id The public client identifier.
- * @return bool True when the consent is confirmed stored after this call.
+ * @param string $preset    Access preset slug for a first approval; '' is Custom.
+ * @return bool True when the consent (and any requested preset) is confirmed stored after this call.
  */
-function aafm_oauth_record_consent( int $user_id, string $client_id ): bool {
+function aafm_oauth_record_consent( int $user_id, string $client_id, string $preset = '' ): bool {
 	if ( $user_id <= 0 || '' === $client_id ) {
 		return false;
 	}
 
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->replace(
-		$wpdb->prefix . 'aafm_oauth_consents',
-		array(
-			'wp_user_id' => $user_id,
-			'client_id'  => $client_id,
-			'granted_at' => gmdate( 'Y-m-d H:i:s', time() ),
-		),
-		array( '%d', '%s', '%s' )
-	);
+	$table    = $wpdb->prefix . 'aafm_oauth_consents';
+	$existing = aafm_oauth_consent_view( $user_id, $client_id );
+	if ( ! $existing['ok'] ) {
+		return false;
+	}
+	// A repeat approval never changes the preset, for any approver: the owner changes it on the Connection tab.
+	$preset = $existing['value'] ? '' : $preset;
+	if ( '' !== $preset ) {
+		// A restrictive preset must be stored or the approval refused, never silently dropped. If the v9 columns
+		// did not install, try once more, then refuse.
+		aafm_maybe_upgrade_oauth_tables();
+		if ( ! aafm_oauth_table_has_column( $table, 'preset' ) ) {
+			return false;
+		}
+		$sql = $wpdb->prepare( 'INSERT INTO %i (wp_user_id, client_id, granted_at, preset) VALUES (%d, %s, %s, %s) ON DUPLICATE KEY UPDATE granted_at = VALUES(granted_at)', $table, $user_id, $client_id, gmdate( 'Y-m-d H:i:s' ), $preset );
+	} else {
+		$sql = $wpdb->prepare( 'INSERT INTO %i (wp_user_id, client_id, granted_at) VALUES (%d, %s, %s) ON DUPLICATE KEY UPDATE granted_at = VALUES(granted_at)', $table, $user_id, $client_id, gmdate( 'Y-m-d H:i:s' ) );
+	}
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- prepared just above.
+	$wpdb->query( $sql );
 
-	// Certify against a fresh read rather than trusting $wpdb->replace()'s own result (same
-	// reasoning as aafm_oauth_deactivate_client()): a failed REPLACE must stop the approval
-	// handler from minting and handing back a code that redemption will find has no matching
-	// consent (Codex round 9, R9-6).
-	return aafm_oauth_has_consent( $user_id, $client_id );
+	// Certify against a fresh read rather than trusting the write's own result (Codex round 9, R9-6): a
+	// failed write must stop the approval handler from minting a code that redemption will refuse, and a
+	// stored preset must be the one that was asked for (another request can win the race to the row).
+	if ( ! aafm_oauth_has_consent( $user_id, $client_id ) ) {
+		return false;
+	}
+	if ( '' === $preset ) {
+		return true;
+	}
+	$state = aafm_oauth_grant_state( $user_id, $client_id );
+	return null !== $state && $state['preset'] === $preset;
 }
 
 /**

@@ -512,6 +512,20 @@ function aafm_maybe_upgrade_oauth_tables(): void {
 }
 
 /**
+ * Seconds before a never-consented, token-less DCR client row is reaped.
+ *
+ * @return int
+ */
+function aafm_oauth_client_reap_ttl(): int {
+	/**
+	 * TTL (seconds) before a never-consented, token-less DCR client row is reaped.
+	 *
+	 * @param int $ttl TTL in seconds. Default 7 days.
+	 */
+	return max( 0, (int) apply_filters( 'aafm_oauth_client_reap_ttl', 7 * DAY_IN_SECONDS ) );
+}
+
+/**
  * Empty all four OAuth tables, keeping their structure. Used by the plugin reset.
  *
  * Uses DELETE rather than TRUNCATE so it stays compatible with the PHPUnit harness,
@@ -631,13 +645,7 @@ function aafm_oauth_cleanup(): void {
 function aafm_oauth_reap_abandoned_clients(): int {
 	global $wpdb;
 
-	/**
-	 * TTL (seconds) before a never-consented, token-less DCR client row is reaped.
-	 *
-	 * @param int $ttl TTL in seconds. Default 7 days.
-	 */
-	$ttl    = (int) apply_filters( 'aafm_oauth_client_reap_ttl', 7 * DAY_IN_SECONDS );
-	$cutoff = gmdate( 'Y-m-d H:i:s', time() - max( 0, $ttl ) );
+	$cutoff = gmdate( 'Y-m-d H:i:s', time() - aafm_oauth_client_reap_ttl() );
 
 	$clients_table  = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
 	$consents_table = esc_sql( $wpdb->prefix . 'aafm_oauth_consents' );

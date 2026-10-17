@@ -548,7 +548,7 @@ class AuthorizeTest extends TestCase {
 		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent' );
 		$params['aafm_oauth_decision'] = 'approve';
 		$result                        = QueryFaultInjector::break_query_with_real_error(
-			'REPLACE INTO `' . $wpdb->prefix . 'aafm_oauth_consents`',
+			'INSERT INTO `' . $wpdb->prefix . 'aafm_oauth_consents`',
 			function () use ( $params ) {
 				return $this->run_authorize_post( $params );
 			}

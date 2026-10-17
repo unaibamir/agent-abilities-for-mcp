@@ -221,6 +221,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'REMOTE_ADDR, returned only when filter_var( $ip, FILTER_VALIDATE_IP ) accepts it and \'\' otherwise, so nothing carrying an invisible character can reach a log row.',
 		),
+		'includes/safety.php::aafm_trusted_proxy_visitor::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) )',
+			),
+			'reason' => 'The trusted proxy\'s visitor header, read only when the request arrives from a trusted range. aafm_pick_visitor_ip() returns an entry only when filter_var( FILTER_VALIDATE_IP ) accepts it and the connection address otherwise, so nothing carrying an invisible character can reach a log row.',
+		),
 		'includes/helpers.php::aafm_rich_post::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $post->post_excerpt )',

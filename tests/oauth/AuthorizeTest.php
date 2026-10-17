@@ -1350,4 +1350,148 @@ class AuthorizeTest extends TestCase {
 		$this->assertSame( $codes, $this->code_count() );
 		$this->assertFalse( aafm_oauth_has_consent( $user, $client ) );
 	}
+
+	/**
+	 * Render the consent form's preset fieldset for the current user.
+	 *
+	 * @param array<string,mixed> $extra View keys over the defaults.
+	 * @return string
+	 */
+	private function consent_html( array $extra = array() ): string {
+		ob_start();
+		aafm_oauth_render_consent_page(
+			array_merge(
+				array(
+					'client_name'   => 'App',
+					'user_login'    => 'someone',
+					'site_name'     => 'Site',
+					'action_url'    => 'https://site.example/?aafm_oauth=authorize',
+					'nonce_field'   => '',
+					'hidden_inputs' => array(),
+					'presets'       => aafm_oauth_consent_presets(),
+				),
+				$extra
+			)
+		);
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * The preset values offered by the form.
+	 *
+	 * @param string $html Consent page.
+	 * @return list<string>
+	 */
+	private function offered( string $html ): array {
+		preg_match_all( '/name="aafm_oauth_preset" value="([a-z_]+)"/', $html, $m );
+		return $m[1];
+	}
+
+	public function test_the_consent_form_offers_the_four_presets_with_the_site_default_checked(): void {
+		$this->acting_as( 'administrator' );
+		$html = $this->consent_html();
+		$this->assertSame( array( 'read_only', 'content_editor', 'shop_manager', 'custom' ), $this->offered( $html ) );
+		$this->assertStringContainsString( 'value="custom" checked', $html );
+		$this->assertSame( 1, substr_count( $html, ' checked>' ) );
+	}
+
+	public function test_a_stored_default_preset_is_the_one_checked(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_oauth_default_preset', 'content_editor' );
+		aafm_policy_reset_request_state();
+		$this->assertStringContainsString( 'value="content_editor" checked', $this->consent_html() );
+	}
+
+	public function test_each_option_says_up_to_and_how_many(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/create-post' ) );
+		$html = $this->consent_html();
+		$read = aafm_preset_count( 'read_only' );
+		$this->assertStringContainsString( 'up to ' . $read['allowed'] . ' of the ' . $read['enabled'] . ' abilities you have switched on', $html );
+		$this->assertStringNotContainsString( 'none of the abilities', $html );
+
+		// Shop manager includes Content editor, so it reaches none only when nothing it covers is on:
+		// here, a permanent delete that only Custom reaches.
+		update_option( 'aafm_enabled_abilities', array( 'aafm/delete-post' ) );
+		$this->assertSame( 0, aafm_preset_count( 'shop_manager' )['allowed'] );
+		$this->assertStringContainsString( '<b>Shop manager</b> <span class="preset-reach">none of the abilities you have switched on</span>', $this->consent_html() );
+	}
+
+	public function test_the_chosen_preset_is_stored_on_the_grant(): void {
+		$user                          = $this->acting_as( 'administrator' );
+		$client                        = $this->register_client();
+		$params                        = $this->valid_params( $client );
+		$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent|' . $client );
+		$params['aafm_oauth_decision'] = 'approve';
+		$params['aafm_oauth_preset']   = 'content_editor';
+		$post                          = $this->run_authorize_post( $params );
+		$this->assertNotNull( $post['redirect'] );
+		$this->assertSame( 'content_editor', aafm_oauth_grant_state( $user, $client )['preset'] );
+		$this->assertFalse( aafm_preset_permits( 'content_editor', 'aafm/delete-post' ) );
+
+		$tokens = $this->redeem( $client, (string) $post['redirect'] );
+		$this->assertArrayHasKey( 'access_token', $tokens );
+		$this->assertSame( $user, aafm_oauth_validate_access_token( (string) $tokens['access_token'] ) );
+	}
+
+	public function test_a_tampered_preset_value_falls_back_to_the_site_default_not_to_custom(): void {
+		update_option( 'aafm_oauth_default_preset', 'read_only' );
+		foreach ( array( 'bogus', array(), "custom\0" ) as $bad ) {
+			aafm_policy_reset_request_state();
+			$user                          = $this->acting_as( 'administrator' );
+			$client                        = $this->register_client();
+			$params                        = $this->valid_params( $client );
+			$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent|' . $client );
+			$params['aafm_oauth_decision'] = 'approve';
+			$params['aafm_oauth_preset']   = $bad;
+			$this->assertNotNull( $this->run_authorize_post( $params )['redirect'] );
+			$this->assertSame( 'read_only', aafm_oauth_grant_state( $user, $client )['preset'] );
+		}
+	}
+
+	public function test_a_non_owner_only_sees_presets_at_or_below_the_site_default(): void {
+		update_option( 'aafm_oauth_default_preset', 'content_editor' );
+		aafm_policy_reset_request_state();
+		$user = $this->acting_as( 'editor' );
+		$this->assertSame( array( 'read_only', 'content_editor' ), $this->offered( $this->consent_html() ) );
+		foreach ( array( 'shop_manager', 'custom' ) as $wider ) {
+			$client                        = $this->register_client();
+			$params                        = $this->valid_params( $client );
+			$params['_wpnonce']            = wp_create_nonce( 'aafm_oauth_consent|' . $client );
+			$params['aafm_oauth_decision'] = 'approve';
+			$params['aafm_oauth_preset']   = $wider;
+			$this->assertNotNull( $this->run_authorize_post( $params )['redirect'] );
+			$this->assertSame( 'content_editor', aafm_oauth_grant_state( $user, $client )['preset'] );
+		}
+
+		$this->acting_as( 'administrator' );
+		$this->assertCount( 4, $this->offered( $this->consent_html() ) );
+
+		delete_option( 'aafm_oauth_default_preset' );
+		aafm_policy_reset_request_state();
+		$this->acting_as( 'editor' );
+		$this->assertCount( 4, $this->offered( $this->consent_html() ) );
+	}
+
+	public function test_the_renewal_screen_shows_the_current_access_and_no_picker(): void {
+		$this->acting_as( 'administrator' );
+		$html = $this->consent_html(
+			array(
+				'presets'       => array(),
+				'renewing'      => true,
+				'current_label' => 'Read only',
+			)
+		);
+		$this->assertStringContainsString( 'Approving renews it with the same access: Read only.', $html );
+		$this->assertStringNotContainsString( 'name="aafm_oauth_preset"', $html );
+	}
+
+	public function test_the_consent_page_still_sends_the_same_csp_and_no_inline_script(): void {
+		$this->acting_as( 'administrator' );
+		$html = $this->consent_html();
+		$this->assertStringNotContainsString( '<script', $html );
+		$this->assertStringNotContainsString( '<style', $html );
+		$this->assertStringNotContainsString( ' style=', $html );
+		$this->assertStringContainsString( '<fieldset class="presets">', $html );
+	}
 }

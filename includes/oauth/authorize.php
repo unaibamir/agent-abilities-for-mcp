@@ -576,16 +576,50 @@ function aafm_oauth_user_is_high_privilege( WP_User $user ): bool {
 }
 
 /**
+ * The access presets the current approver may give, for the consent screen: an owner any, anyone
+ * else no wider than the site default, which starts checked.
+ *
+ * @return list<array{slug:string,label:string,summary:string,reach:string,checked:bool}>
+ */
+function aafm_oauth_consent_presets(): array {
+	$default  = aafm_default_preset();
+	$by_owner = current_user_can( 'manage_options' );
+	$presets  = array();
+	foreach ( aafm_access_presets() as $slug => $preset ) {
+		$value = 'custom' === $slug ? '' : $slug;
+		if ( ! $by_owner && aafm_preset_rank( $value ) > aafm_preset_rank( $default ) ) {
+			continue; // An approver who is not the owner may pick no wider than the owner's default.
+		}
+		$count     = aafm_preset_count( $value );
+		$presets[] = array(
+			'slug'    => $slug,
+			'label'   => $preset['label'],
+			'summary' => $preset['summary'],
+			'reach'   => 0 === $count['allowed']
+				? __( 'none of the abilities you have switched on', 'agent-abilities-for-mcp' )
+				/* translators: 1: abilities this preset reaches, 2: abilities switched on. */
+				: sprintf( __( 'up to %1$d of the %2$d abilities you have switched on', 'agent-abilities-for-mcp' ), $count['allowed'], $count['enabled'] ),
+			'checked' => $value === $default,
+		);
+	}
+	return $presets;
+}
+
+/**
  * Render the consent screen for a validated authorize request, then exit.
  *
  * Carries every OAuth param as a hidden field (attribute-escaped) so the POST back
  * re-presents them, plus the consent nonce. Flags the destination host and, when the
  * approving user can administer the site, a high-privilege warning.
  *
- * @param array<string,string> $valid The normalized, validated authorize params.
+ * Offers the access presets an approver may give (an owner any, anyone else no wider than the
+ * site default); an owner renewing an expired grant sees its current access and no choice.
+ *
+ * @param array<string,string>     $valid    The normalized, validated authorize params.
+ * @param array<string,mixed>|null $renewing The expired grant an owner is renewing, or null.
  * @return void
  */
-function aafm_oauth_show_consent( array $valid ): void {
+function aafm_oauth_show_consent( array $valid, ?array $renewing = null ): void {
 	$user = wp_get_current_user();
 
 	$hidden_keys   = array( 'response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method', 'state', 'scope', 'resource' );
@@ -621,7 +655,15 @@ function aafm_oauth_show_consent( array $valid ): void {
 		'action_url'     => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
 		'nonce_field'    => wp_nonce_field( 'aafm_oauth_consent|' . $valid['client_id'], '_wpnonce', true, false ),
 		'hidden_inputs'  => $hidden_inputs,
+		'presets'        => array(),
+		'renewing'       => null !== $renewing,
+		'current_label'  => '',
 	);
+	if ( null !== $renewing ) {
+		$view['current_label'] = aafm_access_presets()[ '' === $renewing['preset'] ? 'custom' : (string) $renewing['preset'] ]['label'] ?? '';
+	} else {
+		$view['presets'] = aafm_oauth_consent_presets();
+	}
 
 	// The consent form's POST is answered with a 302 to this validated client origin,
 	// so it must be permitted in form-action or the browser blocks the cross-origin
@@ -807,7 +849,13 @@ function aafm_oauth_handle_authorize(): void {
 		if ( $renewing && ! aafm_oauth_grant_update( $user_id, $valid['client_id'], array( 'expires_at' => null ) ) ) {
 			aafm_oauth_render_local_error( 500, __( 'Could not renew this connection. Please try again.', 'agent-abilities-for-mcp' ) );
 		}
-		if ( ! aafm_oauth_record_consent( $user_id, $valid['client_id'] ) ) {
+		// A first approval stores the picked preset, clamped to the owner's default for anyone who is not
+		// an owner; garbage falls back to the default, never to Custom. A repeat approval or a renewal
+		// ignores it: aafm_oauth_record_consent() keeps the stored preset.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; normalized against the preset list.
+		$posted = isset( $_POST['aafm_oauth_preset'] ) ? wp_unslash( $_POST['aafm_oauth_preset'] ) : null;
+		$preset = aafm_preset_clamp( aafm_preset_normalize( $posted, aafm_default_preset() ), current_user_can( 'manage_options' ) );
+		if ( ! aafm_oauth_record_consent( $user_id, $valid['client_id'], $preset ) ) {
 			aafm_oauth_render_local_error(
 				500,
 				__( 'Could not record your approval. Please try again.', 'agent-abilities-for-mcp' )
@@ -822,5 +870,5 @@ function aafm_oauth_handle_authorize(): void {
 		aafm_oauth_issue_code_and_redirect( $valid, $user_id );
 	}
 
-	aafm_oauth_show_consent( $valid );
+	aafm_oauth_show_consent( $valid, $renewing ? $grant : null );
 }

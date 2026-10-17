@@ -661,6 +661,7 @@ final class SettingsSaveTest extends TestCase {
 		$html = (string) ob_get_clean();
 		$this->assertStringNotContainsString( 'aafm-oauth-dcr-enabled', $html );
 		$this->assertStringContainsString( 'Token lifetimes and dynamic client registration are on the', $html );
-		$this->assertStringContainsString( 'admin.php?page=agent-abilities-for-mcp&amp;tab=connection">Connection tab</a>', $html );
+		// wp_kses writes the ampersand as &amp; on WordPress 7.0 and as &#038; on 6.9; both are the same link.
+		$this->assertMatchesRegularExpression( '/admin\.php\?page=agent-abilities-for-mcp&(?:amp|#038);tab=connection">Connection tab<\/a>/', $html );
 	}
 }

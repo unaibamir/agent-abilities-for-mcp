@@ -74,6 +74,7 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/read-only.php';
 // Owner-level access switches (pause-all, roles that can connect). Required at include time: the
 // OAuth resolver and the activation installer read them.
 require_once AAFM_PLUGIN_DIR . 'includes/access.php';
+require_once AAFM_PLUGIN_DIR . 'includes/presets.php';
 
 /**
  * Schedule the daily activity-log prune event, if not already scheduled.

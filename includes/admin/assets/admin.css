@@ -201,6 +201,19 @@
 		}
 	}
 
+	/* Destructive action: the secondary shape in the red tokens. */
+	.aafm-btn-danger {
+		background: var(--aafm-surface);
+		color: var(--aafm-red-text);
+		border-color: var(--aafm-red);
+
+		&:hover {
+			background: var(--aafm-red-tint);
+			border-color: var(--aafm-red-text);
+			color: var(--aafm-red-text);
+		}
+	}
+
 	.aafm-btn-ghost {
 		background: transparent;
 		color: var(--aafm-text-muted);
@@ -1473,7 +1486,7 @@
 
 	/* ---------- Danger zone (Settings) ----------
 	   A destructive, irreversible action set apart with a red accent so it never
-	   reads as a routine control. The button itself stays WP-native (.button-link-delete). */
+	   reads as a routine control. Its button is .aafm-btn-danger. */
 	.aafm-danger {
 		border-color: var(--aafm-red);
 

@@ -934,7 +934,7 @@ function aafm_render_settings_tab(): void {
 	echo '<div class="aafm-set-control">';
 	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-enabled" name="aafm_oauth_enabled" value="1" aria-labelledby="aafm-oauth-enabled-title aafm-oauth-enabled-desc" ' . checked( aafm_oauth_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
 	echo '<label for="aafm-oauth-enabled" id="aafm-oauth-enabled-desc">' . esc_html__( 'Let agents connect by pasting your site URL.', 'agent-abilities-for-mcp' ) . '</label>';
-	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="help">' . esc_html__( 'Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	// Roles that can connect. With nothing stored the boxes show today's floor; the marker tells the
@@ -964,7 +964,7 @@ function aafm_render_settings_tab(): void {
 		)
 	);
 
-	echo '<p class="help">' . wp_kses(
+	echo '<p class="aafm-card-desc">' . wp_kses(
 		sprintf(
 			/* translators: %s: link to the Connection tab. */
 			__( 'Token lifetimes and dynamic client registration are on the %s.', 'agent-abilities-for-mcp' ),
@@ -984,7 +984,7 @@ function aafm_render_settings_tab(): void {
 	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent
 	// screen tells the approving human the app acts with their full capabilities either way - but
 	// nothing said that on the admin side until now. Stated once, here, next to the two switches.
-	echo '<p class="help">' . esc_html__( 'If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	$oauth_body = (string) ob_get_clean();
 	aafm_render_section(
@@ -997,14 +997,6 @@ function aafm_render_settings_tab(): void {
 
 	aafm_render_site_brief_section();
 	aafm_render_notifications_section();
-
-	// Caption for the card immediately below it. It names the safety controls outright, so it
-	// travelled down with them when OAuth took the top of the tab rather than staying at the head
-	// of the page describing a card it no longer introduces.
-	aafm_render_notice(
-		'info',
-		__( 'These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need.', 'agent-abilities-for-mcp' )
-	);
 
 	// Safety controls section. Each labelled control is a pre-built row passed to the shared
 	// aafm_render_section() component; the <input> name/value/checked() contracts are unchanged,
@@ -1230,7 +1222,7 @@ function aafm_render_settings_tab(): void {
 	foreach ( $default_server_options as $value => $label ) {
 		$default_server_select .= '<option value="' . esc_attr( $value ) . '"' . selected( $default_server_mode, $value, false ) . '>' . esc_html( $label ) . '</option>';
 	}
-	$default_server_select .= '</select> <span id="aafm-default-server-state" class="aafm-default-server-state" role="status">' . esc_html( aafm_default_server_state_label() ) . '</span>';
+	$default_server_select .= '</select> <span id="aafm-default-server-state" class="aafm-pill aafm-pill-neutral aafm-default-server-state" role="status">' . esc_html( aafm_default_server_state_label() ) . '</span>';
 	aafm_render_set_row(
 		array(
 			'label'   => __( 'Allow the MCP Adapter\'s default server', 'agent-abilities-for-mcp' ),
@@ -1270,17 +1262,20 @@ function aafm_render_settings_tab(): void {
 	);
 
 	$safety_body = (string) ob_get_clean();
-	aafm_render_section(
-		array(
-			'icon'  => 'shield',
-			'title' => __( 'Safety controls', 'agent-abilities-for-mcp' ),
-			'body'  => $safety_body,
-		)
-	);
-
+	// Both callouts live inside the card they describe: the caption as its description, the
+	// lockout warning at the top of its body.
+	ob_start();
 	aafm_render_notice(
 		'warning',
 		__( 'These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests.', 'agent-abilities-for-mcp' )
+	);
+	aafm_render_section(
+		array(
+			'icon'        => 'shield',
+			'title'       => __( 'Safety controls', 'agent-abilities-for-mcp' ),
+			'description' => __( 'These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need.', 'agent-abilities-for-mcp' ),
+			'body'        => (string) ob_get_clean() . $safety_body,
+		)
 	);
 
 	// One Save, in the shared .aafm-savebar the Abilities, Integrations and Bridge tabs already
@@ -1302,17 +1297,12 @@ function aafm_render_settings_tab(): void {
 	// run through aafm_render_section(). Same .aafm-card-head/.aafm-card-pad structure the
 	// component produces, so the spacing matches the other two sections.
 	echo '<section class="aafm-section aafm-card aafm-danger">';
-	echo '<div class="aafm-card-head">';
-	echo '<span class="aafm-card-head-ic">';
-	echo wp_kses( aafm_icon( 'warning' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">' . esc_html__( 'Danger zone', 'agent-abilities-for-mcp' ) . '</h3></div>';
-	echo '</div>';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'warning', __( 'Danger zone', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
 	echo '<div class="aafm-card-pad aafm-section-body">';
 	echo '<div class="aafm-set-row">';
 	echo '<div class="aafm-set-label">' . esc_html__( 'Reset plugin', 'agent-abilities-for-mcp' ) . '<span class="opt">' . esc_html__( 'Cannot be undone', 'agent-abilities-for-mcp' ) . '</span></div>';
 	echo '<div class="aafm-set-control">';
-	echo '<button type="button" id="aafm-reset-plugin" class="button button-link-delete">' . esc_html__( 'Reset plugin to defaults', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
+	echo '<button type="button" id="aafm-reset-plugin" class="aafm-btn aafm-btn-danger">' . esc_html__( 'Reset plugin to defaults', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
 	echo '<p class="help">' . esc_html__( 'Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 

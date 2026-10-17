@@ -172,7 +172,7 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertNotFalse( $danger_at, 'The Danger zone card is missing from the Settings tab.' );
 
 		$this->assertLessThan( $safety_at, $oauth_at, 'OAuth must be the first card on the Settings tab.' );
-		$this->assertLessThan( $safety_at, $caption_at, 'The caption must introduce the Safety controls card.' );
+		$this->assertGreaterThan( $safety_at, $caption_at, 'The caption is the Safety controls card\'s own description.' );
 		$this->assertLessThan( $caption_at, $oauth_at, 'The caption belongs below OAuth, not above it.' );
 		$this->assertLessThan( $danger_at, $safety_at, 'The Danger zone stays last.' );
 

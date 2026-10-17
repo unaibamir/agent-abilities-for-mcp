@@ -3034,7 +3034,8 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 	foreach ( $rows as $row ) {
 		$v     = aafm_activity_row_view( $row, $names );
 		$html .= sprintf(
-			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td>%5$s</td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td>%10$s</td><td>%11$s</td></tr>',
+			// The short columns clip with an ellipsis, so each carries its full text as a title.
+			'<tr><td>%1$s</td><td title="%2$s">%2$s</td><td title="%3$s">%3$s</td><td title="%4$s">%4$s</td><td class="aafm-log-detail%12$s">%5$s</td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td title="%10$s">%10$s</td><td title="%11$s">%11$s</td></tr>',
 			esc_html( $v['time'] ),
 			esc_html( $v['principal'] ),
 			esc_html( $v['connection'] ),
@@ -3045,7 +3046,8 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 			esc_html( $v['status'] ),
 			esc_html( $v['duration'] ),
 			esc_html( $v['ip'] ),
-			esc_html( $v['arg_keys'] )
+			esc_html( $v['arg_keys'] ),
+			1 === preg_match( '/^\s*[\[{]/', (string) $v['detail'] ) ? ' is-json' : ''
 		);
 	}
 	return $html;

@@ -2530,6 +2530,8 @@
 		 */
 		#buildDetailCell( row ) {
 			const td = document.createElement( 'td' );
+			td.className = 'aafm-log-detail';
+			td.classList.toggle( 'is-json', /^\s*[[{]/.test( row.detail ?? '' ) );
 			const link = row.detail_link;
 			if ( ! link || typeof link !== 'object' ) {
 				td.textContent = row.detail ?? '';
@@ -2573,9 +2575,11 @@
 			rows.forEach( ( row ) => {
 				const tr = document.createElement( 'tr' );
 
+				// The short columns clip with an ellipsis, so each carries its full text as a title.
 				const cell = ( text ) => {
 					const td = document.createElement( 'td' );
 					td.textContent = text ?? '';
+					td.title = td.textContent;
 					return td;
 				};
 

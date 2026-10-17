@@ -279,13 +279,35 @@ set_state() {
 }
 
 # mcp_post <route> <json body> [session id]: prints the HTTP code; body in body.json, headers in head.txt.
+# Authenticates with the admin's Application Password, or with MCP_BEARER when that is set.
+MCP_BEARER=''
 mcp_post() {
-	local sid=()
+	local sid=() auth=(-u "admin:$APP_PW")
 	[ -n "${3:-}" ] && sid=(-H "Mcp-Session-Id: $3" -H 'MCP-Protocol-Version: 2025-06-18')
+	[ -n "$MCP_BEARER" ] && auth=(-H "Authorization: Bearer $MCP_BEARER")
 	curl -s --max-time 60 -D "$SMOKE_ROOT/head.txt" -o "$SMOKE_ROOT/body.json" -w '%{http_code}' \
-		-u "admin:$APP_PW" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+		"${auth[@]}" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
 		${sid[@]+"${sid[@]}"} -X POST "$URL/index.php?rest_route=/$1" -d "$2"
 }
+
+# token_post <form body>: POST to the OAuth token endpoint; prints the HTTP code, body in body.json.
+token_post() {
+	curl -s --max-time 60 -o "$SMOKE_ROOT/body.json" -w '%{http_code}' -d "$1" \
+		"$URL/index.php?rest_route=/agent-abilities-for-mcp/oauth/token"
+}
+
+# bearer_lists <leg> <label> <token> <want file>: the token's tools/list equals the file, byte for byte.
+bearer_lists() {
+	local out="$SMOKE_ROOT/tools-bearer-check.txt"
+	if MCP_BEARER="$3" tools_list "$ROUTE_OURS" "$out" >/dev/null && cmp -s "$out" "$4"; then
+		pass "$1" "$2: tools/list is the same $(wc -l < "$4" | tr -d ' ') tools"
+	else
+		fail "$1" "$2: tools/list was '$(tr '\n' ' ' < "$out")', wanted '$(tr '\n' ' ' < "$4")'"
+	fi
+}
+
+# init_code <token>: HTTP code of an initialize sent with that bearer token ('' = Application Password).
+init_code() { MCP_BEARER="$1" mcp_post "$ROUTE_OURS" "$INIT"; }
 
 # init_ok <leg> <label> <route>
 init_ok() {
@@ -429,9 +451,26 @@ leg_upgrade() {
 	else
 		fail upgrade "release install: version '$vold' (wanted $FROM), snapshot '$snap'"
 	fi
+	# A live grant under the OLD code: a client, a consent, a token pair, an unredeemed PKCE code and a
+	# client allowlist row, plus the admin's Application Password from setup.
+	local seed="$SMOKE_ROOT/seed.json" bearer consents_before
+	rm -f "$seed"
+	# A php -S worker keeps its realpath cache, so one that served the symlinked tree could still run the
+	# new code for the "before" requests. A fresh server runs only the release now on disk.
+	start_server || return 0
+	W eval-file "$PLUGIN_SRC/bin/smoke-seed-grants.php" "$seed" >/dev/null 2>&1
+	bearer=$(jq -r '.access // empty' "$seed" 2>/dev/null)
+	if [ -z "$bearer" ]; then
+		fail upgrade "could not seed grants on $FROM"
+	fi
+	MCP_BEARER="$bearer" tools_list "$ROUTE_OURS" "$SMOKE_ROOT/tools-bearer-before.txt" >/dev/null
+	MCP_BEARER='' tools_list "$ROUTE_OURS" "$SMOKE_ROOT/tools-basic-before.txt" >/dev/null
+	consents_before=$(W eval 'global $wpdb; echo (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_consents" );' 2>/dev/null)
 	[ -L "$dir" ] || rm -rf "$dir"
 	ln -sfn "$PLUGIN_SRC" "$dir"
 	: > "$LOG"
+	start_server || return 0
+	[ -n "$bearer" ] && upgrade_grant_checks "$seed" "$consents_before"
 	vnew=$(W plugin get agent-abilities-for-mcp --field=version 2>/dev/null)
 	after=$(W option get aafm_enabled_abilities --format=json 2>/dev/null)
 	if W plugin is-active agent-abilities-for-mcp >/dev/null 2>&1 && [ "$vnew" = "$cur" ]; then
@@ -454,6 +493,56 @@ leg_upgrade() {
 		pass upgrade "after $FROM to $cur the activity log is schema 6 and has duration_ms"
 	else
 		fail upgrade "after $FROM to $cur: schema '$schema', duration_ms '$col' (wanted 6 and yes)"
+	fi
+}
+
+# upgrade_grant_checks <seed file> <consent count before>: the grant seeded under the old release, read
+# right after the swap. The code redeems first because it lives only 60 seconds; the new-column check runs
+# before any bearer call, which would stamp last_used_at.
+upgrade_grant_checks() {
+	local seed="$1" before="$2" cid code access fresh got
+	cid=$(jq -r '.client_id' "$seed")
+	code=$(token_post "grant_type=authorization_code&code=$(jq -r '.code' "$seed")&code_verifier=$(jq -r '.code_verifier' "$seed")&client_id=$cid&redirect_uri=$(jq -rn --arg u "$(jq -r '.redirect_uri' "$seed")" '$u|@uri')")
+	access=$(jq -r '.access_token // empty' "$SMOKE_ROOT/body.json" 2>/dev/null)
+	if [ "$code" = 200 ] && [ -n "$access" ]; then
+		pass upgrade "a PKCE code minted before the update redeems after it (HTTP 200)"
+	else
+		fail upgrade "pre-update code redemption: HTTP $code $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
+	fi
+	got=$(W eval 'global $wpdb; $t = $wpdb->prefix . "aafm_oauth_consents"; $ok = true; foreach ( aafm_oauth_grant_columns() as $c ) { $ok = $ok && aafm_oauth_table_has_column( $t, $c ); } echo aafm_read_option_views( "aafm_oauth_schema_version" )["db_value"], " ", $ok ? "columns" : "missing", " ", (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t" ), " ", (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t WHERE COALESCE( paused_at, expires_at, last_used_at, last_used_ip, preset, rate_per_min ) IS NOT NULL" );' 2>/dev/null)
+	if [ "$got" = "9 columns $before 0" ]; then
+		pass upgrade "OAuth schema 9, all six grant columns present, $before consent row(s) kept, every new column NULL"
+	else
+		fail upgrade "schema, columns, consent rows, non-NULL rows: '$got' (wanted '9 columns $before 0')"
+	fi
+	if [ "$(wc -l < "$SMOKE_ROOT/tools-bearer-before.txt" | tr -d ' ')" = 2 ] && [ "$(sort "$SMOKE_ROOT/tools-bearer-before.txt" | tr '\n' ' ')" = "aafm-count-posts aafm-get-posts " ]; then
+		pass upgrade "before the update the bearer listed exactly the two allowlisted tools"
+	else
+		fail upgrade "before the update the bearer listed '$(tr '\n' ' ' < "$SMOKE_ROOT/tools-bearer-before.txt")'"
+	fi
+	bearer_lists upgrade 'the old bearer after the update' "$(jq -r '.access' "$seed")" "$SMOKE_ROOT/tools-bearer-before.txt"
+	bearer_lists upgrade 'the token from the pre-update code' "$access" "$SMOKE_ROOT/tools-bearer-before.txt"
+	if MCP_BEARER='' tools_list "$ROUTE_OURS" "$SMOKE_ROOT/tools-basic-after.txt" >/dev/null && cmp -s "$SMOKE_ROOT/tools-basic-after.txt" "$SMOKE_ROOT/tools-basic-before.txt"; then
+		pass upgrade "the Application Password's tools/list is unchanged"
+	else
+		fail upgrade "Application Password tools/list changed: '$(tr '\n' ' ' < "$SMOKE_ROOT/tools-basic-after.txt")'"
+	fi
+	code=$(token_post "grant_type=refresh_token&refresh_token=$(jq -r '.refresh' "$seed")&client_id=$cid")
+	fresh=$(jq -r '.access_token // empty' "$SMOKE_ROOT/body.json" 2>/dev/null)
+	if [ "$code" = 200 ] && [ -n "$fresh" ]; then
+		pass upgrade "a refresh token minted before the update rotates (HTTP 200)"
+		bearer_lists upgrade 'the rotated token' "$fresh" "$SMOKE_ROOT/tools-bearer-before.txt"
+	else
+		fail upgrade "pre-update refresh: HTTP $code $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
+	fi
+	W eval "aafm_oauth_grant_update( 1, '$cid', array( 'paused' => true ) );" >/dev/null 2>&1
+	got="$(init_code "$access") $(init_code '')"
+	W eval "aafm_oauth_grant_update( 1, '$cid', array( 'paused' => false ) );" >/dev/null 2>&1
+	got="$got $(init_code "$access")"
+	if [ "$got" = '403 200 200' ]; then
+		pass upgrade "pausing the upgraded grant gives the bearer 403, the Application Password still 200, Resume 200"
+	else
+		fail upgrade "pause then resume: bearer, Application Password, bearer answered '$got' (wanted '403 200 200')"
 	fi
 }
 

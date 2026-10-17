@@ -302,7 +302,7 @@ function aafm_render_grants_card( array $data ): void {
 			if ( null === $grant['last_used_at'] ) {
 				echo '<td><span class="aafm-muted">' . esc_html__( 'Never', 'agent-abilities-for-mcp' ) . '</span></td>';
 			} else {
-				printf( '<td>%1$s <span class="aafm-muted">%2$s</span></td>', esc_html( aafm_format_admin_datetime( $grant['last_used_at'] ) ), esc_html( $grant['last_used_ip'] ) );
+				printf( '<td class="aafm-grant-last-used">%1$s<br><span class="aafm-muted">%2$s</span></td>', esc_html( aafm_format_admin_datetime( $grant['last_used_at'] ) ), esc_html( $grant['last_used_ip'] ) );
 			}
 
 			printf(

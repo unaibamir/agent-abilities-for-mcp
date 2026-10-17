@@ -1374,7 +1374,8 @@
 		   under the button on a narrow viewport instead of squeezing it. */
 		flex-wrap: wrap;
 		gap: 12px;
-		margin-block-start: 24px;
+		/* The card above supplies the gap, as between any two cards. */
+		margin-block-start: 0;
 		padding-block: 12px;
 		padding-inline: 18px;
 		background: var(--aafm-surface);
@@ -1826,6 +1827,7 @@
 		}
 
 		#aafm-log-live.is-active {
+			background: var(--aafm-accent-tint);
 			border-color: var(--aafm-accent);
 			color: var(--aafm-accent);
 		}
@@ -2200,7 +2202,6 @@
 
 	/* ---------- Help accordion (native <details class="aafm-help-entry">) ---------- */
 	.aafm-help {
-		max-inline-size: 820px;
 
 		.aafm-help-intro {
 			margin-block-end: 16px;
@@ -2433,6 +2434,40 @@
 			gap: 10px;
 		}
 
+		/* Phones: the status pills go under the title instead of squeezing it, and the tab strip
+		   stays one row that scrolls sideways inside itself. */
+		.aafm-page-head {
+			flex-direction: column;
+
+			.aafm-page-head-pills { justify-content: flex-start; }
+		}
+
+		/* Integration and Other plugins cards: the ability count drops under the title so the
+		   name keeps the width. */
+		.aafm-integrations details.aafm-integration-card > summary.aafm-card-head {
+			flex-wrap: wrap;
+
+			&::after { margin-inline-start: auto; }
+
+			.abilities-count {
+				order: 1;
+				flex-basis: 100%;
+				margin-inline-start: 0;
+			}
+		}
+
+		.nav-tab-wrapper {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			/* Contains the tabs' absolutely positioned screen-reader text, which would otherwise
+			   escape the scroller and widen the page. */
+			position: relative;
+
+			.nav-tab { flex: 0 0 auto; }
+
+			.aafm-nav-ext-group { flex-wrap: nowrap; }
+		}
+
 		.aafm-stat-grid {
 			grid-template-columns: 1fr;
 		}
@@ -2606,6 +2641,17 @@
 		/* Wide enough for the "inherit" placeholder. */
 		.aafm-grant-rate {
 			inline-size: 7em;
+		}
+
+		/* The tables scroll inside their wrapper before any column is squeezed to a few
+		   characters; the last-used date stays on one line with its IP below. */
+		.aafm-grants-table,
+		.aafm-clients-table {
+			min-inline-size: 960px;
+		}
+
+		.aafm-grant-last-used {
+			white-space: nowrap;
 		}
 
 		.aafm-table-wrap {

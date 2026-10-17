@@ -86,6 +86,20 @@
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
 			this.#bindDirtyDots();
+			this.#revealActiveNavTab();
+		}
+
+		/**
+		 * On a phone the tab strip is one row that scrolls sideways (admin.css), so bring the
+		 * current tab into view inside it. Only the strip scrolls, never the page.
+		 */
+		#revealActiveNavTab() {
+			const active = document.querySelector( '.aafm-wrap .nav-tab-wrapper .nav-tab-active' );
+			const strip = active?.closest( '.nav-tab-wrapper' );
+			if ( ! active || ! strip || strip.scrollWidth <= strip.clientWidth ) {
+				return;
+			}
+			strip.scrollLeft = active.offsetLeft - ( strip.clientWidth - active.offsetWidth ) / 2;
 		}
 
 		/**

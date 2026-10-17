@@ -260,7 +260,7 @@ class ConnectionCardsTest extends TestCase {
 			)
 		);
 		$html = $this->grants_html();
-		$this->assertStringContainsString( esc_html( aafm_format_admin_datetime( '2026-01-02 03:04:05' ) ) . ' <span class="aafm-muted">203.0.113.7</span>', $html );
+		$this->assertStringContainsString( esc_html( aafm_format_admin_datetime( '2026-01-02 03:04:05' ) ) . '<br><span class="aafm-muted">203.0.113.7</span>', $html );
 	}
 
 	public function test_an_expired_row_shows_the_Expired_pill_and_the_end_date(): void { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- names the pill.

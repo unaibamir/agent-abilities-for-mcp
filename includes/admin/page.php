@@ -3496,6 +3496,7 @@ function aafm_render_help_tab(): void {
 		__( 'Is there rate limiting?', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'Yes. The Settings tab has a "Rate limit (per minute)" field. Set it to a number and each agent user can make at most that many calls per minute; set it to 0 to turn the limit off. The cap is counted per agent user, not per connection, so two connections signed in as the same agent user share one budget between them.', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'On the Connection tab you can also give one OAuth connection a lower limit of its own. Each of its calls still counts against the agent user\'s limit as well.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)

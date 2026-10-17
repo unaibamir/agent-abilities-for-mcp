@@ -159,13 +159,41 @@ Agent Abilities for MCP gives you three layers for its own tools. Every ability 
 
 = Can I give one connection less access than another? =
 
-Yes. Beyond the site-wide list of enabled abilities, you can add a per-role allowlist, a per-connection allowlist, or both, on the Connections screen. Either one only narrows what was already enabled: an ability still has to clear the global list, then the matching role's list, then the matching connection's list, before an agent can call it. There is no finer-grained scoping below role and OAuth connection - an Application Password inherits its user's whole role, with no separate per-password limit. Leave the screen alone and nothing changes; every existing connection keeps working exactly as it did before.
+Yes. Beyond the site-wide list of enabled abilities, you can add a per-role allowlist, a per-connection allowlist, or both, on the Connection tab. Either one only narrows what was already enabled: an ability still has to clear the global list, then the matching role's list, then the matching connection's list, before an agent can call it. There is no finer-grained scoping below role and OAuth connection - an Application Password inherits its user's whole role, with no separate per-password limit. Leave the screen alone and nothing changes; every existing connection keeps working exactly as it did before.
+
+Each OAuth connection can also carry an access preset: Read only, Content editor, Shop manager or Custom. You pick it when you approve the app or in Quick Connect, and can change it later on the connection's row. A preset means "up to these tools", so it only narrows and never reaches a tool that is not already enabled and allowed. Custom adds no limit. The preset chosen in Quick Connect becomes the default, and someone approving an app who cannot manage the site can pick that default or a narrower preset, never a wider one.
+
+= Can I pause a connection or give it an end date? =
+
+Yes. On the Connection tab each approved OAuth connection has Pause and Resume next to Revoke, an optional end date and an optional rate limit, and shows when and from which address it was last used. A paused connection keeps its sign-in: its calls get an ordinary 403 Forbidden until you resume it, and nobody has to approve it again. After its end date a connection is refused until a site administrator renews it, and its old tokens never work again. Pausing one connection does not stop the same person's Application Password.
+
+To stop everything at once, use Pause all access on the Connection tab. It refuses every MCP request through this site, on this plugin's endpoint and on the MCP Adapter's default server, for OAuth apps and Application Passwords alike. It does not stop an Application Password from using the rest of the WordPress REST API.
+
+Rolling back to 1.9.x ignores per-connection pauses, end dates, access presets and limits: each connection runs with the site-wide access again.
+
+= Who can approve an app's connection? =
+
+Anyone whose role is ticked under Roles that can connect on the Settings tab. A site that was already installed keeps the old rule (any user who can edit posts) until you save that list; a new install starts with Administrators only. A site filter on aafm_oauth_min_capability overrides the list. If you narrow the list, the connections of people whose role was removed stop working.
+
+= Can the Activity Log and the IP allowlist see visitor addresses behind Cloudflare or a proxy? =
+
+Yes, once you turn on Real visitor address behind a proxy or CDN on the Settings tab. It is off by default. Choose Cloudflare, or Custom with the header your proxy sends (CF-Connecting-IP, True-Client-IP, X-Real-IP or X-Forwarded-For) and the addresses it connects from. The header is believed only when the request comes from one of those addresses, and a range wider than /8 for IPv4 or /16 for IPv6 is not accepted. Cloudflare's own Authenticated Origin Pulls stop anyone from reaching your server directly around the proxy.
+
+The Cloudflare address list ships with the plugin and is refreshed by hand each release. If Cloudflare adds a range before the plugin catches up, requests from it show the proxy's address, which can lock out an IP allowlist of visitor addresses.
+
+= Why is a tool I switched on missing from my agent? =
+
+Look at the Why is my tool missing? card on the Dashboard. It lists every tool you switched on that agents cannot see right now and says why: the tool no longer exists, its plugin is inactive or older than the tool needs, read-only mode or the high-risk lock holds it, or the server left it out when it registered the tools, for example because the enabled tool limit was reached. Tools from other plugins are not listed there; the Other plugins tab shows their state.
+
+= Does my page cache update when an agent changes only custom fields? =
+
+By default an agent's change to only a post's or term's custom fields clears that post's or term's cache entry and fires the aafm_agent_meta_written action, without re-saving it, so its modified date stays the same. A page cache that listens only to save_post, W3 Total Cache among them, needs add_filter( 'aafm_meta_write_full_resave', '__return_true' ). That saves the post again, so its modified date moves as it would for the same edit in the block editor. Check which hooks your own cache plugin listens to.
 
 = How do I find what an agent did? =
 
 Open the Activity Log tab. You can filter by user, connection, tool, plugin, date and text. Each row shows the connection name, the source IP address and how long the tool ran. A summary at the top covers the last 7 days, and a Live view keeps the first page current while you watch (it needs a date range when a text search or a user filter is applied). Export CSV downloads exactly the rows the filters show.
 
-The IP is the address the request came from, so behind a proxy or CDN it is the proxy's address. Duration is the time spent inside the tool, not what the agent experienced. A denied call never runs, so it has no duration.
+The IP is the address the request came from, so behind a proxy or CDN it is the proxy's address unless you turn on the visitor address setting described below. Duration is the time spent inside the tool, not what the agent experienced. A denied call never runs, so it has no duration.
 
 = Is there an audit log of what the agent did? =
 
@@ -253,7 +281,7 @@ Yes. Turn on Force draft on create in Settings. Anything the agent creates, and 
 
 = Why can't ChatGPT or Claude connect to my WordPress site? =
 
-Open the Connection tab and click Check my connection (the Connection Doctor). It runs the checks from your own server and names the fix, for example a host that strips the Authorization header. The other usual causes are a CDN or firewall blocking the /mcp path and a local site with a self-signed certificate, and both have their own answers below.
+Open the Connection tab and click Check my connection (the Connection Doctor). It runs the checks from your own server and names the fix, for example a host that strips the Authorization header or the MCP headers, a firewall that empties the JSON body, a redirect, or a stale or blocked discovery document. The other usual causes are a CDN or firewall blocking the /mcp path and a local site with a self-signed certificate, and both have their own answers below.
 
 = Can I tell the AI agent about my site, such as my house style or what to leave alone? =
 
@@ -313,7 +341,7 @@ Each type of event sends at most one email every 15 minutes, so turning read-onl
 
 = Is there rate limiting? =
 
-Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each connection can make that many agent calls a minute, counted per agent user; 0 turns the limit off. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.
+Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each agent user can make that many calls a minute, shared by all of that user's connections; 0 turns the limit off. On the Connection tab you can also give one OAuth connection a lower limit of its own, and its calls count against both. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.
 
 = Does it send my content to OpenAI, Anthropic, or Google? =
 
@@ -339,7 +367,7 @@ Please report security issues privately rather than in the support forum, so a f
 
 This plugin contacts no AI provider and includes no analytics or telemetry.
 
-It makes two kinds of outbound HTTP request on its own: the Connection tab's checks (a few requests your site makes to its own address, to see whether the MCP endpoint answers and, with OAuth on, whether the discovery documents load), and, only when you enable the off-by-default upload-media-from-url ability, a fetch of the exact HTTPS URL your AI client supplies so that file can be added to your media library. That fetch is SSRF-hardened against private, reserved, and redirect-based targets, and carries none of your content, credentials, or site data - it only reads what's already public at that URL.
+It makes two kinds of outbound HTTP request on its own: the Connection tab's checks (requests your site makes to its own address, to check the MCP endpoint, the headers and body it gets, and, with OAuth on, the discovery documents), and, only when you enable the off-by-default upload-media-from-url ability, a fetch of the exact HTTPS URL your AI client supplies so that file can be added to your media library. That fetch is SSRF-hardened against private, reserved, and redirect-based targets, and carries none of your content, credentials, or site data - it only reads what's already public at that URL.
 
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source `mcp-remote` or `@automattic/mcp-wordpress-remote`, run on your own machine and not bundled with this plugin:
 
@@ -364,6 +392,14 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 14. Notifications, off until you choose how to be told: an admin notice, an email right away or a daily email, for the events you tick.
 
 == Changelog ==
+
+= 1.10.0 =
+
+* **Feature:** Each OAuth connection can be paused and resumed without signing in again, given an end date and a lower rate limit of its own, and shows when and from which address it was last used. Approving an app, and Quick Connect, offer Read only, Content editor, Shop manager or Custom access.
+* **Feature:** The Connection tab now has OAuth and Application Passwords tabs, a token lifetimes card (the client registration switch moved there from Settings), a switch that pauses all MCP access to the site, and a list of the agent users' Application Passwords with their last use and a Revoke button.
+* **Feature:** Settings can limit which roles may connect an app and can read the visitor's real address behind Cloudflare or another proxy. Connection Doctor checks MCP headers, JSON bodies, redirects and stale or blocked discovery documents; the Dashboard says why an enabled tool is missing; tabs show a dot while they have unsaved changes.
+* **Fix:** When an agent changed only a post's or term's custom fields, nothing told caches; its cache entry is now cleared, with an action for page caches and an opt-in full re-save for caches that need one. Lines in the IP allowlist that only look blank are dropped on save, and Settings and the Dashboard no longer scroll sideways on a phone.
+* **Chore:** The Activity Log and Connection Doctor show placeholders while they load.
 
 = 1.9.0 =
 
@@ -480,6 +516,10 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 [Full release history](https://agentabilitieswp.com/changelog/).
 
 == Upgrade Notice ==
+
+= 1.10.0 =
+
+Nothing changes until you use it. Existing connections keep their access.
 
 = 1.9.0 =
 

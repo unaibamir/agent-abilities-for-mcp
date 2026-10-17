@@ -15,12 +15,11 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Data for the "Registered clients" card.
  *
- * @return array{id:string,title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}}
+ * @return array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}}
  */
 function aafm_connection_clients_data(): array {
 	$rows = array_values( aafm_oauth_list_clients() );
 	return array(
-		'id'    => 'clients',
 		'title' => __( 'Registered clients', 'agent-abilities-for-mcp' ),
 		'rule'  => sprintf(
 			/* translators: %s: how long an unapproved registration is kept, for example "1 week". */
@@ -39,7 +38,7 @@ function aafm_connection_clients_data(): array {
 /**
  * Data for the "Active grants" card. Each row is an aafm_oauth_list_grants() row plus its status.
  *
- * @return array{id:string,title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}}
+ * @return array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}}
  */
 function aafm_connection_grants_data(): array {
 	$rows = array_values(
@@ -52,7 +51,6 @@ function aafm_connection_grants_data(): array {
 		)
 	);
 	return array(
-		'id'    => 'grants',
 		'title' => __( 'Active grants', 'agent-abilities-for-mcp' ),
 		'rule'  => __( 'Each row is one person who approved one app. Revoking signs that app out for that person at once.', 'agent-abilities-for-mcp' ),
 		'count' => count( $rows ),
@@ -91,7 +89,7 @@ function aafm_connection_empty_state( array $text, bool $hidden = false ): strin
 /**
  * Render the "Registered clients" card.
  *
- * @param array{id:string,title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}} $data aafm_connection_clients_data().
+ * @param array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}} $data aafm_connection_clients_data().
  * @return void
  */
 function aafm_render_clients_card( array $data ): void {
@@ -218,7 +216,7 @@ function aafm_connection_grant_pill( string $status ): string {
  * The "Current role" column reads each identity's LIVE role (aafm_oauth_list_grants()), never a
  * value captured at approval: a token acts with whatever the identity can do right now.
  *
- * @param array{id:string,title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}} $data aafm_connection_grants_data().
+ * @param array{title:string,rule:string,count:int,rows:list<array<string,mixed>>,empty:array{title:string,hint:string}} $data aafm_connection_grants_data().
  * @return void
  */
 function aafm_render_grants_card( array $data ): void {
@@ -738,7 +736,7 @@ function aafm_ajax_oauth_update_grant(): void {
 /**
  * Data for the Application Passwords card: the passwords of the agent users this plugin created.
  *
- * @return array{id:string,title:string,rule:string,available:bool,unavailable:string,users:list<array{user_id:int,login:string,passwords:list<array{uuid:string,name:string,created:int,last_used:?int,last_ip:string}>}>,empty:array{title:string,hint:string}}
+ * @return array{title:string,rule:string,available:bool,unavailable:string,users:list<array{user_id:int,login:string,passwords:list<array{uuid:string,name:string,created:int,last_used:?int,last_ip:string}>}>,empty:array{title:string,hint:string}}
  */
 function aafm_connection_app_passwords_data(): array {
 	$users = array();
@@ -765,7 +763,6 @@ function aafm_connection_app_passwords_data(): array {
 	}
 	$doctor = aafm_doctor_check_app_passwords();
 	return array(
-		'id'          => 'app-passwords',
 		'title'       => __( 'Application Passwords', 'agent-abilities-for-mcp' ),
 		'rule'        => __( 'An Application Password is a whole-site credential for the agent user. Revoke any you no longer use.', 'agent-abilities-for-mcp' ),
 		'available'   => 'pass' === $doctor['status'],

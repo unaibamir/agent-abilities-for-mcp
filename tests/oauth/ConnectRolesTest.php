@@ -178,6 +178,23 @@ class ConnectRolesTest extends TestCase {
 		$this->assertSame( array( false, true ), $result );
 	}
 
+	public function test_a_custom_role_that_can_manage_options_is_treated_as_an_owner(): void {
+		add_role(
+			'aafm_site_owner',
+			'Site owner',
+			array(
+				'read'           => true,
+				'manage_options' => true,
+			)
+		);
+		$this->store_roles( array( 'administrator' ) );
+		$owner = $this->user( 'aafm_site_owner' );
+
+		$this->assertTrue( aafm_oauth_user_may_connect( $owner ) );
+		$this->assertTrue( aafm_oauth_user_still_may_connect( $owner->ID ) );
+		remove_role( 'aafm_site_owner' );
+	}
+
 	public function test_a_user_with_two_roles_is_allowed_when_either_is_listed(): void {
 		$this->store_roles( array( 'administrator', 'editor' ) );
 		$user = $this->user( 'author' );

@@ -138,7 +138,7 @@ function aafm_oauth_user_may_connect( WP_User $user ): bool {
 		}
 		$roles = array( 'administrator' );
 	}
-	return ( is_multisite() && is_super_admin( $user->ID ) ) || array() !== array_intersect( (array) $user->roles, $roles );
+	return ( is_multisite() && is_super_admin( $user->ID ) ) || user_can( $user, 'manage_options' ) || array() !== array_intersect( (array) $user->roles, $roles );
 }
 
 /**

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-17T19:07:41+05:00\n"
+"POT-Creation-Date: 2026-10-17T19:31:21+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -8134,7 +8134,7 @@ msgid "Let agents connect by pasting your site URL. Application Passwords keep w
 msgstr ""
 
 #: includes/admin/settings.php:955
-msgid "A connected app never does more than the person who approved it can. While a role is off this list, the connections of users who only have that role stop working. Adding it back restores them."
+msgid "A connected app never does more than the person who approved it can. While a role is off this list, the connections of users who only have that role stop working. Adding the role back lets them work again, though an app that was already refused may need to reconnect."
 msgstr ""
 
 #: includes/admin/settings.php:957

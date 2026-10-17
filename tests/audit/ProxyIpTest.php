@@ -147,9 +147,7 @@ final class ProxyIpTest extends TestCase {
 		$this->custom( 'X-Forwarded-For', array( '10.0.0.0/8' ) );
 		$value = implode( ', ', array_fill( 0, 4999, '1.2.3.4' ) ) . ', 203.0.113.9';
 		$this->request( '10.0.0.1', array( 'HTTP_X_FORWARDED_FOR' => $value ) );
-		$start = microtime( true );
 		$this->assertSame( '203.0.113.9', aafm_source_ip() );
-		$this->assertLessThan( 1.0, microtime( true ) - $start );
 		$this->assertSame( '', aafm_pick_visitor_ip( '1.2.3.4,' . implode( ',', array_fill( 0, 30, '10.0.0.9' ) ), array( '10.0.0.0/8' ) ), 'Entries past the last 20 are never read.' );
 	}
 

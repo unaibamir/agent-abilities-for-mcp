@@ -273,7 +273,7 @@ function aafm_proxy_allowlist_sentence( array $proxy, array $allowlist ): string
 		/* translators: %s: an IP address. */
 		? sprintf( __( 'With this setting the plugin reads this request as %s, which your IP allowlist admits.', 'agent-abilities-for-mcp' ), $seen )
 		/* translators: %s: an IP address. */
-		: sprintf( __( 'With this setting the plugin reads this request as %s, which your IP allowlist does not admit. Saving it could lock your agents out.', 'agent-abilities-for-mcp' ), $seen );
+		: sprintf( __( 'With this setting the plugin reads this request as %s, which your IP allowlist does not admit. This setting may lock your agents out.', 'agent-abilities-for-mcp' ), $seen );
 }
 
 /**
@@ -552,7 +552,6 @@ function aafm_ajax_save_settings(): void {
 				'aafm_ip_dropped'           => $dropped,
 				// Plain text for the "Currently running" line beside the select; reflects the saved mode.
 				'aafm_default_server_state' => aafm_default_server_state_label(),
-				'aafm_source_ip_preview'    => null === $clean['aafm_trusted_proxy'] ? aafm_source_ip() : aafm_trusted_proxy_visitor( aafm_settings_remote_addr(), aafm_trusted_proxy_normalize( $clean['aafm_trusted_proxy'] ) ),
 				'warning'                   => null === $clean['aafm_trusted_proxy'] || 'off' === $clean['aafm_trusted_proxy']['mode'] ? '' : aafm_proxy_allowlist_sentence( $clean['aafm_trusted_proxy'], $clean['aafm_ip_allowlist'] ),
 			)
 		)

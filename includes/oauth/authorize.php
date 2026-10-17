@@ -717,15 +717,9 @@ function aafm_oauth_handle_authorize(): void {
 		exit;
 	}
 
-	// Capability gate. A failure here is a LOCAL authorization failure, not an OAuth
-	// error to hand back to the client, so render a local 403 (never redirect). The floor
-	// defaults to `edit_posts` (contributor and up) rather than `read`, so a bare subscriber
-	// cannot mint an MCP token by default - the token acts with the approver's full account,
-	// so a subscriber-level floor is an over-broad self-service foothold on any site with open
-	// registration. Filterable via aafm_oauth_min_capability for operators who want it lower or
-	// higher (e.g. 'manage_options' to restrict authorization to admins).
-	$min_cap = apply_filters( 'aafm_oauth_min_capability', 'edit_posts' );
-	if ( ! current_user_can( $min_cap ) ) {
+	// Who may approve: the Settings roles list, or a site's aafm_oauth_min_capability filter
+	// (aafm_oauth_user_may_connect()). A failure is a LOCAL authorization failure, never a redirect.
+	if ( ! aafm_oauth_user_may_connect( wp_get_current_user() ) ) {
 		aafm_oauth_render_local_error(
 			403,
 			__( 'Your account does not have permission to authorize access.', 'agent-abilities-for-mcp' )

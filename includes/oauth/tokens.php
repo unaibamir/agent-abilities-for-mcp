@@ -318,6 +318,9 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( 'expired' === $gate ) {
 		return new WP_Error( 'invalid_grant', __( 'This connection has expired. Approve it again to reconnect.', 'agent-abilities-for-mcp' ) );
 	}
+	if ( ! aafm_oauth_user_still_may_connect( (int) $row['wp_user_id'] ) ) {
+		return new WP_Error( 'invalid_grant', __( 'This account can no longer connect apps.', 'agent-abilities-for-mcp' ) );
+	}
 
 	// Expired refresh token: reject without rotating. The PHP string compare is
 	// safe because 'Y-m-d H:i:s' is a fixed-width, zero-padded, lexicographically

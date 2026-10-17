@@ -138,6 +138,7 @@ final class OptionReadSweepTest extends TestCase {
 	 * @var list<string>
 	 */
 	private const READ_OPTION_VIEWS = array(
+		'includes/access.php|aafm_oauth_install_is_fresh|1',
 		'includes/abilities/woocommerce/gateways.php|aafm_exec_wc_update_payment_gateway|1',
 		'includes/admin/onboarding-pointer.php|aafm_quickconnect_flag_menu_pointer|1',
 		'includes/admin/page.php|aafm_paired_meta_write_three_stage|1',

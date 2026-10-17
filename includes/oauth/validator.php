@@ -247,6 +247,15 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			return $user_id;
 		}
 
+		// 10c. Roles that can connect. Narrowing the owner's list ends the grants of users it no longer
+		// covers; a site that never saved a list keeps every grant (aafm_oauth_user_still_may_connect()).
+		if ( ! aafm_oauth_user_still_may_connect( (int) $row['wp_user_id'] ) ) {
+			if ( function_exists( 'aafm_oauth_log_event' ) ) {
+				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
+			}
+			return $user_id;
+		}
+
 		// 11. Token capability map. The token resolves to the approver's FULL account by default
 		// (unchanged behaviour). A site that registers aafm_oauth_token_capabilities replaces the
 		// token's capabilities for the rest of this MCP request: each listed capability is set

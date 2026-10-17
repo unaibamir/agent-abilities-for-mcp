@@ -85,6 +85,118 @@ function aafm_pause_all_guard( $result, $server, $request ) {
 add_filter( 'rest_pre_dispatch', 'aafm_pause_all_guard', 0, 3 );
 
 /**
+ * The roles the owner allows to connect apps.
+ *
+ * @return array<int,string>|null Role slugs (Administrators always included), or null when the owner
+ *                                never saved a list (today's floor). An unreadable or malformed row is
+ *                                Administrators only, never wider.
+ */
+function aafm_oauth_connect_roles(): ?array {
+	$row = aafm_policy_row( 'aafm_oauth_connect_roles' );
+	if ( ! $row['ok'] ) {
+		return array( 'administrator' );
+	}
+	if ( ! $row['found'] ) {
+		return null;
+	}
+	if ( ! is_array( $row['value'] ) ) {
+		return array( 'administrator' );
+	}
+	return array_values( array_unique( array_merge( array( 'administrator' ), array_map( 'strval', $row['value'] ) ) ) );
+}
+
+/**
+ * Whether a user may APPROVE a connection.
+ *
+ * A filter on aafm_oauth_min_capability takes priority over the stored list, detected with
+ * has_filter() so a filter that returns the default still wins. With no stored list the floor is
+ * `edit_posts` (contributor and up) rather than `read`, so a bare subscriber cannot mint an MCP
+ * token: the token acts with the approver's full account, and a subscriber-level floor is an
+ * over-broad self-service foothold on any site with open registration. The one exception is a
+ * provably fresh install whose Administrators-only seed has not landed yet.
+ *
+ * @param WP_User $user The approving user.
+ * @return bool
+ */
+function aafm_oauth_user_may_connect( WP_User $user ): bool {
+	if ( has_filter( 'aafm_oauth_min_capability' ) ) {
+		/**
+		 * The capability an account needs to approve an OAuth connection. Overrides the Settings
+		 * roles list when any callback is attached.
+		 *
+		 * @param string $capability Default 'edit_posts'. Use 'manage_options' to restrict approval to admins.
+		 */
+		return user_can( $user, (string) apply_filters( 'aafm_oauth_min_capability', 'edit_posts' ) );
+	}
+	$roles = aafm_oauth_connect_roles();
+	if ( null === $roles ) {
+		// No stored list. Administrators only ONLY for a provably fresh install. Prior OAuth use, or a
+		// probe that could not be read, keeps the floor 1.9.0 shipped with: an uncertain read must
+		// never make an existing install stricter.
+		if ( true !== aafm_oauth_install_is_fresh() ) {
+			return user_can( $user, 'edit_posts' );
+		}
+		$roles = array( 'administrator' );
+	}
+	return ( is_multisite() && is_super_admin( $user->ID ) ) || array() !== array_intersect( (array) $user->roles, $roles );
+}
+
+/**
+ * Whether a user's EXISTING connections may still be used. Narrowing the list ends the grants of
+ * users it no longer covers. A site that never saved the list keeps every grant it has: before
+ * 1.10.0 the floor was checked at approval only.
+ *
+ * @param int $user_id The approving user of the grant.
+ * @return bool
+ */
+function aafm_oauth_user_still_may_connect( int $user_id ): bool {
+	if ( null === aafm_oauth_connect_roles() ) {
+		return true;
+	}
+	$user = get_userdata( $user_id );
+	return $user instanceof WP_User && aafm_oauth_user_may_connect( $user );
+}
+
+/**
+ * Whether this install has never used OAuth: no aafm_oauth_schema_version row, no row in the OAuth
+ * clients table and no row in the OAuth consents table. Every one of those is a fact no Settings
+ * save can change, and an absent schema row alone is NOT proof: the installer runs at activation
+ * even with OAuth off and withholds the stamp after any table, engine or stamp-write failure, so an
+ * unstamped 1.9.0 site can hold a working grant. A client or consent row is prior use even when the
+ * stamp row is missing. The access-tokens and codes tables are not probed: a token cannot exist
+ * without a client. aafm_oauth_count_active_clients_view() is not reused: it counts active clients only.
+ *
+ * @return bool|null True only when all three reads succeeded and found nothing; false on any sign of
+ *                   prior use; null when a read failed (callers treat null like false: write nothing,
+ *                   keep the legacy behaviour).
+ */
+function aafm_oauth_install_is_fresh(): ?bool {
+	global $wpdb;
+	$stamp = aafm_read_option_views( 'aafm_oauth_schema_version' );
+	if ( $stamp['db_error'] ) {
+		return null;
+	}
+	if ( $stamp['db_found'] ) {
+		return false;
+	}
+	$suppressed = $wpdb->suppress_errors();
+	$fresh      = true;
+	foreach ( array( 'aafm_oauth_clients', 'aafm_oauth_consents' ) as $suffix ) {
+		$view = aafm_wpdb_scalar( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 1', $wpdb->prefix . $suffix ) );
+		if ( ! $view['ok'] ) {
+			$fresh = null;
+			break;
+		}
+		if ( null !== $view['value'] ) {
+			$fresh = false;
+			break;
+		}
+	}
+	$wpdb->suppress_errors( $suppressed );
+	return $fresh;
+}
+
+/**
  * Write one setting_changed row for a change the acting admin made.
  *
  * @param string $ability Row label, for example the option or card name.

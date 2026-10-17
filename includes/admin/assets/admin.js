@@ -2765,6 +2765,7 @@
 				buttons.forEach( ( b ) => {
 					b.disabled = false;
 				} );
+				btn.focus(); // A disabled button drops focus to the body.
 				if ( ! json?.success ) {
 					status.textContent =
 						json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
@@ -2877,6 +2878,7 @@
 				btn.disabled = true;
 				const json = await this.#post( 'aafm_set_pause_all', { paused: pausing ? '1' : '0' } );
 				btn.disabled = false;
+				btn.focus(); // A disabled button drops focus to the body.
 				if ( ! json?.success ) {
 					if ( status ) {
 						status.textContent =

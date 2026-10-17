@@ -27,17 +27,17 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   presence of the field (unchecked checkbox -> false). Every reader defaults off on a missing
  *   option, so unlike the OAuth pair below there is nothing to work around: a stored false reads as
  *   off either way.
- * - aafm_oauth_enabled, aafm_oauth_dcr_enabled: the STRING '1' when the checkbox is present, '0'
- *   when absent. The OAuth readers treat every falsy stored form as off, so the off state must be
- *   the literal '0' string - a PHP bool false would not store as false on a never-created option,
- *   leaving the toggle stuck on. DCR defaults on, but a save always sends its explicit state, so
- *   the round-trip is symmetric with OAuth.
+ * - aafm_oauth_enabled: the STRING '1' when the checkbox is present, '0' when absent. The OAuth
+ *   reader treats every falsy stored form as off, so the off state must be the literal '0' string -
+ *   a PHP bool false would not store as false on a never-created option, leaving the toggle stuck
+ *   on. Dynamic client registration is not part of this form: it is saved by the Connection tab's
+ *   lifetimes card, so an absent field here can never turn it off.
  * - aafm_ip_allowlist: split on newlines, trimmed, blanks dropped, and every surviving line
  *   must clear aafm_is_valid_ip_or_cidr(). Invalid lines are dropped (fail-closed), so a
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_notifications:array{mode:string,email:string,triggers:array<string,bool>},aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_site_brief:string,aafm_default_server_mode:string,aafm_notifications:array{mode:string,email:string,triggers:array<string,bool>},aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -50,8 +50,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	$high_risk   = ! empty( $posted['aafm_high_risk_abilities_unlocked'] );
 	$read_only   = ! empty( $posted['aafm_read_only_mode'] );
 
-	$oauth     = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
-	$oauth_dcr = empty( $posted['aafm_oauth_dcr_enabled'] ) ? '0' : '1';
+	$oauth = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
 
 	$raw   = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
 	$lines = array_values( array_filter( aafm_split_and_trim_lines( $raw ), 'aafm_is_valid_ip_or_cidr' ) );
@@ -71,7 +70,6 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_high_risk_abilities_unlocked' => $high_risk,
 		'aafm_read_only_mode'               => $read_only,
 		'aafm_oauth_enabled'                => $oauth,
-		'aafm_oauth_dcr_enabled'            => $oauth_dcr,
 		'aafm_site_brief'                   => aafm_clean_site_brief( $brief_raw ),
 		'aafm_default_server_mode'          => $mode,
 		'aafm_notifications'                => aafm_notifications_sanitize( $posted ),
@@ -217,31 +215,20 @@ function aafm_ajax_save_settings(): void {
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Read-only mode', 'agent-abilities-for-mcp' ) ) ) );
 	}
 
-	// OAuth and DCR get the same restrictive-first treatment as the two switches above: turning
-	// either OFF closes an attack surface (no self-registering OAuth clients, no OAuth at all), so
-	// that direction is written now, before the ordinary settings loop - including the IP
-	// allowlist - below. Turning either ON is the permissive direction and is deferred until every
+	// OAuth gets the same restrictive-first treatment as the two switches above: turning it OFF
+	// closes an attack surface, so that direction is written now, before the ordinary settings loop -
+	// including the IP allowlist - below. Turning it ON is the permissive direction and is deferred until every
 	// restrictive write, including a narrowed IP allowlist, has certified (Codex round 5, R5-1): an
 	// operator asking for "OAuth on, restricted to these IPs" must never end up with OAuth on and
 	// the old, wider allowlist because the allowlist write failed after OAuth had already been
 	// flipped on.
 	$oauth_persisted = ( '1' === $clean['aafm_oauth_enabled'] ) ? true : aafm_update_option_verified( 'aafm_oauth_enabled', '0' );
-	$dcr_persisted   = ( '1' === $clean['aafm_oauth_dcr_enabled'] ) ? true : aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '0' );
 
-	// Gate review, 1.7.4 final round: both writes above are already attempted by this point, so a
-	// failure of exactly ONE of the pair is a genuine partial save, not an all-or-nothing failure.
-	// This is deliberately NOT aafm_paired_write_partial_failure_message() - that helper's "the
-	// site is now stricter than requested" claim only holds when the failed half is the permissive
-	// one (as it is below, once OAuth/DCR are deferred to the ON branch). Here both writes are the
-	// OFF/restrictive direction, so whichever one failed simply keeps its OLD value, which may
-	// still be ON - a mixed-direction save could leave the site transiently wider than either the
-	// old or the new requested state, exactly the residual the gate review flagged. Say plainly
-	// that some changes did not take rather than implying either a full success or a full rollback.
-	if ( ! $oauth_persisted || ! $dcr_persisted ) {
+	if ( ! $oauth_persisted ) {
 		// The high-risk / read-only switches above already certified by this point (their own
 		// failure branch already returned above if either had failed), so an attempted one has no
 		// audit row yet - it is only written on failure there, or unconditionally much further down
-		// once every write in this handler has succeeded. Without this, an OAuth/DCR OFF failure
+		// once every write in this handler has succeeded. Without this, an OAuth OFF failure
 		// here would return before either log call ever ran, leaving an applied restrictive change
 		// with no activity-log row at all (Codex round 6, B6-4).
 		if ( $high_risk_attempted ) {
@@ -249,15 +236,6 @@ function aafm_ajax_save_settings(): void {
 		}
 		if ( $read_only_attempted ) {
 			aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'], $read_only_persisted );
-		}
-		if ( $oauth_persisted xor $dcr_persisted ) {
-			wp_send_json_error(
-				array(
-					'message' => $oauth_persisted
-						? aafm_mixed_write_partial_failure_message( __( 'Enable OAuth', 'agent-abilities-for-mcp' ), __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) )
-						: aafm_mixed_write_partial_failure_message( __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ), __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ),
-				)
-			);
 		}
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ) ) );
 	}
@@ -276,11 +254,10 @@ function aafm_ajax_save_settings(): void {
 		'aafm_force_draft'              => array( $clean['aafm_force_draft'], __( 'Force draft on create', 'agent-abilities-for-mcp' ) ),
 		'aafm_block_guard_strict'       => array( $clean['aafm_block_guard_strict'], __( 'Strict block validation', 'agent-abilities-for-mcp' ) ),
 		'aafm_delete_data_on_uninstall' => array( $clean['aafm_delete_data_on_uninstall'], __( 'Delete data on uninstall', 'agent-abilities-for-mcp' ) ),
-		// aafm_oauth_enabled and aafm_oauth_dcr_enabled are NOT here: their OFF direction already
-		// persisted above and their ON direction is deferred below, both restrictive-first (Codex
-		// round 5, R5-1). The IP allowlist stays in this ordinary loop, which runs before that
-		// deferred ON write, so a narrowed allowlist is always in place before OAuth or DCR can
-		// turn on.
+		// aafm_oauth_enabled is NOT here: its OFF direction already persisted above and its ON
+		// direction is deferred below, restrictive-first (Codex round 5, R5-1). The IP allowlist
+		// stays in this ordinary loop, which runs before that deferred ON write, so a narrowed
+		// allowlist is always in place before OAuth can turn on.
 		'aafm_ip_allowlist'             => array( $clean['aafm_ip_allowlist'], __( 'The IP allowlist', 'agent-abilities-for-mcp' ) ),
 	);
 	if ( $brief_posted ) {
@@ -328,14 +305,11 @@ function aafm_ajax_save_settings(): void {
 		// Off deletes the row here too, for the reason spelled out above the high-risk branch.
 		$read_only_persisted = aafm_set_read_only_mode( false );
 	}
-	// Same deferred-permissive rule for OAuth and DCR (see the restrictive-first block above): the
-	// IP allowlist and every other ordinary setting are already verified by this point, so turning
-	// either on now can never leave a wider surface than requested.
+	// Same deferred-permissive rule for OAuth (see the restrictive-first block above): the IP
+	// allowlist and every other ordinary setting are already verified by this point, so turning it
+	// on now can never leave a wider surface than requested.
 	if ( '1' === $clean['aafm_oauth_enabled'] ) {
 		$oauth_persisted = aafm_update_option_verified( 'aafm_oauth_enabled', '1' );
-	}
-	if ( '1' === $clean['aafm_oauth_dcr_enabled'] ) {
-		$dcr_persisted = aafm_update_option_verified( 'aafm_oauth_dcr_enabled', '1' );
 	}
 
 	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'], $high_risk_persisted );
@@ -359,13 +333,6 @@ function aafm_ajax_save_settings(): void {
 		wp_send_json_error(
 			array(
 				'message' => aafm_paired_write_partial_failure_message( __( 'Every other setting', 'agent-abilities-for-mcp' ), __( 'Enable OAuth', 'agent-abilities-for-mcp' ) ),
-			)
-		);
-	}
-	if ( ! $dcr_persisted ) {
-		wp_send_json_error(
-			array(
-				'message' => aafm_paired_write_partial_failure_message( __( 'Every other setting', 'agent-abilities-for-mcp' ), __( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) ),
 			)
 		);
 	}
@@ -778,17 +745,22 @@ function aafm_render_settings_tab(): void {
 	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	// Enable dynamic client registration. On by default so ChatGPT and Claude, which only ever
-	// connect by self-registering, work as soon as OAuth is on; turn it off to require manual client
-	// setup. Same .aafm-switch / .aafm-set-row markup and aria wiring as the row above. It stays
-	// inert while OAuth is off, since the register route and discovery both gate on OAuth too.
-	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
-	echo '<div class="aafm-set-control">';
-	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	echo '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">' . esc_html__( 'Let agents self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
-	echo '<p class="help">' . esc_html__( 'On by default, so ChatGPT and Claude can connect. Turn it off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '</div></div>';
+	echo '<p class="help">' . wp_kses(
+		sprintf(
+			/* translators: %s: link to the Connection tab. */
+			__( 'Token lifetimes and dynamic client registration are on the %s.', 'agent-abilities-for-mcp' ),
+			'<a href="' . esc_url(
+				add_query_arg(
+					array(
+						'page' => 'agent-abilities-for-mcp',
+						'tab'  => 'connection',
+					),
+					admin_url( 'admin.php' )
+				)
+			) . '">' . esc_html__( 'Connection tab', 'agent-abilities-for-mcp' ) . '</a>'
+		),
+		array( 'a' => array( 'href' => true ) )
+	) . '</p>';
 
 	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent
 	// screen tells the approving human the app acts with their full capabilities either way - but

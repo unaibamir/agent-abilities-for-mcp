@@ -139,8 +139,8 @@ final class SettingsSaveTest extends TestCase {
 			$this->assertStringContainsString( 'name="' . $name . '"', $html );
 		}
 
-		// The DCR toggle renders as its own checkbox (on by default) alongside the OAuth switch.
-		$this->assertStringContainsString( 'name="aafm_oauth_dcr_enabled"', $html );
+		// The DCR toggle lives on the Connection tab now.
+		$this->assertStringNotContainsString( 'aafm_oauth_dcr_enabled', $html );
 
 		// No stray empty card: every card-pad body holds real markup (the Wave-4
 		// empty-card defect class). An empty body would render the two tags back to back.
@@ -241,7 +241,6 @@ final class SettingsSaveTest extends TestCase {
 		foreach (
 			array(
 				'aafm_oauth_enabled',
-				'aafm_oauth_dcr_enabled',
 				'aafm_block_guard_strict',
 				'aafm_high_risk_abilities_unlocked',
 			) as $field
@@ -258,23 +257,21 @@ final class SettingsSaveTest extends TestCase {
 	 * Server-side round-trip contract behind the fix above: with the checkbox present the
 	 * sanitizer keeps the toggle on; with it absent (the payload the pre-fix script sent) it
 	 * coerces off. Documents both sides of the failure mode so the "absent -> off" semantics is
-	 * not accidentally loosened while fixing the payload. DCR round-trips the same way.
+	 * not accidentally loosened while fixing the payload. DCR is not part of this form at all.
 	 */
 	public function test_settings_sanitizer_round_trips_oauth_and_block_guard_toggles(): void {
 		$on = aafm_sanitize_settings_input(
 			array(
 				'aafm_oauth_enabled'      => '1',
-				'aafm_oauth_dcr_enabled'  => '1',
 				'aafm_block_guard_strict' => '1',
 			)
 		);
 		$this->assertSame( '1', $on['aafm_oauth_enabled'] );
-		$this->assertSame( '1', $on['aafm_oauth_dcr_enabled'] );
+		$this->assertArrayNotHasKey( 'aafm_oauth_dcr_enabled', $on );
 		$this->assertTrue( $on['aafm_block_guard_strict'] );
 
 		$off = aafm_sanitize_settings_input( array() );
 		$this->assertSame( '0', $off['aafm_oauth_enabled'] );
-		$this->assertSame( '0', $off['aafm_oauth_dcr_enabled'], 'An absent DCR checkbox sanitizes to 0.' );
 		$this->assertFalse( $off['aafm_block_guard_strict'] );
 	}
 
@@ -598,5 +595,72 @@ final class SettingsSaveTest extends TestCase {
 		$html = (string) ob_get_clean();
 		$this->assertSame( 1, preg_match( '/<input[^>]*name="aafm_delete_data_on_uninstall"[^>]*>/', $html, $m ) );
 		$this->assertSame( $checked, str_contains( $m[0], 'checked' ) );
+	}
+
+	/**
+	 * Run a Settings save as an administrator with the given fields and return the JSON.
+	 *
+	 * @param array<string,mixed> $fields POST fields.
+	 * @return array<string,mixed>
+	 */
+	private function save_settings( array $fields ): array {
+		$this->acting_as( 'administrator' );
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST             = array_merge( array( 'nonce' => $nonce ), $fields );
+		$_REQUEST['nonce'] = $nonce;
+		return $this->run_handler( 'aafm_ajax_save_settings' );
+	}
+
+	/**
+	 * Review Focus 2 and U8: the DCR checkbox left Settings, so a save without it must not read
+	 * as "off".
+	 */
+	public function test_a_settings_save_without_the_dcr_field_leaves_dcr_untouched(): void {
+		foreach ( array( '1', '0' ) as $stored ) {
+			update_option( 'aafm_oauth_dcr_enabled', $stored );
+			$json = $this->save_settings( array( 'aafm_oauth_enabled' => '1' ) );
+			$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+			$this->assertSame( $stored, aafm_option_row( 'aafm_oauth_dcr_enabled' )['value'] );
+		}
+	}
+
+	/**
+	 * A browser still running the 1.9.0 script posts the old payload, which carries the DCR field
+	 * only when its (now missing) checkbox was ticked.
+	 */
+	public function test_a_stale_cached_admin_js_payload_cannot_turn_dcr_off(): void {
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+		$json = $this->save_settings(
+			array(
+				'aafm_rate_limit_per_min' => '0',
+				'aafm_max_title_len'      => '0',
+				'aafm_log_retention_days' => '30',
+				'aafm_oauth_enabled'      => '1',
+				'aafm_ip_allowlist'       => '',
+			)
+		);
+		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+		$this->assertSame( '1', aafm_option_row( 'aafm_oauth_dcr_enabled' )['value'] );
+	}
+
+	public function test_a_settings_save_that_posts_dcr_anyway_is_ignored(): void {
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		$this->save_settings(
+			array(
+				'aafm_oauth_enabled'     => '1',
+				'aafm_oauth_dcr_enabled' => '1',
+			)
+		);
+		$this->assertSame( '0', aafm_option_row( 'aafm_oauth_dcr_enabled' )['value'] );
+	}
+
+	public function test_the_settings_tab_no_longer_renders_the_dcr_switch_and_points_to_the_connection_tab(): void {
+		ob_start();
+		aafm_render_settings_tab();
+		$html = (string) ob_get_clean();
+		$this->assertStringNotContainsString( 'aafm-oauth-dcr-enabled', $html );
+		$this->assertStringContainsString( 'Token lifetimes and dynamic client registration are on the', $html );
+		$this->assertStringContainsString( 'admin.php?page=agent-abilities-for-mcp&amp;tab=connection">Connection tab</a>', $html );
 	}
 }

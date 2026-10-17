@@ -35,10 +35,10 @@ class SettingsTest extends TestCase {
 	}
 
 	/**
-	 * Present checkboxes sanitize to the string '1' for both toggles, and each reader
-	 * reports enabled once the value is stored.
+	 * A present checkbox sanitizes to the string '1', and the reader reports enabled once the
+	 * value is stored. DCR is not part of the Settings form.
 	 */
-	public function test_save_with_both_present_persists_one_each(): void {
+	public function test_save_with_oauth_present_persists_one(): void {
 		$clean = aafm_sanitize_settings_input(
 			array(
 				'aafm_oauth_enabled'     => '1',
@@ -47,29 +47,25 @@ class SettingsTest extends TestCase {
 		);
 
 		$this->assertSame( '1', $clean['aafm_oauth_enabled'] );
-		$this->assertSame( '1', $clean['aafm_oauth_dcr_enabled'] );
+		$this->assertArrayNotHasKey( 'aafm_oauth_dcr_enabled', $clean );
 
 		update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
-		update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
 
 		$this->assertTrue( aafm_oauth_enabled() );
-		$this->assertTrue( aafm_oauth_dcr_enabled() );
 	}
 
 	/**
-	 * An absent checkbox sanitizes to the string '0' for each toggle, so turning DCR off in
-	 * the UI persists a real '0' the reader honours over its on-by-default default.
-	 * Persisting '0' rather than a PHP bool false is what keeps a toggle from sticking on
-	 * against a never-created option.
+	 * An absent checkbox sanitizes to the string '0'. Persisting '0' rather than a PHP bool
+	 * false is what keeps the toggle from sticking on against a never-created option. A stored
+	 * '0' turns DCR off over its on-by-default default.
 	 */
-	public function test_save_with_both_absent_persists_zero_each(): void {
+	public function test_save_with_oauth_absent_persists_zero(): void {
 		$clean = aafm_sanitize_settings_input( array() );
 
 		$this->assertSame( '0', $clean['aafm_oauth_enabled'] );
-		$this->assertSame( '0', $clean['aafm_oauth_dcr_enabled'] );
 
 		update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
-		update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
 
 		$this->assertFalse( aafm_oauth_enabled() );
 		$this->assertFalse( aafm_oauth_dcr_enabled(), 'A stored 0 turns the DCR toggle off.' );
@@ -87,10 +83,10 @@ class SettingsTest extends TestCase {
 	}
 
 	/**
-	 * The rendered Settings tab shows both the "Enable OAuth" switch and the "Enable
-	 * dynamic client registration" switch, with DCR checked by default. Asserting the
-	 * force-draft checkbox, the reset hook, and the danger card still render proves the
-	 * markup around them is intact.
+	 * The rendered Settings tab shows the "Enable OAuth" switch, and the Connection tab's
+	 * lifetimes card shows the DCR switch, checked by default. Asserting the force-draft
+	 * checkbox, the reset hook, and the danger card still render proves the markup around them
+	 * is intact.
 	 */
 	public function test_settings_render_keeps_both_oauth_toggles(): void {
 		delete_option( 'aafm_oauth_dcr_enabled' );
@@ -105,20 +101,19 @@ class SettingsTest extends TestCase {
 			$html
 		);
 
-		// The DCR switch renders again, and is checked by default (no stored row).
-		// WordPress 6.9's checked() emits single quotes and 7.x emits double, so accept either.
-		$this->assertMatchesRegularExpression(
-			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*name="aafm_oauth_dcr_enabled"[^>]*checked=[\'"]checked[\'"]/',
-			$html,
-			'The DCR toggle must render checked by default.'
-		);
-
-		// Accessibility tie-up on both switches.
+		// Accessibility tie-up on the OAuth switch.
 		$this->assertStringContainsString( '<div class="aafm-set-label" id="aafm-oauth-enabled-title">', $html );
 		$this->assertStringContainsString( '<label for="aafm-oauth-enabled" id="aafm-oauth-enabled-desc">', $html );
+
+		// The DCR switch is on the lifetimes card, checked by default (no stored row).
+		// WordPress 6.9's checked() emits single quotes and 7.x emits double, so accept either.
+		ob_start();
+		aafm_render_lifetimes_card( aafm_connection_lifetimes_data() );
+		$card = (string) ob_get_clean();
 		$this->assertMatchesRegularExpression(
-			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc"/',
-			$html
+			'/<input type="checkbox" id="aafm-lifetimes-dcr"[^>]*aria-labelledby="aafm-lifetimes-dcr-title aafm-lifetimes-dcr-desc"[^>]*checked=[\'"]checked[\'"]/',
+			$card,
+			'The DCR toggle must render checked by default.'
 		);
 
 		// Existing controls untouched.

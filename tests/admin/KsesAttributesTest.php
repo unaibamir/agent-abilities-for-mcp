@@ -35,6 +35,7 @@ class KsesAttributesTest extends TestCase {
 			'aria-pressed'        => array( 'aria-pressed' ),
 			'data-ttl'            => array( 'data-ttl' ),
 			'data-who'            => array( 'data-who' ),
+			'data-uuid'           => array( 'data-uuid' ),
 		);
 	}
 

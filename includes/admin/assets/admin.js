@@ -77,6 +77,7 @@
 			this.#bindConnectionTabs();
 			this.#bindLifetimesCard();
 			this.#bindGrantControls();
+			this.#bindAppPasswordRevoke();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
 			this.#bindClientAgentToggle();
@@ -2627,6 +2628,56 @@
 					pill.textContent = look[ 1 ];
 				}
 				status.textContent = this.#t( 'saved', 'Saved' );
+			} );
+		}
+
+		/**
+		 * Wire the Application Passwords card's Revoke buttons: confirm, revoke, then drop the row
+		 * (and the user's table when it was the last row).
+		 */
+		#bindAppPasswordRevoke() {
+			const card = document.getElementById( 'aafm-card-app-passwords' );
+			if ( ! card ) {
+				return;
+			}
+			card.addEventListener( 'click', async ( e ) => {
+				const btn = e.target.closest( '.aafm-revoke-app-password' );
+				if ( ! btn ) {
+					return;
+				}
+				if (
+					! window.confirm(
+						this.#t(
+							'appPasswordRevokeConfirm',
+							'Revoke this Application Password? Anything using it stops working right away.'
+						)
+					)
+				) {
+					return;
+				}
+				btn.disabled = true;
+				const json = await this.#post( 'aafm_revoke_app_password', {
+					user_id: btn.dataset.userId ?? '',
+					uuid: btn.dataset.uuid ?? '',
+				} );
+				if ( ! json?.success ) {
+					btn.disabled = false;
+					window.alert(
+						json?.data?.message ??
+							this.#t( 'revokeFailed', 'Could not revoke. Please try again.' )
+					);
+					return;
+				}
+				const wrap = btn.closest( '.aafm-table-wrap' );
+				btn.closest( 'tr' )?.remove();
+				if ( wrap && ! wrap.querySelector( 'tbody tr' ) ) {
+					wrap.previousElementSibling?.remove();
+					wrap.remove();
+				}
+				const empty = card.querySelector( '.aafm-empty-state' );
+				if ( empty && ! card.querySelector( '.aafm-app-passwords-table' ) ) {
+					empty.hidden = false;
+				}
 			} );
 		}
 

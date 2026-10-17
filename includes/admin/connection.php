@@ -1125,6 +1125,8 @@ function aafm_render_app_password_steps(): void {
 		__( "An Application Password is a whole-site WordPress credential, not something this plugin can scope down. It authenticates the connected user across all of WordPress, including the REST API and XML-RPC, with everything that user's role allows, not only the abilities you turn on below. The allowlist, the high-risk floor, and the activity log on this plugin's tabs all apply to calls made through this MCP endpoint only, never to anything done with the same password elsewhere. OAuth above does not have this limit: a token this plugin issues only ever authenticates this one endpoint.", 'agent-abilities-for-mcp' )
 	);
 
+	aafm_render_app_passwords_card( aafm_connection_app_passwords_data() );
+
 	// ---- Step 1: create a dedicated agent user ----
 	// Done-ness keys off the plugin-created marker (any dedicated agent user this plugin made),
 	// NOT a hardcoded login: the create form below lets the admin type any username, so matching

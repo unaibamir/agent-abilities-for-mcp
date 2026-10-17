@@ -179,6 +179,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				/* translators: %s: user login and app name. */
 				'grantResumeFor'           => __( 'Resume %s', 'agent-abilities-for-mcp' ),
 				'grantNothingChanged'      => __( 'Nothing to save.', 'agent-abilities-for-mcp' ),
+				'appPasswordRevokeConfirm' => __( 'Revoke this Application Password? Anything using it stops working right away.', 'agent-abilities-for-mcp' ),
 				'dcrOffConfirm'            => __( 'Turn off dynamic client registration? ChatGPT and Claude can no longer register themselves, so new connections from them will fail until you turn it back on.', 'agent-abilities-for-mcp' ),
 				'settingsNotSaved'         => __( 'Could not save - your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
 				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),

@@ -205,6 +205,7 @@ function aafm_admin_allowed_html(): array {
 		'data-qc-preset'      => true,
 		'data-ttl'            => true,
 		'data-who'            => true,
+		'data-uuid'           => true,
 	);
 
 	$global = array_merge(

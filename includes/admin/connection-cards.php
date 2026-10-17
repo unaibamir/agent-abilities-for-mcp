@@ -80,11 +80,12 @@ function aafm_connection_card_title( array $data ): string {
 /**
  * The empty state a card shows when it has no rows.
  *
- * @param array{title:string,hint:string} $text Empty-state text.
+ * @param array{title:string,hint:string} $text   Empty-state text.
+ * @param bool                            $hidden Render it hidden, for a script to reveal.
  * @return string Escaped HTML.
  */
-function aafm_connection_empty_state( array $text ): string {
-	return sprintf( '<div class="aafm-empty-state"><strong>%1$s</strong><br>%2$s</div>', esc_html( $text['title'] ), esc_html( $text['hint'] ) );
+function aafm_connection_empty_state( array $text, bool $hidden = false ): string {
+	return sprintf( '<div class="aafm-empty-state"%3$s><strong>%1$s</strong><br>%2$s</div>', esc_html( $text['title'] ), esc_html( $text['hint'] ), $hidden ? ' hidden' : '' );
 }
 
 /**
@@ -732,4 +733,138 @@ function aafm_ajax_oauth_update_grant(): void {
 		aafm_log_setting_change( 'aafm/oauth-grant', $detail . sprintf( ' (user ID %1$d, app %2$s)', $user_id, substr( $client, 0, 8 ) ) );
 	}
 	wp_send_json_success( aafm_connection_grant_row( $user_id, $client ) );
+}
+
+/**
+ * Data for the Application Passwords card: the passwords of the agent users this plugin created.
+ *
+ * @return array{id:string,title:string,rule:string,available:bool,unavailable:string,users:list<array{user_id:int,login:string,passwords:list<array{uuid:string,name:string,created:int,last_used:?int,last_ip:string}>}>,empty:array{title:string,hint:string}}
+ */
+function aafm_connection_app_passwords_data(): array {
+	$users = array();
+	foreach ( aafm_created_agent_users() as $user_id ) {
+		$user = aafm_exact_object( 'user', (int) $user_id );
+		if ( ! $user instanceof WP_User ) {
+			continue;
+		}
+		$passwords = array();
+		foreach ( WP_Application_Passwords::get_user_application_passwords( $user->ID ) as $item ) {
+			$passwords[] = array(
+				'uuid'      => (string) $item['uuid'],
+				'name'      => (string) $item['name'],
+				'created'   => (int) $item['created'],
+				'last_used' => empty( $item['last_used'] ) ? null : (int) $item['last_used'],
+				'last_ip'   => (string) ( $item['last_ip'] ?? '' ),
+			);
+		}
+		$users[] = array(
+			'user_id'   => (int) $user->ID,
+			'login'     => (string) $user->user_login,
+			'passwords' => $passwords,
+		);
+	}
+	$doctor = aafm_doctor_check_app_passwords();
+	return array(
+		'id'          => 'app-passwords',
+		'title'       => __( 'Application Passwords', 'agent-abilities-for-mcp' ),
+		'rule'        => __( 'An Application Password is a whole-site credential for the agent user. Revoke any you no longer use.', 'agent-abilities-for-mcp' ),
+		'available'   => 'pass' === $doctor['status'],
+		'unavailable' => 'pass' === $doctor['status'] ? '' : (string) $doctor['detail'],
+		'users'       => $users,
+		'empty'       => array(
+			'title' => __( 'No Application Passwords yet', 'agent-abilities-for-mcp' ),
+			'hint'  => __( 'Create the agent user in Step 1 below, then add an Application Password on its profile (Users, Profile, Application Passwords).', 'agent-abilities-for-mcp' ),
+		),
+	);
+}
+
+/**
+ * Render the Application Passwords card.
+ *
+ * @param array<string,mixed> $data aafm_connection_app_passwords_data().
+ * @return void
+ */
+function aafm_render_app_passwords_card( array $data ): void {
+	$body = '';
+	if ( ! $data['available'] ) {
+		$body .= '<p class="aafm-app-passwords-off">' . esc_html( $data['unavailable'] ) . '</p>';
+	}
+	$listed = 0;
+	foreach ( $data['users'] as $user ) {
+		if ( array() === $user['passwords'] ) {
+			continue;
+		}
+		$listed += count( $user['passwords'] );
+		$body   .= '<h4>' . esc_html( $user['login'] ) . '</h4>';
+		$body   .= '<div class="aafm-table-wrap"><table class="widefat striped aafm-oauth-table aafm-app-passwords-table"><thead><tr>';
+		foreach ( array( __( 'Name', 'agent-abilities-for-mcp' ), __( 'Created', 'agent-abilities-for-mcp' ), __( 'Last used', 'agent-abilities-for-mcp' ), __( 'IP', 'agent-abilities-for-mcp' ), __( 'Action', 'agent-abilities-for-mcp' ) ) as $heading ) {
+			$body .= '<th>' . esc_html( $heading ) . '</th>';
+		}
+		$body .= '</tr></thead><tbody>';
+		foreach ( $user['passwords'] as $item ) {
+			$never = '<span class="aafm-muted">' . esc_html__( 'Never', 'agent-abilities-for-mcp' ) . '</span>';
+			$body .= sprintf(
+				'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-revoke-app-password" data-user-id="%5$d" data-uuid="%6$s" aria-label="%7$s">%8$s</button></td></tr>',
+				esc_html( $item['name'] ),
+				esc_html( aafm_format_admin_datetime( gmdate( 'Y-m-d H:i:s', $item['created'] ) ) ),
+				null === $item['last_used'] ? $never : esc_html( aafm_format_admin_datetime( gmdate( 'Y-m-d H:i:s', $item['last_used'] ) ) ),
+				'' === $item['last_ip'] ? $never : esc_html( $item['last_ip'] ),
+				$user['user_id'],
+				esc_attr( $item['uuid'] ),
+				/* translators: %s: Application Password name. */
+				esc_attr( sprintf( __( 'Revoke %s', 'agent-abilities-for-mcp' ), $item['name'] ) ),
+				esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
+			);
+		}
+		$body .= '</tbody></table></div>';
+	}
+	$body .= aafm_connection_empty_state( $data['empty'], $listed > 0 );
+	$body .= sprintf(
+		'<p class="help">%1$s <a href="%2$s">%3$s</a></p>',
+		esc_html__( 'Passwords on other accounts are managed on each user\'s profile.', 'agent-abilities-for-mcp' ),
+		esc_url( admin_url( 'users.php' ) ),
+		esc_html__( 'Users', 'agent-abilities-for-mcp' )
+	);
+	aafm_render_section(
+		array(
+			'id'          => 'aafm-card-app-passwords',
+			'class'       => 'aafm-app-passwords-card',
+			'icon'        => 'lock',
+			'title'       => $data['title'],
+			'description' => $data['rule'],
+			'body'        => $body,
+		)
+	);
+}
+
+/**
+ * AJAX: revoke one Application Password of a plugin-created agent user.
+ *
+ * @return void
+ */
+function aafm_ajax_revoke_app_password(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	// phpcs:disable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; both values are type-checked, the uuid by wp_is_uuid().
+	$raw_user = isset( $_POST['user_id'] ) ? wp_unslash( $_POST['user_id'] ) : null;
+	$uuid     = isset( $_POST['uuid'] ) ? wp_unslash( $_POST['uuid'] ) : null;
+	// phpcs:enable
+	$user_id = is_string( $raw_user ) ? absint( $raw_user ) : 0;
+	if ( $user_id <= 0 || ! is_string( $uuid ) || ! wp_is_uuid( $uuid ) || ! in_array( $user_id, array_map( 'intval', aafm_created_agent_users() ), true ) || ! current_user_can( 'delete_app_password', $user_id, $uuid ) ) {
+		wp_send_json_error( array( 'message' => __( 'That Application Password cannot be revoked here.', 'agent-abilities-for-mcp' ) ) );
+	}
+	$deleted = WP_Application_Passwords::delete_application_password( $user_id, $uuid );
+	if ( is_wp_error( $deleted ) || null !== WP_Application_Passwords::get_user_application_password( $user_id, $uuid ) ) {
+		wp_send_json_error( array( 'message' => __( 'Could not revoke the Application Password. Please try again.', 'agent-abilities-for-mcp' ) ) );
+	}
+	/* translators: %d: user ID. */
+	aafm_log_setting_change( 'aafm/app-password-revoked', sprintf( __( 'Application Password revoked (user ID %d)', 'agent-abilities-for-mcp' ), $user_id ) );
+	wp_send_json_success(
+		array(
+			'user_id' => $user_id,
+			'uuid'    => $uuid,
+		)
+	);
 }

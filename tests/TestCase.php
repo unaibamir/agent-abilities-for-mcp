@@ -70,6 +70,7 @@ abstract class TestCase extends WP_UnitTestCase {
 		// A schema upgrade that commits mid-test (DDL) can leave its lock row behind for a minute; the lock
 		// would then make the next test's aafm_maybe_upgrade_activity_log() skip its upgrade.
 		delete_transient( 'aafm_activity_log_upgrade_lock' );
+		delete_transient( 'aafm_oauth_upgrade_lock' );
 		// The high-risk floor is off-by-default, and a test that finds it already lifted would assert
 		// against a security posture no fresh install has. It needs an explicit reset for the same
 		// reason the enabled-abilities option above does: aafm_clear_activity_log() issues a TRUNCATE,

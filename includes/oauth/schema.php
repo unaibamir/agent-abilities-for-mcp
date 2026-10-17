@@ -496,7 +496,19 @@ function aafm_maybe_upgrade_oauth_tables(): void {
 		return;
 	}
 
-	aafm_install_oauth_tables();
+	// One request upgrades at a time, and a failed upgrade waits an hour before the next try, so a
+	// refused ALTER does not rerun dbDelta() on every admin and REST request. Same lock and same
+	// ceiling as aafm_maybe_upgrade_activity_log(). An unreadable lock counts as held.
+	$held = aafm_transient_count( 'aafm_oauth_upgrade_lock' );
+	if ( null === $held || $held > 0 ) {
+		return;
+	}
+	set_transient( 'aafm_oauth_upgrade_lock', 1, MINUTE_IN_SECONDS );
+	if ( aafm_install_oauth_tables() ) {
+		delete_transient( 'aafm_oauth_upgrade_lock' );
+		return;
+	}
+	set_transient( 'aafm_oauth_upgrade_lock', 1, HOUR_IN_SECONDS );
 }
 
 /**

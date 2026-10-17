@@ -2977,6 +2977,11 @@
 					// count by the tokens we just revoked so it does not read stale.
 					this.#adjustClientTokens( root, clientId, -revoked );
 					row.remove();
+					const title = root.querySelector( '#aafm-card-grants .aafm-card-head-title' );
+					if ( title ) {
+						const left = root.querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ).length;
+						title.textContent = `${ title.textContent.replace( /\s*\([^)]*\)$/, '' ) }${ left ? ` (${ left.toLocaleString() })` : '' }`;
+					}
 				} else {
 					// The client and all its tokens are revoked: its active-token count is now 0.
 					const tokensCell = row.querySelector( '.aafm-client-tokens' );

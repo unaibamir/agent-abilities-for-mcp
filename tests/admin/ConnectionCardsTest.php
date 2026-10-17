@@ -199,6 +199,22 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertSame( array( 'User', 'Current role', 'App', 'Access', 'Last used', 'Ends', 'Limit', 'Status', 'Actions' ), $heads[1] );
 	}
 
+	/**
+	 * Revoking a grant removes its row, so the script must also lower the "(N)" in the card title.
+	 * There is no JS runner here: this pins the markup the script reads and the script's use of it.
+	 */
+	public function test_revoking_a_grant_updates_the_card_title_count(): void {
+		$this->seed_grant();
+		$html = $this->grants_html();
+		$this->assertMatchesRegularExpression( '/id="aafm-card-grants".*?<h3 class="aafm-card-head-title">Active grants \(1\)<\/h3>/s', $html );
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$at = strpos( $js, 'this.#adjustClientTokens( root, clientId, -revoked );' );
+		$this->assertNotFalse( $at );
+		$this->assertStringContainsString( '#aafm-card-grants .aafm-card-head-title', substr( $js, (int) $at, 600 ) );
+	}
+
 	public function test_the_access_select_lists_the_four_presets_with_the_current_one_selected_and_a_custom_default_for_a_null_preset(): void {
 		$this->seed_grant();
 		$html = $this->grants_html();

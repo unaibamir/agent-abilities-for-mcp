@@ -2413,21 +2413,18 @@ function aafm_abilities_display_tabs( array $subjects, array $by_subject, array 
 function aafm_render_post_types_selector(): void {
 	$eligible = array_values( array_diff( aafm_eligible_post_types(), array( 'post', 'page' ) ) );
 	$allowed  = aafm_allowed_post_types();
+	$head     = '<div class="aafm-card-head">' . aafm_card_head_html( 'file', __( 'Exposed content types', 'agent-abilities-for-mcp' ), '', '', 'h3' ) . '</div><div class="aafm-card-pad"><p class="aafm-card-desc">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	if ( empty( $eligible ) ) {
-		echo '<div class="aafm-card aafm-card-pad">';
-		echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
-		echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<div class="aafm-card aafm-post-types">' . wp_kses( $head, aafm_admin_allowed_html() );
 		aafm_render_notice( 'info', __( 'No custom content types on this site are eligible to expose. Only public, non-internal types can be offered here.', 'agent-abilities-for-mcp' ) );
-		echo '</div>';
+		echo '</div></div>';
 		return;
 	}
 
 	// The selector is a plain <div> (never a nested <form>): only the outer abilities <form>
 	// may open a form here, and the tab's one Save button saves this section.
-	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types" data-aafm-section="post_types">';
-	echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<div id="aafm-post-types-form" class="aafm-card aafm-post-types" data-aafm-section="post_types">' . wp_kses( $head, aafm_admin_allowed_html() );
 	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-post-types-table"><thead><tr>';
 	echo '<th scope="col">' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
@@ -2467,7 +2464,7 @@ function aafm_render_post_types_selector(): void {
 	echo '</div>'; // .aafm-table-wrap
 	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
 	echo '<p class="aafm-section-result aafm-post-types-status" hidden></p>';
-	echo '</div>';
+	echo '</div></div>';
 }
 
 /**
@@ -2484,21 +2481,21 @@ function aafm_render_post_types_selector(): void {
  * @param array<string,mixed> $cfg {
  *     Render config.
  *     @type string        $container_id        Wrapping <div> id.
- *     @type string        $exposed_title       H3 text above the exposed textarea.
- *     @type string        $exposed_description Paragraph under that h3.
+ *     @type string        $exposed_title       Card title, above the exposed textarea.
+ *     @type string        $exposed_description Paragraph opening the card body.
  *     @type string        $warning             Text for the warning notice between them.
  *     @type string[]      $exposed             Exposed keys ('*' already restored if set).
  *     @type string        $exposed_field_name  Textarea name attribute.
  *     @type string        $exposed_textarea_id Textarea id attribute.
- *     @type string        $exposed_label_id    Id the h3 carries, referenced by aria-labelledby.
+ *     @type string        $exposed_label_id    Id the card title carries, referenced by aria-labelledby.
  *     @type string        $exposed_hint_id     Id the hint paragraph carries.
  *     @type string[]|null $detected            Detected keys to render as chips, or null to
  *                                               skip the whole "detected" section.
- *     @type string        $denied_title        H3 text above the denied textarea.
+ *     @type string        $denied_title        H4 text above the denied textarea.
  *     @type string[]      $denied              Denied keys ('*' already restored if set).
  *     @type string        $denied_field_name   Textarea name attribute.
  *     @type string        $denied_textarea_id  Textarea id attribute.
- *     @type string        $denied_label_id     Id the h3 carries.
+ *     @type string        $denied_label_id     Id the h4 carries.
  *     @type string        $denied_hint_id      Id the hint paragraph carries.
  *     @type string        $section             Section key the tab's one Save sends, for data-aafm-section.
  *     @type string        $status_class        Class on the hidden section result line.
@@ -2506,9 +2503,10 @@ function aafm_render_post_types_selector(): void {
  * @return void
  */
 function aafm_render_meta_keys_pair( array $cfg ): void {
-	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-card-pad aafm-meta-keys" data-aafm-section="' . esc_attr( $cfg['section'] ) . '">';
-	echo '<h3 id="' . esc_attr( $cfg['exposed_label_id'] ) . '">' . esc_html( $cfg['exposed_title'] ) . '</h3>';
-	echo '<p class="description">' . esc_html( $cfg['exposed_description'] ) . '</p>';
+	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-meta-keys" data-aafm-section="' . esc_attr( $cfg['section'] ) . '">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'tag', $cfg['exposed_title'], $cfg['exposed_label_id'], '', 'h3' ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
+	echo '<p class="aafm-card-desc">' . esc_html( $cfg['exposed_description'] ) . '</p>';
 	aafm_render_notice( 'warning', $cfg['warning'] );
 
 	printf(
@@ -2540,7 +2538,7 @@ function aafm_render_meta_keys_pair( array $cfg ): void {
 
 	// Deny list, below the exposed list. Denied keys always win over the exposed list, even
 	// when it uses *. The chip source above writes only into the exposed textarea.
-	echo '<h3 id="' . esc_attr( $cfg['denied_label_id'] ) . '">' . esc_html( $cfg['denied_title'] ) . '</h3>';
+	echo '<h4 id="' . esc_attr( $cfg['denied_label_id'] ) . '">' . esc_html( $cfg['denied_title'] ) . '</h4>';
 	printf(
 		'<textarea name="%1$s" id="%2$s" rows="4" class="large-text code" aria-labelledby="%3$s" aria-describedby="%4$s">%5$s</textarea>',
 		esc_attr( $cfg['denied_field_name'] ),
@@ -2552,7 +2550,7 @@ function aafm_render_meta_keys_pair( array $cfg ): void {
 	echo '<p class="description" id="' . esc_attr( $cfg['denied_hint_id'] ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<p class="aafm-section-result ' . esc_attr( $cfg['status_class'] ) . '" hidden></p>';
-	echo '</div>';
+	echo '</div></div>';
 }
 
 /**

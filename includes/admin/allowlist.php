@@ -267,12 +267,7 @@ function aafm_render_allowlist_section(): void {
 	$registry_full = aafm_get_abilities_registry_full();
 
 	echo '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card" open>';
-	echo '<summary class="aafm-card-head">';
-	echo '<span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() ) . '</span>';
-	echo '<div class="aafm-card-head-text">';
-	echo '<h3 class="aafm-card-head-title">' . esc_html__( 'Ability allowlist', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '</div>';
-	echo '</summary>';
+	echo '<summary class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'lock', __( 'Ability allowlist', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</summary>';
 
 	echo '<div class="aafm-section-body">';
 

@@ -470,7 +470,7 @@ function aafm_render_dashboard_tab(): void {
 	// security heads-up computed from the broad candidate set, worded so it does not imply those
 	// admins are agent users.
 	$created_count = count( $created_agents );
-	aafm_render_stat_head( 'aafm-stat-agent-users', __( 'Agent users', 'agent-abilities-for-mcp' ), 'groups' );
+	aafm_render_stat_head( 'aafm-stat-agent-users', __( 'Agent users', 'agent-abilities-for-mcp' ), 'shield' );
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $created_count ) ) );
 	if ( 0 === $created_count ) {
 		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet', 'agent-abilities-for-mcp' ) . '</div>';
@@ -508,21 +508,12 @@ function aafm_render_dashboard_tab(): void {
 
 	// Endpoint card - keeps the existing aafm-copy button + data-copy contract (admin.js binds to it).
 	echo '<section class="aafm-card aafm-card-endpoint">';
-	echo '<div class="aafm-card-head">';
-	echo '<span class="icon">';
-	echo wp_kses( aafm_icon( 'endpoint' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '<h2>' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</h2>';
-	// Permalink-mode info pill on the right, like the mockup.
+	// Permalink-mode info pill at the row end.
 	$pretty          = (bool) get_option( 'permalink_structure' );
 	$permalink_label = $pretty
 		? __( 'Pretty permalinks', 'agent-abilities-for-mcp' )
 		: __( 'Plain permalinks', 'agent-abilities-for-mcp' );
-	printf(
-		'<span class="aafm-pill aafm-pill-info" style="margin-inline-start:auto">%s</span>',
-		esc_html( $permalink_label )
-	);
-	echo '</div>';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'endpoint', __( 'MCP endpoint', 'agent-abilities-for-mcp' ), '', '<span class="aafm-pill aafm-pill-info">' . esc_html( $permalink_label ) . '</span>' ), aafm_admin_allowed_html() ) . '</div>';
 	echo '<div class="aafm-card-pad">';
 	echo wp_kses(
 		sprintf(
@@ -534,18 +525,13 @@ function aafm_render_dashboard_tab(): void {
 		),
 		aafm_admin_allowed_html()
 	);
-	echo '<p class="description">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div>';
 	echo '</section>';
 
 	// Versions card.
 	echo '<section class="aafm-card aafm-card-versions">';
-	echo '<div class="aafm-card-head">';
-	echo '<span class="icon">';
-	echo wp_kses( aafm_icon( 'clock' ), aafm_svg_allowed_html() );
-	echo '</span>';
-	echo '<h2>' . esc_html__( 'Versions', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '</div>';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'clock', __( 'Versions', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
 	echo '<div class="aafm-card-pad">';
 	echo '<dl class="aafm-kv">';
 	printf(

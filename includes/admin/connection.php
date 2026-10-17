@@ -952,8 +952,7 @@ function aafm_render_connection_tab(): void {
 
 	// ---- 1. Endpoint card (the single canonical endpoint display) ----
 	echo '<section class="aafm-card aafm-endpoint-card">';
-	echo '<div class="aafm-card-head"><span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'endpoint' ), aafm_svg_allowed_html() ) . '</span>';
-	echo '<div class="aafm-card-head-text"><h2 class="aafm-card-head-title">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</h2></div></div>';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'endpoint', __( 'MCP endpoint', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
 	echo '<div class="aafm-card-pad">';
 	echo '<div class="aafm-field-mono">';
 	printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
@@ -975,13 +974,11 @@ function aafm_render_connection_tab(): void {
 
 	// ---- 2. OAuth card ----
 	echo '<section class="aafm-card aafm-oauth-card">';
-	echo '<div class="aafm-card-head"><span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'connection' ), aafm_svg_allowed_html() ) . '</span>';
-	echo '<div class="aafm-card-head-text"><h2 class="aafm-card-head-title">' . esc_html__( 'Connect with OAuth', 'agent-abilities-for-mcp' ) . '</h2></div>';
-	echo '<span class="aafm-pill aafm-pill-info aafm-recommended-pill">' . esc_html__( 'Recommended', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '</div><div class="aafm-card-pad">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'connection', __( 'Connect with OAuth', 'agent-abilities-for-mcp' ), '', '<span class="aafm-pill aafm-pill-info aafm-recommended-pill">' . esc_html__( 'Recommended', 'agent-abilities-for-mcp' ) . '</span>' ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
 
 	if ( $oauth_on ) {
-		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="aafm-card-desc">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
 
 		// REST-lockdown diagnostic. The OAuth /register and /token endpoints must answer BEFORE a
 		// client has any credential, so a security or membership plugin that restricts the whole
@@ -1075,7 +1072,7 @@ function aafm_render_connection_tab(): void {
 
 	} else {
 		// OAuth is off - short notice instead of the picker.
-		echo '<p class="sub">' . esc_html__(
+		echo '<p class="aafm-card-desc">' . esc_html__(
 			'OAuth is turned off. Enable it under Settings to use the browser-approval flow, or connect with an Application Password below.',
 			'agent-abilities-for-mcp'
 		) . '</p>';
@@ -1092,7 +1089,7 @@ function aafm_render_connection_tab(): void {
 			}
 		}
 		if ( ! empty( $hosted_labels ) ) {
-			echo '<p class="sub aafm-oauth-off-hosted">' . esc_html(
+			echo '<p class="aafm-card-desc aafm-oauth-off-hosted">' . esc_html(
 				sprintf(
 					/* translators: %s: comma-separated list of hosted client names, e.g. "ChatGPT, Claude, and Manus". */
 					__( '%s connect over OAuth only, so they need OAuth turned on - the Application Password path below will not work for them.', 'agent-abilities-for-mcp' ),

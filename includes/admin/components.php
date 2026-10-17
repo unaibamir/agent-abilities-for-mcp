@@ -35,6 +35,29 @@ function aafm_sanitize_html_classes( string $extra_class ): string {
 }
 
 /**
+ * The inside of a card head: icon, title and whatever sits at the row end. Every card head in the
+ * admin is built from this, so the pattern is defined once.
+ *
+ * @param string $icon     aafm_icon() name, or '' for none.
+ * @param string $title    Title text, escaped here.
+ * @param string $title_id Optional id for the title element.
+ * @param string $after    Pre-escaped HTML for the row end (a pill or badge), echoed verbatim.
+ * @param string $level    Title tag, 'h2' or 'h3'.
+ * @return string HTML for the caller to place inside its `.aafm-card-head` element.
+ */
+function aafm_card_head_html( string $icon, string $title, string $title_id = '', string $after = '', string $level = 'h2' ): string {
+	$tag = 'h3' === $level ? 'h3' : 'h2';
+	return sprintf(
+		'%1$s<div class="aafm-card-head-text"><%2$s class="aafm-card-head-title"%3$s>%4$s</%2$s></div>%5$s',
+		'' === $icon ? '' : '<span class="aafm-card-head-ic">' . aafm_icon( $icon ) . '</span>',
+		$tag,
+		'' === $title_id ? '' : ' id="' . esc_attr( $title_id ) . '"',
+		esc_html( $title ),
+		$after
+	);
+}
+
+/**
  * Echo a settings section wrapper.
  *
  * Both shapes share one head: a `.aafm-card-head` holding the icon, the title and an optional
@@ -52,7 +75,8 @@ function aafm_sanitize_html_classes( string $extra_class ): string {
  * head glyph), `description` (one muted paragraph that opens the body, escaped), `pill` (pre-built pill HTML, echoed
  * verbatim), `collapsible` (bool, default false), `open` (bool, default true, honored only
  * when collapsible), `badge` (count-badge text for the summary, escaped), and `body`
- * (pre-escaped inner HTML, echoed verbatim).
+ * (pre-escaped inner HTML, echoed verbatim), and `level` (title tag, 'h2' by default, 'h3' for a card
+ * nested under a section heading).
  *
  * @param array<string,mixed> $args Section args (see the recognised keys above).
  * @return void
@@ -73,17 +97,15 @@ function aafm_render_section( array $args ): void {
 
 	$extra = aafm_sanitize_html_classes( $extra_class );
 
-	$icon_html = '' === $icon
-		? ''
-		: sprintf( '<span class="aafm-card-head-ic">%s</span>', aafm_icon( $icon ) );
 	$desc_html = '' === $description
 		? ''
 		: sprintf( '<p class="aafm-card-desc">%s</p>', esc_html( $description ) );
-	$head      = sprintf(
-		'%1$s<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">%2$s</h3></div>%3$s',
-		$icon_html,
-		esc_html( $title ),
-		$pill . ( '' === $badge ? '' : sprintf( ' <span class="aafm-count-badge">%s</span>', esc_html( $badge ) ) )
+	$head      = aafm_card_head_html(
+		$icon,
+		$title,
+		'',
+		$pill . ( '' === $badge ? '' : sprintf( ' <span class="aafm-count-badge">%s</span>', esc_html( $badge ) ) ),
+		isset( $args['level'] ) ? (string) $args['level'] : 'h2'
 	);
 
 	if ( $collapsible ) {

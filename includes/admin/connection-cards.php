@@ -355,7 +355,7 @@ function aafm_render_grants_card( array $data ): void {
 
 		echo '</tbody></table>';
 		echo '</div>';
-		echo '<p class="help">' . esc_html__( 'Access presets only narrow what you have switched on under Abilities. They never add anything.', 'agent-abilities-for-mcp' );
+		echo '<p class="aafm-card-desc">' . esc_html__( 'Access presets only narrow what you have switched on under Abilities. They never add anything.', 'agent-abilities-for-mcp' );
 		if ( $site_limit > 0 ) {
 			/* translators: %d: the site-wide calls-a-minute limit. */
 			echo ' ' . esc_html( sprintf( __( 'A connection limit cannot go above the site limit (%d).', 'agent-abilities-for-mcp' ), $site_limit ) );
@@ -365,7 +365,7 @@ function aafm_render_grants_card( array $data ): void {
 	aafm_render_section(
 		array(
 			'id'          => 'aafm-card-grants',
-			'icon'        => 'connection',
+			'icon'        => 'recent',
 			'title'       => aafm_connection_card_title( $data ),
 			'description' => $data['rule'],
 			'body'        => (string) ob_get_clean(),
@@ -518,8 +518,7 @@ function aafm_connection_ttl_row( string $kind, string $label, int $seconds, int
  * @return void
  */
 function aafm_render_lifetimes_card( array $data ): void {
-	$body  = '<p class="help">' . esc_html__( 'Applies to tokens issued from now on. Lowering a lifetime does not shorten tokens already issued; Revoke on the grants card below ends a connection at once.', 'agent-abilities-for-mcp' ) . '</p>';
-	$body .= aafm_connection_ttl_row( 'access', __( 'Access token lifetime', 'agent-abilities-for-mcp' ), (int) $data['access'], (int) $data['access_default'] );
+	$body  = aafm_connection_ttl_row( 'access', __( 'Access token lifetime', 'agent-abilities-for-mcp' ), (int) $data['access'], (int) $data['access_default'] );
 	$body .= aafm_connection_ttl_row( 'refresh', __( 'Refresh token lifetime', 'agent-abilities-for-mcp' ), (int) $data['refresh'], (int) $data['refresh_default'] );
 	$body .= sprintf(
 		'<div class="aafm-set-row"><div class="aafm-set-label" id="aafm-lifetimes-dcr-title">%1$s</div><div class="aafm-set-control"><label class="aafm-switch"><input type="checkbox" id="aafm-lifetimes-dcr" data-saved="%2$s" aria-labelledby="aafm-lifetimes-dcr-title aafm-lifetimes-dcr-desc"%3$s><span class="aafm-switch-track"></span></label> <label for="aafm-lifetimes-dcr" id="aafm-lifetimes-dcr-desc">%4$s</label><p class="help">%5$s</p></div></div>',
@@ -540,6 +539,7 @@ function aafm_render_lifetimes_card( array $data ): void {
 			'collapsible' => true,
 			'open'        => false,
 			'title'       => __( 'Token lifetimes and client registration', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Applies to tokens issued from now on. Lowering a lifetime does not shorten tokens already issued; Revoke on the grants card below ends a connection at once.', 'agent-abilities-for-mcp' ),
 			'body'        => $body,
 		)
 	);
@@ -818,7 +818,7 @@ function aafm_render_app_passwords_card( array $data ): void {
 	}
 	$body .= aafm_connection_empty_state( $data['empty'], $listed > 0 );
 	$body .= sprintf(
-		'<p class="help">%1$s <a href="%2$s">%3$s</a></p>',
+		'<p class="aafm-card-desc">%1$s <a href="%2$s">%3$s</a></p>',
 		esc_html__( 'Passwords on other accounts are managed on each user\'s profile.', 'agent-abilities-for-mcp' ),
 		esc_url( admin_url( 'users.php' ) ),
 		esc_html__( 'Users', 'agent-abilities-for-mcp' )
@@ -889,7 +889,7 @@ function aafm_render_pause_all_card(): void {
 	aafm_render_section(
 		array(
 			'id'          => 'aafm-card-pause-all',
-			'icon'        => 'shield',
+			'icon'        => 'pause',
 			'title'       => __( 'Pause all access', 'agent-abilities-for-mcp' ),
 			'description' => __( 'Stops all MCP access through this site at once: this plugin\'s endpoint and the MCP adapter\'s default server, for OAuth apps and Application Passwords alike. Nothing is deleted; resume to carry on. Application Passwords still work with the rest of the WordPress REST API; this switch does not close that.', 'agent-abilities-for-mcp' ),
 			'body'        => sprintf(

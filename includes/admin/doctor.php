@@ -906,11 +906,9 @@ function aafm_ajax_run_doctor(): void {
  */
 function aafm_render_doctor_card(): void {
 	echo '<section class="aafm-card aafm-doctor" id="aafm-doctor">';
-	echo '<div class="aafm-card-head"><span class="icon">';
-	echo wp_kses( aafm_icon( 'check' ), aafm_svg_allowed_html() );
-	echo '</span><h2>' . esc_html__( 'Check my connection', 'agent-abilities-for-mcp' ) . '</h2></div>';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'check', __( 'Check my connection', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
 	echo '<div class="aafm-card-pad">';
-	echo '<p class="description">' . esc_html__( 'These checks run from this site\'s own server. Nothing is sent to anyone else. They look for the usual reasons an agent cannot connect and say who can fix each one.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'These checks run from this site\'s own server. Nothing is sent to anyone else. They look for the usual reasons an agent cannot connect and say who can fix each one.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '<div class="aafm-doctor-actions">';
 	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-doctor-run">' . esc_html__( 'Check my connection', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" id="aafm-doctor-copy" data-copy="" hidden><span class="aafm-copy-label">' . esc_html__( 'Copy report for support', 'agent-abilities-for-mcp' ) . '</span></button>';

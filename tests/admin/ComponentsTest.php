@@ -59,6 +59,27 @@ final class ComponentsTest extends TestCase {
 		$this->assertStringContainsString( '<i>kept</i>', $html ); // body is pre-escaped by caller.
 	}
 
+	public function test_card_head_html_is_the_one_head_pattern(): void {
+		$html = aafm_card_head_html( 'clock', '<i>Title</i>', 'title-id', '<span class="aafm-pill">P</span>' );
+		$this->assertStringStartsWith( '<span class="aafm-card-head-ic"><svg', $html );
+		$this->assertStringContainsString( '<div class="aafm-card-head-text"><h2 class="aafm-card-head-title" id="title-id">&lt;i&gt;Title&lt;/i&gt;</h2></div><span class="aafm-pill">P</span>', $html );
+		$this->assertStringContainsString( '<h3 class="aafm-card-head-title">T</h3>', aafm_card_head_html( '', 'T', '', '', 'h3' ) );
+	}
+
+	public function test_render_section_puts_the_description_in_the_body_not_the_head(): void {
+		ob_start();
+		aafm_render_section(
+			array(
+				'title'       => 'Card',
+				'description' => 'Explains the card.',
+				'body'        => '<p>body</p>',
+			)
+		);
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( '<div class="aafm-card-pad aafm-section-body"><p class="aafm-card-desc">Explains the card.</p><p>body</p></div>', $html );
+		$this->assertStringContainsString( '<h2 class="aafm-card-head-title">Card</h2></div></div>', $html );
+	}
+
 	public function test_render_set_row_emits_label_and_control(): void {
 		ob_start();
 		aafm_render_set_row(

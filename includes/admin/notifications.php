@@ -81,12 +81,12 @@ function aafm_render_notifications_section(): void {
 		);
 	}
 
-	echo '<p class="help">' . esc_html__( 'The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run "wp cron event run --due-now") for the daily email. Admin notice only and Email right away do not depend on cron. If email is unreliable on your host, the admin notice still shows every alert.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'The daily email depends on WP-Cron, which only runs when your site gets visits and does not run at all if DISABLE_WP_CRON is set. On a quiet site, point a real cron job at wp-cron.php (or run "wp cron event run --due-now") for the daily email. Admin notice only and Email right away do not depend on cron. If email is unreliable on your host, the admin notice still shows every alert.', 'agent-abilities-for-mcp' ) . '</p>';
 	$body = (string) ob_get_clean();
 
 	aafm_render_section(
 		array(
-			'icon'  => 'audit',
+			'icon'  => 'bell',
 			'title' => __( 'Notifications', 'agent-abilities-for-mcp' ),
 			'body'  => $body,
 		)

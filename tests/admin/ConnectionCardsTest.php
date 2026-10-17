@@ -206,7 +206,7 @@ class ConnectionCardsTest extends TestCase {
 	public function test_revoking_a_grant_updates_the_card_title_count(): void {
 		$this->seed_grant();
 		$html = $this->grants_html();
-		$this->assertMatchesRegularExpression( '/id="aafm-card-grants".*?<h3 class="aafm-card-head-title">Active grants \(1\)<\/h3>/s', $html );
+		$this->assertMatchesRegularExpression( '/id="aafm-card-grants".*?<h2 class="aafm-card-head-title">Active grants \(1\)<\/h2>/s', $html );
 
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
 		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );

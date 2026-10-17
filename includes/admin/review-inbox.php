@@ -247,13 +247,9 @@ function aafm_render_review_inbox_card(): void {
 	$rows = aafm_review_inbox_rows();
 
 	echo '<section class="aafm-card aafm-review-inbox" id="aafm-review-inbox">';
-	echo '<div class="aafm-card-head"><span class="icon">';
-	echo wp_kses( aafm_icon( 'check' ), aafm_svg_allowed_html() );
-	echo '</span><h2>' . esc_html__( 'Needs review', 'agent-abilities-for-mcp' ) . '</h2>';
-	if ( array() !== $rows ) {
-		printf( '<span class="aafm-pill aafm-pill-warn aafm-review-count">%s</span>', esc_html( count( $rows ) >= AAFM_REVIEW_INBOX_LIMIT ? number_format_i18n( AAFM_REVIEW_INBOX_LIMIT ) . '+' : number_format_i18n( count( $rows ) ) ) );
-	}
-	echo '</div><div class="aafm-card-pad">';
+	$count = array() === $rows ? '' : sprintf( '<span class="aafm-pill aafm-pill-warn aafm-review-count">%s</span>', esc_html( count( $rows ) >= AAFM_REVIEW_INBOX_LIMIT ? number_format_i18n( AAFM_REVIEW_INBOX_LIMIT ) . '+' : number_format_i18n( count( $rows ) ) ) );
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'file', __( 'Needs review', 'agent-abilities-for-mcp' ), '', $count ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
 
 	if ( array() === $rows ) {
 		echo '<p class="description">' . esc_html__( 'Nothing is waiting. Drafts and pending posts an agent writes show up here so you can look them over before they go live.', 'agent-abilities-for-mcp' ) . '</p>';

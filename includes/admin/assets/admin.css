@@ -427,10 +427,18 @@
 		/* aafm_render_section() wraps the title (and optional description) in a
 		   text column so a pill can sit at the row end; the head still lays the
 		   icon + text out in a row. */
+		/* At least a pill tall, so a head with a pill or badge is no taller than one without. */
 		.aafm-card-head-text {
 			display: flex;
 			flex-direction: column;
+			justify-content: center;
 			gap: 2px;
+			min-block-size: 24px;
+		}
+
+		> .aafm-pill,
+		> .aafm-count-badge {
+			margin-inline-start: auto;
 		}
 
 		.icon,
@@ -447,11 +455,16 @@
 		}
 	}
 
-	/* A card's explanation: the first paragraph of its body, small and muted. */
+	/* A card's explanation or closing note: small and muted. Opening the body it keeps a gap
+	   below; closing the body, a gap above. */
 	.aafm-card-desc {
 		margin-block: 0 var(--aafm-space-3);
 		font-size: var(--aafm-fs-sm);
 		color: var(--aafm-text-subtle);
+
+		&:last-child:not(:first-child) {
+			margin-block: var(--aafm-space-3) 0;
+		}
 	}
 
 	/* ---------- Stat cards ---------- */
@@ -549,16 +562,8 @@
 		font-family: var(--aafm-mono);
 		background: var(--aafm-surface-2);
 		border: 1px solid var(--aafm-border);
-		border-radius: 3px;
+		border-radius: var(--aafm-radius-sm);
 		overflow-wrap: anywhere;
-	}
-
-	/* In the dashboard endpoint card the URL stays on one line beside the inline
-	   Copy button (matches the mockup), scrolling horizontally rather than wrapping tall. */
-	.aafm-card-endpoint .aafm-field-mono .aafm-endpoint {
-		overflow-x: auto;
-		overflow-wrap: normal;
-		white-space: nowrap;
 	}
 
 	.aafm-snippet {
@@ -1253,7 +1258,7 @@
 		}
 
 		.aafm-integration-note {
-			font-size: 13px;
+			font-size: var(--aafm-fs-sm);
 			color: var(--aafm-text-subtle);
 			margin-block: 0;
 			padding-block: 12px 0;
@@ -1833,12 +1838,12 @@
 			border: 0;
 			background: transparent;
 			font-family: inherit;
-			font-size: 12.5px;
+			font-size: var(--aafm-fs-sm);
 			font-weight: 600;
 			color: var(--aafm-text-muted);
-			padding-block: 5px;
+			padding-block: 0;
 			padding-inline: 12px;
-			border-radius: 5px;
+			border-radius: 3px;
 			cursor: pointer;
 
 			&:focus-visible {
@@ -2115,7 +2120,6 @@
 	.aafm-review-inbox {
 		margin-block-end: var(--aafm-space-4);
 
-		.aafm-review-count { margin-inline-start: auto; }
 		.aafm-review-list { margin: 0; padding: 0; list-style: none; }
 
 		.aafm-review-row {
@@ -2296,6 +2300,11 @@
 
 	/* ---------- Detected meta-key chips ---------- */
 	.aafm-meta-keys {
+		h4 {
+			margin-block: var(--aafm-space-4) var(--aafm-space-2);
+			font-size: var(--aafm-fs-body);
+		}
+
 		.aafm-meta-chips {
 			display: flex;
 			flex-wrap: wrap;
@@ -2385,11 +2394,10 @@
 			margin-block: 0;
 		}
 
-		/* Lower row: endpoint (wide) beside versions (narrow). */
+		/* Lower row: endpoint (wide) beside versions (narrow), the same height. */
 		.aafm-dashboard-lower {
 			grid-template-columns: 2fr 1fr;
 			margin-block-start: 0;
-			align-items: start;
 		}
 	}
 
@@ -2515,7 +2523,8 @@
 			}
 		}
 
-		&:not([open]) > summary { border-block-end: 0; }
+		/* Transparent rather than removed, so a closed card's head keeps the same height. */
+		&:not([open]) > summary { border-block-end-color: transparent; }
 
 		.aafm-section-body {
 			padding-block: 18px;
@@ -2733,7 +2742,6 @@
 	.aafm-oauth-card {
 		.aafm-recommended-pill {
 			flex-shrink: 0;
-			margin-inline-start: auto;
 		}
 
 		/* Per-client instruction note above the snippet */

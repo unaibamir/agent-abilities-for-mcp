@@ -9,7 +9,7 @@ WordPress MCP server for Claude and ChatGPT. Run one site or many with limited a
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.9.0 |
+| **Stable tag** | 1.10.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description

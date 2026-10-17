@@ -238,7 +238,7 @@ class SettingsAccessCardsTest extends TestCase {
 	}
 
 	public function test_the_row_says_a_removed_role_pauses_its_connections_until_it_is_added_back(): void {
-		$this->assertStringContainsString( 'While a role is off this list, the connections of users who only have that role stop working. Adding it back restores them.', $this->render() );
+		$this->assertStringContainsString( 'While a role is off this list, the connections of users who only have that role stop working. Adding the role back lets them work again, though an app that was already refused may need to reconnect.', $this->render() );
 	}
 
 	public function test_off_is_the_default_and_renders_selected(): void {

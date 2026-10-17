@@ -952,7 +952,7 @@ function aafm_render_settings_tab(): void {
 		);
 	}
 	$role_boxes .= '</span>';
-	$role_help   = __( 'A connected app never does more than the person who approved it can. While a role is off this list, the connections of users who only have that role stop working. Adding it back restores them.', 'agent-abilities-for-mcp' );
+	$role_help   = __( 'A connected app never does more than the person who approved it can. While a role is off this list, the connections of users who only have that role stop working. Adding the role back lets them work again, though an app that was already refused may need to reconnect.', 'agent-abilities-for-mcp' );
 	if ( has_filter( 'aafm_oauth_min_capability' ) ) {
 		$role_help .= ' ' . __( 'A setting in this site\'s code also controls this and takes priority.', 'agent-abilities-for-mcp' );
 	}

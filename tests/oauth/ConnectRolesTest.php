@@ -246,7 +246,8 @@ class ConnectRolesTest extends TestCase {
 		$editor      = $this->user( 'editor' );
 		$contributor = $this->user( 'contributor' );
 		$tokens      = $this->grant( $editor->ID );
-		$legacy      = array( 'administrator', 'editor', 'author', 'contributor' );
+		// What the form ticks: the shared helper, so a role another suite left in memory is counted too.
+		$legacy = aafm_oauth_legacy_default_roles();
 
 		$steps = array(
 			'unrelated save' => function () use ( $legacy ): void {

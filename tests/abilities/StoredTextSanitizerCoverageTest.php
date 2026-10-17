@@ -203,6 +203,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The same client_id lookup pattern, plus a \'1\'/\'0\' truthy flag read as plain text and never written back as text (it is cast to a bool, then to an int, before the DB write).',
 		),
+		'includes/admin/connection-cards.php::aafm_ajax_oauth_update_grant::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( $field( \'client_id\' ) )',
+			),
+			'reason' => 'The same client_id lookup on the grant-update path; the grant must exist (aafm_oauth_has_consent()) and nothing is written back under this value.',
+		),
 		'includes/admin/page.php::aafm_sanitize_enabled_input::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $name )',
@@ -214,6 +220,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 				'sanitize_text_field( (string) $line )',
 			),
 			'reason' => 'Shared by aafm_sanitize_settings_input(), which stores a line only after aafm_is_valid_ip_or_cidr() accepts it (no invisible character survives that), and aafm_count_dropped_ip_lines(), which uses the same parse purely to count rejected lines for the save notice and stores nothing at all.',
+		),
+		'includes/admin/settings.php::aafm_settings_remote_addr::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_SERVER[\'REMOTE_ADDR\'] ) )',
+			),
+			'reason' => 'REMOTE_ADDR for the Settings preview line, returned only when filter_var( $remote, FILTER_VALIDATE_IP ) accepts it; it is displayed, never stored.',
 		),
 		'includes/audit/log.php::aafm_source_ip::sanitize_text_field' => array(
 			'calls'  => array(

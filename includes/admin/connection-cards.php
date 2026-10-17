@@ -544,3 +544,125 @@ function aafm_ajax_save_oauth_lifetimes(): void {
 	}
 	wp_send_json_success( aafm_connection_lifetimes_data() );
 }
+
+/**
+ * One grant row of aafm_connection_grants_data(), or null when the grant is not listed.
+ *
+ * @param int    $user_id   Approving user.
+ * @param string $client_id OAuth client id.
+ * @return array<string,mixed>|null
+ */
+function aafm_connection_grant_row( int $user_id, string $client_id ): ?array {
+	foreach ( aafm_connection_grants_data()['rows'] as $row ) {
+		if ( $user_id === $row['user_id'] && $client_id === $row['client_id'] ) {
+			return $row;
+		}
+	}
+	return null;
+}
+
+/**
+ * AJAX: change one grant's pause, access preset, end date or rate override.
+ *
+ * Each field is optional; an absent field is left alone. preset, expires and rate must arrive with
+ * the value the browser last saw (expect_*), and nothing is written when the stored value has moved,
+ * so a stale tab cannot undo another admin's change.
+ *
+ * @return void
+ */
+function aafm_ajax_oauth_update_grant(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	// phpcs:disable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; every caller type-checks the raw value, so an array is refused, never cast.
+	$field = static function ( string $key ) {
+		return isset( $_POST[ $key ] ) ? wp_unslash( $_POST[ $key ] ) : null;
+	};
+	// phpcs:enable
+	$user_id = is_string( $field( 'user_id' ) ) ? absint( $field( 'user_id' ) ) : 0;
+	$client  = is_string( $field( 'client_id' ) ) ? sanitize_text_field( $field( 'client_id' ) ) : '';
+	if ( $user_id <= 0 || '' === $client || ! aafm_oauth_has_consent( $user_id, $client ) ) {
+		wp_send_json_error( array( 'message' => __( 'Missing grant.', 'agent-abilities-for-mcp' ) ) );
+	}
+	$refuse  = __( 'That value is not allowed.', 'agent-abilities-for-mcp' );
+	$changes = array();
+	$logs    = array();
+
+	$paused = $field( 'paused' );
+	if ( null !== $paused ) {
+		if ( ! in_array( $paused, array( '0', '1' ), true ) ) {
+			wp_send_json_error( array( 'message' => $refuse ) );
+		}
+		$changes['paused'] = '1' === $paused;
+		$logs[]            = $changes['paused'] ? __( 'Connection paused', 'agent-abilities-for-mcp' ) : __( 'Connection resumed', 'agent-abilities-for-mcp' );
+	}
+	$state = aafm_oauth_grant_state( $user_id, $client );
+	if ( null === $state ) {
+		wp_send_json_error( array( 'message' => $refuse ) );
+	}
+	// ponytail: the baseline compare happens in PHP before the UPDATE, a window of milliseconds; a
+	// compare-and-set in the UPDATE's WHERE is the upgrade if two admins ever collide that tightly.
+	$moved    = __( 'This connection was changed in another tab or by another admin. Reload the page to see the current settings.', 'agent-abilities-for-mcp' );
+	$baseline = static function ( string $key, string $current ) use ( $field, $moved ): void {
+		$expected = $field( 'expect_' . $key );
+		if ( ! is_string( $expected ) || $expected !== $current ) {
+			wp_send_json_error( array( 'message' => $moved ) );
+		}
+	};
+
+	$preset = $field( 'preset' );
+	if ( null !== $preset ) {
+		if ( ! is_string( $preset ) || ! isset( aafm_access_presets()[ $preset ] ) ) {
+			wp_send_json_error( array( 'message' => $refuse ) );
+		}
+		$baseline( 'preset', '' === $state['preset'] ? 'custom' : $state['preset'] );
+		$changes['preset'] = aafm_preset_normalize( $preset );
+		/* translators: %s: access preset name, for example "Read only". */
+		$logs[] = sprintf( __( 'Access preset changed to %s', 'agent-abilities-for-mcp' ), aafm_access_presets()[ $preset ]['label'] );
+	}
+
+	$day = $field( 'expires' );
+	if ( null !== $day ) {
+		$baseline( 'expires', null === $state['expires_at'] ? '' : get_date_from_gmt( $state['expires_at'], 'Y-m-d' ) );
+		if ( '' === $day ) {
+			$changes['expires_at'] = null;
+			$logs[]                = __( 'End date removed', 'agent-abilities-for-mcp' );
+		} else {
+			$valid = aafm_activity_valid_date( $day );
+			$utc   = null === $valid ? '' : get_gmt_from_date( $valid . ' 23:59:59' );
+			if ( '' === $utc || $utc <= gmdate( 'Y-m-d H:i:s' ) ) {
+				wp_send_json_error( array( 'message' => __( 'Pick a date in the future. To stop a connection now, pause or revoke it.', 'agent-abilities-for-mcp' ) ) );
+			}
+			$changes['expires_at'] = $utc;
+			/* translators: %s: the end date, Y-m-d. */
+			$logs[] = sprintf( __( 'End date set to %s', 'agent-abilities-for-mcp' ), $valid );
+		}
+	}
+
+	$rate = $field( 'rate' );
+	if ( null !== $rate ) {
+		$baseline( 'rate', $state['rate'] > 0 ? (string) $state['rate'] : '' );
+		if ( '' === $rate ) {
+			$changes['rate'] = 0;
+			$logs[]          = __( 'Rate limit override removed', 'agent-abilities-for-mcp' );
+		} elseif ( is_string( $rate ) && 1 === preg_match( '/\A[1-9][0-9]{0,4}\z/', $rate ) && (int) $rate <= 10000 ) {
+			$changes['rate'] = (int) $rate;
+			/* translators: %d: calls per minute. */
+			$logs[] = sprintf( __( 'Rate limit set to %d a minute', 'agent-abilities-for-mcp' ), (int) $rate );
+		} else {
+			wp_send_json_error( array( 'message' => $refuse ) );
+		}
+	}
+
+	if ( array() === $changes ) {
+		wp_send_json_error( array( 'message' => __( 'Nothing to change.', 'agent-abilities-for-mcp' ) ) );
+	}
+	if ( ! aafm_oauth_grant_update( $user_id, $client, $changes ) ) {
+		wp_send_json_error( array( 'message' => __( 'The change did not take. Reload the page and try again.', 'agent-abilities-for-mcp' ) ) );
+	}
+	foreach ( $logs as $detail ) {
+		aafm_log_setting_change( 'aafm/oauth-grant', $detail . sprintf( ' (user ID %1$d, app %2$s)', $user_id, substr( $client, 0, 8 ) ) );
+	}
+	wp_send_json_success( aafm_connection_grant_row( $user_id, $client ) );
+}

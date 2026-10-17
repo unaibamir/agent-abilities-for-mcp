@@ -28,7 +28,7 @@ class ConsentRecordTest extends TestCase {
 	public function tear_down(): void {
 		remove_all_filters( 'query' );
 		delete_transient( 'aafm_oauth_upgrade_lock' );
-		aafm_install_oauth_tables();
+		SchemaV9Test::restore_schema();
 		parent::tear_down();
 	}
 

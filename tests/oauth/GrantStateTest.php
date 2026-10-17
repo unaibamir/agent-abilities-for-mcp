@@ -24,7 +24,7 @@ class GrantStateTest extends TestCase {
 	}
 
 	public function tear_down(): void {
-		aafm_install_oauth_tables();
+		SchemaV9Test::restore_schema();
 		parent::tear_down();
 	}
 

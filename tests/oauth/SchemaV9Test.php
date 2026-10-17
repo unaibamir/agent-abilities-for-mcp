@@ -24,11 +24,23 @@ class SchemaV9Test extends TestCase {
 	}
 
 	public function tear_down(): void {
-		// The ALTERs commit, so put the table and the stamp back for the next test.
 		remove_all_filters( 'query' );
 		delete_transient( 'aafm_oauth_upgrade_lock' );
-		aafm_install_oauth_tables();
+		self::restore_schema();
 		parent::tear_down();
+	}
+
+	/**
+	 * Put the v9 schema and stamp back after a test that took them away. Runs the installer only
+	 * when something is missing: its DDL commits, which would let the test's own option and
+	 * transient writes escape the per-test rollback.
+	 *
+	 * @return void
+	 */
+	public static function restore_schema(): void {
+		if ( ! aafm_oauth_schema_verify() || AAFM_OAUTH_SCHEMA_VERSION !== get_option( 'aafm_oauth_schema_version' ) ) {
+			aafm_install_oauth_tables();
+		}
 	}
 
 	/**

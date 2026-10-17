@@ -114,6 +114,9 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 			return $result;
 		} finally {
 			aafm_executing_ability_pop();
+			if ( null === aafm_executing_ability() ) {
+				aafm_refresh_after_meta_writes();
+			}
 			aafm_rate_limit_call_reset( $this->get_name() );
 			aafm_resolve_dangling_invocation_if_mine( $this->get_name(), $invocation_token, $result );
 		}

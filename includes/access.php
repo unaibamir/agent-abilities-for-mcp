@@ -12,26 +12,13 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Whether the owner has paused all MCP access.
  *
- * Same shape as aafm_read_only_mode_stored(): the row decides; a cache copy that disagrees is not
+ * Read through aafm_stored_switch_on(): the row decides; a cache copy that disagrees is not
  * trusted for "off"; an unreadable row reads as paused (fail closed).
  *
  * @return bool
  */
 function aafm_pause_all(): bool {
-	$is_on = static function ( $stored ): bool {
-		return is_array( $stored ) || is_object( $stored ) || (bool) $stored;
-	};
-	$raw   = get_option( 'aafm_pause_all', false );
-	$on    = $is_on( $raw );
-	if ( false === $raw ) {
-		$row = aafm_policy_row( 'aafm_pause_all' );
-		$on  = ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
-	}
-	$row = aafm_policy_row_if_stale( 'aafm_pause_all' );
-	if ( null !== $row ) {
-		$on = $on || ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
-	}
-	return $on;
+	return aafm_stored_switch_on( 'aafm_pause_all' );
 }
 
 /**

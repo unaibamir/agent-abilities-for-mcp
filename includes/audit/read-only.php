@@ -52,21 +52,32 @@ function aafm_read_only_mode(): bool {
  * @return bool
  */
 function aafm_read_only_mode_stored(): bool {
-	// An array or an object is not a stored switch, and reads as on.
+	return aafm_stored_switch_on( 'aafm_read_only_mode' );
+}
+
+/**
+ * Whether an operator on/off switch is stored on. The row decides: an array or object is not a
+ * stored switch and reads as on, a cache copy that disagrees with the row reads on when either
+ * does, and an unreadable row reads as on (fail closed). Off is the absent row.
+ *
+ * @param string $option Switch option name.
+ * @return bool
+ */
+function aafm_stored_switch_on( string $option ): bool {
 	$is_on = static function ( $stored ): bool {
 		return is_array( $stored ) || is_object( $stored ) || (bool) $stored;
 	};
 
-	$raw = get_option( 'aafm_read_only_mode', false );
+	$raw = get_option( $option, false );
 	$on  = $is_on( $raw );
 	if ( false === $raw ) {
 		// Off may be a failed read's default: the row decides, and an unreadable row means on.
-		$row = aafm_policy_row( 'aafm_read_only_mode' );
+		$row = aafm_policy_row( $option );
 		$on  = ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
 	}
 
 	// A cache copy that disagrees with the row reads on when either does; an unreadable row means on.
-	$row = aafm_policy_row_if_stale( 'aafm_read_only_mode' );
+	$row = aafm_policy_row_if_stale( $option );
 	if ( null !== $row ) {
 		$on = $on || ! $row['ok'] || ( $row['found'] && $is_on( $row['value'] ) );
 	}

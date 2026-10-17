@@ -186,4 +186,72 @@ class ConnectionCardsTest extends TestCase {
 			$this->assertStringContainsString( $control, $panel, $control );
 		}
 	}
+
+	private function grants_html(): string {
+		return $this->render( static fn() => aafm_render_grants_card( aafm_connection_grants_data() ) );
+	}
+
+	public function test_the_grants_table_has_status_access_last_used_expires_and_limit_columns(): void {
+		$this->seed_grant();
+		preg_match( '/<table[^>]*aafm-grants-table.*?<\/thead>/s', $this->grants_html(), $m );
+		$this->assertNotEmpty( $m );
+		preg_match_all( '/<th>(?:<span[^>]*>)?([^<]+)/', $m[0], $heads );
+		$this->assertSame( array( 'User', 'Current role', 'App', 'Access', 'Last used', 'Ends', 'Limit', 'Status', 'Actions' ), $heads[1] );
+	}
+
+	public function test_the_access_select_lists_the_four_presets_with_the_current_one_selected_and_a_custom_default_for_a_null_preset(): void {
+		$this->seed_grant();
+		$html = $this->grants_html();
+		$this->assertStringContainsString( 'class="aafm-grant-preset" data-aafm-saved="custom"', $html );
+		foreach ( array( 'read_only', 'content_editor', 'shop_manager', 'custom' ) as $slug ) {
+			$this->assertStringContainsString( '<option value="' . $slug . '"', $html );
+		}
+		$this->assertMatchesRegularExpression( '/<option value="custom" selected/', $html );
+
+		aafm_truncate_oauth_tables();
+		$this->seed_grant( array( 'preset' => 'read_only' ) );
+		$html = $this->grants_html();
+		$this->assertStringContainsString( 'data-aafm-saved="read_only"', $html );
+		$this->assertMatchesRegularExpression( '/<option value="read_only" selected/', $html );
+	}
+
+	public function test_each_preset_option_states_how_many_of_the_enabled_abilities_it_reaches(): void {
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/create-post', 'aafm/delete-post' ) );
+		$this->seed_grant();
+		$html = $this->grants_html();
+		$read = aafm_preset_count( 'read_only' );
+		$this->assertStringContainsString( 'Read only (up to ' . $read['allowed'] . ' of ' . $read['enabled'] . ')', $html );
+		$this->assertStringContainsString( 'Custom (up to ' . $read['enabled'] . ' of ' . $read['enabled'] . ')', $html );
+		$this->assertStringContainsString( 'Access presets only narrow what you have switched on under Abilities.', $html );
+	}
+
+	public function test_a_paused_row_shows_Resume_and_an_active_row_shows_Pause(): void { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- names the button labels.
+		$this->seed_grant();
+		$this->assertMatchesRegularExpression( '/aafm-grant-pause"[^>]*data-paused="0"[^>]*>Pause</', $this->grants_html() );
+		aafm_truncate_oauth_tables();
+		$this->seed_grant( array( 'paused_at' => gmdate( 'Y-m-d H:i:s' ) ) );
+		$this->assertMatchesRegularExpression( '/aafm-grant-pause"[^>]*data-paused="1"[^>]*>Resume</', $this->grants_html() );
+	}
+
+	public function test_last_used_shows_time_and_ip_or_Never(): void { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- names the label.
+		$this->seed_grant();
+		$this->assertStringContainsString( '<span class="aafm-muted">Never</span>', $this->grants_html() );
+		aafm_truncate_oauth_tables();
+		$this->seed_grant(
+			array(
+				'last_used_at' => '2026-01-02 03:04:05',
+				'last_used_ip' => '203.0.113.7',
+			)
+		);
+		$html = $this->grants_html();
+		$this->assertStringContainsString( esc_html( aafm_format_admin_datetime( '2026-01-02 03:04:05' ) ) . ' <span class="aafm-muted">203.0.113.7</span>', $html );
+	}
+
+	public function test_an_expired_row_shows_the_Expired_pill_and_the_end_date(): void { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- names the pill.
+		$this->seed_grant( array( 'expires_at' => '2026-01-01 18:59:59' ) );
+		$html = $this->grants_html();
+		$this->assertStringContainsString( '<span class="aafm-pill aafm-pill-neutral">Expired</span>', $html );
+		$this->assertStringContainsString( 'value="' . get_date_from_gmt( '2026-01-01 18:59:59', 'Y-m-d' ) . '"', $html );
+		$this->assertStringContainsString( 'min="' . wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) . '"', $html );
+	}
 }

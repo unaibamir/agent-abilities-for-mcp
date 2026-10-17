@@ -204,6 +204,7 @@ function aafm_admin_allowed_html(): array {
 		'data-aafm-untracked' => true,
 		'data-qc-preset'      => true,
 		'data-ttl'            => true,
+		'data-who'            => true,
 	);
 
 	$global = array_merge(

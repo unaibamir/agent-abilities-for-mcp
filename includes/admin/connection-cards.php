@@ -225,8 +225,20 @@ function aafm_render_grants_card( array $data ): void {
 	if ( array() === $data['rows'] ) {
 		echo aafm_connection_empty_state( $data['empty'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by the helper.
 	} else {
-		$scope_hint     = __( 'The app can only do what this user\'s role allows and what you have turned on under Abilities.', 'agent-abilities-for-mcp' );
 		$role_names_map = wp_roles()->get_names();
+		$tomorrow       = (string) wp_date( 'Y-m-d', time() + DAY_IN_SECONDS );
+		$site_limit     = aafm_rate_limit_per_min();
+		$preset_options = array();
+		foreach ( aafm_access_presets() as $slug => $preset ) {
+			$count                   = aafm_preset_count( 'custom' === $slug ? '' : $slug );
+			$preset_options[ $slug ] = sprintf(
+				/* translators: 1: preset name, 2: abilities it reaches, 3: abilities switched on. */
+				__( '%1$s (up to %2$d of %3$d)', 'agent-abilities-for-mcp' ),
+				$preset['label'],
+				$count['allowed'],
+				$count['enabled']
+			);
+		}
 
 		echo '<div class="aafm-table-wrap">';
 		echo '<table class="widefat striped aafm-oauth-table aafm-grants-table"><thead><tr>';
@@ -236,15 +248,18 @@ function aafm_render_grants_card( array $data ): void {
 			esc_attr__( "The user's role right now, not necessarily what it was when they approved this connection. A token always acts with whatever this identity can currently do.", 'agent-abilities-for-mcp' ),
 			esc_html__( 'Current role', 'agent-abilities-for-mcp' )
 		);
-		echo '<th>' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Scope', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Granted', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
+		foreach ( array( __( 'App', 'agent-abilities-for-mcp' ), __( 'Access', 'agent-abilities-for-mcp' ), __( 'Last used', 'agent-abilities-for-mcp' ), __( 'Ends', 'agent-abilities-for-mcp' ), __( 'Limit', 'agent-abilities-for-mcp' ), __( 'Status', 'agent-abilities-for-mcp' ), __( 'Actions', 'agent-abilities-for-mcp' ) ) as $heading ) {
+			echo '<th>' . esc_html( $heading ) . '</th>';
+		}
 		echo '</tr></thead><tbody>';
 
 		foreach ( $data['rows'] as $grant ) {
 			$client_name = '' !== $grant['client_name'] ? $grant['client_name'] : __( '(unnamed client)', 'agent-abilities-for-mcp' );
+			/* translators: 1: user login, 2: app name. */
+			$who    = sprintf( __( '%1$s, %2$s', 'agent-abilities-for-mcp' ), $grant['user_login'], $client_name );
+			$preset = '' === $grant['preset'] ? 'custom' : $grant['preset'];
+			$ends   = null === $grant['expires_at'] ? '' : get_date_from_gmt( $grant['expires_at'], 'Y-m-d' );
+			$rate   = $grant['rate'] > 0 ? (string) $grant['rate'] : '';
 
 			printf(
 				'<tr data-grant-row="%1$s|%2$s">',
@@ -277,24 +292,76 @@ function aafm_render_grants_card( array $data ): void {
 			echo '</td>';
 
 			printf( '<td>%s</td>', esc_html( $client_name ) );
+
+			/* translators: %s: user login and app name. */
+			printf( '<td><select class="aafm-grant-preset" data-aafm-saved="%1$s" aria-label="%2$s">', esc_attr( $preset ), esc_attr( sprintf( __( 'Access for %s', 'agent-abilities-for-mcp' ), $who ) ) );
+			foreach ( $preset_options as $slug => $label ) {
+				printf( '<option value="%1$s"%2$s>%3$s</option>', esc_attr( $slug ), selected( $slug, $preset, false ), esc_html( $label ) );
+			}
+			echo '</select></td>';
+
+			if ( null === $grant['last_used_at'] ) {
+				echo '<td><span class="aafm-muted">' . esc_html__( 'Never', 'agent-abilities-for-mcp' ) . '</span></td>';
+			} else {
+				printf( '<td>%1$s <span class="aafm-muted">%2$s</span></td>', esc_html( aafm_format_admin_datetime( $grant['last_used_at'] ) ), esc_html( $grant['last_used_ip'] ) );
+			}
+
 			printf(
-				'<td><span title="%1$s">%2$s</span></td>',
-				esc_attr( $scope_hint ),
-				esc_html__( 'Full access', 'agent-abilities-for-mcp' )
+				'<td><input type="date" class="aafm-grant-expires" min="%1$s" value="%2$s" data-aafm-saved="%2$s" aria-label="%3$s"></td>',
+				esc_attr( $tomorrow ),
+				esc_attr( $ends ),
+				/* translators: %s: user login and app name. */
+				esc_attr( sprintf( __( 'End date for %s', 'agent-abilities-for-mcp' ), $who ) )
 			);
-			printf( '<td>%s</td>', esc_html( aafm_format_admin_datetime( $grant['granted_at'] ) ) );
-			echo '<td class="aafm-status-cell">' . aafm_connection_grant_pill( $grant['status'] ) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by the helper.
 			printf(
-				'<td><button type="button" class="aafm-btn aafm-btn-secondary aafm-revoke-grant" data-user-id="%1$s" data-client-id="%2$s">%3$s</button></td>',
+				'<td><input type="number" min="1" max="10000" step="1" class="aafm-grant-rate small-text" placeholder="%1$s" value="%2$s" data-aafm-saved="%2$s" aria-label="%3$s"></td>',
+				esc_attr__( 'inherit', 'agent-abilities-for-mcp' ),
+				esc_attr( $rate ),
+				/* translators: %s: user login and app name. */
+				esc_attr( sprintf( __( 'Calls a minute for %s', 'agent-abilities-for-mcp' ), $who ) )
+			);
+			echo '<td class="aafm-status-cell">' . aafm_connection_grant_pill( $grant['status'] ) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by the helper.
+
+			echo '<td class="aafm-grant-actions">';
+			printf(
+				'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-grant-save" data-user-id="%1$s" data-client-id="%2$s" aria-label="%3$s">%4$s</button> ',
 				esc_attr( (string) $grant['user_id'] ),
 				esc_attr( $grant['client_id'] ),
+				/* translators: %s: user login and app name. */
+				esc_attr( sprintf( __( 'Save changes for %s', 'agent-abilities-for-mcp' ), $who ) ),
+				esc_html__( 'Save', 'agent-abilities-for-mcp' )
+			);
+			printf(
+				'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-grant-pause" data-user-id="%1$s" data-client-id="%2$s" data-paused="%3$s" data-who="%6$s" aria-label="%4$s">%5$s</button> ',
+				esc_attr( (string) $grant['user_id'] ),
+				esc_attr( $grant['client_id'] ),
+				$grant['paused'] ? '1' : '0',
+				/* translators: %s: user login and app name. */
+				esc_attr( sprintf( $grant['paused'] ? __( 'Resume %s', 'agent-abilities-for-mcp' ) : __( 'Pause %s', 'agent-abilities-for-mcp' ), $who ) ),
+				$grant['paused'] ? esc_html__( 'Resume', 'agent-abilities-for-mcp' ) : esc_html__( 'Pause', 'agent-abilities-for-mcp' ),
+				esc_attr( $who )
+			);
+			printf(
+				'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-revoke-grant" data-user-id="%1$s" data-client-id="%2$s" aria-label="%3$s">%4$s</button>',
+				esc_attr( (string) $grant['user_id'] ),
+				esc_attr( $grant['client_id'] ),
+				/* translators: %s: user login and app name. */
+				esc_attr( sprintf( __( 'Revoke %s', 'agent-abilities-for-mcp' ), $who ) ),
 				esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
 			);
+			echo ' <span class="aafm-grant-status" role="status"></span>';
+			echo '</td>';
 			echo '</tr>';
 		}
 
 		echo '</tbody></table>';
 		echo '</div>';
+		echo '<p class="help">' . esc_html__( 'Access presets only narrow what you have switched on under Abilities. They never add anything.', 'agent-abilities-for-mcp' );
+		if ( $site_limit > 0 ) {
+			/* translators: %d: the site-wide calls-a-minute limit. */
+			echo ' ' . esc_html( sprintf( __( 'A connection limit cannot go above the site limit (%d).', 'agent-abilities-for-mcp' ), $site_limit ) );
+		}
+		echo '</p>';
 	}
 	aafm_render_section(
 		array(

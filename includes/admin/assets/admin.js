@@ -76,6 +76,7 @@
 			this.#bindResetPlugin();
 			this.#bindConnectionTabs();
 			this.#bindLifetimesCard();
+			this.#bindGrantControls();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
 			this.#bindClientAgentToggle();
@@ -2537,6 +2538,95 @@
 				}
 				status.textContent = this.#t( 'saved', 'Saved' );
 				refresh();
+			} );
+		}
+
+		/**
+		 * Wire each grant row's Pause/Resume and Save. Save posts only the controls whose value
+		 * differs from their data-aafm-saved baseline, each with that baseline, so a stale tab
+		 * cannot undo another admin's change.
+		 */
+		#bindGrantControls() {
+			const root = document.querySelector( '.aafm-oauth-manage' );
+			if ( ! root ) {
+				return;
+			}
+			const pills = {
+				active: [ 'aafm-pill-success', this.#t( 'grantActive', 'Active' ) ],
+				paused: [ 'aafm-pill-warn', this.#t( 'grantPaused', 'Paused' ) ],
+				expired: [ 'aafm-pill-neutral', this.#t( 'grantExpired', 'Expired' ) ],
+			};
+			const fields = {
+				preset: '.aafm-grant-preset',
+				expires: '.aafm-grant-expires',
+				rate: '.aafm-grant-rate',
+			};
+			root.addEventListener( 'click', async ( e ) => {
+				const btn = e.target.closest( '.aafm-grant-pause, .aafm-grant-save' );
+				const row = btn?.closest( 'tr[data-grant-row]' );
+				if ( ! row || ! root.contains( btn ) ) {
+					return;
+				}
+				const status = row.querySelector( '.aafm-grant-status' );
+				const data = { user_id: btn.dataset.userId ?? '', client_id: btn.dataset.clientId ?? '' };
+				const sent = {};
+				if ( btn.classList.contains( 'aafm-grant-pause' ) ) {
+					data.paused = '1' === btn.dataset.paused ? '0' : '1';
+				} else {
+					Object.entries( fields ).forEach( ( [ key, selector ] ) => {
+						const input = row.querySelector( selector );
+						if ( input && input.value !== ( input.dataset.aafmSaved ?? '' ) ) {
+							data[ key ] = input.value;
+							data[ `expect_${ key }` ] = input.dataset.aafmSaved ?? '';
+							sent[ key ] = input;
+						}
+					} );
+					if ( ! Object.keys( sent ).length ) {
+						status.textContent = this.#t( 'grantNothingChanged', 'Nothing to save.' );
+						return;
+					}
+				}
+				const buttons = row.querySelectorAll( 'button' );
+				buttons.forEach( ( b ) => {
+					b.disabled = true;
+				} );
+				status.textContent = this.#t( 'saving', 'Saving…' );
+				const json = await this.#post( 'aafm_oauth_update_grant', data );
+				buttons.forEach( ( b ) => {
+					b.disabled = false;
+				} );
+				if ( ! json?.success ) {
+					status.textContent =
+						json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					return;
+				}
+				const grant = json.data ?? {};
+				Object.values( sent ).forEach( ( input ) => {
+					input.dataset.aafmSaved = input.value;
+				} );
+				const pause = row.querySelector( '.aafm-grant-pause' );
+				if ( pause ) {
+					pause.dataset.paused = grant.paused ? '1' : '0';
+					pause.textContent = grant.paused
+						? this.#t( 'grantResume', 'Resume' )
+						: this.#t( 'grantPause', 'Pause' );
+					pause.setAttribute(
+						'aria-label',
+						this.#format(
+							grant.paused
+								? this.#t( 'grantResumeFor', 'Resume %s' )
+								: this.#t( 'grantPauseFor', 'Pause %s' ),
+							pause.dataset.who ?? ''
+						)
+					);
+				}
+				const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
+				const look = pills[ grant.status ] ?? pills.active;
+				if ( pill ) {
+					pill.className = `aafm-pill ${ look[ 0 ] }`;
+					pill.textContent = look[ 1 ];
+				}
+				status.textContent = this.#t( 'saved', 'Saved' );
 			} );
 		}
 

@@ -169,6 +169,16 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'cleared'                  => __( 'Cleared', 'agent-abilities-for-mcp' ),
 				'error'                    => __( 'Error', 'agent-abilities-for-mcp' ),
 				'requestFailed'            => __( 'Request failed.', 'agent-abilities-for-mcp' ),
+				'grantActive'              => __( 'Active', 'agent-abilities-for-mcp' ),
+				'grantPaused'              => __( 'Paused', 'agent-abilities-for-mcp' ),
+				'grantExpired'             => __( 'Expired', 'agent-abilities-for-mcp' ),
+				'grantPause'               => __( 'Pause', 'agent-abilities-for-mcp' ),
+				'grantResume'              => __( 'Resume', 'agent-abilities-for-mcp' ),
+				/* translators: %s: user login and app name. */
+				'grantPauseFor'            => __( 'Pause %s', 'agent-abilities-for-mcp' ),
+				/* translators: %s: user login and app name. */
+				'grantResumeFor'           => __( 'Resume %s', 'agent-abilities-for-mcp' ),
+				'grantNothingChanged'      => __( 'Nothing to save.', 'agent-abilities-for-mcp' ),
 				'dcrOffConfirm'            => __( 'Turn off dynamic client registration? ChatGPT and Claude can no longer register themselves, so new connections from them will fail until you turn it back on.', 'agent-abilities-for-mcp' ),
 				'settingsNotSaved'         => __( 'Could not save - your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
 				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),

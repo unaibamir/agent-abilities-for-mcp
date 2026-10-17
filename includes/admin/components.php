@@ -37,19 +37,19 @@ function aafm_sanitize_html_classes( string $extra_class ): string {
 /**
  * Echo a settings section wrapper.
  *
- * Non-collapsible (default) renders a `<section class="aafm-section aafm-card">`
- * with a `.aafm-card-head` (icon/title/description/pill) and a
- * `.aafm-card-pad aafm-section-body` body. Collapsible renders a
- * `<details class="aafm-section aafm-section--collapsible">` with a `<summary>`
- * (title + optional badge) and a `.aafm-section-body` body, honoring `open` only
- * when `collapsible` is true.
+ * Both shapes share one head: a `.aafm-card-head` holding the icon, the title and an optional
+ * pill or badge. The description never sits in the head; it opens the body as one small, muted
+ * paragraph, so a long explanation cannot stretch the header. Non-collapsible (default) renders a
+ * `<section class="aafm-section aafm-card">` with a `.aafm-card-pad aafm-section-body` body.
+ * Collapsible renders a `<details class="aafm-card aafm-section aafm-section--collapsible">` whose
+ * `<summary>` is the head, honoring `open` only when `collapsible` is true.
  *
  * STRUCTURAL ONLY: `body`/`pill` are echoed verbatim - the caller must have
  * escaped them. `title`/`description` are escaped here with esc_html.
  *
  * Recognised $args keys: `id` (wrapper id attribute), `class` (extra wrapper classes,
  * sanitized per class name), `title` (heading, escaped), `icon` (aafm_icon() key for the
- * head glyph), `description` (sub-heading, escaped), `pill` (pre-built pill HTML, echoed
+ * head glyph), `description` (one muted paragraph that opens the body, escaped), `pill` (pre-built pill HTML, echoed
  * verbatim), `collapsible` (bool, default false), `open` (bool, default true, honored only
  * when collapsible), `badge` (count-badge text for the summary, escaped), and `body`
  * (pre-escaped inner HTML, echoed verbatim).
@@ -73,20 +73,28 @@ function aafm_render_section( array $args ): void {
 
 	$extra = aafm_sanitize_html_classes( $extra_class );
 
-	if ( $collapsible ) {
-		$open_attr  = $open ? ' open' : '';
-		$badge_html = '' === $badge
-			? ''
-			: sprintf( ' <span class="aafm-count-badge">%s</span>', esc_html( $badge ) );
+	$icon_html = '' === $icon
+		? ''
+		: sprintf( '<span class="aafm-card-head-ic">%s</span>', aafm_icon( $icon ) );
+	$desc_html = '' === $description
+		? ''
+		: sprintf( '<p class="aafm-card-desc">%s</p>', esc_html( $description ) );
+	$head      = sprintf(
+		'%1$s<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">%2$s</h3></div>%3$s',
+		$icon_html,
+		esc_html( $title ),
+		$pill . ( '' === $badge ? '' : sprintf( ' <span class="aafm-count-badge">%s</span>', esc_html( $badge ) ) )
+	);
 
+	if ( $collapsible ) {
 		echo wp_kses(
 			sprintf(
-				'<details class="aafm-section aafm-section--collapsible%1$s"%2$s%3$s><summary>%4$s%5$s</summary><div class="aafm-section-body">%6$s</div></details>',
+				'<details class="aafm-card aafm-section aafm-section--collapsible%1$s"%2$s%3$s><summary class="aafm-card-head">%4$s</summary><div class="aafm-section-body">%5$s%6$s</div></details>',
 				esc_attr( $extra ),
 				$id_attr,
-				esc_attr( $open_attr ),
-				esc_html( $title ),
-				$badge_html,
+				$open ? ' open' : '',
+				$head,
+				$desc_html,
 				$body
 			),
 			aafm_admin_allowed_html()
@@ -94,22 +102,13 @@ function aafm_render_section( array $args ): void {
 		return;
 	}
 
-	$icon_html = '' === $icon
-		? ''
-		: sprintf( '<span class="aafm-card-head-ic">%s</span>', aafm_icon( $icon ) );
-	$desc_html = '' === $description
-		? ''
-		: sprintf( '<p class="aafm-card-head-desc">%s</p>', esc_html( $description ) );
-
 	echo wp_kses(
 		sprintf(
-			'<section class="aafm-section aafm-card%1$s"%2$s><div class="aafm-card-head">%3$s<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">%4$s</h3>%5$s</div>%6$s</div><div class="aafm-card-pad aafm-section-body">%7$s</div></section>',
+			'<section class="aafm-section aafm-card%1$s"%2$s><div class="aafm-card-head">%3$s</div><div class="aafm-card-pad aafm-section-body">%4$s%5$s</div></section>',
 			esc_attr( $extra ),
 			$id_attr,
-			$icon_html,
-			esc_html( $title ),
+			$head,
 			$desc_html,
-			$pill,
 			$body
 		),
 		aafm_admin_allowed_html()

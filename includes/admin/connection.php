@@ -950,8 +950,10 @@ function aafm_render_connection_tab(): void {
 	aafm_render_pause_all_notice();
 
 	// ---- 1. Endpoint card (the single canonical endpoint display) ----
-	echo '<section class="aafm-card aafm-card-pad aafm-endpoint-card">';
-	echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<section class="aafm-card aafm-endpoint-card">';
+	echo '<div class="aafm-card-head"><span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'endpoint' ), aafm_svg_allowed_html() ) . '</span>';
+	echo '<div class="aafm-card-head-text"><h2 class="aafm-card-head-title">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</h2></div></div>';
+	echo '<div class="aafm-card-pad">';
 	echo '<div class="aafm-field-mono">';
 	printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
 	echo wp_kses(
@@ -965,16 +967,16 @@ function aafm_render_connection_tab(): void {
 		aafm_admin_allowed_html()
 	);
 	echo '</div>';
-	echo '</section>';
+	echo '</div></section>'; // .aafm-card-pad, .aafm-endpoint-card
 
 	aafm_render_doctor_card();
 
 	// ---- 2. OAuth card ----
-	echo '<section class="aafm-card aafm-card-pad aafm-oauth-card">';
-	echo '<div class="aafm-oauth-card-head">';
-	echo '<h2>' . esc_html__( 'Connect with OAuth', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<section class="aafm-card aafm-oauth-card">';
+	echo '<div class="aafm-card-head"><span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'connection' ), aafm_svg_allowed_html() ) . '</span>';
+	echo '<div class="aafm-card-head-text"><h2 class="aafm-card-head-title">' . esc_html__( 'Connect with OAuth', 'agent-abilities-for-mcp' ) . '</h2></div>';
 	echo '<span class="aafm-pill aafm-pill-info aafm-recommended-pill">' . esc_html__( 'Recommended', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '</div>';
+	echo '</div><div class="aafm-card-pad">';
 
 	if ( $oauth_on ) {
 		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
@@ -1098,7 +1100,7 @@ function aafm_render_connection_tab(): void {
 		}
 	}
 
-	echo '</section>';
+	echo '</div></section>'; // .aafm-card-pad, .aafm-oauth-card
 
 	aafm_render_pause_all_card();
 	aafm_render_connection_tabs( $oauth_on );

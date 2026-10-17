@@ -387,21 +387,23 @@
 
 	.aafm-card-pad {
 		padding-block: 18px;
-		padding-inline: 20px;
+		padding-inline: var(--aafm-space-5);
 	}
 
+	/* The one card header: icon, title, then an optional pill at the row end. Explanatory
+	   text never goes here; it opens the body as .aafm-card-desc. */
 	.aafm-card-head {
 		display: flex;
 		align-items: center;
 		gap: 10px;
 		padding-block: 14px;
-		padding-inline: 20px;
+		padding-inline: var(--aafm-space-5);
 		border-block-end: 1px solid var(--aafm-border);
 
 		h2,
 		.aafm-card-head-title {
 			margin: 0;
-			font-size: 14px;
+			font-size: var(--aafm-fs-body);
 			font-weight: 600;
 		}
 
@@ -412,12 +414,6 @@
 			display: flex;
 			flex-direction: column;
 			gap: 2px;
-		}
-
-		.aafm-card-head-desc {
-			margin: 0;
-			font-size: 12.5px;
-			color: var(--aafm-text-subtle);
 		}
 
 		.icon,
@@ -432,6 +428,13 @@
 				font-size: 18px;
 			}
 		}
+	}
+
+	/* A card's explanation: the first paragraph of its body, small and muted. */
+	.aafm-card-desc {
+		margin-block: 0 var(--aafm-space-3);
+		font-size: var(--aafm-fs-sm);
+		color: var(--aafm-text-subtle);
 	}
 
 	/* ---------- Stat cards ---------- */
@@ -1488,9 +1491,9 @@
 		.aafm-setup-top {
 			display: flex;
 			align-items: center;
-			gap: 14px;
-			padding-block: 16px;
-			padding-inline: 20px;
+			gap: 10px;
+			padding-block: 14px;
+			padding-inline: var(--aafm-space-5);
 			border-block-end: 1px solid var(--aafm-border);
 			cursor: pointer;
 			list-style: none;
@@ -1501,7 +1504,7 @@
 
 			h2 {
 				margin: 0;
-				font-size: 15px;
+				font-size: var(--aafm-fs-body);
 				font-weight: 600;
 				flex: 1;
 			}
@@ -2359,14 +2362,10 @@
 		flex-direction: column;
 		gap: 16px;
 
+		/* The column gap is the only spacing between dashboard blocks. */
+		> *,
 		.aafm-card {
-			padding-block: 14px;
-			padding-inline: 16px;
-
-			h3 {
-				margin-block: 0 8px;
-				font-size: 13px;
-			}
+			margin-block: 0;
 		}
 
 		/* Lower row: endpoint (wide) beside versions (narrow). */
@@ -2457,16 +2456,10 @@
 		border: 1px solid var(--aafm-border);
 		border-radius: var(--aafm-radius);
 
+		/* The summary is the shared .aafm-card-head; this only makes it a disclosure. */
 		> summary {
-			display: flex;
-			align-items: center;
-			gap: 10px;
-			padding-block: 12px;
-			padding-inline: 18px;
 			cursor: pointer;
 			list-style: none;
-			font-size: 14px;
-			font-weight: 600;
 			user-select: none;
 
 			&::marker,
@@ -2480,9 +2473,11 @@
 			}
 		}
 
+		&:not([open]) > summary { border-block-end: 0; }
+
 		.aafm-section-body {
-			padding-block: 0 16px;
-			padding-inline: 18px;
+			padding-block: 18px;
+			padding-inline: var(--aafm-space-5);
 		}
 	}
 
@@ -2584,20 +2579,6 @@
 
 	/* ---------- Ability allowlist (Connections tab) ---------- */
 	.aafm-allowlist-card {
-		/* .aafm-section--collapsible sets padding-block: 0 16px on the body, so the
-		   description (now the first thing in the body, moved out of <summary>) needs its
-		   own top gap under the summary's bottom edge - the .aafm-card-head-desc rule that
-		   used to give it spacing is scoped to .aafm-card-head, which this body is not inside. */
-		.aafm-section-body {
-			padding-block-start: 12px;
-		}
-
-		.aafm-card-head-desc {
-			margin: 0 0 16px;
-			font-size: 12.5px;
-			color: var(--aafm-text-subtle);
-		}
-
 		.aafm-allowlist-table {
 			margin-block-end: 8px;
 		}
@@ -2706,24 +2687,11 @@
 /* ---------- OAuth-first connection layout additions ---------- */
 .aafm-connection {
 
-	/* OAuth card header: title + Recommended pill on the same row */
+	/* OAuth card: the head is the shared .aafm-card-head; the pill sits at its row end. */
 	.aafm-oauth-card {
-		.aafm-oauth-card-head {
-			display: flex;
-			align-items: center;
-			gap: 10px;
-			margin-block-end: 8px;
-
-			h2 {
-				margin-block: 0;
-				font-size: 15px;
-				font-weight: 600;
-				line-height: 1.3;
-			}
-		}
-
 		.aafm-recommended-pill {
 			flex-shrink: 0;
+			margin-inline-start: auto;
 		}
 
 		/* Per-client instruction note above the snippet */

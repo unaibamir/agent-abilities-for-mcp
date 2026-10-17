@@ -62,7 +62,7 @@ class LifetimesCardTest extends TestCase {
 
 	public function test_it_renders_collapsed_and_the_save_button_starts_disabled(): void {
 		$html = $this->render();
-		$this->assertMatchesRegularExpression( '/<details class="aafm-section aafm-section--collapsible" id="aafm-oauth-lifetimes">/', $html );
+		$this->assertMatchesRegularExpression( '/<details class="aafm-card aafm-section aafm-section--collapsible" id="aafm-oauth-lifetimes">/', $html );
 		$this->assertStringContainsString( 'id="aafm-lifetimes-save" disabled', $html );
 	}
 }

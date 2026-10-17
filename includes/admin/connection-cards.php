@@ -536,6 +536,7 @@ function aafm_render_lifetimes_card( array $data ): void {
 	aafm_render_section(
 		array(
 			'id'          => 'aafm-oauth-lifetimes',
+			'icon'        => 'clock',
 			'collapsible' => true,
 			'open'        => false,
 			'title'       => __( 'Token lifetimes and client registration', 'agent-abilities-for-mcp' ),

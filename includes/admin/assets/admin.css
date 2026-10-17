@@ -2477,11 +2477,23 @@
 	}
 
 	/* ---------- OAuth client/grant management (Connections OAuth card) ---------- */
+	/* Settings: the "Roles that can connect" checkboxes. */
+	.aafm-role-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 16px;
+	}
+
 	.aafm-oauth-manage {
 		margin-block-start: 20px;
 
 		.aafm-grant-actions {
 			white-space: nowrap;
+		}
+
+		/* Wide enough for the "inherit" placeholder. */
+		.aafm-grant-rate {
+			inline-size: 7em;
 		}
 
 		.aafm-table-wrap {

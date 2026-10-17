@@ -74,6 +74,7 @@
 			this.#bindNotifyTest();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
+			this.#bindConnectionTabs();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
 			this.#bindClientAgentToggle();
@@ -2444,6 +2445,33 @@
 			if ( next ) {
 				next.disabled = page >= totalPages;
 			}
+		}
+
+		/**
+		 * Wire the Connection tab's OAuth and Application Passwords tabs: click or arrow keys
+		 * select a tab and show its panel through the hidden attribute.
+		 */
+		#bindConnectionTabs() {
+			const tabs = Array.from( document.querySelectorAll( '[data-conn-tab]' ) );
+			if ( tabs.length < 2 ) {
+				return;
+			}
+			const activate = ( tab ) => {
+				tabs.forEach( ( t ) => {
+					const on = t === tab;
+					t.classList.toggle( 'is-active', on );
+					t.setAttribute( 'aria-selected', on ? 'true' : 'false' );
+					const panel = document.querySelector(
+						`[data-conn-panel="${ t.dataset.connTab }"]`
+					);
+					if ( panel ) {
+						panel.hidden = ! on;
+					}
+				} );
+				this.#rovingTabindex( tabs, tab );
+			};
+			tabs.forEach( ( t ) => t.addEventListener( 'click', () => activate( t ) ) );
+			this.#wireTablistKeys( tabs, activate );
 		}
 
 		/**

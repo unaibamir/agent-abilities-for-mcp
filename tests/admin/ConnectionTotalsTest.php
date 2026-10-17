@@ -21,13 +21,14 @@ final class ConnectionTotalsTest extends TestCase {
 	}
 
 	/**
-	 * Render the OAuth management section and return its HTML.
+	 * Render the clients and grants cards and return their HTML.
 	 *
 	 * @return string
 	 */
 	private function render(): string {
 		ob_start();
-		aafm_render_oauth_management();
+		aafm_render_clients_card( aafm_connection_clients_data() );
+		aafm_render_grants_card( aafm_connection_grants_data() );
 		return (string) ob_get_clean();
 	}
 

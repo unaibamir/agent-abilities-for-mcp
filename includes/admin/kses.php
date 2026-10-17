@@ -183,17 +183,26 @@ function aafm_admin_allowed_html(): array {
 	);
 
 	$data = array(
-		'data-copy'        => true,
-		'data-client'      => true,
-		'data-os'          => true,
-		'data-client-id'   => true,
-		'data-user-id'     => true,
-		'data-config'      => true,
-		'data-client-row'  => true,
-		'data-grant-row'   => true,
-		'data-page'        => true,
-		'data-filter'      => true,
-		'data-total-pages' => true,
+		'data-copy'           => true,
+		'data-client'         => true,
+		'data-os'             => true,
+		'data-client-id'      => true,
+		'data-user-id'        => true,
+		'data-config'         => true,
+		'data-client-row'     => true,
+		'data-grant-row'      => true,
+		'data-page'           => true,
+		'data-filter'         => true,
+		'data-total-pages'    => true,
+		// 1.10.0 Connection tabs, grant controls, unsaved-change baselines and the wizard preset.
+		'data-conn-tab'       => true,
+		'data-conn-panel'     => true,
+		'data-paused'         => true,
+		'data-aafm-saved'     => true,
+		'data-saved'          => true,
+		'data-tab'            => true,
+		'data-aafm-untracked' => true,
+		'data-qc-preset'      => true,
 	);
 
 	$global = array_merge(

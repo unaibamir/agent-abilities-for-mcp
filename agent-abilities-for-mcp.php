@@ -458,6 +458,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-inbox.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection-cards.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/doctor.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/allowlist.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';

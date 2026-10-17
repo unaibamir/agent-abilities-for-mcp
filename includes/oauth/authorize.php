@@ -820,7 +820,12 @@ function aafm_oauth_handle_authorize(): void {
 	if ( null === $grant ) {
 		aafm_oauth_render_local_error( 500, __( 'This connection could not be checked. Please try again.', 'agent-abilities-for-mcp' ) );
 	}
-	$has_consent = aafm_oauth_has_consent( $user_id, $valid['client_id'] );
+	// Tri-state read: a failed consent SELECT must not read as "no consent" and let a paused grant through.
+	$consent = aafm_oauth_consent_view( $user_id, $valid['client_id'] );
+	if ( ! $consent['ok'] ) {
+		aafm_oauth_render_local_error( 500, __( 'This connection could not be checked. Please try again.', 'agent-abilities-for-mcp' ) );
+	}
+	$has_consent = $consent['value'];
 	if ( $has_consent && $grant['paused'] ) {
 		aafm_oauth_render_local_error( 403, __( 'The site owner has paused this connection. Ask them to resume it, then try again.', 'agent-abilities-for-mcp' ) );
 	}

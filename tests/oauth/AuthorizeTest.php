@@ -1302,6 +1302,25 @@ class AuthorizeTest extends TestCase {
 		$this->assertSame( $codes, $this->code_count() );
 	}
 
+	public function test_an_unreadable_consent_row_does_not_let_a_paused_grant_be_approved(): void {
+		global $wpdb;
+		$user   = $this->acting_as( 'administrator' );
+		$client = $this->register_client();
+		$this->set_grant( $user, $client, array( 'paused_at' => '2026-10-01 00:00:00' ) );
+		$codes = $this->code_count();
+
+		// Only the first consent SELECT fails; the later write path would succeed.
+		$result = QueryFaultInjector::fail_nth_query(
+			'SELECT id FROM `' . $wpdb->prefix . 'aafm_oauth_consents`',
+			1,
+			fn() => $this->approve( $client )
+		);
+		$this->assertNull( $result['redirect'], 'No code is issued when the consent row cannot be read.' );
+		$this->assertSame( 500, $result['status'] );
+		$this->assertSame( $codes, $this->code_count() );
+		$this->assertTrue( aafm_oauth_grant_state( $user, $client )['paused'], 'The pause is untouched.' );
+	}
+
 	public function test_the_consent_nonce_is_bound_to_the_client(): void {
 		$user     = $this->acting_as( 'administrator' );
 		$client_a = $this->register_client();

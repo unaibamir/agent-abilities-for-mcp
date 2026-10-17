@@ -2545,6 +2545,41 @@
 		.aafm-muted {
 			color: var(--aafm-text-subtle);
 		}
+
+		/* The id is already shortened, so keep it on one line instead of letting it wrap per character. */
+		.aafm-client-id-cell code {
+			white-space: nowrap;
+		}
+
+		/* Phones: the wide tables scroll inside their wrapper, so pin the last column (the row's actions)
+		   where it can always be reached, and stack the grant buttons to keep it narrow. */
+		@media (max-width: 600px) {
+			.aafm-grants-table,
+			.aafm-clients-table {
+				th:last-child,
+				td:last-child {
+					position: sticky;
+					inset-inline-end: 0;
+					z-index: 1;
+					background: var(--aafm-surface);
+					box-shadow: -1px 0 0 var(--aafm-border);
+				}
+
+				/* Match the striped row so the scrolled cells never show through. */
+				tbody tr:nth-child(odd) td:last-child {
+					background: var(--aafm-surface-2);
+				}
+			}
+
+			.aafm-grant-actions .aafm-btn {
+				display: block;
+				inline-size: 100%;
+
+				& + .aafm-btn {
+					margin-block-start: 6px;
+				}
+			}
+		}
 	}
 
 	/* ---------- Ability allowlist (Connections tab) ---------- */

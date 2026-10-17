@@ -1,5 +1,6 @@
 // Capture the wordpress.org screenshots from a disposable site.
 //   PW_DIR=/path/to/dir/with/node_modules/playwright node capture.mjs <baseUrl> <outDir> [--only=1,2,9]
+// AAFM_SHOTS_OVERFLOW=1 also checks every tab for sideways scrolling at 390 and 360 px.
 // Logs in as the disposable site's own admin (AAFM_SHOTS_USER / AAFM_SHOTS_PASS, default admin/admin).
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -116,6 +117,19 @@ for ( const shot of SHOTS.filter( ( s ) => ! only || only.includes( s.n ) ) ) {
 	const file = path.join( outDir, `screenshot-${ shot.n }.png` );
 	await page.screenshot( { path: file, fullPage: false } );
 	process.stdout.write( `wrote ${ file }\n` );
+}
+
+// AAFM_SHOTS_OVERFLOW=1: no plugin tab may scroll sideways on a phone (390 and 360 px wide).
+if ( process.env.AAFM_SHOTS_OVERFLOW ) {
+	for ( const width of [ 390, 360 ] ) {
+		await page.setViewportSize( { width, height: 844 } );
+		for ( const tab of [ 'dashboard', 'abilities', 'integrations', 'bridge', 'connection', 'activity', 'settings' ] ) {
+			await page.goto( plugin( `tab=${ tab }` ), { waitUntil: 'networkidle' } );
+			const over = await page.evaluate( () => document.documentElement.scrollWidth - window.innerWidth );
+			process.stdout.write( `overflow ${ width } ${ tab }: ${ over }px\n` );
+			failed += over > 0 ? 1 : 0;
+		}
+	}
 }
 await browser.close();
 process.exit( failed ? 1 : 0 );

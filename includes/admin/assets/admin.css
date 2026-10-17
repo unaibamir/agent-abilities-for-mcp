@@ -769,6 +769,7 @@
 		.aafm-nav-ext-group {
 			margin-inline-start: auto;
 			display: inline-flex;
+			flex-wrap: wrap;
 			align-items: center;
 			gap: 2px;
 		}
@@ -1367,6 +1368,8 @@
 
 		.aafm-set-control {
 			max-inline-size: 560px;
+
+			select { max-inline-size: 100%; }
 
 			/* The sentence beside a switch is a real `for=` label, so clicking it flips the
 			   checkbox. It hovered as a text caret, which hid that. The switch's own
@@ -2381,13 +2384,13 @@
 		}
 
 		.aafm-dashboard .aafm-dashboard-lower {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 
 	@media (max-width: 640px) {
 		.aafm-set-row {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 			gap: 10px;
 		}
 

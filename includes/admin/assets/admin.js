@@ -13,6 +13,7 @@
 		#ajaxUrl = aafmAdmin.ajaxUrl;
 		#nonce = aafmAdmin.nonce;
 		#abilitiesDirty = false;
+		#refreshDirty = null;
 
 		/**
 		 * Read a localized string, falling back to its English source when the
@@ -84,6 +85,69 @@
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
+			this.#bindDirtyDots();
+		}
+
+		/**
+		 * Show a dot on the current tab while one of its saved controls differs from what was
+		 * last loaded or saved. Integrations, Other plugins, Settings and Connection only.
+		 * Controls whose value no Save on the tab stores are left out.
+		 */
+		#bindDirtyDots() {
+			const slug = new URLSearchParams( window.location.search ).get( 'tab' ) ?? 'dashboard';
+			if ( ! [ 'integrations', 'bridge', 'settings', 'connection' ].includes( slug ) ) {
+				return;
+			}
+			const dot = document.querySelector( `.nav-tab[data-tab="${ slug }"] .aafm-dirty-dot` );
+			if ( ! dot ) {
+				return;
+			}
+			const sr = dot.nextElementSibling;
+			const untracked =
+				'[data-aafm-untracked], .aafm-integration-filter, .aafm-doctor, .aafm-app-password-fallback, .aafm-allowlist-add, .aafm-qc-overlay, .aafm-client-agent-toggle';
+			const controls = () =>
+				Array.from(
+					document.querySelectorAll(
+						'.aafm-wrap input:not([type="hidden"]):not([type="search"]), .aafm-wrap select, .aafm-wrap textarea'
+					)
+				).filter( ( c ) => ! c.closest( untracked ) );
+			controls().forEach( ( c ) => {
+				c.dataset.aafmSaved ??= this.#controlValue( c );
+			} );
+			const refresh = () => {
+				const dirty = controls().some( ( c ) => this.#controlValue( c ) !== c.dataset.aafmSaved );
+				dot.hidden = ! dirty;
+				if ( sr ) {
+					sr.hidden = ! dirty;
+				}
+			};
+			document.addEventListener( 'input', refresh );
+			document.addEventListener( 'change', refresh );
+			this.#refreshDirty = refresh;
+		}
+
+		/**
+		 * @param {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} c A form control.
+		 * @return {string} The value the dirty check compares.
+		 */
+		#controlValue( c ) {
+			if ( 'checkbox' === c.type || 'radio' === c.type ) {
+				return c.checked ? '1' : '0';
+			}
+			return c.value;
+		}
+
+		/**
+		 * Mark the controls a successful save covered as saved. Callers always pass the element
+		 * they saved, never the document, so an unsaved edit elsewhere on the tab keeps its dot.
+		 *
+		 * @param {Element} root The saved form, card or row.
+		 */
+		#markClean( root ) {
+			root.querySelectorAll( 'input, select, textarea' ).forEach( ( c ) => {
+				c.dataset.aafmSaved = this.#controlValue( c );
+			} );
+			this.#refreshDirty?.();
 		}
 
 		/**
@@ -984,6 +1048,7 @@
 						form,
 						json.data?.enabled ?? []
 					);
+					this.#markClean( form );
 				}
 				if ( status ) {
 					status.textContent = json?.success
@@ -1032,6 +1097,9 @@
 					json = await res.json();
 				} catch {
 					json = { success: false };
+				}
+				if ( json?.success ) {
+					this.#markClean( form );
 				}
 				if ( status ) {
 					status.textContent = json?.success
@@ -1639,6 +1707,9 @@
 				// Assigned via .value (never innerHTML), so the server echo is never an HTML sink.
 				if ( json?.success && allowlist && typeof json.data?.aafm_ip_allowlist_text === 'string' ) {
 					allowlist.value = json.data.aafm_ip_allowlist_text;
+				}
+				if ( json?.success ) {
+					this.#markClean( form );
 				}
 			} );
 		}
@@ -2560,6 +2631,7 @@
 					dcr.dataset.saved = data.dcr ? '1' : '0';
 				}
 				status.textContent = this.#t( 'saved', 'Saved' );
+				this.#markClean( card );
 				refresh();
 			} );
 		}
@@ -2624,9 +2696,10 @@
 					return;
 				}
 				const grant = json.data ?? {};
-				Object.values( sent ).forEach( ( input ) => {
-					input.dataset.aafmSaved = input.value;
-				} );
+				if ( Object.keys( sent ).length ) {
+					// Every control that differed was sent, so the whole row now matches what is stored.
+					this.#markClean( row );
+				}
 				const pause = row.querySelector( '.aafm-grant-pause' );
 				if ( pause ) {
 					pause.dataset.paused = grant.paused ? '1' : '0';
@@ -3501,6 +3574,7 @@
 					if ( status ) {
 						status.textContent = this.#t( 'allowlistSaved', 'Saved.' );
 					}
+					this.#markClean( card );
 				} else if ( status ) {
 					// A row naming an unknown role or OAuth client rejects the whole save with a
 					// row-specific message (aafm_ajax_save_allowlist()) - surfaced here verbatim

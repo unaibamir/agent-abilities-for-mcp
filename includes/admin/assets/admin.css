@@ -728,6 +728,17 @@
 				border-radius: var(--aafm-radius-sm);
 				outline: none;
 			}
+
+			/* Unsaved-changes dot. The display rule needs its [hidden] twin spelled out. */
+			.aafm-dirty-dot {
+				display: inline-block;
+				inline-size: 8px;
+				block-size: 8px;
+				border-radius: 50%;
+				background: var(--aafm-amber, #dba617);
+
+				&[hidden] { display: none; }
+			}
 		}
 
 		.nav-tab-active,

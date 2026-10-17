@@ -1725,7 +1725,7 @@ function aafm_render_admin_page(): void {
 	foreach ( $tabs as $slug => $label ) {
 		echo wp_kses(
 			sprintf(
-				'<a href="%s" class="nav-tab %s">%s %s</a>',
+				'<a href="%s" class="nav-tab %s" data-tab="%s">%s %s<span class="aafm-dirty-dot" hidden aria-hidden="true"></span><span class="screen-reader-text aafm-dirty-sr" hidden>%s</span></a>',
 				esc_url(
 					add_query_arg(
 						array(
@@ -1736,8 +1736,10 @@ function aafm_render_admin_page(): void {
 					)
 				),
 				esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
+				esc_attr( $slug ),
 				aafm_icon( $slug ),
-				esc_html( $label )
+				esc_html( $label ),
+				esc_html__( 'Unsaved changes', 'agent-abilities-for-mcp' )
 			),
 			aafm_admin_allowed_html()
 		);

@@ -138,14 +138,28 @@
 		}
 
 		/**
+		 * The values of every control under an element, to record as saved once a request that sent them succeeds.
+		 *
+		 * @param {Element} root The form, card or row about to be saved.
+		 * @return {Map<Element,string>} Control to value.
+		 */
+		#snapshot( root ) {
+			return new Map(
+				Array.from( root.querySelectorAll( 'input, select, textarea' ), ( c ) => [ c, this.#controlValue( c ) ] )
+			);
+		}
+
+		/**
 		 * Mark the controls a successful save covered as saved. Callers always pass the element
 		 * they saved, never the document, so an unsaved edit elsewhere on the tab keeps its dot.
+		 * With a snapshot taken before the request, a control edited while it was in flight keeps its dot.
 		 *
-		 * @param {Element} root The saved form, card or row.
+		 * @param {Element}                  root The saved form, card or row.
+		 * @param {Map<Element,string>|null} sent The values the request carried, or null for the current ones.
 		 */
-		#markClean( root ) {
+		#markClean( root, sent = null ) {
 			root.querySelectorAll( 'input, select, textarea' ).forEach( ( c ) => {
-				c.dataset.aafmSaved = this.#controlValue( c );
+				c.dataset.aafmSaved = sent?.get( c ) ?? this.#controlValue( c );
 			} );
 			this.#refreshDirty?.();
 		}
@@ -1061,6 +1075,7 @@
 					...form.querySelectorAll( 'input[name="aafm_scope[]"]' ),
 				].forEach( ( i ) => body.append( 'aafm_scope[]', i.value ) );
 
+				const sent = this.#snapshot( form );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -1080,7 +1095,7 @@
 						form,
 						json.data?.enabled ?? []
 					);
-					this.#markClean( form );
+					this.#markClean( form, sent );
 				}
 				if ( status ) {
 					status.textContent = json?.success
@@ -1116,6 +1131,7 @@
 					body.append( 'bridged_abilities[]', v )
 				);
 
+				const sent = this.#snapshot( form );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -1131,7 +1147,7 @@
 					json = { success: false };
 				}
 				if ( json?.success ) {
-					this.#markClean( form );
+					this.#markClean( form, sent );
 				}
 				if ( status ) {
 					status.textContent = json?.success
@@ -1675,6 +1691,7 @@
 					} );
 				}
 
+				const sent = this.#snapshot( form );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -1708,6 +1725,7 @@
 						}
 						if ( siteBrief && 'string' === typeof json.data?.aafm_site_brief ) {
 							siteBrief.value = json.data.aafm_site_brief; // Show what was actually kept.
+							sent.set( siteBrief, siteBrief.value );
 						}
 						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
 						const kept = Array.isArray( json.data?.aafm_ip_allowlist )
@@ -1739,9 +1757,10 @@
 				// Assigned via .value (never innerHTML), so the server echo is never an HTML sink.
 				if ( json?.success && allowlist && typeof json.data?.aafm_ip_allowlist_text === 'string' ) {
 					allowlist.value = json.data.aafm_ip_allowlist_text;
+					sent.set( allowlist, allowlist.value );
 				}
 				if ( json?.success ) {
-					this.#markClean( form );
+					this.#markClean( form, sent );
 				}
 			} );
 		}
@@ -2660,6 +2679,7 @@
 					return;
 				}
 				save.disabled = true;
+				const sent = this.#snapshot( card );
 				status.textContent = this.#t( 'saving', 'Saving…' );
 				const json = await this.#post( 'aafm_save_oauth_lifetimes', {
 					aafm_oauth_access_ttl: String( seconds( 'access' ) ),
@@ -2682,9 +2702,10 @@
 				if ( dcr ) {
 					dcr.checked = Boolean( data.dcr );
 					dcr.dataset.saved = data.dcr ? '1' : '0';
+					sent.set( dcr, dcr.checked ? '1' : '0' );
 				}
 				status.textContent = this.#t( 'saved', 'Saved' );
-				this.#markClean( card );
+				this.#markClean( card, sent );
 				refresh();
 			} );
 		}
@@ -2734,6 +2755,7 @@
 						return;
 					}
 				}
+				const snap = this.#snapshot( row );
 				const buttons = row.querySelectorAll( 'button' );
 				buttons.forEach( ( b ) => {
 					b.disabled = true;
@@ -2750,8 +2772,8 @@
 				}
 				const grant = json.data ?? {};
 				if ( Object.keys( sent ).length ) {
-					// Every control that differed was sent, so the whole row now matches what is stored.
-					this.#markClean( row );
+					// Record what was sent, so a control edited while the save was in flight keeps its dot.
+					this.#markClean( row, snap );
 				}
 				const pause = row.querySelector( '.aafm-grant-pause' );
 				if ( pause ) {

@@ -3700,7 +3700,10 @@
 			const finishBtn = root.querySelector( '#aafm-qc-finish' );
 			finishBtn.addEventListener( 'click', async () => {
 				finishBtn.disabled = true;
-				const json = await this.#post( 'aafm_quickconnect_finish', { write: state.write ? 1 : 0 } );
+				const json = await this.#post( 'aafm_quickconnect_finish', {
+					write: state.write ? 1 : 0,
+					preset: root.querySelector( '[data-qc-preset]' )?.value ?? '',
+				} );
 				if ( ! json?.success ) {
 					finishBtn.disabled = false;
 					if ( hint ) {

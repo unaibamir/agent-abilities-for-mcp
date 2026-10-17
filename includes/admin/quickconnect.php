@@ -345,6 +345,18 @@ function aafm_ajax_quickconnect_finish(): void {
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The enabled abilities selection', 'agent-abilities-for-mcp' ) ) ) );
 	}
 
+	// The default access for new connections, posted-only: a finish without the field leaves it alone,
+	// and an unknown value is ignored rather than failing the rest of the finish.
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; matched against the preset list.
+	$preset_raw = isset( $_POST['preset'] ) ? wp_unslash( $_POST['preset'] ) : null;
+	$preset     = is_string( $preset_raw ) && isset( aafm_access_presets()[ $preset_raw ] ) ? aafm_preset_normalize( $preset_raw ) : null;
+	if ( null !== $preset && aafm_default_preset() !== $preset ) {
+		if ( ! aafm_update_option_verified( 'aafm_oauth_default_preset', '' === $preset ? 'custom' : $preset ) ) {
+			wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'The default access for new connections', 'agent-abilities-for-mcp' ) ) ) );
+		}
+		aafm_log_setting_change( 'aafm/default-preset', __( 'Default access for new connections changed', 'agent-abilities-for-mcp' ) );
+	}
+
 	if ( ! aafm_update_option_verified( 'aafm_quickconnect_finished', '1' ) ) {
 		wp_send_json_error( array( 'message' => aafm_switch_not_persisted_message( __( 'Finishing the wizard', 'agent-abilities-for-mcp' ) ) ) );
 	}
@@ -605,6 +617,19 @@ function aafm_quickconnect_render(): void {
 								<div class="at"><?php echo wp_kses( __( '<b>Write is on.</b> The agent can create, update, and publish posts and pages as the connected user. Nothing is deleted permanently; deletes go to Trash.', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></div>
 							</div>
 						</div></div>
+
+						<div class="aafm-qc-preset">
+							<label for="aafm-qc-preset"><?php esc_html_e( 'Access for new connections', 'agent-abilities-for-mcp' ); ?></label>
+							<select id="aafm-qc-preset" data-qc-preset>
+								<?php
+								$qc_default = '' === aafm_default_preset() ? 'custom' : aafm_default_preset();
+								foreach ( aafm_access_presets() as $qc_slug => $qc_preset ) {
+									printf( '<option value="%1$s"%2$s>%3$s</option>', esc_attr( $qc_slug ), selected( $qc_slug, $qc_default, false ), esc_html( $qc_preset['label'] ) );
+								}
+								?>
+							</select>
+							<p class="cd"><?php esc_html_e( 'New connections start with this access. You can change it for each connection later. It only narrows what is switched on.', 'agent-abilities-for-mcp' ); ?></p>
+						</div>
 
 						<div class="aafm-qc-trust" aria-label="<?php esc_attr_e( 'Safety guarantees', 'agent-abilities-for-mcp' ); ?>">
 							<?php

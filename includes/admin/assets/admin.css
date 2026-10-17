@@ -506,6 +506,20 @@
 		}
 	}
 
+	/* ---------- Loading placeholders (Activity Log rows, Connection Doctor) ---------- */
+	.aafm-skeleton {
+		display: block;
+		block-size: 1em;
+		border-radius: 4px;
+		background: linear-gradient(90deg, var(--aafm-surface-2, #f0f0f1) 25%, var(--aafm-border, #dcdcde) 37%, var(--aafm-surface-2, #f0f0f1) 63%);
+		background-size: 400% 100%;
+		animation: aafm-skeleton 1.2s ease infinite;
+
+		#aafm-doctor-results > & { block-size: 2.5em; margin-block-end: 8px; }
+
+		@media (prefers-reduced-motion: reduce) { animation: none; }
+	}
+
 	/* ---------- Endpoint field (mono) ---------- */
 	.aafm-endpoint {
 		display: inline-block;
@@ -3398,4 +3412,9 @@
 		outline: 2px solid Highlight;
 		outline-offset: 2px;
 	}
+}
+
+@keyframes aafm-skeleton {
+	from { background-position: 100% 50%; }
+	to { background-position: 0 50%; }
 }

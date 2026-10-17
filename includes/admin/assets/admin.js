@@ -151,6 +151,38 @@
 		}
 
 		/**
+		 * One loading placeholder bar.
+		 *
+		 * @return {HTMLSpanElement} The placeholder.
+		 */
+		#skeleton() {
+			const bar = document.createElement( 'span' );
+			bar.className = 'aafm-skeleton';
+			return bar;
+		}
+
+		/**
+		 * Replace a table body with placeholder rows while its data loads.
+		 *
+		 * @param {HTMLTableSectionElement} tbody   The table body.
+		 * @param {number}                  columns Cells per row.
+		 * @param {number}                  rows    Row count.
+		 */
+		#skeletonRows( tbody, columns, rows = 5 ) {
+			tbody.replaceChildren(
+				...Array.from( { length: rows }, () => {
+					const tr = document.createElement( 'tr' );
+					for ( let i = 0; i < columns; i++ ) {
+						const td = document.createElement( 'td' );
+						td.append( this.#skeleton() );
+						tr.append( td );
+					}
+					return tr;
+				} )
+			);
+		}
+
+		/**
 		 * Wire the client picker (the .aafm-client cards in #aafm-clients).
 		 *
 		 * Clicking a card marks it .on (clearing its siblings) and swaps the primary
@@ -1964,9 +1996,14 @@
 			runBtn.addEventListener( 'click', async () => {
 				runBtn.disabled = true;
 				status.textContent = this.#t( 'checking', 'Checking…' );
+				const shown = [ ...results.children ];
+				results.setAttribute( 'aria-busy', 'true' );
+				results.replaceChildren( ...[ 1, 2, 3 ].map( () => this.#skeleton() ) );
 				const json = await this.#post( 'aafm_run_doctor' );
 				runBtn.disabled = false;
+				results.removeAttribute( 'aria-busy' );
 				if ( ! json?.success ) {
+					results.replaceChildren( ...shown );
 					status.textContent = json?.data?.message ?? this.#t( 'doctorError', 'The check could not run. Reload the page and try again.' );
 					return;
 				}
@@ -2166,6 +2203,7 @@
 			// never clobber a newer filter result.
 			let loadToken = 0;
 			let userLoads = 0;
+			let shownRows = [];
 
 			// The filters the table currently shows. Set ONLY on Apply, Enter, Reset and at load (from the
 			// server-rendered inputs). Typing in a box changes nothing until then: paging, the Live poll, the
@@ -2201,8 +2239,17 @@
 					pagerStatus.textContent = this.#t( 'loadingPage', 'Loading…' );
 				}
 				let json;
+				const tbody = wrap.querySelector( '.aafm-log-table tbody' );
 				if ( ! withSummary ) {
+					// A Live tick never shows placeholders: it would flicker every ten seconds.
+					if ( 0 === userLoads && tbody ) {
+						shownRows = [ ...tbody.children ];
+					}
 					userLoads += 1;
+					wrap.setAttribute( 'aria-busy', 'true' );
+					if ( tbody ) {
+						this.#skeletonRows( tbody, 9 );
+					}
 				}
 				try {
 					json = await this.#post( 'aafm_get_log_page', {
@@ -2214,12 +2261,18 @@
 				} finally {
 					if ( ! withSummary ) {
 						userLoads -= 1;
+						if ( 0 === userLoads ) {
+							wrap.removeAttribute( 'aria-busy' );
+						}
 					}
 				}
 				if ( token !== loadToken ) {
 					return 'stale';
 				}
 				if ( ! json?.success ) {
+					if ( ! withSummary && tbody ) {
+						tbody.replaceChildren( ...shownRows ); // Put back what was there before the placeholders.
+					}
 					setActiveFilterButton( wrap.dataset.filter ?? 'all' );
 					this.#updatePager(
 						Number( wrap.dataset.page ) || 1,

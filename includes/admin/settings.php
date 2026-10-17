@@ -924,6 +924,28 @@ function aafm_render_settings_tab(): void {
 	// here, and the safety controls below only start mattering once something is connected.
 	ob_start();
 
+	echo '<p class="aafm-card-desc">' . wp_kses(
+		sprintf(
+			/* translators: %s: link to the Connection tab. */
+			__( 'Token lifetimes and dynamic client registration are on the %s.', 'agent-abilities-for-mcp' ),
+			'<a href="' . esc_url(
+				add_query_arg(
+					array(
+						'page' => 'agent-abilities-for-mcp',
+						'tab'  => 'connection',
+					),
+					admin_url( 'admin.php' )
+				)
+			) . '">' . esc_html__( 'Connection tab', 'agent-abilities-for-mcp' ) . '</a>'
+		),
+		array( 'a' => array( 'href' => true ) )
+	) . '</p>';
+
+	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent
+	// screen tells the approving human the app acts with their full capabilities either way - but
+	// nothing said that on the admin side until now. Stated once, here, next to the two switches.
+	echo '<p class="aafm-card-desc">' . esc_html__( 'If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it.', 'agent-abilities-for-mcp' ) . '</p>';
+
 	// Enable OAuth. The row title and the sentence label each carry an id, and the checkbox
 	// points at both with aria-labelledby, so the toggle's accessible name is the title plus the
 	// descriptive sentence. The sentence <label for> stays put - it is the existing single
@@ -963,28 +985,6 @@ function aafm_render_settings_tab(): void {
 			'help'    => $role_help,
 		)
 	);
-
-	echo '<p class="aafm-card-desc">' . wp_kses(
-		sprintf(
-			/* translators: %s: link to the Connection tab. */
-			__( 'Token lifetimes and dynamic client registration are on the %s.', 'agent-abilities-for-mcp' ),
-			'<a href="' . esc_url(
-				add_query_arg(
-					array(
-						'page' => 'agent-abilities-for-mcp',
-						'tab'  => 'connection',
-					),
-					admin_url( 'admin.php' )
-				)
-			) . '">' . esc_html__( 'Connection tab', 'agent-abilities-for-mcp' ) . '</a>'
-		),
-		array( 'a' => array( 'href' => true ) )
-	) . '</p>';
-
-	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent
-	// screen tells the approving human the app acts with their full capabilities either way - but
-	// nothing said that on the admin side until now. Stated once, here, next to the two switches.
-	echo '<p class="aafm-card-desc">' . esc_html__( 'If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	$oauth_body = (string) ob_get_clean();
 	aafm_render_section(

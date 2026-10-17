@@ -515,6 +515,7 @@ function aafm_render_dashboard_tab(): void {
 		: __( 'Plain permalinks', 'agent-abilities-for-mcp' );
 	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'endpoint', __( 'MCP endpoint', 'agent-abilities-for-mcp' ), '', '<span class="aafm-pill aafm-pill-info">' . esc_html( $permalink_label ) . '</span>' ), aafm_admin_allowed_html() ) . '</div>';
 	echo '<div class="aafm-card-pad">';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo wp_kses(
 		sprintf(
 			'<div class="aafm-field-mono"><code class="aafm-endpoint">%1$s</code> <button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%2$s">%3$s<span class="aafm-copy-label">%4$s</span></button></div>',
@@ -525,7 +526,6 @@ function aafm_render_dashboard_tab(): void {
 		),
 		aafm_admin_allowed_html()
 	);
-	echo '<p class="aafm-card-desc">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div>';
 	echo '</section>';
 

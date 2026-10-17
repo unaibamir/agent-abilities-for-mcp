@@ -33,6 +33,7 @@ function aafm_denial_reason_labels(): array {
 		'missing_argument'    => __( 'a required argument was missing', 'agent-abilities-for-mcp' ),
 		'capability'          => __( 'WordPress capability check failed', 'agent-abilities-for-mcp' ),
 		'source_plugin'       => __( 'the source plugin check refused', 'agent-abilities-for-mcp' ),
+		'connection_paused'   => __( 'this connection is paused', 'agent-abilities-for-mcp' ),
 	);
 }
 

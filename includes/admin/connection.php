@@ -932,7 +932,8 @@ function aafm_render_snippet_block( string $snippet, string $os = '' ): void {
  * Render the Connection tab.
  *
  * Layout (OAuth-first):
- *   1. Endpoint card - single canonical endpoint display.
+ *   1. Endpoint card - single canonical endpoint display, then the Connection Doctor and the
+ *      Pause all access switch, so the kill switch is on screen without opening a tab.
  *   2. OAuth card (Recommended) - guided browser-approval flow when OAuth is enabled;
  *      a short notice when it is turned off.
  *   3. OAuth and Application Passwords tabs (aafm_render_connection_tabs()), OAuth selected
@@ -970,6 +971,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div></section>'; // .aafm-card-pad, .aafm-endpoint-card
 
 	aafm_render_doctor_card();
+	aafm_render_pause_all_card();
 
 	// ---- 2. OAuth card ----
 	echo '<section class="aafm-card aafm-oauth-card">';
@@ -1102,7 +1104,6 @@ function aafm_render_connection_tab(): void {
 
 	echo '</div></section>'; // .aafm-card-pad, .aafm-oauth-card
 
-	aafm_render_pause_all_card();
 	aafm_render_connection_tabs( $oauth_on );
 
 	// After the tabs: the allowlist governs both roles and OAuth clients, whichever method is in use.

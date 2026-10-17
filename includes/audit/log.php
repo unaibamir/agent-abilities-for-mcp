@@ -408,21 +408,26 @@ function aafm_denial_log_within_cap( string $bucket ): bool {
 
 /**
  * Write one "(transport)" denied row for the current user, inside the per-IP cap of its bucket, at most
- * once per bucket per request. The refusal itself is the caller's and happens on every call.
+ * once per bucket per request object. The refusal itself is the caller's and happens on every call.
  *
  * @param string $bucket    Cap bucket, as aafm_denial_log_within_cap() takes it: 'ipb', 'cpa' or 'pau' here.
  * @param string $reason    Refusal reason for the detail column, or '' for a row without detail.
  * @param string $client_id OAuth client id the call carried, or '' when it was not a bearer call.
+ * @param mixed  $request   The REST request being refused, or null.
  * @return void
  */
-function aafm_log_transport_denial( string $bucket, string $reason = '', string $client_id = '' ): void {
-	// Core's Allow header filter calls each handler's permission callback again once per HTTP method, so one
-	// refused request reaches here several times. One row per bucket per request, or it spends the cap.
+function aafm_log_transport_denial( string $bucket, string $reason = '', string $client_id = '', $request = null ): void {
+	// Core's Allow header filter calls each handler's permission callback again once per HTTP method, with the
+	// SAME request object, so one refused request reaches here several times. One row per bucket per request
+	// object, or it spends the cap; a separate dispatch in the same process is a different object. The object
+	// itself is kept (not its id, which PHP reuses once it is freed). No request object: nothing to dedupe on.
 	global $aafm_policy_state;
-	if ( ! empty( $aafm_policy_state['denied'][ $bucket ] ) ) {
-		return;
+	if ( is_object( $request ) ) {
+		if ( ( $aafm_policy_state['denied'][ $bucket ] ?? null ) === $request ) {
+			return;
+		}
+		$aafm_policy_state['denied'][ $bucket ] = $request;
 	}
-	$aafm_policy_state['denied'][ $bucket ] = true;
 	if ( ! aafm_denial_log_within_cap( $bucket ) ) {
 		return;
 	}

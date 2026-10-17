@@ -54,7 +54,7 @@ function aafm_pause_all_guard( $result, $server, $request ) {
 	if ( ! aafm_pause_all() ) {
 		return $result;
 	}
-	aafm_log_transport_denial( 'pau', 'access_paused' );
+	aafm_log_transport_denial( 'pau', 'access_paused', '', $request );
 	return new WP_Error( 'aafm_access_paused', __( 'Access to this site is paused by its owner.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
 }
 // Priority 0: ahead of the plugin's own MCP body filters at 10, so a paused site never parses an MCP body.

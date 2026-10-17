@@ -188,9 +188,12 @@ class GrantPauseTest extends TestCase {
 		$this->assertSame( 403, $this->dispatch( true )->get_status() );
 		$this->assertSame( 1, $this->paused_rows(), 'The Allow header re-run must not spend the denial cap.' );
 
+		// A second, separate dispatch in the same process is a different request and gets its own row.
+		$this->assertSame( 403, $this->dispatch( true )->get_status() );
+		$this->assertSame( 2, $this->paused_rows() );
+
 		update_option( 'aafm_ip_allowlist', array( '198.51.100.1' ) );
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
-		aafm_policy_reset_request_state();
 		$this->set_paused( null );
 		$this->resolve();
 		$this->assertSame( 403, $this->dispatch( true )->get_status() );
@@ -200,7 +203,7 @@ class GrantPauseTest extends TestCase {
 				'status'  => 'denied',
 			)
 		);
-		$this->assertCount( 2, $rows, 'One more row for the blocked address, not four.' );
+		$this->assertCount( 3, $rows, 'One more row for the blocked address, not four.' );
 	}
 
 	public function test_resuming_restores_access_without_a_new_token(): void {

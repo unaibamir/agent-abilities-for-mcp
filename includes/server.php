@@ -1034,12 +1034,10 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
  * paused connection. Per-ability caps do the real work. Named (not inline) so it is unit-testable and
  * PHPStan-visible.
  *
- * @param \WP_REST_Request<array<string,mixed>> $request Incoming request (unused; auth already resolved).
+ * @param \WP_REST_Request<array<string,mixed>> $request Incoming request; keys the once-per-request denial row.
  * @return bool|WP_Error
  */
 function aafm_transport_permission_callback( $request ) {
-	unset( $request );
-
 	if ( ! is_user_logged_in() ) {
 		return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), array( 'status' => 401 ) );
 	}
@@ -1049,7 +1047,7 @@ function aafm_transport_permission_callback( $request ) {
 		// VALID credential from a blocked address hits this branch on every request, so an
 		// uncapped row per denial lets one address flood the 30-day activity table. Only the
 		// row is capped - the denial below is returned every time regardless.
-		aafm_log_transport_denial( 'ipb' );
+		aafm_log_transport_denial( 'ipb', '', '', $request );
 		return new WP_Error( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
 	}
 
@@ -1058,7 +1056,7 @@ function aafm_transport_permission_callback( $request ) {
 	// error_log line, whereas a returned WP_Error is logged by HttpTransport::check_permission() on every request.
 	$grant = aafm_oauth_current_grant();
 	if ( $grant['paused'] ) {
-		aafm_log_transport_denial( 'cpa', 'connection_paused', (string) $grant['client_id'] );
+		aafm_log_transport_denial( 'cpa', 'connection_paused', (string) $grant['client_id'], $request );
 		return false;
 	}
 

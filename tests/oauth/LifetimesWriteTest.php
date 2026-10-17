@@ -113,6 +113,12 @@ class LifetimesWriteTest extends TestCase {
 		$this->assertFalse( aafm_option_row( 'aafm_oauth_access_ttl' )['found'] );
 	}
 
+	public function test_the_range_error_names_the_bounds(): void {
+		$message = (string) $this->save( array( 'aafm_oauth_access_ttl' => '299' ) )['data']['message'];
+		$this->assertStringContainsString( 'from 5 minutes to 24 hours', $message );
+		$this->assertStringContainsString( 'from 1 hour to 90 days', $message );
+	}
+
 	public function test_an_array_param_is_refused_cleanly(): void {
 		$json = $this->save( array( 'aafm_oauth_access_ttl' => array( '3600' ) ) );
 		$this->assertFalse( $json['success'] );

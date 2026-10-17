@@ -570,7 +570,7 @@ function aafm_ajax_save_oauth_lifetimes(): void {
 	// phpcs:enable
 	$bounds = aafm_oauth_ttl_bounds();
 	if ( null === $access || null === $refresh || $access < $bounds['access'][0] || $access > $bounds['access'][1] || $refresh < $bounds['refresh'][0] || $refresh > $bounds['refresh'][1] || $access >= $refresh || ! in_array( $dcr_raw, array( '0', '1' ), true ) ) {
-		wp_send_json_error( array( 'message' => __( 'Use whole numbers inside the allowed range, and keep the access token shorter than the refresh token.', 'agent-abilities-for-mcp' ) ) );
+		wp_send_json_error( array( 'message' => __( 'Use whole numbers. The access token lifetime runs from 5 minutes to 24 hours, the refresh token lifetime from 1 hour to 90 days, and the access token must be shorter than the refresh token.', 'agent-abilities-for-mcp' ) ) );
 	}
 	$dcr_on     = '1' === $dcr_raw;
 	$dcr_before = aafm_oauth_dcr_enabled();

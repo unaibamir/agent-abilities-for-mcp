@@ -2661,8 +2661,12 @@
 			const refresh = () => {
 				save.disabled = ! changed();
 			};
-			card.addEventListener( 'input', refresh );
-			card.addEventListener( 'change', refresh );
+			const edited = () => {
+				status.textContent = ''; // A new edit makes "Saved" or an old error stale.
+				refresh();
+			};
+			card.addEventListener( 'input', edited );
+			card.addEventListener( 'change', edited );
 
 			save.addEventListener( 'click', async () => {
 				if (

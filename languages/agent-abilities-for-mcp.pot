@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-17T19:31:21+05:00\n"
+"POT-Creation-Date: 2026-10-18T00:36:58+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -3933,7 +3933,7 @@ msgstr ""
 #: includes/admin/connection.php:665
 #: includes/admin/connection.php:700
 #: includes/admin/connection.php:762
-#: includes/admin/doctor.php:885
+#: includes/admin/doctor.php:888
 #: includes/admin/notifications.php:310
 #: includes/admin/notifications.php:380
 #: includes/admin/page.php:648
@@ -6048,24 +6048,32 @@ msgstr ""
 msgid "A discovery document names a different site address than this endpoint, or a static file under /.well-known/ answers instead of WordPress. Clients that read it connect to the wrong place. Remove the static file, or clear the cache that serves the old copy."
 msgstr ""
 
-#: includes/admin/doctor.php:908
-#: includes/admin/doctor.php:912
+#: includes/admin/doctor.php:807
+msgid "Agent access is not paused"
+msgstr ""
+
+#: includes/admin/doctor.php:807
+msgid "Pause all access is on, so every agent is refused with a 403 Forbidden until you resume it. The endpoint check below uses a test request, not an agent, so it can still pass. Choose Resume all access in the Pause all access card on this tab."
+msgstr ""
+
+#: includes/admin/doctor.php:911
+#: includes/admin/doctor.php:915
 msgid "Check my connection"
 msgstr ""
 
-#: includes/admin/doctor.php:910
+#: includes/admin/doctor.php:913
 msgid "These checks run from this site's own server. Nothing is sent to anyone else. They look for the usual reasons an agent cannot connect and say who can fix each one."
 msgstr ""
 
-#: includes/admin/doctor.php:913
+#: includes/admin/doctor.php:916
 msgid "Copy report for support"
 msgstr ""
 
-#: includes/admin/doctor.php:914
+#: includes/admin/doctor.php:917
 msgid "Show passing checks"
 msgstr ""
 
-#: includes/admin/doctor.php:917
+#: includes/admin/doctor.php:920
 msgid "Everything this check covers looks fine. Turn on \"Show passing checks\" to see each result."
 msgstr ""
 
@@ -8697,12 +8705,12 @@ msgstr ""
 msgid "Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin tries again on its own, at most once an hour."
 msgstr ""
 
-#: includes/audit/log.php:493
+#: includes/audit/log.php:501
 msgid "Invalid Application Password"
 msgstr ""
 
 #. translators: %s: human-readable label of the option that failed to persist.
-#: includes/audit/log.php:622
+#: includes/audit/log.php:630
 #, php-format
 msgid "%s could not be saved: object cache stale"
 msgstr ""

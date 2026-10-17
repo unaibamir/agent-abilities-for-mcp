@@ -237,8 +237,8 @@ class SettingsAccessCardsTest extends TestCase {
 		$this->assertSame( array( 'Roles that can connect changed to: Administrator, Editor' ), $this->setting_rows() );
 	}
 
-	public function test_the_row_warns_that_removing_a_role_signs_out_its_connections(): void {
-		$this->assertStringContainsString( 'Removing a role signs out the connections of users who only had that role.', $this->render() );
+	public function test_the_row_says_a_removed_role_pauses_its_connections_until_it_is_added_back(): void {
+		$this->assertStringContainsString( 'While a role is off this list, the connections of users who only have that role stop working. Adding it back restores them.', $this->render() );
 	}
 
 	public function test_off_is_the_default_and_renders_selected(): void {

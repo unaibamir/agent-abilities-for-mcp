@@ -28,15 +28,31 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_blocks_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_blocks_definitions( array $registry ): array {
-	$registry['aafm/list-blocks']  = array(
+	$registry['aafm/list-blocks']      = array(
 		'label'        => __( 'List blocks', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks; each page omits blocks you lack edit access to, so total can exceed the rows returned). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists saved reusable blocks (synced patterns), not block types; call aafm-list-block-types for those. Returns id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks; each page omits blocks you lack edit access to, so total can exceed the rows returned). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_blocks',
 	);
-	$registry['aafm/get-block']    = array(
+	$registry['aafm/list-block-types'] = array(
+		'label'        => __( 'List block types', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists the block types registered on this site (core, theme and plugin blocks, including ACF blocks), not saved reusable blocks; use aafm-get-block-type for one block\'s attributes, supports, styles and, for ACF blocks, its field names and an example payload. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_list_block_types',
+	);
+	$registry['aafm/get-block-type']   = array(
+		'label'        => __( 'Get block type', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Reads one registered block type by name (for example core/group): its attributes, supports, style variations, parent and context rules, and whether it renders on the server. For an ACF block it also lists the field names, types, choices and sub-fields, plus an example block comment that uses field names as data keys (image fields take attachment IDs). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_get_block_type',
+	);
+	$registry['aafm/get-block']        = array(
 		'label'        => __( 'Get block', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -44,7 +60,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_block',
 	);
-	$registry['aafm/create-block'] = array(
+	$registry['aafm/create-block']     = array(
 		'label'        => __( 'Create block', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Creates a reusable block (published immediately, unless the operator\'s force-draft setting holds it as a draft). Its markup is sanitized, and the author is always the agent. Requires the publish-posts capability. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -52,7 +68,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_create_block',
 	);
-	$registry['aafm/update-block'] = array(
+	$registry['aafm/update-block']     = array(
 		'label'        => __( 'Update block', 'agent-abilities-for-mcp' ),
 		'description'  => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -60,7 +76,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_update_block',
 	);
-	$registry['aafm/delete-block'] = array(
+	$registry['aafm/delete-block']     = array(
 		'label'        => __( 'Delete block', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Moves a reusable block to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that block.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -209,6 +225,236 @@ function aafm_exec_list_blocks( array $input ): array {
 		// total can exceed the rows returned; the description discloses that.
 		'total'  => (int) $query->found_posts,
 	);
+}
+
+/**
+ * Args for list-block-types.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_list_block_types(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/list-block-types' ),
+		'description'         => aafm_ability_description( 'aafm/list-block-types' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array_merge(
+				array(
+					'namespace' => array(
+						'type'        => 'string',
+						'description' => __( 'Only block types in this namespace, the part before the slash (for example core, or a theme or plugin prefix).', 'agent-abilities-for-mcp' ),
+					),
+					'search'    => array(
+						'type'        => 'string',
+						'description' => __( 'Case-insensitive text matched against the block name and title.', 'agent-abilities-for-mcp' ),
+					),
+				),
+				aafm_pagination_schema_props(
+					100,
+					__( 'Number of block types per page, clamped to the 1-100 range. Defaults to 50 when omitted.', 'agent-abilities-for-mcp' ),
+					__( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' )
+				)
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'block_types' => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'name'        => array( 'type' => 'string' ),
+							'title'       => array( 'type' => 'string' ),
+							'category'    => array( 'type' => 'string' ),
+							'description' => array( 'type' => 'string' ),
+							'parent'      => array( 'type' => array( 'array', 'null' ) ),
+							'is_acf'      => array( 'type' => 'boolean' ),
+							'is_dynamic'  => array( 'type' => 'boolean' ),
+						),
+					),
+				),
+				'total'       => array( 'type' => 'integer' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_list_block_types',
+		'permission_callback' => 'aafm_perm_blocks_floor',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute list-block-types: registered block types sorted by name, filtered, then paginated.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return array{block_types:list<array<string,mixed>>,total:int}
+ */
+function aafm_exec_list_block_types( array $input ): array {
+	$paging    = aafm_paginate_args( $input + array( 'per_page' => 50 ), 100 );
+	$namespace = isset( $input['namespace'] ) ? sanitize_text_field( (string) $input['namespace'] ) : '';
+	$search    = isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '';
+
+	$types = WP_Block_Type_Registry::get_instance()->get_all_registered();
+	ksort( $types, SORT_STRING );
+	$matches = array();
+	foreach ( $types as $name => $type ) {
+		$name = (string) $name;
+		if ( '' !== $namespace && 0 !== strpos( $name, $namespace . '/' ) ) {
+			continue;
+		}
+		if ( '' !== $search && false === stripos( $name, $search ) && false === stripos( (string) $type->title, $search ) ) {
+			continue;
+		}
+		$matches[] = $type;
+	}
+
+	$rows = array();
+	foreach ( array_slice( $matches, ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] ) as $type ) {
+		$rows[] = array(
+			'name'        => (string) $type->name,
+			'title'       => (string) $type->title,
+			'category'    => (string) $type->category,
+			'description' => (string) $type->description,
+			'parent'      => is_array( $type->parent ) ? array_values( $type->parent ) : null,
+			'is_acf'      => null !== aafm_acf_block_fields( (string) $type->name ),
+			'is_dynamic'  => $type->is_dynamic(),
+		);
+	}
+
+	return array(
+		'block_types' => $rows,
+		'total'       => count( $matches ),
+	);
+}
+
+/**
+ * Args for get-block-type.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_get_block_type(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/get-block-type' ),
+		'description'         => aafm_ability_description( 'aafm/get-block-type' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'name' => array(
+					'type'        => 'string',
+					'pattern'     => '^[a-z0-9-]+/[a-z0-9-]+$',
+					'description' => __( 'Block type name, namespace/name, for example core/group. aafm-list-block-types lists the names.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'name' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'name'             => array( 'type' => 'string' ),
+				'title'            => array( 'type' => 'string' ),
+				'description'      => array( 'type' => 'string' ),
+				'category'         => array( 'type' => 'string' ),
+				'parent'           => array( 'type' => array( 'array', 'null' ) ),
+				'ancestor'         => array( 'type' => array( 'array', 'null' ) ),
+				'allowed_blocks'   => array( 'type' => array( 'array', 'null' ) ),
+				'attributes'       => array( 'type' => array( 'object', 'array' ) ),
+				'supports'         => array( 'type' => array( 'object', 'array' ) ),
+				'styles'           => array( 'type' => 'array' ),
+				'uses_context'     => array( 'type' => 'array' ),
+				'provides_context' => array( 'type' => array( 'object', 'array' ) ),
+				'example'          => array( 'type' => array( 'object', 'array', 'null' ) ),
+				'is_dynamic'       => array( 'type' => 'boolean' ),
+				'acf'              => array( 'type' => array( 'object', 'null' ) ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_get_block_type',
+		'permission_callback' => 'aafm_perm_blocks_floor',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute get-block-type: one registered block type's editor-facing definition.
+ *
+ * Only what the block editor already shows an edit_posts user: no render callback, no script or
+ * style handles, no file paths. Values go through a JSON round trip, so a callable anywhere in
+ * the registered attributes or example drops out.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_get_block_type( array $input ) {
+	$name = (string) ( $input['name'] ?? '' );
+	$type = WP_Block_Type_Registry::get_instance()->get_registered( $name );
+	if ( ! $type instanceof WP_Block_Type ) {
+		return new WP_Error(
+			'aafm_unknown_block_type',
+			sprintf(
+				/* translators: %s: block type name. */
+				__( 'No block type named "%s" is registered on this site. Call aafm-list-block-types for the registered names.', 'agent-abilities-for-mcp' ),
+				$name
+			)
+		);
+	}
+
+	$styles = array();
+	foreach ( array_merge( (array) $type->styles, WP_Block_Styles_Registry::get_instance()->get_registered_styles_for_block( $name ) ) as $style ) {
+		$style                             = (array) $style;
+		$styles[ (string) $style['name'] ] = array(
+			'name'  => (string) $style['name'],
+			'label' => (string) ( $style['label'] ?? '' ),
+		);
+	}
+
+	$fields = aafm_acf_block_fields( $name );
+
+	return array(
+		'name'             => $name,
+		'title'            => (string) $type->title,
+		'description'      => (string) $type->description,
+		'category'         => (string) $type->category,
+		'parent'           => is_array( $type->parent ) ? array_values( $type->parent ) : null,
+		'ancestor'         => is_array( $type->ancestor ) ? array_values( $type->ancestor ) : null,
+		'allowed_blocks'   => is_array( $type->allowed_blocks ) ? array_values( $type->allowed_blocks ) : null,
+		'attributes'       => aafm_json_safe( $type->get_attributes() ) ?? array(),
+		'supports'         => aafm_json_safe( $type->supports ) ?? array(),
+		'styles'           => array_values( $styles ),
+		'uses_context'     => array_values( $type->get_uses_context() ),
+		'provides_context' => aafm_json_safe( $type->provides_context ) ?? array(),
+		'example'          => aafm_json_safe( $type->example ),
+		'is_dynamic'       => $type->is_dynamic(),
+		'acf'              => null === $fields ? null : array(
+			'fields'           => $fields,
+			'envelope_example' => aafm_acf_block_envelope_example( $name, $fields ),
+		),
+	);
+}
+
+/**
+ * A value as it survives a JSON round trip: callables and objects without public data drop out.
+ *
+ * @param mixed $value Value.
+ * @return array<int|string,mixed>|null The decoded array, or null when the value is not an array or object.
+ */
+function aafm_json_safe( $value ): ?array {
+	$decoded = json_decode( (string) wp_json_encode( $value ), true );
+	return is_array( $decoded ) ? $decoded : null;
 }
 
 /**

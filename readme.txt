@@ -58,9 +58,9 @@ WordPress 6.9 ships the Abilities API. The official MCP Adapter (wordpress/mcp-a
 
 = 📦 179 governed abilities =
 
-The plugin ships **179 governed abilities: 85 across WordPress core and 94 from auto-detected integrations**, every one off until you enable it, scoped, capability-gated, and logged. It can also bridge abilities from your other plugins (see below).
+The plugin ships **181 governed abilities: 87 across WordPress core and 94 from auto-detected integrations**, every one off until you enable it, scoped, capability-gated, and logged. It can also bridge abilities from your other plugins (see below).
 
-**WordPress core (85 abilities).** Reads plus guarded writes across your whole site:
+**WordPress core (87 abilities).** Reads plus guarded writes across your whole site:
 
 * **📝 Posts & Pages:** list, read, create, update, and delete, with destructive actions off by default and deletes routed to Trash.
 * **🏷️ Terms & Taxonomies:** manage categories, tags, and custom taxonomy terms.

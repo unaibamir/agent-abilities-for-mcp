@@ -2286,3 +2286,143 @@ function aafm_exec_acf_update_user_fields( array $input ) {
 		'fields'  => (object) $written,
 	);
 }
+
+/**
+ * The ACF field tree of a block: every field group bound to it by a block location rule.
+ *
+ * A group belongs to the block when any of its OR-groups holds a rule param=block, operator ==,
+ * value=<block name>. Its other AND rules are not evaluated: they need a post context this read
+ * does not have, and the fields are the editor configuration ACF renders into the block sidebar
+ * for anyone who inserts the block. ACF Pro turns inline acf.fields in a block.json into exactly
+ * such a local group. Shared by aafm/get-block-type and the block guard's unknown_acf_field check.
+ *
+ * @param string $block_name Block type name.
+ * @return list<array<string,mixed>>|null Fields in group order, or null when ACF is absent or no
+ *                                        group targets the block.
+ */
+function aafm_acf_block_fields( string $block_name ): ?array {
+	if ( ! function_exists( 'acf_get_field_groups' ) || ! function_exists( 'acf_get_fields' ) ) {
+		return null;
+	}
+
+	$fields = null;
+	foreach ( (array) acf_get_field_groups() as $group ) {
+		$group   = (array) $group;
+		$targets = false;
+		foreach ( (array) ( $group['location'] ?? array() ) as $and_rules ) {
+			foreach ( (array) $and_rules as $rule ) {
+				$rule    = (array) $rule;
+				$value   = (string) ( $rule['value'] ?? '' );
+				$targets = $targets || ( 'block' === ( $rule['param'] ?? '' ) && '==' === ( $rule['operator'] ?? '' ) && $value === $block_name );
+			}
+		}
+		if ( ! $targets ) {
+			continue;
+		}
+		$fields = $fields ?? array();
+		foreach ( (array) acf_get_fields( $group ) as $field ) {
+			$fields[] = aafm_acf_block_field_shape( (array) $field, 1 );
+		}
+	}
+	return $fields;
+}
+
+/**
+ * One field of a block's field tree, recursive through sub-fields and layouts up to depth 5.
+ *
+ * A clone's sub_fields keep the names ACF loaded them with: ACF already writes <clone>_<sub>
+ * there when prefix_name is set, and the bare sub-field name otherwise.
+ *
+ * @param array<string,mixed> $field ACF field definition.
+ * @param int                 $depth Depth of this field, 1 at the top level.
+ * @return array<string,mixed>
+ */
+function aafm_acf_block_field_shape( array $field, int $depth ): array {
+	$type  = (string) ( $field['type'] ?? '' );
+	$shape = array(
+		'name'          => (string) ( $field['name'] ?? '' ),
+		'key'           => (string) ( $field['key'] ?? '' ),
+		'label'         => (string) ( $field['label'] ?? '' ),
+		'type'          => $type,
+		'required'      => ! empty( $field['required'] ),
+		'default_value' => $field['default_value'] ?? null,
+		'instructions'  => (string) ( $field['instructions'] ?? '' ),
+	);
+	if ( in_array( $type, array( 'select', 'radio', 'checkbox', 'button_group' ), true ) ) {
+		$shape['choices'] = (array) ( $field['choices'] ?? array() );
+	}
+	if ( isset( $field['return_format'] ) ) {
+		$shape['return_format'] = (string) $field['return_format'];
+	}
+	if ( $depth >= 5 ) {
+		return $shape;
+	}
+	$subs = static function ( $sub_fields ) use ( $depth ): array {
+		$out = array();
+		foreach ( (array) $sub_fields as $sub ) {
+			$out[] = aafm_acf_block_field_shape( (array) $sub, $depth + 1 );
+		}
+		return $out;
+	};
+	if ( in_array( $type, array( 'repeater', 'group', 'clone' ), true ) ) {
+		$shape['sub_fields'] = $subs( $field['sub_fields'] ?? array() );
+	}
+	if ( 'flexible_content' === $type ) {
+		$shape['layouts'] = array();
+		foreach ( (array) ( $field['layouts'] ?? array() ) as $layout ) {
+			$layout             = (array) $layout;
+			$shape['layouts'][] = array(
+				'name'       => (string) ( $layout['name'] ?? '' ),
+				'label'      => (string) ( $layout['label'] ?? '' ),
+				'sub_fields' => $subs( $layout['sub_fields'] ?? array() ),
+			);
+		}
+	}
+	return $shape;
+}
+
+/**
+ * An example block comment for an ACF block: {"name","data","mode"} with field names as data keys.
+ *
+ * Values by type: a select-like field takes its first choice key, true_false 0, image 0 (an
+ * attachment ID), link an empty url/title/target object, anything else an empty string.
+ *
+ * @param string                    $block_name Block type name.
+ * @param list<array<string,mixed>> $fields     The block's field tree.
+ * @return string
+ */
+function aafm_acf_block_envelope_example( string $block_name, array $fields ): string {
+	$data = array();
+	foreach ( $fields as $field ) {
+		switch ( $field['type'] ) {
+			case 'select':
+			case 'radio':
+			case 'checkbox':
+			case 'button_group':
+				$value = (string) ( array_keys( (array) $field['choices'] )[0] ?? '' );
+				break;
+			case 'true_false':
+			case 'image':
+				$value = 0;
+				break;
+			case 'link':
+				$value = array(
+					'url'    => '',
+					'title'  => '',
+					'target' => '',
+				);
+				break;
+			default:
+				$value = '';
+		}
+		$data[ (string) $field['name'] ] = $value;
+	}
+
+	return '<!-- wp:' . $block_name . ' ' . serialize_block_attributes(
+		array(
+			'name' => $block_name,
+			'data' => $data,
+			'mode' => 'preview',
+		)
+	) . ' /-->';
+}

@@ -54,6 +54,8 @@ final class CatalogFixture {
 		'aafm/list-plugins',
 		'aafm/get-activity-log',
 		'aafm/list-blocks',
+		'aafm/list-block-types',
+		'aafm/get-block-type',
 		'aafm/get-block',
 		'aafm/list-menus',
 		'aafm/get-menu',

@@ -1891,6 +1891,8 @@ function aafm_site_subgroups(): array {
 			'label'     => __( 'Blocks', 'agent-abilities-for-mcp' ),
 			'abilities' => array(
 				'aafm/list-blocks',
+				'aafm/list-block-types',
+				'aafm/get-block-type',
 				'aafm/get-block',
 				'aafm/create-block',
 				'aafm/update-block',

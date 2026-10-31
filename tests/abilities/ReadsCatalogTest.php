@@ -74,7 +74,7 @@ final class ReadsCatalogTest extends TestCase {
 			$reads,
 			'The read group must be exactly the 86 reads - no more, no fewer.'
 		);
-		$this->assertCount( count( self::READS ), $reads, 'The read catalog ships exactly 89 read abilities.' );
+		$this->assertCount( count( self::READS ), $reads, 'The read catalog ships exactly 91 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

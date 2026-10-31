@@ -70,7 +70,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	/**
-	 * Enable the entire catalog (all 179) and register categories + abilities.
+	 * Enable the entire catalog (all 181) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -101,9 +101,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			179,
+			181,
 			$registry,
-			'The catalog must contain exactly 179 abilities - 89 reads + 90 writes.'
+			'The catalog must contain exactly 181 abilities - 91 reads + 90 writes.'
 		);
 	}
 
@@ -143,7 +143,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names - no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 179 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 181 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -157,9 +157,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			179,
+			181,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(89) + writes(90) must equal the full catalog (179).'
+			'reads(91) + writes(90) must equal the full catalog (181).'
 		);
 	}
 

@@ -65,6 +65,13 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
 		),
+		'includes/abilities/blocks.php::aafm_exec_list_block_types::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'namespace\'] )',
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
+			'reason' => 'The list-block-types namespace and search filters. Both are compared against registered block type names and titles and are never written back, so nothing about them reaches storage.',
+		),
 		'includes/abilities/media.php::aafm_exec_count_media::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $input[\'mime_type\'] )',

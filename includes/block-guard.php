@@ -380,6 +380,20 @@ function aafm_block_warning( string $block, string $code, string $class_name ): 
 				$block
 			);
 			break;
+		case 'removed_element':
+			$message = sprintf(
+				/* translators: %s: HTML element name, style or script. */
+				__( 'A <%s> element was removed together with its contents. Stored content cannot carry styles or scripts; put styling in block attributes instead.', 'agent-abilities-for-mcp' ),
+				$class_name
+			);
+			break;
+		case 'invalid_block_attributes':
+			$message = sprintf(
+				/* translators: %s: block name. */
+				__( 'The %s block has delimiter attributes that are not valid JSON, so WordPress ignores all of them. Fix the JSON (for example a trailing comma) and write the block again.', 'agent-abilities-for-mcp' ),
+				$block
+			);
+			break;
 		default:
 			$message = sprintf(
 				/* translators: %s: block name. */
@@ -427,4 +441,166 @@ function aafm_block_guard_evaluate( string $content ): array {
 		'warnings' => $warnings,
 		'error'    => $error,
 	);
+}
+
+/**
+ * Sanitize agent-written block markup: wp_kses_post(), minus its damage to plain attribute text.
+ *
+ * The wp_kses_post() pass entity-encodes &, < and > inside block attribute JSON for every user, so
+ * a value such as "Saturday & Sunday" or an embed URL with a query string is stored changed. Core
+ * does that on save only for users without unfiltered_html; for a user with it, the block editor
+ * stores the attribute text raw. This helper keeps wp_kses_post() as the sanitizer and, for a user with
+ * unfiltered_html only, puts back each attribute string that cannot open an HTML tag exactly as it
+ * was sent. A value that can open a tag keeps the kses result, and innerHTML is never restored.
+ * When nothing is restored, or the user lacks unfiltered_html, the content is wp_kses_post() of
+ * the input byte for byte (apart from the <style>/<script> removal below).
+ *
+ * <style> and <script> elements are removed with their contents first, since kses would strip the
+ * tags and leave the CSS or script text in the page. Both that removal and a block whose delimiter
+ * JSON does not parse come back as informational warnings, which never refuse a write.
+ *
+ * @param string $raw Block markup as the agent sent it.
+ * @return array{content:string,warnings:list<array{block:string,code:string,message:string}>}
+ */
+function aafm_kses_block_markup( string $raw ): array {
+	$warnings = array();
+	$stripped = aafm_strip_raw_text_elements( $raw, $warnings );
+	$clean    = wp_kses_post( $stripped );
+	$parsed   = parse_blocks( $stripped );
+
+	// The block parser decides whether this is block markup, not a "<!-- wp:" literal.
+	$has_blocks = aafm_flag_invalid_block_attributes( $parsed, $warnings );
+	if ( ! $has_blocks || ! current_user_can( 'unfiltered_html' ) ) {
+		return array(
+			'content'  => $clean,
+			'warnings' => $warnings,
+		);
+	}
+
+	// Serialize first so a raw "<" in the comment JSON is escaped before kses can merge two keys.
+	$norm     = serialize_blocks( $parsed );
+	$restored = 0;
+	$tree     = aafm_restore_block_attrs( parse_blocks( $norm ), parse_blocks( wp_kses_post( $norm ) ), $restored );
+
+	if ( null !== $tree && $restored > 0 ) {
+		// @phpstan-ignore-next-line argument.type (the walk rewrites attrs values only, so every entry keeps the parse_blocks() block shape)
+		$clean = serialize_blocks( $tree );
+	}
+	return array(
+		'content'  => $clean,
+		'warnings' => $warnings,
+	);
+}
+
+/**
+ * Empty every <style> and <script> element, using the HTML tokenizer rather than a regex.
+ *
+ * A "<style>" inside a quoted attribute or inside an HTML comment (a block delimiter) is not an
+ * element and is left alone. An unclosed element stops the tokenizer and is left for kses, as
+ * before. kses then drops the emptied tags, since neither is an allowed post tag.
+ *
+ * @param string                                               $raw      Markup.
+ * @param list<array{block:string,code:string,message:string}> $warnings Accumulator, by reference: one removed_element row per element name.
+ * @return string The markup, byte for byte when nothing was emptied.
+ */
+function aafm_strip_raw_text_elements( string $raw, array &$warnings ): string {
+	$processor = new WP_HTML_Tag_Processor( $raw );
+	$removed   = array();
+	while ( $processor->next_tag() ) {
+		$tag = $processor->get_tag();
+		if ( ( 'STYLE' === $tag || 'SCRIPT' === $tag ) && $processor->set_modifiable_text( '' ) ) {
+			$removed[ $tag ] = true;
+		}
+	}
+	if ( array() === $removed ) {
+		return $raw;
+	}
+	foreach ( array_keys( $removed ) as $tag ) {
+		$warnings[] = aafm_block_warning( '', 'removed_element', strtolower( (string) $tag ) );
+	}
+	return $processor->get_updated_html();
+}
+
+/**
+ * Add an invalid_block_attributes warning for every named block whose delimiter JSON did not parse.
+ *
+ * The block parser leaves attrs null when json_decode() fails, and the attributes are then lost.
+ *
+ * @param array<int|string,array<string,mixed>>                $blocks   Parsed blocks.
+ * @param list<array{block:string,code:string,message:string}> $warnings Accumulator, by reference.
+ * @return bool Whether the tree holds any named block at any depth.
+ */
+function aafm_flag_invalid_block_attributes( array $blocks, array &$warnings ): bool {
+	$named = false;
+	foreach ( $blocks as $block ) {
+		if ( isset( $block['blockName'] ) ) {
+			$named = true;
+			if ( null === $block['attrs'] ) {
+				$warnings[] = aafm_block_warning( (string) $block['blockName'], 'invalid_block_attributes', '' );
+			}
+		}
+		if ( ! empty( $block['innerBlocks'] ) && aafm_flag_invalid_block_attributes( $block['innerBlocks'], $warnings ) ) {
+			$named = true;
+		}
+	}
+	return $named;
+}
+
+/**
+ * Walk the as-sent tree and the kses tree together, restoring tag-free attribute strings.
+ *
+ * @param array<int|string,array<string,mixed>> $sent     Parsed tree of the normalized markup.
+ * @param array<int|string,array<string,mixed>> $kept     Parsed tree of its wp_kses_post() output.
+ * @param int                                   $restored Count of restored values, by reference.
+ * @return array<int|string,array<string,mixed>>|null The kses tree with values restored, or null
+ *                                                    when the two trees differ in shape.
+ */
+function aafm_restore_block_attrs( array $sent, array $kept, int &$restored ): ?array {
+	if ( count( $sent ) !== count( $kept ) ) {
+		return null;
+	}
+	foreach ( $kept as $i => $block ) {
+		$from = $sent[ $i ] ?? null;
+		if ( ! is_array( $from ) || $from['blockName'] !== $block['blockName'] ) {
+			return null;
+		}
+		if ( is_array( $from['attrs'] ) && is_array( $block['attrs'] ) ) {
+			$kept[ $i ]['attrs'] = aafm_restore_attr_values( $from['attrs'], $block['attrs'], $restored );
+		}
+		$inner = aafm_restore_block_attrs( (array) $from['innerBlocks'], (array) $block['innerBlocks'], $restored );
+		if ( null === $inner ) {
+			return null;
+		}
+		$kept[ $i ]['innerBlocks'] = $inner;
+	}
+	return $kept;
+}
+
+/**
+ * Restore one attribute value (recursively through arrays, by identical key path).
+ *
+ * A string comes back as sent when kses changed it and it cannot open an HTML tag (no "<" followed
+ * by a letter, "/", "!" or "?"). Keys present in only one tree keep the kses side.
+ *
+ * @param mixed $sent     Value as sent.
+ * @param mixed $kept     Value after kses.
+ * @param int   $restored Count of restored values, by reference.
+ * @return mixed
+ */
+function aafm_restore_attr_values( $sent, $kept, int &$restored ) {
+	if ( is_string( $sent ) && is_string( $kept ) ) {
+		if ( $sent !== $kept && 1 !== preg_match( '#<[a-zA-Z/!?]#', $sent ) ) {
+			++$restored;
+			return $sent;
+		}
+		return $kept;
+	}
+	if ( is_array( $sent ) && is_array( $kept ) ) {
+		foreach ( $kept as $key => $value ) {
+			if ( array_key_exists( $key, $sent ) ) {
+				$kept[ $key ] = aafm_restore_attr_values( $sent[ $key ], $value, $restored );
+			}
+		}
+	}
+	return $kept;
 }

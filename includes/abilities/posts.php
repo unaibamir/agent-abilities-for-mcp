@@ -96,7 +96,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-block']    = array(
 		'label'        => __( 'Replace block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. Every other block keeps its attributes and HTML. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -905,8 +905,8 @@ function aafm_write_enrichment_output_schema(): array {
  * Anti-escalation: post_author is never threaded from input - wp_insert_post
  * defaults it to the current (agent) user, so a caller cannot spoof authorship.
  * post_type is forced by the caller of this function, never by the agent's input. Title is
- * sanitized with aafm_sanitize_plain_text and content with wp_kses_post so even an
- * unfiltered_html-capable agent cannot store script.
+ * sanitized with aafm_sanitize_plain_text and content with aafm_kses_block_markup() (wp_kses_post(),
+ * keeping tag-free attribute text for unfiltered_html users), so no agent can store a script element.
  *
  * When $publish_cap is given, the effective status is resolved from $input['status'] (falling
  * back to $default_status when omitted) via aafm_resolve_create_status() - this is the shared

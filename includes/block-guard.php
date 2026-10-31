@@ -45,8 +45,8 @@ function aafm_write_content_description(): string {
  * The set of core blocks the guard inspects.
  *
  * Curated on purpose: only common blocks whose save() output encodes color/size/border styling
- * that agents tend to get wrong. Third-party blocks and freeform blocks (core/html) are out of
- * scope and never inspected, so an unknown block can never be flagged.
+ * that agents tend to get wrong. Editor-invalid-content checks cover only this core whitelist.
+ * Informational checks run on every named block, including third-party blocks.
  *
  * @return list<string>
  */
@@ -574,10 +574,10 @@ function aafm_block_guard_strict_codes(): array {
 /**
  * Run the guard against final content and, in strict mode, return a blocking error.
  *
- * The single chokepoint every write executor calls. It returns the scan warnings in every case;
- * when strict mode is on and the scan found anything, it ALSO returns a WP_Error the caller must
- * return before writing, so invalid markup is never stored. The caller attaches the warnings to
- * its success response in warn mode.
+ * The single chokepoint every write executor calls. It returns the scan warnings in every case.
+ * Strict mode refuses only warnings whose codes are listed by aafm_block_guard_strict_codes();
+ * informational warnings never block a write. On such a refusal it ALSO returns a WP_Error the
+ * caller must return before writing. The caller attaches the warnings to its success response.
  *
  * @param string $content Final, post-sanitization block markup.
  * @return array{warnings:list<array{block:string,code:string,message:string}>,error:WP_Error|null}

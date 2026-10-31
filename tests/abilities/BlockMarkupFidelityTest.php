@@ -179,6 +179,80 @@ final class BlockMarkupFidelityTest extends TestCase {
 		$this->assertSame( 'alert(1)ok', $attrs['c'] );
 	}
 
+	/**
+	 * Values kses reads as a tag inside a block comment. kses of the raw markup would break the
+	 * opener into visible text, so the stored content is the kses-of-normalized tree instead.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function data_raw_less_than_kses_reads_as_a_tag(): array {
+		return array(
+			'comparison' => array( 'a < b and c > d' ),
+			'age range'  => array( 'Kids < 12 > free' ),
+		);
+	}
+
+	/**
+	 * The admin's write stores one valid paragraph block, not a broken opener shown as text.
+	 *
+	 * @dataProvider data_raw_less_than_kses_reads_as_a_tag
+	 *
+	 * @param string $name Block metadata name.
+	 */
+	public function test_a_raw_less_than_kses_reads_as_a_tag_keeps_the_block_valid( string $name ): void {
+		$this->admin();
+		$res    = $this->create( '<!-- wp:paragraph {"metadata":{"name":"' . $name . '"}} --><p>Body</p><!-- /wp:paragraph -->' );
+		$stored = $this->stored( $res );
+		$blocks = parse_blocks( $stored );
+
+		$this->assertStringNotContainsString( '&lt;!--', $stored );
+		$this->assertCount( 1, $blocks, 'One block, no stray text or orphan closer.' );
+		$this->assertSame( 'core/paragraph', $blocks[0]['blockName'] );
+		$this->assertSame( '<p>Body</p>', $blocks[0]['innerHTML'] );
+	}
+
+	/**
+	 * Two keys kses would merge if it read the raw comment JSON.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function data_raw_less_than_key_merge(): array {
+		return array(
+			'b restored'       => array( '{"a":"x < y","b":"z > w"}' ),
+			'nothing restored' => array( '{"a":"x < y and z > w","b":"v"}' ),
+		);
+	}
+
+	/**
+	 * Both keys stay in the one block, whether or not a sibling value is restored.
+	 *
+	 * @dataProvider data_raw_less_than_key_merge
+	 *
+	 * @param string $json Delimiter JSON.
+	 */
+	public function test_a_raw_less_than_keeps_both_keys_in_one_block( string $json ): void {
+		$this->admin();
+		$res    = $this->create( '<!-- wp:paragraph ' . $json . ' --><p>Body</p><!-- /wp:paragraph -->' );
+		$blocks = $this->stored_blocks( $res );
+
+		$this->assertCount( 1, $blocks );
+		$this->assertSame( 'core/paragraph', $blocks[0]['blockName'] );
+		$this->assertSame( array( 'a', 'b' ), array_keys( (array) $blocks[0]['attrs'] ) );
+	}
+
+	/**
+	 * Non-canonical but harmless markup (extra spaces inside the delimiters, no "<" in the JSON)
+	 * with nothing to restore is still wp_kses_post() of it, byte for byte.
+	 */
+	public function test_non_canonical_harmless_markup_is_byte_identical_to_wp_kses_post(): void {
+		$this->admin();
+		$raw = '<!--   wp:paragraph   {"align":"center"}   --><p class="has-text-align-center">Wide</p><!--   /wp:paragraph   -->';
+
+		$this->assertSame( 'core/paragraph', parse_blocks( $raw )[0]['blockName'], 'Fixture: the parser reads the spaced delimiter.' );
+		$this->assertNotSame( serialize_blocks( parse_blocks( $raw ) ), $raw, 'Fixture: the markup is not canonical.' );
+		$this->assertSame( wp_kses_post( $raw ), aafm_kses_block_markup( $raw )['content'] );
+	}
+
 	public function test_a_value_that_can_open_a_tag_is_still_cleaned(): void {
 		$this->admin();
 		$raw    = '<!-- wp:rosh/x {"plain":"A & B","img":"<img src=x onerror=alert(1)>hi","comment":"<!-- x -->y","closer":"</p>z"} /-->';
@@ -340,10 +414,12 @@ final class BlockMarkupFidelityTest extends TestCase {
 		$raw    = '<!-- wp:rosh/x {"c":"<script>alert(1)</script>ok"} /-->';
 		$result = aafm_kses_block_markup( $raw );
 
-		// Not an element, so nothing is removed; the value can open a tag, so nothing is restored
-		// and the result is wp_kses_post() exactly.
+		// Not an element, so nothing is removed; the value can open a tag, so nothing is restored.
+		// kses of the raw markup breaks the comment, so the normalized kses tree is stored.
 		$this->assertSame( array(), $result['warnings'] );
-		$this->assertSame( wp_kses_post( $raw ), $result['content'] );
+		$this->assertSame( parse_blocks( wp_kses_post( serialize_blocks( parse_blocks( $raw ) ) ) ), parse_blocks( $result['content'] ) );
+		$this->assertSame( 'alert(1)ok', parse_blocks( $result['content'] )[0]['attrs']['c'] ?? null );
+		$this->assertStringNotContainsString( '&lt;!--', $result['content'] );
 		$this->assertStringNotContainsString( '<script', $result['content'] );
 	}
 

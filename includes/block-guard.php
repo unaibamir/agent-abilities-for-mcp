@@ -619,8 +619,11 @@ function aafm_block_guard_evaluate( string $content ): array {
  * unfiltered_html only, puts back each attribute string that cannot open an HTML tag and that kses
  * only entity-encoded, exactly as it was sent. Any other value keeps the kses result, and
  * innerHTML is never restored.
- * When nothing is restored, or the user lacks unfiltered_html, the content is wp_kses_post() of
- * the input byte for byte (apart from the <style>/<script> removal below).
+ * When nothing is restored, the content is wp_kses_post() of the input byte for byte, unless kses
+ * of the raw input parses differently from kses of the normalized input (a raw "<" in the comment
+ * JSON broke or merged the comment): then it is the normalized kses tree, serialized. A user
+ * without unfiltered_html always gets wp_kses_post() of the input byte for byte. Both apart from
+ * the <style>/<script> removal below.
  *
  * <style> and <script> elements are removed with their contents first, since kses would strip the
  * tags and leave the CSS or script text in the page. Both that removal and a block whose delimiter
@@ -652,6 +655,9 @@ function aafm_kses_block_markup( string $raw ): array {
 	if ( null !== $tree && $tree !== $kept ) {
 		// @phpstan-ignore-next-line argument.type (the walk rewrites attrs values only, so every entry keeps the parse_blocks() block shape)
 		$clean = serialize_blocks( $tree );
+	} elseif ( null !== $tree && parse_blocks( $clean ) !== $kept ) {
+		// kses of the raw input read a "<" in the comment JSON as a tag and broke or merged the comment.
+		$clean = serialize_blocks( $kept );
 	}
 	return array(
 		'content'  => $clean,

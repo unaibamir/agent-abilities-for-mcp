@@ -33,10 +33,10 @@ Short walkthrough:
 * **Run several sites from one AI chat.** Install it on each site and add each one to ChatGPT or Claude as its own connector. Each site keeps its own user, its own switches and its own audit log, so an agency can hand one client's site to the agent without touching the others.
 * **Let ChatGPT or Claude write and edit posts without admin access.** Connect the agent as an Editor, Author or Contributor account. It can only do what that role can do in wp-admin.
 * **Have the agent save drafts for you to approve.** Turn on Force draft on create and anything the agent creates or tries to publish is saved as a draft. The Needs review card on the Dashboard lists the drafts and pending posts an agent starts, with Preview, Open in editor, Publish and Discard (Discard moves the post to the Trash). To stop it changing posts that are already live as well, connect it as a Contributor.
-* **Let AI read your site without changing anything.** Read-only mode stops every write tool from loading, including write tools you have bridged from your other plugins.
+* **Let AI read your site without changing anything.** Read-only mode stops every write tool from loading.
 * **Tell the agent about your site once.** Write a few lines in Site Brief on the Settings tab, for example your house style or what to leave alone. This plugin sends it to every agent that connects, when its session starts.
 * **Find out why an agent cannot connect.** Connection Doctor on the Connection tab checks the connection from your own server and names the fix, for example a host that strips the Authorization header.
-* **Fix typos and refresh old posts.** The agent can search your posts, read one and update it, and every step through this plugin is logged.
+* **Fix typos and refresh old posts.** The agent can search your posts, read one and update it.
 * **Use your other plugins through the agent.** Plugins that register WordPress abilities, such as WPForms, show up on the Other plugins screen and stay off until you switch them on.
 
 = 🛡️ Permission controls and an audit log on every call =
@@ -62,21 +62,21 @@ The plugin ships **182 governed abilities: 88 across WordPress core and 94 from 
 
 **WordPress core (88 abilities).** Reads plus guarded writes across your whole site:
 
-* **📝 Posts & Pages:** list, read, create, update, and delete, with destructive actions off by default and deletes routed to Trash.
+* **📝 Posts & Pages:** list, read, create, update, trash and permanently delete, with destructive actions off by default; trash tools move items to the Trash, delete tools bypass it.
 * **🏷️ Terms & Taxonomies:** manage categories, tags, and custom taxonomy terms.
 * **💬 Comments:** read and moderate the comment queue.
 * **🖼️ Media:** list and read the library, and add images from inline data or an HTTPS URL, validated by their real bytes against an allow-list.
 * **🗂️ Post Meta:** read and write only administrator-allowlisted meta keys; protected, underscore-prefixed, and authentication keys can never be allowlisted.
 * **👥 Users:** read and manage users within capability limits; a new user gets the default role, never admin, and the last administrator can't be removed.
-* **🧭 Site structure:** work with menus and the structural pieces that hold the site together.
-* **🕓 Revision history:** read the revision trail for content.
-* **🧱 Blocks & Templates:** work with reusable blocks, themes, and templates.
+* **🧭 Site structure:** work with menus and related site structure.
+* **🕓 Revision history:** read the revision trail, restore a revision, and delete one.
+* **🧱 Blocks & Templates:** list the site's block types (ACF blocks included), replace one block in a post, and work with reusable blocks, themes, and templates.
 * **⚙️ Limited settings & site health:** a tightly scoped set of settings, plus read-only site health and plugin status.
 * **🔍 Site-wide search:** one search that spans every post type at once.
 
 **Integrations (94 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, logged, and only present while that plugin is active:
 
-* **🛒 WooCommerce MCP (52 abilities):** read and write products, orders, and customers to help run your store. These touch personal data (names, emails, addresses), so they sit behind a clear admin notice and stay off until enabled.
+* **🛒 WooCommerce MCP (52 abilities):** read and write products, orders, and customers. These touch personal data (names, emails, addresses), so they sit behind a clear admin notice and stay off until enabled.
 * **🧩 Advanced Custom Fields (7 abilities):** read and write ACF field data; like WooCommerce, these can reach personal data and sit behind the same notice.
 * **📈 Rank Math SEO (5 abilities):** read and manage Rank Math SEO data.
 * **📈 Yoast SEO (3 abilities):** read and manage Yoast SEO data.
@@ -401,7 +401,7 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 * **Feature:** The Connection tab now has OAuth and Application Passwords tabs, a token lifetimes card (the client registration switch moved there from Settings), a switch that pauses all MCP access to the site, and a list of the agent users' Application Passwords with their last use and a Revoke button.
 * **Feature:** Settings can limit which roles may connect an app and can read the visitor's real address behind Cloudflare or another proxy. Connection Doctor checks MCP headers, JSON bodies, redirects and stale or blocked discovery documents; the Dashboard says why an enabled tool is missing; tabs show a dot while they have unsaved changes; the Abilities tab opens on an All view listing every ability under its category, with the same bulk buttons each category has.
 * **Feature:** Agents can list the site's block types and read one block's attributes, supports and styles, plus, for ACF blocks, its field names, choices and an example payload. A new Replace block tool swaps one block in a post or page without resending the whole page.
-* **Fix:** Plain text in block attributes, such as an & in an ACF field, is now stored as written for users who may post unfiltered HTML, style and script elements are removed with their contents, and writes that return content warnings now also flag unknown blocks or ACF fields, invalid attribute JSON and ignored block gaps. A custom-field-only change now clears that post's or term's cache entry (with an action for page caches and an opt-in full re-save for caches that need one), blank-looking IP allowlist lines are dropped, Settings and the Dashboard no longer scroll sideways on a phone, new drafts report real dates, and the Activity Log and Connection Doctor show placeholders while they load.
+* **Fix:** Plain attribute text that WordPress would only entity-encode, such as an & in an ACF field, is now stored as written for users who may post unfiltered HTML, style and script elements are removed with their contents, and writes that return content warnings now also flag unknown blocks or ACF fields, invalid attribute JSON and ignored block gaps. A custom-field-only change now clears that post's or term's cache entry (with an action for page caches and an opt-in full re-save for caches that need one), blank-looking IP allowlist lines are dropped, Settings and the Dashboard no longer scroll sideways on a phone, new drafts report real dates, and the Activity Log and Connection Doctor show placeholders while they load.
 
 = 1.9.0 =
 

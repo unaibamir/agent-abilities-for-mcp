@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-31T21:43:43+05:00\n"
+"POT-Creation-Date: 2026-10-31T23:12:27+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -1250,7 +1250,7 @@ msgid "Replace block"
 msgstr ""
 
 #: includes/abilities/posts.php:99
-msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. Every other block keeps its attributes and HTML. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:106
@@ -5540,7 +5540,7 @@ msgid "Finds and replaces literal text in a post's body, sanitizing the inserted
 msgstr ""
 
 #: includes/admin/disclosures.php:110
-msgid "Replaces one whole block in a post or page, picked by its position, with new block markup. Every other block keeps its attributes and HTML, the replacement is sanitized like any content write, and the change is reversible from the revision history. Requires edit access to that post."
+msgid "Replaces one whole block in a post or page, picked by its position, with new block markup. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. The replacement is sanitized like any content write, and the change can be restored from revision history when WordPress revisions are enabled. Requires edit access to that post."
 msgstr ""
 
 #: includes/admin/disclosures.php:111
@@ -9092,61 +9092,61 @@ msgid "Gutenberg block markup. Put every bit of styling inside the block delimit
 msgstr ""
 
 #. translators: 1: block name, 2: CSS class name.
-#: includes/block-guard.php:475
+#: includes/block-guard.php:476
 #, php-format
 msgid "The %1$s block has the \"%2$s\" class but no matching value in its block attributes. Encode the styling inside the block delimiter so the editor does not flag the block as invalid."
 msgstr ""
 
 #. translators: %s: block name.
-#: includes/block-guard.php:483
+#: includes/block-guard.php:484
 #, php-format
 msgid "The %s block uses an inline style=\"\" attribute with no styling in its block attributes. Move the styling into the block delimiter, or the editor will flag the block as invalid."
 msgstr ""
 
 #. translators: %s: block name.
-#: includes/block-guard.php:492
+#: includes/block-guard.php:493
 #, php-format
 msgid "The %s block declares a color or size in its attributes, but the value is missing from the stored HTML (the sanitizer likely dropped an rgba() or alpha color). Use a plain hex color so the attribute and the markup agree."
 msgstr ""
 
 #. translators: %s: HTML element name, style or script.
-#: includes/block-guard.php:499
+#: includes/block-guard.php:500
 #, php-format
 msgid "A <%s> element was removed together with its contents. Stored content cannot carry styles or scripts; put styling in block attributes instead."
 msgstr ""
 
 #. translators: %s: block name.
-#: includes/block-guard.php:506
+#: includes/block-guard.php:507
 #, php-format
 msgid "No block type named %s is registered on this site, so it will not render as that block. Check the name with aafm-list-block-types."
 msgstr ""
 
 #. translators: 1: block name, 2: comma-separated data keys, 3: comma-separated field names.
-#: includes/block-guard.php:514
+#: includes/block-guard.php:515
 #, php-format
 msgid "The %1$s block data has keys that match none of its ACF fields, so ACF ignores them: %2$s. Its field names are: %3$s. See aafm-get-block-type."
 msgstr ""
 
 #. translators: 1: block name, 2: blockGap value(s).
-#: includes/block-guard.php:523
+#: includes/block-guard.php:524
 #, php-format
 msgid "WordPress ignores the blockGap value %2$s on the %1$s block, because it contains (, \\, &, =, } or /*. Use a length such as 24px or a spacing preset such as var:preset|spacing|40."
 msgstr ""
 
 #. translators: %s: block name.
-#: includes/block-guard.php:531
+#: includes/block-guard.php:532
 #, php-format
 msgid "The %s block has delimiter attributes that are not valid JSON, so WordPress ignores all of them. Fix the JSON (for example a trailing comma) and write the block again."
 msgstr ""
 
 #. translators: %s: block name.
-#: includes/block-guard.php:538
+#: includes/block-guard.php:539
 #, php-format
 msgid "The %s block may render as invalid content in the editor. Encode all styling as block attributes."
 msgstr ""
 
 #. translators: %s: comma-separated list of block names.
-#: includes/block-guard.php:599
+#: includes/block-guard.php:600
 #, php-format
 msgid "The block content was rejected because these blocks would show as invalid in the editor: %s. Encode all styling as block attributes inside the block delimiters and try again."
 msgstr ""

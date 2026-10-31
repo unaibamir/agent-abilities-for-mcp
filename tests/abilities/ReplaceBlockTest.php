@@ -72,21 +72,11 @@ final class ReplaceBlockTest extends TestCase {
 		return $id;
 	}
 
-	/**
-	 * Run the executor.
-	 *
-	 * @param array<string,mixed> $input Input.
-	 * @return array<string,mixed>|\WP_Error
-	 */
-	private function replace( array $input ) {
-		return aafm_exec_replace_block( $input );
-	}
-
 	public function test_replaces_a_top_level_block(): void {
 		$this->admin();
 		$id = $this->post_with( serialize_blocks( parse_blocks( self::PAGE ) ) );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 1 ),
@@ -115,7 +105,7 @@ final class ReplaceBlockTest extends TestCase {
 		$page = serialize_blocks( parse_blocks( self::PAGE ) );
 		$id   = $this->post_with( $page );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 2, 1 ),
@@ -134,7 +124,7 @@ final class ReplaceBlockTest extends TestCase {
 		$this->admin();
 		$id = $this->post_with( self::PAGE );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 2, 0 ),
@@ -158,7 +148,7 @@ final class ReplaceBlockTest extends TestCase {
 
 		// Raw index 2 is the blank line between the heading and the paragraph; named index 2 is the group.
 		$this->assertNull( parse_blocks( self::PAGE )[1]['blockName'], 'Fixture: freeform whitespace between blocks.' );
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id'      => $id,
 				'path'         => array( 2 ),
@@ -178,7 +168,7 @@ final class ReplaceBlockTest extends TestCase {
 		$this->admin();
 		$id = $this->post_with( self::PAGE );
 
-		$top = $this->replace(
+		$top = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 3 ),
@@ -189,7 +179,7 @@ final class ReplaceBlockTest extends TestCase {
 		$this->assertSame( 'aafm_block_path_not_found', $top->get_error_code() );
 		$this->assertStringContainsString( '3', $top->get_error_message() );
 
-		$inner = $this->replace(
+		$inner = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 2, 5 ),
@@ -207,7 +197,7 @@ final class ReplaceBlockTest extends TestCase {
 		$this->admin();
 		$id = $this->post_with( self::PAGE );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id'      => $id,
 				'path'         => array( 0 ),
@@ -227,7 +217,7 @@ final class ReplaceBlockTest extends TestCase {
 		$id = $this->post_with( self::PAGE );
 
 		foreach ( array( self::NEW_PARAGRAPH . "\n\n" . self::NEW_PARAGRAPH, 'just some text', "\n\n" ) as $markup ) {
-			$res = $this->replace(
+			$res = aafm_exec_replace_block(
 				array(
 					'post_id' => $id,
 					'path'    => array( 1 ),
@@ -244,7 +234,7 @@ final class ReplaceBlockTest extends TestCase {
 		$this->admin();
 		$id = $this->post_with( self::PAGE );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 1 ),
@@ -264,7 +254,7 @@ final class ReplaceBlockTest extends TestCase {
 		$page = "<!-- wp:acme/card {\"lead\":\"Saturday &amp; Sunday\"} /-->\n\n" . self::NEW_PARAGRAPH;
 		$id   = $this->post_with( $page );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 1 ),
@@ -284,7 +274,7 @@ final class ReplaceBlockTest extends TestCase {
 		$page = "<!-- wp:heading {\"level\":2,} -->\n<h2 class=\"wp-block-heading\">Bad JSON</h2>\n<!-- /wp:heading -->\n\n" . self::NEW_PARAGRAPH;
 		$id   = $this->post_with( $page );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 1 ),
@@ -304,7 +294,7 @@ final class ReplaceBlockTest extends TestCase {
 		$page   = serialize_blocks( parse_blocks( '<!-- wp:html -->' . $iframe . '<!-- /wp:html -->' . "\n\n" . self::NEW_PARAGRAPH ) );
 		$id     = $this->post_with( $page );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 1 ),
@@ -323,7 +313,7 @@ final class ReplaceBlockTest extends TestCase {
 		$page = serialize_blocks( parse_blocks( '<!-- wp:html --><iframe src="https://example.com/embed"></iframe><!-- /wp:html -->' . "\n\n" . self::NEW_PARAGRAPH ) );
 		$id   = $this->post_with( $page, $author );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 1 ),
@@ -352,7 +342,7 @@ final class ReplaceBlockTest extends TestCase {
 			2
 		);
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 1 ),
@@ -370,7 +360,7 @@ final class ReplaceBlockTest extends TestCase {
 		$id     = $this->post_with( self::PAGE );
 		$before = count( wp_get_post_revisions( $id ) );
 
-		$res = $this->replace(
+		$res = aafm_exec_replace_block(
 			array(
 				'post_id' => $id,
 				'path'    => array( 1 ),

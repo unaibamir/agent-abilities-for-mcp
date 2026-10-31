@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-31T23:12:27+05:00\n"
+"POT-Creation-Date: 2026-11-01T00:29:24+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -319,17 +319,17 @@ msgid "ID of the post/page to read. The current user must have edit access to it
 msgstr ""
 
 #: includes/abilities/avada.php:172
-#: includes/abilities/posts.php:1407
+#: includes/abilities/posts.php:1408
 msgid "ID of the post to edit."
 msgstr ""
 
 #: includes/abilities/avada.php:177
-#: includes/abilities/posts.php:1412
+#: includes/abilities/posts.php:1413
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
 #: includes/abilities/avada.php:181
-#: includes/abilities/posts.php:1416
+#: includes/abilities/posts.php:1417
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
@@ -342,7 +342,7 @@ msgid "That replacement would change the Fusion Builder shortcode structure rath
 msgstr ""
 
 #: includes/abilities/avada.php:467
-#: includes/abilities/posts.php:1787
+#: includes/abilities/posts.php:1788
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
@@ -442,15 +442,15 @@ msgstr ""
 msgid "Title for the new reusable block. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/blocks.php:651
+#: includes/abilities/blocks.php:652
 msgid "ID of the reusable block to update. The caller must have edit access to this specific block."
 msgstr ""
 
-#: includes/abilities/blocks.php:655
+#: includes/abilities/blocks.php:656
 msgid "New title for the block. Sanitized as plain text. Omit to leave the current title unchanged."
 msgstr ""
 
-#: includes/abilities/blocks.php:754
+#: includes/abilities/blocks.php:755
 msgid "ID of the reusable block to move to the Trash. The caller must have delete access to this specific block. This is a Trash move, not a permanent delete, so it can be restored."
 msgstr ""
 
@@ -1242,7 +1242,7 @@ msgid "Replace in post"
 msgstr ""
 
 #: includes/abilities/posts.php:91
-msgid "Literal find-and-replace inside a post's content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Literal find-and-replace inside a post's content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:98
@@ -1360,97 +1360,97 @@ msgstr ""
 msgid "Unsupported or unauthorized post status."
 msgstr ""
 
-#: includes/abilities/posts.php:945
-#: includes/abilities/posts.php:1294
+#: includes/abilities/posts.php:946
+#: includes/abilities/posts.php:1295
 #: includes/safety.php:630
 msgid "The title exceeds the maximum allowed length."
 msgstr ""
 
-#: includes/abilities/posts.php:1206
+#: includes/abilities/posts.php:1207
 msgid "ID of the post to update."
 msgstr ""
 
-#: includes/abilities/posts.php:1752
+#: includes/abilities/posts.php:1753
 msgid "That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly."
 msgstr ""
 
-#: includes/abilities/posts.php:1817
+#: includes/abilities/posts.php:1818
 msgid "ID of the post or page to edit."
 msgstr ""
 
-#: includes/abilities/posts.php:1827
+#: includes/abilities/posts.php:1828
 msgid "Index path to the block, from 0: its position among the top-level blocks, then among each parent's inner blocks. Only real blocks count, not the blank lines between them. [2, 0] is the first block inside the third top-level block."
 msgstr ""
 
-#: includes/abilities/posts.php:1832
+#: includes/abilities/posts.php:1833
 msgid "The complete markup of exactly one replacement block, from its opening delimiter to its closing one."
 msgstr ""
 
-#: includes/abilities/posts.php:1836
+#: includes/abilities/posts.php:1837
 msgid "Optional block name, such as core/group, that the block at path must have. The write is refused if it differs."
 msgstr ""
 
-#: includes/abilities/posts.php:1906
+#: includes/abilities/posts.php:1907
 msgid "This post's block markup does not survive being re-serialized (for example, a block has invalid attribute JSON), so one block cannot be replaced safely. Nothing was changed. Use aafm-update-post to rewrite the whole content instead."
 msgstr ""
 
 #. translators: 1: level in the path, counted from 1; 2: number of blocks at that level.
-#: includes/abilities/posts.php:1922
+#: includes/abilities/posts.php:1923
 #, php-format
 msgid "No block at that path. Level %1$d of the path has %2$d blocks, counted from 0 and skipping the blank lines between blocks. Nothing was changed."
 msgstr ""
 
 #. translators: %s: block name found at the path.
-#: includes/abilities/posts.php:1941
+#: includes/abilities/posts.php:1942
 #, php-format
 msgid "The block at that path is %s, not the expected block. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:1958
+#: includes/abilities/posts.php:1959
 msgid "The markup must be exactly one block, from its opening delimiter to its closing one, with nothing else around it. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:1990
+#: includes/abilities/posts.php:1991
 msgid "The replaced block could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/posts.php:2044
+#: includes/abilities/posts.php:2045
 msgid "Literal text to find. Matched as-is, not as a regular expression."
 msgstr ""
 
-#: includes/abilities/posts.php:2048
+#: includes/abilities/posts.php:2049
 msgid "Literal text to substitute for every match."
 msgstr ""
 
-#: includes/abilities/posts.php:2053
+#: includes/abilities/posts.php:2054
 msgid "Slug of an allowlisted content type to scope the replace to. Defaults to post."
 msgstr ""
 
-#: includes/abilities/posts.php:2058
+#: includes/abilities/posts.php:2059
 msgid "Post status to scope the replace to. Defaults to publish."
 msgstr ""
 
-#: includes/abilities/posts.php:2063
+#: includes/abilities/posts.php:2064
 msgid "When true (the default), previews the match without writing anything. Pass false to apply the change."
 msgstr ""
 
-#: includes/abilities/posts.php:2079
+#: includes/abilities/posts.php:2080
 msgid "Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content."
 msgstr ""
 
-#: includes/abilities/posts.php:2083
+#: includes/abilities/posts.php:2084
 msgid "Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal."
 msgstr ""
 
-#: includes/abilities/posts.php:2367
+#: includes/abilities/posts.php:2368
 msgid "ID of the content item to update."
 msgstr ""
 
-#: includes/abilities/posts.php:2455
+#: includes/abilities/posts.php:2456
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2525
+#: includes/abilities/posts.php:2526
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -5536,7 +5536,7 @@ msgid "Updates an existing post's fields by id. Publishing is gated separately."
 msgstr ""
 
 #: includes/admin/disclosures.php:109
-msgid "Finds and replaces literal text in a post's body, sanitizing the inserted text. It edits only the replaced spans, leaves the rest of the content untouched, never changes the status, and the change is reversible from the revision history."
+msgid "Finds and replaces literal text in a post's body, sanitizing the inserted text. It edits only the replaced spans, leaves the rest of the content untouched, never changes the status, and the change can be restored from revision history when WordPress revisions are enabled."
 msgstr ""
 
 #: includes/admin/disclosures.php:110
@@ -9088,7 +9088,7 @@ msgid "Read-only mode could not be turned off: object cache stale"
 msgstr ""
 
 #: includes/block-guard.php:38
-msgid "Gutenberg block markup. Put every bit of styling inside the block delimiter attributes, never as inline style=\"\" on the HTML, or the editor flags the block as invalid content. Right: <!-- wp:heading {\"style\":{\"color\":{\"text\":\"#ffffff\"}}} --><h2 class=\"has-text-color\" style=\"color:#ffffff\">Hi</h2><!-- /wp:heading -->. Wrong: <!-- wp:heading --><h2 style=\"color:#ffffff\">Hi</h2><!-- /wp:heading -->. The sanitizer strips inline rgba() and hex-with-alpha colors and inline <svg> from stored content, so use plain hex colors and an uploaded <img> or a unicode glyph for icons. For genuinely bespoke markup that has no matching block, use a core/html block. Plain text inside block attributes (anything that does not open an HTML tag) is stored exactly as written for users who can post unfiltered HTML; HTML tags inside attribute values are still sanitized, and other users get WordPress's own sanitizing. <style> and <script> elements are removed with their contents. ACF blocks take {\"name\",\"data\",\"mode\"} attributes with field NAMES as the data keys (see aafm-get-block-type). On WordPress 7.0+, metadata.blockVisibility.viewport with mobile, tablet or desktop set to false hides a block on that screen size; on 6.9, metadata.blockVisibility:false hides it everywhere. With fluid typography on (aafm-get-global-styles settings.typography.fluid), px font sizes scale down on small screens. WordPress ignores a blockGap that contains (, \\, &, =, } or /*, so clamp(), calc() and var() are dropped there, while 24px or a preset such as var:preset|spacing|40 work."
+msgid "Gutenberg block markup. Put every bit of styling inside the block delimiter attributes, never as inline style=\"\" on the HTML, or the editor flags the block as invalid content. Right: <!-- wp:heading {\"style\":{\"color\":{\"text\":\"#ffffff\"}}} --><h2 class=\"has-text-color\" style=\"color:#ffffff\">Hi</h2><!-- /wp:heading -->. Wrong: <!-- wp:heading --><h2 style=\"color:#ffffff\">Hi</h2><!-- /wp:heading -->. The sanitizer strips inline rgba() and hex-with-alpha colors and inline <svg> from stored content, so use plain hex colors and an uploaded <img> or a unicode glyph for icons. For genuinely bespoke markup that has no matching block, use a core/html block. For users who can post unfiltered HTML, &, < and > in plain block attribute text are stored as written when WordPress would only entity-encode them; a value that already holds an entity, or that WordPress changes in any other way, keeps WordPress's sanitized value; HTML tags inside attribute values are still sanitized, and other users get WordPress's own sanitizing. <style> and <script> elements are removed with their contents. ACF blocks take {\"name\",\"data\",\"mode\"} attributes with field NAMES as the data keys (see aafm-get-block-type). On WordPress 7.0+, metadata.blockVisibility.viewport with mobile, tablet or desktop set to false hides a block on that screen size; on 6.9, metadata.blockVisibility:false hides it everywhere. With fluid typography on (aafm-get-global-styles settings.typography.fluid), px font sizes scale down on small screens. WordPress ignores a blockGap that contains (, \\, &, =, } or /*, so clamp(), calc() and var() are dropped there, while 24px or a preset such as var:preset|spacing|40 work."
 msgstr ""
 
 #. translators: 1: block name, 2: CSS class name.

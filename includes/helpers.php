@@ -2030,6 +2030,18 @@ function aafm_status_requires_publish_cap( string $status, ?array $public_status
 }
 
 /**
+ * A post's GMT date as core REST reports it: WordPress stores a zero GMT date on a draft until it
+ * is published, so a zero value is reported as the GMT form of the local date instead.
+ *
+ * @param string $gmt   Stored GMT date.
+ * @param string $local Stored local date.
+ * @return string
+ */
+function aafm_post_gmt_date( string $gmt, string $local ): string {
+	return '0000-00-00 00:00:00' === $gmt ? get_gmt_from_date( $local ) : $gmt;
+}
+
+/**
  * Reduce a post to a safe, public-facing shape.
  *
  * @param WP_Post $post Post object.
@@ -2045,8 +2057,8 @@ function aafm_redact_post( WP_Post $post ): array {
 		'excerpt'      => has_excerpt( $post ) ? get_the_excerpt( $post ) : '',
 		'link'         => (string) get_permalink( $post ),
 		'author_id'    => (int) $post->post_author,
-		'date_gmt'     => $post->post_date_gmt,
-		'modified_gmt' => $post->post_modified_gmt,
+		'date_gmt'     => aafm_post_gmt_date( $post->post_date_gmt, $post->post_date ),
+		'modified_gmt' => aafm_post_gmt_date( $post->post_modified_gmt, $post->post_modified ),
 	);
 
 	$lang = aafm_wpml_post_language( (int) $post->ID );
@@ -2543,8 +2555,8 @@ function aafm_redact_revision( WP_Post $revision ): array {
 		'id'           => (int) $revision->ID,
 		'post_id'      => (int) $revision->post_parent,
 		'author_id'    => (int) $revision->post_author,
-		'date_gmt'     => $revision->post_date_gmt,
-		'modified_gmt' => $revision->post_modified_gmt,
+		'date_gmt'     => aafm_post_gmt_date( $revision->post_date_gmt, $revision->post_date ),
+		'modified_gmt' => aafm_post_gmt_date( $revision->post_modified_gmt, $revision->post_modified ),
 		'title'        => get_the_title( $revision ),
 	);
 }

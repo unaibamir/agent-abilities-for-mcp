@@ -154,6 +154,11 @@ function aafm_scan_blocks_recursive( array $blocks, array &$warnings ): void {
 				$warnings[] = $warning;
 			}
 		}
+		if ( '' !== $name ) {
+			foreach ( aafm_inspect_block_silent_drops( $block ) as $warning ) {
+				$warnings[] = $warning;
+			}
+		}
 
 		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
 			aafm_scan_blocks_recursive( $block['innerBlocks'], $warnings );
@@ -237,6 +242,113 @@ function aafm_inspect_block( array $block ): array {
 	}
 
 	return $warnings;
+}
+
+/**
+ * Informational checks on any named block for things WordPress drops without saying so.
+ *
+ * - unregistered_block: no block type of that name is registered (a deactivated plugin's block
+ *   reads the same way, which is why it never refuses).
+ * - unknown_acf_field: an ACF block's data holds a key that resolves to none of its fields.
+ * - block_gap_dropped: a style.spacing.blockGap value core skips when it renders the layout.
+ *
+ * @param array<string,mixed> $block One parsed block.
+ * @return list<array{block:string,code:string,message:string}>
+ */
+function aafm_inspect_block_silent_drops( array $block ): array {
+	$name     = (string) $block['blockName'];
+	$attrs    = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array();
+	$warnings = array();
+
+	if ( ! WP_Block_Type_Registry::get_instance()->is_registered( $name ) ) {
+		$warnings[] = aafm_block_warning( $name, 'unregistered_block', '' );
+	}
+
+	$fields = aafm_acf_block_fields( $name );
+	if ( null !== $fields && isset( $attrs['data'] ) && is_array( $attrs['data'] ) ) {
+		$unknown = array();
+		foreach ( array_keys( $attrs['data'] ) as $key ) {
+			$key = (string) $key;
+			if ( '_' !== substr( $key, 0, 1 ) && ! aafm_acf_block_key_resolves( $key, $fields ) ) {
+				$unknown[] = $key;
+			}
+		}
+		if ( array() !== $unknown ) {
+			$warnings[] = aafm_block_warning( $name, 'unknown_acf_field', implode( ', ', array_slice( $unknown, 0, 10 ) ) );
+		}
+	}
+
+	$gap     = aafm_arr_path( $attrs, array( 'style', 'spacing', 'blockGap' ) );
+	$dropped = array();
+	foreach ( is_array( $gap ) ? $gap : array( $gap ) as $value ) {
+		if ( is_string( $value ) && '' !== $value && aafm_block_gap_is_dropped( $value ) ) {
+			$dropped[] = $value;
+		}
+	}
+	if ( array() !== $dropped ) {
+		$warnings[] = aafm_block_warning( $name, 'block_gap_dropped', implode( ', ', $dropped ) );
+	}
+
+	return $warnings;
+}
+
+/**
+ * Whether core drops this blockGap value when it renders the layout.
+ *
+ * WordPress 7.1 has wp_sanitize_block_gap_value(). Before it, 6.9.4 inlines the same pattern in
+ * wp_render_layout_support_flag() (wp-includes/block-supports/layout.php:801 and :804).
+ *
+ * @param string $value One blockGap value.
+ * @return bool
+ */
+function aafm_block_gap_is_dropped( string $value ): bool {
+	if ( function_exists( 'wp_sanitize_block_gap_value' ) ) {
+		return null === wp_sanitize_block_gap_value( $value );
+	}
+	return 1 === preg_match( '%[\\\(&=}]|/\*%', $value );
+}
+
+/**
+ * Whether an ACF block data key resolves against a block's field tree.
+ *
+ * A key resolves when it is a field name; <group>_<rest> with <rest> resolving against the group's
+ * sub-fields; <repeater>_<n>_<rest> or <flexible>_<n>_<rest> with <rest> resolving against the
+ * repeater's sub-fields or any layout's; or, at a clone's own level, its name or one of its
+ * sub-field names (loaded with any prefix already applied). The tree is depth-capped at 5 by
+ * aafm_acf_block_fields(), so the recursion is too.
+ *
+ * @param string                         $key    Data key.
+ * @param array<int,array<string,mixed>> $fields Fields at this level.
+ * @return bool
+ */
+function aafm_acf_block_key_resolves( string $key, array $fields ): bool {
+	foreach ( $fields as $field ) {
+		$name = (string) $field['name'];
+		$type = (string) $field['type'];
+		$subs = isset( $field['sub_fields'] ) ? (array) $field['sub_fields'] : array();
+		if ( $key === $name || ( 'clone' === $type && aafm_acf_block_key_resolves( $key, $subs ) ) ) {
+			return true;
+		}
+		if ( '' === $name || 0 !== strpos( $key, $name . '_' ) ) {
+			continue;
+		}
+		$rest = (string) substr( $key, strlen( $name ) + 1 );
+		if ( 'group' === $type && aafm_acf_block_key_resolves( $rest, $subs ) ) {
+			return true;
+		}
+		if ( ( 'repeater' === $type || 'flexible_content' === $type ) && 1 === preg_match( '/^[0-9]+_(.+)$/s', $rest, $row ) ) {
+			if ( 'flexible_content' === $type ) {
+				$subs = array();
+				foreach ( (array) ( $field['layouts'] ?? array() ) as $layout ) {
+					$subs = array_merge( $subs, (array) $layout['sub_fields'] );
+				}
+			}
+			if ( aafm_acf_block_key_resolves( $row[1], $subs ) ) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 /**
@@ -345,12 +457,13 @@ function aafm_arr_path( array $arr, array $path ) {
  * The message is human, translatable prose (it rides back to the agent and can surface in a
  * strict-mode error); the code is a stable machine token for programmatic handling.
  *
- * @param string $block      Block name (for example core/heading).
- * @param string $code       Machine code for the warning type.
- * @param string $class_name Offending class name, when the warning is about a class ('' otherwise).
+ * @param string $block  Block name (for example core/heading).
+ * @param string $code   Machine code for the warning type.
+ * @param string $detail The code's detail: the offending class name, the removed element name,
+ *                       the unknown ACF keys or the dropped blockGap values ('' otherwise).
  * @return array{block:string,code:string,message:string}
  */
-function aafm_block_warning( string $block, string $code, string $class_name ): array {
+function aafm_block_warning( string $block, string $code, string $detail ): array {
 	switch ( $code ) {
 		case 'text_color_class_without_attr':
 		case 'background_class_without_attr':
@@ -361,7 +474,7 @@ function aafm_block_warning( string $block, string $code, string $class_name ): 
 				/* translators: 1: block name, 2: CSS class name. */
 				__( 'The %1$s block has the "%2$s" class but no matching value in its block attributes. Encode the styling inside the block delimiter so the editor does not flag the block as invalid.', 'agent-abilities-for-mcp' ),
 				$block,
-				$class_name
+				$detail
 			);
 			break;
 		case 'inline_style_without_attrs':
@@ -384,7 +497,32 @@ function aafm_block_warning( string $block, string $code, string $class_name ): 
 			$message = sprintf(
 				/* translators: %s: HTML element name, style or script. */
 				__( 'A <%s> element was removed together with its contents. Stored content cannot carry styles or scripts; put styling in block attributes instead.', 'agent-abilities-for-mcp' ),
-				$class_name
+				$detail
+			);
+			break;
+		case 'unregistered_block':
+			$message = sprintf(
+				/* translators: %s: block name. */
+				__( 'No block type named %s is registered on this site, so it will not render as that block. Check the name with aafm-list-block-types.', 'agent-abilities-for-mcp' ),
+				$block
+			);
+			break;
+		case 'unknown_acf_field':
+			$valid   = wp_list_pluck( (array) aafm_acf_block_fields( $block ), 'name' );
+			$message = sprintf(
+				/* translators: 1: block name, 2: comma-separated data keys, 3: comma-separated field names. */
+				__( 'The %1$s block data has keys that match none of its ACF fields, so ACF ignores them: %2$s. Its field names are: %3$s. See aafm-get-block-type.', 'agent-abilities-for-mcp' ),
+				$block,
+				$detail,
+				implode( ', ', array_slice( $valid, 0, 20 ) )
+			);
+			break;
+		case 'block_gap_dropped':
+			$message = sprintf(
+				/* translators: 1: block name, 2: blockGap value(s). */
+				__( 'WordPress ignores the blockGap value %2$s on the %1$s block, because it contains (, \\, &, =, } or /*. Use a length such as 24px or a spacing preset such as var:preset|spacing|40.', 'agent-abilities-for-mcp' ),
+				$block,
+				$detail
 			);
 			break;
 		case 'invalid_block_attributes':
@@ -411,6 +549,28 @@ function aafm_block_warning( string $block, string $code, string $class_name ): 
 }
 
 /**
+ * The warning codes strict mode refuses on: the editor-invalid-content codes the guard had before
+ * the informational ones (unregistered_block, unknown_acf_field, block_gap_dropped,
+ * invalid_block_attributes, removed_element) were added. Those never refuse, so a strict site does
+ * not start refusing writes it accepted before.
+ *
+ * @return list<string>
+ */
+function aafm_block_guard_strict_codes(): array {
+	return array(
+		'text_color_class_without_attr',
+		'background_class_without_attr',
+		'border_color_class_without_attr',
+		'custom_font_size_class_without_attr',
+		'font_size_class_without_attr',
+		'inline_style_without_attrs',
+		'color_attr_value_dropped',
+		'background_attr_value_dropped',
+		'font_size_attr_value_dropped',
+	);
+}
+
+/**
  * Run the guard against final content and, in strict mode, return a blocking error.
  *
  * The single chokepoint every write executor calls. It returns the scan warnings in every case;
@@ -425,8 +585,13 @@ function aafm_block_guard_evaluate( string $content ): array {
 	$warnings = aafm_scan_block_content( $content );
 	$error    = null;
 
-	if ( ! empty( $warnings ) && aafm_block_guard_is_strict() ) {
-		$blocks = implode( ', ', array_values( array_unique( wp_list_pluck( $warnings, 'block' ) ) ) );
+	// Strict mode refuses only on the editor-invalid codes; the informational ones never refuse.
+	$refusing = array_filter(
+		$warnings,
+		static fn( array $warning ): bool => in_array( $warning['code'], aafm_block_guard_strict_codes(), true )
+	);
+	if ( ! empty( $refusing ) && aafm_block_guard_is_strict() ) {
+		$blocks = implode( ', ', array_values( array_unique( wp_list_pluck( $refusing, 'block' ) ) ) );
 		$error  = new WP_Error(
 			'aafm_invalid_block_content',
 			sprintf(

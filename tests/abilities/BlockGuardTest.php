@@ -9,10 +9,14 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\TestCase;
+use WP_Block_Type_Registry;
 use WP_Error;
 
 final class BlockGuardTest extends TestCase {
+
+	use IntegrationStubs;
 
 	/**
 	 * Stylesheet to restore after a test that switched themes, or null when none was switched.
@@ -229,7 +233,12 @@ final class BlockGuardTest extends TestCase {
 			. '<div class="acme-fancy has-text-color" style="color:#fff">X</div>' . "\n"
 			. '<!-- /wp:acme/fancy -->';
 
-		$this->assertSame( array(), aafm_scan_block_content( $markup ) );
+		// Registered, so the unregistered_block check stays out of this heuristic-only test.
+		register_block_type( 'acme/fancy' );
+		$warnings = aafm_scan_block_content( $markup );
+		unregister_block_type( 'acme/fancy' );
+
+		$this->assertSame( array(), $warnings );
 	}
 
 	/**
@@ -463,5 +472,283 @@ final class BlockGuardTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 		$this->assertSame( 'aafm_invalid_block_content', $out->get_error_code() );
 		$this->assertSame( $original, (string) get_post( $post_id )->post_content );
+	}
+
+	/**
+	 * Codes of the warnings the guard scan returns for a markup string.
+	 *
+	 * @param string $markup Markup.
+	 * @return list<string>
+	 */
+	private function codes( string $markup ): array {
+		return wp_list_pluck( aafm_scan_block_content( $markup ), 'code' );
+	}
+
+	/**
+	 * Seed an ACF field group bound to acme/acf-card with a repeater, a group, a flexible field and
+	 * two clones (one without prefix_name, one with it), as ACF loads them.
+	 */
+	private function stub_card_fields(): void {
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'      => 'group_card',
+						'title'    => 'Card',
+						'location' => array(
+							array(
+								array(
+									'param'    => 'block',
+									'operator' => '==',
+									'value'    => 'acme/acf-card',
+								),
+							),
+						),
+						'fields'   => array(
+							array(
+								'key'  => 'f_title',
+								'name' => 'title',
+								'type' => 'text',
+							),
+							array(
+								'key'        => 'f_items',
+								'name'       => 'items',
+								'type'       => 'repeater',
+								'sub_fields' => array(
+									array(
+										'key'  => 'f_items_title',
+										'name' => 'title',
+										'type' => 'text',
+									),
+								),
+							),
+							array(
+								'key'        => 'f_group',
+								'name'       => 'group',
+								'type'       => 'group',
+								'sub_fields' => array(
+									array(
+										'key'  => 'f_group_sub',
+										'name' => 'sub',
+										'type' => 'text',
+									),
+								),
+							),
+							array(
+								'key'     => 'f_flex',
+								'name'    => 'layout_field',
+								'type'    => 'flexible_content',
+								'layouts' => array(
+									'l1' => array(
+										'name'       => 'text_row',
+										'label'      => 'Text row',
+										'sub_fields' => array(
+											array(
+												'key'  => 'f_flex_text',
+												'name' => 'text',
+												'type' => 'text',
+											),
+										),
+									),
+								),
+							),
+							array(
+								'key'        => 'f_cta',
+								'name'       => 'cta',
+								'type'       => 'clone',
+								'sub_fields' => array(
+									array(
+										'key'  => 'f_cta_label',
+										'name' => 'cta_label',
+										'type' => 'text',
+									),
+								),
+							),
+							array(
+								'key'         => 'f_promo',
+								'name'        => 'promo',
+								'type'        => 'clone',
+								'prefix_name' => 1,
+								'sub_fields'  => array(
+									array(
+										'key'  => 'f_promo_text',
+										'name' => 'promo_text',
+										'type' => 'text',
+									),
+								),
+							),
+						),
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * The guard's unknown_acf_field rows for an acme/acf-card block carrying $data.
+	 *
+	 * @param array<string,mixed> $data ACF block data.
+	 * @return list<array{block:string,code:string,message:string}>
+	 */
+	private function acf_rows( array $data ): array {
+		$markup = '<!-- wp:acme/acf-card ' . serialize_block_attributes(
+			array(
+				'name' => 'acme/acf-card',
+				'data' => $data,
+				'mode' => 'preview',
+			)
+		) . ' /-->';
+		return array_values(
+			array_filter(
+				aafm_scan_block_content( $markup ),
+				static fn( array $row ): bool => 'unknown_acf_field' === $row['code']
+			)
+		);
+	}
+
+	public function test_unregistered_block_is_flagged(): void {
+		$this->assertSame(
+			array( 'unregistered_block' ),
+			$this->codes( '<!-- wp:acme/nowhere --><div>x</div><!-- /wp:acme/nowhere -->' )
+		);
+		$this->assertStringContainsString( 'aafm-list-block-types', aafm_scan_block_content( '<!-- wp:acme/nowhere /-->' )[0]['message'] );
+	}
+
+	public function test_a_registered_block_is_not_flagged_as_unregistered(): void {
+		$this->assertSame( array(), $this->codes( '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->' ) );
+		$this->assertSame( array(), $this->codes( '<p>freeform only</p>' ) );
+	}
+
+	public function test_unknown_acf_key_ignores_references_and_valid_flattened_rows(): void {
+		$this->stub_card_fields();
+
+		$this->assertSame(
+			array(),
+			$this->acf_rows(
+				array(
+					'title'               => 'T',
+					'_title'              => 'f_title',
+					'items'               => 1,
+					'items_0_title'       => 'Row',
+					'_items_0_title'      => 'f_items_title',
+					'group_sub'           => 'G',
+					'layout_field'        => array( 'text_row' ),
+					'layout_field_0_text' => 'Flex',
+					'cta'                 => '',
+					'promo'               => '',
+				)
+			)
+		);
+	}
+
+	public function test_unknown_acf_key_flags_a_misspelled_sub_field(): void {
+		$this->stub_card_fields();
+		$rows = $this->acf_rows(
+			array(
+				'title'         => 'T',
+				'items_0_tilte' => 'Row',
+			)
+		);
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'acme/acf-card', $rows[0]['block'] );
+		$this->assertStringContainsString( 'items_0_tilte', $rows[0]['message'] );
+		$this->assertStringContainsString( 'title, items, group, layout_field, cta, promo', $rows[0]['message'] );
+	}
+
+	public function test_unknown_acf_key_is_silent_for_a_block_without_acf_fields(): void {
+		$this->stub_card_fields();
+		$this->assertSame( array(), wp_list_pluck( $this->acf_rows( array() ), 'code' ) );
+		$this->assertNotContains(
+			'unknown_acf_field',
+			$this->codes( '<!-- wp:acme/other {"data":{"whatever":"x"}} /-->' )
+		);
+	}
+
+	public function test_a_clone_without_prefix_name_takes_the_bare_sub_field_key(): void {
+		$this->stub_card_fields();
+		$this->assertSame( array(), $this->acf_rows( array( 'cta_label' => 'Go' ) ) );
+	}
+
+	public function test_a_clone_with_prefix_name_takes_the_prefixed_key_and_flags_the_bare_one(): void {
+		$this->stub_card_fields();
+		$this->assertSame( array(), $this->acf_rows( array( 'promo_text' => 'P' ) ) );
+		$this->assertCount( 1, $this->acf_rows( array( 'text' => 'P' ) ) );
+	}
+
+	public function test_a_misspelled_clone_sub_field_is_flagged(): void {
+		$this->stub_card_fields();
+		$this->assertCount( 1, $this->acf_rows( array( 'cta_lable' => 'Go' ) ) );
+	}
+
+	public function test_a_block_gap_core_drops_is_flagged(): void {
+		$scalar = $this->codes( '<!-- wp:group {"style":{"spacing":{"blockGap":"clamp(1rem, 2vw, 2rem)"}}} --><div class="wp-block-group"></div><!-- /wp:group -->' );
+		$array  = aafm_scan_block_content( '<!-- wp:group {"style":{"spacing":{"blockGap":{"top":"calc(1rem + 2px)","left":"24px"}}}} --><div class="wp-block-group"></div><!-- /wp:group -->' );
+
+		$this->assertSame( array( 'block_gap_dropped' ), $scalar );
+		$this->assertSame( array( 'block_gap_dropped' ), wp_list_pluck( $array, 'code' ) );
+		$this->assertStringContainsString( 'calc(1rem + 2px)', $array[0]['message'] );
+		$this->assertStringContainsString( 'value calc(1rem + 2px) on', $array[0]['message'], 'Only the dropped value is named.' );
+	}
+
+	public function test_a_block_gap_core_keeps_is_not_flagged(): void {
+		$this->assertSame( array(), $this->codes( '<!-- wp:group {"style":{"spacing":{"blockGap":"24px"}}} --><div class="wp-block-group"></div><!-- /wp:group -->' ) );
+		$this->assertSame( array(), $this->codes( '<!-- wp:group {"style":{"spacing":{"blockGap":"var:preset|spacing|40"}}} --><div class="wp-block-group"></div><!-- /wp:group -->' ) );
+	}
+
+	/**
+	 * U35: strict mode refuses exactly what it refused before. The five informational codes,
+	 * alone, never refuse a write.
+	 */
+	public function test_strict_mode_does_not_refuse_on_informational_codes(): void {
+		update_option( 'aafm_block_guard_strict', true );
+		$this->acting_as( 'administrator' );
+
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'   => 'Informational strict',
+				'content' => '<!-- wp:acme/nowhere /--><!-- wp:group {"style":{"spacing":{"blockGap":"calc(1rem)"}}} --><div class="wp-block-group"></div><!-- /wp:group --><!-- wp:heading {"level":2,} --><h2 class="wp-block-heading">Hi</h2><!-- /wp:heading --><!-- wp:html --><style>.a{}</style><!-- /wp:html -->',
+			)
+		);
+
+		$this->assertIsArray( $out, is_wp_error( $out ) ? $out->get_error_message() : '' );
+		$codes = wp_list_pluck( $out['content_warnings'], 'code' );
+		sort( $codes );
+		$this->assertSame( array( 'block_gap_dropped', 'invalid_block_attributes', 'removed_element', 'unregistered_block' ), $codes );
+	}
+
+	/**
+	 * U36: the codes the guard returned at 1.10.0 keep their exact rows.
+	 */
+	public function test_existing_warning_codes_are_unchanged(): void {
+		$this->assertSame(
+			array(
+				array(
+					'block'   => 'core/heading',
+					'code'    => 'text_color_class_without_attr',
+					'message' => 'The core/heading block has the "has-text-color" class but no matching value in its block attributes. Encode the styling inside the block delimiter so the editor does not flag the block as invalid.',
+				),
+				array(
+					'block'   => 'core/heading',
+					'code'    => 'inline_style_without_attrs',
+					'message' => 'The core/heading block uses an inline style="" attribute with no styling in its block attributes. Move the styling into the block delimiter, or the editor will flag the block as invalid.',
+				),
+			),
+			aafm_scan_block_content( '<!-- wp:heading --><h2 class="has-text-color" style="color:#fff">Hi</h2><!-- /wp:heading -->' )
+		);
+		$this->assertSame(
+			array(
+				array(
+					'block'   => 'core/paragraph',
+					'code'    => 'color_attr_value_dropped',
+					'message' => 'The core/paragraph block declares a color or size in its attributes, but the value is missing from the stored HTML (the sanitizer likely dropped an rgba() or alpha color). Use a plain hex color so the attribute and the markup agree.',
+				),
+			),
+			aafm_scan_block_content( '<!-- wp:paragraph {"style":{"color":{"text":"#fff"}}} --><p class="has-text-color">x</p><!-- /wp:paragraph -->' )
+		);
+		$this->assertSame(
+			array( 'text_color_class_without_attr', 'background_class_without_attr', 'border_color_class_without_attr', 'custom_font_size_class_without_attr', 'font_size_class_without_attr', 'inline_style_without_attrs', 'color_attr_value_dropped', 'background_attr_value_dropped', 'font_size_attr_value_dropped' ),
+			aafm_block_guard_strict_codes()
+		);
 	}
 }

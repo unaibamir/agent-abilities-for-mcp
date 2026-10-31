@@ -698,7 +698,9 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 	// post_content write uses -- strict mode refuses markup that would show as invalid in the
 	// editor instead of silently storing it.
 	if ( array_key_exists( 'description', $input ) ) {
-		$description = wp_kses_post( (string) $input['description'] );
+		// The sanitizer's own warnings are dropped with the guard's: a WooCommerce response
+		// carries no content_warnings key.
+		$description = aafm_kses_block_markup( (string) $input['description'] )['content'];
 		$guard       = aafm_block_guard_evaluate( $description );
 		if ( $guard['error'] instanceof \WP_Error ) {
 			return $guard['error'];

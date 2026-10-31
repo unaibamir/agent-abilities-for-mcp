@@ -451,7 +451,8 @@ function aafm_exec_update_template( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$content = wp_kses_post( (string) ( $input['content'] ?? '' ) );
+	$sanitized = aafm_kses_block_markup( (string) ( $input['content'] ?? '' ) );
+	$content   = $sanitized['content'];
 	// Read before the write: the raw post_content confirmation below reads back, matching the
 	// context aafm_post_field_write_confirmed()'s own read-back uses.
 	$stored = aafm_exact_object_chain( 'post', $wp_id );
@@ -468,6 +469,7 @@ function aafm_exec_update_template( array $input ) {
 	if ( $guard['error'] instanceof WP_Error ) {
 		return $guard['error'];
 	}
+	$guard['warnings'] = array_merge( $guard['warnings'], $sanitized['warnings'] );
 
 	$result = wp_update_post(
 		wp_slash(

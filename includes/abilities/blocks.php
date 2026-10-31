@@ -310,21 +310,24 @@ function aafm_args_create_block(): array {
  *
  * The type is forced to wp_block from our own args; post_author is omitted so wp_insert_post
  * defaults it to the current (agent) user - neither can be spoofed through input. The markup
- * is sanitized with wp_kses_post() (which preserves Gutenberg block delimiters), then the
+ * is sanitized with aafm_kses_block_markup() (wp_kses_post(), which preserves Gutenberg block
+ * delimiters, with plain attribute text kept as sent for unfiltered_html users), then the
  * whole array is wp_slash()'d once because the insert functions expect slashed data.
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_create_block( array $input ) {
-	$title   = isset( $input['title'] ) ? aafm_sanitize_plain_text( (string) $input['title'] ) : '';
-	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
+	$title     = isset( $input['title'] ) ? aafm_sanitize_plain_text( (string) $input['title'] ) : '';
+	$sanitized = aafm_kses_block_markup( isset( $input['content'] ) ? (string) $input['content'] : '' );
+	$content   = $sanitized['content'];
 
 	// Guard the final markup: strict mode blocks the write, warn mode rides on the response.
 	$guard = aafm_block_guard_evaluate( $content );
 	if ( $guard['error'] instanceof WP_Error ) {
 		return $guard['error'];
 	}
+	$guard['warnings'] = array_merge( $guard['warnings'], $sanitized['warnings'] );
 
 	$id = wp_insert_post(
 		wp_slash(
@@ -452,11 +455,13 @@ function aafm_exec_update_block( array $input ) {
 		$update['post_title'] = aafm_sanitize_plain_text( (string) $input['title'] );
 	}
 	if ( isset( $input['content'] ) ) {
-		$update['post_content'] = wp_kses_post( (string) $input['content'] );
+		$sanitized              = aafm_kses_block_markup( (string) $input['content'] );
+		$update['post_content'] = $sanitized['content'];
 		$guard                  = aafm_block_guard_evaluate( (string) $update['post_content'] );
 		if ( $guard['error'] instanceof WP_Error ) {
 			return $guard['error'];
 		}
+		$guard['warnings'] = array_merge( $guard['warnings'], $sanitized['warnings'] );
 	}
 	$result = wp_update_post( wp_slash( $update ), true );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {

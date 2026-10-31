@@ -323,16 +323,19 @@ function aafm_exec_tec_get_event( array $input ) {
  * tec-delete-event's own delete capability and this plugin's destructive-ability classification
  * entirely.
  *
- * @param array<string,mixed> $input Validated input.
+ * @param array<string,mixed>                                  $input    Validated input.
+ * @param list<array{block:string,code:string,message:string}> $warnings Sanitizer warnings for the content, by reference.
  * @return array<string,mixed>
  */
-function aafm_tec_event_orm_args( array $input ): array {
+function aafm_tec_event_orm_args( array $input, array &$warnings = array() ): array {
 	$args = array();
 	if ( isset( $input['title'] ) ) {
 		$args['post_title'] = aafm_sanitize_plain_text( (string) $input['title'] );
 	}
 	if ( isset( $input['content'] ) ) {
-		$args['post_content'] = wp_kses_post( (string) $input['content'] );
+		$sanitized            = aafm_kses_block_markup( (string) $input['content'] );
+		$args['post_content'] = $sanitized['content'];
+		$warnings             = $sanitized['warnings'];
 	}
 	if ( isset( $input['start_date'] ) ) {
 		$args['start_date'] = aafm_sanitize_plain_text( (string) $input['start_date'] );
@@ -485,7 +488,8 @@ function aafm_exec_tec_create_event( array $input ) {
 		return $invalid_relationship;
 	}
 
-	$args                = aafm_tec_event_orm_args( $input );
+	$markup_warnings     = array();
+	$args                = aafm_tec_event_orm_args( $input, $markup_warnings );
 	$args['post_status'] = $status;
 
 	$safety = aafm_tec_enforce_content_safety( $args, 'post_title', 'post_content' );
@@ -508,8 +512,9 @@ function aafm_exec_tec_create_event( array $input ) {
 	if ( is_wp_error( $response ) ) {
 		return $response;
 	}
-	if ( ! empty( $safety['warnings'] ) ) {
-		$response['content_warnings'] = $safety['warnings'];
+	$warnings = array_merge( $safety['warnings'], $markup_warnings );
+	if ( ! empty( $warnings ) ) {
+		$response['content_warnings'] = $warnings;
 	}
 	return $response;
 }
@@ -579,7 +584,8 @@ function aafm_exec_tec_update_event( array $input ) {
 		return $invalid_relationship;
 	}
 
-	$args = aafm_tec_event_orm_args( $input );
+	$markup_warnings = array();
+	$args            = aafm_tec_event_orm_args( $input, $markup_warnings );
 	if ( isset( $input['status'] ) ) {
 		$status = aafm_authorize_post_status( (string) $input['status'], aafm_tec_event_publish_cap(), null, aafm_current_post_status( $id ) );
 		if ( is_wp_error( $status ) ) {
@@ -630,8 +636,9 @@ function aafm_exec_tec_update_event( array $input ) {
 	if ( is_wp_error( $response ) ) {
 		return $response;
 	}
-	if ( ! empty( $safety['warnings'] ) ) {
-		$response['content_warnings'] = $safety['warnings'];
+	$warnings = array_merge( $safety['warnings'], $markup_warnings );
+	if ( ! empty( $warnings ) ) {
+		$response['content_warnings'] = $warnings;
 	}
 	return $response;
 }

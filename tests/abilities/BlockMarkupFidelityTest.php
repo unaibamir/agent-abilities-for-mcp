@@ -32,6 +32,153 @@ final class BlockMarkupFidelityTest extends TestCase {
 		$this->assertFalse( current_user_can( 'unfiltered_html' ), 'Fixture: an author does not post unfiltered HTML.' );
 	}
 
+	/**
+	 * Create a published post through the create-post executor and return the response.
+	 *
+	 * @param string $content Block markup.
+	 * @return array<string,mixed>
+	 */
+	private function create( string $content ): array {
+		$res = aafm_exec_create_post(
+			array(
+				'title'   => 'Fidelity',
+				'content' => $content,
+				'status'  => 'publish',
+			)
+		);
+		$this->assertIsArray( $res, is_wp_error( $res ) ? $res->get_error_message() : 'not an array' );
+		return $res;
+	}
+
+	private function stored( array $res ): string {
+		return (string) get_post( (int) $res['post']['id'] )->post_content;
+	}
+
+	/**
+	 * The parsed blocks of what a create stored.
+	 *
+	 * @param array<string,mixed> $res Create response.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function stored_blocks( array $res ): array {
+		return parse_blocks( $this->stored( $res ) );
+	}
+
+	public function test_ampersand_in_block_data_round_trips_for_an_admin(): void {
+		$this->admin();
+		$res = $this->create( '<!-- wp:rosh/contact-card {"name":"rosh/contact-card","data":{"lead":"Saturday & Sunday: closed"},"mode":"preview"} /-->' );
+
+		$this->assertSame( 'Saturday & Sunday: closed', $this->stored_blocks( $res )[0]['attrs']['data']['lead'] ?? null );
+	}
+
+	public function test_angle_brackets_in_block_data_round_trip_for_an_admin(): void {
+		$this->admin();
+		$res   = $this->create( '<!-- wp:rosh/contact-card {"data":{"lead":"a > b and c < d","q":"say \"hi\""}} /-->' );
+		$attrs = $this->stored_blocks( $res )[0]['attrs'] ?? array();
+
+		$this->assertSame( 'a > b and c < d', $attrs['data']['lead'] ?? null );
+		$this->assertSame( 'say "hi"', $attrs['data']['q'] ?? null );
+	}
+
+	public function test_ampersand_in_embed_url_round_trips_for_an_admin(): void {
+		$this->admin();
+		$res = $this->create( '<!-- wp:embed {"url":"https://www.youtube.com/watch?v=abc&t=10","type":"video","providerNameSlug":"youtube"} --><figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube"><div class="wp-block-embed__wrapper">https://www.youtube.com/watch?v=abc&amp;t=10</div></figure><!-- /wp:embed -->' );
+
+		$this->assertSame( 'https://www.youtube.com/watch?v=abc&t=10', $this->stored_blocks( $res )[0]['attrs']['url'] ?? null );
+	}
+
+	/**
+	 * Core's own content_save_pre kses runs for a user without unfiltered_html, whatever the plugin
+	 * sends, so their & still becomes &amp; exactly as in their own block editor (plan 302 D3).
+	 */
+	public function test_core_kses_still_applies_to_a_user_without_unfiltered_html(): void {
+		$this->author();
+		$res = $this->create( '<!-- wp:rosh/contact-card {"data":{"lead":"Saturday & Sunday: closed"}} /-->' );
+
+		$this->assertSame( 'Saturday &amp; Sunday: closed', $this->stored_blocks( $res )[0]['attrs']['data']['lead'] ?? null );
+	}
+
+	/**
+	 * Core re-sanitizes this user's content on save; the write confirmation replays that and still
+	 * certifies the write.
+	 */
+	public function test_a_user_without_unfiltered_html_still_gets_a_confirmed_write(): void {
+		$this->author();
+		$res = $this->create( '<!-- wp:rosh/x {"t":"a & b < c"} /--><!-- wp:html --><style>.a{}</style><p>x</p><!-- /wp:html -->' );
+
+		$this->assertArrayHasKey( 'post', $res );
+		$this->assertStringNotContainsString( '.a{}', $this->stored( $res ) );
+	}
+
+	public function test_style_element_leaves_no_css_text(): void {
+		$this->admin();
+		$res     = $this->create( '<!-- wp:html --><style>.mcp-t td{padding:12px}</style><table class="mcp-t"><tr><td>x</td></tr></table><!-- /wp:html -->' );
+		$content = $this->stored( $res );
+
+		$this->assertStringNotContainsString( 'padding:12px', $content );
+		$this->assertStringContainsString( '<table class="mcp-t">', $content );
+		$this->assertContains( 'removed_element', wp_list_pluck( $res['content_warnings'] ?? array(), 'code' ) );
+	}
+
+	public function test_invalid_delimiter_json_is_reported(): void {
+		$this->admin();
+		$res = $this->create( '<!-- wp:heading {"level":2,} --><h2 class="wp-block-heading">Hi</h2><!-- /wp:heading -->' );
+
+		$rows = array_values(
+			array_filter(
+				$res['content_warnings'] ?? array(),
+				static fn( array $row ): bool => 'invalid_block_attributes' === $row['code']
+			)
+		);
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'core/heading', $rows[0]['block'] );
+	}
+
+	public function test_plain_values_survive_and_html_values_are_still_cleaned(): void {
+		$this->admin();
+		$res = $this->create( '<!-- wp:group --><div class="wp-block-group"><!-- wp:rosh/x {"data":{"a":"S & S","b":"a > b < c","c":"<script>alert(1)</script>ok","d":"var(--wp--x)","e":"javascript:alert(1)"}} /--></div><!-- /wp:group -->' );
+
+		$out  = $this->stored( $res );
+		$data = $this->stored_blocks( $res )[0]['innerBlocks'][0]['attrs']['data'] ?? array();
+		$this->assertSame( 'S & S', $data['a'] ?? null );
+		$this->assertSame( 'a > b < c', $data['b'] ?? null );
+		$this->assertSame( 'javascript:alert(1)', $data['e'] ?? null );
+		$this->assertSame( 'alert(1)ok', $data['c'] ?? null );
+		$this->assertSame( 'var(--wp--x)', $data['d'] ?? null );
+		$this->assertStringNotContainsString( '<script', $out );
+		$this->assertSame( 1, substr_count( $out, '<!-- wp:rosh/x' ) );
+	}
+
+	public function test_markup_without_blocks_is_byte_identical_to_today(): void {
+		$this->admin();
+		$raw = '<p>Hi & bye</p>';
+		$res = $this->create( $raw );
+
+		$this->assertSame( wp_kses_post( $raw ), $this->stored( $res ) );
+	}
+
+	public function test_block_markup_with_nothing_to_restore_is_byte_identical_to_today(): void {
+		$this->admin();
+		$raw = '<!-- wp:paragraph {"style":{"color":{"text":"#fff"}}} --><p class="has-text-color" style="color:#fff">A &amp; B</p><!-- /wp:paragraph -->';
+		$res = $this->create( $raw );
+
+		$this->assertSame( wp_kses_post( $raw ), $this->stored( $res ) );
+	}
+
+	/**
+	 * A raw "<" inside the comment JSON used to be rewritten before the block parser ran, which
+	 * merged key b into key c. Both keys survive; b is restored, c keeps the cleaned value.
+	 */
+	public function test_a_raw_less_than_in_comment_json_keeps_every_key(): void {
+		$this->admin();
+		$res   = $this->create( '<!-- wp:rosh/x {"b":"a > b < c","c":"<script>alert(1)</script>ok"} /-->' );
+		$attrs = $this->stored_blocks( $res )[0]['attrs'] ?? array();
+
+		$this->assertSame( array( 'b', 'c' ), array_keys( $attrs ) );
+		$this->assertSame( 'a > b < c', $attrs['b'] );
+		$this->assertSame( 'alert(1)ok', $attrs['c'] );
+	}
+
 	public function test_a_value_that_can_open_a_tag_is_still_cleaned(): void {
 		$this->admin();
 		$raw    = '<!-- wp:rosh/x {"plain":"A & B","img":"<img src=x onerror=alert(1)>hi","comment":"<!-- x -->y","closer":"</p>z"} /-->';
@@ -60,6 +207,18 @@ final class BlockMarkupFidelityTest extends TestCase {
 		$this->assertCount( 2, $blocks, 'The restored value did not close the comment early.' );
 		$this->assertSame( 'a --> b', $blocks[0]['attrs']['t'] ?? null );
 		$this->assertSame( 'core/paragraph', $blocks[1]['blockName'] );
+	}
+
+	/**
+	 * What the block editor stores for an administrator: the attribute text exactly as sent.
+	 */
+	public function test_a_restored_value_is_stored_exactly_as_sent(): void {
+		$this->admin();
+		$res   = $this->create( '<!-- wp:rosh/x {"u":"java&#9script:","t":"a & b"} /-->' );
+		$attrs = $this->stored_blocks( $res )[0]['attrs'] ?? array();
+
+		$this->assertSame( 'java&#9script:', $attrs['u'] ?? null );
+		$this->assertSame( 'a & b', $attrs['t'] ?? null );
 	}
 
 	public function test_a_user_without_unfiltered_html_gets_exactly_wp_kses_post(): void {

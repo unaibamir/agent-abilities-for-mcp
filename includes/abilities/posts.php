@@ -948,11 +948,12 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 		return $enrichment;
 	}
 
-	$postarr = array(
+	$sanitized = aafm_kses_block_markup( isset( $input['content'] ) ? (string) $input['content'] : '' );
+	$postarr   = array(
 		'post_type'    => $type,
 		'post_status'  => $status,
 		'post_title'   => $title,
-		'post_content' => isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '',
+		'post_content' => $sanitized['content'],
 		'post_excerpt' => isset( $input['excerpt'] ) ? aafm_sanitize_plain_text( (string) $input['excerpt'] ) : '',
 	);
 
@@ -970,6 +971,7 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	if ( $guard['error'] instanceof WP_Error ) {
 		return $guard['error'];
 	}
+	$guard['warnings'] = array_merge( $guard['warnings'], $sanitized['warnings'] );
 
 	$id = wp_insert_post( wp_slash( $postarr ), true );
 	if ( is_wp_error( $id ) ) {
@@ -1286,12 +1288,14 @@ function aafm_exec_update_post( array $input ) {
 		$postarr['post_title'] = $title;
 	}
 	if ( isset( $input['content'] ) ) {
-		$postarr['post_content'] = wp_kses_post( (string) $input['content'] );
+		$sanitized               = aafm_kses_block_markup( (string) $input['content'] );
+		$postarr['post_content'] = $sanitized['content'];
 		// Guard the final markup: strict mode blocks the write, warn mode rides on the response.
 		$guard = aafm_block_guard_evaluate( (string) $postarr['post_content'] );
 		if ( $guard['error'] instanceof WP_Error ) {
 			return $guard['error'];
 		}
+		$guard['warnings'] = array_merge( $guard['warnings'], $sanitized['warnings'] );
 	}
 	if ( isset( $input['excerpt'] ) ) {
 		$postarr['post_excerpt'] = aafm_sanitize_plain_text( (string) $input['excerpt'] );

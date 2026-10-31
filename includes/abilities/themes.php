@@ -51,7 +51,7 @@ function aafm_register_themes_definitions( array $registry ): array {
 	);
 	$registry['aafm/list-templates']    = array(
 		'label'        => __( 'List templates', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists block templates (or template parts) by id, slug, title, type, and source. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists block templates (or template parts) by id, slug, title, type, and source. A classic theme without block-template support usually has none, so the list can be empty there. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -67,7 +67,7 @@ function aafm_register_themes_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-global-styles'] = array(
 		'label'        => __( 'Get global styles', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads the active theme's resolved global styles and settings (theme.json). Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Reads the site's resolved theme.json settings and styles, on block and classic themes alike: the colour palette slugs to use as backgroundColor and textColor, font sizes, spacing, layout widths and whether fluid typography is on. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',

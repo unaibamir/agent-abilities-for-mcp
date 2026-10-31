@@ -171,4 +171,56 @@ final class ThemesTest extends TestCase {
 		$this->assertArrayHasKey( 'styles', $res );
 		$this->assertStringNotContainsString( ABSPATH, (string) wp_json_encode( $res ) );
 	}
+
+	/**
+	 * A classic theme (no block templates) that ships a theme.json still has its palette, font sizes
+	 * and fluid flag read through get-global-styles, which the ability description promises.
+	 */
+	public function test_get_global_styles_reads_a_classic_theme_palette(): void {
+		$root = trailingslashit( get_temp_dir() ) . 'aafm-classic-themes';
+		$dir  = $root . '/aafm-classic';
+		wp_mkdir_p( $dir );
+		file_put_contents( $dir . '/style.css', "/*\nTheme Name: AAFM Classic\n*/\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- disposable test fixture.
+		file_put_contents( $dir . '/index.php', '<?php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- disposable test fixture.
+		file_put_contents( // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- disposable test fixture.
+			$dir . '/theme.json',
+			(string) wp_json_encode(
+				array(
+					'version'  => 3,
+					'settings' => array(
+						'color'      => array(
+							'palette' => array(
+								array(
+									'slug'  => 'aafm-ink',
+									'color' => '#111111',
+									'name'  => 'Ink',
+								),
+							),
+						),
+						'typography' => array( 'fluid' => true ),
+					),
+				)
+			)
+		);
+		register_theme_directory( $root );
+		search_theme_directories( true );
+		$this->previous_stylesheet = get_stylesheet();
+		switch_theme( 'aafm-classic' );
+		wp_clean_theme_json_cache();
+		$this->acting_as( 'administrator' );
+
+		$this->assertFalse( wp_is_block_theme(), 'Fixture: a classic theme.' );
+		$settings = aafm_exec_get_global_styles()['settings'];
+		$this->assertContains( 'aafm-ink', wp_list_pluck( $settings['color']['palette']['theme'] ?? array(), 'slug' ) );
+		$this->assertTrue( $settings['typography']['fluid'] ?? null );
+
+		switch_theme( $this->previous_stylesheet );
+		$this->previous_stylesheet = null;
+		wp_clean_theme_json_cache();
+		array_map( 'wp_delete_file', glob( $dir . '/*' ) ?: array() ); // phpcs:ignore Universal.Operators.DisallowShortTernary.Found -- glob() returns false on error.
+		rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- disposable test fixture.
+		rmdir( $root ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- disposable test fixture.
+		$GLOBALS['wp_theme_directories'] = array_values( array_diff( $GLOBALS['wp_theme_directories'], array( $root ) ) ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- undo register_theme_directory() above.
+		search_theme_directories( true );
+	}
 }

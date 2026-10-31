@@ -82,7 +82,10 @@ final class RedactPostDatesTest extends TestCase {
 		$block = get_post( $id );
 		$this->assertSame( self::ZERO, $block->post_date_gmt, 'Fixture: core stores a zero GMT date on a draft.' );
 
+		$this->assertSame( self::ZERO, $block->post_modified_gmt, 'Fixture: core copies the zero GMT date into post_modified_gmt on insert.' );
+
 		$this->assertSame( get_gmt_from_date( $block->post_date ), aafm_rich_block( $block )['date'] );
+		$this->assertSame( get_gmt_from_date( $block->post_modified ), aafm_rich_block( $block )['modified'] );
 	}
 
 	public function test_a_published_post_keeps_its_stored_gmt_dates(): void {

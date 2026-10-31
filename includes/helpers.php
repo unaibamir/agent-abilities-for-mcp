@@ -2962,7 +2962,7 @@ function aafm_redact_block( $block ): array {
 		'title'    => $block->post_title,
 		'slug'     => $block->post_name,
 		'status'   => $block->post_status,
-		'modified' => $block->post_modified_gmt,
+		'modified' => aafm_post_gmt_date( $block->post_modified_gmt, $block->post_modified ),
 	);
 }
 

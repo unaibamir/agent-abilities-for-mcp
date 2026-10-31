@@ -103,6 +103,13 @@ class AcfStubStore {
 	public static array $read_override = array();
 
 	/**
+	 * Block type names ACF has registered, what acf_has_block_type() answers from.
+	 *
+	 * @var string[]
+	 */
+	public static array $block_types = array();
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -116,6 +123,7 @@ class AcfStubStore {
 		self::$fail_keys                = array();
 		self::$model_container_rekeying = false;
 		self::$read_override            = array();
+		self::$block_types              = array();
 	}
 
 	/**

@@ -266,6 +266,7 @@ PHP;
 	 *     'groups' => array( array( 'key' => 'group_1', 'title' => 'Hero',
 	 *                  'fields' => array( array( 'key' => 'field_1', 'label' => 'Headline', 'type' => 'text' ) ) ) ),
 	 *     'values' => array( 'field_1' => 'Hello' ),  // seeds the current object's hydrated values.
+	 *     'block_types' => array( 'acf/hero' ),  // names acf_has_block_type() reports as ACF blocks.
 	 *   )
 	 *
 	 * Defining get_field() makes real ACF detection true; the slice still forces the integration
@@ -281,6 +282,7 @@ PHP;
 		// Seed the seeded values under every object selector the test might read, plus the
 		// "current object" bucket (selector '' / 0) ACF uses when no explicit id is given.
 		AcfStubStore::$seed_values = $values;
+		AcfStubStore::$block_types = isset( $config['block_types'] ) && is_array( $config['block_types'] ) ? $config['block_types'] : array();
 
 		// Build the field-definition index (key => {key,label,type}) from the group fields so
 		// acf_get_field() can resolve a field's type for type-aware sanitize.
@@ -300,6 +302,10 @@ PHP;
 		if ( ! function_exists( 'acf_get_fields' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
 			eval( 'function acf_get_fields( $group ) { return \AAFM\Tests\AcfStubStore::fields_for_group( $group ); }' );
+		}
+		if ( ! function_exists( 'acf_has_block_type' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
+			eval( 'function acf_has_block_type( $name ) { return in_array( $name, \AAFM\Tests\AcfStubStore::$block_types, true ); }' );
 		}
 		if ( ! function_exists( 'acf_get_field' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.

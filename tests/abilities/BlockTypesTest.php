@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\AcfStubStore;
 use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\TestCase;
 use WP_Block_Type_Registry;
@@ -265,6 +266,75 @@ final class BlockTypesTest extends TestCase {
 
 		$listed = aafm_exec_list_block_types( array( 'search' => 'acf/hero' ) )['block_types'];
 		$this->assertTrue( $listed[0]['is_acf'] );
+	}
+
+	/**
+	 * A group whose block rule is "All" applies to every ACF block: it adds its fields to a block
+	 * with its own group, makes a block with no group of its own an ACF block, and leaves a block
+	 * ACF did not register alone.
+	 */
+	public function test_an_all_blocks_group_applies_to_every_acf_block(): void {
+		$this->acting_as( 'contributor' );
+		$this->stub_hero_group();
+		$this->register( 'acf/banner', array( 'title' => 'Banner' ) );
+		$this->register( 'acme/plain', array( 'title' => 'Plain' ) );
+		AcfStubStore::$block_types = array( 'acf/hero', 'acf/banner' );
+		AcfStubStore::$groups[]    = array(
+			'key'      => 'group_all',
+			'title'    => 'Every block',
+			'location' => array(
+				array(
+					array(
+						'param'    => 'block',
+						'operator' => '==',
+						'value'    => 'all',
+					),
+				),
+			),
+			'fields'   => array(
+				array(
+					'key'  => 'field_anchor',
+					'name' => 'anchor_id',
+					'type' => 'text',
+				),
+			),
+		);
+
+		$hero = aafm_exec_get_block_type( array( 'name' => 'acf/hero' ) )['acf'];
+		$this->assertSame( array( 'title', 'style', 'items', 'art', 'anchor_id' ), wp_list_pluck( $hero['fields'], 'name' ) );
+		$this->assertArrayHasKey( 'anchor_id', parse_blocks( $hero['envelope_example'] )[0]['attrs']['data'] );
+		$this->assertSame( array( 'anchor_id' ), wp_list_pluck( (array) aafm_acf_block_fields( 'acf/banner' ), 'name' ) );
+		$this->assertNull( aafm_acf_block_fields( 'acme/plain' ) );
+	}
+
+	/**
+	 * Tab, message and accordion fields have no name and hold no data, so they are left out of the
+	 * field list, the example payload and the guard's list of valid names.
+	 */
+	public function test_a_nameless_field_is_left_out_of_fields_example_and_guard_message(): void {
+		$this->acting_as( 'contributor' );
+		$this->stub_hero_group();
+		array_unshift(
+			AcfStubStore::$groups[0]['fields'],
+			array(
+				'key'  => 'field_tab',
+				'name' => '',
+				'type' => 'tab',
+			)
+		);
+		AcfStubStore::$groups[0]['fields'][2]['sub_fields'][] = array(
+			'key'  => 'field_note',
+			'name' => '',
+			'type' => 'message',
+		);
+
+		$acf = aafm_exec_get_block_type( array( 'name' => 'acf/hero' ) )['acf'];
+		$this->assertSame( array( 'title', 'style', 'items', 'art' ), wp_list_pluck( $acf['fields'], 'name' ) );
+		$this->assertSame( array( 'item_title' ), wp_list_pluck( $acf['fields'][2]['sub_fields'], 'name' ) );
+		$this->assertArrayNotHasKey( '', parse_blocks( $acf['envelope_example'] )[0]['attrs']['data'] );
+
+		$rows = aafm_scan_block_content( '<!-- wp:acf/hero {"name":"acf/hero","data":{"nope":"x"}} /-->' );
+		$this->assertStringContainsString( 'Its field names are: title, style, items, art.', $rows[0]['message'] ?? '' );
 	}
 
 	public function test_a_group_without_a_block_rule_is_not_an_acf_block(): void {

@@ -311,7 +311,8 @@ function aafm_block_gap_is_dropped( string $value ): bool {
 /**
  * Whether an ACF block data key resolves against a block's field tree.
  *
- * A key resolves when it is a field name; <group>_<rest> with <rest> resolving against the group's
+ * A key resolves when it is a field name or a field key (ACF turns field-key data into names on
+ * save); <group>_<rest> with <rest> resolving against the group's
  * sub-fields; <repeater>_<n>_<rest> or <flexible>_<n>_<rest> with <rest> resolving against the
  * repeater's sub-fields or any layout's; or, at a clone's own level, its name or one of its
  * sub-field names (loaded with any prefix already applied). The tree is depth-capped at 5 by
@@ -326,7 +327,7 @@ function aafm_acf_block_key_resolves( string $key, array $fields ): bool {
 		$name = (string) $field['name'];
 		$type = (string) $field['type'];
 		$subs = isset( $field['sub_fields'] ) ? (array) $field['sub_fields'] : array();
-		if ( $key === $name || ( 'clone' === $type && aafm_acf_block_key_resolves( $key, $subs ) ) ) {
+		if ( $key === $name || $key === (string) $field['key'] || ( 'clone' === $type && aafm_acf_block_key_resolves( $key, $subs ) ) ) {
 			return true;
 		}
 		if ( '' === $name || 0 !== strpos( $key, $name . '_' ) ) {

@@ -9,6 +9,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\AcfStubStore;
 use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\TestCase;
 use WP_Block_Type_Registry;
@@ -679,6 +680,54 @@ final class BlockGuardTest extends TestCase {
 	public function test_a_misspelled_clone_sub_field_is_flagged(): void {
 		$this->stub_card_fields();
 		$this->assertCount( 1, $this->acf_rows( array( 'cta_lable' => 'Go' ) ) );
+	}
+
+	/**
+	 * ACF's "Block is equal to All" rule binds a group to every ACF block, so its field names are
+	 * valid data keys on a block that also has its own group.
+	 */
+	public function test_a_field_from_an_all_blocks_group_is_not_flagged(): void {
+		$this->stub_card_fields();
+		AcfStubStore::$block_types = array( 'acme/acf-card' );
+		AcfStubStore::$groups[]    = array(
+			'key'      => 'group_all',
+			'title'    => 'Every block',
+			'location' => array(
+				array(
+					array(
+						'param'    => 'block',
+						'operator' => '==',
+						'value'    => 'all',
+					),
+				),
+			),
+			'fields'   => array(
+				array(
+					'key'  => 'f_anchor',
+					'name' => 'anchor_id',
+					'type' => 'text',
+				),
+			),
+		);
+
+		$this->assertSame( array(), $this->acf_rows( array( 'anchor_id' => 'top' ) ) );
+	}
+
+	/**
+	 * ACF converts data keyed by field keys into names on save, so a field key is not ignored.
+	 */
+	public function test_a_field_key_used_as_a_data_key_is_not_flagged(): void {
+		$this->stub_card_fields();
+		$this->assertSame(
+			array(),
+			$this->acf_rows(
+				array(
+					'f_title'       => 'T',
+					'items_0_title' => 'Row',
+				)
+			)
+		);
+		$this->assertCount( 1, $this->acf_rows( array( 'f_nope' => 'x' ) ) );
 	}
 
 	public function test_a_block_gap_core_drops_is_flagged(): void {

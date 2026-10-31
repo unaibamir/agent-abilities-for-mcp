@@ -2291,7 +2291,9 @@ function aafm_exec_acf_update_user_fields( array $input ) {
  * The ACF field tree of a block: every field group bound to it by a block location rule.
  *
  * A group belongs to the block when any of its OR-groups holds a rule param=block, operator ==,
- * value=<block name>. Its other AND rules are not evaluated: they need a post context this read
+ * value=<block name>, or value=all (ACF's "All" choice) when ACF registered the block. Fields
+ * without a name (tab, message, accordion) hold no data and are left out at every depth.
+ * Its other AND rules are not evaluated: they need a post context this read
  * does not have, and the fields are the editor configuration ACF renders into the block sidebar
  * for anyone who inserts the block. ACF Pro turns inline acf.fields in a block.json into exactly
  * such a local group. Shared by aafm/get-block-type and the block guard's unknown_acf_field check.
@@ -2313,7 +2315,8 @@ function aafm_acf_block_fields( string $block_name ): ?array {
 			foreach ( (array) $and_rules as $rule ) {
 				$rule    = (array) $rule;
 				$value   = (string) ( $rule['value'] ?? '' );
-				$targets = $targets || ( 'block' === ( $rule['param'] ?? '' ) && '==' === ( $rule['operator'] ?? '' ) && $value === $block_name );
+				$targets = $targets || ( 'block' === ( $rule['param'] ?? '' ) && '==' === ( $rule['operator'] ?? '' )
+					&& ( $value === $block_name || ( 'all' === $value && function_exists( 'acf_has_block_type' ) && acf_has_block_type( $block_name ) ) ) );
 			}
 		}
 		if ( ! $targets ) {
@@ -2321,7 +2324,9 @@ function aafm_acf_block_fields( string $block_name ): ?array {
 		}
 		$fields = $fields ?? array();
 		foreach ( (array) acf_get_fields( $group ) as $field ) {
-			$fields[] = aafm_acf_block_field_shape( (array) $field, 1 );
+			if ( '' !== (string) ( ( (array) $field )['name'] ?? '' ) ) {
+				$fields[] = aafm_acf_block_field_shape( (array) $field, 1 );
+			}
 		}
 	}
 	return $fields;
@@ -2360,7 +2365,9 @@ function aafm_acf_block_field_shape( array $field, int $depth ): array {
 	$subs = static function ( $sub_fields ) use ( $depth ): array {
 		$out = array();
 		foreach ( (array) $sub_fields as $sub ) {
-			$out[] = aafm_acf_block_field_shape( (array) $sub, $depth + 1 );
+			if ( '' !== (string) ( ( (array) $sub )['name'] ?? '' ) ) {
+				$out[] = aafm_acf_block_field_shape( (array) $sub, $depth + 1 );
+			}
 		}
 		return $out;
 	};

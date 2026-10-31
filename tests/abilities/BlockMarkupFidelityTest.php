@@ -193,6 +193,20 @@ final class BlockMarkupFidelityTest extends TestCase {
 		$this->assertStringNotContainsString( 'onerror', (string) $attrs['img'] );
 	}
 
+	/**
+	 * Core's kses empties a template-part tagName that is not an allowed post element. That value
+	 * has no "<", but kses rewrote it rather than entity-encoding it, so it keeps the kses side.
+	 */
+	public function test_a_template_part_tag_name_that_kses_empties_stays_empty_for_an_admin(): void {
+		$this->admin();
+		$raw    = '<!-- wp:template-part {"slug":"header","tagName":"script","area":"A & B"} /-->';
+		$result = aafm_kses_block_markup( $raw );
+		$attrs  = parse_blocks( $result['content'] )[0]['attrs'] ?? array();
+
+		$this->assertSame( '', $attrs['tagName'] ?? null, 'The tagName kses emptied is not restored.' );
+		$this->assertSame( 'A & B', $attrs['area'] ?? null, 'An entity-encoded value beside it is still restored.' );
+	}
+
 	public function test_a_restored_value_cannot_close_the_block_comment(): void {
 		$this->admin();
 		$raw    = '<!-- wp:rosh/x {"t":"a --> b"} /--><!-- wp:paragraph --><p>after</p><!-- /wp:paragraph -->';

@@ -615,8 +615,9 @@ function aafm_block_guard_evaluate( string $content ): array {
  * a value such as "Saturday & Sunday" or an embed URL with a query string is stored changed. Core
  * does that on save only for users without unfiltered_html; for a user with it, the block editor
  * stores the attribute text raw. This helper keeps wp_kses_post() as the sanitizer and, for a user with
- * unfiltered_html only, puts back each attribute string that cannot open an HTML tag exactly as it
- * was sent. A value that can open a tag keeps the kses result, and innerHTML is never restored.
+ * unfiltered_html only, puts back each attribute string that cannot open an HTML tag and that kses
+ * only entity-encoded, exactly as it was sent. Any other value keeps the kses result, and
+ * innerHTML is never restored.
  * When nothing is restored, or the user lacks unfiltered_html, the content is wp_kses_post() of
  * the input byte for byte (apart from the <style>/<script> removal below).
  *
@@ -643,11 +644,11 @@ function aafm_kses_block_markup( string $raw ): array {
 	}
 
 	// Serialize first so a raw "<" in the comment JSON is escaped before kses can merge two keys.
-	$norm     = serialize_blocks( $parsed );
-	$restored = 0;
-	$tree     = aafm_restore_block_attrs( parse_blocks( $norm ), parse_blocks( wp_kses_post( $norm ) ), $restored );
+	$norm = serialize_blocks( $parsed );
+	$kept = parse_blocks( wp_kses_post( $norm ) );
+	$tree = aafm_restore_block_attrs( parse_blocks( $norm ), $kept );
 
-	if ( null !== $tree && $restored > 0 ) {
+	if ( null !== $tree && $tree !== $kept ) {
 		// @phpstan-ignore-next-line argument.type (the walk rewrites attrs values only, so every entry keeps the parse_blocks() block shape)
 		$clean = serialize_blocks( $tree );
 	}
@@ -714,13 +715,12 @@ function aafm_flag_invalid_block_attributes( array $blocks, array &$warnings ): 
 /**
  * Walk the as-sent tree and the kses tree together, restoring tag-free attribute strings.
  *
- * @param array<int|string,array<string,mixed>> $sent     Parsed tree of the normalized markup.
- * @param array<int|string,array<string,mixed>> $kept     Parsed tree of its wp_kses_post() output.
- * @param int                                   $restored Count of restored values, by reference.
+ * @param array<int|string,array<string,mixed>> $sent Parsed tree of the normalized markup.
+ * @param array<int|string,array<string,mixed>> $kept Parsed tree of its wp_kses_post() output.
  * @return array<int|string,array<string,mixed>>|null The kses tree with values restored, or null
  *                                                    when the two trees differ in shape.
  */
-function aafm_restore_block_attrs( array $sent, array $kept, int &$restored ): ?array {
+function aafm_restore_block_attrs( array $sent, array $kept ): ?array {
 	if ( count( $sent ) !== count( $kept ) ) {
 		return null;
 	}
@@ -730,9 +730,9 @@ function aafm_restore_block_attrs( array $sent, array $kept, int &$restored ): ?
 			return null;
 		}
 		if ( is_array( $from['attrs'] ) && is_array( $block['attrs'] ) ) {
-			$kept[ $i ]['attrs'] = aafm_restore_attr_values( $from['attrs'], $block['attrs'], $restored );
+			$kept[ $i ]['attrs'] = aafm_restore_attr_values( $from['attrs'], $block['attrs'] );
 		}
-		$inner = aafm_restore_block_attrs( (array) $from['innerBlocks'], (array) $block['innerBlocks'], $restored );
+		$inner = aafm_restore_block_attrs( (array) $from['innerBlocks'], (array) $block['innerBlocks'] );
 		if ( null === $inner ) {
 			return null;
 		}
@@ -744,18 +744,19 @@ function aafm_restore_block_attrs( array $sent, array $kept, int &$restored ): ?
 /**
  * Restore one attribute value (recursively through arrays, by identical key path).
  *
- * A string comes back as sent when kses changed it and it cannot open an HTML tag (no "<" followed
- * by a letter, "/", "!" or "?"). Keys present in only one tree keep the kses side.
+ * A string comes back as sent only when it cannot open an HTML tag (no "<" followed by a letter,
+ * "/", "!" or "?") and kses changed it by entity encoding alone, so decoding the kses value gives
+ * the sent value back. A value kses emptied or rewrote for any other reason (a template-part
+ * tagName that is not an allowed element, for one) keeps the kses side, as do keys present in
+ * only one tree.
  *
- * @param mixed $sent     Value as sent.
- * @param mixed $kept     Value after kses.
- * @param int   $restored Count of restored values, by reference.
+ * @param mixed $sent Value as sent.
+ * @param mixed $kept Value after kses.
  * @return mixed
  */
-function aafm_restore_attr_values( $sent, $kept, int &$restored ) {
+function aafm_restore_attr_values( $sent, $kept ) {
 	if ( is_string( $sent ) && is_string( $kept ) ) {
-		if ( $sent !== $kept && 1 !== preg_match( '#<[a-zA-Z/!?]#', $sent ) ) {
-			++$restored;
+		if ( 1 !== preg_match( '#<[a-zA-Z/!?]#', $sent ) && html_entity_decode( $kept, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) === $sent ) {
 			return $sent;
 		}
 		return $kept;
@@ -763,7 +764,7 @@ function aafm_restore_attr_values( $sent, $kept, int &$restored ) {
 	if ( is_array( $sent ) && is_array( $kept ) ) {
 		foreach ( $kept as $key => $value ) {
 			if ( array_key_exists( $key, $sent ) ) {
-				$kept[ $key ] = aafm_restore_attr_values( $sent[ $key ], $value, $restored );
+				$kept[ $key ] = aafm_restore_attr_values( $sent[ $key ], $value );
 			}
 		}
 	}

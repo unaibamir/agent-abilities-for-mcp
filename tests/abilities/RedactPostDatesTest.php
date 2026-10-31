@@ -72,6 +72,19 @@ final class RedactPostDatesTest extends TestCase {
 		$this->assertSame( get_gmt_from_date( $rev->post_modified ), $shape['modified_gmt'] );
 	}
 
+	public function test_a_draft_reusable_block_reports_a_real_gmt_date(): void {
+		$id    = self::factory()->post->create(
+			array(
+				'post_type'   => 'wp_block',
+				'post_status' => 'draft',
+			)
+		);
+		$block = get_post( $id );
+		$this->assertSame( self::ZERO, $block->post_date_gmt, 'Fixture: core stores a zero GMT date on a draft.' );
+
+		$this->assertSame( get_gmt_from_date( $block->post_date ), aafm_rich_block( $block )['date'] );
+	}
+
 	public function test_a_published_post_keeps_its_stored_gmt_dates(): void {
 		global $wpdb;
 		$id = self::factory()->post->create( array( 'post_status' => 'publish' ) );

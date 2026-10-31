@@ -2981,7 +2981,7 @@ function aafm_rich_block( $block ): array {
 	}
 	$base            = aafm_redact_block( $block );
 	$base['content'] = $block->post_content;
-	$base['date']    = $block->post_date_gmt;
+	$base['date']    = aafm_post_gmt_date( $block->post_date_gmt, $block->post_date );
 	return $base;
 }
 

@@ -16,7 +16,7 @@ WordPress MCP server for Claude and ChatGPT. Run one site or many with limited a
 
 ### WordPress MCP server for ChatGPT and Claude, with limited access and an audit log
 
-Agent Abilities for MCP connects ChatGPT, Claude, Cursor and other AI agents to your WordPress site over the Model Context Protocol (MCP), through 179 curated WordPress abilities (tools). The agent acts as a real WordPress user you choose, never with an admin key, so it can only do what that user's role allows. Run it on one site or on several, each with its own user, switches and audit log. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install.
+Agent Abilities for MCP connects ChatGPT, Claude, Cursor and other AI agents to your WordPress site over the Model Context Protocol (MCP), through 182 curated WordPress abilities (tools). The agent acts as a real WordPress user you choose, never with an admin key, so it can only do what that user's role allows. Run it on one site or on several, each with its own user, switches and audit log. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install.
 
 Nothing this plugin serves is exposed until you turn it on. Every call to this plugin's tools is checked against the chosen user's permissions and written to the audit log before it runs, denied attempts included. An Editor account can write and publish posts but cannot install plugins or change settings, so you add reach as you build trust. To approve new posts before they go live, switch on Force draft and review what the agent wrote on the Needs review card on the Dashboard. See External Services below for exactly what the plugin can reach on its own.
 
@@ -60,7 +60,7 @@ Short walkthrough:
 
 WordPress 6.9 ships the Abilities API. The official MCP Adapter (`wordpress/mcp-adapter`) comes bundled with this plugin, so you do not install it separately. If the standalone Adapter plugin is active too, this plugin works with whichever copy loads first, from 0.6.1 through 0.7.x. Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or server, so there's no bespoke transport to trust. A Settings switch (Automatic, Always on, Always off) controls the Adapter's default server, which other plugins can publish tools to. Automatic, the default, starts it only when another plugin publishes tools there, and this plugin's own tools never appear on it.
 
-### 📦 179 governed abilities
+### 📦 182 governed abilities
 
 The plugin ships **182 governed abilities: 88 across WordPress core and 94 from auto-detected integrations**, every one off until you enable it, scoped, capability-gated, and logged. It can also bridge abilities from your other plugins (see below).
 
@@ -383,8 +383,8 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 * **Feature:** Each OAuth connection can be paused and resumed without signing in again, given an end date and a lower rate limit of its own, and shows when and from which address it was last used. Approving an app, and Quick Connect, offer Read only, Content editor, Shop manager or Custom access.
 * **Feature:** The Connection tab now has OAuth and Application Passwords tabs, a token lifetimes card (the client registration switch moved there from Settings), a switch that pauses all MCP access to the site, and a list of the agent users' Application Passwords with their last use and a Revoke button.
 * **Feature:** Settings can limit which roles may connect an app and can read the visitor's real address behind Cloudflare or another proxy. Connection Doctor checks MCP headers, JSON bodies, redirects and stale or blocked discovery documents; the Dashboard says why an enabled tool is missing; tabs show a dot while they have unsaved changes; the Abilities tab opens on an All view listing every ability under its category, with the same bulk buttons each category has.
-* **Fix:** When an agent changed only a post's or term's custom fields, nothing told caches; its cache entry is now cleared, with an action for page caches and an opt-in full re-save for caches that need one. Lines in the IP allowlist that only look blank are dropped on save, and Settings and the Dashboard no longer scroll sideways on a phone.
-* **Chore:** The Activity Log and Connection Doctor show placeholders while they load.
+* **Feature:** Agents can list the site's block types and read one block's attributes, supports and styles, plus, for ACF blocks, its field names, choices and an example payload. A new Replace block tool swaps one block in a post or page without resending the whole page.
+* **Fix:** Plain text in block attributes, such as an & in an ACF field, is now stored as written for users who may post unfiltered HTML, style and script elements are removed with their contents, and writes that return content warnings now also flag unknown blocks or ACF fields, invalid attribute JSON and ignored block gaps. A custom-field-only change now clears that post's or term's cache entry (with an action for page caches and an opt-in full re-save for caches that need one), blank-looking IP allowlist lines are dropped, Settings and the Dashboard no longer scroll sideways on a phone, new drafts report real dates, and the Activity Log and Connection Doctor show placeholders while they load.
 
 ### 1.9.0
 

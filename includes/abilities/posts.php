@@ -88,7 +88,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-in-post']  = array(
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -906,7 +906,8 @@ function aafm_write_enrichment_output_schema(): array {
  * defaults it to the current (agent) user, so a caller cannot spoof authorship.
  * post_type is forced by the caller of this function, never by the agent's input. Title is
  * sanitized with aafm_sanitize_plain_text and content with aafm_kses_block_markup() (wp_kses_post(),
- * keeping tag-free attribute text for unfiltered_html users), so no agent can store a script element.
+ * keeping tag-free attribute text as sent for unfiltered_html users when kses would only
+ * entity-encode it), so no agent can store a script element.
  *
  * When $publish_cap is given, the effective status is resolved from $input['status'] (falling
  * back to $default_status when omitted) via aafm_resolve_create_status() - this is the shared

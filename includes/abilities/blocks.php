@@ -557,7 +557,8 @@ function aafm_args_create_block(): array {
  * The type is forced to wp_block from our own args; post_author is omitted so wp_insert_post
  * defaults it to the current (agent) user - neither can be spoofed through input. The markup
  * is sanitized with aafm_kses_block_markup() (wp_kses_post(), which preserves Gutenberg block
- * delimiters, with plain attribute text kept as sent for unfiltered_html users), then the
+ * delimiters; for unfiltered_html users, plain attribute text that kses would only entity-encode
+ * is kept as sent, and any other change keeps the kses value), then the
  * whole array is wp_slash()'d once because the insert functions expect slashed data.
  *
  * @param array<string,mixed> $input Input.

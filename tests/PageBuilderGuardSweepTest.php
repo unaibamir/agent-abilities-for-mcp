@@ -384,6 +384,15 @@ final class PageBuilderGuardSweepTest extends TestCase {
 				'post_id',
 				'post',
 			),
+			'replace-block'               => array(
+				'aafm_exec_replace_block',
+				array(
+					'path'   => array( 0 ),
+					'markup' => '<!-- wp:paragraph --><p>x</p><!-- /wp:paragraph -->',
+				),
+				'post_id',
+				'post',
+			),
 			'update-page'                 => array( 'aafm_exec_update_page', array( 'title' => 'x' ), 'page_id', 'page' ),
 			'update-cpt-item'             => array( 'aafm_exec_update_cpt_item', array( 'title' => 'x' ), 'post_id', 'post' ),
 			// Codex final round 8 HIGH: both added after the earlier rows above were the ONLY

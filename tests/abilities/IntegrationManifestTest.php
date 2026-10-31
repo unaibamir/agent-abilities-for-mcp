@@ -86,7 +86,7 @@ final class IntegrationManifestTest extends TestCase {
 			$core + $manifest_total,
 			'Manifest integration totals plus the core count must equal the live catalog total - drift detected.'
 		);
-		$this->assertSame( 181, $core + $manifest_total );
+		$this->assertSame( 182, $core + $manifest_total );
 
 		aafm_registry_cache_should_flush( true );
 	}
@@ -95,7 +95,7 @@ final class IntegrationManifestTest extends TestCase {
 		// The Dashboard and Abilities "available/total" both read this one function, so they
 		// can never disagree. It equals core + every integration manifest total.
 		$available = aafm_available_ability_count();
-		$this->assertSame( 181, $available );
+		$this->assertSame( 182, $available );
 	}
 
 	public function test_descriptor_counts_drive_the_manifest(): void {

@@ -93,6 +93,17 @@ final class PresetTest extends TestCase {
 		}
 	}
 
+	public function test_the_three_block_abilities_are_classified_by_rule(): void {
+		$this->assertTrue( aafm_preset_permits( 'read_only', 'aafm/list-block-types' ) );
+		$this->assertTrue( aafm_preset_permits( 'read_only', 'aafm/get-block-type' ) );
+		$this->assertFalse( aafm_preset_permits( 'read_only', 'aafm/replace-block' ) );
+		foreach ( array( 'content_editor', 'shop_manager' ) as $preset ) {
+			foreach ( array( 'aafm/list-block-types', 'aafm/get-block-type', 'aafm/replace-block' ) as $name ) {
+				$this->assertTrue( aafm_preset_permits( $preset, $name ), "$preset: $name" );
+			}
+		}
+	}
+
 	public function test_shop_manager_membership(): void {
 		foreach ( array( 'aafm/wc-update-product', 'aafm/wc-create-product', 'aafm/wc-list-products' ) as $name ) {
 			$this->assertTrue( aafm_preset_permits( 'shop_manager', $name ), $name );

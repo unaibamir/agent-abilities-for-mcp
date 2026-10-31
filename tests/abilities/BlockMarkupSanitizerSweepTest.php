@@ -61,14 +61,14 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 	);
 
 	/**
-	 * The nine routed write sites, by file.
+	 * The nine routed write sites, plus aafm/replace-block's replacement markup in posts.php, by file.
 	 *
 	 * @var array<string,int>
 	 */
 	private const ROUTED = array(
 		'blocks.php'               => 2,
 		'geodirectory.php'         => 2,
-		'posts.php'                => 2,
+		'posts.php'                => 3,
 		'tec/events.php'           => 1,
 		'themes.php'               => 1,
 		'woocommerce/products.php' => 1,
@@ -168,7 +168,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		$this->assertSame( $expected, self::calls_to( 'wp_kses_post' ), 'A wp_kses_post( call in includes/abilities/ is neither routed through aafm_kses_block_markup() nor on the exclusion list.' );
 	}
 
-	public function test_the_nine_routed_sites_call_the_helper(): void {
+	public function test_the_routed_sites_call_the_helper(): void {
 		$per_file = array();
 		foreach ( self::calls_to( 'aafm_kses_block_markup' ) as $call ) {
 			$file              = explode( '|', $call )[0];
@@ -177,7 +177,7 @@ final class BlockMarkupSanitizerSweepTest extends TestCase {
 		ksort( $per_file );
 
 		$this->assertSame( self::ROUTED, $per_file );
-		$this->assertSame( 9, array_sum( $per_file ) );
+		$this->assertSame( 10, array_sum( $per_file ) );
 	}
 
 	/**

@@ -604,6 +604,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// Task 8 fixed for update-page, just never carried over to its sibling here.
 		case 'aafm/update-post':
 		case 'aafm/replace-in-post':
+		case 'aafm/replace-block':
 		case 'aafm/set-featured-image':
 			return static fn(): bool => aafm_can_edit_post_family();
 		case 'aafm/trash-post':

@@ -128,6 +128,7 @@ final class CatalogFixture {
 		'aafm/create-post',
 		'aafm/update-post',
 		'aafm/replace-in-post',
+		'aafm/replace-block',
 		'aafm/trash-post',
 		'aafm/create-page',
 		'aafm/update-page',

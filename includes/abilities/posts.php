@@ -94,6 +94,14 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_replace_in_post',
 	);
+	$registry['aafm/replace-block']    = array(
+		'label'        => __( 'Replace block', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. Every other block keeps its attributes and HTML. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. Reversible via revisions. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_replace_block',
+	);
 	$registry['aafm/replace-sitewide'] = array(
 		'label'        => __( 'Replace sitewide', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. Bounded to 50 posts per call; a larger match set reports truncated:true with the real total.', 'agent-abilities-for-mcp' ),
@@ -1786,6 +1794,213 @@ function aafm_exec_replace_in_post( array $input ) {
 	);
 	if ( ! empty( $guard['warnings'] ) ) {
 		$response['content_warnings'] = $guard['warnings'];
+	}
+	return $response;
+}
+
+/**
+ * Args for aafm/replace-block.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_replace_block(): array {
+	return array(
+		'label'               => aafm_ability_label( 'aafm/replace-block' ),
+		'description'         => aafm_ability_description( 'aafm/replace-block' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id'      => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post or page to edit.', 'agent-abilities-for-mcp' ),
+				),
+				'path'         => array(
+					'type'        => 'array',
+					'minItems'    => 1,
+					'maxItems'    => 10,
+					'items'       => array(
+						'type'    => 'integer',
+						'minimum' => 0,
+					),
+					'description' => __( 'Index path to the block, from 0: its position among the top-level blocks, then among each parent\'s inner blocks. Only real blocks count, not the blank lines between them. [2, 0] is the first block inside the third top-level block.', 'agent-abilities-for-mcp' ),
+				),
+				'markup'       => array(
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The complete markup of exactly one replacement block, from its opening delimiter to its closing one.', 'agent-abilities-for-mcp' ) . ' ' . aafm_write_content_description(),
+				),
+				'expect_block' => array(
+					'type'        => 'string',
+					'description' => __( 'Optional block name, such as core/group, that the block at path must have. The write is refused if it differs.', 'agent-abilities-for-mcp' ),
+				),
+			),
+			'required'             => array( 'post_id', 'path', 'markup' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post'             => array( 'type' => 'object' ),
+				'replaced'         => array(
+					'type'       => 'object',
+					'properties' => array(
+						'path'  => array(
+							'type'  => 'array',
+							'items' => array( 'type' => 'integer' ),
+						),
+						'block' => array( 'type' => 'string' ),
+					),
+				),
+				'content_warnings' => array( 'type' => 'array' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_replace_block',
+		'permission_callback' => 'aafm_perm_update_post',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/replace-block: swap one block, found by its path over named blocks.
+ *
+ * Same calls in the same order as aafm_exec_replace_in_post(): ownership guard, build the new
+ * content, block guard, wp_update_post(), then confirm the stored content against its canonical
+ * form, so a vetoing wp_insert_post_data filter is reported rather than mistaken for success.
+ *
+ * The page is rebuilt with serialize_blocks() from its parsed tree, so only the replacement is
+ * sanitized here. Re-sanitizing the whole page would strip an unfiltered_html author's markup in
+ * every other block, the bug replace-in-post already fixed once. Every other block keeps its parsed
+ * attributes and HTML; its delimiter JSON may be re-encoded in canonical form, as the block editor
+ * does on every save, so a page already in canonical form keeps every byte outside the replaced
+ * block. A page whose parsed tree does not survive that round trip (a block with invalid delimiter
+ * JSON loses its attributes) is refused instead. For a user without unfiltered_html, core's own
+ * kses re-sanitizes the whole saved page, the same as that user's own editor.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_replace_block( array $input ) {
+	$id   = absint( $input['post_id'] );
+	$post = aafm_exact_object_chain( 'post', $id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	$owning_builder = aafm_post_has_foreign_builder_ownership( $id );
+	if ( false !== $owning_builder ) {
+		return aafm_page_builder_owned_error( $owning_builder );
+	}
+
+	$old  = (string) $post->post_content;
+	$tree = parse_blocks( $old );
+	if ( parse_blocks( serialize_blocks( $tree ) ) !== $tree ) {
+		return new WP_Error(
+			'aafm_not_round_trippable',
+			__( 'This post\'s block markup does not survive being re-serialized (for example, a block has invalid attribute JSON), so one block cannot be replaced safely. Nothing was changed. Use aafm-update-post to rewrite the whole content instead.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	// Walk the path over named blocks only; $list is the block list holding the current step.
+	$path  = array_map( 'intval', (array) $input['path'] );
+	$list  = &$tree;
+	$found = null;
+	foreach ( $path as $depth => $index ) {
+		$named = array_keys( array_filter( $list, static fn( array $block ): bool => null !== $block['blockName'] ) );
+		if ( ! isset( $named[ $index ] ) ) {
+			return new WP_Error(
+				'aafm_block_path_not_found',
+				sprintf(
+					/* translators: 1: level in the path, counted from 1; 2: number of blocks at that level. */
+					__( 'No block at that path. Level %1$d of the path has %2$d blocks, counted from 0 and skipping the blank lines between blocks. Nothing was changed.', 'agent-abilities-for-mcp' ),
+					$depth + 1,
+					count( $named )
+				),
+				array( 'status' => 400 )
+			);
+		}
+		$found = $named[ $index ];
+		if ( $depth < count( $path ) - 1 ) {
+			$list = &$list[ $found ]['innerBlocks'];
+		}
+	}
+
+	$current = (string) $list[ $found ]['blockName'];
+	if ( isset( $input['expect_block'] ) && (string) $input['expect_block'] !== $current ) {
+		return new WP_Error(
+			'aafm_block_mismatch',
+			sprintf(
+				/* translators: %s: block name found at the path. */
+				__( 'The block at that path is %s, not the expected block. Nothing was changed.', 'agent-abilities-for-mcp' ),
+				$current
+			),
+			array( 'status' => 400 )
+		);
+	}
+
+	$sanitized   = aafm_kses_block_markup( (string) $input['markup'] );
+	$replacement = array();
+	foreach ( parse_blocks( $sanitized['content'] ) as $block ) {
+		if ( null !== $block['blockName'] || '' !== trim( (string) $block['innerHTML'] ) ) {
+			$replacement[] = $block;
+		}
+	}
+	if ( 1 !== count( $replacement ) || null === $replacement[0]['blockName'] ) {
+		return new WP_Error(
+			'aafm_replacement_not_one_block',
+			__( 'The markup must be exactly one block, from its opening delimiter to its closing one, with nothing else around it. Nothing was changed.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	// The parent's innerContent keeps its null slot, so only the innerBlocks entry changes.
+	$list[ $found ] = $replacement[0];
+	unset( $list );
+	$new = serialize_blocks( $tree );
+
+	$guard = aafm_block_guard_evaluate( $new );
+	if ( $guard['error'] instanceof WP_Error ) {
+		return $guard['error'];
+	}
+
+	$result = wp_update_post(
+		wp_slash(
+			array(
+				'ID'           => $id,
+				'post_content' => $new,
+			)
+		),
+		true
+	);
+	if ( is_wp_error( $result ) ) {
+		return aafm_generic_error();
+	}
+
+	$updated = aafm_exact_object( 'post', (int) $result );
+	if ( ! $updated instanceof WP_Post || ! aafm_post_field_confirm_logged( $id, 'post_content', $new, $old ) ) {
+		return new WP_Error(
+			'aafm_replace_block_write_unconfirmed',
+			__( 'The replaced block could not be confirmed as saved.', 'agent-abilities-for-mcp' )
+		);
+	}
+
+	$response = array(
+		'post'     => aafm_redact_post( $updated ),
+		'replaced' => array(
+			'path'  => $path,
+			'block' => (string) $replacement[0]['blockName'],
+		),
+	);
+	$warnings = array_merge( $sanitized['warnings'], $guard['warnings'] );
+	if ( ! empty( $warnings ) ) {
+		$response['content_warnings'] = $warnings;
 	}
 	return $response;
 }

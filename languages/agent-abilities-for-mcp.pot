@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-01T02:09:46+05:00\n"
+"POT-Creation-Date: 2026-11-01T16:03:46+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -351,7 +351,7 @@ msgid "List blocks"
 msgstr ""
 
 #: includes/abilities/blocks.php:33
-msgid "Lists saved reusable blocks (synced patterns), not block types; call aafm-list-block-types for those. Returns id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks; each page omits blocks you lack edit access to, so total can exceed the rows returned). Requires the edit-posts capability."
+msgid "Lists saved reusable blocks (synced patterns), not block types; aafm-list-block-types lists those, if it is enabled. Returns id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks; each page omits blocks you lack edit access to, so total can exceed the rows returned). Requires the edit-posts capability."
 msgstr ""
 
 #: includes/abilities/blocks.php:40
@@ -359,7 +359,7 @@ msgid "List block types"
 msgstr ""
 
 #: includes/abilities/blocks.php:41
-msgid "Lists the block types registered on this site (core, theme and plugin blocks, including ACF blocks), not saved reusable blocks; use aafm-get-block-type for one block's attributes, supports, styles and, for ACF blocks, its field names and an example payload. Requires the edit-posts capability."
+msgid "Lists the block types registered on this site (core, theme and plugin blocks, including ACF blocks), not saved reusable blocks; if aafm-get-block-type is enabled, use it for one block's attributes, supports, styles and, for ACF blocks, its field names and an example payload. Requires the edit-posts capability."
 msgstr ""
 
 #: includes/abilities/blocks.php:48
@@ -1250,7 +1250,7 @@ msgid "Replace block"
 msgstr ""
 
 #: includes/abilities/posts.php:99
-msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:106
@@ -1371,7 +1371,7 @@ msgid "ID of the post to update."
 msgstr ""
 
 #: includes/abilities/posts.php:1753
-msgid "That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly."
+msgid "That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly. To change one whole block, use aafm-replace-block if it is enabled."
 msgstr ""
 
 #: includes/abilities/posts.php:1818
@@ -1394,63 +1394,67 @@ msgstr ""
 msgid "This post's block markup does not survive being re-serialized (for example, a block has invalid attribute JSON), so one block cannot be replaced safely. Nothing was changed. Use aafm-update-post to rewrite the whole content instead."
 msgstr ""
 
+#: includes/abilities/posts.php:1921
+msgid "This post has no blocks to address by path. Nothing was changed. Use aafm-update-post to replace its content."
+msgstr ""
+
 #. translators: 1: level in the path, counted from 1; 2: number of blocks at that level.
-#: includes/abilities/posts.php:1923
+#: includes/abilities/posts.php:1930
 #, php-format
 msgid "No block at that path. Level %1$d of the path has %2$d blocks, counted from 0 and skipping the blank lines between blocks. Nothing was changed."
 msgstr ""
 
 #. translators: %s: block name found at the path.
-#: includes/abilities/posts.php:1942
+#: includes/abilities/posts.php:1949
 #, php-format
 msgid "The block at that path is %s, not the expected block. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:1959
+#: includes/abilities/posts.php:1966
 msgid "The markup must be exactly one block, from its opening delimiter to its closing one, with nothing else around it. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:1991
+#: includes/abilities/posts.php:1998
 msgid "The replaced block could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/posts.php:2045
+#: includes/abilities/posts.php:2052
 msgid "Literal text to find. Matched as-is, not as a regular expression."
 msgstr ""
 
-#: includes/abilities/posts.php:2049
+#: includes/abilities/posts.php:2056
 msgid "Literal text to substitute for every match."
 msgstr ""
 
-#: includes/abilities/posts.php:2054
+#: includes/abilities/posts.php:2061
 msgid "Slug of an allowlisted content type to scope the replace to. Defaults to post."
 msgstr ""
 
-#: includes/abilities/posts.php:2059
+#: includes/abilities/posts.php:2066
 msgid "Post status to scope the replace to. Defaults to publish."
 msgstr ""
 
-#: includes/abilities/posts.php:2064
+#: includes/abilities/posts.php:2071
 msgid "When true (the default), previews the match without writing anything. Pass false to apply the change."
 msgstr ""
 
-#: includes/abilities/posts.php:2080
+#: includes/abilities/posts.php:2087
 msgid "Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content."
 msgstr ""
 
-#: includes/abilities/posts.php:2084
+#: includes/abilities/posts.php:2091
 msgid "Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal."
 msgstr ""
 
-#: includes/abilities/posts.php:2368
+#: includes/abilities/posts.php:2375
 msgid "ID of the content item to update."
 msgstr ""
 
-#: includes/abilities/posts.php:2456
+#: includes/abilities/posts.php:2463
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2526
+#: includes/abilities/posts.php:2533
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -2290,7 +2294,7 @@ msgid "Get global styles"
 msgstr ""
 
 #: includes/abilities/themes.php:70
-msgid "Reads the site's resolved theme.json settings and styles, on block and classic themes alike: the colour palette slugs to use as backgroundColor and textColor, font sizes, spacing, layout widths and whether fluid typography is on. Requires the edit-theme-options capability."
+msgid "Reads the site's resolved theme.json settings and styles, on block and classic themes alike: the colour palette slugs to use as backgroundColor and textColor, font sizes, spacing, layout widths and whether fluid typography is on. On a classic theme most values are WordPress core defaults, and some keys (such as layout or typography.fluid) may be absent. Requires the edit-theme-options capability."
 msgstr ""
 
 #: includes/abilities/themes.php:77
@@ -3198,49 +3202,49 @@ msgstr ""
 msgid "The SKU \"%s\" is already in use by another product."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:733
+#: includes/abilities/woocommerce/products.php:735
 msgid "stock_status cannot be set while manage_stock is true: WooCommerce derives it from stock_quantity. Set stock_quantity instead, or set manage_stock to false."
 msgstr ""
 
 #. translators: %s: comma-separated list of global attribute slugs whose displayed options differ from the stored ones.
-#: includes/abilities/woocommerce/products.php:929
+#: includes/abilities/woocommerce/products.php:931
 #, php-format
 msgid "Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean \"leave this alone\" or it could mean \"remove the terms I was not shown\", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. Changing a global attribute's own options is not available through this plugin; that has to be done in the WooCommerce admin."
 msgstr ""
 
 #. translators: %s: comma-separated list of global attribute slugs the request tried to change.
-#: includes/abilities/woocommerce/products.php:943
+#: includes/abilities/woocommerce/products.php:945
 #, php-format
 msgid "These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product's own custom attributes, and it has no way to express a global attribute's terms. Changing a global attribute's options is not available through this plugin's abilities; add or remove the option in the WooCommerce admin under Products > Attributes, then use wc-create-product-variation or wc-update-product-variation here to build variations with it. Send its current options back unchanged to leave it alone."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1091
+#: includes/abilities/woocommerce/products.php:1093
 msgid "The product's title. Required; the product is not created without one."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1097
+#: includes/abilities/woocommerce/products.php:1099
 msgid "The product's type. This ability only creates simple products; requesting grouped, external, or variable fails."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1192
+#: includes/abilities/woocommerce/products.php:1194
 msgid "The WooCommerce product id to update."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1197
+#: includes/abilities/woocommerce/products.php:1199
 msgid "The product's title. Omit to leave the existing title unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1206
+#: includes/abilities/woocommerce/products.php:1208
 msgid "The product's current type. A value matching the product's existing type is accepted as a no-op; a different value is rejected with an error, since converting a product between simple, grouped, external, and variable is not supported. Omit this field to leave the type unchanged."
 msgstr ""
 
 #. translators: 1: the product's actual current type. 2: the type the caller requested.
-#: includes/abilities/woocommerce/products.php:1307
+#: includes/abilities/woocommerce/products.php:1309
 #, php-format
 msgid "This product is a %1$s product and cannot be changed to %2$s -- converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:1330
+#: includes/abilities/woocommerce/products.php:1332
 msgid "The WooCommerce product id to permanently delete."
 msgstr ""
 
@@ -4489,10 +4493,9 @@ msgid "Actions"
 msgstr ""
 
 #. translators: 1: user login, 2: app name.
-#. translators: 1: "entry" or "entries", 2: what the log keeps, for example "keeping the last 30 days".
 #: includes/admin/connection-cards.php:258
-#: includes/admin/page.php:2891
 #, php-format
+msgctxt "OAuth grant: user login, app name"
 msgid "%1$s, %2$s"
 msgstr ""
 
@@ -4567,10 +4570,9 @@ msgid "Pause"
 msgstr ""
 
 #. translators: %s: user login and app name.
-#. translators: %s: Application Password name.
 #: includes/admin/connection-cards.php:348
-#: includes/admin/connection-cards.php:813
 #, php-format
+msgctxt "OAuth grant button label"
 msgid "Revoke %s"
 msgstr ""
 
@@ -4731,6 +4733,10 @@ msgstr ""
 msgid "Rate limit set to %d a minute"
 msgstr ""
 
+#: includes/admin/connection-cards.php:721
+msgid "Use a whole number from 1 to 10,000 calls a minute, or leave it empty to use the site limit."
+msgstr ""
+
 #: includes/admin/connection-cards.php:726
 msgid "Nothing to change."
 msgstr ""
@@ -4758,6 +4764,13 @@ msgstr ""
 #: includes/admin/connection-cards.php:798
 #: includes/admin/page.php:1607
 msgid "IP"
+msgstr ""
+
+#. translators: %s: Application Password name.
+#: includes/admin/connection-cards.php:813
+#, php-format
+msgctxt "Application Password button label"
+msgid "Revoke %s"
 msgstr ""
 
 #: includes/admin/connection-cards.php:822
@@ -7083,8 +7096,8 @@ msgstr ""
 #. translators: 1: number of built-in abilities listed here, 2: number of abilities listed on other tabs.
 #: includes/admin/page.php:2082
 #, php-format
-msgid "All lists the %1$s built-in abilities. The other %2$s is on the Integrations and Other plugins tabs."
-msgid_plural "All lists the %1$s built-in abilities. The other %2$s are on the Integrations and Other plugins tabs."
+msgid "All lists the %1$s built-in abilities. The other %2$s is on the Integrations tab."
+msgid_plural "All lists the %1$s built-in abilities. The other %2$s are on the Integrations tab."
 msgstr[0] ""
 msgstr[1] ""
 
@@ -7236,6 +7249,12 @@ msgstr[1] ""
 
 #: includes/admin/page.php:2887
 msgid "keeping everything"
+msgstr ""
+
+#. translators: 1: "entry" or "entries", 2: what the log keeps, for example "keeping the last 30 days".
+#: includes/admin/page.php:2891
+#, php-format
+msgid "%1$s, %2$s"
 msgstr ""
 
 #: includes/admin/page.php:2937
@@ -9088,7 +9107,7 @@ msgid "Read-only mode could not be turned off: object cache stale"
 msgstr ""
 
 #: includes/block-guard.php:38
-msgid "Gutenberg block markup. Put every bit of styling inside the block delimiter attributes, never as inline style=\"\" on the HTML, or the editor flags the block as invalid content. Right: <!-- wp:heading {\"style\":{\"color\":{\"text\":\"#ffffff\"}}} --><h2 class=\"has-text-color\" style=\"color:#ffffff\">Hi</h2><!-- /wp:heading -->. Wrong: <!-- wp:heading --><h2 style=\"color:#ffffff\">Hi</h2><!-- /wp:heading -->. The sanitizer strips inline rgba() and hex-with-alpha colors and inline <svg> from stored content, so use plain hex colors and an uploaded <img> or a unicode glyph for icons. For genuinely bespoke markup that has no matching block, use a core/html block. For users who can post unfiltered HTML, &, < and > in plain block attribute text (text where no < starts a tag) are stored as written when WordPress would only entity-encode them; a value that already holds an entity, or that WordPress changes in any other way, keeps WordPress's sanitized value; HTML tags inside attribute values are still sanitized, and other users get WordPress's own sanitizing. <style> and <script> elements are removed with their contents. ACF blocks take {\"name\",\"data\",\"mode\"} attributes with field NAMES as the data keys (see aafm-get-block-type). On WordPress 7.0+, metadata.blockVisibility.viewport with mobile, tablet or desktop set to false hides a block on that screen size; on 6.9, metadata.blockVisibility:false hides it everywhere. With fluid typography on (aafm-get-global-styles settings.typography.fluid), px font sizes scale down on small screens. WordPress ignores a blockGap that contains (, \\, &, =, } or /*, so clamp(), calc() and var() are dropped there, while 24px or a preset such as var:preset|spacing|40 work."
+msgid "Gutenberg block markup. Put every bit of styling inside the block delimiter attributes, never as inline style=\"\" on the HTML, or the editor flags the block as invalid content. Right: <!-- wp:heading {\"style\":{\"color\":{\"text\":\"#ffffff\"}}} --><h2 class=\"has-text-color\" style=\"color:#ffffff\">Hi</h2><!-- /wp:heading -->. Wrong: <!-- wp:heading --><h2 style=\"color:#ffffff\">Hi</h2><!-- /wp:heading -->. Use a core/html block for markup no block matches. Stored content loses inline rgba() and hex-with-alpha colors, inline <svg>, and <style> and <script> elements with their contents. For users who can post unfiltered HTML, tag-free attribute text that WordPress would only entity-encode is stored as written; other users, and tags inside attribute values, get WordPress's own sanitizing. WordPress drops a blockGap containing (, \\, &, =, } or /*; use 24px or var:preset|spacing|40. On WordPress 7.0+, metadata.blockVisibility.viewport hides a block per screen size; on 6.9, metadata.blockVisibility:false hides it everywhere. ACF blocks take {\"name\",\"data\",\"mode\"} attributes with field names as the data keys. If aafm-get-block-type is enabled, it lists a block's attributes and ACF fields with an example."
 msgstr ""
 
 #. translators: 1: block name, 2: CSS class name.
@@ -9118,13 +9137,13 @@ msgstr ""
 #. translators: %s: block name.
 #: includes/block-guard.php:507
 #, php-format
-msgid "No block type named %s is registered on this site, so it will not render as that block. Check the name with aafm-list-block-types."
+msgid "No block type named %s is registered on this site, so it will not render as that block. If aafm-list-block-types is enabled, check the name there."
 msgstr ""
 
 #. translators: 1: block name, 2: comma-separated data keys, 3: comma-separated field names.
 #: includes/block-guard.php:515
 #, php-format
-msgid "The %1$s block data has keys that match none of its ACF fields, so ACF ignores them: %2$s. Its field names are: %3$s. See aafm-get-block-type."
+msgid "The %1$s block data has keys that match none of its ACF fields, so ACF ignores them: %2$s. Its field names are: %3$s. If aafm-get-block-type is enabled, it shows an example."
 msgstr ""
 
 #. translators: 1: block name, 2: blockGap value(s).
@@ -9413,7 +9432,7 @@ msgstr ""
 msgid "A redirect URI is not allowed."
 msgstr ""
 
-#: includes/oauth/clients.php:104
+#: includes/oauth/clients.php:105
 msgid "Could not store the client registration."
 msgstr ""
 
@@ -9590,7 +9609,7 @@ msgstr ""
 #: includes/oauth/rest.php:811
 #: includes/oauth/tokens.php:121
 #: includes/oauth/tokens.php:132
-#: includes/oauth/tokens.php:165
+#: includes/oauth/tokens.php:166
 msgid "The access token could not be issued."
 msgstr ""
 
@@ -9623,52 +9642,52 @@ msgstr ""
 msgid "Agent Abilities for MCP could not finish setting up its OAuth database tables. OAuth may not work correctly until the update completes; the plugin retries automatically on the next admin or REST request."
 msgstr ""
 
-#: includes/oauth/tokens.php:253
+#: includes/oauth/tokens.php:254
 msgid "The refresh token could not be looked up."
 msgstr ""
 
-#: includes/oauth/tokens.php:263
-#: includes/oauth/tokens.php:408
+#: includes/oauth/tokens.php:264
+#: includes/oauth/tokens.php:409
 msgid "The refresh token is invalid."
 msgstr ""
 
-#: includes/oauth/tokens.php:279
+#: includes/oauth/tokens.php:280
 msgid "The refresh token has already been used; the token chain has been revoked."
 msgstr ""
 
-#: includes/oauth/tokens.php:280
+#: includes/oauth/tokens.php:281
 msgid "The refresh token has already been used."
 msgstr ""
 
-#: includes/oauth/tokens.php:288
+#: includes/oauth/tokens.php:289
 msgid "The refresh token was issued to a different client."
 msgstr ""
 
-#: includes/oauth/tokens.php:304
+#: includes/oauth/tokens.php:305
 msgid "The client could not be checked."
 msgstr ""
 
-#: includes/oauth/tokens.php:309
+#: includes/oauth/tokens.php:310
 msgid "The client is no longer active."
 msgstr ""
 
-#: includes/oauth/tokens.php:316
+#: includes/oauth/tokens.php:317
 msgid "The connection could not be checked."
 msgstr ""
 
-#: includes/oauth/tokens.php:319
+#: includes/oauth/tokens.php:320
 msgid "This connection has expired. Approve it again to reconnect."
 msgstr ""
 
-#: includes/oauth/tokens.php:322
+#: includes/oauth/tokens.php:323
 msgid "This account can no longer connect apps."
 msgstr ""
 
-#: includes/oauth/tokens.php:331
+#: includes/oauth/tokens.php:332
 msgid "The refresh token has expired."
 msgstr ""
 
-#: includes/oauth/tokens.php:402
+#: includes/oauth/tokens.php:403
 msgid "The refresh token could not be consumed."
 msgstr ""
 

@@ -451,4 +451,50 @@ final class TecEventsWireTest extends TestCase {
 		$this->assertSame( $before, $count() );
 		$this->assertSame( array(), $this->outcome_details() );
 	}
+	/**
+	 * Block attributes whose JSON escapes carry a backslash (--, &, quotes, < and >) survive an
+	 * event create and update: the stored content parses back to the attributes that were sent.
+	 */
+	public function test_event_content_keeps_block_attribute_escapes_on_create_and_update(): void {
+		$this->acting_as( 'administrator' );
+		$attrs        = array(
+			'style'    => array( 'color' => array( 'text' => 'var(--wp--preset--color--accent)' ) ),
+			'metadata' => array( 'name' => 'Tom & Jerry say "hi", a > b and c < d' ),
+		);
+		$markup       = static fn( array $a ): string => serialize_block(
+			array(
+				'blockName'    => 'core/paragraph',
+				'attrs'        => $a,
+				'innerBlocks'  => array(),
+				'innerHTML'    => '<p>Hello</p>',
+				'innerContent' => array( '<p>Hello</p>' ),
+			)
+		);
+		$stored_attrs = static function ( int $id ): array {
+			clean_post_cache( $id );
+			return parse_blocks( (string) get_post( $id )->post_content )[0]['attrs'];
+		};
+
+		$created = aafm_exec_tec_create_event(
+			array(
+				'title'      => 'Escapes',
+				'start_date' => '2027-01-01 09:00:00',
+				'end_date'   => '2027-01-01 12:00:00',
+				'content'    => $markup( $attrs ),
+			)
+		);
+		$this->assertIsArray( $created );
+		$id = (int) $created['event']['id'];
+		$this->assertSame( $attrs, $stored_attrs( $id ) );
+
+		$attrs['metadata']['name'] = 'Q & A -- "two" x < y';
+		$updated                   = aafm_exec_tec_update_event(
+			array(
+				'event_id' => $id,
+				'content'  => $markup( $attrs ),
+			)
+		);
+		$this->assertIsArray( $updated );
+		$this->assertSame( $attrs, $stored_attrs( $id ) );
+	}
 }

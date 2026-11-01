@@ -36,7 +36,7 @@ defined( 'ABSPATH' ) || exit;
  */
 function aafm_write_content_description(): string {
 	return __(
-		'Gutenberg block markup. Put every bit of styling inside the block delimiter attributes, never as inline style="" on the HTML, or the editor flags the block as invalid content. Right: <!-- wp:heading {"style":{"color":{"text":"#ffffff"}}} --><h2 class="has-text-color" style="color:#ffffff">Hi</h2><!-- /wp:heading -->. Wrong: <!-- wp:heading --><h2 style="color:#ffffff">Hi</h2><!-- /wp:heading -->. The sanitizer strips inline rgba() and hex-with-alpha colors and inline <svg> from stored content, so use plain hex colors and an uploaded <img> or a unicode glyph for icons. For genuinely bespoke markup that has no matching block, use a core/html block. For users who can post unfiltered HTML, &, < and > in plain block attribute text (text where no < starts a tag) are stored as written when WordPress would only entity-encode them; a value that already holds an entity, or that WordPress changes in any other way, keeps WordPress\'s sanitized value; HTML tags inside attribute values are still sanitized, and other users get WordPress\'s own sanitizing. <style> and <script> elements are removed with their contents. ACF blocks take {"name","data","mode"} attributes with field NAMES as the data keys (see aafm-get-block-type). On WordPress 7.0+, metadata.blockVisibility.viewport with mobile, tablet or desktop set to false hides a block on that screen size; on 6.9, metadata.blockVisibility:false hides it everywhere. With fluid typography on (aafm-get-global-styles settings.typography.fluid), px font sizes scale down on small screens. WordPress ignores a blockGap that contains (, \\, &, =, } or /*, so clamp(), calc() and var() are dropped there, while 24px or a preset such as var:preset|spacing|40 work.',
+		'Gutenberg block markup. Put every bit of styling inside the block delimiter attributes, never as inline style="" on the HTML, or the editor flags the block as invalid content. Right: <!-- wp:heading {"style":{"color":{"text":"#ffffff"}}} --><h2 class="has-text-color" style="color:#ffffff">Hi</h2><!-- /wp:heading -->. Wrong: <!-- wp:heading --><h2 style="color:#ffffff">Hi</h2><!-- /wp:heading -->. Use a core/html block for markup no block matches. Stored content loses inline rgba() and hex-with-alpha colors, inline <svg>, and <style> and <script> elements with their contents. For users who can post unfiltered HTML, tag-free attribute text that WordPress would only entity-encode is stored as written; other users, and tags inside attribute values, get WordPress\'s own sanitizing. WordPress drops a blockGap containing (, \\, &, =, } or /*; use 24px or var:preset|spacing|40. On WordPress 7.0+, metadata.blockVisibility.viewport hides a block per screen size; on 6.9, metadata.blockVisibility:false hides it everywhere. ACF blocks take {"name","data","mode"} attributes with field names as the data keys. If aafm-get-block-type is enabled, it lists a block\'s attributes and ACF fields with an example.',
 		'agent-abilities-for-mcp'
 	);
 }
@@ -504,7 +504,7 @@ function aafm_block_warning( string $block, string $code, string $detail ): arra
 		case 'unregistered_block':
 			$message = sprintf(
 				/* translators: %s: block name. */
-				__( 'No block type named %s is registered on this site, so it will not render as that block. Check the name with aafm-list-block-types.', 'agent-abilities-for-mcp' ),
+				__( 'No block type named %s is registered on this site, so it will not render as that block. If aafm-list-block-types is enabled, check the name there.', 'agent-abilities-for-mcp' ),
 				$block
 			);
 			break;
@@ -512,7 +512,7 @@ function aafm_block_warning( string $block, string $code, string $detail ): arra
 			$valid   = wp_list_pluck( (array) aafm_acf_block_fields( $block ), 'name' );
 			$message = sprintf(
 				/* translators: 1: block name, 2: comma-separated data keys, 3: comma-separated field names. */
-				__( 'The %1$s block data has keys that match none of its ACF fields, so ACF ignores them: %2$s. Its field names are: %3$s. See aafm-get-block-type.', 'agent-abilities-for-mcp' ),
+				__( 'The %1$s block data has keys that match none of its ACF fields, so ACF ignores them: %2$s. Its field names are: %3$s. If aafm-get-block-type is enabled, it shows an example.', 'agent-abilities-for-mcp' ),
 				$block,
 				$detail,
 				implode( ', ', array_slice( $valid, 0, 20 ) )

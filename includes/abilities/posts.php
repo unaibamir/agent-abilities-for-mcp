@@ -96,7 +96,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-block']    = array(
 		'label'        => __( 'Replace block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -1750,7 +1750,7 @@ function aafm_exec_replace_in_post( array $input ) {
 	if ( ! aafm_replacement_preserves_structure( $content, $new ) ) {
 		return new WP_Error(
 			'aafm_replace_inside_markup',
-			__( 'That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly.', 'agent-abilities-for-mcp' ),
+			__( 'That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly. To change one whole block, use aafm-replace-block if it is enabled.', 'agent-abilities-for-mcp' ),
 			array( 'status' => 400 )
 		);
 	}
@@ -1915,6 +1915,13 @@ function aafm_exec_replace_block( array $input ) {
 	$found = null;
 	foreach ( $path as $depth => $index ) {
 		$named = array_keys( array_filter( $list, static fn( array $block ): bool => null !== $block['blockName'] ) );
+		if ( 0 === $depth && array() === $named ) {
+			return new WP_Error(
+				'aafm_block_path_not_found',
+				__( 'This post has no blocks to address by path. Nothing was changed. Use aafm-update-post to replace its content.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
 		if ( ! isset( $named[ $index ] ) ) {
 			return new WP_Error(
 				'aafm_block_path_not_found',

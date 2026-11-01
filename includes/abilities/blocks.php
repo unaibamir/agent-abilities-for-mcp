@@ -30,7 +30,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_blocks_definitions' );
 function aafm_register_blocks_definitions( array $registry ): array {
 	$registry['aafm/list-blocks']      = array(
 		'label'        => __( 'List blocks', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists saved reusable blocks (synced patterns), not block types; call aafm-list-block-types for those. Returns id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks; each page omits blocks you lack edit access to, so total can exceed the rows returned). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists saved reusable blocks (synced patterns), not block types; aafm-list-block-types lists those, if it is enabled. Returns id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks; each page omits blocks you lack edit access to, so total can exceed the rows returned). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -38,7 +38,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 	);
 	$registry['aafm/list-block-types'] = array(
 		'label'        => __( 'List block types', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists the block types registered on this site (core, theme and plugin blocks, including ACF blocks), not saved reusable blocks; use aafm-get-block-type for one block\'s attributes, supports, styles and, for ACF blocks, its field names and an example payload. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists the block types registered on this site (core, theme and plugin blocks, including ACF blocks), not saved reusable blocks; if aafm-get-block-type is enabled, use it for one block\'s attributes, supports, styles and, for ACF blocks, its field names and an example payload. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',

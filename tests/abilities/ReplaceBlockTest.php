@@ -193,6 +193,23 @@ final class ReplaceBlockTest extends TestCase {
 		$this->assertSame( self::PAGE, $this->stored( $id ) );
 	}
 
+	public function test_a_post_with_no_blocks_points_at_update_post(): void {
+		$this->admin();
+		$id = $this->post_with( '<p>Classic content only.</p>' );
+
+		$res = aafm_exec_replace_block(
+			array(
+				'post_id' => $id,
+				'path'    => array( 0 ),
+				'markup'  => self::NEW_PARAGRAPH,
+			)
+		);
+		$this->assertWPError( $res );
+		$this->assertSame( 'aafm_block_path_not_found', $res->get_error_code() );
+		$this->assertStringContainsString( 'aafm-update-post', $res->get_error_message() );
+		$this->assertSame( '<p>Classic content only.</p>', $this->stored( $id ) );
+	}
+
 	public function test_an_expect_block_mismatch_is_refused_and_names_the_block_found(): void {
 		$this->admin();
 		$id = $this->post_with( self::PAGE );

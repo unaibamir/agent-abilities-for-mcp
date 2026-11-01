@@ -67,7 +67,7 @@ function aafm_register_themes_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-global-styles'] = array(
 		'label'        => __( 'Get global styles', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads the site's resolved theme.json settings and styles, on block and classic themes alike: the colour palette slugs to use as backgroundColor and textColor, font sizes, spacing, layout widths and whether fluid typography is on. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Reads the site's resolved theme.json settings and styles, on block and classic themes alike: the colour palette slugs to use as backgroundColor and textColor, font sizes, spacing, layout widths and whether fluid typography is on. On a classic theme most values are WordPress core defaults, and some keys (such as layout or typography.fluid) may be absent. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',

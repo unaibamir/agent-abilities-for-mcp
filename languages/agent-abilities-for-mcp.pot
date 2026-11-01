@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-01T16:03:46+05:00\n"
+"POT-Creation-Date: 2026-11-01T17:16:11+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -425,13 +425,13 @@ msgid "Number of block types per page, clamped to the 1-100 range. Defaults to 5
 msgstr ""
 
 #: includes/abilities/blocks.php:354
-msgid "Block type name, namespace/name, for example core/group. aafm-list-block-types lists the names."
+msgid "Block type name, namespace/name, for example core/group. If aafm-list-block-types is enabled, it lists the names."
 msgstr ""
 
 #. translators: %s: block type name.
 #: includes/abilities/blocks.php:410
 #, php-format
-msgid "No block type named \"%s\" is registered on this site. Call aafm-list-block-types for the registered names."
+msgid "No block type named \"%s\" is registered on this site. If aafm-list-block-types is enabled, call it for the registered names."
 msgstr ""
 
 #: includes/abilities/blocks.php:475

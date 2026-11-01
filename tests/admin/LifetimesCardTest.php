@@ -65,4 +65,25 @@ class LifetimesCardTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/<details class="aafm-card aafm-section aafm-section--collapsible" id="aafm-oauth-lifetimes">/', $html );
 		$this->assertStringContainsString( 'id="aafm-lifetimes-save" disabled', $html );
 	}
+	/**
+	 * Focus never drops to the page body after an async action (DESIGN.md, Focus ring and
+	 * keyboard): Save comes back enabled and focused, and a revoked grant or Application Password
+	 * row hands focus to its neighbour's Revoke button or the card heading.
+	 */
+	public function test_async_connection_actions_keep_keyboard_focus(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$js       = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$section  = static function ( string $from, string $to ) use ( $js ): string {
+			$start = strpos( $js, $from );
+			$end   = false === $start ? false : strpos( $js, $to, $start );
+			return false === $end ? '' : substr( $js, $start, $end - $start );
+		};
+		$lifetime = $section( '#bindLifetimesCard() {', '#bindAppPasswordRevoke() {' );
+		$this->assertSame( 2, preg_match_all( '/save\.disabled = false;\s*save\.focus\(\);/', $lifetime ) );
+		$this->assertStringContainsString( "this.#removeRowKeepingFocus( btn.closest( 'tr' ), '.aafm-revoke-app-password', card );", $js );
+		$this->assertStringContainsString( "this.#removeRowKeepingFocus( row, '.aafm-revoke-grant', root.querySelector( '#aafm-card-grants' ) );", $js );
+		$helper = $section( '#removeRowKeepingFocus( row, selector, card ) {', '#bindAppPasswordRevoke() {' );
+		$this->assertStringContainsString( 'next.focus();', $helper );
+		$this->assertStringContainsString( 'heading.tabIndex = -1;', $helper );
+	}
 }

@@ -2767,7 +2767,8 @@
 				if ( ! json?.success ) {
 					status.textContent =
 						json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
-					refresh();
+					save.disabled = false;
+					save.focus();
 					return;
 				}
 				const data = json.data ?? {};
@@ -2783,7 +2784,9 @@
 				}
 				status.textContent = this.#t( 'saved', 'Saved' );
 				this.#markClean( card, sent );
-				refresh();
+				// Re-enabled so focus can return to it instead of dropping to the page body.
+				save.disabled = false;
+				save.focus();
 			} );
 		}
 
@@ -2880,6 +2883,32 @@
 		}
 
 		/**
+		 * Remove a table row whose button just did its job, and move focus to the next row's (or
+		 * the previous row's) matching button, or to the card heading when no row is left, so
+		 * keyboard focus never drops to the page body.
+		 *
+		 * @param {?HTMLTableRowElement} row      Row to remove.
+		 * @param {string}               selector The button to focus in a neighbouring row.
+		 * @param {?Element}             card     Card whose heading takes focus when the table empties.
+		 */
+		#removeRowKeepingFocus( row, selector, card ) {
+			if ( ! row ) {
+				return;
+			}
+			const next = ( row.nextElementSibling ?? row.previousElementSibling )?.querySelector( selector );
+			row.remove();
+			if ( next ) {
+				next.focus();
+				return;
+			}
+			const heading = card?.querySelector( '.aafm-card-head-title' );
+			if ( heading ) {
+				heading.tabIndex = -1;
+				heading.focus();
+			}
+		}
+
+		/**
 		 * Wire the Application Passwords card's Revoke buttons: confirm, revoke, then drop the row
 		 * (and the user's table when it was the last row).
 		 */
@@ -2910,6 +2939,7 @@
 				} );
 				if ( ! json?.success ) {
 					btn.disabled = false;
+					btn.focus();
 					window.alert(
 						json?.data?.message ??
 							this.#t( 'revokeFailed', 'Could not revoke. Please try again.' )
@@ -2917,7 +2947,7 @@
 					return;
 				}
 				const wrap = btn.closest( '.aafm-table-wrap' );
-				btn.closest( 'tr' )?.remove();
+				this.#removeRowKeepingFocus( btn.closest( 'tr' ), '.aafm-revoke-app-password', card );
 				if ( wrap && ! wrap.querySelector( 'tbody tr' ) ) {
 					wrap.previousElementSibling?.remove();
 					wrap.remove();
@@ -3037,6 +3067,7 @@
 
 				if ( ! json?.success ) {
 					btn.disabled = false;
+					btn.focus();
 					window.alert(
 						json?.data?.message ??
 							this.#t( 'revokeFailed', 'Could not revoke. Please try again.' )
@@ -3053,7 +3084,7 @@
 					// The grant is gone: drop its row, and lower the owning client's active-token
 					// count by the tokens we just revoked so it does not read stale.
 					this.#adjustClientTokens( root, clientId, -revoked );
-					row.remove();
+					this.#removeRowKeepingFocus( row, '.aafm-revoke-grant', root.querySelector( '#aafm-card-grants' ) );
 					const title = root.querySelector( '#aafm-card-grants .aafm-card-head-title' );
 					if ( title ) {
 						const left = root.querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ).length;

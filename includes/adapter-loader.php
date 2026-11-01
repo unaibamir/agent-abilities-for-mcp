@@ -9,7 +9,7 @@
  * that race, and our floor check then rejects the loaded version - so our /mcp route never
  * registers (site-wide 404 for our endpoint).
  *
- * Our copy is 0.7.0 and we MUST run it when we load first: 0.4.1 lacks the mcp_adapter_tools_list
+ * Our copy is 0.7.1 and we MUST run it when we load first: 0.4.1 lacks the mcp_adapter_tools_list
  * filter, our request-time per-connection capability gate, so running on it would be a silent
  * security regression. The public McpAdapter API is additive between 0.4.1 and 0.5.0. Whether that
  * same claim holds through later versions - specifically for McpValidator's public MIME-validation
@@ -162,7 +162,7 @@ function aafm_adapter_path_to_class( string $path, string $base, string $prefix 
  * (WP\MCP\Core\*, Handlers\*, Domain\*, Transport\*, Infrastructure\*, Servers\*, Abilities\*) never
  * references either of them, so we gain nothing by pre-declaring them and lose coexistence by doing
  * so. We therefore skip them in the eager load: the standalone plugin's unguarded require then
- * declares its OWN copy with no collision, while our eager load still commits PHP to our 0.7.0
+ * declares its OWN copy with no collision, while our eager load still commits PHP to our 0.7.1
  * McpAdapter (the class that carries the per-connection capability gate). This does NOT weaken the
  * Rank Math case: Rank Math bundles an older adapter as a plain Composer LIBRARY (lazy autoloader, no
  * unguarded plugin-shell require) and loads after us, so our eager McpAdapter still wins that race.
@@ -279,7 +279,7 @@ function aafm_register_adapter_autoloader(): void {
  * request. The win is eager-declare vs lazy-autoload, not folder ordering: plugins load in
  * activation order (the active_plugins option), not alphabetically, but a sibling that ships the
  * adapter as a plain Composer library only declares its classes on first reference, whereas we
- * declare all of our 0.7.0 WP\MCP\ classes here, during our plugin-include phase. That makes PHP
+ * declare all of our 0.7.1 WP\MCP\ classes here, during our plugin-include phase. That makes PHP
  * commit to our copy; a later sibling that references the same class then transparently uses ours. The public
  * McpAdapter API is additive across 0.4.1 and 0.5.0, so a 0.4.1-expecting consumer keeps working -
  * and we keep the per-connection capability gate that 0.4.1 lacks. A 0.5.0-expecting consumer that
@@ -306,7 +306,7 @@ function aafm_register_adapter_autoloader(): void {
  * only a handful of require_once calls on already-bundled files.
  *
  * Inverse-version trade: this override is version-agnostic - it forces ANY later-loading sibling
- * (older OR newer copy) onto our 0.7.0, since PHP commits to whichever copy is declared first. The
+ * (older OR newer copy) onto our 0.7.1, since PHP commits to whichever copy is declared first. The
  * floor/upper-bound check and "too old"/"too new" notices in bootstrap.php are the fallback for the
  * residual case where an incompatible copy is declared by a plugin that loads BEFORE us.
  *

@@ -14,6 +14,7 @@ return array(
     'Automattic\\Jetpack\\Autoloader\\CustomAutoloaderPlugin' => $vendorDir . '/automattic/jetpack-autoloader/src/CustomAutoloaderPlugin.php',
     'Automattic\\Jetpack\\Autoloader\\ManifestGenerator' => $vendorDir . '/automattic/jetpack-autoloader/src/ManifestGenerator.php',
     'Composer\\InstalledVersions' => $vendorDir . '/composer/InstalledVersions.php',
+    'WP\\MCP\\Abilities\\AbilityNameSuggester' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/AbilityNameSuggester.php',
     'WP\\MCP\\Abilities\\DiscoverAbilitiesAbility' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/DiscoverAbilitiesAbility.php',
     'WP\\MCP\\Abilities\\ExecuteAbilityAbility' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/ExecuteAbilityAbility.php',
     'WP\\MCP\\Abilities\\GetAbilityInfoAbility' => $vendorDir . '/wordpress/mcp-adapter/includes/Abilities/GetAbilityInfoAbility.php',

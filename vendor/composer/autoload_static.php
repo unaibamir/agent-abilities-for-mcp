@@ -42,6 +42,7 @@ class ComposerStaticInit695f50bef26fb7a3b20d301537b2c18a
         'Automattic\\Jetpack\\Autoloader\\CustomAutoloaderPlugin' => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src/CustomAutoloaderPlugin.php',
         'Automattic\\Jetpack\\Autoloader\\ManifestGenerator' => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src/ManifestGenerator.php',
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
+        'WP\\MCP\\Abilities\\AbilityNameSuggester' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Abilities/AbilityNameSuggester.php',
         'WP\\MCP\\Abilities\\DiscoverAbilitiesAbility' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Abilities/DiscoverAbilitiesAbility.php',
         'WP\\MCP\\Abilities\\ExecuteAbilityAbility' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Abilities/ExecuteAbilityAbility.php',
         'WP\\MCP\\Abilities\\GetAbilityInfoAbility' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Abilities/GetAbilityInfoAbility.php',

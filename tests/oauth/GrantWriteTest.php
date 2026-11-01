@@ -141,6 +141,14 @@ class GrantWriteTest extends TestCase {
 		$this->assertFalse( aafm_oauth_grant_state( $this->user, self::CLIENT )['paused'] );
 	}
 
+	public function test_update_fails_when_the_grant_row_is_gone(): void {
+		global $wpdb;
+		$this->assertTrue( aafm_oauth_grant_update( $this->user, self::CLIENT, array( 'paused' => true ) ) );
+		$wpdb->delete( $wpdb->prefix . 'aafm_oauth_consents', array( 'client_id' => self::CLIENT ) );
+
+		$this->assertFalse( aafm_oauth_grant_update( $this->user, self::CLIENT, array( 'paused' => false ) ), 'Resuming a deleted grant must not report success.' );
+	}
+
 	public function test_update_refuses_an_unknown_key_and_an_empty_change_set(): void {
 		$this->assertFalse( aafm_oauth_grant_update( $this->user, self::CLIENT, array() ) );
 		$this->assertFalse( aafm_oauth_grant_update( $this->user, self::CLIENT, array( 'x' => 1 ) ) );

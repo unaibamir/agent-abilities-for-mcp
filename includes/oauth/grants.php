@@ -174,9 +174,10 @@ function aafm_oauth_grant_update( int $user_id, string $client_id, array $change
 	);
 
 	// Certify against a fresh read, not the UPDATE's affected-row count (same rule as aafm_oauth_deactivate_client()).
-	// No matching row reads as the defaults, so a pause asked of a grant that is gone fails here.
+	// No matching row reads as the defaults, so the row itself must still be there: otherwise a
+	// resume (or a cleared field) asked of a grant that is gone would certify against those defaults.
 	$state = aafm_oauth_grant_state( $user_id, $client_id );
-	if ( null === $state ) {
+	if ( null === $state || ! aafm_oauth_has_consent( $user_id, $client_id ) ) {
 		return false;
 	}
 	return ( ! array_key_exists( 'paused', $changes ) || (bool) $changes['paused'] === $state['paused'] )

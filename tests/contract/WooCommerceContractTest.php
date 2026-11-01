@@ -1994,4 +1994,52 @@ final class WooCommerceContractTest extends TestCase {
 
 		$coupon->delete( true );
 	}
+	/**
+	 * A product description's block attributes survive a create and an update through the real
+	 * WooCommerce data store, which hands post_content to wp_insert_post()/wp_update_post() without
+	 * slashing it: the JSON escapes for --, &, quotes, < and > keep their backslash.
+	 */
+	public function test_product_description_keeps_block_attribute_escapes_on_create_and_update(): void {
+		$this->acting_as( 'administrator' );
+		$attrs        = array(
+			'style'    => array( 'color' => array( 'text' => 'var(--wp--preset--color--accent)' ) ),
+			'metadata' => array( 'name' => 'Tom & Jerry say "hi", a > b and c < d' ),
+		);
+		$markup       = static fn( array $a ): string => serialize_block(
+			array(
+				'blockName'    => 'core/paragraph',
+				'attrs'        => $a,
+				'innerBlocks'  => array(),
+				'innerHTML'    => '<p>Hello</p>',
+				'innerContent' => array( '<p>Hello</p>' ),
+			)
+		);
+		$stored_attrs = static function ( int $id ): array {
+			clean_post_cache( $id );
+			return parse_blocks( (string) get_post( $id )->post_content )[0]['attrs'];
+		};
+
+		$created = aafm_exec_wc_create_product(
+			array(
+				'name'        => 'AAFM Contract Escapes',
+				'description' => $markup( $attrs ),
+			)
+		);
+		$this->assertIsArray( $created );
+		$id = (int) $created['id'];
+		$this->assertSame( $attrs, $stored_attrs( $id ) );
+
+		$attrs['metadata']['name'] = 'Q & A -- "two" x < y';
+		$updated                   = aafm_exec_wc_update_product(
+			array(
+				'product_id'  => $id,
+				'description' => $markup( $attrs ),
+			)
+		);
+		$this->assertIsArray( $updated );
+		$this->assertSame( $attrs, $stored_attrs( $id ) );
+		$this->assertSame( $markup( $attrs ), $updated['description'] );
+
+		wp_delete_post( $id, true );
+	}
 }

@@ -705,7 +705,9 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 		if ( $guard['error'] instanceof \WP_Error ) {
 			return $guard['error'];
 		}
-		$product->set_description( $description );
+		// WooCommerce's data store passes the description to wp_insert_post()/wp_update_post()
+		// unslashed, and both unslash it; slash it here so block attribute escapes keep their backslash.
+		$product->set_description( wp_slash( $description ) );
 	}
 	if ( array_key_exists( 'short_description', $input ) ) {
 		$short_description = wp_kses_post( (string) $input['short_description'] );

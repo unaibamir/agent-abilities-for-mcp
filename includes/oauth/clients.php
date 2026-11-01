@@ -94,8 +94,9 @@ function aafm_oauth_register_client( array $req ) {
 			'response_types' => wp_json_encode( $response_types ),
 			'created_by_ip'  => aafm_source_ip(),
 			'is_active'      => 1,
+			'created_at'     => gmdate( 'Y-m-d H:i:s' ), // The column default is the server's local time.
 		),
-		array( '%s', '%s', '%s', '%s', '%s', '%s', '%d' )
+		array( '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s' )
 	);
 
 	if ( false === $inserted ) {

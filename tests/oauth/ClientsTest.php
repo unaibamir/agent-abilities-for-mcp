@@ -68,6 +68,25 @@ class ClientsTest extends TestCase {
 	 * unknown client-supplied grant_types/response_types must be filtered out at registration -
 	 * not stored or echoed back. The return value and the stored row both carry the filtered set.
 	 */
+	/**
+	 * The created_at column is UTC even when the database session clock is not (its default is the
+	 * server's local time, which the admin display and the abandoned-client reaper would misread).
+	 */
+	public function test_created_at_is_written_in_utc_whatever_the_database_clock(): void {
+		aafm_install_oauth_tables();
+		global $wpdb;
+		$zone = (string) $wpdb->get_var( 'SELECT @@session.time_zone' );
+		$wpdb->query( "SET time_zone = '+07:00'" );
+		try {
+			$res = aafm_oauth_register_client( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SET time_zone = %s', $zone ) );
+		}
+		$this->assertIsArray( $res );
+		$row = $this->fetch_client( $res['client_id'] );
+		$this->assertLessThan( 120, abs( time() - strtotime( $row['created_at'] . ' UTC' ) ) );
+	}
+
 	public function test_filters_unknown_grant_and_response_types(): void {
 		aafm_install_oauth_tables();
 

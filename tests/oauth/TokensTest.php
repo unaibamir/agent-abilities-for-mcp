@@ -145,6 +145,23 @@ class TokensTest extends TestCase {
 	 * T1-7: when the row insert fails, mint returns a WP_Error rather than phantom tokens -
 	 * a client must never get a successful token response for a grant that was never stored.
 	 */
+	/**
+	 * The created_at column is UTC even when the database session clock is not.
+	 */
+	public function test_token_created_at_is_written_in_utc_whatever_the_database_clock(): void {
+		global $wpdb;
+		$zone = (string) $wpdb->get_var( 'SELECT @@session.time_zone' );
+		$wpdb->query( "SET time_zone = '+07:00'" );
+		try {
+			$tokens = aafm_oauth_mint_tokens( $this->ctx() );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SET time_zone = %s', $zone ) );
+		}
+		$this->assertIsArray( $tokens );
+		$created = (string) $wpdb->get_var( $wpdb->prepare( 'SELECT created_at FROM %i ORDER BY id DESC LIMIT 1', $wpdb->prefix . 'aafm_oauth_access_tokens' ) );
+		$this->assertLessThan( 120, abs( time() - strtotime( $created . ' UTC' ) ) );
+	}
+
 	public function test_mint_returns_error_when_insert_fails(): void {
 		aafm_install_oauth_tables();
 

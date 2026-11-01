@@ -351,7 +351,7 @@ function aafm_args_get_block_type(): array {
 				'name' => array(
 					'type'        => 'string',
 					'pattern'     => '^[a-z0-9-]+/[a-z0-9-]+$',
-					'description' => __( 'Block type name, namespace/name, for example core/group. aafm-list-block-types lists the names.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Block type name, namespace/name, for example core/group. If aafm-list-block-types is enabled, it lists the names.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'name' ),
@@ -407,7 +407,7 @@ function aafm_exec_get_block_type( array $input ) {
 			'aafm_unknown_block_type',
 			sprintf(
 				/* translators: %s: block type name. */
-				__( 'No block type named "%s" is registered on this site. Call aafm-list-block-types for the registered names.', 'agent-abilities-for-mcp' ),
+				__( 'No block type named "%s" is registered on this site. If aafm-list-block-types is enabled, call it for the registered names.', 'agent-abilities-for-mcp' ),
 				$name
 			)
 		);

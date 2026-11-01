@@ -378,6 +378,13 @@ final class BlockTypesTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 		$this->assertSame( 'aafm_unknown_block_type', $out->get_error_code() );
 		$this->assertStringContainsString( 'aafm-list-block-types', $out->get_error_message() );
+		$this->assertStringContainsStringIgnoringCase( 'if aafm-list-block-types is enabled', $out->get_error_message() );
+	}
+
+	public function test_the_name_param_points_at_the_list_tool_only_if_it_is_enabled(): void {
+		$desc = aafm_args_get_block_type()['input_schema']['properties']['name']['description'];
+		$this->assertStringContainsString( 'aafm-list-block-types', $desc );
+		$this->assertStringContainsStringIgnoringCase( 'if aafm-list-block-types is enabled', $desc );
 	}
 
 	public function test_get_block_type_output_has_no_paths_or_callables(): void {

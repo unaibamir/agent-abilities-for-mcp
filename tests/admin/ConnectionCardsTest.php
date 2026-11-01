@@ -270,4 +270,16 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertStringContainsString( 'value="' . get_date_from_gmt( '2026-01-01 18:59:59', 'Y-m-d' ) . '"', $html );
 		$this->assertStringContainsString( 'min="' . wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) . '"', $html );
 	}
+
+	public function test_the_grant_status_wraps_below_the_buttons_inside_the_actions_column(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test, not a remote URL.
+		$css   = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.css' );
+		$start = strpos( $css, "\t\t.aafm-grant-status {" );
+		$this->assertNotFalse( $start, 'The .aafm-grant-status rule must exist.' );
+		$block = substr( $css, (int) $start, (int) strpos( $css, "\n\t\t}", (int) $start ) - (int) $start );
+		$this->assertStringContainsString( 'display: block;', $block );
+		$this->assertStringContainsString( 'white-space: normal;', $block );
+		// A long message must not widen the column: it adds no intrinsic width of its own.
+		$this->assertStringContainsString( 'contain: inline-size;', $block );
+	}
 }

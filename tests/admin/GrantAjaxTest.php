@@ -253,14 +253,14 @@ class GrantAjaxTest extends TestCase {
 		);
 		$this->assertSame( 0, $this->state()['rate'] );
 		foreach ( array( '0', '-1', '1.5', 'abc', '10001', array( '5' ) ) as $bad ) {
-			$this->assertFalse(
-				$this->update(
-					array(
-						'rate'        => $bad,
-						'expect_rate' => '',
-					)
-				)['success']
+			$out = $this->update(
+				array(
+					'rate'        => $bad,
+					'expect_rate' => '',
+				)
 			);
+			$this->assertFalse( $out['success'] );
+			$this->assertSame( 'Use a whole number from 1 to 10,000 calls a minute, or leave it empty to use the site limit.', $out['data']['message'] ?? null );
 		}
 		$this->assertSame( 0, $this->state()['rate'] );
 	}

@@ -718,7 +718,7 @@ function aafm_ajax_oauth_update_grant(): void {
 			/* translators: %d: calls per minute. */
 			$logs[] = sprintf( __( 'Rate limit set to %d a minute', 'agent-abilities-for-mcp' ), (int) $rate );
 		} else {
-			wp_send_json_error( array( 'message' => $refuse ) );
+			wp_send_json_error( array( 'message' => __( 'Use a whole number from 1 to 10,000 calls a minute, or leave it empty to use the site limit.', 'agent-abilities-for-mcp' ) ) );
 		}
 	}
 

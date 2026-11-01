@@ -531,4 +531,15 @@ final class IntegrationsTabTest extends TestCase {
 			$this->assertStringContainsString( 'this.#refreshDirty?.();', $body, $method . ' ticks boxes without an event, so it must refresh the dot itself.' );
 		}
 	}
+
+	public function test_the_status_pill_sits_after_the_name_not_in_the_free_space(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$css   = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.css' );
+		$start = strpos( $css, "\t\tdetails.aafm-integration-card {" );
+		$this->assertNotFalse( $start, 'The integration card rule must exist.' );
+		$block = substr( $css, (int) $start, (int) strpos( $css, "\n\t\t\t.abilities-count {", (int) $start ) - (int) $start );
+		// The shared head rule gives a direct-child pill an auto start margin; next to the count's own
+		// auto margin that splits the free space and the pill drifts per row.
+		$this->assertStringContainsString( '> .aafm-pill { margin-inline-start: 0; }', $block );
+	}
 }

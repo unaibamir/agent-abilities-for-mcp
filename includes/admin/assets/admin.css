@@ -1329,6 +1329,10 @@
 					flex: 0 0 auto;
 					margin-inline-start: 4px;
 				}
+
+				/* The status pill follows the name; only the count takes the auto margin, so every
+				   row's pill sits the same gap after its name instead of splitting the free space. */
+				> .aafm-pill { margin-inline-start: 0; }
 			}
 
 			/* The count badge sits flush to the right edge, before the chevron. */

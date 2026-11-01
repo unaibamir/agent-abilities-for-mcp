@@ -39,6 +39,12 @@ final class AbilitiesAllTabTest extends TestCase {
 		$this->assertSame( (int) $m[1], substr_count( $html, 'class="aafm-ability-row"' ) );
 	}
 
+	public function test_the_all_note_points_only_at_the_integrations_tab(): void {
+		$html = $this->render();
+		$this->assertSame( 1, preg_match( '/<p class="aafm-card-desc aafm-subject-all-note">([^<]+)</', $html, $m ) );
+		$this->assertStringEndsWith( 'on the Integrations tab.', $m[1] );
+	}
+
 	public function test_every_panel_shows_with_its_label_and_no_checkbox_is_duplicated(): void {
 		$html = $this->render();
 		preg_match_all( '/<div class="aafm-subject-panel"[^>]*>/', $html, $panels );

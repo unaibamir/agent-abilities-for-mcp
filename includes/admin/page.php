@@ -2070,7 +2070,7 @@ function aafm_render_abilities_tab(): void {
 	// The All tab's own panel holds only its bulk controls; the rows are the subject panels below.
 	echo '<div class="aafm-subject-all" role="tabpanel" id="aafm-subject-panel-all" aria-labelledby="aafm-subject-tab-all">';
 	aafm_render_abilities_bulk_toolbar( 'all', $all_rows );
-	// The Total abilities card above counts integration and other-plugin abilities too; say where
+	// The Total abilities card above counts integration abilities too; say where
 	// the difference lives so the two numbers do not look like they disagree.
 	$elsewhere = $ability_total - count( $all_rows );
 	if ( $elsewhere > 0 ) {
@@ -2079,7 +2079,7 @@ function aafm_render_abilities_tab(): void {
 			esc_html(
 				sprintf(
 					/* translators: 1: number of built-in abilities listed here, 2: number of abilities listed on other tabs. */
-					_n( 'All lists the %1$s built-in abilities. The other %2$s is on the Integrations and Other plugins tabs.', 'All lists the %1$s built-in abilities. The other %2$s are on the Integrations and Other plugins tabs.', $elsewhere, 'agent-abilities-for-mcp' ),
+					_n( 'All lists the %1$s built-in abilities. The other %2$s is on the Integrations tab.', 'All lists the %1$s built-in abilities. The other %2$s are on the Integrations tab.', $elsewhere, 'agent-abilities-for-mcp' ),
 					number_format_i18n( count( $all_rows ) ),
 					number_format_i18n( $elsewhere )
 				)

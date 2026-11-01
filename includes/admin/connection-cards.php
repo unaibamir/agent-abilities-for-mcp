@@ -255,7 +255,7 @@ function aafm_render_grants_card( array $data ): void {
 		foreach ( $data['rows'] as $grant ) {
 			$client_name = '' !== $grant['client_name'] ? $grant['client_name'] : __( '(unnamed client)', 'agent-abilities-for-mcp' );
 			/* translators: 1: user login, 2: app name. */
-			$who    = sprintf( __( '%1$s, %2$s', 'agent-abilities-for-mcp' ), $grant['user_login'], $client_name );
+			$who    = sprintf( _x( '%1$s, %2$s', 'OAuth grant: user login, app name', 'agent-abilities-for-mcp' ), $grant['user_login'], $client_name );
 			$preset = '' === $grant['preset'] ? 'custom' : $grant['preset'];
 			$ends   = null === $grant['expires_at'] ? '' : get_date_from_gmt( $grant['expires_at'], 'Y-m-d' );
 			$rate   = $grant['rate'] > 0 ? (string) $grant['rate'] : '';
@@ -345,7 +345,7 @@ function aafm_render_grants_card( array $data ): void {
 				esc_attr( (string) $grant['user_id'] ),
 				esc_attr( $grant['client_id'] ),
 				/* translators: %s: user login and app name. */
-				esc_attr( sprintf( __( 'Revoke %s', 'agent-abilities-for-mcp' ), $who ) ),
+				esc_attr( sprintf( _x( 'Revoke %s', 'OAuth grant button label', 'agent-abilities-for-mcp' ), $who ) ),
 				esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
 			);
 			echo ' <span class="aafm-grant-status" role="status"></span>';
@@ -810,7 +810,7 @@ function aafm_render_app_passwords_card( array $data ): void {
 				$user['user_id'],
 				esc_attr( $item['uuid'] ),
 				/* translators: %s: Application Password name. */
-				esc_attr( sprintf( __( 'Revoke %s', 'agent-abilities-for-mcp' ), $item['name'] ) ),
+				esc_attr( sprintf( _x( 'Revoke %s', 'Application Password button label', 'agent-abilities-for-mcp' ), $item['name'] ) ),
 				esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
 			);
 		}

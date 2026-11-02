@@ -809,14 +809,16 @@ leg_default_server_run() {
 	else
 		fail default-server "control: standalone alone: $msg"
 	fi
+	# The adapter version we bundle, read from the tree under test so an adapter bump needs no edit here.
+	bundled=$(sed -n "s/.*const VERSION = '\([^']*\)'.*/\1/p" "$PLUGIN_SRC/vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php")
 	for ver in 0.7.0 0.6.1; do
 		fetch_adapter default-server "$ver" || continue
 		for order in 'ours first' 'standalone first'; do
 			if [ "$order" = 'ours first' ]; then
-				# Declared first, our bundled 0.7.0 loads whatever standalone version is installed.
+				# Declared first, our bundled adapter loads whatever standalone version is installed.
 				plugins="[\"$OURS\",\"$ADAPTER\"]"
-				lv=0.7.0
-				name="bundled 0.7.0 loads, standalone $ver installed, ours first"
+				lv=$bundled
+				name="bundled $bundled loads, standalone $ver installed, ours first"
 			else
 				plugins="[\"$ADAPTER\",\"$OURS\"]"
 				lv=$ver
@@ -833,12 +835,12 @@ leg_default_server_run() {
 	restamp on
 	REQUIRE_GUARD=1
 	for order in 'ours first' 'standalone first'; do
-		if [ "$order" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; else plugins="[\"$ADAPTER\",\"$OURS\"]"; fi
+		if [ "$order" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; lv=$bundled; else plugins="[\"$ADAPTER\",\"$OURS\"]"; lv=0.7.0; fi
 		if set_state default-server "re-stamped public, $order" "$plugins" true 0; then
 			stamped=$(W eval '$a = wp_get_ability( "aafm/get-posts" ); echo $a ? var_export( $a->get_meta()["mcp"]["public"] ?? null, true ) : "missing";' 2>/dev/null)
 			if [ "$stamped" = true ]; then
 				pass default-server "re-stamped public, $order: aafm/get-posts reads meta.mcp.public = true, so the guards are what is under test"
-				ds_scenario "adapter 0.7.0, $order, re-stamped public, another plugin publishes, Automatic" "$plugins" on unset up "$base" 0.7.0
+				ds_scenario "adapter $lv, $order, re-stamped public, another plugin publishes, Automatic" "$plugins" on unset up "$base" "$lv"
 			else
 				fail default-server "re-stamped public, $order: the fixture did not take effect (meta.mcp.public reads '$stamped')"
 			fi

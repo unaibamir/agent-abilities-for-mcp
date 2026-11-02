@@ -137,6 +137,13 @@ class WcStubStore {
 			$id = self::$next_id;
 			++self::$next_id;
 		}
+		// The real data store writes both through wp_insert_post()/wp_update_post() (or post meta for
+		// a variation), which unslash them; WooCommerceContractTest pins that.
+		foreach ( array( 'description', 'short_description' ) as $field ) {
+			if ( isset( $data[ $field ] ) && is_string( $data[ $field ] ) ) {
+				$data[ $field ] = wp_unslash( $data[ $field ] );
+			}
+		}
 		$data['id']            = $id;
 		self::$products[ $id ] = self::with_defaults( $data );
 

@@ -505,11 +505,12 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 	// data-has-sensitive flag tells the JS to window.confirm() before bulk-enabling a group
 	// that can read or change personal data.
 	printf(
-		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-integration-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button></p>',
+		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-integration-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
 		esc_attr( $slug ),
 		$has_sensitive ? ' data-has-sensitive="1"' : '',
 		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
-		esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' )
+		esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
+		$disabled ? '' : wp_kses( aafm_enable_writes_button_html( 'integration-' . $slug, $rows ), aafm_admin_allowed_html() )
 	);
 
 	// Each per-plugin card renders a flat ability list directly in the accordion body.

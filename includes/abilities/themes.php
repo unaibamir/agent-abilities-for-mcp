@@ -51,7 +51,7 @@ function aafm_register_themes_definitions( array $registry ): array {
 	);
 	$registry['aafm/list-templates']    = array(
 		'label'        => __( 'List templates', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists block templates (or template parts) by id, slug, title, type, and source. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists block templates (or template parts) by id, slug, title, type, and source. A classic theme without block-template support usually has none, so the list can be empty there. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -67,7 +67,7 @@ function aafm_register_themes_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-global-styles'] = array(
 		'label'        => __( 'Get global styles', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads the active theme's resolved global styles and settings (theme.json). Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Reads the site's resolved theme.json settings and styles, on block and classic themes alike: the colour palette slugs to use as backgroundColor and textColor, font sizes, spacing, layout widths and whether fluid typography is on. On a classic theme most values are WordPress core defaults, and some keys (such as layout or typography.fluid) may be absent. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -451,7 +451,8 @@ function aafm_exec_update_template( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$content = wp_kses_post( (string) ( $input['content'] ?? '' ) );
+	$sanitized = aafm_kses_block_markup( (string) ( $input['content'] ?? '' ) );
+	$content   = $sanitized['content'];
 	// Read before the write: the raw post_content confirmation below reads back, matching the
 	// context aafm_post_field_write_confirmed()'s own read-back uses.
 	$stored = aafm_exact_object_chain( 'post', $wp_id );
@@ -468,6 +469,7 @@ function aafm_exec_update_template( array $input ) {
 	if ( $guard['error'] instanceof WP_Error ) {
 		return $guard['error'];
 	}
+	$guard['warnings'] = array_merge( $guard['warnings'], $sanitized['warnings'] );
 
 	$result = wp_update_post(
 		wp_slash(

@@ -54,14 +54,11 @@ abstract class TestCase extends WP_UnitTestCase {
 		// Policy reads are memoised per request; each test is a fresh request. With
 		// AAFM_TEST_POLICY_PATH=batched every test runs as an MCP REST request that WordPress has
 		// already routed, so policy reads take the batched path; unset, they take the front-end path.
+		// The routing itself happens at the end of this method (see there).
 		aafm_policy_reset_request_state();
 		aafm_oauth_rest_routing_began( false );
 		$this->policy_request_uri = $_SERVER['REQUEST_URI'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- snapshot, restored as it was.
 		$this->policy_query_vars  = isset( $GLOBALS['wp'] ) && $GLOBALS['wp'] instanceof \WP ? $GLOBALS['wp']->query_vars : null;
-		if ( 'batched' === getenv( 'AAFM_TEST_POLICY_PATH' ) ) {
-			$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
-			$this->route_as_rest_request();
-		}
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is invoked.
 		aafm_install_activity_log();
@@ -70,6 +67,7 @@ abstract class TestCase extends WP_UnitTestCase {
 		// A schema upgrade that commits mid-test (DDL) can leave its lock row behind for a minute; the lock
 		// would then make the next test's aafm_maybe_upgrade_activity_log() skip its upgrade.
 		delete_transient( 'aafm_activity_log_upgrade_lock' );
+		delete_transient( 'aafm_oauth_upgrade_lock' );
 		// The high-risk floor is off-by-default, and a test that finds it already lifted would assert
 		// against a security posture no fresh install has. It needs an explicit reset for the same
 		// reason the enabled-abilities option above does: aafm_clear_activity_log() issues a TRUNCATE,
@@ -83,6 +81,16 @@ abstract class TestCase extends WP_UnitTestCase {
 		delete_option( 'aafm_site_brief' ); // Escapes the per-test rollback for the same TRUNCATE reason as the options above.
 		delete_option( 'aafm_default_server_mode' ); // Same TRUNCATE escape as the options above.
 		delete_option( 'aafm_default_server_auto_noted' );
+		// The 1.10.0 access options escape the rollback for the same TRUNCATE reason.
+		delete_option( 'aafm_pause_all' );
+		delete_option( 'aafm_oauth_connect_roles' );
+		delete_option( 'aafm_trusted_proxy' );
+		delete_option( 'aafm_oauth_default_preset' );
+		// Every test runs as an install that has already stamped its OAuth schema. The suite's database
+		// is rebuilt each run, so without this the first install of the run would look brand new and be
+		// seeded Administrators only (aafm_seed_fresh_install_defaults()). Fresh-install tests drop the row.
+		update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+		aafm_oauth_current_grant( null, true );
 		// The registry catalog is memoized per request; tests mutate the
 		// aafm_abilities_registry filter set between cases, so start each one with a
 		// fresh build (the next registry read rebuilds).
@@ -97,6 +105,14 @@ abstract class TestCase extends WP_UnitTestCase {
 		// what 1.7.5 wrote; a case that asserts a write_outcome row attaches the observer itself.
 		$this->write_outcome_observer_priority = has_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome' );
 		remove_action( 'aafm_write_completed', 'aafm_activity_log_write_outcome', PHP_INT_MIN );
+		// Routed last: the option writes above log through the write-outcome observer, and the log
+		// row reads the trusted-proxy policy option. Routed first, that read would batch the policy
+		// rows and register the batch hooks before the test starts, so a test that plants a row with
+		// $wpdb or switches to a front-end request would see this fixture's request instead of its own.
+		if ( 'batched' === getenv( 'AAFM_TEST_POLICY_PATH' ) ) {
+			$_SERVER['REQUEST_URI'] = self::mcp_rest_path();
+			$this->route_as_rest_request();
+		}
 	}
 
 	/**

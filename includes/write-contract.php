@@ -1449,6 +1449,12 @@ function aafm_tec_write( string $entity, array $args, int $id = 0 ): array {
 			return $result;
 	}
 
+	// The repository hands post_content to wp_insert_post()/wp_update_post() as is, and both
+	// unslash it, which would strip the backslash from block attribute escapes like -.
+	if ( isset( $args['post_content'] ) ) {
+		$args['post_content'] = wp_slash( (string) $args['post_content'] );
+	}
+
 	$repository = static function () use ( $entity ) {
 		if ( 'events' === $entity ) {
 			return tribe_events();

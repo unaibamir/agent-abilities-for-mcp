@@ -78,6 +78,7 @@ function aafm_oauth_current_client_id( ?string $client_id = null, bool $forget =
  */
 function aafm_oauth_reset_current_client_id(): void {
 	aafm_oauth_current_client_id( null, true );
+	aafm_oauth_current_grant( null, true );
 }
 
 // Registered at include time, beside the store whose contract it enforces, rather than in the
@@ -233,6 +234,22 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			return $user_id;
 		}
 
+		// 10b. Per-connection state (1.10.0). An expired grant ends the connection the way a deactivated
+		// client does, and a grant whose state cannot be certified is refused. A PAUSED grant is not refused
+		// here: it keeps a valid login and is answered with a 403 at the transport gate, so a client shows an
+		// error instead of looping through sign-in and refresh. A token with no consent row, and a site that
+		// has not run the v9 installer yet, read as the defaults (aafm_oauth_grant_state()).
+		// 10c. Roles that can connect. Narrowing the owner's list ends the grants of users it no longer
+		// covers; a site that never saved a list keeps every grant (aafm_oauth_user_still_may_connect()).
+		// Short-circuit order matters: the roles check never runs for a missing or expired grant.
+		$grant = aafm_oauth_grant_state( (int) $row['wp_user_id'], (string) $row['client_id'] );
+		if ( null === $grant || $grant['expired'] || ! aafm_oauth_user_still_may_connect( (int) $row['wp_user_id'] ) ) {
+			if ( function_exists( 'aafm_oauth_log_event' ) ) {
+				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
+			}
+			return $user_id;
+		}
+
 		// 11. Token capability map. The token resolves to the approver's FULL account by default
 		// (unchanged behaviour). A site that registers aafm_oauth_token_capabilities replaces the
 		// token's capabilities for the rest of this MCP request: each listed capability is set
@@ -247,9 +264,20 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		// 12. M16: record the resolved client_id. The activity-log rows attribute calls by it, the
 		// allowlist keys its per-connection scopes on it (aafm_ability_allowed_for_principal()), and
 		// aafm_oauth_confine_bearer_to_mcp_handler() reads it as the marker that the current user came
-		// from our bearer. It is written only after the token has resolved a user through every guard
-		// above, so it cannot change this resolution.
+		// from our bearer. The grant store beside it carries the connection's pause, preset and rate
+		// for the transport gate, the allowlist and the rate limiter. Both are written only after the
+		// token has resolved a user through every guard above, so they cannot change this resolution.
+		// Resolving is not using: the transport gate stamps last use once it admits the request.
 		aafm_oauth_current_client_id( (string) $row['client_id'] );
+		aafm_oauth_current_grant(
+			array_merge(
+				$grant,
+				array(
+					'client_id' => (string) $row['client_id'],
+					'user_id'   => (int) $row['wp_user_id'],
+				)
+			)
+		);
 
 		return (int) $row['wp_user_id'];
 	} finally {

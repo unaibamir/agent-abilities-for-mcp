@@ -355,6 +355,24 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	foreach ( $hidden_inputs as $input ) {
 		echo wp_kses( $input, aafm_admin_allowed_html() );
 	}
+	if ( ! empty( $view['renewing'] ) ) {
+		/* translators: %s: access preset name, for example "Read only". */
+		echo '<p class="presets-renew">' . esc_html( sprintf( __( 'This connection ended. Approving renews it with the same access: %s.', 'agent-abilities-for-mcp' ), (string) $view['current_label'] ) ) . '</p>';
+	} elseif ( ! empty( $view['presets'] ) && is_array( $view['presets'] ) ) {
+		echo '<fieldset class="presets"><legend>' . esc_html__( 'What may this app do?', 'agent-abilities-for-mcp' ) . '</legend>';
+		foreach ( $view['presets'] as $preset ) {
+			printf(
+				'<label class="preset"><input type="radio" name="aafm_oauth_preset" value="%1$s"%2$s><span class="preset-body"><b>%3$s</b> <span class="preset-reach">%4$s</span><span class="preset-sum">%5$s</span></span></label>',
+				esc_attr( $preset['slug'] ),
+				$preset['checked'] ? ' checked' : '',
+				esc_html( $preset['label'] ),
+				esc_html( $preset['reach'] ),
+				esc_html( $preset['summary'] )
+			);
+		}
+		echo '<p class="preset-note">' . esc_html__( 'A preset only narrows what you have switched on. The app never does more than your account can.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '</fieldset>';
+	}
 	printf(
 		'<button type="submit" name="aafm_oauth_decision" value="approve" class="aafm-btn aafm-btn-primary">%s</button>',
 		esc_html__( 'Approve & connect', 'agent-abilities-for-mcp' )

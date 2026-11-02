@@ -21,13 +21,14 @@ final class ConnectionTotalsTest extends TestCase {
 	}
 
 	/**
-	 * Render the OAuth management section and return its HTML.
+	 * Render the clients and grants cards and return their HTML.
 	 *
 	 * @return string
 	 */
 	private function render(): string {
 		ob_start();
-		aafm_render_oauth_management();
+		aafm_render_clients_card( aafm_connection_clients_data() );
+		aafm_render_grants_card( aafm_connection_grants_data() );
 		return (string) ob_get_clean();
 	}
 
@@ -39,8 +40,8 @@ final class ConnectionTotalsTest extends TestCase {
 	public function test_the_headings_carry_no_count_when_there_is_nothing_to_count(): void {
 		$html = $this->render();
 
-		$this->assertStringContainsString( 'Registered clients</h3>', $html );
-		$this->assertStringContainsString( 'Active grants</h3>', $html );
+		$this->assertStringContainsString( 'Registered clients</h2>', $html );
+		$this->assertStringContainsString( 'Active grants</h2>', $html );
 		$this->assertStringNotContainsString( 'Registered clients (0)', $html );
 		$this->assertStringNotContainsString( 'Active grants (0)', $html );
 	}

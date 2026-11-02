@@ -3,7 +3,7 @@
  * Plugin Name:       Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
  * Description:       WordPress MCP server for Claude and ChatGPT. Run one site or many with limited access, read-only mode, drafts you approve and an audit log.
- * Version:           1.9.0
+ * Version:           1.10.0
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.9.0' );
+define( 'AAFM_VERSION', '1.10.0' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -70,6 +70,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';
 // Read-only mode, the second floor. Same reasoning as the line above: the admin screens, the
 // native registration walk, and the bridge walk all read it.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/read-only.php';
+
+// Owner-level access switches (pause-all, roles that can connect). Required at include time: the
+// OAuth resolver and the activation installer read them.
+require_once AAFM_PLUGIN_DIR . 'includes/access.php';
+require_once AAFM_PLUGIN_DIR . 'includes/presets.php';
 
 /**
  * Schedule the daily activity-log prune event, if not already scheduled.
@@ -226,6 +231,7 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/pkce.php';
 // which calls into them and the audit log's aafm_source_ip().
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/http.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/clients.php';
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/grants.php';
 
 // OAuth lifecycle audit logging: one activity-log row per register/authorize/token/refresh/revoke
 // event (non-secret context only). Writes through the audit log module, required earlier.
@@ -451,7 +457,9 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-inbox.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/missing-tools.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection-cards.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/doctor.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/allowlist.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';
@@ -487,6 +495,10 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_run_doctor', 'aafm_ajax_run_doctor' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
+		add_action( 'wp_ajax_aafm_save_oauth_lifetimes', 'aafm_ajax_save_oauth_lifetimes' );
+		add_action( 'wp_ajax_aafm_oauth_update_grant', 'aafm_ajax_oauth_update_grant' );
+		add_action( 'wp_ajax_aafm_revoke_app_password', 'aafm_ajax_revoke_app_password' );
+		add_action( 'wp_ajax_aafm_set_pause_all', 'aafm_ajax_set_pause_all' );
 		add_action( 'wp_ajax_aafm_set_client_agent_identity', 'aafm_ajax_set_client_agent_identity' );
 		add_action( 'wp_ajax_aafm_save_allowlist', 'aafm_ajax_save_allowlist' );
 		add_action( 'wp_ajax_aafm_quickconnect_oauth', 'aafm_ajax_quickconnect_oauth' );

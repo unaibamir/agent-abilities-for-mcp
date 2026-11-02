@@ -753,8 +753,9 @@ final class SecurityRegressionTest extends TestCase {
 	 * admin-only, manage_options + nonce gated reachability probe never reachable by an MCP
 	 * agent (Codex hunt F3 already covers why its target URL is trusted; see
 	 * aafm_ability_disclosures()'s file docblock in disclosures.php). The Connection
-	 * Doctor adds two calls in doctor.php: the probe POST to this site's own endpoint and the OAuth
-	 * discovery GET to its own /.well-known/ documents (same gate, same trust, own-site targets).
+	 * Doctor adds three calls in doctor.php: the probe POST to this site's own endpoint, the OAuth
+	 * discovery GET to its own /.well-known/ documents, and, when those are blocked, one GET of the
+	 * same data from its own REST API (same gate, same trust, own-site targets).
 	 *
 	 * Codex round 7, R7-6: tokens are collapsed (collapse_qualified_names()) and each file's own
 	 * `use` imports resolved (parse_use_aliases()) before matching, so a fully-qualified call or
@@ -792,7 +793,7 @@ final class SecurityRegressionTest extends TestCase {
 			// endpoint and its own /.well-known/ documents, never an agent-reachable path.
 			'includes/admin/doctor.php'     => array(
 				'wp_remote_post' => 1,
-				'wp_remote_get'  => 1,
+				'wp_remote_get'  => 2,
 			),
 			// Codex round 7, R7-6: aafm_adapter_file_applies_tools_list_filter() reads an
 			// already-loaded, is_readable()-checked local adapter file path, never a URL - but the

@@ -837,11 +837,13 @@ function aafm_exec_geodirectory_create_listing( array $input ) {
 		return $title_ok;
 	}
 
-	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
-	$guard   = aafm_block_guard_evaluate( $content );
+	$sanitized = aafm_kses_block_markup( isset( $input['content'] ) ? (string) $input['content'] : '' );
+	$content   = $sanitized['content'];
+	$guard     = aafm_block_guard_evaluate( $content );
 	if ( $guard['error'] instanceof WP_Error ) {
 		return $guard['error'];
 	}
+	$guard['warnings'] = array_merge( $guard['warnings'], $sanitized['warnings'] );
 
 	$post_id = wp_insert_post(
 		wp_slash(
@@ -986,12 +988,13 @@ function aafm_exec_geodirectory_update_listing( array $input ) {
 		$update['post_title'] = $title;
 	}
 	if ( array_key_exists( 'content', $input ) ) {
-		$content = wp_kses_post( (string) $input['content'] );
-		$guard   = aafm_block_guard_evaluate( $content );
+		$sanitized = aafm_kses_block_markup( (string) $input['content'] );
+		$content   = $sanitized['content'];
+		$guard     = aafm_block_guard_evaluate( $content );
 		if ( $guard['error'] instanceof WP_Error ) {
 			return $guard['error'];
 		}
-		$warnings               = $guard['warnings'];
+		$warnings               = array_merge( $guard['warnings'], $sanitized['warnings'] );
 		$update['post_content'] = $content;
 	}
 	if ( count( $update ) > 1 ) {

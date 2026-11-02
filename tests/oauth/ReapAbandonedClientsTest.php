@@ -265,4 +265,17 @@ class ReapAbandonedClientsTest extends TestCase {
 		$this->assertTrue( $this->client_exists( 'kept' ), 'A consented client is never reaped.' );
 		$this->assertTrue( $this->code_exists( 'kept' ), 'Its code must not be deleted merely for sharing a reap pass with a real candidate.' );
 	}
+
+	public function test_the_reap_ttl_helper_matches_what_the_reaper_uses(): void {
+		aafm_install_oauth_tables();
+		$this->assertSame( 7 * DAY_IN_SECONDS, aafm_oauth_client_reap_ttl() );
+
+		$this->seed_client( 'two_days', gmdate( 'Y-m-d H:i:s', time() - 2 * DAY_IN_SECONDS ) );
+		$short = static fn(): int => DAY_IN_SECONDS;
+		add_filter( 'aafm_oauth_client_reap_ttl', $short );
+		$this->assertSame( DAY_IN_SECONDS, aafm_oauth_client_reap_ttl() );
+		aafm_oauth_reap_abandoned_clients();
+		remove_filter( 'aafm_oauth_client_reap_ttl', $short );
+		$this->assertFalse( $this->client_exists( 'two_days' ), 'The filtered TTL decides what the reaper deletes.' );
+	}
 }

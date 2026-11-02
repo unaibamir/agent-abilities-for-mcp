@@ -13,6 +13,7 @@
 		#ajaxUrl = aafmAdmin.ajaxUrl;
 		#nonce = aafmAdmin.nonce;
 		#abilitiesDirty = false;
+		#refreshDirty = null;
 
 		/**
 		 * Read a localized string, falling back to its English source when the
@@ -74,11 +75,159 @@
 			this.#bindNotifyTest();
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
+			this.#bindConnectionTabs();
+			this.#bindLifetimesCard();
+			this.#bindGrantControls();
+			this.#bindAppPasswordRevoke();
+			this.#bindPauseAll();
 			this.#bindOauthRevoke();
 			this.#bindOauthPagination();
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
+			this.#bindDirtyDots();
+			this.#revealActiveNavTab();
+		}
+
+		/**
+		 * On a phone the tab strip is one row that scrolls sideways (admin.css), so bring the
+		 * current tab into view inside it. Only the strip scrolls, never the page.
+		 */
+		#revealActiveNavTab() {
+			const active = document.querySelector( '.aafm-wrap .nav-tab-wrapper .nav-tab-active' );
+			const strip = active?.closest( '.nav-tab-wrapper' );
+			if ( ! active || ! strip || strip.scrollWidth <= strip.clientWidth ) {
+				return;
+			}
+			strip.scrollLeft = active.offsetLeft - ( strip.clientWidth - active.offsetWidth ) / 2;
+		}
+
+		/**
+		 * Show a dot on the current tab while one of its saved controls differs from what was
+		 * last loaded or saved. Integrations, Other plugins, Settings and Connection only.
+		 * Controls whose value no Save on the tab stores are left out.
+		 */
+		#bindDirtyDots() {
+			const slug = new URLSearchParams( window.location.search ).get( 'tab' ) ?? 'dashboard';
+			if ( ! [ 'integrations', 'bridge', 'settings', 'connection' ].includes( slug ) ) {
+				return;
+			}
+			const dot = document.querySelector( `.nav-tab[data-tab="${ slug }"] .aafm-dirty-dot` );
+			if ( ! dot ) {
+				return;
+			}
+			const sr = dot.nextElementSibling;
+			const untracked =
+				'[data-aafm-untracked], .aafm-integration-filter, .aafm-doctor, .aafm-app-password-fallback, .aafm-allowlist-add, .aafm-qc-overlay, .aafm-client-agent-toggle';
+			const controls = () =>
+				Array.from(
+					document.querySelectorAll(
+						'.aafm-wrap input:not([type="hidden"]):not([type="search"]), .aafm-wrap select, .aafm-wrap textarea'
+					)
+				).filter( ( c ) => ! c.closest( untracked ) );
+			controls().forEach( ( c ) => {
+				c.dataset.aafmSaved ??= this.#controlValue( c );
+			} );
+			const refresh = () => {
+				const dirty = controls().some( ( c ) => this.#controlValue( c ) !== c.dataset.aafmSaved );
+				dot.hidden = ! dirty;
+				if ( sr ) {
+					sr.hidden = ! dirty;
+				}
+			};
+			document.addEventListener( 'input', refresh );
+			document.addEventListener( 'change', refresh );
+			this.#refreshDirty = refresh;
+		}
+
+		/**
+		 * @param {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} c A form control.
+		 * @return {string} The value the dirty check compares.
+		 */
+		#controlValue( c ) {
+			if ( 'checkbox' === c.type || 'radio' === c.type ) {
+				return c.checked ? '1' : '0';
+			}
+			return c.value;
+		}
+
+		/**
+		 * The values of every control under an element, to record as saved once a request that sent them succeeds.
+		 *
+		 * @param {Element} root The form, card or row about to be saved.
+		 * @return {Map<Element,string>} Control to value.
+		 */
+		#snapshot( root ) {
+			return new Map(
+				Array.from( root.querySelectorAll( 'input, select, textarea' ), ( c ) => [ c, this.#controlValue( c ) ] )
+			);
+		}
+
+		/**
+		 * Show the value the server confirmed for a control, unless it was edited while the request was
+		 * in flight: that edit is kept, and the confirmed value becomes the saved baseline either way, so
+		 * the edited control keeps its dot.
+		 *
+		 * @param {Map<Element,string>}                                   sent    The snapshot taken before the request.
+		 * @param {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} control The control the server answered for.
+		 * @param {string}                                                value   The confirmed value ('1' or '0' for a checkbox).
+		 */
+		#applyServerValue( sent, control, value ) {
+			if ( this.#controlValue( control ) === sent.get( control ) ) {
+				if ( 'checkbox' === control.type ) {
+					control.checked = '1' === value;
+				} else {
+					control.value = value;
+				}
+			}
+			sent.set( control, value );
+		}
+
+		/**
+		 * Mark the controls a successful save covered as saved. Callers always pass the element
+		 * they saved, never the document, so an unsaved edit elsewhere on the tab keeps its dot.
+		 * With a snapshot taken before the request, a control edited while it was in flight keeps its dot.
+		 *
+		 * @param {Element}                  root The saved form, card or row.
+		 * @param {Map<Element,string>|null} sent The values the request carried, or null for the current ones.
+		 */
+		#markClean( root, sent = null ) {
+			root.querySelectorAll( 'input, select, textarea' ).forEach( ( c ) => {
+				c.dataset.aafmSaved = sent?.get( c ) ?? this.#controlValue( c );
+			} );
+			this.#refreshDirty?.();
+		}
+
+		/**
+		 * One loading placeholder bar.
+		 *
+		 * @return {HTMLSpanElement} The placeholder.
+		 */
+		#skeleton() {
+			const bar = document.createElement( 'span' );
+			bar.className = 'aafm-skeleton';
+			return bar;
+		}
+
+		/**
+		 * Replace a table body with placeholder rows while its data loads.
+		 *
+		 * @param {HTMLTableSectionElement} tbody   The table body.
+		 * @param {number}                  columns Cells per row.
+		 * @param {number}                  rows    Row count.
+		 */
+		#skeletonRows( tbody, columns, rows = 5 ) {
+			tbody.replaceChildren(
+				...Array.from( { length: rows }, () => {
+					const tr = document.createElement( 'tr' );
+					for ( let i = 0; i < columns; i++ ) {
+						const td = document.createElement( 'td' );
+						td.append( this.#skeleton() );
+						tr.append( td );
+					}
+					return tr;
+				} )
+			);
 		}
 
 		/**
@@ -344,11 +493,21 @@
 					t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
 				} );
 				this.#rovingTabindex( list, tab );
+				// "all" shows every panel under its subject label; any other tab shows one panel.
+				const all = 'all' === subject;
 				document
 					.querySelectorAll( '.aafm-subject-panel[data-subject]' )
 					.forEach( ( panel ) => {
-						panel.hidden = panel.dataset.subject !== subject;
+						panel.hidden = ! all && panel.dataset.subject !== subject;
+						const label = this.#abilitiesPanelLabel( panel );
+						if ( label ) {
+							label.hidden = ! all;
+						}
 					} );
+				const allPanel = document.getElementById( 'aafm-subject-panel-all' );
+				if ( allPanel ) {
+					allPanel.hidden = ! all;
+				}
 				// Codex admin-ui-r1 M2: a click and an Arrow/Home/End key both land here (the
 				// keydown handler wired by #wireTablistKeys() calls this same function), so
 				// dispatching from one place lets #bindAbilitiesSearch() clear a stale query on
@@ -433,11 +592,19 @@
 					btn.disabled = disabled;
 				} );
 			};
+			// The All tab's bulk controls act on the whole form, hidden rows included, so a
+			// query hides and disables them the same way it does each panel's own.
+			const allPanel = form.querySelector( '.aafm-subject-all' );
 
 			const clear = () => {
 				const subject = activeSubject();
+				const all = 'all' === subject;
+				if ( allPanel ) {
+					allPanel.hidden = ! all;
+					setBulkButtonsDisabled( allPanel, false );
+				}
 				panels.forEach( ( panel ) => {
-					panel.hidden = panel.dataset.subject !== subject;
+					panel.hidden = ! all && panel.dataset.subject !== subject;
 					panel.querySelectorAll( '.aafm-ability-row' ).forEach( ( row ) => {
 						row.hidden = false;
 					} );
@@ -450,7 +617,7 @@
 					setBulkButtonsDisabled( panel, false );
 					const label = panel.querySelector( ':scope > .aafm-subject-search-label' );
 					if ( label ) {
-						label.hidden = true;
+						label.hidden = ! all;
 					}
 				} );
 				if ( savebar ) {
@@ -468,6 +635,10 @@
 					return;
 				}
 
+				if ( allPanel ) {
+					allPanel.hidden = true;
+					setBulkButtonsDisabled( allPanel, true );
+				}
 				let matchCount = 0;
 				panels.forEach( ( panel ) => {
 					let panelMatches = 0;
@@ -672,8 +843,9 @@
 		#bindEnableReads() {
 			document.querySelectorAll( '.aafm-enable-reads' ).forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
+					// The All tab's controls sit outside every panel, so they reach the form.
 					const scope = btn.closest(
-						'.aafm-subject-panel, .aafm-integration-card'
+						'.aafm-subject-panel, .aafm-integration-card, #aafm-abilities-form'
 					);
 					if ( ! scope ) {
 						return;
@@ -684,12 +856,14 @@
 					boxes.forEach( ( b ) => {
 						b.checked = true;
 					} );
+					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
 
 		/**
-		 * "Enable all writes" on the Abilities tab.
+		 * "Enable all writes" on the Abilities and Integrations tabs.
 		 *
 		 * The write-side counterpart to #bindEnableReads, and it exists because the bulk
 		 * affordance used to cover only the safe half: an operator who wanted reads plus a
@@ -707,15 +881,15 @@
 		 * are already unreachable here. That leaves nothing destructive or high-risk in range,
 		 * which is why this control needs no confirm where "Enable all" does.
 		 *
-		 * Only the Abilities tab renders the button today, so only aafm_abilities[] is matched;
-		 * the scope roots mirror #bindEnableReads so the binding still works if the control is
-		 * ever placed on an integration card.
+		 * The Abilities and Integrations tabs render the button, both posting aafm_abilities[],
+		 * so only that name is matched; the scope roots mirror #bindEnableReads.
 		 */
 		#bindEnableWrites() {
 			document.querySelectorAll( '.aafm-enable-writes' ).forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
+					// The All tab's controls sit outside every panel, so they reach the form.
 					const scope = btn.closest(
-						'.aafm-subject-panel, .aafm-integration-card'
+						'.aafm-subject-panel, .aafm-integration-card, #aafm-abilities-form'
 					);
 					if ( ! scope ) {
 						return;
@@ -726,6 +900,8 @@
 					boxes.forEach( ( b ) => {
 						b.checked = true;
 					} );
+					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
@@ -740,9 +916,10 @@
 			buttons.forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
 					const subject = btn.dataset.subject;
-					const panel = document.querySelector(
-						`.aafm-subject-panel[data-subject="${ subject }"]`
-					);
+					const panel =
+						'all' === subject
+							? btn.closest( '#aafm-abilities-form' )
+							: document.querySelector( `.aafm-subject-panel[data-subject="${ subject }"]` );
 					if ( ! panel ) {
 						return;
 					}
@@ -762,6 +939,8 @@
 					boxes.forEach( ( b ) => {
 						b.checked = enabling;
 					} );
+					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
@@ -802,6 +981,8 @@
 					boxes.forEach( ( b ) => {
 						b.checked = enabling;
 					} );
+					// Setting .checked fires no event, so tell the unsaved-changes dot directly.
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
@@ -960,6 +1141,7 @@
 					...form.querySelectorAll( 'input[name="aafm_scope[]"]' ),
 				].forEach( ( i ) => body.append( 'aafm_scope[]', i.value ) );
 
+				const sent = this.#snapshot( form );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -979,6 +1161,7 @@
 						form,
 						json.data?.enabled ?? []
 					);
+					this.#markClean( form, sent );
 				}
 				if ( status ) {
 					status.textContent = json?.success
@@ -1014,6 +1197,7 @@
 					body.append( 'bridged_abilities[]', v )
 				);
 
+				const sent = this.#snapshot( form );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -1027,6 +1211,9 @@
 					json = await res.json();
 				} catch {
 					json = { success: false };
+				}
+				if ( json?.success ) {
+					this.#markClean( form, sent );
 				}
 				if ( status ) {
 					status.textContent = json?.success
@@ -1179,6 +1366,7 @@
 								confirm.hidden = true;
 							}
 						} );
+					this.#refreshDirty?.();
 				} );
 			} );
 		}
@@ -1474,6 +1662,13 @@
 		}
 
 		#bindSaveSettings() {
+			const proxyMode = document.getElementById( 'aafm-proxy-mode' );
+			const proxyCustom = document.querySelector( '.aafm-proxy-custom' );
+			proxyMode?.addEventListener( 'change', () => {
+				if ( proxyCustom ) {
+					proxyCustom.hidden = 'custom' !== proxyMode.value;
+				}
+			} );
 			const form = document.querySelector( '#aafm-settings-form' );
 			if ( ! form ) {
 				return;
@@ -1496,9 +1691,6 @@
 				const oauthEnabled = form.querySelector(
 					'input[name="aafm_oauth_enabled"]'
 				);
-				const oauthDcrEnabled = form.querySelector(
-					'input[name="aafm_oauth_dcr_enabled"]'
-				);
 				const readOnlyMode = form.querySelector(
 					'input[name="aafm_read_only_mode"]'
 				);
@@ -1520,7 +1712,7 @@
 				// Every checkbox in this form is forwarded the same way: append '1' when checked,
 				// omit it when unchecked. The server sanitizer reads an absent field as off, so a
 				// checkbox that is left out of the payload is never persisted as on. Leaving any of
-				// these out (the pre-fix bug for the OAuth, DCR, and strict-block toggles) made the
+				// these out (the pre-fix bug for the OAuth and strict-block toggles) made the
 				// server coerce them off on every save, so toggling one on never stuck.
 				if ( draft?.checked ) {
 					body.append( 'aafm_force_draft', '1' );
@@ -1533,9 +1725,6 @@
 				}
 				if ( oauthEnabled?.checked ) {
 					body.append( 'aafm_oauth_enabled', '1' );
-				}
-				if ( oauthDcrEnabled?.checked ) {
-					body.append( 'aafm_oauth_dcr_enabled', '1' );
 				}
 				if ( readOnlyMode?.checked ) {
 					body.append( 'aafm_read_only_mode', '1' );
@@ -1550,6 +1739,17 @@
 				if ( siteBrief ) {
 					body.append( 'aafm_site_brief', siteBrief.value );
 				}
+				if ( form.querySelector( 'input[name="aafm_oauth_connect_roles_present"]' ) ) {
+					body.append( 'aafm_oauth_connect_roles_present', '1' );
+					form.querySelectorAll( 'input[name="aafm_oauth_connect_roles[]"]:checked:not(:disabled)' ).forEach( ( box ) => {
+						body.append( 'aafm_oauth_connect_roles[]', box.value );
+					} );
+				}
+				if ( proxyMode ) {
+					body.append( 'aafm_proxy_mode', proxyMode.value );
+					body.append( 'aafm_proxy_header', form.querySelector( 'select[name="aafm_proxy_header"]' )?.value ?? '' );
+					body.append( 'aafm_proxy_ranges', form.querySelector( 'textarea[name="aafm_proxy_ranges"]' )?.value ?? '' );
+				}
 				if ( notifyMode ) {
 					body.append( 'aafm_notify_mode', notifyMode.value );
 					body.append( 'aafm_notify_email', notifyEmail?.value ?? '' );
@@ -1558,6 +1758,7 @@
 					} );
 				}
 
+				const sent = this.#snapshot( form );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -1590,7 +1791,7 @@
 							serverState.textContent = json.data.aafm_default_server_state;
 						}
 						if ( siteBrief && 'string' === typeof json.data?.aafm_site_brief ) {
-							siteBrief.value = json.data.aafm_site_brief; // Show what was actually kept.
+							this.#applyServerValue( sent, siteBrief, json.data.aafm_site_brief ); // Show what was actually kept.
 						}
 						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
 						const kept = Array.isArray( json.data?.aafm_ip_allowlist )
@@ -1613,12 +1814,18 @@
 						} else {
 							status.textContent = this.#t( 'saved', 'Saved' );
 						}
+						if ( json.data?.warning ) {
+							status.textContent = `${ status.textContent } ${ json.data.warning }`;
+						}
 					}
 				}
 				// Reflect the cleaned allowlist so any dropped (invalid) lines visibly disappear.
 				// Assigned via .value (never innerHTML), so the server echo is never an HTML sink.
 				if ( json?.success && allowlist && typeof json.data?.aafm_ip_allowlist_text === 'string' ) {
-					allowlist.value = json.data.aafm_ip_allowlist_text;
+					this.#applyServerValue( sent, allowlist, json.data.aafm_ip_allowlist_text );
+				}
+				if ( json?.success ) {
+					this.#markClean( form, sent );
 				}
 			} );
 		}
@@ -1833,7 +2040,7 @@
 				title.textContent = `${ row.label }: ${ statusLabel[ state ] }`;
 				body.append( title );
 
-				if ( whoLabel[ row.who ] ) {
+				if ( 'pass' !== state && whoLabel[ row.who ] ) {
 					const who = document.createElement( 'div' );
 					who.className = 'd-who';
 					who.textContent = whoLabel[ row.who ];
@@ -1873,9 +2080,14 @@
 			runBtn.addEventListener( 'click', async () => {
 				runBtn.disabled = true;
 				status.textContent = this.#t( 'checking', 'Checking…' );
+				const shown = [ ...results.children ];
+				results.setAttribute( 'aria-busy', 'true' );
+				results.replaceChildren( ...[ 1, 2, 3 ].map( () => this.#skeleton() ) );
 				const json = await this.#post( 'aafm_run_doctor' );
 				runBtn.disabled = false;
+				results.removeAttribute( 'aria-busy' );
 				if ( ! json?.success ) {
+					results.replaceChildren( ...shown );
 					status.textContent = json?.data?.message ?? this.#t( 'doctorError', 'The check could not run. Reload the page and try again.' );
 					return;
 				}
@@ -2075,6 +2287,7 @@
 			// never clobber a newer filter result.
 			let loadToken = 0;
 			let userLoads = 0;
+			let shownRows = [];
 
 			// The filters the table currently shows. Set ONLY on Apply, Enter, Reset and at load (from the
 			// server-rendered inputs). Typing in a box changes nothing until then: paging, the Live poll, the
@@ -2110,8 +2323,17 @@
 					pagerStatus.textContent = this.#t( 'loadingPage', 'Loading…' );
 				}
 				let json;
+				const tbody = wrap.querySelector( '.aafm-log-table tbody' );
 				if ( ! withSummary ) {
+					// A Live tick never shows placeholders: it would flicker every ten seconds.
+					if ( 0 === userLoads && tbody ) {
+						shownRows = [ ...tbody.children ];
+					}
 					userLoads += 1;
+					wrap.setAttribute( 'aria-busy', 'true' );
+					if ( tbody ) {
+						this.#skeletonRows( tbody, 9 );
+					}
 				}
 				try {
 					json = await this.#post( 'aafm_get_log_page', {
@@ -2123,12 +2345,18 @@
 				} finally {
 					if ( ! withSummary ) {
 						userLoads -= 1;
+						if ( 0 === userLoads ) {
+							wrap.removeAttribute( 'aria-busy' );
+						}
 					}
 				}
 				if ( token !== loadToken ) {
 					return 'stale';
 				}
 				if ( ! json?.success ) {
+					if ( ! withSummary && tbody ) {
+						tbody.replaceChildren( ...shownRows ); // Put back what was there before the placeholders.
+					}
 					setActiveFilterButton( wrap.dataset.filter ?? 'all' );
 					this.#updatePager(
 						Number( wrap.dataset.page ) || 1,
@@ -2349,17 +2577,24 @@
 		 */
 		#buildDetailCell( row ) {
 			const td = document.createElement( 'td' );
+			td.className = 'aafm-log-detail';
+			td.classList.toggle( 'is-json', /^\s*[[{]/.test( row.detail ?? '' ) );
+			// A long detail is clamped to a few lines; the title carries all of it.
+			td.title = row.detail ?? '';
+			const text = document.createElement( 'span' );
+			text.className = 'aafm-log-detail-text';
+			td.append( text );
 			const link = row.detail_link;
 			if ( ! link || typeof link !== 'object' ) {
-				td.textContent = row.detail ?? '';
+				text.textContent = row.detail ?? '';
 				return td;
 			}
-			td.append( document.createTextNode( link.before ?? '' ) );
+			text.append( document.createTextNode( link.before ?? '' ) );
 			const anchor = document.createElement( 'a' );
 			anchor.href = link.url ?? '';
 			anchor.textContent = `#${ link.id ?? '' }`;
-			td.append( anchor );
-			td.append( document.createTextNode( link.after ?? '' ) );
+			text.append( anchor );
+			text.append( document.createTextNode( link.after ?? '' ) );
 			return td;
 		}
 
@@ -2392,9 +2627,11 @@
 			rows.forEach( ( row ) => {
 				const tr = document.createElement( 'tr' );
 
+				// The short columns clip with an ellipsis, so each carries its full text as a title.
 				const cell = ( text ) => {
 					const td = document.createElement( 'td' );
 					td.textContent = text ?? '';
+					td.title = td.textContent;
 					return td;
 				};
 
@@ -2444,6 +2681,337 @@
 			if ( next ) {
 				next.disabled = page >= totalPages;
 			}
+		}
+
+		/**
+		 * Wire the Connection tab's OAuth and Application Passwords tabs: click or arrow keys
+		 * select a tab and show its panel through the hidden attribute.
+		 */
+		#bindConnectionTabs() {
+			const tabs = Array.from( document.querySelectorAll( '[data-conn-tab]' ) );
+			if ( tabs.length < 2 ) {
+				return;
+			}
+			const activate = ( tab ) => {
+				tabs.forEach( ( t ) => {
+					const on = t === tab;
+					t.classList.toggle( 'is-active', on );
+					t.setAttribute( 'aria-selected', on ? 'true' : 'false' );
+					const panel = document.querySelector(
+						`[data-conn-panel="${ t.dataset.connTab }"]`
+					);
+					if ( panel ) {
+						panel.hidden = ! on;
+					}
+				} );
+				this.#rovingTabindex( tabs, tab );
+			};
+			tabs.forEach( ( t ) => t.addEventListener( 'click', () => activate( t ) ) );
+			this.#wireTablistKeys( tabs, activate );
+		}
+
+		/**
+		 * Wire the token lifetimes card: Save enables once a lifetime or the registration switch
+		 * differs from what was loaded, confirms before registration is turned off, and resets
+		 * the baselines from the server's answer.
+		 */
+		#bindLifetimesCard() {
+			const save = document.getElementById( 'aafm-lifetimes-save' );
+			const card = save?.closest( '#aafm-oauth-lifetimes' );
+			if ( ! card ) {
+				return;
+			}
+			const dcr = card.querySelector( '#aafm-lifetimes-dcr' );
+			const status = card.querySelector( '.aafm-lifetimes-status' );
+			const seconds = ( kind ) =>
+				Number( card.querySelector( `.aafm-ttl-value[data-ttl="${ kind }"]` )?.value ) *
+				Number( card.querySelector( `.aafm-ttl-unit[data-ttl="${ kind }"]` )?.value );
+			const changed = () =>
+				[ 'access', 'refresh' ].some(
+					( kind ) =>
+						String( seconds( kind ) ) !==
+						card.querySelector( `.aafm-ttl-value[data-ttl="${ kind }"]` )?.dataset.saved
+				) || ( dcr && ( dcr.checked ? '1' : '0' ) !== dcr.dataset.saved );
+			const refresh = () => {
+				save.disabled = ! changed();
+			};
+			const edited = () => {
+				status.textContent = ''; // A new edit makes "Saved" or an old error stale.
+				refresh();
+			};
+			card.addEventListener( 'input', edited );
+			card.addEventListener( 'change', edited );
+
+			save.addEventListener( 'click', async () => {
+				if (
+					dcr &&
+					'1' === dcr.dataset.saved &&
+					! dcr.checked &&
+					! window.confirm(
+						this.#t(
+							'dcrOffConfirm',
+							'Turn off dynamic client registration? ChatGPT and Claude can no longer register themselves, so new connections from them will fail until you turn it back on.'
+						)
+					)
+				) {
+					return;
+				}
+				save.disabled = true;
+				const sent = this.#snapshot( card );
+				status.textContent = this.#t( 'saving', 'Saving…' );
+				const json = await this.#post( 'aafm_save_oauth_lifetimes', {
+					aafm_oauth_access_ttl: String( seconds( 'access' ) ),
+					aafm_oauth_refresh_ttl: String( seconds( 'refresh' ) ),
+					aafm_oauth_dcr_enabled: dcr?.checked ? '1' : '0',
+				} );
+				if ( ! json?.success ) {
+					status.textContent =
+						json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					save.disabled = false;
+					save.focus();
+					return;
+				}
+				const data = json.data ?? {};
+				[ 'access', 'refresh' ].forEach( ( kind ) => {
+					const input = card.querySelector( `.aafm-ttl-value[data-ttl="${ kind }"]` );
+					if ( input ) {
+						input.dataset.saved = String( data[ kind ] ?? seconds( kind ) );
+					}
+				} );
+				if ( dcr ) {
+					this.#applyServerValue( sent, dcr, data.dcr ? '1' : '0' );
+					dcr.dataset.saved = data.dcr ? '1' : '0';
+				}
+				status.textContent = this.#t( 'saved', 'Saved' );
+				this.#markClean( card, sent );
+				// Re-enabled so focus can return to it instead of dropping to the page body.
+				save.disabled = false;
+				save.focus();
+			} );
+		}
+
+		/**
+		 * Wire each grant row's Pause/Resume and Save. Save posts only the controls whose value
+		 * differs from their data-aafm-saved baseline, each with that baseline, so a stale tab
+		 * cannot undo another admin's change.
+		 */
+		#bindGrantControls() {
+			const root = document.querySelector( '.aafm-oauth-manage' );
+			if ( ! root ) {
+				return;
+			}
+			const pills = {
+				active: [ 'aafm-pill-success', this.#t( 'grantActive', 'Active' ) ],
+				paused: [ 'aafm-pill-warn', this.#t( 'grantPaused', 'Paused' ) ],
+				expired: [ 'aafm-pill-neutral', this.#t( 'grantExpired', 'Expired' ) ],
+			};
+			const fields = {
+				preset: '.aafm-grant-preset',
+				expires: '.aafm-grant-expires',
+				rate: '.aafm-grant-rate',
+			};
+			root.addEventListener( 'click', async ( e ) => {
+				const btn = e.target.closest( '.aafm-grant-pause, .aafm-grant-save' );
+				const row = btn?.closest( 'tr[data-grant-row]' );
+				if ( ! row || ! root.contains( btn ) ) {
+					return;
+				}
+				const status = row.querySelector( '.aafm-grant-status' );
+				const data = { user_id: btn.dataset.userId ?? '', client_id: btn.dataset.clientId ?? '' };
+				const sent = {};
+				if ( btn.classList.contains( 'aafm-grant-pause' ) ) {
+					data.paused = '1' === btn.dataset.paused ? '0' : '1';
+				} else {
+					Object.entries( fields ).forEach( ( [ key, selector ] ) => {
+						const input = row.querySelector( selector );
+						if ( input && input.value !== ( input.dataset.aafmSaved ?? '' ) ) {
+							data[ key ] = input.value;
+							data[ `expect_${ key }` ] = input.dataset.aafmSaved ?? '';
+							sent[ key ] = input;
+						}
+					} );
+					if ( ! Object.keys( sent ).length ) {
+						status.textContent = this.#t( 'grantNothingChanged', 'Nothing to save.' );
+						return;
+					}
+				}
+				const snap = this.#snapshot( row );
+				const buttons = row.querySelectorAll( 'button' );
+				buttons.forEach( ( b ) => {
+					b.disabled = true;
+				} );
+				status.textContent = this.#t( 'saving', 'Saving…' );
+				const json = await this.#post( 'aafm_oauth_update_grant', data );
+				buttons.forEach( ( b ) => {
+					b.disabled = false;
+				} );
+				btn.focus(); // A disabled button drops focus to the body.
+				if ( ! json?.success ) {
+					status.textContent =
+						json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					return;
+				}
+				const grant = json.data ?? {};
+				if ( Object.keys( sent ).length ) {
+					// Record what was sent, so a control edited while the save was in flight keeps its dot.
+					this.#markClean( row, snap );
+				}
+				const pause = row.querySelector( '.aafm-grant-pause' );
+				if ( pause ) {
+					pause.dataset.paused = grant.paused ? '1' : '0';
+					pause.textContent = grant.paused
+						? this.#t( 'grantResume', 'Resume' )
+						: this.#t( 'grantPause', 'Pause' );
+					pause.setAttribute(
+						'aria-label',
+						this.#format(
+							grant.paused
+								? this.#t( 'grantResumeFor', 'Resume %s' )
+								: this.#t( 'grantPauseFor', 'Pause %s' ),
+							pause.dataset.who ?? ''
+						)
+					);
+				}
+				const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
+				const look = pills[ grant.status ] ?? pills.active;
+				if ( pill ) {
+					pill.className = `aafm-pill ${ look[ 0 ] }`;
+					pill.textContent = look[ 1 ];
+				}
+				status.textContent = this.#t( 'saved', 'Saved' );
+			} );
+		}
+
+		/**
+		 * Remove a table row whose button just did its job, and move focus to the next row's (or
+		 * the previous row's) matching button, or to the card heading when no row is left, so
+		 * keyboard focus never drops to the page body.
+		 *
+		 * @param {?HTMLTableRowElement} row      Row to remove.
+		 * @param {string}               selector The button to focus in a neighbouring row.
+		 * @param {?Element}             card     Card whose heading takes focus when the table empties.
+		 */
+		#removeRowKeepingFocus( row, selector, card ) {
+			if ( ! row ) {
+				return;
+			}
+			const next = ( row.nextElementSibling ?? row.previousElementSibling )?.querySelector( selector );
+			row.remove();
+			if ( next ) {
+				next.focus();
+				return;
+			}
+			const heading = card?.querySelector( '.aafm-card-head-title' );
+			if ( heading ) {
+				heading.tabIndex = -1;
+				heading.focus();
+			}
+		}
+
+		/**
+		 * Wire the Application Passwords card's Revoke buttons: confirm, revoke, then drop the row
+		 * (and the user's table when it was the last row).
+		 */
+		#bindAppPasswordRevoke() {
+			const card = document.getElementById( 'aafm-card-app-passwords' );
+			if ( ! card ) {
+				return;
+			}
+			card.addEventListener( 'click', async ( e ) => {
+				const btn = e.target.closest( '.aafm-revoke-app-password' );
+				if ( ! btn ) {
+					return;
+				}
+				if (
+					! window.confirm(
+						this.#t(
+							'appPasswordRevokeConfirm',
+							'Revoke this Application Password? Anything using it stops working right away.'
+						)
+					)
+				) {
+					return;
+				}
+				btn.disabled = true;
+				const json = await this.#post( 'aafm_revoke_app_password', {
+					user_id: btn.dataset.userId ?? '',
+					uuid: btn.dataset.uuid ?? '',
+				} );
+				if ( ! json?.success ) {
+					btn.disabled = false;
+					btn.focus();
+					window.alert(
+						json?.data?.message ??
+							this.#t( 'revokeFailed', 'Could not revoke. Please try again.' )
+					);
+					return;
+				}
+				const wrap = btn.closest( '.aafm-table-wrap' );
+				this.#removeRowKeepingFocus( btn.closest( 'tr' ), '.aafm-revoke-app-password', card );
+				if ( wrap && ! wrap.querySelector( 'tbody tr' ) ) {
+					wrap.previousElementSibling?.remove();
+					wrap.remove();
+				}
+				const empty = card.querySelector( '.aafm-empty-state' );
+				if ( empty && ! card.querySelector( '.aafm-app-passwords-table' ) ) {
+					empty.hidden = false;
+				}
+			} );
+		}
+
+		/**
+		 * Wire the pause-all button: confirm before pausing, then flip the button, the Connection
+		 * tab notice and the page-header pill without a reload.
+		 */
+		#bindPauseAll() {
+			const btn = document.getElementById( 'aafm-pause-all' );
+			if ( ! btn ) {
+				return;
+			}
+			const status = btn.parentElement?.querySelector( '.aafm-pause-all-status' );
+			btn.addEventListener( 'click', async () => {
+				const pausing = 'true' !== btn.getAttribute( 'aria-pressed' );
+				if (
+					pausing &&
+					! window.confirm(
+						this.#t(
+							'pauseAllConfirm',
+							'Pause all MCP access through this site? Every connected agent is refused until you resume.'
+						)
+					)
+				) {
+					return;
+				}
+				btn.disabled = true;
+				const json = await this.#post( 'aafm_set_pause_all', { paused: pausing ? '1' : '0' } );
+				btn.disabled = false;
+				btn.focus(); // A disabled button drops focus to the body.
+				if ( ! json?.success ) {
+					if ( status ) {
+						status.textContent =
+							json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					}
+					return;
+				}
+				const paused = Boolean( json.data?.paused );
+				btn.setAttribute( 'aria-pressed', paused ? 'true' : 'false' );
+				btn.classList.toggle( 'aafm-btn-primary', paused );
+				btn.classList.toggle( 'aafm-btn-secondary', ! paused );
+				btn.textContent = paused
+					? this.#t( 'resumeAll', 'Resume all access' )
+					: this.#t( 'pauseAll', 'Pause all access' );
+				const notice = document.querySelector( '.aafm-pause-all-notice' );
+				if ( notice ) {
+					notice.hidden = ! paused;
+				}
+				const pill = document.querySelector( '.aafm-status-pill[data-posture="paused"]' );
+				if ( pill ) {
+					pill.hidden = ! paused;
+				}
+				if ( status ) {
+					status.textContent = '';
+				}
+			} );
 		}
 
 		/**
@@ -2499,6 +3067,7 @@
 
 				if ( ! json?.success ) {
 					btn.disabled = false;
+					btn.focus();
 					window.alert(
 						json?.data?.message ??
 							this.#t( 'revokeFailed', 'Could not revoke. Please try again.' )
@@ -2515,7 +3084,12 @@
 					// The grant is gone: drop its row, and lower the owning client's active-token
 					// count by the tokens we just revoked so it does not read stale.
 					this.#adjustClientTokens( root, clientId, -revoked );
-					row.remove();
+					this.#removeRowKeepingFocus( row, '.aafm-revoke-grant', root.querySelector( '#aafm-card-grants' ) );
+					const title = root.querySelector( '#aafm-card-grants .aafm-card-head-title' );
+					if ( title ) {
+						const left = root.querySelectorAll( '#aafm-card-grants tr[data-grant-row]' ).length;
+						title.textContent = `${ title.textContent.replace( /\s*\([^)]*\)$/, '' ) }${ left ? ` (${ left.toLocaleString() })` : '' }`;
+					}
 				} else {
 					// The client and all its tokens are revoked: its active-token count is now 0.
 					const tokensCell = row.querySelector( '.aafm-client-tokens' );
@@ -3190,6 +3764,7 @@
 					if ( status ) {
 						status.textContent = this.#t( 'allowlistSaved', 'Saved.' );
 					}
+					this.#markClean( card );
 				} else if ( status ) {
 					// A row naming an unknown role or OAuth client rejects the whole save with a
 					// row-specific message (aafm_ajax_save_allowlist()) - surfaced here verbatim
@@ -3465,7 +4040,10 @@
 			const finishBtn = root.querySelector( '#aafm-qc-finish' );
 			finishBtn.addEventListener( 'click', async () => {
 				finishBtn.disabled = true;
-				const json = await this.#post( 'aafm_quickconnect_finish', { write: state.write ? 1 : 0 } );
+				const json = await this.#post( 'aafm_quickconnect_finish', {
+					write: state.write ? 1 : 0,
+					preset: root.querySelector( '[data-qc-preset]' )?.value ?? '',
+				} );
 				if ( ! json?.success ) {
 					finishBtn.disabled = false;
 					if ( hint ) {

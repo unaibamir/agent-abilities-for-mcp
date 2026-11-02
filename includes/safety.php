@@ -59,11 +59,12 @@ function aafm_rate_limit_per_min(): int {
 /**
  * Consume one token from a principal's per-minute rate-limit bucket.
  *
- * Keyed by the authenticated principal's user id and the current GMT-minute, so
- * each user gets an independent window that naturally rolls over every minute.
- * The transient TTL is 120s - longer than a single minute so the bucket survives
- * its own window, while the GMT-minute embedded in the key is what actually rolls
- * the counter to a fresh bucket on the next minute.
+ * Keyed by the authenticated principal's user id and the current GMT minute, so each user gets an
+ * independent window that naturally rolls over every minute. An OAuth call whose connection carries
+ * a per-app override also counts against a per-app bucket, which can only lower the limit: the
+ * per-user bucket stays the ceiling, and a call refused by either bucket consumes neither. The
+ * transient TTL is 120s - longer than a single minute so the bucket survives its own window, while
+ * the GMT minute embedded in the key is what actually rolls the counter to a fresh bucket.
  *
  * This is a fixed-window counter, so a burst straddling a GMT-minute boundary can
  * briefly allow up to 2x the limit. That is acceptable for a coarse defensive cap.
@@ -74,22 +75,38 @@ function aafm_rate_limit_per_min(): int {
  *
  * Discovery / anonymous callers ($user_id <= 0) are intentionally exempt: there
  * is no real principal to limit, and listing (tools/list) relies on the raw
- * permission check rather than consuming a token. A limit of 0 means off.
+ * permission check rather than consuming a token. A site limit of 0 means off; a per-app
+ * override still caps that app.
  *
  * @param int $user_id Authenticated principal user id. <= 0 is never limited.
- * @return bool True if the request is allowed; false once the limit is exceeded.
+ * @return bool True if the request is allowed; false once a limit is exceeded.
  */
 function aafm_rate_limit_consume( int $user_id ): bool {
-	$limit = aafm_rate_limit_per_min();
-	if ( $limit <= 0 || $user_id <= 0 ) {
-		return true; // Off, or no authenticated principal to limit.
+	if ( $user_id <= 0 ) {
+		return true; // No authenticated principal to limit.
 	}
-	$key   = 'aafm_rl_' . $user_id . '_' . gmdate( 'YmdHi' );
-	$count = aafm_transient_count( $key );
-	if ( null === $count || $count >= $limit ) {
-		return false;
+	$grant  = aafm_oauth_current_grant();
+	$site   = aafm_rate_limit_per_min();
+	$app    = '' !== $grant['client_id'] ? (int) $grant['rate'] : 0; // An Application Password has no client, so no override.
+	$minute = gmdate( 'YmdHi' );
+	$limits = array();
+	if ( $site > 0 ) {
+		$limits[ 'aafm_rl_' . $user_id . '_' . $minute ] = $site; // The per-user ceiling; this key is unchanged from 1.9.0.
 	}
-	set_transient( $key, $count + 1, 2 * MINUTE_IN_SECONDS );
+	if ( $app > 0 ) {
+		$limits[ 'aafm_rla_' . $user_id . '_' . substr( md5( (string) $grant['client_id'] ), 0, 12 ) . '_' . $minute ] = $app;
+	}
+	$counts = array();
+	foreach ( $limits as $key => $limit ) {
+		$count = aafm_transient_count( $key );
+		if ( null === $count || $count >= $limit ) {
+			return false; // Refused by one bucket: neither is consumed.
+		}
+		$counts[ $key ] = $count;
+	}
+	foreach ( $counts as $key => $count ) {
+		set_transient( $key, $count + 1, 2 * MINUTE_IN_SECONDS );
+	}
 	return true;
 }
 
@@ -279,13 +296,183 @@ function aafm_ip_is_allowed( string $ip ): bool {
 		return true;
 	}
 
-	foreach ( $list as $entry ) {
-		if ( aafm_cidr_match( $ip, $entry ) ) {
+	return aafm_ip_in_ranges( $ip, $list );
+}
+
+/**
+ * Whether an address falls in any of a list of addresses or CIDR ranges.
+ *
+ * @param string       $ip     Candidate address.
+ * @param array<mixed> $ranges Bare addresses or CIDR ranges.
+ * @return bool
+ */
+function aafm_ip_in_ranges( string $ip, array $ranges ): bool {
+	foreach ( $ranges as $range ) {
+		if ( aafm_cidr_match( $ip, (string) $range ) ) {
 			return true;
 		}
 	}
-
 	return false;
+}
+
+/**
+ * The headers a trusted proxy may name the visitor in. A closed list: anything else is ignored.
+ *
+ * @return array<int,string>
+ */
+function aafm_proxy_headers(): array {
+	return array( 'CF-Connecting-IP', 'True-Client-IP', 'X-Real-IP', 'X-Forwarded-For' );
+}
+
+/**
+ * A valid address or CIDR that does not trust a huge part of the internet: at least /8 for IPv4
+ * and /16 for IPv6.
+ *
+ * @param string $range Address or CIDR.
+ * @return bool
+ */
+function aafm_proxy_range_ok( string $range ): bool {
+	if ( ! aafm_is_valid_ip_or_cidr( $range ) ) {
+		return false;
+	}
+	$pos = strpos( $range, '/' );
+	if ( false === $pos ) {
+		return true;
+	}
+	return (int) substr( $range, $pos + 1 ) >= ( false !== strpos( $range, ':' ) ? 16 : 8 );
+}
+
+/**
+ * Unwrap an IPv4-mapped IPv6 address (::ffff:a.b.c.d) so range tests compare like with like.
+ * ponytail: the hex form ::ffff:c000:201 is not unwrapped; a dual-stack socket reports the dotted form.
+ *
+ * @param string $ip Address.
+ * @return string
+ */
+function aafm_normalize_ip( string $ip ): string {
+	if ( 0 === stripos( $ip, '::ffff:' ) && false !== filter_var( substr( $ip, 7 ), FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+		return substr( $ip, 7 );
+	}
+	return $ip;
+}
+
+/**
+ * Cloudflare's published edge ranges, from https://www.cloudflare.com/ips-v4 and
+ * https://www.cloudflare.com/ips-v6, fetched 2026-10-17. Refreshed by hand each release; the
+ * plugin never fetches them (the readme promises no telemetry). A range missing from a stale list
+ * is not trusted, so the proxy's own address is used: that can lock out an allowlist that holds
+ * visitor addresses, and it can admit everyone behind a proxy when the allowlist holds the proxy's
+ * address.
+ *
+ * @return list<string>
+ */
+function aafm_cloudflare_ranges(): array {
+	return array(
+		'173.245.48.0/20',
+		'103.21.244.0/22',
+		'103.22.200.0/22',
+		'103.31.4.0/22',
+		'141.101.64.0/18',
+		'108.162.192.0/18',
+		'190.93.240.0/20',
+		'188.114.96.0/20',
+		'197.234.240.0/22',
+		'198.41.128.0/17',
+		'162.158.0.0/15',
+		'104.16.0.0/13',
+		'104.24.0.0/14',
+		'172.64.0.0/13',
+		'131.0.72.0/22',
+		'2400:cb00::/32',
+		'2606:4700::/32',
+		'2803:f800::/32',
+		'2405:b500::/32',
+		'2405:8100::/32',
+		'2a06:98c0::/29',
+		'2c0f:f248::/32',
+	);
+}
+
+/**
+ * The trusted-proxy setting. Absent, unreadable or malformed reads as off: today's behaviour.
+ *
+ * @return array{mode:string,header:string,ranges:list<string>}
+ */
+function aafm_trusted_proxy_config(): array {
+	$row = aafm_policy_row( 'aafm_trusted_proxy' );
+	return aafm_trusted_proxy_normalize( $row['ok'] && $row['found'] && is_array( $row['value'] ) ? $row['value'] : array() );
+}
+
+/**
+ * A stored or submitted trusted-proxy value as the config shape. Anything malformed is off.
+ *
+ * @param array<mixed> $value Stored or submitted value.
+ * @return array{mode:string,header:string,ranges:list<string>}
+ */
+function aafm_trusted_proxy_normalize( array $value ): array {
+	$off  = array(
+		'mode'   => 'off',
+		'header' => '',
+		'ranges' => array(),
+	);
+	$mode = isset( $value['mode'] ) && is_string( $value['mode'] ) ? $value['mode'] : 'off';
+	if ( 'cloudflare' === $mode ) {
+		return array(
+			'mode'   => 'cloudflare',
+			'header' => 'CF-Connecting-IP',
+			'ranges' => aafm_cloudflare_ranges(),
+		);
+	}
+	$header = isset( $value['header'] ) && is_string( $value['header'] ) ? $value['header'] : '';
+	if ( 'custom' !== $mode || ! in_array( $header, aafm_proxy_headers(), true ) ) {
+		return $off;
+	}
+	$ranges = array_values( array_filter( (array) ( $value['ranges'] ?? array() ), static fn( $r ): bool => is_string( $r ) && aafm_proxy_range_ok( $r ) ) );
+	return array() === $ranges ? $off : array(
+		'mode'   => 'custom',
+		'header' => $header,
+		'ranges' => $ranges,
+	);
+}
+
+/**
+ * The rightmost address in a header value that is not itself a trusted proxy ('' when there is
+ * none). Bounded to the last 20 entries.
+ *
+ * @param string       $header_value Raw header value, comma separated.
+ * @param array<mixed> $trusted      Trusted proxy ranges.
+ * @return string
+ */
+function aafm_pick_visitor_ip( string $header_value, array $trusted ): string {
+	$parts = array_reverse( array_slice( array_map( 'aafm_trim_unicode', explode( ',', $header_value ) ), -20 ) );
+	foreach ( $parts as $part ) {
+		$part = aafm_normalize_ip( $part );
+		if ( false === filter_var( $part, FILTER_VALIDATE_IP ) ) {
+			return ''; // Anything unparseable on the way in means we cannot say who the visitor is.
+		}
+		if ( ! aafm_ip_in_ranges( $part, $trusted ) ) {
+			return $part;
+		}
+	}
+	return '';
+}
+
+/**
+ * The visitor address when $remote is a trusted proxy that named one; otherwise $remote itself.
+ *
+ * @param string                                                    $remote The connection address (REMOTE_ADDR).
+ * @param array{mode:string,header:string,ranges:list<string>}|null $cfg    A config to test instead of the stored one.
+ * @return string
+ */
+function aafm_trusted_proxy_visitor( string $remote, ?array $cfg = null ): string {
+	$cfg = $cfg ?? aafm_trusted_proxy_config();
+	if ( 'off' === $cfg['mode'] || ! aafm_ip_in_ranges( aafm_normalize_ip( $remote ), $cfg['ranges'] ) ) {
+		return $remote; // Only a request that really arrives from a trusted proxy may name the visitor; anything else is a forged header.
+	}
+	$key   = 'HTTP_' . strtoupper( str_replace( '-', '_', $cfg['header'] ) );
+	$value = isset( $_SERVER[ $key ] ) && is_string( $_SERVER[ $key ] ) ? sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) ) : '';
+	$ip    = aafm_pick_visitor_ip( $value, $cfg['ranges'] );
+	return '' !== $ip ? $ip : $remote;
 }
 
 /**

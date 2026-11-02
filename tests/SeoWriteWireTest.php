@@ -252,7 +252,9 @@ final class SeoWriteWireTest extends TestCase {
 		global $wpdb;
 		require_once AAFM_PLUGIN_DIR . 'tests/stubs/WpseoMetaDouble.php';
 		WpseoMetaDouble::attach();
-		$post_id = self::factory()->post->create();
+		// A draft: after a call that wrote meta to a published post, aafm_refresh_after_meta_writes()
+		// clears its cache entry, which would hide what the read-back left in the cache.
+		$post_id = self::factory()->post->create( array( 'post_status' => 'draft' ) );
 		update_post_meta( $post_id, '_yoast_wpseo_title', 'Old' );
 		update_post_meta( $post_id, '_yoast_wpseo_metadesc', 'D' );
 

@@ -638,8 +638,8 @@ final class ConnectionTest extends TestCase {
 		// OAuth section is present and marked recommended.
 		$this->assertStringContainsString( 'Connect with OAuth', $html );
 		$this->assertStringContainsString( 'Recommended', $html );
-		// App Password path is present as a collapsed fallback (<details>).
-		$this->assertStringContainsString( '<details', $html );
+		// App Password path is present as an unselected tab.
+		$this->assertMatchesRegularExpression( '/id="aafm-conn-tab-app-passwords"[^>]*aria-selected="false"/', $html );
 		$this->assertStringContainsString( 'Application Password', $html );
 		// Endpoint still shown once.
 		$this->assertStringContainsString( aafm_endpoint_url(), $html );
@@ -651,8 +651,8 @@ final class ConnectionTest extends TestCase {
 		aafm_render_connection_tab();
 		$html = (string) ob_get_clean();
 		$this->assertStringContainsString( 'Application Password', $html );
-		// The fallback renders open when OAuth is off.
-		$this->assertMatchesRegularExpression( '/<details[^>]*\bopen\b/', $html );
+		// The Application Passwords tab is selected when OAuth is off.
+		$this->assertMatchesRegularExpression( '/id="aafm-conn-tab-app-passwords"[^>]*aria-selected="true"/', $html );
 		update_option( 'aafm_oauth_enabled', '1' ); // Restore default state.
 	}
 
@@ -738,37 +738,22 @@ final class ConnectionTest extends TestCase {
 	}
 
 	/**
-	 * Regression guard: the <details> wrapper for the App-Password fallback must be
-	 * balanced - the number of <details> opens in the fallback region must equal the
-	 * number of </details> closes in that region.
-	 *
-	 * Finds the full <details ...aafm-app-password-fallback...> tag so the region
-	 * starts at the opening angle-bracket and includes the opening tag itself.
+	 * Regression guard: the Application Passwords panel must be balanced - the region from its
+	 * opening tag to the end of the tab holds as many <div closes as opens, so nothing after the
+	 * panel is swallowed into it.
 	 */
-	public function test_app_password_fallback_details_element_is_balanced(): void {
+	public function test_app_password_panel_is_balanced(): void {
 		update_option( 'aafm_oauth_enabled', '1' );
 		$html = $this->render_connection_tab();
 
-		// Find the <details that carries aafm-app-password-fallback.
-		// preg_match with PREG_OFFSET_CAPTURE gives us the byte offset of the match start.
-		$matched = preg_match( '/<details[^>]*aafm-app-password-fallback[^>]*>/', $html, $m, PREG_OFFSET_CAPTURE );
-		$this->assertSame( 1, $matched, 'Exactly one <details class="aafm-app-password-fallback"> must exist.' );
+		$matched = preg_match( '/<div role="tabpanel"[^>]*aafm-app-password-fallback[^>]*>/', $html, $m, PREG_OFFSET_CAPTURE );
+		$this->assertSame( 1, $matched, 'Exactly one Application Passwords panel must exist.' );
 
-		$region_start = $m[0][1]; // Byte offset of the match.
-		$ap_region    = substr( $html, $region_start );
-
-		$opens  = substr_count( $ap_region, '<details' );
-		$closes = substr_count( $ap_region, '</details>' );
-
-		$this->assertSame(
-			$opens,
-			$closes,
-			sprintf(
-				'<details> open/close mismatch in .aafm-app-password-fallback region: %d open(s), %d close(s). The outer </details> is likely missing.',
-				$opens,
-				$closes
-			)
-		);
+		$end = strpos( $html, '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card"', $m[0][1] );
+		$this->assertNotFalse( $end, 'The allowlist must follow the tabs.' );
+		$region = substr( $html, $m[0][1], $end - $m[0][1] );
+		$this->assertSame( substr_count( $region, '<div' ), substr_count( $region, '</div>' ) );
+		$this->assertSame( substr_count( $region, '<details' ), substr_count( $region, '</details>' ) );
 	}
 
 	/**

@@ -55,7 +55,16 @@ function aafm_icon( string $name ): string {
 		'bolt'               => array( 'svg' => '<path d="M13 3 4 14h6l-1 7 9-11h-6l1-7Z"/>' ),
 		'recent'             => array( 'svg' => '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M16 7a3 3 0 0 1 0 6"/>' ),
 		'audit'              => array( 'svg' => '<path d="M4 5h16M4 12h16M4 19h10"/>' ),
-		'groups'             => array( 'svg' => '<path d="M12 3 4 6v5c0 4.5 3.2 7.8 8 9 4.8-1.2 8-4.5 8-9V6l-8-3Z"/>' ),
+		// Registered apps: a grid of equal tiles, so it never reads as the settings shield.
+		'groups'             => array( 'svg' => '<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>' ),
+
+		// Card-head icons, one per card so no two cards on a tab share a glyph.
+		'pause'              => array( 'svg' => '<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>' ),
+		'bell'               => array( 'svg' => '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z"/><path d="M10 20a2 2 0 0 0 4 0"/>' ),
+		'key'                => array( 'svg' => '<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8M16 7l2 2M14 9l2 2"/>' ),
+		'terminal'           => array( 'svg' => '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/>' ),
+		'file'               => array( 'svg' => '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/>' ),
+		'tag'                => array( 'svg' => '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9Z"/><circle cx="7.5" cy="7.5" r="1.5"/>' ),
 
 		// Client icons (connection.html lines 91-98).
 		'client-chatgpt'     => array( 'svg' => '<path d="M12 3a4 4 0 0 1 3.5 6 4 4 0 0 1-3.5 6 4 4 0 0 1-3.5-6A4 4 0 0 1 12 3Z"/><path d="M12 9v6"/>' ),

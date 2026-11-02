@@ -41,6 +41,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/doctor.php|aafm_doctor_check_app_passwords|1' => 'N',
 		'includes/admin/doctor.php|aafm_doctor_check_https|1' => 'N',
 		'includes/admin/doctor.php|aafm_doctor_check_permalinks|1' => 'N',
+		'includes/admin/missing-tools.php|aafm_missing_tools_data|1' => 'N',
 		'includes/admin/onboarding-pointer.php|aafm_quickconnect_pointer_should_show|1' => 'N',
 		'includes/admin/onboarding-pointer.php|aafm_maybe_enqueue_menu_pointer|1' => 'N',
 		'includes/admin/page.php|aafm_get_stored_enabled_abilities_raw|1' => 'G',
@@ -59,7 +60,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/audit/notifications.php|aafm_notifications_settings|1' => 'N',
 		'includes/audit/notifications.php|aafm_notify_pending_list|1' => 'N',
 		'includes/audit/notifications.php|aafm_notify_queue_list|1' => 'N',
-		'includes/audit/read-only.php|aafm_read_only_mode_stored|1' => 'G',
+		'includes/audit/read-only.php|aafm_stored_switch_on|1' => 'G',
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => 'G',
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => 'G',
 		'includes/default-server.php|aafm_default_server_mode|1' => 'G',
@@ -93,7 +94,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/admin/settings.php|aafm_render_settings_tab|1' => array( 'aafm_high_risk_abilities_unlocked' ),
 		'includes/admin/settings.php|aafm_render_settings_tab|2' => array( 'aafm_delete_data_on_uninstall' ),
 		'includes/audit/high-risk.php|aafm_high_risk_unlocked|1' => array( 'aafm_high_risk_abilities_unlocked' ),
-		'includes/audit/read-only.php|aafm_read_only_mode_stored|1' => array( 'aafm_read_only_mode' ),
+		'includes/audit/read-only.php|aafm_stored_switch_on|1' => array( 'aafm_pause_all', 'aafm_read_only_mode' ),
 		'includes/block-guard.php|aafm_block_guard_is_strict|1' => array( 'aafm_block_guard_strict' ),
 		'includes/bridge.php|aafm_get_stored_bridged_abilities_raw|1' => array( 'aafm_enabled_bridged_abilities' ),
 		'includes/default-server.php|aafm_default_server_mode|1' => array( 'aafm_default_server_mode' ),
@@ -136,6 +137,8 @@ final class OptionReadSweepTest extends TestCase {
 	 * @var list<string>
 	 */
 	private const READ_OPTION_VIEWS = array(
+		'includes/access.php|aafm_oauth_install_is_fresh|1',
+		'includes/access.php|aafm_seed_fresh_install_defaults|1',
 		'includes/abilities/woocommerce/gateways.php|aafm_exec_wc_update_payment_gateway|1',
 		'includes/admin/onboarding-pointer.php|aafm_quickconnect_flag_menu_pointer|1',
 		'includes/admin/page.php|aafm_paired_meta_write_three_stage|1',
@@ -350,7 +353,7 @@ final class OptionReadSweepTest extends TestCase {
 			array(
 				'G' => 21,
 				'L' => 3,
-				'N' => 30,
+				'N' => 31,
 			),
 			array(
 				'G' => count( array_keys( self::GET_OPTION, 'G', true ) ),
@@ -375,12 +378,13 @@ final class OptionReadSweepTest extends TestCase {
 	}
 
 	public function test_the_policy_reads_cover_exactly_the_batched_options(): void {
-		$options = array( 'aafm_ability_allowlist_overrides' );
+		// Read only through aafm_policy_row(), never get_option().
+		$options = array( 'aafm_ability_allowlist_overrides', 'aafm_oauth_connect_roles', 'aafm_trusted_proxy', 'aafm_oauth_default_preset' );
 		foreach ( self::G_OPTIONS as $list ) {
 			$options = array_merge( $options, $list );
 		}
 
-		$this->assertCount( 25, aafm_policy_options() );
+		$this->assertCount( 29, aafm_policy_options() );
 		$this->assertSame( $this->sorted( aafm_policy_options() ), $this->sorted( array_values( array_unique( $options ) ) ) );
 	}
 

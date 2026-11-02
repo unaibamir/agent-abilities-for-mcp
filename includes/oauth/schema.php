@@ -38,7 +38,11 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// distinct from the existing user-level aafm_agent_user_marker_meta_key() marker, that marks
 	// an OAuth client itself as an agent connection. Defaults to 0 for every existing row, so a
 	// bump changes no client's flagged state. Additive, no data migration.
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '8' );
+	// v9 adds six nullable columns to the consents table (paused_at, expires_at, last_used_at,
+	// last_used_ip, preset, rate_per_min) for per-connection pause, end date, last use, access preset
+	// and rate limit. NULL in every column means today's behaviour, so no existing row changes meaning
+	// and there is no data migration.
+	define( 'AAFM_OAUTH_SCHEMA_VERSION', '9' );
 }
 
 /**
@@ -61,9 +65,9 @@ function aafm_oauth_table_suffixes(): array {
  * Idempotent: dbDelta() only applies the diff, so repeat calls are no-ops once the
  * tables match. Mirrors aafm_install_activity_log() in includes/audit/log.php.
  *
- * @return void
+ * @return bool True only when the schema version was stamped.
  */
-function aafm_install_oauth_tables(): void {
+function aafm_install_oauth_tables(): bool {
 	global $wpdb;
 	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
@@ -131,6 +135,12 @@ function aafm_install_oauth_tables(): void {
 		wp_user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 		client_id VARCHAR(191) NOT NULL DEFAULT '',
 		granted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		paused_at DATETIME NULL,
+		expires_at DATETIME NULL,
+		last_used_at DATETIME NULL,
+		last_used_ip VARCHAR(45) NULL,
+		preset VARCHAR(20) NULL,
+		rate_per_min INT UNSIGNED NULL,
 		PRIMARY KEY  (id),
 		UNIQUE KEY user_client (wp_user_id, client_id)
 	) ENGINE=InnoDB {$charset_collate};";
@@ -141,7 +151,7 @@ function aafm_install_oauth_tables(): void {
 	dbDelta( $consents );
 
 	$engine_ok = aafm_oauth_enforce_lifecycle_engine();
-	aafm_oauth_finalize_schema( $engine_ok );
+	return aafm_oauth_finalize_schema( $engine_ok );
 }
 
 /**
@@ -327,10 +337,11 @@ add_action( 'admin_notices', 'aafm_oauth_engine_admin_notice' );
  * already sets its own bounded engine warning, so the table-shape notice would be misleading here.
  *
  * @param bool $engine_ok Whether the lifecycle tables are confirmed transactional (or unverifiable).
- * @return void
+ * @return bool True only when the version was stamped.
  */
-function aafm_oauth_finalize_schema( bool $engine_ok ): void {
+function aafm_oauth_finalize_schema( bool $engine_ok ): bool {
 	$schema_ok = aafm_oauth_schema_verify();
+	$stamped   = false;
 
 	if ( $schema_ok ) {
 		delete_transient( 'aafm_oauth_schema_error' );
@@ -344,25 +355,44 @@ function aafm_oauth_finalize_schema( bool $engine_ok ): void {
 		// Verified, not a bare update_option() (Codex round 7, R7-2): aafm_maybe_upgrade_oauth_tables()
 		// below trusts this stamp to decide whether the installer needs to run again, so a write
 		// that a persistent cache silently no-ops must not be allowed to look like it landed.
-		if ( ! aafm_update_option_verified( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION ) ) {
+		// A fresh install is seeded with Administrators as the only approvers before its first stamp,
+		// and the stamp waits for the seed: an unstamped install is the one state the seed can still
+		// recognise as fresh (aafm_seed_fresh_install_defaults()).
+		$seeded  = aafm_seed_fresh_install_defaults();
+		$stamped = $seeded && aafm_update_option_verified( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+		if ( ! $stamped ) {
 			// Codex round 8 R8-3: this return value used to be discarded. The schema itself is
 			// genuinely fine, but with the version left un-stamped, aafm_maybe_upgrade_oauth_tables()
 			// reruns dbDelta() every request instead of settling - and the error transient above
 			// was already cleared on the strength of $schema_ok alone, hiding the persist failure
 			// from the admin notice. Re-set the transient and log the failure so it is visible.
 			set_transient( 'aafm_oauth_schema_error', time(), DAY_IN_SECONDS );
-			aafm_log_ability_persist_failure( 'aafm_oauth_schema_version', __( 'The OAuth schema version', 'agent-abilities-for-mcp' ) );
+			if ( $seeded ) {
+				aafm_log_ability_persist_failure( 'aafm_oauth_schema_version', __( 'The OAuth schema version', 'agent-abilities-for-mcp' ) );
+			} else {
+				aafm_log_ability_persist_failure( 'aafm_oauth_connect_roles', __( 'The roles that can connect apps', 'agent-abilities-for-mcp' ) );
+			}
 		}
 	}
+	return $stamped;
+}
+
+/**
+ * The six per-connection columns schema v9 adds to the consents table.
+ *
+ * @return string[]
+ */
+function aafm_oauth_grant_columns(): array {
+	return array( 'paused_at', 'expires_at', 'last_used_at', 'last_used_ip', 'preset', 'rate_per_min' );
 }
 
 /**
  * Whether the OAuth schema is actually present: all four tables plus the latest columns.
  *
- * Verifies table presence, the v6 `scope` column on codes + access-tokens, and the v8
- * `is_agent_identity` column on clients - the most recent migration, so its absence is the
- * signal a dbDelta run did not fully land. Gates the version stamp in
- * aafm_oauth_finalize_schema().
+ * Verifies table presence, the v6 `scope` column on codes + access-tokens, the v8
+ * `is_agent_identity` column on clients, and every v9 column on consents. The most recent
+ * migration is v9, and every column it adds is checked, because a partial dbDelta can land the
+ * last column and miss an earlier one. Gates the version stamp in aafm_oauth_finalize_schema().
  *
  * @return bool
  */
@@ -371,6 +401,12 @@ function aafm_oauth_schema_verify(): bool {
 
 	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
 		if ( ! aafm_oauth_table_present( $wpdb->prefix . $suffix ) ) {
+			return false;
+		}
+	}
+
+	foreach ( aafm_oauth_grant_columns() as $col ) {
+		if ( ! aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_consents', $col ) ) {
 			return false;
 		}
 	}
@@ -461,6 +497,10 @@ add_action( 'admin_notices', 'aafm_oauth_schema_admin_notice' );
  * needed install, and this file's own docblocks identify missing tables/columns as the failure
  * this guard exists to catch.
  *
+ * Retry policy: activation takes no lock, so the first admin or REST request after a failed
+ * activation retries at once; a failed retry holds aafm_oauth_upgrade_lock for an hour; deactivating
+ * and reactivating the plugin retries immediately.
+ *
  * @return void
  */
 function aafm_maybe_upgrade_oauth_tables(): void {
@@ -468,7 +508,33 @@ function aafm_maybe_upgrade_oauth_tables(): void {
 		return;
 	}
 
-	aafm_install_oauth_tables();
+	// One request upgrades at a time, and a failed upgrade waits an hour before the next try, so a
+	// refused ALTER does not rerun dbDelta() on every admin and REST request. Same lock and same
+	// ceiling as aafm_maybe_upgrade_activity_log(). An unreadable lock counts as held.
+	$held = aafm_transient_count( 'aafm_oauth_upgrade_lock' );
+	if ( null === $held || $held > 0 ) {
+		return;
+	}
+	set_transient( 'aafm_oauth_upgrade_lock', 1, MINUTE_IN_SECONDS );
+	if ( aafm_install_oauth_tables() ) {
+		delete_transient( 'aafm_oauth_upgrade_lock' );
+		return;
+	}
+	set_transient( 'aafm_oauth_upgrade_lock', 1, HOUR_IN_SECONDS );
+}
+
+/**
+ * Seconds before a never-consented, token-less DCR client row is reaped.
+ *
+ * @return int
+ */
+function aafm_oauth_client_reap_ttl(): int {
+	/**
+	 * TTL (seconds) before a never-consented, token-less DCR client row is reaped.
+	 *
+	 * @param int $ttl TTL in seconds. Default 7 days.
+	 */
+	return max( 0, (int) apply_filters( 'aafm_oauth_client_reap_ttl', 7 * DAY_IN_SECONDS ) );
 }
 
 /**
@@ -591,13 +657,7 @@ function aafm_oauth_cleanup(): void {
 function aafm_oauth_reap_abandoned_clients(): int {
 	global $wpdb;
 
-	/**
-	 * TTL (seconds) before a never-consented, token-less DCR client row is reaped.
-	 *
-	 * @param int $ttl TTL in seconds. Default 7 days.
-	 */
-	$ttl    = (int) apply_filters( 'aafm_oauth_client_reap_ttl', 7 * DAY_IN_SECONDS );
-	$cutoff = gmdate( 'Y-m-d H:i:s', time() - max( 0, $ttl ) );
+	$cutoff = gmdate( 'Y-m-d H:i:s', time() - aafm_oauth_client_reap_ttl() );
 
 	$clients_table  = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
 	$consents_table = esc_sql( $wpdb->prefix . 'aafm_oauth_consents' );

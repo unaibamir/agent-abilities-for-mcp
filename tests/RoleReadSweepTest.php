@@ -32,6 +32,7 @@ final class RoleReadSweepTest extends TestCase {
 		'includes/admin/connection.php|aafm_create_agent_user|1' => 'admin write guard: an empty role list is not agent-shaped and writes nothing',
 		'includes/admin/connection.php|aafm_backfill_agent_user_marker|1' => 'admin write guard: same shape',
 		'includes/admin/allowlist.php|aafm_allowlist_sanitize_row|1' => 'role registry (wp_roles()->roles), not a user load',
+		'includes/access.php|aafm_oauth_user_may_connect|1' => 'decision, roles that can connect: the approver, or the grant user loaded by exact id; no roles means refused',
 	);
 
 	private const PROPERTIES = array( 'roles', 'caps', 'allcaps' );

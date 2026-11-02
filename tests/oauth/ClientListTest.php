@@ -269,4 +269,36 @@ final class ClientListTest extends TestCase {
 		$this->assertSame( array(), $grants[0]['user_roles'] );
 		$this->assertTrue( $grants[0]['is_high_privilege'] );
 	}
+
+	public function test_list_grants_carries_the_new_fields_and_stays_json_safe(): void {
+		global $wpdb;
+		$user_id = self::factory()->user->create();
+		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
+		$this->seed_consent( $user_id, 'client_abc' );
+		$wpdb->update(
+			$wpdb->prefix . 'aafm_oauth_consents',
+			array(
+				'paused_at'    => '2026-10-01 00:00:00',
+				'preset'       => 'read_only',
+				'rate_per_min' => 9,
+			),
+			array( 'client_id' => 'client_abc' )
+		);
+
+		$grant = aafm_oauth_list_grants()[0];
+		$this->assertTrue( $grant['paused'] );
+		$this->assertFalse( $grant['expired'] );
+		$this->assertNull( $grant['expires_at'] );
+		$this->assertSame( 'read_only', $grant['preset'] );
+		$this->assertSame( 9, $grant['rate'] );
+		$this->assertNull( $grant['last_used_at'] );
+		$this->assertSame( '', $grant['last_used_ip'] );
+		$this->assertSame( $grant, json_decode( (string) wp_json_encode( $grant ), true ) );
+
+		SchemaV9Test::downgrade_consents_to_v8();
+		$this->seed_consent( $user_id, 'client_abc' );
+		$grant = aafm_oauth_list_grants()[0];
+		aafm_install_oauth_tables();
+		$this->assertFalse( $grant['paused'], 'In the update window the listing reads the defaults instead of erroring.' );
+	}
 }

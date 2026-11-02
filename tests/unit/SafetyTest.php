@@ -181,6 +181,16 @@ final class SafetyTest extends TestCase {
 		$this->assertFalse( aafm_ip_is_allowed( '203.0.113.9' ) );
 	}
 
+	/**
+	 * Only the save path drops blank-looking lines. A stored entry that is only an invisible
+	 * character stays a non-address entry at runtime, so the list is non-empty and refuses everyone.
+	 */
+	public function test_a_stored_invisible_only_entry_still_blocks_everyone(): void {
+		update_option( 'aafm_ip_allowlist', array( "\xC2\xA0" ) );
+		$this->assertNotSame( array(), aafm_ip_allowlist() );
+		$this->assertFalse( aafm_ip_is_allowed( '203.0.113.9' ) );
+	}
+
 	public function test_rate_limit_consume_blocks_over_limit(): void {
 		update_option( 'aafm_rate_limit_per_min', 2 );
 		$uid = 77;

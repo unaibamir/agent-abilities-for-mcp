@@ -32,7 +32,7 @@ ADAPTER='mcp-adapter/mcp-adapter.php'
 QM='query-monitor/query-monitor.php'
 ROUTE_OURS='agent-abilities-for-mcp/mcp'
 ROUTE_DEFAULT='mcp/mcp-adapter-default-server'
-PAGES=('wp-admin/index.php' 'wp-admin/admin.php?page=agent-abilities-for-mcp' 'wp-admin/plugins.php' '')
+PAGES=('wp-admin/index.php' 'wp-admin/admin.php?page=agent-abilities-for-mcp' 'wp-admin/admin.php?page=agent-abilities-for-mcp&tab=connection' 'wp-admin/admin.php?page=agent-abilities-for-mcp&tab=settings' 'wp-admin/plugins.php' '')
 BAD_BODY='Fatal error|Uncaught|already defined|is deprecated'
 # Abilities enabled on the disposable site so tools/list has something to count.
 ENABLED='["aafm/get-posts","aafm/get-pages","aafm/count-posts"]'
@@ -279,13 +279,38 @@ set_state() {
 }
 
 # mcp_post <route> <json body> [session id]: prints the HTTP code; body in body.json, headers in head.txt.
+# Authenticates with the admin's Application Password, or with MCP_BEARER when that is set.
+# MCP_XFF, when set, is sent as X-Forwarded-For.
+MCP_BEARER=''
+MCP_XFF=''
 mcp_post() {
-	local sid=()
+	local sid=() auth=(-u "admin:$APP_PW")
 	[ -n "${3:-}" ] && sid=(-H "Mcp-Session-Id: $3" -H 'MCP-Protocol-Version: 2025-06-18')
+	[ -n "$MCP_BEARER" ] && auth=(-H "Authorization: Bearer $MCP_BEARER")
+	[ -n "$MCP_XFF" ] && auth+=(-H "X-Forwarded-For: $MCP_XFF")
 	curl -s --max-time 60 -D "$SMOKE_ROOT/head.txt" -o "$SMOKE_ROOT/body.json" -w '%{http_code}' \
-		-u "admin:$APP_PW" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+		"${auth[@]}" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
 		${sid[@]+"${sid[@]}"} -X POST "$URL/index.php?rest_route=/$1" -d "$2"
 }
+
+# token_post <form body>: POST to the OAuth token endpoint; prints the HTTP code, body in body.json.
+token_post() {
+	curl -s --max-time 60 -o "$SMOKE_ROOT/body.json" -w '%{http_code}' -d "$1" \
+		"$URL/index.php?rest_route=/agent-abilities-for-mcp/oauth/token"
+}
+
+# bearer_lists <leg> <label> <token> <want file>: the token's tools/list equals the file, byte for byte.
+bearer_lists() {
+	local out="$SMOKE_ROOT/tools-bearer-check.txt"
+	if MCP_BEARER="$3" tools_list "$ROUTE_OURS" "$out" >/dev/null && cmp -s "$out" "$4"; then
+		pass "$1" "$2: tools/list is the same $(wc -l < "$4" | tr -d ' ') tools"
+	else
+		fail "$1" "$2: tools/list was '$(tr '\n' ' ' < "$out")', wanted '$(tr '\n' ' ' < "$4")'"
+	fi
+}
+
+# init_code <token>: HTTP code of an initialize sent with that bearer token ('' = Application Password).
+init_code() { MCP_BEARER="$1" mcp_post "$ROUTE_OURS" "$INIT"; }
 
 # init_ok <leg> <label> <route>
 init_ok() {
@@ -315,7 +340,7 @@ pages_ok() {
 		if [ "$code" != 200 ] || [ "$hits" != 0 ]; then bad="$bad /$p (HTTP $code, $hits error strings)"; fi
 	done
 	if [ -z "$bad" ]; then
-		pass "$1" "$2: 4 pages HTTP 200, no fatal/deprecated text in the body"
+		pass "$1" "$2: ${#PAGES[@]} pages HTTP 200, no fatal/deprecated text in the body"
 	else
 		fail "$1" "$2:$bad"
 	fi
@@ -429,9 +454,26 @@ leg_upgrade() {
 	else
 		fail upgrade "release install: version '$vold' (wanted $FROM), snapshot '$snap'"
 	fi
+	# A live grant under the OLD code: a client, a consent, a token pair, an unredeemed PKCE code and a
+	# client allowlist row, plus the admin's Application Password from setup.
+	local seed="$SMOKE_ROOT/seed.json" bearer consents_before
+	rm -f "$seed"
+	# A php -S worker keeps its realpath cache, so one that served the symlinked tree could still run the
+	# new code for the "before" requests. A fresh server runs only the release now on disk.
+	start_server || return 0
+	W eval-file "$PLUGIN_SRC/bin/smoke-seed-grants.php" "$seed" >/dev/null 2>&1
+	bearer=$(jq -r '.access // empty' "$seed" 2>/dev/null)
+	if [ -z "$bearer" ]; then
+		fail upgrade "could not seed grants on $FROM"
+	fi
+	MCP_BEARER="$bearer" tools_list "$ROUTE_OURS" "$SMOKE_ROOT/tools-bearer-before.txt" >/dev/null
+	MCP_BEARER='' tools_list "$ROUTE_OURS" "$SMOKE_ROOT/tools-basic-before.txt" >/dev/null
+	consents_before=$(W eval 'global $wpdb; echo (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_consents" );' 2>/dev/null)
 	[ -L "$dir" ] || rm -rf "$dir"
 	ln -sfn "$PLUGIN_SRC" "$dir"
 	: > "$LOG"
+	start_server || return 0
+	[ -n "$bearer" ] && upgrade_grant_checks "$seed" "$consents_before"
 	vnew=$(W plugin get agent-abilities-for-mcp --field=version 2>/dev/null)
 	after=$(W option get aafm_enabled_abilities --format=json 2>/dev/null)
 	if W plugin is-active agent-abilities-for-mcp >/dev/null 2>&1 && [ "$vnew" = "$cur" ]; then
@@ -454,6 +496,56 @@ leg_upgrade() {
 		pass upgrade "after $FROM to $cur the activity log is schema 6 and has duration_ms"
 	else
 		fail upgrade "after $FROM to $cur: schema '$schema', duration_ms '$col' (wanted 6 and yes)"
+	fi
+}
+
+# upgrade_grant_checks <seed file> <consent count before>: the grant seeded under the old release, read
+# right after the swap. The code redeems first because it lives only 60 seconds; the new-column check runs
+# before any bearer call, which would stamp last_used_at.
+upgrade_grant_checks() {
+	local seed="$1" before="$2" cid code access fresh got
+	cid=$(jq -r '.client_id' "$seed")
+	code=$(token_post "grant_type=authorization_code&code=$(jq -r '.code' "$seed")&code_verifier=$(jq -r '.code_verifier' "$seed")&client_id=$cid&redirect_uri=$(jq -rn --arg u "$(jq -r '.redirect_uri' "$seed")" '$u|@uri')")
+	access=$(jq -r '.access_token // empty' "$SMOKE_ROOT/body.json" 2>/dev/null)
+	if [ "$code" = 200 ] && [ -n "$access" ]; then
+		pass upgrade "a PKCE code minted before the update redeems after it (HTTP 200)"
+	else
+		fail upgrade "pre-update code redemption: HTTP $code $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
+	fi
+	got=$(W eval 'global $wpdb; $t = $wpdb->prefix . "aafm_oauth_consents"; $ok = true; foreach ( aafm_oauth_grant_columns() as $c ) { $ok = $ok && aafm_oauth_table_has_column( $t, $c ); } echo aafm_read_option_views( "aafm_oauth_schema_version" )["db_value"], " ", $ok ? "columns" : "missing", " ", (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t" ), " ", (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t WHERE COALESCE( paused_at, expires_at, last_used_at, last_used_ip, preset, rate_per_min ) IS NOT NULL" );' 2>/dev/null)
+	if [ "$got" = "9 columns $before 0" ]; then
+		pass upgrade "OAuth schema 9, all six grant columns present, $before consent row(s) kept, every new column NULL"
+	else
+		fail upgrade "schema, columns, consent rows, non-NULL rows: '$got' (wanted '9 columns $before 0')"
+	fi
+	if [ "$(wc -l < "$SMOKE_ROOT/tools-bearer-before.txt" | tr -d ' ')" = 2 ] && [ "$(sort "$SMOKE_ROOT/tools-bearer-before.txt" | tr '\n' ' ')" = "aafm-count-posts aafm-get-posts " ]; then
+		pass upgrade "before the update the bearer listed exactly the two allowlisted tools"
+	else
+		fail upgrade "before the update the bearer listed '$(tr '\n' ' ' < "$SMOKE_ROOT/tools-bearer-before.txt")'"
+	fi
+	bearer_lists upgrade 'the old bearer after the update' "$(jq -r '.access' "$seed")" "$SMOKE_ROOT/tools-bearer-before.txt"
+	bearer_lists upgrade 'the token from the pre-update code' "$access" "$SMOKE_ROOT/tools-bearer-before.txt"
+	if MCP_BEARER='' tools_list "$ROUTE_OURS" "$SMOKE_ROOT/tools-basic-after.txt" >/dev/null && cmp -s "$SMOKE_ROOT/tools-basic-after.txt" "$SMOKE_ROOT/tools-basic-before.txt"; then
+		pass upgrade "the Application Password's tools/list is unchanged"
+	else
+		fail upgrade "Application Password tools/list changed: '$(tr '\n' ' ' < "$SMOKE_ROOT/tools-basic-after.txt")'"
+	fi
+	code=$(token_post "grant_type=refresh_token&refresh_token=$(jq -r '.refresh' "$seed")&client_id=$cid")
+	fresh=$(jq -r '.access_token // empty' "$SMOKE_ROOT/body.json" 2>/dev/null)
+	if [ "$code" = 200 ] && [ -n "$fresh" ]; then
+		pass upgrade "a refresh token minted before the update rotates (HTTP 200)"
+		bearer_lists upgrade 'the rotated token' "$fresh" "$SMOKE_ROOT/tools-bearer-before.txt"
+	else
+		fail upgrade "pre-update refresh: HTTP $code $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
+	fi
+	W eval "aafm_oauth_grant_update( 1, '$cid', array( 'paused' => true ) );" >/dev/null 2>&1
+	got="$(init_code "$access") $(init_code '')"
+	W eval "aafm_oauth_grant_update( 1, '$cid', array( 'paused' => false ) );" >/dev/null 2>&1
+	got="$got $(init_code "$access")"
+	if [ "$got" = '403 200 200' ]; then
+		pass upgrade "pausing the upgraded grant gives the bearer 403, the Application Password still 200, Resume 200"
+	else
+		fail upgrade "pause then resume: bearer, Application Password, bearer answered '$got' (wanted '403 200 200')"
 	fi
 }
 
@@ -717,14 +809,16 @@ leg_default_server_run() {
 	else
 		fail default-server "control: standalone alone: $msg"
 	fi
+	# The adapter version we bundle, read from the tree under test so an adapter bump needs no edit here.
+	bundled=$(sed -n "s/.*const VERSION = '\([^']*\)'.*/\1/p" "$PLUGIN_SRC/vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php")
 	for ver in 0.7.0 0.6.1; do
 		fetch_adapter default-server "$ver" || continue
 		for order in 'ours first' 'standalone first'; do
 			if [ "$order" = 'ours first' ]; then
-				# Declared first, our bundled 0.7.0 loads whatever standalone version is installed.
+				# Declared first, our bundled adapter loads whatever standalone version is installed.
 				plugins="[\"$OURS\",\"$ADAPTER\"]"
-				lv=0.7.0
-				name="bundled 0.7.0 loads, standalone $ver installed, ours first"
+				lv=$bundled
+				name="bundled $bundled loads, standalone $ver installed, ours first"
 			else
 				plugins="[\"$ADAPTER\",\"$OURS\"]"
 				lv=$ver
@@ -741,12 +835,12 @@ leg_default_server_run() {
 	restamp on
 	REQUIRE_GUARD=1
 	for order in 'ours first' 'standalone first'; do
-		if [ "$order" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; else plugins="[\"$ADAPTER\",\"$OURS\"]"; fi
+		if [ "$order" = 'ours first' ]; then plugins="[\"$OURS\",\"$ADAPTER\"]"; lv=$bundled; else plugins="[\"$ADAPTER\",\"$OURS\"]"; lv=0.7.0; fi
 		if set_state default-server "re-stamped public, $order" "$plugins" true 0; then
 			stamped=$(W eval '$a = wp_get_ability( "aafm/get-posts" ); echo $a ? var_export( $a->get_meta()["mcp"]["public"] ?? null, true ) : "missing";' 2>/dev/null)
 			if [ "$stamped" = true ]; then
 				pass default-server "re-stamped public, $order: aafm/get-posts reads meta.mcp.public = true, so the guards are what is under test"
-				ds_scenario "adapter 0.7.0, $order, re-stamped public, another plugin publishes, Automatic" "$plugins" on unset up "$base" 0.7.0
+				ds_scenario "adapter $lv, $order, re-stamped public, another plugin publishes, Automatic" "$plugins" on unset up "$base" "$lv"
 			else
 				fail default-server "re-stamped public, $order: the fixture did not take effect (meta.mcp.public reads '$stamped')"
 			fi
@@ -832,10 +926,11 @@ doctor_status() { echo "$DOCTOR_OUT" | jq -r --arg id "$1" '.[] | select(.id==$i
 doctor_wire() {
 	local code
 	code=$(curl -s --max-time 20 -o "$SMOKE_ROOT/body.json" -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
-		-H "X-AAFM-Doctor: $2" -H "Authorization: AAFM-Doctor $2" -d '{}' "$URL/index.php?rest_route=/$ROUTE_OURS")
+		-H "X-AAFM-Doctor: $2" -H "Authorization: AAFM-Doctor $2" -H 'MCP-Protocol-Version: 2025-06-18' -H 'Mcp-Session-Id: aafm-doctor' \
+		-d '{"aafm_doctor":"json"}' "$URL/index.php?rest_route=/$ROUTE_OURS")
 	if [ "$3" = answer ]; then
-		if [ "$code" = 200 ] && [ "$(jq -c . "$SMOKE_ROOT/body.json" 2>/dev/null)" = '{"aafm_doctor":{"authorization_seen":true,"route_registered":true}}' ]; then
-			pass doctor "$1: HTTP 200 with exactly the two booleans"
+		if [ "$code" = 200 ] && [ "$(jq -c . "$SMOKE_ROOT/body.json" 2>/dev/null)" = '{"aafm_doctor":{"authorization_seen":true,"route_registered":true,"transport_headers_seen":true,"json_body_seen":true}}' ]; then
+			pass doctor "$1: HTTP 200 with exactly the four booleans, MCP headers and JSON body seen"
 		else
 			fail doctor "$1: HTTP $code $(head -c 200 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
 		fi
@@ -859,7 +954,7 @@ leg_doctor() {
 		return 0
 	fi
 	# The disposable site is plain HTTP on plain permalinks with a local environment type.
-	for want in endpoint:pass auth_header:pass app_passwords:pass https:warn permalinks:warn security_plugins:pass; do
+	for want in endpoint:pass auth_header:pass app_passwords:pass https:warn permalinks:warn security_plugins:pass transport_headers:pass json_post:pass; do
 		id=${want%%:*}
 		if [ "$(doctor_status "$id")" = "${want##*:}" ]; then
 			pass doctor "$id is ${want##*:}"
@@ -892,6 +987,132 @@ leg_doctor() {
 		fail doctor "activity rows went from $before to $after across the wire probes"
 	fi
 	log_ok doctor 'Connection Doctor'
+}
+
+# leg_grants: per-connection state on the current code. Presets, pause, pause-all, a per-app rate limit,
+# Check endpoint while paused, and an end date, each read over the real endpoint.
+leg_grants() {
+	local seed="$SMOKE_ROOT/seed-grants.json" cid bearer verdict got jar nonce
+	set_state grants 'ours only' "[\"$OURS\"]" true 0 || return 0
+	W option update aafm_enabled_abilities '["aafm/get-posts","aafm/get-pages","aafm/count-posts","aafm/create-post","aafm/delete-post"]' --format=json >/dev/null 2>&1
+	rm -f "$seed"
+	W eval-file "$PLUGIN_SRC/bin/smoke-seed-grants.php" "$seed" >/dev/null 2>&1
+	W option delete aafm_ability_allowlist_overrides >/dev/null 2>&1
+	cid=$(jq -r '.client_id // empty' "$seed" 2>/dev/null)
+	bearer=$(jq -r '.access // empty' "$seed" 2>/dev/null)
+	[ -n "$bearer" ] || { fail grants "could not seed a grant"; return 0; }
+	grant() { W eval "aafm_oauth_grant_update( 1, '$cid', $1 );" >/dev/null 2>&1; }
+
+	grant "array( 'preset' => 'read_only' )"
+	MCP_BEARER="$bearer" tools_list "$ROUTE_OURS" "$SMOKE_ROOT/g.txt" >/dev/null
+	if [ "$(sort "$SMOKE_ROOT/g.txt" | tr '\n' ' ')" = "aafm-count-posts aafm-get-pages aafm-get-posts " ]; then
+		pass grants "Read only: tools/list holds only the three reads"
+	else
+		fail grants "Read only: tools/list was '$(tr '\n' ' ' < "$SMOKE_ROOT/g.txt")'"
+	fi
+	if MCP_BEARER="$bearer" tools_call "$ROUTE_OURS" aafm-create-post '{"title":"smoke"}' >/dev/null; then verdict=$(call_verdict); else verdict=broken; fi
+	if [ "$verdict" = refused ]; then pass grants "Read only: a write tools/call is refused"; else fail grants "Read only: a write tools/call was '$verdict'"; fi
+	grant "array( 'preset' => 'content_editor' )"
+	MCP_BEARER="$bearer" tools_list "$ROUTE_OURS" "$SMOKE_ROOT/g.txt" >/dev/null
+	if grep -qx aafm-create-post "$SMOKE_ROOT/g.txt" && ! grep -qx aafm-delete-post "$SMOKE_ROOT/g.txt"; then
+		pass grants "Content editor: create-post listed, delete-post hidden"
+	else
+		fail grants "Content editor: tools/list was '$(tr '\n' ' ' < "$SMOKE_ROOT/g.txt")'"
+	fi
+	grant "array( 'preset' => '' )"
+
+	grant "array( 'paused' => true )"
+	got="$(init_code "$bearer") $(init_code '')"
+	if [ "$got" = '403 200' ]; then
+		pass grants "a paused grant gives the bearer a plain 403 while the same user's Application Password still works"
+	else
+		fail grants "paused grant: bearer, Application Password answered '$got' (wanted '403 200')"
+	fi
+	grant "array( 'paused' => false )"
+
+	W eval 'aafm_set_pause_all( true );' >/dev/null 2>&1
+	W option update aafm_default_server_mode on >/dev/null 2>&1
+	got="$(init_code "$bearer") $(init_code '') $(MCP_BEARER='' mcp_post "$ROUTE_DEFAULT" "$INIT")"
+	if [ "$got" = '403 403 403' ]; then
+		pass grants "pause-all: 403 for the bearer and the Application Password, and on the adapter's default server"
+	else
+		fail grants "pause-all: bearer, Application Password, default server answered '$got' (wanted '403 403 403')"
+	fi
+	jar="$SMOKE_ROOT/jar.txt"
+	admin_login "$jar"
+	curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/page.html" "$URL/wp-admin/admin.php?page=agent-abilities-for-mcp&tab=connection"
+	nonce=$(sed -n 's/.*var aafmAdmin = \({.*}\);.*/\1/p' "$SMOKE_ROOT/page.html" | head -1 | jq -r '.nonce // empty' 2>/dev/null)
+	curl -s --max-time 60 -b "$jar" -o "$SMOKE_ROOT/body.json" -d "action=aafm_test_connection&nonce=$nonce" "$URL/wp-admin/admin-ajax.php"
+	if [ -n "$nonce" ] && jq -r '.data.message // empty' "$SMOKE_ROOT/body.json" 2>/dev/null | grep -q 'paused'; then
+		pass grants "Check endpoint says access is paused"
+	else
+		fail grants "Check endpoint while paused: nonce '${nonce:+set}', answer $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
+	fi
+	W eval 'aafm_set_pause_all( false );' >/dev/null 2>&1
+	W option delete aafm_default_server_mode >/dev/null 2>&1
+	got="$(init_code "$bearer") $(init_code '')"
+	if [ "$got" = '200 200' ]; then pass grants "resuming all access lets both credentials in again"; else fail grants "after resume-all: '$got' (wanted '200 200')"; fi
+
+	grant "array( 'rate' => 1 )"
+	got=''
+	for verdict in 1 2; do
+		if MCP_BEARER="$bearer" tools_call "$ROUTE_OURS" aafm-count-posts '{}' >/dev/null; then got="$got $(call_verdict)"; else got="$got broken"; fi
+	done
+	if [ "$got" = ' ran refused' ]; then
+		pass grants "a per-app limit of 1 lets one call through and refuses the next"
+	else
+		fail grants "per-app limit of 1: calls were '$got' (wanted ran refused)"
+	fi
+	grant "array( 'rate' => 0 )"
+
+	grant "array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) )"
+	got="$(init_code "$bearer") $(token_post "grant_type=refresh_token&refresh_token=$(jq -r '.refresh' "$seed")&client_id=$cid")"
+	case "$got" in
+		'401 200') fail grants "an expired grant: the bearer got 401 but the refresh was accepted" ;;
+		401\ *) pass grants "an expired grant: the bearer gets 401 and the refresh is refused (HTTP ${got#401 })" ;;
+		*) fail grants "an expired grant: bearer and refresh answered '$got'" ;;
+	esac
+	W option update aafm_enabled_abilities "$ENABLED" --format=json >/dev/null 2>&1
+	log_ok grants 'grant state'
+}
+
+# leg_proxy: the trusted-proxy visitor address, read from the activity log's source_ip.
+leg_proxy() {
+	local direct got
+	set_state proxy 'ours only' "[\"$OURS\"]" true 0 || return 0
+	last_ip() { W eval 'global $wpdb; echo $wpdb->get_var( "SELECT source_ip FROM {$wpdb->prefix}aafm_activity_log WHERE event_type = \"ability_call\" ORDER BY id DESC LIMIT 1" );' 2>/dev/null; }
+	call_ip() { MCP_XFF="$1" tools_call "$ROUTE_OURS" aafm-count-posts '{}' >/dev/null; last_ip; }
+	proxy() { W option update aafm_trusted_proxy "{\"mode\":\"custom\",\"header\":\"X-Forwarded-For\",\"ranges\":[\"$1\"]}" --format=json >/dev/null 2>&1; }
+	direct=$(call_ip '')
+	case "$direct" in
+		*:*) direct_range="$direct/128" ;;
+		*) direct_range="$direct/32" ;;
+	esac
+	got=$(call_ip 203.0.113.9)
+	if [ -n "$direct" ] && [ "$got" = "$direct" ]; then pass proxy "off by default: a forwarded header is ignored ($direct logged)"; else fail proxy "off: logged '$got', connection is '$direct'"; fi
+	proxy "$direct_range"
+	got=$(call_ip 203.0.113.9)
+	if [ "$got" = 203.0.113.9 ]; then pass proxy "from a trusted proxy ($direct_range) the forwarded address is logged"; else fail proxy "trusted proxy: logged '$got', wanted 203.0.113.9"; fi
+	proxy 10.0.0.0/8
+	got=$(call_ip 203.0.113.9)
+	if [ "$got" = "$direct" ]; then pass proxy "from an untrusted address the forged header is ignored"; else fail proxy "untrusted proxy: logged '$got', wanted $direct"; fi
+	proxy "$direct_range"
+	W option update aafm_ip_allowlist '["203.0.113.9/32"]' --format=json >/dev/null 2>&1
+	got="$(MCP_XFF=203.0.113.9 mcp_post "$ROUTE_OURS" "$INIT") $(mcp_post "$ROUTE_OURS" "$INIT")"
+	if [ "$got" = '200 403' ]; then
+		pass proxy "an IP allowlist of the visitor address admits it through the proxy and refuses the proxy itself"
+	else
+		fail proxy "allowlist through the proxy: with header, without answered '$got' (wanted '200 403')"
+	fi
+	W option delete aafm_ip_allowlist >/dev/null 2>&1
+	: > "$LOG"
+	if W plugin deactivate agent-abilities-for-mcp >/dev/null 2>&1 && W plugin activate agent-abilities-for-mcp >/dev/null 2>&1; then
+		pass proxy "deactivate and activate with a trusted proxy stored"
+	else
+		fail proxy "deactivate or activate failed with a trusted proxy stored"
+	fi
+	W option delete aafm_trusted_proxy >/dev/null 2>&1
+	log_ok proxy 'trusted proxy'
 }
 
 # shots_mode: build the disposable site, seed demo data, point WordPress at the container's own IP so a
@@ -1120,6 +1341,8 @@ leg_upgrade
 leg_default_server
 leg_brief
 leg_doctor
+leg_grants
+leg_proxy
 leg_log
 leg_logscale
 leg_notify

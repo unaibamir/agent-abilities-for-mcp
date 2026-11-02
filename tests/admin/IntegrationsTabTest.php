@@ -497,4 +497,49 @@ final class IntegrationsTabTest extends TestCase {
 
 		$this->assertSame( 1, substr_count( $html, '<form' ), 'The Integrations tab must render exactly one <form>.' );
 	}
+
+	public function test_a_card_with_an_ordinary_write_offers_enable_all_writes_and_a_disabled_card_does_not(): void {
+		$rows = array(
+			array(
+				'name'  => 'aafm/demo-read',
+				'label' => 'Demo read',
+				'risk'  => 'read',
+			),
+			array(
+				'name'  => 'aafm/demo-write',
+				'label' => 'Demo write',
+				'risk'  => 'write',
+			),
+		);
+		ob_start();
+		aafm_render_integration_abilities( 'demo', $rows, array(), array() );
+		$html = (string) ob_get_clean();
+		$this->assertMatchesRegularExpression( '/<button[^>]*aafm-enable-writes[^>]*aria-describedby="aafm-write-note-integration-demo"/', $html );
+
+		ob_start();
+		aafm_render_integration_abilities( 'demo', $rows, array(), array(), true );
+		$this->assertStringNotContainsString( 'aafm-enable-writes', (string) ob_get_clean() );
+	}
+
+	public function test_every_bulk_button_refreshes_the_unsaved_dot(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		foreach ( array( '#bindEnableReads() {', '#bindEnableWrites() {', '#bindSectionToggles() {', '#bindIntegrationToggles() {', '#bindBridgeBulk() {' ) as $method ) {
+			$start = strpos( $js, $method );
+			$this->assertNotFalse( $start, $method );
+			$body = substr( $js, (int) $start, (int) strpos( $js, "\n\t\t#", (int) $start + 1 ) - (int) $start );
+			$this->assertStringContainsString( 'this.#refreshDirty?.();', $body, $method . ' ticks boxes without an event, so it must refresh the dot itself.' );
+		}
+	}
+
+	public function test_the_status_pill_sits_after_the_name_not_in_the_free_space(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$css   = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.css' );
+		$start = strpos( $css, "\t\tdetails.aafm-integration-card {" );
+		$this->assertNotFalse( $start, 'The integration card rule must exist.' );
+		$block = substr( $css, (int) $start, (int) strpos( $css, "\n\t\t\t.abilities-count {", (int) $start ) - (int) $start );
+		// The shared head rule gives a direct-child pill an auto start margin; next to the count's own
+		// auto margin that splits the free space and the pill drifts per row.
+		$this->assertStringContainsString( '> .aafm-pill { margin-inline-start: 0; }', $block );
+	}
 }

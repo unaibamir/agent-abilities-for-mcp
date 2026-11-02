@@ -65,6 +65,13 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
 		),
+		'includes/abilities/blocks.php::aafm_exec_list_block_types::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'namespace\'] )',
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
+			'reason' => 'The list-block-types namespace and search filters. Both are compared against registered block type names and titles and are never written back, so nothing about them reaches storage.',
+		),
 		'includes/abilities/media.php::aafm_exec_count_media::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $input[\'mime_type\'] )',
@@ -203,6 +210,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'The same client_id lookup pattern, plus a \'1\'/\'0\' truthy flag read as plain text and never written back as text (it is cast to a bool, then to an int, before the DB write).',
 		),
+		'includes/admin/connection-cards.php::aafm_ajax_oauth_update_grant::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( $field( \'client_id\' ) )',
+			),
+			'reason' => 'The same client_id lookup on the grant-update path; the grant must exist (aafm_oauth_has_consent()) and nothing is written back under this value.',
+		),
 		'includes/admin/page.php::aafm_sanitize_enabled_input::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( (string) $name )',
@@ -215,11 +228,23 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			),
 			'reason' => 'Shared by aafm_sanitize_settings_input(), which stores a line only after aafm_is_valid_ip_or_cidr() accepts it (no invisible character survives that), and aafm_count_dropped_ip_lines(), which uses the same parse purely to count rejected lines for the save notice and stores nothing at all.',
 		),
+		'includes/admin/settings.php::aafm_settings_remote_addr::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_SERVER[\'REMOTE_ADDR\'] ) )',
+			),
+			'reason' => 'REMOTE_ADDR for the Settings preview line, returned only when filter_var( $remote, FILTER_VALIDATE_IP ) accepts it; it is displayed, never stored.',
+		),
 		'includes/audit/log.php::aafm_source_ip::sanitize_text_field' => array(
 			'calls'  => array(
 				'sanitize_text_field( wp_unslash( $_SERVER[\'REMOTE_ADDR\'] ) )',
 			),
 			'reason' => 'REMOTE_ADDR, returned only when filter_var( $ip, FILTER_VALIDATE_IP ) accepts it and \'\' otherwise, so nothing carrying an invisible character can reach a log row.',
+		),
+		'includes/safety.php::aafm_trusted_proxy_visitor::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) )',
+			),
+			'reason' => 'The trusted proxy\'s visitor header, read only when the request arrives from a trusted range. aafm_pick_visitor_ip() returns an entry only when filter_var( FILTER_VALIDATE_IP ) accepts it and the connection address otherwise, so nothing carrying an invisible character can reach a log row.',
 		),
 		'includes/helpers.php::aafm_rich_post::sanitize_text_field' => array(
 			'calls'  => array(
@@ -232,8 +257,9 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 				'sanitize_text_field( wp_unslash( $_GET[\'aafm_oauth\'] ) )',
 				'sanitize_text_field( wp_unslash( $_POST[\'_wpnonce\'] ) )',
 				'sanitize_text_field( wp_unslash( $_POST[\'aafm_oauth_decision\'] ) )',
+				'sanitize_text_field( wp_unslash( $_POST[\'client_id\'] ) )',
 			),
-			'reason' => 'The request-shaped reads around the consent POST: the ?aafm_oauth marker, the _wpnonce, and the approve/deny decision. All three are compared against known values within the request and none is persisted. The client_name, which IS stored and rendered on this very screen, uses the helper. REQUEST_URI used to be sanitized here too, but 1.7.2 bug #9 moved it to esc_url_raw() (below), since it is reused as a URL, not compared as plain text, and sanitize_text_field() was silently stripping its percent-encoded octets.',
+			'reason' => 'The request-shaped reads around the consent POST: the ?aafm_oauth marker, the _wpnonce, the approve/deny decision, and the client id that names the nonce action. All four are compared against known values within the request and none is persisted. The client_name, which IS stored and rendered on this very screen, uses the helper. REQUEST_URI used to be sanitized here too, but 1.7.2 bug #9 moved it to esc_url_raw() (below), since it is reused as a URL, not compared as plain text, and sanitize_text_field() was silently stripping its percent-encoded octets.',
 		),
 		'includes/oauth/authorize.php::aafm_oauth_read_authorize_params::sanitize_text_field' => array(
 			'calls'  => array(

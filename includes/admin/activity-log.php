@@ -99,17 +99,21 @@ function aafm_render_activity_summary( array $summary ): void {
 	$num = static function ( int $n ) use ( $v ): string {
 		return $v['ok'] ? number_format_i18n( $n ) : '-';
 	};
+	// The Dashboard's stat cards, one per figure, so both tabs show numbers the same way.
 	echo '<section class="aafm-log-summary" id="aafm-log-summary" aria-label="' . esc_attr__( 'Last 7 days', 'agent-abilities-for-mcp' ) . '">';
+	echo '<div class="aafm-stat-grid aafm-log-stats">';
 	$stats = array(
-		'total'  => array( __( 'Calls, last 7 days', 'agent-abilities-for-mcp' ), $num( $v['total'] ) ),
-		'rate'   => array( __( 'Success rate', 'agent-abilities-for-mcp' ), $v['ok'] ? $v['rate'] : '-' ),
-		'denied' => array( __( 'Denied', 'agent-abilities-for-mcp' ), $num( $v['denied'] ) ),
-		'errors' => array( __( 'Errors', 'agent-abilities-for-mcp' ), $num( $v['error'] ) ),
+		'total'  => array( __( 'Calls, last 7 days', 'agent-abilities-for-mcp' ), $num( $v['total'] ), 'bolt' ),
+		'rate'   => array( __( 'Success rate', 'agent-abilities-for-mcp' ), $v['ok'] ? $v['rate'] : '-', 'success' ),
+		'denied' => array( __( 'Denied', 'agent-abilities-for-mcp' ), $num( $v['denied'] ), 'lock' ),
+		'errors' => array( __( 'Errors', 'agent-abilities-for-mcp' ), $num( $v['error'] ), 'warning' ),
 	);
 	foreach ( $stats as $key => $stat ) {
-		echo '<div class="aafm-log-stat"><div class="aafm-log-stat-num" data-summary="' . esc_attr( $key ) . '">' . esc_html( $stat[1] ) . '</div><div class="aafm-log-stat-label">' . esc_html( $stat[0] ) . '</div></div>';
+		aafm_render_stat_head( 'aafm-log-stat', $stat[0], $stat[2] );
+		echo '<div class="stat-value" data-summary="' . esc_attr( $key ) . '">' . esc_html( $stat[1] ) . '</div></div>';
 	}
-	echo '<div class="aafm-log-top"><div class="aafm-log-stat-label">' . esc_html__( 'Top tools', 'agent-abilities-for-mcp' ) . '</div><ol data-summary="top">';
+	aafm_render_stat_head( 'aafm-log-top', __( 'Top tools', 'agent-abilities-for-mcp' ), 'audit' );
+	echo '<ol data-summary="top">';
 	if ( ! $v['ok'] ) {
 		echo '<li>' . esc_html__( 'Summary unavailable.', 'agent-abilities-for-mcp' ) . '</li>';
 	} elseif ( array() === $v['top'] ) {
@@ -119,7 +123,8 @@ function aafm_render_activity_summary( array $summary ): void {
 		echo '<li><code>' . esc_html( (string) $tool['ability'] ) . '</code> ' . esc_html( number_format_i18n( (int) $tool['count'] ) ) . '</li>';
 	}
 	echo '</ol></div>';
-	echo '<p class="aafm-log-summary-note">' . esc_html__( 'Agent tool calls only, updated about once a minute. Times are UTC.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div>'; // .aafm-log-stats
+	echo '<p class="aafm-card-desc aafm-log-summary-note">' . esc_html__( 'Agent tool calls only, updated about once a minute. Times are UTC.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</section>';
 }
 

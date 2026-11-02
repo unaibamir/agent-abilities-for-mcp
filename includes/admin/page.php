@@ -169,6 +169,21 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'cleared'                  => __( 'Cleared', 'agent-abilities-for-mcp' ),
 				'error'                    => __( 'Error', 'agent-abilities-for-mcp' ),
 				'requestFailed'            => __( 'Request failed.', 'agent-abilities-for-mcp' ),
+				'grantActive'              => __( 'Active', 'agent-abilities-for-mcp' ),
+				'grantPaused'              => __( 'Paused', 'agent-abilities-for-mcp' ),
+				'grantExpired'             => __( 'Expired', 'agent-abilities-for-mcp' ),
+				'grantPause'               => __( 'Pause', 'agent-abilities-for-mcp' ),
+				'grantResume'              => __( 'Resume', 'agent-abilities-for-mcp' ),
+				/* translators: %s: user login and app name. */
+				'grantPauseFor'            => __( 'Pause %s', 'agent-abilities-for-mcp' ),
+				/* translators: %s: user login and app name. */
+				'grantResumeFor'           => __( 'Resume %s', 'agent-abilities-for-mcp' ),
+				'grantNothingChanged'      => __( 'Nothing to save.', 'agent-abilities-for-mcp' ),
+				'appPasswordRevokeConfirm' => __( 'Revoke this Application Password? Anything using it stops working right away.', 'agent-abilities-for-mcp' ),
+				'pauseAll'                 => __( 'Pause all access', 'agent-abilities-for-mcp' ),
+				'resumeAll'                => __( 'Resume all access', 'agent-abilities-for-mcp' ),
+				'pauseAllConfirm'          => __( 'Pause all MCP access through this site? Every connected agent is refused until you resume.', 'agent-abilities-for-mcp' ),
+				'dcrOffConfirm'            => __( 'Turn off dynamic client registration? ChatGPT and Claude can no longer register themselves, so new connections from them will fail until you turn it back on.', 'agent-abilities-for-mcp' ),
 				'settingsNotSaved'         => __( 'Could not save - your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
 				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: number of allowlist lines that were dropped as invalid. */
@@ -1684,6 +1699,11 @@ function aafm_render_admin_page(): void {
 	$posture = aafm_exposure_posture();
 	echo '<span class="aafm-page-head-pills">';
 	printf(
+		'<span class="aafm-status-pill aafm-pill aafm-pill-warn" data-posture="paused"%1$s>%2$s</span>',
+		aafm_pause_all() ? '' : ' hidden',
+		esc_html__( 'Access paused', 'agent-abilities-for-mcp' )
+	);
+	printf(
 		'<span class="aafm-status-pill aafm-pill aafm-pill-%1$s" data-posture="%2$s">%3$s</span>',
 		esc_attr( $posture['variant'] ),
 		esc_attr( $posture['state'] ),
@@ -1705,7 +1725,7 @@ function aafm_render_admin_page(): void {
 	foreach ( $tabs as $slug => $label ) {
 		echo wp_kses(
 			sprintf(
-				'<a href="%s" class="nav-tab %s">%s %s</a>',
+				'<a href="%s" class="nav-tab %s" data-tab="%s">%s %s<span class="aafm-dirty-dot" hidden aria-hidden="true"></span><span class="screen-reader-text aafm-dirty-sr" hidden>%s</span></a>',
 				esc_url(
 					add_query_arg(
 						array(
@@ -1716,8 +1736,10 @@ function aafm_render_admin_page(): void {
 					)
 				),
 				esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
+				esc_attr( $slug ),
 				aafm_icon( $slug ),
-				esc_html( $label )
+				esc_html( $label ),
+				esc_html__( 'Unsaved changes', 'agent-abilities-for-mcp' )
 			),
 			aafm_admin_allowed_html()
 		);
@@ -1869,6 +1891,8 @@ function aafm_site_subgroups(): array {
 			'label'     => __( 'Blocks', 'agent-abilities-for-mcp' ),
 			'abilities' => array(
 				'aafm/list-blocks',
+				'aafm/list-block-types',
+				'aafm/get-block-type',
 				'aafm/get-block',
 				'aafm/create-block',
 				'aafm/update-block',
@@ -2013,9 +2037,19 @@ function aafm_render_abilities_tab(): void {
 	// Full WAI-ARIA tabs pattern: each tab carries a stable id + aria-controls pointing at its
 	// panel, roving tabindex (only the active tab is in the tab sequence), and the JS adds
 	// Arrow/Home/End handling. Each panel below carries the matching id + aria-labelledby.
-	$first = array_key_first( $display_tabs );
+	// "All" comes first and is the default view. It is not a second copy of the rows: it shows
+	// every subject panel at once under its subject label, so each checkbox still renders once.
+	$all_rows = array();
+	foreach ( $display_tabs as $tab ) {
+		$all_rows = array_merge( $all_rows, $tab['rows'] );
+	}
+	$first   = 'all';
+	$all_tab = array(
+		'label' => __( 'All', 'agent-abilities-for-mcp' ),
+		'rows'  => $all_rows,
+	);
 	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist" aria-label="' . esc_attr__( 'Ability subjects', 'agent-abilities-for-mcp' ) . '">';
-	foreach ( $display_tabs as $slug => $tab ) {
+	foreach ( array( 'all' => $all_tab ) + $display_tabs as $slug => $tab ) {
 		$is_active = ( $slug === $first );
 		$tab_id    = 'aafm-subject-tab-' . $slug;
 		$panel_id  = 'aafm-subject-panel-' . $slug;
@@ -2033,20 +2067,38 @@ function aafm_render_abilities_tab(): void {
 	}
 	echo '</div>';
 
-	foreach ( $display_tabs as $slug => $tab ) {
-		$is_active = ( $slug === $first );
-		$tab_rows  = $tab['rows'];
-		// data-subject-label: the panel's own heading below is just a count ("27 / 27 enabled"),
-		// never the subject name, so there is nothing on the panel itself to reuse when the
-		// abilities search reveals several panels at once. admin.js reads this to show which
-		// sub-tab a given panel is while more than one is visible.
+	// The All tab's own panel holds only its bulk controls; the rows are the subject panels below.
+	echo '<div class="aafm-subject-all" role="tabpanel" id="aafm-subject-panel-all" aria-labelledby="aafm-subject-tab-all">';
+	aafm_render_abilities_bulk_toolbar( 'all', $all_rows );
+	// The Total abilities card above counts integration abilities too; say where
+	// the difference lives so the two numbers do not look like they disagree.
+	$elsewhere = $ability_total - count( $all_rows );
+	if ( $elsewhere > 0 ) {
 		printf(
-			'<div class="aafm-subject-panel" data-subject="%1$s" data-subject-label="%2$s" role="tabpanel" id="%3$s" aria-labelledby="%4$s" tabindex="0"%5$s>',
+			'<p class="aafm-card-desc aafm-subject-all-note">%s</p>',
+			esc_html(
+				sprintf(
+					/* translators: 1: number of built-in abilities listed here, 2: number of abilities listed on other tabs. */
+					_n( 'All lists the %1$s built-in abilities. The other %2$s is on the Integrations tab.', 'All lists the %1$s built-in abilities. The other %2$s are on the Integrations tab.', $elsewhere, 'agent-abilities-for-mcp' ),
+					number_format_i18n( count( $all_rows ) ),
+					number_format_i18n( $elsewhere )
+				)
+			)
+		);
+	}
+	echo '</div>';
+
+	foreach ( $display_tabs as $slug => $tab ) {
+		$tab_rows = $tab['rows'];
+		// The panel's own heading below is just a count ("27 / 27 enabled"), never the subject name,
+		// so the subject label names the group whenever several panels show at once: the All tab
+		// and a cross-tab search. admin.js hides it while a single subject tab is open.
+		printf(
+			'<div class="aafm-subject-panel" data-subject="%1$s" data-subject-label="%2$s" role="tabpanel" id="%3$s" aria-labelledby="%4$s" tabindex="0"><p class="aafm-subject-search-label">%2$s</p>',
 			esc_attr( $slug ),
 			esc_attr( $tab['label'] ),
 			esc_attr( 'aafm-subject-panel-' . $slug ),
-			esc_attr( 'aafm-subject-tab-' . $slug ),
-			$is_active ? '' : ' hidden'
+			esc_attr( 'aafm-subject-tab-' . $slug )
 		);
 
 		// Per-tab count badge: how many of this tab's abilities are enabled.
@@ -2068,56 +2120,7 @@ function aafm_render_abilities_tab(): void {
 			esc_html__( 'enabled', 'agent-abilities-for-mcp' )
 		);
 
-		// Per-section enable/disable-all control. JS scopes by .aafm-subject-panel[data-subject]
-		// and toggles every checkbox in this panel; data-has-destructive tells it to confirm before
-		// bulk-enabling a section that contains a destructive ability.
-		$has_destructive = false;
-		foreach ( $tab_rows as $ability ) {
-			if ( 'destructive' === (string) ( $ability['risk'] ?? '' ) ) {
-				$has_destructive = true;
-				break;
-			}
-		}
-		// "Enable all writes" only renders where it can actually do something. A section with no
-		// ordinary write row, or one where every write is currently locked (read-only mode on, or
-		// the high-risk category shut), would render a button guaranteed to tick nothing - the
-		// failure mode that looks exactly like success. aafm_ability_lock_reason() covers both lock
-		// causes; the explicit high-risk test covers the UNLOCKED high-risk ability, which the lock
-		// predicate lets through but this control still refuses to touch.
-		$has_enableable_write = false;
-		foreach ( $tab_rows as $ability ) {
-			$write_name = (string) ( $ability['name'] ?? '' );
-			if ( 'write' !== (string) ( $ability['risk'] ?? '' ) ) {
-				continue;
-			}
-			if ( aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
-				continue;
-			}
-			$has_enableable_write = true;
-			break;
-		}
-
-		// The note is not decoration: "writes" on its own reads as "everything that changes the
-		// site", and this control deliberately stops short of deletes and the high-risk category.
-		// aria-describedby hangs it off the button so a screen reader announces the caveat with the
-		// control rather than only sighted users seeing it.
-		$write_note_id = 'aafm-write-note-' . sanitize_key( $slug );
-
-		printf(
-			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
-			esc_attr( $slug ),
-			$has_destructive ? ' data-has-destructive="1"' : '',
-			esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
-			esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
-			$has_enableable_write
-				? sprintf(
-					' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
-					esc_attr( $write_note_id ),
-					esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
-					esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
-				)
-				: ''
-		);
+		aafm_render_abilities_bulk_toolbar( $slug, $tab_rows );
 
 		if ( 'content' === $slug ) {
 			aafm_render_post_types_selector();
@@ -2184,6 +2187,73 @@ function aafm_render_abilities_tab(): void {
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
 	// feature - it would filter $enabled per principal here rather than at render time.
+}
+
+/**
+ * Echo the bulk controls for a set of ability rows: Enable all / Disable all, Enable all reads and,
+ * where it can tick something, Enable all writes.
+ *
+ * Used once per subject panel and once for the All tab, where `$slug` is 'all' and `$tab_rows` is
+ * every row, so the All tab's buttons act on the whole form through the same JS bindings.
+ *
+ * @param string                         $slug     Display-tab slug, or 'all'.
+ * @param array<int,array<string,mixed>> $tab_rows The ability entries the controls act on.
+ * @return void
+ */
+function aafm_render_abilities_bulk_toolbar( string $slug, array $tab_rows ): void {
+	// Per-section enable/disable-all control. JS scopes by .aafm-subject-panel[data-subject]
+	// (the whole form for 'all') and toggles every checkbox in it; data-has-destructive tells it to confirm before
+	// bulk-enabling a section that contains a destructive ability.
+	$has_destructive = false;
+	foreach ( $tab_rows as $ability ) {
+		if ( 'destructive' === (string) ( $ability['risk'] ?? '' ) ) {
+			$has_destructive = true;
+			break;
+		}
+	}
+	printf(
+		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
+		esc_attr( $slug ),
+		$has_destructive ? ' data-has-destructive="1"' : '',
+		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
+		esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
+		wp_kses( aafm_enable_writes_button_html( $slug, $tab_rows ), aafm_admin_allowed_html() )
+	);
+}
+
+/**
+ * The "Enable all writes" button and its caveat, or '' when no row in the set is an ordinary
+ * write that can be ticked. Shared by the Abilities and Integrations bulk controls.
+ *
+ * "Enable all writes" only renders where it can actually do something. A set with no ordinary
+ * write row, or one where every write is currently locked (read-only mode on, or the high-risk
+ * category shut), would render a button guaranteed to tick nothing - the failure mode that looks
+ * exactly like success. aafm_ability_lock_reason() covers both lock causes; the explicit high-risk
+ * test covers the UNLOCKED high-risk ability, which the lock predicate lets through but this
+ * control still refuses to touch.
+ *
+ * @param string                         $slug Scope slug, used for the caveat's id.
+ * @param array<int,array<string,mixed>> $rows The ability entries the button acts on.
+ * @return string Escaped HTML, starting with a space.
+ */
+function aafm_enable_writes_button_html( string $slug, array $rows ): string {
+	foreach ( $rows as $ability ) {
+		$write_name = (string) ( $ability['name'] ?? '' );
+		if ( 'write' !== (string) ( $ability['risk'] ?? '' ) || aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
+			continue;
+		}
+		// The note is not decoration: "writes" on its own reads as "everything that changes the
+		// site", and this control deliberately stops short of deletes and the high-risk category.
+		// aria-describedby hangs it off the button so a screen reader announces the caveat with
+		// the control rather than only sighted users seeing it.
+		return sprintf(
+			' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
+			esc_attr( 'aafm-write-note-' . sanitize_key( $slug ) ),
+			esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
+			esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
+		);
+	}
+	return '';
 }
 
 /**
@@ -2364,21 +2434,18 @@ function aafm_abilities_display_tabs( array $subjects, array $by_subject, array 
 function aafm_render_post_types_selector(): void {
 	$eligible = array_values( array_diff( aafm_eligible_post_types(), array( 'post', 'page' ) ) );
 	$allowed  = aafm_allowed_post_types();
+	$head     = '<div class="aafm-card-head">' . aafm_card_head_html( 'file', __( 'Exposed content types', 'agent-abilities-for-mcp' ) ) . '</div><div class="aafm-card-pad"><p class="aafm-card-desc">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	if ( empty( $eligible ) ) {
-		echo '<div class="aafm-card aafm-card-pad">';
-		echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
-		echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<div class="aafm-card aafm-post-types">' . wp_kses( $head, aafm_admin_allowed_html() );
 		aafm_render_notice( 'info', __( 'No custom content types on this site are eligible to expose. Only public, non-internal types can be offered here.', 'agent-abilities-for-mcp' ) );
-		echo '</div>';
+		echo '</div></div>';
 		return;
 	}
 
 	// The selector is a plain <div> (never a nested <form>): only the outer abilities <form>
 	// may open a form here, and the tab's one Save button saves this section.
-	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types" data-aafm-section="post_types">';
-	echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<div id="aafm-post-types-form" class="aafm-card aafm-post-types" data-aafm-section="post_types">' . wp_kses( $head, aafm_admin_allowed_html() );
 	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-post-types-table"><thead><tr>';
 	echo '<th scope="col">' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
@@ -2418,7 +2485,7 @@ function aafm_render_post_types_selector(): void {
 	echo '</div>'; // .aafm-table-wrap
 	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
 	echo '<p class="aafm-section-result aafm-post-types-status" hidden></p>';
-	echo '</div>';
+	echo '</div></div>';
 }
 
 /**
@@ -2435,13 +2502,13 @@ function aafm_render_post_types_selector(): void {
  * @param array<string,mixed> $cfg {
  *     Render config.
  *     @type string        $container_id        Wrapping <div> id.
- *     @type string        $exposed_title       H3 text above the exposed textarea.
- *     @type string        $exposed_description Paragraph under that h3.
+ *     @type string        $exposed_title       Card title, above the exposed textarea.
+ *     @type string        $exposed_description Paragraph opening the card body.
  *     @type string        $warning             Text for the warning notice between them.
  *     @type string[]      $exposed             Exposed keys ('*' already restored if set).
  *     @type string        $exposed_field_name  Textarea name attribute.
  *     @type string        $exposed_textarea_id Textarea id attribute.
- *     @type string        $exposed_label_id    Id the h3 carries, referenced by aria-labelledby.
+ *     @type string        $exposed_label_id    Id the card title carries, referenced by aria-labelledby.
  *     @type string        $exposed_hint_id     Id the hint paragraph carries.
  *     @type string[]|null $detected            Detected keys to render as chips, or null to
  *                                               skip the whole "detected" section.
@@ -2457,9 +2524,10 @@ function aafm_render_post_types_selector(): void {
  * @return void
  */
 function aafm_render_meta_keys_pair( array $cfg ): void {
-	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-card-pad aafm-meta-keys" data-aafm-section="' . esc_attr( $cfg['section'] ) . '">';
-	echo '<h3 id="' . esc_attr( $cfg['exposed_label_id'] ) . '">' . esc_html( $cfg['exposed_title'] ) . '</h3>';
-	echo '<p class="description">' . esc_html( $cfg['exposed_description'] ) . '</p>';
+	echo '<div id="' . esc_attr( $cfg['container_id'] ) . '" class="aafm-card aafm-meta-keys" data-aafm-section="' . esc_attr( $cfg['section'] ) . '">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'tag', $cfg['exposed_title'], $cfg['exposed_label_id'] ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
+	echo '<p class="aafm-card-desc">' . esc_html( $cfg['exposed_description'] ) . '</p>';
 	aafm_render_notice( 'warning', $cfg['warning'] );
 
 	printf(
@@ -2503,7 +2571,7 @@ function aafm_render_meta_keys_pair( array $cfg ): void {
 	echo '<p class="description" id="' . esc_attr( $cfg['denied_hint_id'] ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<p class="aafm-section-result ' . esc_attr( $cfg['status_class'] ) . '" hidden></p>';
-	echo '</div>';
+	echo '</div></div>';
 }
 
 /**
@@ -2680,6 +2748,11 @@ function aafm_render_activity_tab(): void {
 
 	aafm_render_activity_summary( aafm_activity_summary() );
 
+	// The controls, filters, table and pager sit in one card, like every other tab's content.
+	echo '<section class="aafm-card aafm-log-card">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'activity', __( 'Log entries', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
+
 	// Status filter - server-side: each button re-queries page 1 with its status (admin.js).
 	echo '<div class="aafm-activity-toolbar">';
 	echo '<div class="aafm-seg" role="group" aria-label="' . esc_attr__( 'Filter by status', 'agent-abilities-for-mcp' ) . '">';
@@ -2789,6 +2862,7 @@ function aafm_render_activity_tab(): void {
 	);
 	echo '</div>';
 
+	echo '</div></section>'; // .aafm-card-pad, .aafm-log-card
 	echo '</div>';
 }
 
@@ -3012,7 +3086,8 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 	foreach ( $rows as $row ) {
 		$v     = aafm_activity_row_view( $row, $names );
 		$html .= sprintf(
-			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td>%5$s</td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td>%10$s</td><td>%11$s</td></tr>',
+			// The short columns clip with an ellipsis, so each carries its full text as a title.
+			'<tr><td>%1$s</td><td title="%2$s">%2$s</td><td title="%3$s">%3$s</td><td title="%4$s">%4$s</td><td class="aafm-log-detail%12$s" title="%13$s"><span class="aafm-log-detail-text">%5$s</span></td><td><span class="aafm-pill aafm-pill-%6$s aafm-status aafm-status-%7$s">%8$s</span></td><td>%9$s</td><td title="%10$s">%10$s</td><td title="%11$s">%11$s</td></tr>',
 			esc_html( $v['time'] ),
 			esc_html( $v['principal'] ),
 			esc_html( $v['connection'] ),
@@ -3023,7 +3098,9 @@ function aafm_activity_rows_html( array $rows, bool $filtered = false ): string 
 			esc_html( $v['status'] ),
 			esc_html( $v['duration'] ),
 			esc_html( $v['ip'] ),
-			esc_html( $v['arg_keys'] )
+			esc_html( $v['arg_keys'] ),
+			1 === preg_match( '/^\s*[\[{]/', (string) $v['detail'] ) ? ' is-json' : '',
+			esc_attr( (string) $v['detail'] )
 		);
 	}
 	return $html;
@@ -3474,6 +3551,7 @@ function aafm_render_help_tab(): void {
 		__( 'Is there rate limiting?', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'Yes. The Settings tab has a "Rate limit (per minute)" field. Set it to a number and each agent user can make at most that many calls per minute; set it to 0 to turn the limit off. The cap is counted per agent user, not per connection, so two connections signed in as the same agent user share one budget between them.', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'On the Connection tab you can also give one OAuth connection a lower limit of its own. Each of its calls still counts against the agent user\'s limit as well.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)

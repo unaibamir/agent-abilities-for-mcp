@@ -16,6 +16,8 @@
 	     diagnostic scripts, never shipped, and a leftover probe there must not be able to turn the
 	     whole gate red for code that does ship. -->
 	<exclude-pattern>*/.scratch/*</exclude-pattern>
+	<!-- scratchpad/ is the same kind of git-ignored working space. -->
+	<exclude-pattern>*/scratchpad/*</exclude-pattern>
 	<!-- bin/ holds standalone developer CLIs (e.g. the MCP regression harness) that run with no
 	     WordPress bootstrap, so they use fwrite()/curl directly and a single-file class - WPCS does
 	     not apply. They are export-ignored from the build and never ship. -->

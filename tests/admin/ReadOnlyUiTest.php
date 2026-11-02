@@ -268,7 +268,8 @@ final class ReadOnlyUiTest extends TestCase {
 	public function test_the_endpoint_pill_still_renders_beside_it(): void {
 		$html = $this->render_admin_page();
 		$this->assertStringContainsString( 'aafm-page-head-pills', $html );
-		$this->assertSame( 2, substr_count( $html, 'aafm-status-pill' ), 'The header carries exactly two pills: posture and endpoint.' );
+		// The "Access paused" pill is always in the markup for the script, hidden while access is not paused.
+		$this->assertSame( 2, substr_count( $html, 'aafm-status-pill' ) - substr_count( $html, 'data-posture="paused" hidden' ), 'The header shows exactly two pills: posture and endpoint.' );
 	}
 
 	// ---------------------------------------------------------------------------------------

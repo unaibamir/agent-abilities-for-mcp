@@ -49,15 +49,13 @@
 
 /* Shared disclosure chevron: the solid-triangle affordance every <details>/<summary>
    accordion in the admin uses (integration cards, the abilities "show more" remainder,
-   the dashboard setup panel, the help/FAQ entries, a collapsible settings section, and
-   the app-password fallback). Each site keeps its own layout (flex vs inline-block),
+   the dashboard setup panel, the help/FAQ entries and a collapsible settings section). Each site keeps its own layout (flex vs inline-block),
    margin, and any color override as a one-line addition on its own selector below. */
 .aafm-wrap .aafm-integrations details.aafm-integration-card > summary.aafm-card-head::after,
 .aafm-wrap details.aafm-set-more > summary::after,
 .aafm-wrap .aafm-setup .aafm-setup-top::after,
 .aafm-wrap .aafm-help .aafm-help-entry summary::after,
-.aafm-wrap .aafm-section--collapsible > summary::after,
-.aafm-connection .aafm-app-password-fallback > summary::after {
+.aafm-wrap .aafm-section--collapsible > summary::after {
 	content: "";
 	inline-size: 0;
 	block-size: 0;
@@ -70,16 +68,14 @@
 .aafm-wrap details.aafm-set-more[open] > summary::after,
 .aafm-wrap .aafm-setup[open] .aafm-setup-top::after,
 .aafm-wrap .aafm-help .aafm-help-entry[open] summary::after,
-.aafm-wrap .aafm-section--collapsible[open] > summary::after,
-.aafm-connection .aafm-app-password-fallback[open] > summary::after {
+.aafm-wrap .aafm-section--collapsible[open] > summary::after {
 	transform: rotate(180deg);
 }
 
 .aafm-wrap {
 	--aafm-mono: Menlo, Consolas, Monaco, "Courier New", monospace;
-	/* ponytail: the outer ring is 25% alpha, so keyboard focus is faint on some backgrounds. Darken the
-	   alpha (or add a solid outline) if an accessibility audit flags the contrast. */
-	--aafm-ring: 0 0 0 2px #fff, 0 0 0 4px rgba(34, 113, 177, 0.25);
+	/* The one keyboard focus ring: a white gap, then a solid accent ring. */
+	--aafm-ring: 0 0 0 2px #fff, 0 0 0 4px var(--aafm-accent);
 	--aafm-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.07);
 	/* The large display figure on the dashboard/abilities stat cards. A named token
 	   instead of a bare 28px so every stat card shares one type size. */
@@ -88,6 +84,12 @@
 	color: var(--aafm-text);
 	font-size: 14px;
 	line-height: 1.5;
+
+	/* Core colours checked checkboxes and radios with the admin theme colour; point it at the
+	   plugin accent so they match the toggles and buttons beside them. */
+	--wp-admin-theme-color: var(--aafm-accent);
+	--wp-admin-theme-color-darker-10: var(--aafm-accent-hover);
+	--wp-admin-theme-color-darker-20: #0a4b78;
 
 	/* Base size for every inline SVG icon. Specific contexts (pills, card-heads,
 	   stat cards, client cards, buttons) override this with their own dimensions;
@@ -147,9 +149,10 @@
 	   admin output. The icon inside a button is sized 15px to match the mockup. */
 	.aafm-btn {
 		display: inline-flex;
+		box-sizing: border-box;
 		align-items: center;
 		gap: 7px;
-		block-size: 34px;
+		block-size: var(--aafm-control-h);
 		padding-inline: 14px;
 		border-radius: var(--aafm-radius-sm);
 		font-size: 13px;
@@ -198,6 +201,19 @@
 		}
 	}
 
+	/* Destructive action: the secondary shape in the red tokens. */
+	.aafm-btn-danger {
+		background: var(--aafm-surface);
+		color: var(--aafm-red-text);
+		border-color: var(--aafm-red);
+
+		&:hover {
+			background: var(--aafm-red-tint);
+			border-color: var(--aafm-red-text);
+			color: var(--aafm-red-text);
+		}
+	}
+
 	.aafm-btn-ghost {
 		background: transparent;
 		color: var(--aafm-text-muted);
@@ -241,6 +257,7 @@
 	input[type="password"],
 	input[type="tel"],
 	input[type="number"],
+	input[type="date"],
 	select,
 	textarea {
 		/* WP core pins these to a 40px floor via `min-height`, a different property from
@@ -253,7 +270,9 @@
 		padding-inline: var(--aafm-space-3);
 		border: 1px solid var(--aafm-border-strong);
 		border-radius: var(--aafm-radius-sm);
-		background: var(--aafm-surface);
+		/* background-color, never the shorthand: core draws the select chevron as a
+		   background-image, and the shorthand would wipe it. */
+		background-color: var(--aafm-surface);
 		color: inherit;
 		font-size: var(--aafm-fs-base);
 
@@ -264,8 +283,16 @@
 		}
 	}
 
+	/* Disclosure summaries take the same focus ring as buttons and tabs, not the browser outline. */
+	summary:focus-visible {
+		outline: none;
+		box-shadow: var(--aafm-ring);
+	}
+
 	select {
 		font-family: inherit;
+		/* Room for core's chevron, as core's own select padding leaves. */
+		padding-inline-end: var(--aafm-space-6);
 	}
 
 	/* Textareas size by rows, not the fixed control height; they still share the
@@ -307,6 +334,10 @@
 
 	/* ---------- Pills / status ---------- */
 	.aafm-pill {
+		/* Pills toggled with the hidden attribute (the "Access paused" header pill) need this:
+		   an author display rule beats the user agent's [hidden] { display: none }. */
+		&[hidden] { display: none; }
+
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
@@ -386,37 +417,43 @@
 
 	.aafm-card-pad {
 		padding-block: 18px;
-		padding-inline: 20px;
+		padding-inline: var(--aafm-space-5);
 	}
 
+	/* The one card header: icon, title, then an optional pill at the row end. Explanatory
+	   text never goes here; it opens the body as .aafm-card-desc. */
 	.aafm-card-head {
 		display: flex;
 		align-items: center;
 		gap: 10px;
 		padding-block: 14px;
-		padding-inline: 20px;
+		padding-inline: var(--aafm-space-5);
 		border-block-end: 1px solid var(--aafm-border);
 
 		h2,
 		.aafm-card-head-title {
 			margin: 0;
-			font-size: 14px;
+			font-size: var(--aafm-fs-body);
 			font-weight: 600;
 		}
 
 		/* aafm_render_section() wraps the title (and optional description) in a
 		   text column so a pill can sit at the row end; the head still lays the
 		   icon + text out in a row. */
-		.aafm-card-head-text {
+		/* At least a pill tall, so a head with a pill or badge is no taller than one without. The
+		   bare h2 covers the Integrations and Other plugins summaries, which have no text column. */
+		.aafm-card-head-text,
+		> h2 {
 			display: flex;
 			flex-direction: column;
+			justify-content: center;
 			gap: 2px;
+			min-block-size: 24px;
 		}
 
-		.aafm-card-head-desc {
-			margin: 0;
-			font-size: 12.5px;
-			color: var(--aafm-text-subtle);
+		> .aafm-pill,
+		> .aafm-count-badge {
+			margin-inline-start: auto;
 		}
 
 		.icon,
@@ -430,6 +467,18 @@
 				block-size: 18px;
 				font-size: 18px;
 			}
+		}
+	}
+
+	/* A card's explanation or closing note: small and muted. Opening the body it keeps a gap
+	   below; closing the body, a gap above. */
+	.aafm-card-desc {
+		margin-block: 0 var(--aafm-space-3);
+		font-size: var(--aafm-fs-sm);
+		color: var(--aafm-text-subtle);
+
+		&:last-child:not(:first-child) {
+			margin-block: var(--aafm-space-3) 0;
 		}
 	}
 
@@ -505,6 +554,20 @@
 		}
 	}
 
+	/* ---------- Loading placeholders (Activity Log rows, Connection Doctor) ---------- */
+	.aafm-skeleton {
+		display: block;
+		block-size: 1em;
+		border-radius: 4px;
+		background: linear-gradient(90deg, var(--aafm-surface-2, #f0f0f1) 25%, var(--aafm-border, #dcdcde) 37%, var(--aafm-surface-2, #f0f0f1) 63%);
+		background-size: 400% 100%;
+		animation: aafm-skeleton 1.2s ease infinite;
+
+		#aafm-doctor-results > & { block-size: 2.5em; margin-block-end: 8px; }
+
+		@media (prefers-reduced-motion: reduce) { animation: none; }
+	}
+
 	/* ---------- Endpoint field (mono) ---------- */
 	.aafm-endpoint {
 		display: inline-block;
@@ -514,16 +577,8 @@
 		font-family: var(--aafm-mono);
 		background: var(--aafm-surface-2);
 		border: 1px solid var(--aafm-border);
-		border-radius: 3px;
+		border-radius: var(--aafm-radius-sm);
 		overflow-wrap: anywhere;
-	}
-
-	/* In the dashboard endpoint card the URL stays on one line beside the inline
-	   Copy button (matches the mockup), scrolling horizontally rather than wrapping tall. */
-	.aafm-card-endpoint .aafm-field-mono .aafm-endpoint {
-		overflow-x: auto;
-		overflow-wrap: normal;
-		white-space: nowrap;
 	}
 
 	.aafm-snippet {
@@ -569,11 +624,15 @@
 		margin-block-end: 8px;
 	}
 
+	/* Each row's label sits on its own line above its text, so the two never run together. */
 	.aafm-os-note {
-		max-inline-size: 760px;
+		.aafm-os-note-label {
+			display: block;
+			font-weight: 600;
+		}
 
 		.aafm-os-note-row + .aafm-os-note-row {
-			margin-block-start: 6px;
+			margin-block-start: var(--aafm-space-2);
 		}
 
 		code {
@@ -660,19 +719,15 @@
 	/* ---------- Accordion content contract ----------
 	   An accordion in this plugin comes in two shapes. Most wrap their content in a body
 	   element that supplies the horizontal inset (.aafm-section-body, .aafm-integration-body,
-	   .aafm-set-more-body, .aafm-help-body). Three do not, and put content directly inside
-	   the <details>: the app-password fallback, the bridge alternative, and the dashboard
-	   setup card. In those, anything dropped in ran edge to edge, which is how the
-	   app-password warning notice ended up flush against the card border while its sibling
-	   .aafm-step rows looked correct (they carried their own margin-inline, so the gap was
-	   invisible until something without one landed there).
+	   .aafm-set-more-body, .aafm-help-body). Two do not, and put content directly inside
+	   the <details>: the bridge alternative and the dashboard setup card. In those, anything
+	   dropped in would run edge to edge.
 
 	   Rather than patch the one component that showed the symptom, give the bare shape the
 	   same gutter contract a body wrapper provides. Any direct child gets it, so a notice,
 	   a table or a plain paragraph added later lands correctly with no wrapper markup and no
 	   author having to know. Children that already supply their own inset are normalised onto
 	   the token below rather than left to double it. */
-	.aafm-app-password-fallback,
 	.aafm-bridge-alt,
 	.aafm-setup {
 		> *:not(summary) {
@@ -727,6 +782,17 @@
 				border-radius: var(--aafm-radius-sm);
 				outline: none;
 			}
+
+			/* Unsaved-changes dot. The display rule needs its [hidden] twin spelled out. */
+			.aafm-dirty-dot {
+				display: inline-block;
+				inline-size: 8px;
+				block-size: 8px;
+				border-radius: 50%;
+				background: var(--aafm-amber, #dba617);
+
+				&[hidden] { display: none; }
+			}
 		}
 
 		.nav-tab-active,
@@ -743,6 +809,7 @@
 		.aafm-nav-ext-group {
 			margin-inline-start: auto;
 			display: inline-flex;
+			flex-wrap: wrap;
 			align-items: center;
 			gap: 2px;
 		}
@@ -836,6 +903,31 @@
 
 	.aafm-subject-panel {
 		margin-block-start: 4px;
+	}
+
+	/* Bulk controls (Abilities and Integrations): one row of buttons, then the "Enable all
+	   writes" caveat, which wraps below on a narrow screen. The caveat is the button's
+	   aria-describedby target, so it stays rendered and readable at every width. */
+	.aafm-section-toggle {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--aafm-space-2);
+
+		/* The abilities search hides panel chrome with the hidden attribute. */
+		&[hidden] { display: none; }
+
+		> .aafm-section-toggle-note {
+			margin-inline-start: var(--aafm-space-1);
+			font-size: var(--aafm-fs-sm);
+			color: var(--aafm-text-subtle);
+		}
+	}
+
+	/* In the All view the All tab's own bulk controls cover every panel, so each panel's
+	   copy is hidden rather than shown again under every category. */
+	.aafm-abilities:has(> .aafm-subject-all:not([hidden])) .aafm-subject-panel .aafm-section-toggle {
+		display: none;
 	}
 
 	.aafm-subject-heading {
@@ -1182,15 +1274,15 @@
 		}
 	}
 
-	/* Shown above a panel's own heading only while a cross-tab search leaves more than one
-	   .aafm-subject-panel visible at once, naming which sub-tab that panel is. */
+	/* Shown above a panel's own heading while more than one .aafm-subject-panel is visible (the
+	   All tab, or a cross-tab search), naming which sub-tab that panel is. */
 	.aafm-subject-search-label {
-		margin-block: 0 4px;
-		font-size: 12px;
+		margin-block: var(--aafm-space-6) var(--aafm-space-2);
+		padding-block-start: var(--aafm-space-4);
+		border-block-start: 1px solid var(--aafm-border);
+		font-size: var(--aafm-fs-lg);
 		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.02em;
-		color: var(--aafm-text-subtle);
+		color: var(--aafm-text);
 	}
 
 	/* ---------- Integration cards (Integrations tab) ---------- */
@@ -1206,7 +1298,7 @@
 		}
 
 		.aafm-integration-note {
-			font-size: 13px;
+			font-size: var(--aafm-fs-sm);
 			color: var(--aafm-text-subtle);
 			margin-block: 0;
 			padding-block: 12px 0;
@@ -1214,16 +1306,8 @@
 		}
 
 		.aafm-section-toggle {
-			padding-inline: 20px;
-			margin-block: 12px 0;
-
-			/* Caveat for "Enable all writes". Sits inline after the buttons and wraps below them
-			   on a narrow screen; it is the button's aria-describedby target, so it must stay
-			   rendered and readable rather than being hidden at any breakpoint. */
-			> .aafm-section-toggle-note {
-				font-size: 12px;
-				color: var(--aafm-text-subtle);
-			}
+			padding-inline: var(--aafm-space-5);
+			margin-block: var(--aafm-space-3) 0;
 		}
 
 		/* Each card is a native <details> accordion. The <summary> is the card head; clicking
@@ -1245,6 +1329,10 @@
 					flex: 0 0 auto;
 					margin-inline-start: 4px;
 				}
+
+				/* The status pill follows the name; only the count takes the auto margin, so every
+				   row's pill sits the same gap after its name instead of splitting the free space. */
+				> .aafm-pill { margin-inline-start: 0; }
 			}
 
 			/* The count badge sits flush to the right edge, before the chevron. */
@@ -1292,7 +1380,8 @@
 		   under the button on a narrow viewport instead of squeezing it. */
 		flex-wrap: wrap;
 		gap: 12px;
-		margin-block-start: 24px;
+		/* The card above supplies the gap, as between any two cards. */
+		margin-block-start: 0;
 		padding-block: 12px;
 		padding-inline: 18px;
 		background: var(--aafm-surface);
@@ -1341,6 +1430,8 @@
 
 		.aafm-set-control {
 			max-inline-size: 560px;
+
+			select { max-inline-size: 100%; }
 
 			/* The sentence beside a switch is a real `for=` label, so clicking it flips the
 			   checkbox. It hovered as a text caret, which hid that. The switch's own
@@ -1419,7 +1510,7 @@
 
 	/* ---------- Danger zone (Settings) ----------
 	   A destructive, irreversible action set apart with a red accent so it never
-	   reads as a routine control. The button itself stays WP-native (.button-link-delete). */
+	   reads as a routine control. Its button is .aafm-btn-danger. */
 	.aafm-danger {
 		border-color: var(--aafm-red);
 
@@ -1459,9 +1550,9 @@
 		.aafm-setup-top {
 			display: flex;
 			align-items: center;
-			gap: 14px;
-			padding-block: 16px;
-			padding-inline: 20px;
+			gap: 10px;
+			padding-block: 14px;
+			padding-inline: var(--aafm-space-5);
 			border-block-end: 1px solid var(--aafm-border);
 			cursor: pointer;
 			list-style: none;
@@ -1472,7 +1563,7 @@
 
 			h2 {
 				margin: 0;
-				font-size: 15px;
+				font-size: var(--aafm-fs-body);
 				font-weight: 600;
 				flex: 1;
 			}
@@ -1651,15 +1742,15 @@
 			font-size: 13px;
 		}
 
-		h2 {
+		h3 {
 			margin: 0;
-			font-size: 16px;
+			font-size: var(--aafm-fs-body);
 			font-weight: 600;
 		}
 
 		.sub {
 			color: var(--aafm-text-subtle);
-			font-size: 12.5px;
+			font-size: var(--aafm-fs-sm);
 			margin-block: 1px 0;
 		}
 	}
@@ -1689,46 +1780,28 @@
 
 	/* ---------- Activity log: 7-day summary, filter row, Live view ---------- */
 	.aafm-activity {
-		.aafm-log-summary {
-			display: grid;
-			grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-			gap: 12px;
-			margin-block: 0 16px;
-
-			.aafm-log-stat,
-			.aafm-log-top {
-				border: 1px solid var(--aafm-border);
-				border-radius: 6px;
-				background: var(--aafm-surface);
-				padding: 12px 14px;
-			}
-
-			.aafm-log-stat-num {
-				font-size: 22px;
-				font-weight: 600;
-				line-height: 1.2;
-			}
-
-			.aafm-log-stat-label {
-				color: var(--aafm-text-subtle);
-				font-size: 12px;
-			}
+		/* Four stat cards in the Dashboard's grid, then Top tools across the full width with its
+		   list in one wrapping row, so no card is stretched tall and empty. */
+		.aafm-log-stats {
+			margin-block: 0 var(--aafm-space-2);
 
 			.aafm-log-top {
-				grid-column: span 2;
+				grid-column: 1 / -1;
 
 				ol {
-					margin: 6px 0 0;
-					padding-inline-start: 18px;
+					display: flex;
+					flex-wrap: wrap;
+					gap: var(--aafm-space-2) var(--aafm-space-6);
+					margin: 0;
+					padding: 0;
+					list-style-position: inside;
+					font-size: var(--aafm-fs-base);
 				}
 			}
+		}
 
-			.aafm-log-summary-note {
-				grid-column: 1 / -1;
-				margin: 0;
-				color: var(--aafm-text-subtle);
-				font-size: 12px;
-			}
+		.aafm-log-summary-note {
+			margin-block-end: var(--aafm-space-4);
 		}
 
 		.aafm-log-filters {
@@ -1741,7 +1814,7 @@
 			.aafm-log-filter {
 				display: grid;
 				gap: 4px;
-				font-size: 12px;
+				font-size: var(--aafm-fs-sm);
 
 				input,
 				select {
@@ -1760,6 +1833,7 @@
 		}
 
 		#aafm-log-live.is-active {
+			background: var(--aafm-accent-tint);
 			border-color: var(--aafm-accent);
 			color: var(--aafm-accent);
 		}
@@ -1771,11 +1845,14 @@
 	}
 
 	/* ---------- Segmented control ---------- */
+	/* Same outer height as a button or field (--aafm-control-h). */
 	.aafm-seg {
 		display: inline-flex;
+		box-sizing: border-box;
+		block-size: var(--aafm-control-h);
 		background: var(--aafm-surface-2);
 		border: 1px solid var(--aafm-border);
-		border-radius: 7px;
+		border-radius: var(--aafm-radius-sm);
 		padding: 3px;
 		gap: 2px;
 
@@ -1784,12 +1861,12 @@
 			border: 0;
 			background: transparent;
 			font-family: inherit;
-			font-size: 12.5px;
+			font-size: var(--aafm-fs-sm);
 			font-weight: 600;
 			color: var(--aafm-text-muted);
-			padding-block: 5px;
+			padding-block: 0;
 			padding-inline: 12px;
-			border-radius: 5px;
+			border-radius: 3px;
 			cursor: pointer;
 
 			&:focus-visible {
@@ -2048,11 +2125,24 @@
 		}
 	}
 
+	/* ---------- Why is my tool missing (Dashboard) ---------- */
+	#aafm-missing-tools {
+		margin-block-end: var(--aafm-space-4);
+
+		.aafm-missing-tools-list {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+
+			li { padding-block: var(--aafm-space-2); border-block-end: 1px solid var(--aafm-border); overflow-wrap: anywhere; }
+			li:last-child { border-block-end: 0; }
+		}
+	}
+
 	/* ---------- Needs review inbox (Dashboard) ---------- */
 	.aafm-review-inbox {
 		margin-block-end: var(--aafm-space-4);
 
-		.aafm-review-count { margin-inline-start: auto; }
 		.aafm-review-list { margin: 0; padding: 0; list-style: none; }
 
 		.aafm-review-row {
@@ -2118,7 +2208,6 @@
 
 	/* ---------- Help accordion (native <details class="aafm-help-entry">) ---------- */
 	.aafm-help {
-		max-inline-size: 820px;
 
 		.aafm-help-intro {
 			margin-block-end: 16px;
@@ -2233,6 +2322,11 @@
 
 	/* ---------- Detected meta-key chips ---------- */
 	.aafm-meta-keys {
+		h3 {
+			margin-block: var(--aafm-space-4) var(--aafm-space-2);
+			font-size: var(--aafm-fs-body);
+		}
+
 		.aafm-meta-chips {
 			display: flex;
 			flex-wrap: wrap;
@@ -2316,21 +2410,16 @@
 		flex-direction: column;
 		gap: 16px;
 
+		/* The column gap is the only spacing between dashboard blocks. */
+		> *,
 		.aafm-card {
-			padding-block: 14px;
-			padding-inline: 16px;
-
-			h3 {
-				margin-block: 0 8px;
-				font-size: 13px;
-			}
+			margin-block: 0;
 		}
 
-		/* Lower row: endpoint (wide) beside versions (narrow). */
+		/* Lower row: endpoint (wide) beside versions (narrow), the same height. */
 		.aafm-dashboard-lower {
 			grid-template-columns: 2fr 1fr;
 			margin-block-start: 0;
-			align-items: start;
 		}
 	}
 
@@ -2341,14 +2430,50 @@
 		}
 
 		.aafm-dashboard .aafm-dashboard-lower {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 
 	@media (max-width: 640px) {
 		.aafm-set-row {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 			gap: 10px;
+		}
+
+		/* Phones: the status pills go under the title instead of squeezing it, and the tab strip
+		   stays one row that scrolls sideways inside itself. */
+		.aafm-page-head {
+			flex-direction: column;
+
+			.aafm-page-head-pills { justify-content: flex-start; }
+		}
+
+		/* Integration and Other plugins cards: the ability count drops under the title so the
+		   name keeps the width. */
+		.aafm-integrations details.aafm-integration-card > summary.aafm-card-head {
+			flex-wrap: wrap;
+
+			&::after { margin-inline-start: auto; }
+
+			.abilities-count {
+				order: 1;
+				flex-basis: 100%;
+				margin-inline-start: 0;
+			}
+		}
+
+		.nav-tab-wrapper {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			overflow-y: hidden;
+			scrollbar-width: thin;
+			/* Contains the tabs' absolutely positioned screen-reader text, which would otherwise
+			   escape the scroller and widen the page. */
+			position: relative;
+
+			.nav-tab { flex: 0 0 auto; }
+
+			.aafm-nav-ext-group { flex-wrap: nowrap; }
 		}
 
 		.aafm-stat-grid {
@@ -2369,22 +2494,56 @@
 	/* Activity log: fixed columns that share the viewport, long values (JSON detail, argument
 	   keys, event names) wrap inside their cell instead of stretching the table sideways. The
 	   min-width keeps a phone-width screen readable by scrolling the wrapper. */
+	/* Fixed widths sized to each column's content; Detail (5th) takes whatever is left. The short
+	   columns clip with an ellipsis and carry a title. Narrow screens scroll inside .aafm-table-wrap. */
 	.aafm-log-table {
 		table-layout: fixed;
 		inline-size: 100%;
-		min-inline-size: 720px;
+		min-inline-size: 1100px;
 
 		th,
 		td {
-			overflow-wrap: anywhere;
+			box-sizing: border-box;
 			vertical-align: top;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 
-		th:nth-child(1) { inline-size: 9%; }
-		th:nth-child(2) { inline-size: 13%; }
-		th:nth-child(3) { inline-size: 20%; }
-		th:nth-child(5) { inline-size: 8%; }
-		th:nth-child(6) { inline-size: 14%; }
+		/* Headers and Time wrap between words; Detail wraps as prose. */
+		th,
+		td:first-child,
+		.aafm-log-detail {
+			white-space: normal;
+		}
+
+		.aafm-log-detail {
+			overflow-wrap: break-word;
+
+			/* A long detail stops at four lines; the cell's title holds the full text. */
+			.aafm-log-detail-text {
+				display: -webkit-box;
+				-webkit-box-orient: vertical;
+				-webkit-line-clamp: 4;
+				line-clamp: 4;
+				overflow: hidden;
+			}
+
+			&.is-json {
+				font-family: var(--aafm-mono);
+				font-size: var(--aafm-fs-xs);
+				word-break: break-all;
+			}
+		}
+
+		th:nth-child(1) { inline-size: 104px; }
+		th:nth-child(2) { inline-size: 100px; }
+		th:nth-child(3) { inline-size: 120px; }
+		th:nth-child(4) { inline-size: 140px; }
+		th:nth-child(6) { inline-size: 112px; }
+		th:nth-child(7) { inline-size: 84px; }
+		th:nth-child(8) { inline-size: 104px; }
+		th:nth-child(9) { inline-size: 104px; }
 	}
 
 	/* ---------- Shared section component (aafm_render_section) ---------- */
@@ -2414,16 +2573,10 @@
 		border: 1px solid var(--aafm-border);
 		border-radius: var(--aafm-radius);
 
+		/* The summary is the shared .aafm-card-head; this only makes it a disclosure. */
 		> summary {
-			display: flex;
-			align-items: center;
-			gap: 10px;
-			padding-block: 12px;
-			padding-inline: 18px;
 			cursor: pointer;
 			list-style: none;
-			font-size: 14px;
-			font-weight: 600;
 			user-select: none;
 
 			&::marker,
@@ -2437,9 +2590,12 @@
 			}
 		}
 
+		/* Transparent rather than removed, so a closed card's head keeps the same height. */
+		&:not([open]) > summary { border-block-end-color: transparent; }
+
 		.aafm-section-body {
-			padding-block: 0 16px;
-			padding-inline: 18px;
+			padding-block: 18px;
+			padding-inline: var(--aafm-space-5);
 		}
 	}
 
@@ -2476,18 +2632,64 @@
 	}
 
 	/* ---------- OAuth client/grant management (Connections OAuth card) ---------- */
+	/* Settings: the "Roles that can connect" checkboxes. */
+	.aafm-role-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 16px;
+	}
+
 	.aafm-oauth-manage {
 		margin-block-start: 20px;
 
-		h3 {
-			margin-block: 18px 4px;
-			font-size: 14px;
+		.aafm-grant-actions {
+			white-space: nowrap;
 		}
 
-		.sub {
-			margin-block: 0 12px;
-			color: var(--aafm-text-muted);
-			font-size: 13px;
+		/* Wide enough for the "inherit" placeholder. */
+		.aafm-grant-rate {
+			inline-size: 7em;
+		}
+
+		/* The tables scroll inside their wrapper before any column is squeezed to a few
+		   characters; the last-used date stays on one line with its IP below. */
+		.aafm-grants-table,
+		.aafm-clients-table {
+			min-inline-size: 960px;
+
+			/* The app name keeps a readable width when the table scrolls on a phone. */
+			th:nth-child(3) { inline-size: 8em; }
+		}
+
+		.aafm-grant-last-used {
+			white-space: nowrap;
+		}
+
+		/* A refusal message wraps below Save, Pause and Revoke at the column's width instead of
+		   widening the column: contain drops the text's own width from the table layout. */
+		.aafm-grant-status {
+			display: block;
+			white-space: normal;
+			contain: inline-size;
+
+			&:not(:empty) {
+				margin-block-start: var(--aafm-space-2);
+			}
+		}
+
+		/* Sized so the grants table fits the card at 1440: the controls take a fixed width and
+		   Save, Pause and Revoke stack in a narrow column. */
+		.aafm-grant-preset { inline-size: 16em; }
+		.aafm-grant-expires { inline-size: 10em; }
+
+		.aafm-grant-actions .aafm-btn {
+			display: flex;
+			justify-content: center;
+			inline-size: 100%;
+
+			& + .aafm-btn {
+				margin-block-start: 6px;
+			}
 		}
 
 		.aafm-table-wrap {
@@ -2497,24 +2699,36 @@
 		.aafm-muted {
 			color: var(--aafm-text-subtle);
 		}
+
+		/* The id is already shortened, so keep it on one line instead of letting it wrap per character. */
+		.aafm-client-id-cell code {
+			white-space: nowrap;
+		}
+
+		/* Phones: the wide tables scroll inside their wrapper, so pin the last column (the row's actions)
+		   where it can always be reached. */
+		@media (max-width: 600px) {
+			.aafm-grants-table,
+			.aafm-clients-table {
+				th:last-child,
+				td:last-child {
+					position: sticky;
+					inset-inline-end: 0;
+					z-index: 1;
+					background: var(--aafm-surface);
+					box-shadow: -1px 0 0 var(--aafm-border);
+				}
+
+				/* Match the striped row so the scrolled cells never show through. */
+				tbody tr:nth-child(odd) td:last-child {
+					background: var(--aafm-surface-2);
+				}
+			}
+		}
 	}
 
 	/* ---------- Ability allowlist (Connections tab) ---------- */
 	.aafm-allowlist-card {
-		/* .aafm-section--collapsible sets padding-block: 0 16px on the body, so the
-		   description (now the first thing in the body, moved out of <summary>) needs its
-		   own top gap under the summary's bottom edge - the .aafm-card-head-desc rule that
-		   used to give it spacing is scoped to .aafm-card-head, which this body is not inside. */
-		.aafm-section-body {
-			padding-block-start: 12px;
-		}
-
-		.aafm-card-head-desc {
-			margin: 0 0 16px;
-			font-size: 12.5px;
-			color: var(--aafm-text-subtle);
-		}
-
 		.aafm-allowlist-table {
 			margin-block-end: 8px;
 		}
@@ -2623,22 +2837,8 @@
 /* ---------- OAuth-first connection layout additions ---------- */
 .aafm-connection {
 
-	/* OAuth card header: title + Recommended pill on the same row */
+	/* OAuth card: the head is the shared .aafm-card-head; the pill sits at its row end. */
 	.aafm-oauth-card {
-		.aafm-oauth-card-head {
-			display: flex;
-			align-items: center;
-			gap: 10px;
-			margin-block-end: 8px;
-
-			h2 {
-				margin-block: 0;
-				font-size: 15px;
-				font-weight: 600;
-				line-height: 1.3;
-			}
-		}
-
 		.aafm-recommended-pill {
 			flex-shrink: 0;
 		}
@@ -2709,54 +2909,6 @@
 		}
 	}
 
-	/* App-Password fallback <details> expander */
-	.aafm-app-password-fallback {
-		margin-block-start: 4px;
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border);
-		border-radius: var(--aafm-radius);
-
-		> summary {
-			display: flex;
-			align-items: center;
-			gap: 10px;
-			padding-block: 13px;
-			padding-inline: 18px;
-			cursor: pointer;
-			list-style: none;
-			font-size: 13px;
-			font-weight: 600;
-			color: var(--aafm-text-muted);
-			user-select: none;
-
-			&::marker,
-			&::-webkit-details-marker { display: none; }
-
-			/* Shape and rotate-on-open come from the shared disclosure chevron near the
-			   top of the file; this only adds the layout this row needs. */
-			&::after {
-				display: inline-block;
-				margin-inline-start: auto;
-			}
-
-			&:hover {
-				color: var(--aafm-text);
-			}
-		}
-
-		&[open] > summary {
-			border-block-end: 1px solid var(--aafm-border);
-		}
-
-		/* Inner steps take the same gutter as every other direct child (see the accordion
-		   content contract above); only their vertical rhythm is special here. */
-		.aafm-step {
-			margin-inline: var(--aafm-space-5);
-
-			&:first-of-type { margin-block-start: 18px; }
-			&:last-of-type  { margin-block-end: 18px; }
-		}
-	}
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3006,6 +3158,12 @@
 	& .aafm-qc-control .cl .soft { font-weight: 400; color: var(--aafm-text-subtle); }
 	& .aafm-qc-control .cl .amber { font-weight: 400; color: var(--aafm-amber-text); }
 	& .aafm-qc-control .cd { font-size: 12.5px; color: var(--aafm-text-subtle); margin-top: 2px; }
+	& .aafm-qc-preset {
+		margin-top: var(--aafm-space-3);
+
+		label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: var(--aafm-space-1); }
+		.cd { font-size: 12.5px; color: var(--aafm-text-subtle); margin: var(--aafm-space-1) 0 0; }
+	}
 
 	& .aafm-qc-byline {
 		display: flex;
@@ -3392,4 +3550,9 @@
 		outline: 2px solid Highlight;
 		outline-offset: 2px;
 	}
+}
+
+@keyframes aafm-skeleton {
+	from { background-position: 100% 50%; }
+	to { background-position: 0 50%; }
 }

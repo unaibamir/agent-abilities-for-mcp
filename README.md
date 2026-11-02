@@ -9,14 +9,14 @@ WordPress MCP server for Claude and ChatGPT. Run one site or many with limited a
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.9.0 |
+| **Stable tag** | 1.10.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
 
 ### WordPress MCP server for ChatGPT and Claude, with limited access and an audit log
 
-Agent Abilities for MCP connects ChatGPT, Claude, Cursor and other AI agents to your WordPress site over the Model Context Protocol (MCP), through 179 curated WordPress abilities (tools). The agent acts as a real WordPress user you choose, never with an admin key, so it can only do what that user's role allows. Run it on one site or on several, each with its own user, switches and audit log. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install.
+Agent Abilities for MCP connects ChatGPT, Claude, Cursor and other AI agents to your WordPress site over the Model Context Protocol (MCP), through 182 curated WordPress abilities (tools). The agent acts as a real WordPress user you choose, never with an admin key, so it can only do what that user's role allows. Run it on one site or on several, each with its own user, switches and audit log. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install.
 
 Nothing this plugin serves is exposed until you turn it on. Every call to this plugin's tools is checked against the chosen user's permissions and written to the audit log before it runs, denied attempts included. An Editor account can write and publish posts but cannot install plugins or change settings, so you add reach as you build trust. To approve new posts before they go live, switch on Force draft and review what the agent wrote on the Needs review card on the Dashboard. See External Services below for exactly what the plugin can reach on its own.
 
@@ -37,10 +37,10 @@ Short walkthrough:
 * **Run several sites from one AI chat.** Install it on each site and add each one to ChatGPT or Claude as its own connector. Each site keeps its own user, its own switches and its own audit log, so an agency can hand one client's site to the agent without touching the others.
 * **Let ChatGPT or Claude write and edit posts without admin access.** Connect the agent as an Editor, Author or Contributor account. It can only do what that role can do in wp-admin.
 * **Have the agent save drafts for you to approve.** Turn on Force draft on create and anything the agent creates or tries to publish is saved as a draft. The Needs review card on the Dashboard lists the drafts and pending posts an agent starts, with Preview, Open in editor, Publish and Discard (Discard moves the post to the Trash). To stop it changing posts that are already live as well, connect it as a Contributor.
-* **Let AI read your site without changing anything.** Read-only mode stops every write tool from loading, including write tools you have bridged from your other plugins.
+* **Let AI read your site without changing anything.** Read-only mode stops every write tool from loading.
 * **Tell the agent about your site once.** Write a few lines in Site Brief on the Settings tab, for example your house style or what to leave alone. This plugin sends it to every agent that connects, when its session starts.
 * **Find out why an agent cannot connect.** Connection Doctor on the Connection tab checks the connection from your own server and names the fix, for example a host that strips the Authorization header.
-* **Fix typos and refresh old posts.** The agent can search your posts, read one and update it, and every step through this plugin is logged.
+* **Fix typos and refresh old posts.** The agent can search your posts, read one and update it.
 * **Use your other plugins through the agent.** Plugins that register WordPress abilities, such as WPForms, show up on the Other plugins screen and stay off until you switch them on.
 
 ### 🛡️ Permission controls and an audit log on every call
@@ -60,27 +60,27 @@ Short walkthrough:
 
 WordPress 6.9 ships the Abilities API. The official MCP Adapter (`wordpress/mcp-adapter`) comes bundled with this plugin, so you do not install it separately. If the standalone Adapter plugin is active too, this plugin works with whichever copy loads first, from 0.6.1 through 0.7.x. Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or server, so there's no bespoke transport to trust. A Settings switch (Automatic, Always on, Always off) controls the Adapter's default server, which other plugins can publish tools to. Automatic, the default, starts it only when another plugin publishes tools there, and this plugin's own tools never appear on it.
 
-### 📦 179 governed abilities
+### 📦 182 governed abilities
 
-The plugin ships **179 governed abilities: 85 across WordPress core and 94 from auto-detected integrations**, every one off until you enable it, scoped, capability-gated, and logged. It can also bridge abilities from your other plugins (see below).
+The plugin ships **182 governed abilities: 88 across WordPress core and 94 from auto-detected integrations**, every one off until you enable it, scoped, capability-gated, and logged. It can also bridge abilities from your other plugins (see below).
 
-**WordPress core (85 abilities).** Reads plus guarded writes across your whole site:
+**WordPress core (88 abilities).** Reads plus guarded writes across your whole site:
 
-* **📝 Posts & Pages:** list, read, create, update, and delete, with destructive actions off by default and deletes routed to Trash.
+* **📝 Posts & Pages:** list, read, create, update, trash and permanently delete, with destructive actions off by default; trash tools move items to the Trash, delete tools bypass it.
 * **🏷️ Terms & Taxonomies:** manage categories, tags, and custom taxonomy terms.
 * **💬 Comments:** read and moderate the comment queue.
 * **🖼️ Media:** list and read the library, and add images from inline data or an HTTPS URL, validated by their real bytes against an allow-list.
 * **🗂️ Post Meta:** read and write only administrator-allowlisted meta keys; protected, underscore-prefixed, and authentication keys can never be allowlisted.
 * **👥 Users:** read and manage users within capability limits; a new user gets the default role, never admin, and the last administrator can't be removed.
-* **🧭 Site structure:** work with menus and the structural pieces that hold the site together.
-* **🕓 Revision history:** read the revision trail for content.
-* **🧱 Blocks & Templates:** work with reusable blocks, themes, and templates.
+* **🧭 Site structure:** work with menus and related site structure.
+* **🕓 Revision history:** read the revision trail, restore a revision, and delete one.
+* **🧱 Blocks & Templates:** list the site's block types (ACF blocks included), replace one block in a post, and work with reusable blocks, themes, and templates.
 * **⚙️ Limited settings & site health:** a tightly scoped set of settings, plus read-only site health and plugin status.
 * **🔍 Site-wide search:** one search that spans every post type at once.
 
 **Integrations (94 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, logged, and only present while that plugin is active:
 
-* **🛒 WooCommerce MCP (52 abilities):** read and write products, orders, and customers to help run your store. These touch personal data (names, emails, addresses), so they sit behind a clear admin notice and stay off until enabled.
+* **🛒 WooCommerce MCP (52 abilities):** read and write products, orders, and customers. These touch personal data (names, emails, addresses), so they sit behind a clear admin notice and stay off until enabled.
 * **🧩 Advanced Custom Fields (7 abilities):** read and write ACF field data; like WooCommerce, these can reach personal data and sit behind the same notice.
 * **📈 Rank Math SEO (5 abilities):** read and manage Rank Math SEO data.
 * **📈 Yoast SEO (3 abilities):** read and manage Yoast SEO data.
@@ -185,13 +185,41 @@ Agent Abilities for MCP gives you three layers for its own tools. Every ability 
 
 ### Can I give one connection less access than another?
 
-Yes. Beyond the site-wide list of enabled abilities, you can add a per-role allowlist, a per-connection allowlist, or both, on the Connections screen. Either one only narrows what was already enabled: an ability still has to clear the global list, then the matching role's list, then the matching connection's list, before an agent can call it. There is no finer-grained scoping below role and OAuth connection - an Application Password inherits its user's whole role, with no separate per-password limit. Leave the screen alone and nothing changes; every existing connection keeps working exactly as it did before.
+Yes. Beyond the site-wide list of enabled abilities, you can add a per-role allowlist, a per-connection allowlist, or both, on the Connection tab. Either one only narrows what was already enabled: an ability still has to clear the global list, then the matching role's list, then the matching connection's list, before an agent can call it. There is no finer-grained scoping below role and OAuth connection - an Application Password inherits its user's whole role, with no separate per-password limit. Leave the screen alone and nothing changes; every existing connection keeps working exactly as it did before.
+
+Each OAuth connection can also carry an access preset: Read only, Content editor, Shop manager or Custom. You pick it when you approve the app or in Quick Connect, and can change it later on the connection's row. A preset means "up to these tools", so it only narrows and never reaches a tool that is not already enabled and allowed. Custom adds no limit. The preset chosen in Quick Connect becomes the default, and someone approving an app who cannot manage the site can pick that default or a narrower preset, never a wider one.
+
+### Can I pause a connection or give it an end date?
+
+Yes. On the Connection tab each approved OAuth connection has Pause and Resume next to Revoke, an optional end date and an optional rate limit, and shows when and from which address it was last used. A paused connection keeps its sign-in: its calls get an ordinary 403 Forbidden until you resume it, and nobody has to approve it again. After its end date a connection is refused until a site administrator renews it, and its old tokens never work again. Pausing one connection does not stop the same person's Application Password.
+
+To stop everything at once, use Pause all access on the Connection tab. It refuses every MCP request through this site, on this plugin's endpoint and on the MCP Adapter's default server, for OAuth apps and Application Passwords alike. It does not stop an Application Password from using the rest of the WordPress REST API.
+
+Rolling back to 1.9.x ignores per-connection pauses, end dates, access presets and limits: each connection runs with the site-wide access again.
+
+### Who can approve an app's connection?
+
+Anyone whose role is ticked under Roles that can connect on the Settings tab. A site that was already installed keeps the old rule (any user who can edit posts) until you save that list; a new install starts with Administrators only. A site filter on aafm_oauth_min_capability overrides the list. If you narrow the list, the connections of people whose role was removed stop working.
+
+### Can the Activity Log and the IP allowlist see visitor addresses behind Cloudflare or a proxy?
+
+Yes, once you turn on Real visitor address behind a proxy or CDN on the Settings tab. It is off by default. Choose Cloudflare, or Custom with the header your proxy sends (CF-Connecting-IP, True-Client-IP, X-Real-IP or X-Forwarded-For) and the addresses it connects from. The header is believed only when the request comes from one of those addresses, and a range wider than /8 for IPv4 or /16 for IPv6 is not accepted. Cloudflare's own Authenticated Origin Pulls stop anyone from reaching your server directly around the proxy.
+
+The Cloudflare address list ships with the plugin and is refreshed by hand each release. If Cloudflare adds a range before the plugin catches up, requests from it show the proxy's address, which can lock out an IP allowlist of visitor addresses.
+
+### Why is a tool I switched on missing from my agent?
+
+Look at the Why is my tool missing? card on the Dashboard. It lists every tool you switched on that agents cannot see right now and says why: the tool no longer exists, its plugin is inactive or older than the tool needs, read-only mode or the high-risk lock holds it, or the server left it out when it registered the tools, for example because the enabled tool limit was reached. Tools from other plugins are not listed there; the Other plugins tab shows their state.
+
+### Does my page cache update when an agent changes only custom fields?
+
+By default an agent's change to only a post's or term's custom fields clears that post's or term's cache entry and fires the aafm_agent_meta_written action, without re-saving it, so its modified date stays the same. A page cache that listens only to save_post, W3 Total Cache among them, needs add_filter( 'aafm_meta_write_full_resave', '__return_true' ). That saves the post again, so its modified date moves as it would for the same edit in the block editor. Check which hooks your own cache plugin listens to.
 
 ### How do I find what an agent did?
 
 Open the Activity Log tab. You can filter by user, connection, tool, plugin, date and text. Each row shows the connection name, the source IP address and how long the tool ran. A summary at the top covers the last 7 days, and a Live view keeps the first page current while you watch (it needs a date range when a text search or a user filter is applied). Export CSV downloads exactly the rows the filters show.
 
-The IP is the address the request came from, so behind a proxy or CDN it is the proxy's address. Duration is the time spent inside the tool, not what the agent experienced. A denied call never runs, so it has no duration.
+The IP is the address the request came from, so behind a proxy or CDN it is the proxy's address unless you turn on the visitor address setting described below. Duration is the time spent inside the tool, not what the agent experienced. A denied call never runs, so it has no duration.
 
 ### Is there an audit log of what the agent did?
 
@@ -275,7 +303,7 @@ Yes. Turn on Force draft on create in Settings. Anything the agent creates, and 
 
 ### Why can't ChatGPT or Claude connect to my WordPress site?
 
-Open the Connection tab and click Check my connection (the Connection Doctor). It runs the checks from your own server and names the fix, for example a host that strips the Authorization header. The other usual causes are a CDN or firewall blocking the /mcp path and a local site with a self-signed certificate, and both have their own answers below.
+Open the Connection tab and click Check my connection (the Connection Doctor). It runs the checks from your own server and names the fix, for example a host that strips the Authorization header or the MCP headers, a firewall that empties the JSON body, a redirect, or a stale or blocked discovery document. The other usual causes are a CDN or firewall blocking the /mcp path and a local site with a self-signed certificate, and both have their own answers below.
 
 ### Can I tell the AI agent about my site, such as my house style or what to leave alone?
 
@@ -319,7 +347,7 @@ Each type of event sends at most one email every 15 minutes, so turning read-onl
 
 ### Is there rate limiting?
 
-Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each connection can make that many agent calls a minute, counted per agent user; 0 turns the limit off. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.
+Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each agent user can make that many calls a minute, shared by all of that user's connections; 0 turns the limit off. On the Connection tab you can also give one OAuth connection a lower limit of its own, and its calls count against both. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.
 
 ### Does it send my content to OpenAI, Anthropic, or Google?
 
@@ -345,11 +373,19 @@ Please report security issues privately rather than in the support forum, so a f
 
 This plugin contacts no AI provider and includes no analytics or telemetry.
 
-It makes two kinds of outbound HTTP request on its own: the Connection tab's checks (a few requests your site makes to its own address, to see whether the MCP endpoint answers and, with OAuth on, whether the discovery documents load), and, only when you enable the off-by-default upload-media-from-url ability, a fetch of the exact HTTPS URL your AI client supplies so that file can be added to your media library. That fetch is SSRF-hardened against private, reserved, and redirect-based targets, and carries none of your content, credentials, or site data - it only reads what's already public at that URL.
+It makes two kinds of outbound HTTP request on its own: the Connection tab's checks (requests your site makes to its own address, to check the MCP endpoint, the headers and body it gets, and, with OAuth on, the discovery documents), and, only when you enable the off-by-default upload-media-from-url ability, a fetch of the exact HTTPS URL your AI client supplies so that file can be added to your media library. That fetch is SSRF-hardened against private, reserved, and redirect-based targets, and carries none of your content, credentials, or site data - it only reads what's already public at that URL.
 
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), run on your own machine and not bundled with this plugin.
 
 ## Changelog
+### 1.10.0
+
+* **Feature:** Each OAuth connection can be paused and resumed without signing in again, given an end date and a lower rate limit of its own, and shows when and from which address it was last used. Approving an app, and Quick Connect, offer Read only, Content editor, Shop manager or Custom access.
+* **Feature:** The Connection tab now has OAuth and Application Passwords tabs, a token lifetimes card (the client registration switch moved there from Settings), a switch that pauses all MCP access to the site, and a list of the agent users' Application Passwords with their last use and a Revoke button.
+* **Feature:** Settings can limit which roles may connect an app and can read the visitor's real address behind Cloudflare or another proxy. Connection Doctor checks MCP headers, JSON bodies, redirects and stale or blocked discovery documents; the Dashboard says why an enabled tool is missing; tabs show a dot while they have unsaved changes; the Abilities tab opens on an All view listing every ability under its category, with the same bulk buttons each category has.
+* **Feature:** Agents can list the site's block types and read one block's attributes, supports and styles, plus, for ACF blocks, its field names, choices and an example payload. A new Replace block tool swaps one block in a post or page without resending the whole page. Like every other tool, they stay off until you turn them on in the Abilities tab.
+* **Fix:** Plain attribute text that WordPress would only entity-encode, such as an & in an ACF field, is now stored as written for users who may post unfiltered HTML, style and script elements are removed with their contents, WooCommerce product descriptions and Events Calendar events no longer strip the backslash escapes from block attributes, and writes that return content warnings now also flag unknown blocks or ACF fields, invalid attribute JSON and ignored block gaps. A custom-field-only change now clears that post's or term's cache entry (with an action for page caches and an opt-in full re-save for caches that need one), blank-looking IP allowlist lines are dropped, Settings and the Dashboard no longer scroll sideways on a phone, new drafts report real dates, OAuth clients and tokens record their creation time in UTC, and the Activity Log and Connection Doctor show placeholders while they load. The bundled MCP Adapter moves to 0.7.1.
+
 ### 1.9.0
 
 * **Feature:** The Activity Log can be searched and filtered by user, connection, tool, plugin, date and text. Each call shows its connection and IP address, and its duration when it ran; the log adds a 7-day summary and a Live view. The CSV export follows your filters.

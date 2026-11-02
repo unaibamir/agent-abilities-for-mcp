@@ -198,7 +198,7 @@ final class DefaultServerGuardTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$permission = \WP\MCP\Abilities\ExecuteAbilityAbility::check_permission( array( 'ability_name' => 'aafm/get-posts' ) );
 		$this->assertWPError( $permission );
-		$this->assertSame( 'ability_not_public_mcp', $permission->get_error_code() );
+		$this->assertSame( 'ability_not_found', $permission->get_error_code() );
 	}
 
 	/**

@@ -36,7 +36,7 @@ defined( 'ABSPATH' ) || exit;
  */
 function aafm_write_content_description(): string {
 	return __(
-		'Gutenberg block markup. Put every bit of styling inside the block delimiter attributes, never as inline style="" on the HTML, or the editor flags the block as invalid content. Right: <!-- wp:heading {"style":{"color":{"text":"#ffffff"}}} --><h2 class="has-text-color" style="color:#ffffff">Hi</h2><!-- /wp:heading -->. Wrong: <!-- wp:heading --><h2 style="color:#ffffff">Hi</h2><!-- /wp:heading -->. The sanitizer strips inline rgba() and hex-with-alpha colors and inline <svg> from stored content, so use plain hex colors and an uploaded <img> or a unicode glyph for icons. For genuinely bespoke markup that has no matching block, use a core/html block.',
+		'Gutenberg block markup. Put every bit of styling inside the block delimiter attributes, never as inline style="" on the HTML, or the editor flags the block as invalid content. Right: <!-- wp:heading {"style":{"color":{"text":"#ffffff"}}} --><h2 class="has-text-color" style="color:#ffffff">Hi</h2><!-- /wp:heading -->. Wrong: <!-- wp:heading --><h2 style="color:#ffffff">Hi</h2><!-- /wp:heading -->. Use a core/html block for markup no block matches. Stored content loses inline rgba() and hex-with-alpha colors, inline <svg>, and <style> and <script> elements with their contents. For users who can post unfiltered HTML, tag-free attribute text that WordPress would only entity-encode is stored as written; other users, and tags inside attribute values, get WordPress\'s own sanitizing. WordPress drops a blockGap containing (, \\, &, =, } or /*; use 24px or var:preset|spacing|40. On WordPress 7.0+, metadata.blockVisibility.viewport hides a block per screen size; on 6.9, metadata.blockVisibility:false hides it everywhere. ACF blocks take {"name","data","mode"} attributes with field names as the data keys. If aafm-get-block-type is enabled, it lists a block\'s attributes and ACF fields with an example.',
 		'agent-abilities-for-mcp'
 	);
 }
@@ -45,8 +45,8 @@ function aafm_write_content_description(): string {
  * The set of core blocks the guard inspects.
  *
  * Curated on purpose: only common blocks whose save() output encodes color/size/border styling
- * that agents tend to get wrong. Third-party blocks and freeform blocks (core/html) are out of
- * scope and never inspected, so an unknown block can never be flagged.
+ * that agents tend to get wrong. Editor-invalid-content checks cover only this core whitelist.
+ * Informational checks run on every named block, including third-party blocks.
  *
  * @return list<string>
  */
@@ -154,6 +154,11 @@ function aafm_scan_blocks_recursive( array $blocks, array &$warnings ): void {
 				$warnings[] = $warning;
 			}
 		}
+		if ( '' !== $name ) {
+			foreach ( aafm_inspect_block_silent_drops( $block ) as $warning ) {
+				$warnings[] = $warning;
+			}
+		}
 
 		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
 			aafm_scan_blocks_recursive( $block['innerBlocks'], $warnings );
@@ -237,6 +242,114 @@ function aafm_inspect_block( array $block ): array {
 	}
 
 	return $warnings;
+}
+
+/**
+ * Informational checks on any named block for things WordPress drops without saying so.
+ *
+ * - unregistered_block: no block type of that name is registered (a deactivated plugin's block
+ *   reads the same way, which is why it never refuses).
+ * - unknown_acf_field: an ACF block's data holds a key that resolves to none of its fields.
+ * - block_gap_dropped: a style.spacing.blockGap value core skips when it renders the layout.
+ *
+ * @param array<string,mixed> $block One parsed block.
+ * @return list<array{block:string,code:string,message:string}>
+ */
+function aafm_inspect_block_silent_drops( array $block ): array {
+	$name     = (string) $block['blockName'];
+	$attrs    = is_array( $block['attrs'] ?? null ) ? $block['attrs'] : array();
+	$warnings = array();
+
+	if ( ! WP_Block_Type_Registry::get_instance()->is_registered( $name ) ) {
+		$warnings[] = aafm_block_warning( $name, 'unregistered_block', '' );
+	}
+
+	$fields = aafm_acf_block_fields( $name );
+	if ( null !== $fields && isset( $attrs['data'] ) && is_array( $attrs['data'] ) ) {
+		$unknown = array();
+		foreach ( array_keys( $attrs['data'] ) as $key ) {
+			$key = (string) $key;
+			if ( '_' !== substr( $key, 0, 1 ) && ! aafm_acf_block_key_resolves( $key, $fields ) ) {
+				$unknown[] = $key;
+			}
+		}
+		if ( array() !== $unknown ) {
+			$warnings[] = aafm_block_warning( $name, 'unknown_acf_field', implode( ', ', array_slice( $unknown, 0, 10 ) ) );
+		}
+	}
+
+	$gap     = aafm_arr_path( $attrs, array( 'style', 'spacing', 'blockGap' ) );
+	$dropped = array();
+	foreach ( is_array( $gap ) ? $gap : array( $gap ) as $value ) {
+		if ( is_string( $value ) && '' !== $value && aafm_block_gap_is_dropped( $value ) ) {
+			$dropped[] = $value;
+		}
+	}
+	if ( array() !== $dropped ) {
+		$warnings[] = aafm_block_warning( $name, 'block_gap_dropped', implode( ', ', $dropped ) );
+	}
+
+	return $warnings;
+}
+
+/**
+ * Whether core drops this blockGap value when it renders the layout.
+ *
+ * WordPress 7.1 has wp_sanitize_block_gap_value(). Before it, 6.9.4 inlines the same pattern in
+ * wp_render_layout_support_flag() (wp-includes/block-supports/layout.php:801 and :804).
+ *
+ * @param string $value One blockGap value.
+ * @return bool
+ */
+function aafm_block_gap_is_dropped( string $value ): bool {
+	if ( function_exists( 'wp_sanitize_block_gap_value' ) ) {
+		return null === wp_sanitize_block_gap_value( $value );
+	}
+	return 1 === preg_match( '%[\\\(&=}]|/\*%', $value );
+}
+
+/**
+ * Whether an ACF block data key resolves against a block's field tree.
+ *
+ * A key resolves when it is a field name or a field key (ACF turns field-key data into names on
+ * save); <group>_<rest> with <rest> resolving against the group's
+ * sub-fields; <repeater>_<n>_<rest> or <flexible>_<n>_<rest> with <rest> resolving against the
+ * repeater's sub-fields or any layout's; or, at a clone's own level, its name or one of its
+ * sub-field names (loaded with any prefix already applied). The tree is depth-capped at 5 by
+ * aafm_acf_block_fields(), so the recursion is too.
+ *
+ * @param string                         $key    Data key.
+ * @param array<int,array<string,mixed>> $fields Fields at this level.
+ * @return bool
+ */
+function aafm_acf_block_key_resolves( string $key, array $fields ): bool {
+	foreach ( $fields as $field ) {
+		$name = (string) $field['name'];
+		$type = (string) $field['type'];
+		$subs = isset( $field['sub_fields'] ) ? (array) $field['sub_fields'] : array();
+		if ( $key === $name || $key === (string) $field['key'] || ( 'clone' === $type && aafm_acf_block_key_resolves( $key, $subs ) ) ) {
+			return true;
+		}
+		if ( '' === $name || 0 !== strpos( $key, $name . '_' ) ) {
+			continue;
+		}
+		$rest = (string) substr( $key, strlen( $name ) + 1 );
+		if ( 'group' === $type && aafm_acf_block_key_resolves( $rest, $subs ) ) {
+			return true;
+		}
+		if ( ( 'repeater' === $type || 'flexible_content' === $type ) && 1 === preg_match( '/^[0-9]+_(.+)$/s', $rest, $row ) ) {
+			if ( 'flexible_content' === $type ) {
+				$subs = array();
+				foreach ( (array) ( $field['layouts'] ?? array() ) as $layout ) {
+					$subs = array_merge( $subs, (array) $layout['sub_fields'] );
+				}
+			}
+			if ( aafm_acf_block_key_resolves( $row[1], $subs ) ) {
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 /**
@@ -345,12 +458,13 @@ function aafm_arr_path( array $arr, array $path ) {
  * The message is human, translatable prose (it rides back to the agent and can surface in a
  * strict-mode error); the code is a stable machine token for programmatic handling.
  *
- * @param string $block      Block name (for example core/heading).
- * @param string $code       Machine code for the warning type.
- * @param string $class_name Offending class name, when the warning is about a class ('' otherwise).
+ * @param string $block  Block name (for example core/heading).
+ * @param string $code   Machine code for the warning type.
+ * @param string $detail The code's detail: the offending class name, the removed element name,
+ *                       the unknown ACF keys or the dropped blockGap values ('' otherwise).
  * @return array{block:string,code:string,message:string}
  */
-function aafm_block_warning( string $block, string $code, string $class_name ): array {
+function aafm_block_warning( string $block, string $code, string $detail ): array {
 	switch ( $code ) {
 		case 'text_color_class_without_attr':
 		case 'background_class_without_attr':
@@ -361,7 +475,7 @@ function aafm_block_warning( string $block, string $code, string $class_name ): 
 				/* translators: 1: block name, 2: CSS class name. */
 				__( 'The %1$s block has the "%2$s" class but no matching value in its block attributes. Encode the styling inside the block delimiter so the editor does not flag the block as invalid.', 'agent-abilities-for-mcp' ),
 				$block,
-				$class_name
+				$detail
 			);
 			break;
 		case 'inline_style_without_attrs':
@@ -377,6 +491,45 @@ function aafm_block_warning( string $block, string $code, string $class_name ): 
 			$message = sprintf(
 				/* translators: %s: block name. */
 				__( 'The %s block declares a color or size in its attributes, but the value is missing from the stored HTML (the sanitizer likely dropped an rgba() or alpha color). Use a plain hex color so the attribute and the markup agree.', 'agent-abilities-for-mcp' ),
+				$block
+			);
+			break;
+		case 'removed_element':
+			$message = sprintf(
+				/* translators: %s: HTML element name, style or script. */
+				__( 'A <%s> element was removed together with its contents. Stored content cannot carry styles or scripts; put styling in block attributes instead.', 'agent-abilities-for-mcp' ),
+				$detail
+			);
+			break;
+		case 'unregistered_block':
+			$message = sprintf(
+				/* translators: %s: block name. */
+				__( 'No block type named %s is registered on this site, so it will not render as that block. If aafm-list-block-types is enabled, check the name there.', 'agent-abilities-for-mcp' ),
+				$block
+			);
+			break;
+		case 'unknown_acf_field':
+			$valid   = wp_list_pluck( (array) aafm_acf_block_fields( $block ), 'name' );
+			$message = sprintf(
+				/* translators: 1: block name, 2: comma-separated data keys, 3: comma-separated field names. */
+				__( 'The %1$s block data has keys that match none of its ACF fields, so ACF ignores them: %2$s. Its field names are: %3$s. If aafm-get-block-type is enabled, it shows an example.', 'agent-abilities-for-mcp' ),
+				$block,
+				$detail,
+				implode( ', ', array_slice( $valid, 0, 20 ) )
+			);
+			break;
+		case 'block_gap_dropped':
+			$message = sprintf(
+				/* translators: 1: block name, 2: blockGap value(s). */
+				__( 'WordPress ignores the blockGap value %2$s on the %1$s block, because it contains (, \\, &, =, } or /*. Use a length such as 24px or a spacing preset such as var:preset|spacing|40.', 'agent-abilities-for-mcp' ),
+				$block,
+				$detail
+			);
+			break;
+		case 'invalid_block_attributes':
+			$message = sprintf(
+				/* translators: %s: block name. */
+				__( 'The %s block has delimiter attributes that are not valid JSON, so WordPress ignores all of them. Fix the JSON (for example a trailing comma) and write the block again.', 'agent-abilities-for-mcp' ),
 				$block
 			);
 			break;
@@ -397,12 +550,34 @@ function aafm_block_warning( string $block, string $code, string $class_name ): 
 }
 
 /**
+ * The warning codes strict mode refuses on: the editor-invalid-content codes the guard had before
+ * the informational ones (unregistered_block, unknown_acf_field, block_gap_dropped,
+ * invalid_block_attributes, removed_element) were added. Those never refuse, so a strict site does
+ * not start refusing writes it accepted before.
+ *
+ * @return list<string>
+ */
+function aafm_block_guard_strict_codes(): array {
+	return array(
+		'text_color_class_without_attr',
+		'background_class_without_attr',
+		'border_color_class_without_attr',
+		'custom_font_size_class_without_attr',
+		'font_size_class_without_attr',
+		'inline_style_without_attrs',
+		'color_attr_value_dropped',
+		'background_attr_value_dropped',
+		'font_size_attr_value_dropped',
+	);
+}
+
+/**
  * Run the guard against final content and, in strict mode, return a blocking error.
  *
- * The single chokepoint every write executor calls. It returns the scan warnings in every case;
- * when strict mode is on and the scan found anything, it ALSO returns a WP_Error the caller must
- * return before writing, so invalid markup is never stored. The caller attaches the warnings to
- * its success response in warn mode.
+ * The single chokepoint every write executor calls. It returns the scan warnings in every case.
+ * Strict mode refuses only warnings whose codes are listed by aafm_block_guard_strict_codes();
+ * informational warnings never block a write. On such a refusal it ALSO returns a WP_Error the
+ * caller must return before writing. The caller attaches the warnings to its success response.
  *
  * @param string $content Final, post-sanitization block markup.
  * @return array{warnings:list<array{block:string,code:string,message:string}>,error:WP_Error|null}
@@ -411,8 +586,13 @@ function aafm_block_guard_evaluate( string $content ): array {
 	$warnings = aafm_scan_block_content( $content );
 	$error    = null;
 
-	if ( ! empty( $warnings ) && aafm_block_guard_is_strict() ) {
-		$blocks = implode( ', ', array_values( array_unique( wp_list_pluck( $warnings, 'block' ) ) ) );
+	// Strict mode refuses only on the editor-invalid codes; the informational ones never refuse.
+	$refusing = array_filter(
+		$warnings,
+		static fn( array $warning ): bool => in_array( $warning['code'], aafm_block_guard_strict_codes(), true )
+	);
+	if ( ! empty( $refusing ) && aafm_block_guard_is_strict() ) {
+		$blocks = implode( ', ', array_values( array_unique( wp_list_pluck( $refusing, 'block' ) ) ) );
 		$error  = new WP_Error(
 			'aafm_invalid_block_content',
 			sprintf(
@@ -427,4 +607,173 @@ function aafm_block_guard_evaluate( string $content ): array {
 		'warnings' => $warnings,
 		'error'    => $error,
 	);
+}
+
+/**
+ * Sanitize agent-written block markup: wp_kses_post(), minus its damage to plain attribute text.
+ *
+ * The wp_kses_post() pass entity-encodes &, < and > inside block attribute JSON for every user, so
+ * a value such as "Saturday & Sunday" or an embed URL with a query string is stored changed. Core
+ * does that on save only for users without unfiltered_html; for a user with it, the block editor
+ * stores the attribute text raw. This helper keeps wp_kses_post() as the sanitizer and, for a user with
+ * unfiltered_html only, puts back each attribute string that cannot open an HTML tag and that kses
+ * only entity-encoded, exactly as it was sent. Any other value keeps the kses result, and
+ * innerHTML is never restored.
+ * When nothing is restored, the content is wp_kses_post() of the input byte for byte, unless kses
+ * of the raw input parses differently from kses of the normalized input (a raw "<" in the comment
+ * JSON broke or merged the comment): then it is the normalized kses tree, serialized. A user
+ * without unfiltered_html always gets wp_kses_post() of the input byte for byte. Both apart from
+ * the <style>/<script> removal below.
+ *
+ * <style> and <script> elements are removed with their contents first, since kses would strip the
+ * tags and leave the CSS or script text in the page. Both that removal and a block whose delimiter
+ * JSON does not parse come back as informational warnings, which never refuse a write.
+ *
+ * @param string $raw Block markup as the agent sent it.
+ * @return array{content:string,warnings:list<array{block:string,code:string,message:string}>}
+ */
+function aafm_kses_block_markup( string $raw ): array {
+	$warnings = array();
+	$stripped = aafm_strip_raw_text_elements( $raw, $warnings );
+	$clean    = wp_kses_post( $stripped );
+	$parsed   = parse_blocks( $stripped );
+
+	// The block parser decides whether this is block markup, not a "<!-- wp:" literal.
+	$has_blocks = aafm_flag_invalid_block_attributes( $parsed, $warnings );
+	if ( ! $has_blocks || ! current_user_can( 'unfiltered_html' ) ) {
+		return array(
+			'content'  => $clean,
+			'warnings' => $warnings,
+		);
+	}
+
+	// Serialize first so a raw "<" in the comment JSON is escaped before kses can merge two keys.
+	$norm = serialize_blocks( $parsed );
+	$kept = parse_blocks( wp_kses_post( $norm ) );
+	$tree = aafm_restore_block_attrs( parse_blocks( $norm ), $kept );
+
+	if ( null !== $tree && $tree !== $kept ) {
+		// @phpstan-ignore-next-line argument.type (the walk rewrites attrs values only, so every entry keeps the parse_blocks() block shape)
+		$clean = serialize_blocks( $tree );
+	} elseif ( null !== $tree && parse_blocks( $clean ) !== $kept ) {
+		// kses of the raw input read a "<" in the comment JSON as a tag and broke or merged the comment.
+		$clean = serialize_blocks( $kept );
+	}
+	return array(
+		'content'  => $clean,
+		'warnings' => $warnings,
+	);
+}
+
+/**
+ * Empty every <style> and <script> element, using the HTML tokenizer rather than a regex.
+ *
+ * A "<style>" inside a quoted attribute or inside an HTML comment (a block delimiter) is not an
+ * element and is left alone. An unclosed element stops the tokenizer and is left for kses, as
+ * before. kses then drops the emptied tags, since neither is an allowed post tag.
+ *
+ * @param string                                               $raw      Markup.
+ * @param list<array{block:string,code:string,message:string}> $warnings Accumulator, by reference: one removed_element row per element name.
+ * @return string The markup, byte for byte when nothing was emptied.
+ */
+function aafm_strip_raw_text_elements( string $raw, array &$warnings ): string {
+	$processor = new WP_HTML_Tag_Processor( $raw );
+	$removed   = array();
+	while ( $processor->next_tag() ) {
+		$tag = $processor->get_tag();
+		if ( ( 'STYLE' === $tag || 'SCRIPT' === $tag ) && $processor->set_modifiable_text( '' ) ) {
+			$removed[ $tag ] = true;
+		}
+	}
+	if ( array() === $removed ) {
+		return $raw;
+	}
+	foreach ( array_keys( $removed ) as $tag ) {
+		$warnings[] = aafm_block_warning( '', 'removed_element', strtolower( (string) $tag ) );
+	}
+	return $processor->get_updated_html();
+}
+
+/**
+ * Add an invalid_block_attributes warning for every named block whose delimiter JSON did not parse.
+ *
+ * The block parser leaves attrs null when json_decode() fails, and the attributes are then lost.
+ *
+ * @param array<int|string,array<string,mixed>>                $blocks   Parsed blocks.
+ * @param list<array{block:string,code:string,message:string}> $warnings Accumulator, by reference.
+ * @return bool Whether the tree holds any named block at any depth.
+ */
+function aafm_flag_invalid_block_attributes( array $blocks, array &$warnings ): bool {
+	$named = false;
+	foreach ( $blocks as $block ) {
+		if ( isset( $block['blockName'] ) ) {
+			$named = true;
+			if ( null === $block['attrs'] ) {
+				$warnings[] = aafm_block_warning( (string) $block['blockName'], 'invalid_block_attributes', '' );
+			}
+		}
+		if ( ! empty( $block['innerBlocks'] ) && aafm_flag_invalid_block_attributes( $block['innerBlocks'], $warnings ) ) {
+			$named = true;
+		}
+	}
+	return $named;
+}
+
+/**
+ * Walk the as-sent tree and the kses tree together, restoring tag-free attribute strings.
+ *
+ * @param array<int|string,array<string,mixed>> $sent Parsed tree of the normalized markup.
+ * @param array<int|string,array<string,mixed>> $kept Parsed tree of its wp_kses_post() output.
+ * @return array<int|string,array<string,mixed>>|null The kses tree with values restored, or null
+ *                                                    when the two trees differ in shape.
+ */
+function aafm_restore_block_attrs( array $sent, array $kept ): ?array {
+	if ( count( $sent ) !== count( $kept ) ) {
+		return null;
+	}
+	foreach ( $kept as $i => $block ) {
+		$from = $sent[ $i ] ?? null;
+		if ( ! is_array( $from ) || $from['blockName'] !== $block['blockName'] ) {
+			return null;
+		}
+		if ( is_array( $from['attrs'] ) && is_array( $block['attrs'] ) ) {
+			$kept[ $i ]['attrs'] = aafm_restore_attr_values( $from['attrs'], $block['attrs'] );
+		}
+		$inner = aafm_restore_block_attrs( (array) $from['innerBlocks'], (array) $block['innerBlocks'] );
+		if ( null === $inner ) {
+			return null;
+		}
+		$kept[ $i ]['innerBlocks'] = $inner;
+	}
+	return $kept;
+}
+
+/**
+ * Restore one attribute value (recursively through arrays, by identical key path).
+ *
+ * A string comes back as sent only when it cannot open an HTML tag (no "<" followed by a letter,
+ * "/", "!" or "?") and kses changed it by entity encoding alone, so decoding the kses value gives
+ * the sent value back. A value kses emptied or rewrote for any other reason (a template-part
+ * tagName that is not an allowed element, for one) keeps the kses side, as do keys present in
+ * only one tree.
+ *
+ * @param mixed $sent Value as sent.
+ * @param mixed $kept Value after kses.
+ * @return mixed
+ */
+function aafm_restore_attr_values( $sent, $kept ) {
+	if ( is_string( $sent ) && is_string( $kept ) ) {
+		if ( 1 !== preg_match( '#<[a-zA-Z/!?]#', $sent ) && html_entity_decode( $kept, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) === $sent ) {
+			return $sent;
+		}
+		return $kept;
+	}
+	if ( is_array( $sent ) && is_array( $kept ) ) {
+		foreach ( $kept as $key => $value ) {
+			if ( array_key_exists( $key, $sent ) ) {
+				$kept[ $key ] = aafm_restore_attr_values( $sent[ $key ], $value );
+			}
+		}
+	}
+	return $kept;
 }

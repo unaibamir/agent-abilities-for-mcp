@@ -92,7 +92,7 @@ class ConnectionRenderTest extends TestCase {
 
 	/**
 	 * With OAuth disabled, the card shows a notice instead of the picker, and the
-	 * App Password fallback renders open so it is immediately visible.
+	 * Application Passwords tab starts selected so it is immediately visible.
 	 */
 	public function test_oauth_card_shows_notice_when_disabled(): void {
 		update_option( 'aafm_oauth_enabled', '0' );
@@ -103,8 +103,8 @@ class ConnectionRenderTest extends TestCase {
 		$this->assertStringContainsString( 'Connect with OAuth', $html );
 		$this->assertStringContainsString( 'OAuth is turned off', $html );
 
-		// The App Password fallback opens automatically when OAuth is off.
-		$this->assertMatchesRegularExpression( '/<details[^>]*\bopen\b/', $html );
+		// The Application Passwords tab is selected when OAuth is off.
+		$this->assertMatchesRegularExpression( '/id="aafm-conn-tab-app-passwords"[^>]*aria-selected="true"/', $html );
 
 		// The existing pieces still render, proving the gate is purely additive.
 		$this->assertStringContainsString( 'MCP endpoint', $html );
@@ -139,8 +139,8 @@ class ConnectionRenderTest extends TestCase {
 
 		$this->assertStringContainsString( 'Registered clients', $html );
 		$this->assertStringContainsString( 'Active grants', $html );
-		$this->assertStringContainsString( 'No clients have registered yet.', $html );
-		$this->assertStringContainsString( 'No one has approved an OAuth connection yet.', $html );
+		$this->assertStringContainsString( 'No registered clients yet', $html );
+		$this->assertStringContainsString( 'No active grants yet', $html );
 		// The revoke AJAX nonce field is printed for the JS to read.
 		$this->assertStringContainsString( 'aafm_oauth_admin_nonce', $html );
 	}

@@ -242,6 +242,14 @@ final class ServerDiscoveryTest extends TestCase {
 		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/moderate-comment' ), $names );
 	}
 
+	public function test_editor_discovers_replace_block_and_a_subscriber_does_not(): void {
+		$this->acting_as( 'editor' );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/replace-block' ), $this->visible_tool_names() );
+
+		$this->acting_as( 'subscriber' );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/replace-block' ), $this->visible_tool_names() );
+	}
+
 	public function test_discover_helper_falls_back_for_general_cap_abilities(): void {
 		// For abilities with no per-object branch, discovery is the plain empty-input check -
 		// behavior is unchanged. create-post gates on publish_posts: editor yes, subscriber no.

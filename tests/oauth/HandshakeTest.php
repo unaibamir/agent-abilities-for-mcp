@@ -19,6 +19,7 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\OAuth;
 
+use AAFM\Tests\Support\QueryFaultInjector;
 use AAFM\Tests\TestCase;
 use WP_REST_Request;
 
@@ -606,5 +607,50 @@ class HandshakeTest extends TestCase {
 			$response->get_status(),
 			'an unrelated public route must still work with a bogus OAuth bearer set'
 		);
+	}
+
+	public function test_code_redemption_is_refused_for_an_expired_grant_and_the_code_is_burned(): void {
+		global $wpdb;
+		$uid       = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$client_id = $this->register_client( array( self::REDIRECT ) );
+		$code      = $this->mint_code( $client_id, $uid, self::REDIRECT, $this->challenge_for( self::VERIFIER ) );
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_consents', array( 'expires_at' => '2020-01-01 00:00:00' ), array( 'client_id' => $client_id ) );
+
+		$response = $this->exchange( $client_id, $code, self::REDIRECT, self::VERIFIER );
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertArrayNotHasKey( 'access_token', (array) $response->get_data() );
+
+		$wpdb->update( $wpdb->prefix . 'aafm_oauth_consents', array( 'expires_at' => null ), array( 'client_id' => $client_id ) );
+		$this->assertSame( 400, $this->exchange( $client_id, $code, self::REDIRECT, self::VERIFIER )->get_status(), 'The code was burned.' );
+	}
+
+	public function test_code_redemption_rolls_back_when_the_grant_cannot_be_read(): void {
+		global $wpdb;
+		$uid       = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$client_id = $this->register_client( array( self::REDIRECT ) );
+		$code      = $this->mint_code( $client_id, $uid, self::REDIRECT, $this->challenge_for( self::VERIFIER ) );
+
+		$response = QueryFaultInjector::fail_query(
+			'SELECT paused_at, expires_at',
+			fn() => $this->exchange( $client_id, $code, self::REDIRECT, self::VERIFIER )
+		);
+		$this->assertSame( 500, $response->get_status() );
+		$this->assertSame( 200, $this->exchange( $client_id, $code, self::REDIRECT, self::VERIFIER )->get_status(), 'The code survives a read fault.' );
+	}
+
+	public function test_an_authorization_code_minted_before_the_update_still_redeems(): void {
+		SchemaV9Test::downgrade_consents_to_v8();
+		update_option( 'aafm_oauth_schema_version', '8' );
+		$uid       = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$client_id = $this->register_client( array( self::REDIRECT ) );
+		$code      = $this->mint_code( $client_id, $uid, self::REDIRECT, $this->challenge_for( self::VERIFIER ) );
+
+		delete_transient( 'aafm_oauth_upgrade_lock' );
+		aafm_maybe_upgrade_oauth_tables();
+		$this->assertSame( '9', get_option( 'aafm_oauth_schema_version' ) );
+
+		$response = $this->exchange( $client_id, $code, self::REDIRECT, self::VERIFIER );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'refresh_token', (array) $response->get_data() );
 	}
 }

@@ -267,12 +267,7 @@ function aafm_render_allowlist_section(): void {
 	$registry_full = aafm_get_abilities_registry_full();
 
 	echo '<details class="aafm-card aafm-section aafm-section--collapsible aafm-allowlist-card" open>';
-	echo '<summary class="aafm-card-head">';
-	echo '<span class="aafm-card-head-ic">' . wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() ) . '</span>';
-	echo '<div class="aafm-card-head-text">';
-	echo '<h3 class="aafm-card-head-title">' . esc_html__( 'Ability allowlist', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '</div>';
-	echo '</summary>';
+	echo '<summary class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'lock', __( 'Ability allowlist', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</summary>';
 
 	echo '<div class="aafm-section-body">';
 
@@ -280,7 +275,7 @@ function aafm_render_allowlist_section(): void {
 	// component's non-collapsible shape copied here by mistake - the description then collided
 	// with the table below it, and being part of the summary's click target meant clicking the
 	// explanation toggled the card. It belongs in the body, as prose, not in the disclosure control.
-	echo '<p class="aafm-card-head-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-card-desc">' . esc_html__( 'Optionally narrow which abilities a role or a specific connection may reach, on top of the abilities enabled above. Leave a scope with no row to leave it unrestricted.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	// R3-3 (1.7.5 deferred, round 3): a failed read must never be rendered as "no restrictions
 	// exist" - this card is editable and Save replaces the whole option, so that lookalike empty

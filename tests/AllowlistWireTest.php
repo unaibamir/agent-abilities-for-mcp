@@ -27,16 +27,17 @@ final class AllowlistWireTest extends TestCase {
 	 * Builds a throwaway single-ability MCP server, mirroring
 	 * ServerToolsListExposureTest::build_exposure_test_server().
 	 *
-	 * @param \WP\MCP\Core\McpAdapter $adapter Adapter instance.
+	 * @param \WP\MCP\Core\McpAdapter $adapter   Adapter instance.
+	 * @param string[]                $abilities Abilities the server carries.
 	 * @return \WP\MCP\Core\McpServer
 	 * @throws \RuntimeException When the adapter refuses to build the test-only server.
 	 */
-	private function build_single_ability_server( \WP\MCP\Core\McpAdapter $adapter ): \WP\MCP\Core\McpServer {
+	private function build_single_ability_server( \WP\MCP\Core\McpAdapter $adapter, array $abilities = array( 'aafm/update-post' ) ): \WP\MCP\Core\McpServer {
 		static $counter = 0;
 		++$counter;
 		$server_id = 'aafm-server-allowlist-wire-test-' . $counter;
 
-		$tools = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( array( 'aafm/update-post' ) ) );
+		$tools = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( $abilities ) );
 
 		$this->in_action(
 			'mcp_adapter_init',
@@ -167,5 +168,158 @@ final class AllowlistWireTest extends TestCase {
 			'req-allowlist-wire-2'
 		);
 		$this->assertInstanceOf( \AAFM\Tests\Support\McpProtocolError::class, $result );
+	}
+
+	/**
+	 * Put an OAuth grant with a preset in the request store, as the bearer resolver does.
+	 *
+	 * @param string $client_id Client id.
+	 * @param string $preset    Preset slug, '' for Custom.
+	 * @return void
+	 */
+	private function grant_with_preset( string $client_id, string $preset ): void {
+		aafm_oauth_current_client_id( $client_id );
+		aafm_oauth_current_grant(
+			array_merge(
+				aafm_oauth_grant_defaults(),
+				array(
+					'preset'    => $preset,
+					'client_id' => $client_id,
+					'user_id'   => get_current_user_id(),
+				)
+			)
+		);
+	}
+
+	public function test_a_grant_with_a_preset_hides_tools_outside_it_in_tools_list_and_refuses_the_call(): void {
+		$this->register_enabled( array( 'aafm/update-post', 'aafm/delete-post' ) );
+		$post_id = self::factory()->post->create();
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$server  = $this->build_single_ability_server( $adapter, array( 'aafm/update-post', 'aafm/delete-post' ) );
+		$handler = new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
+
+		$this->acting_as( 'administrator' );
+		$this->grant_with_preset( 'preset-client', 'content_editor' );
+
+		$names = array_map( static fn( $tool ) => $tool->getName(), aafm_filter_mcp_tools_list( $handler->list_tools()->getTools(), $server ) );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/update-post' ), $names );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/delete-post' ), $names );
+
+		$result = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/delete-post' ),
+				'arguments' => array( 'post_id' => $post_id ),
+			),
+			'req-preset-wire-1'
+		);
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $result );
+		$this->assertTrue( $result->getIsError() );
+		$this->assertNotNull( get_post( $post_id ) );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm/delete-post' ) );
+		$this->assertSame( 'denied', $rows[0]['status'] );
+		$this->assertStringContainsString( 'Refused: scope_list', (string) $rows[0]['detail'] );
+	}
+
+	public function test_a_preset_cannot_widen_the_allowlist(): void {
+		update_option(
+			'aafm_ability_allowlist_overrides',
+			array(
+				array(
+					'scope_type'        => 'oauth_client',
+					'scope_id'          => 'narrow-client',
+					'allowed_abilities' => array( 'aafm/get-posts' ),
+				),
+			)
+		);
+		$admin = $this->acting_as( 'administrator' );
+		$this->grant_with_preset( 'narrow-client', 'content_editor' );
+		$this->assertFalse( aafm_ability_allowed_for_principal( 'aafm/create-post', $admin, 'narrow-client' ) );
+		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/get-posts', $admin, 'narrow-client' ) );
+	}
+
+	public function test_the_preset_does_not_apply_to_an_application_password_request(): void {
+		$admin = $this->acting_as( 'administrator' );
+		// A grant left in the store from another request, and no OAuth client on this one.
+		aafm_oauth_current_grant(
+			array_merge(
+				aafm_oauth_grant_defaults(),
+				array(
+					'preset'    => 'read_only',
+					'client_id' => 'other-client',
+					'user_id'   => $admin,
+				)
+			)
+		);
+		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/delete-post', $admin, null ) );
+		$this->assertTrue( aafm_ability_allowed_for_principal( 'aafm/delete-post', $admin, 'this-client' ), 'A grant for another client is ignored.' );
+	}
+
+	public function test_a_bridged_call_is_gated_by_the_preset_on_the_execute_path(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'preset-wire-things' ) ) {
+					wp_register_ability_category(
+						'preset-wire-things',
+						array(
+							'label'       => 'Preset wire',
+							'description' => 'Fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				$base = array(
+					'category'            => 'preset-wire-things',
+					'description'         => 'Fixture.',
+					'input_schema'        => array( 'type' => 'object' ),
+					'execute_callback'    => static fn() => array( 'ran' => true ),
+					'permission_callback' => '__return_true',
+				);
+				aafm_register_ability_with_log(
+					'aafm-bridge/preset-wire-reader',
+					$base + array(
+						'label' => 'Reader',
+						'meta'  => array( 'annotations' => array( 'readonly' => true ) ),
+					)
+				);
+				aafm_register_ability_with_log(
+					'aafm-bridge/preset-wire-writer',
+					$base + array(
+						'label' => 'Writer',
+						'meta'  => array( 'annotations' => array( 'readonly' => false ) ),
+					)
+				);
+			}
+		);
+		$this->acting_as( 'administrator' );
+		$run = static function ( string $name ): bool {
+			$result = wp_get_ability( $name )->execute( array() );
+			return ! is_wp_error( $result );
+		};
+
+		$expect = array(
+			'content_editor' => array( false, false ),
+			'read_only'      => array( true, false ),
+			''               => array( true, true ),
+		);
+		foreach ( $expect as $preset => $outcome ) {
+			$this->grant_with_preset( 'bridge-client', (string) $preset );
+			$this->assertSame( $outcome, array( $run( 'aafm-bridge/preset-wire-reader' ), $run( 'aafm-bridge/preset-wire-writer' ) ), "preset '$preset'" );
+		}
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm-bridge/preset-wire-writer',
+				'status'  => 'denied',
+			)
+		);
+		$this->assertNotEmpty( $rows );
+		$this->assertStringContainsString( 'Refused: scope_list', (string) $rows[0]['detail'] );
+
+		wp_unregister_ability( 'aafm-bridge/preset-wire-reader' );
+		wp_unregister_ability( 'aafm-bridge/preset-wire-writer' );
 	}
 }

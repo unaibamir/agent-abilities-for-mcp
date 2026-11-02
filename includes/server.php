@@ -604,6 +604,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// Task 8 fixed for update-page, just never carried over to its sibling here.
 		case 'aafm/update-post':
 		case 'aafm/replace-in-post':
+		case 'aafm/replace-block':
 		case 'aafm/set-featured-image':
 			return static fn(): bool => aafm_can_edit_post_family();
 		case 'aafm/trash-post':
@@ -1030,16 +1031,14 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
 }
 
 /**
- * Transport-level gate: require an authenticated user, then enforce the IP allowlist.
- * Per-ability caps do the real work. Named (not inline) so it is unit-testable and
+ * Transport-level gate: require an authenticated user, enforce the IP allowlist, then refuse a
+ * paused connection. Per-ability caps do the real work. Named (not inline) so it is unit-testable and
  * PHPStan-visible.
  *
- * @param \WP_REST_Request<array<string,mixed>> $request Incoming request (unused; auth already resolved).
+ * @param \WP_REST_Request<array<string,mixed>> $request Incoming request; keys the once-per-request denial row.
  * @return bool|WP_Error
  */
 function aafm_transport_permission_callback( $request ) {
-	unset( $request );
-
 	if ( ! is_user_logged_in() ) {
 		return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), array( 'status' => 401 ) );
 	}
@@ -1049,18 +1048,22 @@ function aafm_transport_permission_callback( $request ) {
 		// VALID credential from a blocked address hits this branch on every request, so an
 		// uncapped row per denial lets one address flood the 30-day activity table. Only the
 		// row is capped - the denial below is returned every time regardless.
-		if ( aafm_denial_log_within_cap( 'ipb' ) ) {
-			$user = wp_get_current_user();
-			aafm_log_activity(
-				array(
-					'ability'           => '(transport)',
-					'status'            => 'denied',
-					'principal_user_id' => (int) $user->ID,
-					'principal_login'   => (string) $user->user_login,
-				)
-			);
-		}
+		aafm_log_transport_denial( 'ipb', '', '', $request );
 		return new WP_Error( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
+	}
+
+	// A paused connection keeps its login but may not use the endpoint. Resume is instant: nothing was revoked.
+	// Return false, not a WP_Error: the adapter turns false into core's generic rest_forbidden (a plain 403) and writes no
+	// error_log line, whereas a returned WP_Error is logged by HttpTransport::check_permission() on every request.
+	$grant = aafm_oauth_current_grant();
+	if ( $grant['paused'] ) {
+		aafm_log_transport_denial( 'cpa', 'connection_paused', (string) $grant['client_id'], $request );
+		return false;
+	}
+
+	// Admitted: only now is the call a use of the grant (refused calls are not stamped).
+	if ( '' !== $grant['client_id'] ) {
+		aafm_oauth_grant_touch( (int) $grant['user_id'], (string) $grant['client_id'], $grant['last_used_at'] );
 	}
 
 	return true;

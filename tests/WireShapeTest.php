@@ -271,6 +271,8 @@ final class WireShapeTest extends TestCase {
 			'aafm/get-activity-log'     => aafm_exec_get_activity_log( array() ),
 			'aafm/list-blocks'          => aafm_exec_list_blocks( array() ),
 			'aafm/get-block'            => aafm_exec_get_block( array( 'block_id' => $block ) ),
+			'aafm/list-block-types'     => aafm_exec_list_block_types( array() ),
+			'aafm/get-block-type'       => aafm_exec_get_block_type( array( 'name' => 'core/group' ) ),
 			'aafm/list-menus'           => aafm_exec_list_menus(),
 			'aafm/get-menu'             => aafm_exec_get_menu( array( 'menu_id' => $menu_id ) ),
 			'aafm/list-menu-items'      => aafm_exec_list_menu_items( array( 'menu_id' => $menu_id ) ),

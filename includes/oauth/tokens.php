@@ -155,8 +155,9 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 			'expires_at'         => gmdate( 'Y-m-d H:i:s', $now + $access_ttl ),
 			'refresh_expires_at' => gmdate( 'Y-m-d H:i:s', $now + $refresh_ttl ),
 			'is_active'          => 1,
+			'created_at'         => gmdate( 'Y-m-d H:i:s', $now ), // The column default is the server's local time.
 		),
-		array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d' )
+		array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d', '%s' )
 	);
 
 	// A failed insert means there is no persisted token row - never return a token pair for it,
@@ -179,7 +180,8 @@ function aafm_oauth_mint_tokens( array $ctx ) {
  * lives in exactly one place, then re-enforces client deactivation - matching the live request path
  * in validator.php. A token validates only when it is active, unexpired, AND its owning client has
  * not been deactivated; so disabling a compromised client invalidates its live access tokens here
- * too, not just on the REST path.
+ * too, not just on the REST path. A grant past its end date, or one whose state cannot be read,
+ * does not validate either, matching the resolver's step 10b.
  *
  * WARNING: this does NOT perform the RFC 8707 audience binding that the live request path enforces
  * (aafm_oauth_resolve_current_user compares the token's resource against aafm_endpoint_url() before
@@ -200,6 +202,11 @@ function aafm_oauth_validate_access_token( string $raw ) {
 	// Re-enforce client deactivation: a token already in a client's hands keeps working unless its
 	// owning client is re-checked, so a deactivated client's live tokens must stop validating.
 	if ( aafm_oauth_client_is_deactivated( (string) ( $row['client_id'] ?? '' ) ) ) {
+		return false;
+	}
+
+	// Same per-connection rule as the resolver: an expired or uncertifiable grant does not validate.
+	if ( 'ok' !== aafm_oauth_grant_gate( (int) $row['wp_user_id'], (string) ( $row['client_id'] ?? '' ) ) ) {
 		return false;
 	}
 
@@ -302,6 +309,18 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 			'invalid_grant',
 			__( 'The client is no longer active.', 'agent-abilities-for-mcp' )
 		);
+	}
+
+	// A grant past its end date cannot roll its tokens forward. A paused grant can: Resume must not need a new sign-in.
+	$gate = aafm_oauth_grant_gate( (int) $row['wp_user_id'], $client_id );
+	if ( 'unknown' === $gate ) {
+		return new WP_Error( 'server_error', __( 'The connection could not be checked.', 'agent-abilities-for-mcp' ) );
+	}
+	if ( 'expired' === $gate ) {
+		return new WP_Error( 'invalid_grant', __( 'This connection has expired. Approve it again to reconnect.', 'agent-abilities-for-mcp' ) );
+	}
+	if ( ! aafm_oauth_user_still_may_connect( (int) $row['wp_user_id'] ) ) {
+		return new WP_Error( 'invalid_grant', __( 'This account can no longer connect apps.', 'agent-abilities-for-mcp' ) );
 	}
 
 	// Expired refresh token: reject without rotating. The PHP string compare is

@@ -761,6 +761,9 @@ function aafm_ajax_test_connection(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
+	if ( aafm_pause_all() ) {
+		wp_send_json_error( array( 'message' => __( 'Access to this site is paused. Resume it on this tab, then check again.', 'agent-abilities-for-mcp' ) ) );
+	}
 
 	// Forward only the current admin's WordPress auth cookies on the self-call (admin-eye
 	// reachability check). The self-request is same-origin and already nonce + cap gated, but it
@@ -824,235 +827,6 @@ function aafm_ajax_test_connection(): void {
 			'admin_tool_count' => $tool_count, // The admin's-eye count, not the agent's.
 		)
 	);
-}
-
-/**
- * Render the OAuth management UI: a Registered Clients table and an Active Grants table.
- *
- * Both read from the plugin's own OAuth tables and render fully escaped, using the same
- * widefat striped / aafm-pill / aafm-btn styling as the rest of the admin. Each table
- * shows a one-line empty state when it has no rows. Revoke buttons are wired in admin.js
- * (confirm + nonce-checked AJAX); the nonce field printed here is what those calls read.
- *
- * The Active Grants table's "Current role" column reads each identity's LIVE role from
- * aafm_oauth_list_grants(), never a value captured when the grant was approved (1.7.4
- * security assessment, S4): nothing in the schema stores a consent-time snapshot to diff
- * against, so this is the honest, no-schema-change way to give an operator visibility into
- * what a grant currently authorizes, even though it cannot by itself flag that a role
- * changed since approval. A high-privilege identity is called out with the same
- * aafm-pill-warn styling and the same "administrator access" language the consent screen
- * itself uses (aafm_oauth_user_is_high_privilege(), authorize.php).
- *
- * Only ever called from inside the capability-gated Connection tab, within the
- * aafm_oauth_enabled() card.
- *
- * @return void
- */
-function aafm_render_oauth_management(): void {
-	$clients = aafm_oauth_list_clients();
-	$grants  = aafm_oauth_list_grants();
-
-	echo '<div class="aafm-oauth-manage">';
-	wp_nonce_field( 'aafm_admin', 'aafm_oauth_admin_nonce' );
-
-	// ---- Registered clients ----
-	// The count rides in the heading only when there is something to count: the zero case already
-	// has its own empty state below, and "Registered clients (0)" above "No clients have registered
-	// yet" says the same thing twice.
-	echo '<h3>';
-	if ( empty( $clients ) ) {
-		echo esc_html__( 'Registered clients', 'agent-abilities-for-mcp' );
-	} else {
-		printf(
-			/* translators: %s: number of registered OAuth clients. */
-			esc_html( _n( 'Registered clients (%s)', 'Registered clients (%s)', count( $clients ), 'agent-abilities-for-mcp' ) ),
-			esc_html( number_format_i18n( count( $clients ) ) )
-		);
-	}
-	echo '</h3>';
-	echo '<p class="sub">' . esc_html__( 'Apps that have registered to connect over OAuth. Revoking a client turns it off and ends its active sessions right away.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	if ( empty( $clients ) ) {
-		echo '<p class="aafm-empty-state">' . esc_html__( 'No clients have registered yet.', 'agent-abilities-for-mcp' ) . '</p>';
-	} else {
-		echo '<div class="aafm-table-wrap">';
-		echo '<table class="widefat striped aafm-oauth-table aafm-clients-table"><thead><tr>';
-		echo '<th>' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Client ID', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Redirect URIs', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Created', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Active tokens', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
-		printf(
-			'<th><span title="%1$s">%2$s</span></th>',
-			esc_attr__( 'Marks this client as an AI agent connection rather than an ordinary human client, surfaced on the activity log.', 'agent-abilities-for-mcp' ),
-			esc_html__( 'Agent', 'agent-abilities-for-mcp' )
-		);
-		echo '<th>' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '</tr></thead><tbody>';
-
-		foreach ( $clients as $client ) {
-			$full_id  = $client['client_id'];
-			$short_id = strlen( $full_id ) > 14 ? substr( $full_id, 0, 14 ) . '…' : $full_id;
-			$name     = '' !== $client['client_name'] ? $client['client_name'] : __( '(unnamed client)', 'agent-abilities-for-mcp' );
-
-			printf( '<tr data-client-row="%s">', esc_attr( $full_id ) );
-			printf( '<td>%s</td>', esc_html( $name ) );
-			// The cell cannot hold a full client id without breaking the table layout, so the
-			// column stays truncated; a copy control (the same .aafm-copy component used
-			// elsewhere on this tab, already bound in admin.js and already in the kses allowlist)
-			// carries the full id, since the title tooltip lets an operator see it but not copy it.
-			echo '<td>';
-			echo wp_kses(
-				sprintf(
-					'<span class="aafm-field-mono aafm-client-id-cell"><code title="%1$s">%2$s</code><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-copy" data-copy="%1$s" aria-label="%5$s">%3$s<span class="aafm-copy-label">%4$s</span></button></span>',
-					esc_attr( $full_id ),
-					esc_html( $short_id ),
-					aafm_icon( 'copy' ),
-					esc_html__( 'Copy', 'agent-abilities-for-mcp' ),
-					esc_attr__( 'Copy the full client ID', 'agent-abilities-for-mcp' )
-				),
-				aafm_admin_allowed_html()
-			);
-			echo '</td>';
-
-			echo '<td>';
-			if ( empty( $client['redirect_uris'] ) ) {
-				echo '<span class="aafm-muted">' . esc_html__( 'None', 'agent-abilities-for-mcp' ) . '</span>';
-			} else {
-				$links = array();
-				foreach ( $client['redirect_uris'] as $uri ) {
-					$links[] = '<a href="' . esc_url( $uri ) . '" target="_blank" rel="noreferrer noopener">' . esc_html( $uri ) . '</a>';
-				}
-				echo wp_kses( implode( '<br>', $links ), aafm_admin_allowed_html() );
-			}
-			echo '</td>';
-
-			printf( '<td>%s</td>', esc_html( aafm_format_admin_datetime( $client['created_at'] ) ) );
-			printf( '<td class="aafm-client-tokens">%s</td>', esc_html( number_format_i18n( $client['active_tokens'] ) ) );
-
-			echo '<td class="aafm-status-cell">';
-			if ( $client['is_active'] ) {
-				echo '<span class="aafm-pill aafm-pill-success">' . esc_html__( 'Active', 'agent-abilities-for-mcp' ) . '</span>';
-			} else {
-				echo '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Revoked', 'agent-abilities-for-mcp' ) . '</span>';
-			}
-			echo '</td>';
-
-			printf(
-				'<td><label class="aafm-switch"><input type="checkbox" class="aafm-client-agent-toggle" data-client-id="%1$s" aria-label="%3$s"%2$s><span class="aafm-switch-track"></span></label></td>',
-				esc_attr( $full_id ),
-				checked( ! empty( $client['is_agent_identity'] ), true, false ),
-				esc_attr__( 'Agent identity', 'agent-abilities-for-mcp' )
-			);
-
-			echo '<td>';
-			if ( $client['is_active'] ) {
-				printf(
-					'<button type="button" class="aafm-btn aafm-btn-secondary aafm-revoke-client" data-client-id="%s">%s</button>',
-					esc_attr( $full_id ),
-					esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
-				);
-			} else {
-				echo '<span class="aafm-muted">' . esc_html__( 'Revoked', 'agent-abilities-for-mcp' ) . '</span>';
-			}
-			echo '</td>';
-			echo '</tr>';
-		}
-
-		echo '</tbody></table>';
-		echo '</div>';
-	}
-
-	// ---- Active grants ----
-	echo '<h3>';
-	if ( empty( $grants ) ) {
-		echo esc_html__( 'Active grants', 'agent-abilities-for-mcp' );
-	} else {
-		printf(
-			/* translators: %s: number of active OAuth grants. */
-			esc_html( _n( 'Active grants (%s)', 'Active grants (%s)', count( $grants ), 'agent-abilities-for-mcp' ) ),
-			esc_html( number_format_i18n( count( $grants ) ) )
-		);
-	}
-	echo '</h3>';
-	echo '<p class="sub">' . esc_html__( 'People who have approved an app to act as them. Revoking a grant ends that connection; they would need to approve again to reconnect.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	if ( empty( $grants ) ) {
-		echo '<p class="aafm-empty-state">' . esc_html__( 'No one has approved an OAuth connection yet.', 'agent-abilities-for-mcp' ) . '</p>';
-	} else {
-		$scope_hint     = __( 'The app can only do what this user\'s role allows and what you have turned on under Abilities.', 'agent-abilities-for-mcp' );
-		$role_names_map = wp_roles()->get_names();
-
-		echo '<div class="aafm-table-wrap">';
-		echo '<table class="widefat striped aafm-oauth-table aafm-grants-table"><thead><tr>';
-		echo '<th>' . esc_html__( 'User', 'agent-abilities-for-mcp' ) . '</th>';
-		printf(
-			'<th><span title="%1$s">%2$s</span></th>',
-			esc_attr__( "The user's role right now, not necessarily what it was when they approved this connection. A token always acts with whatever this identity can currently do.", 'agent-abilities-for-mcp' ),
-			esc_html__( 'Current role', 'agent-abilities-for-mcp' )
-		);
-		echo '<th>' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Scope', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Granted', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '</tr></thead><tbody>';
-
-		foreach ( $grants as $grant ) {
-			$client_name = '' !== $grant['client_name'] ? $grant['client_name'] : __( '(unnamed client)', 'agent-abilities-for-mcp' );
-
-			printf(
-				'<tr data-grant-row="%1$s|%2$s">',
-				esc_attr( (string) $grant['user_id'] ),
-				esc_attr( $grant['client_id'] )
-			);
-			printf(
-				/* translators: 1: user display name, 2: user login. */
-				'<td>%1$s <span class="aafm-muted">(%2$s)</span></td>',
-				esc_html( $grant['user_display'] ),
-				esc_html( $grant['user_login'] )
-			);
-
-			echo '<td>';
-			$role_names = array_map(
-				static function ( $role_slug ) use ( $role_names_map ) {
-					return isset( $role_names_map[ $role_slug ] ) ? translate_user_role( $role_names_map[ $role_slug ] ) : (string) $role_slug;
-				},
-				(array) $grant['user_roles']
-			);
-			$role_label = ! empty( $role_names ) ? implode( ', ', $role_names ) : __( 'No role', 'agent-abilities-for-mcp' );
-			if ( ! empty( $grant['is_high_privilege'] ) ) {
-				printf(
-					'<span class="aafm-pill aafm-pill-warn" title="%1$s">%2$s</span>',
-					esc_attr__( 'This connection currently acts with full administrator access.', 'agent-abilities-for-mcp' ),
-					esc_html( $role_label )
-				);
-			} else {
-				echo esc_html( $role_label );
-			}
-			echo '</td>';
-
-			printf( '<td>%s</td>', esc_html( $client_name ) );
-			printf(
-				'<td><span title="%1$s">%2$s</span></td>',
-				esc_attr( $scope_hint ),
-				esc_html__( 'Full access', 'agent-abilities-for-mcp' )
-			);
-			printf( '<td>%s</td>', esc_html( aafm_format_admin_datetime( $grant['granted_at'] ) ) );
-			printf(
-				'<td><button type="button" class="aafm-btn aafm-btn-secondary aafm-revoke-grant" data-user-id="%1$s" data-client-id="%2$s">%3$s</button></td>',
-				esc_attr( (string) $grant['user_id'] ),
-				esc_attr( $grant['client_id'] ),
-				esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
-			);
-			echo '</tr>';
-		}
-
-		echo '</tbody></table>';
-		echo '</div>';
-	}
-
-	echo '</div>'; // .aafm-oauth-manage
 }
 
 /**
@@ -1158,25 +932,28 @@ function aafm_render_snippet_block( string $snippet, string $os = '' ): void {
  * Render the Connection tab.
  *
  * Layout (OAuth-first):
- *   1. Endpoint card - single canonical endpoint display.
+ *   1. Endpoint card - single canonical endpoint display, then the Connection Doctor and the
+ *      Pause all access switch, so the kill switch is on screen without opening a tab.
  *   2. OAuth card (Recommended) - guided browser-approval flow when OAuth is enabled;
  *      a short notice when it is turned off.
- *   3. App-Password fallback - the existing three-step wizard wrapped in a <details>
- *      element, collapsed by default when OAuth is on, open when OAuth is off.
+ *   3. OAuth and Application Passwords tabs (aafm_render_connection_tabs()), OAuth selected
+ *      when it is on.
+ *   4. The allowlist, which governs both methods.
  *
  * @return void
  */
 function aafm_render_connection_tab(): void {
-	$url       = aafm_endpoint_url();
-	$oauth_on  = aafm_oauth_enabled();
-	$is_local  = aafm_site_is_local();
-	$kses_code = array( 'code' => array() );
+	$url      = aafm_endpoint_url();
+	$oauth_on = aafm_oauth_enabled();
+	$is_local = aafm_site_is_local();
 
 	echo '<div class="aafm-connection">';
+	aafm_render_pause_all_notice();
 
 	// ---- 1. Endpoint card (the single canonical endpoint display) ----
-	echo '<section class="aafm-card aafm-card-pad aafm-endpoint-card">';
-	echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<section class="aafm-card aafm-endpoint-card">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'endpoint', __( 'MCP endpoint', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
 	echo '<div class="aafm-field-mono">';
 	printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
 	echo wp_kses(
@@ -1190,19 +967,18 @@ function aafm_render_connection_tab(): void {
 		aafm_admin_allowed_html()
 	);
 	echo '</div>';
-	echo '</section>';
+	echo '</div></section>'; // .aafm-card-pad, .aafm-endpoint-card
 
 	aafm_render_doctor_card();
+	aafm_render_pause_all_card();
 
 	// ---- 2. OAuth card ----
-	echo '<section class="aafm-card aafm-card-pad aafm-oauth-card">';
-	echo '<div class="aafm-oauth-card-head">';
-	echo '<h2>' . esc_html__( 'Connect with OAuth', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '<span class="aafm-pill aafm-pill-info aafm-recommended-pill">' . esc_html__( 'Recommended', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '</div>';
+	echo '<section class="aafm-card aafm-oauth-card">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'connection', __( 'Connect with OAuth', 'agent-abilities-for-mcp' ), '', '<span class="aafm-pill aafm-pill-info aafm-recommended-pill">' . esc_html__( 'Recommended', 'agent-abilities-for-mcp' ) . '</span>' ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
 
 	if ( $oauth_on ) {
-		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="aafm-card-desc">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
 
 		// REST-lockdown diagnostic. The OAuth /register and /token endpoints must answer BEFORE a
 		// client has any credential, so a security or membership plugin that restricts the whole
@@ -1294,12 +1070,9 @@ function aafm_render_connection_tab(): void {
 		}
 		echo '</div>'; // .aafm-oauth-panels
 
-		// OAuth management tables (registered clients + active grants).
-		aafm_render_oauth_management();
-
 	} else {
 		// OAuth is off - short notice instead of the picker.
-		echo '<p class="sub">' . esc_html__(
+		echo '<p class="aafm-card-desc">' . esc_html__(
 			'OAuth is turned off. Enable it under Settings to use the browser-approval flow, or connect with an Application Password below.',
 			'agent-abilities-for-mcp'
 		) . '</p>';
@@ -1316,7 +1089,7 @@ function aafm_render_connection_tab(): void {
 			}
 		}
 		if ( ! empty( $hosted_labels ) ) {
-			echo '<p class="sub aafm-oauth-off-hosted">' . esc_html(
+			echo '<p class="aafm-card-desc aafm-oauth-off-hosted">' . esc_html(
 				sprintf(
 					/* translators: %s: comma-separated list of hosted client names, e.g. "ChatGPT, Claude, and Manus". */
 					__( '%s connect over OAuth only, so they need OAuth turned on - the Application Password path below will not work for them.', 'agent-abilities-for-mcp' ),
@@ -1326,19 +1099,32 @@ function aafm_render_connection_tab(): void {
 		}
 	}
 
-	echo '</section>';
+	echo '</div></section>'; // .aafm-card-pad, .aafm-oauth-card
 
-	// Moved above the app-password fallback per operator request: the allowlist governs both
-	// roles and OAuth clients regardless of which connection method is in use, so it belongs with
-	// the OAuth management tables rather than buried below the accordion.
+	aafm_render_connection_tabs( $oauth_on );
+
+	// After the tabs: the allowlist governs both roles and OAuth clients, whichever method is in use.
 	aafm_render_allowlist_section();
 
-	// ---- 3. App-Password fallback: existing three-step wizard inside <details> ----
-	// Open by default when OAuth is off so the wizard is immediately visible; collapsed when
-	// OAuth is on because most operators will use the OAuth path above.
-	$open_attr = $oauth_on ? '' : ' open';
-	printf( '<details class="aafm-app-password-fallback"%s>', esc_attr( $open_attr ) );
-	echo '<summary>' . esc_html__( 'OAuth not working? Connect with an Application Password', 'agent-abilities-for-mcp' ) . '</summary>';
+	echo '</div>'; // .aafm-connection
+}
+
+/**
+ * Render the Application Passwords panel body: the whole-site credential warning and Steps 1 to 3.
+ *
+ * @return void
+ */
+function aafm_render_app_password_steps(): void {
+	$is_local  = aafm_site_is_local();
+	$kses_code = array( 'code' => array() );
+
+	aafm_render_app_passwords_card( aafm_connection_app_passwords_data() );
+
+	// One card for the three steps, headed like the OAuth card. The steps sit straight in its body:
+	// no card inside a card.
+	echo '<section class="aafm-card aafm-app-password-steps">';
+	echo '<div class="aafm-card-head">' . wp_kses( aafm_card_head_html( 'terminal', __( 'Connect with an Application Password', 'agent-abilities-for-mcp' ) ), aafm_admin_allowed_html() ) . '</div>';
+	echo '<div class="aafm-card-pad">';
 
 	// Whole-site-credential caution. An Application Password is a core WordPress feature this
 	// plugin cannot scope: it authenticates the connected user everywhere in WordPress, not only
@@ -1378,10 +1164,10 @@ function aafm_render_connection_tab(): void {
 		echo '1';
 	}
 	echo '</span><div>';
-	echo '<h2>' . esc_html__( 'Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h3>' . esc_html__( 'Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="sub">' . esc_html__( 'Give the agent its own user with the least privilege it needs. It can only do what that user\'s role allows, and every ability is off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
-	echo '<div class="aafm-step-rail"><div class="aafm-card aafm-card-pad">';
+	echo '<div class="aafm-step-rail">';
 	wp_nonce_field( 'aafm_admin', 'aafm_conn_nonce' );
 	if ( $agent_exists ) {
 		$edit_url = (string) get_edit_user_link( $existing_agent_id );
@@ -1408,25 +1194,25 @@ function aafm_render_connection_tab(): void {
 		// wizard's equivalent input (quickconnect.php) is labelled the same way.
 		echo '<p><input type="text" id="aafm-agent-login" value="' . esc_attr( $default_agent_login ) . '" class="regular-text" aria-label="' . esc_attr__( 'Agent username', 'agent-abilities-for-mcp' ) . '"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
 	}
-	echo '</div></div>';
+	echo '</div>'; // .aafm-step-rail
 	echo '</div>';
 
 	// ---- Step 2: connect your client (App Password path) ----
 	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">2</span><div>';
-	echo '<h2>' . esc_html__( 'Connect your client', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h3>' . esc_html__( 'Connect your client', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="sub">' . esc_html__( 'Generate an Application Password for the agent user (Users → Profile → Application Passwords), pick your client, then copy the config.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	echo '<div class="aafm-step-rail"><div class="aafm-card">';
+	echo '<div class="aafm-step-rail">';
 
 	// OS toggle + client picker row.
-	echo '<div class="aafm-card-pad aafm-connect-controls">';
+	echo '<div class="aafm-connect-controls">';
 	aafm_render_client_picker( 'aafm-os-label-bridge', 'aafm-clients', aafm_config_snippet_clients() );
 	echo '</div>'; // .aafm-connect-controls
 
 	// Primary config block: the default (first) client, one .aafm-codeblock per OS.
-	echo '<div class="aafm-card-pad">';
+	echo '<div class="aafm-connect-config">';
 
 	// Use the first client in the config-snippet grid (claude-code) for the default block. Seed the
 	// username from the actual marked agent login when one exists (the admin may have created the
@@ -1463,9 +1249,8 @@ function aafm_render_connection_tab(): void {
 		'info',
 		$os_note_body,
 		array(
-			'html'   => true,
-			'inline' => true,
-			'class'  => 'aafm-os-note',
+			'html'  => true,
+			'class' => 'aafm-os-note',
 		)
 	);
 
@@ -1486,20 +1271,20 @@ function aafm_render_connection_tab(): void {
 	echo '</div>';
 	echo '</div>';
 
-	echo '</div>'; // .aafm-card-pad config block
+	echo '</div>'; // .aafm-connect-config
 
-	echo '</div></div>'; // .aafm-card / .aafm-step-rail
+	echo '</div>'; // .aafm-step-rail
 	echo '</div>'; // .aafm-step 2
 
 	// ---- Step 3: check the endpoint is reachable ----
 	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">3</span><div>';
-	echo '<h2>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h3>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view - your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	echo '<div class="aafm-step-rail"><div class="aafm-card">';
-	echo '<div class="aafm-card-pad aafm-connect-check">';
+	echo '<div class="aafm-step-rail">';
+	echo '<div class="aafm-connect-check">';
 	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-test-connection">';
 	echo wp_kses( aafm_icon( 'check' ), aafm_svg_allowed_html() );
 	echo esc_html__( 'Check endpoint', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-test-status" aria-live="polite"></span>';
@@ -1523,10 +1308,8 @@ function aafm_render_connection_tab(): void {
 		);
 	}
 	echo '</div>';
-	echo '</div></div>'; // .aafm-card / .aafm-step-rail
+	echo '</div>'; // .aafm-step-rail
 	echo '</div>'; // .aafm-step 3
 
-	echo '</details>'; // .aafm-app-password-fallback
-
-	echo '</div>'; // .aafm-connection
+	echo '</div></section>'; // .aafm-card-pad, .aafm-app-password-steps
 }

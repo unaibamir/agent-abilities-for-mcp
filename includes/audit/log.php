@@ -333,14 +333,21 @@ add_action( 'admin_init', 'aafm_maybe_upgrade_activity_log' );
 add_action( 'rest_api_init', 'aafm_maybe_upgrade_activity_log' );
 
 /**
- * Resolve the request source IP from REMOTE_ADDR only (never a spoofable header).
+ * Resolve the request source IP: REMOTE_ADDR, unless the owner opted into a trusted proxy and the
+ * request came from one; never a header from any other source.
  *
  * @return string
  */
 function aafm_source_ip(): string {
 	$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
 	$ip = trim( $ip );
-	return ( '' !== $ip && filter_var( $ip, FILTER_VALIDATE_IP ) ) ? $ip : '';
+	if ( '' === $ip || ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+		return '';
+	}
+	// This file loads at plugin-include time; safety.php, which holds the proxy code, loads on
+	// plugins_loaded. An early caller (activation, a log row written before bootstrap) gets the
+	// connection address, exactly as before.
+	return function_exists( 'aafm_trusted_proxy_visitor' ) ? aafm_trusted_proxy_visitor( $ip ) : $ip;
 }
 
 /**
@@ -397,6 +404,47 @@ function aafm_denial_log_within_cap( string $bucket ): bool {
 	}
 	set_transient( $key, $count + 1, AAFM_FAILED_AUTH_LOG_WINDOW );
 	return true;
+}
+
+/**
+ * Write one "(transport)" denied row for the current user, inside the per-IP cap of its bucket, at most
+ * once per bucket per request object. The refusal itself is the caller's and happens on every call.
+ *
+ * @param string $bucket    Cap bucket, as aafm_denial_log_within_cap() takes it: 'ipb', 'cpa' or 'pau' here.
+ * @param string $reason    Refusal reason for the detail column, or '' for a row without detail.
+ * @param string $client_id OAuth client id the call carried, or '' when it was not a bearer call.
+ * @param mixed  $request   The REST request being refused, or null.
+ * @return void
+ */
+function aafm_log_transport_denial( string $bucket, string $reason = '', string $client_id = '', $request = null ): void {
+	// Core's Allow header filter calls each handler's permission callback again once per HTTP method, with the
+	// SAME request object, so one refused request reaches here several times. One row per bucket per request
+	// object, or it spends the cap; a separate dispatch in the same process is a different object. The object
+	// itself is kept (not its id, which PHP reuses once it is freed). No request object: nothing to dedupe on.
+	global $aafm_policy_state;
+	if ( is_object( $request ) ) {
+		if ( ( $aafm_policy_state['denied'][ $bucket ] ?? null ) === $request ) {
+			return;
+		}
+		$aafm_policy_state['denied'][ $bucket ] = $request;
+	}
+	if ( ! aafm_denial_log_within_cap( $bucket ) ) {
+		return;
+	}
+	$user   = wp_get_current_user();
+	$record = array(
+		'ability'           => '(transport)',
+		'status'            => 'denied',
+		'principal_user_id' => (int) $user->ID,
+		'principal_login'   => (string) $user->user_login,
+	);
+	if ( '' !== $client_id ) {
+		$record['client_id'] = $client_id;
+	}
+	if ( '' !== $reason ) {
+		$record['detail'] = aafm_compose_denied_detail( null, $reason );
+	}
+	aafm_log_activity( $record );
 }
 
 /**

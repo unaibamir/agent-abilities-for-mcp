@@ -241,38 +241,58 @@ function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
 }
 
 /**
- * Record (or refresh) the user's consent for a client.
+ * Record (or refresh) the user's consent. The first approval stores the preset; a repeat approval
+ * changes only `granted_at` (pause, end date, last use, rate override and preset belong to the owner
+ * and survive it). The existing row keeps its `id`.
  *
- * The consents table has a UNIQUE (wp_user_id, client_id) key, so $wpdb->replace()
- * makes this an idempotent upsert: a repeat approval refreshes granted_at on the
- * single existing row rather than inserting a duplicate.
+ * This is an INSERT ... ON DUPLICATE KEY UPDATE on the UNIQUE (wp_user_id, client_id) key, not a
+ * REPLACE: REPLACE deletes and reinserts, which would wipe every owner setting on the row.
+ * $wpdb->prepare() cannot bind NULL, so a Custom approval simply names no preset column, which
+ * also keeps it working on a v8 table whose v9 columns have not installed yet.
  *
  * @param int    $user_id   WordPress user ID.
  * @param string $client_id The public client identifier.
- * @return bool True when the consent is confirmed stored after this call.
+ * @param string $preset    Access preset slug for a first approval; '' is Custom.
+ * @return bool True when the consent (and any requested preset) is confirmed stored after this call.
  */
-function aafm_oauth_record_consent( int $user_id, string $client_id ): bool {
+function aafm_oauth_record_consent( int $user_id, string $client_id, string $preset = '' ): bool {
 	if ( $user_id <= 0 || '' === $client_id ) {
 		return false;
 	}
 
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->replace(
-		$wpdb->prefix . 'aafm_oauth_consents',
-		array(
-			'wp_user_id' => $user_id,
-			'client_id'  => $client_id,
-			'granted_at' => gmdate( 'Y-m-d H:i:s', time() ),
-		),
-		array( '%d', '%s', '%s' )
-	);
+	$table    = $wpdb->prefix . 'aafm_oauth_consents';
+	$existing = aafm_oauth_consent_view( $user_id, $client_id );
+	if ( ! $existing['ok'] ) {
+		return false;
+	}
+	// A repeat approval never changes the preset, for any approver: the owner changes it on the Connection tab.
+	$preset = $existing['value'] ? '' : $preset;
+	if ( '' !== $preset ) {
+		// A restrictive preset must be stored or the approval refused, never silently dropped. If the v9 columns
+		// did not install, try once more, then refuse.
+		aafm_maybe_upgrade_oauth_tables();
+		if ( ! aafm_oauth_table_has_column( $table, 'preset' ) ) {
+			return false;
+		}
+		$sql = $wpdb->prepare( 'INSERT INTO %i (wp_user_id, client_id, granted_at, preset) VALUES (%d, %s, %s, %s) ON DUPLICATE KEY UPDATE granted_at = VALUES(granted_at)', $table, $user_id, $client_id, gmdate( 'Y-m-d H:i:s' ), $preset );
+	} else {
+		$sql = $wpdb->prepare( 'INSERT INTO %i (wp_user_id, client_id, granted_at) VALUES (%d, %s, %s) ON DUPLICATE KEY UPDATE granted_at = VALUES(granted_at)', $table, $user_id, $client_id, gmdate( 'Y-m-d H:i:s' ) );
+	}
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- prepared just above.
+	$wpdb->query( $sql );
 
-	// Certify against a fresh read rather than trusting $wpdb->replace()'s own result (same
-	// reasoning as aafm_oauth_deactivate_client()): a failed REPLACE must stop the approval
-	// handler from minting and handing back a code that redemption will find has no matching
-	// consent (Codex round 9, R9-6).
-	return aafm_oauth_has_consent( $user_id, $client_id );
+	// Certify against a fresh read rather than trusting the write's own result (Codex round 9, R9-6): a
+	// failed write must stop the approval handler from minting a code that redemption will refuse, and a
+	// stored preset must be the one that was asked for (another request can win the race to the row).
+	if ( ! aafm_oauth_has_consent( $user_id, $client_id ) ) {
+		return false;
+	}
+	if ( '' === $preset ) {
+		return true;
+	}
+	$state = aafm_oauth_grant_state( $user_id, $client_id );
+	return null !== $state && $state['preset'] === $preset;
 }
 
 /**
@@ -556,16 +576,50 @@ function aafm_oauth_user_is_high_privilege( WP_User $user ): bool {
 }
 
 /**
+ * The access presets the current approver may give, for the consent screen: an owner any, anyone
+ * else no wider than the site default, which starts checked.
+ *
+ * @return list<array{slug:string,label:string,summary:string,reach:string,checked:bool}>
+ */
+function aafm_oauth_consent_presets(): array {
+	$default  = aafm_default_preset();
+	$by_owner = current_user_can( 'manage_options' );
+	$presets  = array();
+	foreach ( aafm_access_presets() as $slug => $preset ) {
+		$value = 'custom' === $slug ? '' : $slug;
+		if ( ! $by_owner && aafm_preset_rank( $value ) > aafm_preset_rank( $default ) ) {
+			continue; // An approver who is not the owner may pick no wider than the owner's default.
+		}
+		$count     = aafm_preset_count( $value );
+		$presets[] = array(
+			'slug'    => $slug,
+			'label'   => $preset['label'],
+			'summary' => $preset['summary'],
+			'reach'   => 0 === $count['allowed']
+				? __( 'none of the abilities you have switched on', 'agent-abilities-for-mcp' )
+				/* translators: 1: abilities this preset reaches, 2: abilities switched on. */
+				: sprintf( __( 'up to %1$d of the %2$d abilities you have switched on', 'agent-abilities-for-mcp' ), $count['allowed'], $count['enabled'] ),
+			'checked' => $value === $default,
+		);
+	}
+	return $presets;
+}
+
+/**
  * Render the consent screen for a validated authorize request, then exit.
  *
  * Carries every OAuth param as a hidden field (attribute-escaped) so the POST back
  * re-presents them, plus the consent nonce. Flags the destination host and, when the
  * approving user can administer the site, a high-privilege warning.
  *
- * @param array<string,string> $valid The normalized, validated authorize params.
+ * Offers the access presets an approver may give (an owner any, anyone else no wider than the
+ * site default); an owner renewing an expired grant sees its current access and no choice.
+ *
+ * @param array<string,string>     $valid    The normalized, validated authorize params.
+ * @param array<string,mixed>|null $renewing The expired grant an owner is renewing, or null.
  * @return void
  */
-function aafm_oauth_show_consent( array $valid ): void {
+function aafm_oauth_show_consent( array $valid, ?array $renewing = null ): void {
 	$user = wp_get_current_user();
 
 	$hidden_keys   = array( 'response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method', 'state', 'scope', 'resource' );
@@ -599,9 +653,17 @@ function aafm_oauth_show_consent( array $valid ): void {
 		'redirect_host'  => $redirect_host,
 		'high_privilege' => aafm_oauth_user_is_high_privilege( $user ),
 		'action_url'     => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
-		'nonce_field'    => wp_nonce_field( 'aafm_oauth_consent', '_wpnonce', true, false ),
+		'nonce_field'    => wp_nonce_field( 'aafm_oauth_consent|' . $valid['client_id'], '_wpnonce', true, false ),
 		'hidden_inputs'  => $hidden_inputs,
+		'presets'        => array(),
+		'renewing'       => null !== $renewing,
+		'current_label'  => '',
 	);
+	if ( null !== $renewing ) {
+		$view['current_label'] = aafm_access_presets()[ '' === $renewing['preset'] ? 'custom' : (string) $renewing['preset'] ]['label'] ?? '';
+	} else {
+		$view['presets'] = aafm_oauth_consent_presets();
+	}
 
 	// The consent form's POST is answered with a 302 to this validated client origin,
 	// so it must be permitted in form-action or the browser blocks the cross-origin
@@ -697,29 +759,32 @@ function aafm_oauth_handle_authorize(): void {
 		exit;
 	}
 
-	// Capability gate. A failure here is a LOCAL authorization failure, not an OAuth
-	// error to hand back to the client, so render a local 403 (never redirect). The floor
-	// defaults to `edit_posts` (contributor and up) rather than `read`, so a bare subscriber
-	// cannot mint an MCP token by default - the token acts with the approver's full account,
-	// so a subscriber-level floor is an over-broad self-service foothold on any site with open
-	// registration. Filterable via aafm_oauth_min_capability for operators who want it lower or
-	// higher (e.g. 'manage_options' to restrict authorization to admins).
-	$min_cap = apply_filters( 'aafm_oauth_min_capability', 'edit_posts' );
-	if ( ! current_user_can( $min_cap ) ) {
+	// Who may approve: the Settings roles list, or a site's aafm_oauth_min_capability filter
+	// (aafm_oauth_user_may_connect()). A failure is a LOCAL authorization failure, never a redirect.
+	if ( ! aafm_oauth_user_may_connect( wp_get_current_user() ) ) {
 		aafm_oauth_render_local_error(
 			403,
 			__( 'Your account does not have permission to authorize access.', 'agent-abilities-for-mcp' )
 		);
 	}
 
+	// Pause-all refuses the screen and the consent POST alike: nothing is approved while it is on.
+	if ( aafm_pause_all() ) {
+		aafm_oauth_render_local_error( 403, __( 'Access to this site is paused by its owner. Try again after they resume it.', 'agent-abilities-for-mcp' ) );
+	}
+
 	$is_post = isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === $_SERVER['REQUEST_METHOD'];
 
 	// On POST, verify the consent nonce BEFORE trusting any submitted field. A bad
 	// nonce is a local failure (render a local 403), never a redirect to the client.
+	// The nonce is bound to the client: the client id is read raw here only to name the
+	// action; the full parameter validation still runs below.
 	if ( $is_post ) {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- explicit verification on the next line.
 		$nonce = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
-		if ( ! wp_verify_nonce( $nonce, 'aafm_oauth_consent' ) ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- this read names the nonce action.
+		$nonce_client = isset( $_POST['client_id'] ) && is_string( $_POST['client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) : '';
+		if ( ! wp_verify_nonce( $nonce, 'aafm_oauth_consent|' . $nonce_client ) ) {
 			aafm_oauth_render_local_error(
 				403,
 				__( 'Your authorization session expired. Please start again.', 'agent-abilities-for-mcp' )
@@ -749,6 +814,26 @@ function aafm_oauth_handle_authorize(): void {
 
 	$user_id = get_current_user_id();
 
+	// Per-connection state. An unreadable row never reaches consent or a code; a paused grant gets a
+	// local page (no consent screen, no code); an expired grant is renewed only by a site owner.
+	$grant = aafm_oauth_grant_state( $user_id, $valid['client_id'] );
+	if ( null === $grant ) {
+		aafm_oauth_render_local_error( 500, __( 'This connection could not be checked. Please try again.', 'agent-abilities-for-mcp' ) );
+	}
+	// Tri-state read: a failed consent SELECT must not read as "no consent" and let a paused grant through.
+	$consent = aafm_oauth_consent_view( $user_id, $valid['client_id'] );
+	if ( ! $consent['ok'] ) {
+		aafm_oauth_render_local_error( 500, __( 'This connection could not be checked. Please try again.', 'agent-abilities-for-mcp' ) );
+	}
+	$has_consent = $consent['value'];
+	if ( $has_consent && $grant['paused'] ) {
+		aafm_oauth_render_local_error( 403, __( 'The site owner has paused this connection. Ask them to resume it, then try again.', 'agent-abilities-for-mcp' ) );
+	}
+	$renewing = $has_consent && $grant['expired'];
+	if ( $renewing && ! current_user_can( 'manage_options' ) ) {
+		aafm_oauth_render_local_error( 403, __( 'This connection has ended. Ask the site owner to renew it.', 'agent-abilities-for-mcp' ) );
+	}
+
 	if ( $is_post ) {
 		// Default-deny: only an explicit 'approve' grants a code. Treat anything else -
 		// a blank field, 'deny', or any unexpected value - as a denial and hand
@@ -763,8 +848,19 @@ function aafm_oauth_handle_authorize(): void {
 
 		// Approve: persist consent, then issue the code. A code must never be minted over a
 		// consent write that did not actually take - redemption would only fail it later as a
-		// dead invalid_grant after the client was already told approval succeeded.
-		if ( ! aafm_oauth_record_consent( $user_id, $valid['client_id'] ) ) {
+		// dead invalid_grant after the client was already told approval succeeded. Renewing an
+		// expired grant clears its end date first; the writer revokes the old tokens and certifies
+		// none is left, so old credentials never come back.
+		if ( $renewing && ! aafm_oauth_grant_update( $user_id, $valid['client_id'], array( 'expires_at' => null ) ) ) {
+			aafm_oauth_render_local_error( 500, __( 'Could not renew this connection. Please try again.', 'agent-abilities-for-mcp' ) );
+		}
+		// A first approval stores the picked preset, clamped to the owner's default for anyone who is not
+		// an owner; garbage falls back to the default, never to Custom. A repeat approval or a renewal
+		// ignores it: aafm_oauth_record_consent() keeps the stored preset.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; normalized against the preset list.
+		$posted = isset( $_POST['aafm_oauth_preset'] ) ? wp_unslash( $_POST['aafm_oauth_preset'] ) : null;
+		$preset = aafm_preset_clamp( aafm_preset_normalize( $posted, aafm_default_preset() ), current_user_can( 'manage_options' ) );
+		if ( ! aafm_oauth_record_consent( $user_id, $valid['client_id'], $preset ) ) {
 			aafm_oauth_render_local_error(
 				500,
 				__( 'Could not record your approval. Please try again.', 'agent-abilities-for-mcp' )
@@ -773,10 +869,11 @@ function aafm_oauth_handle_authorize(): void {
 		aafm_oauth_issue_code_and_redirect( $valid, $user_id );
 	}
 
-	// GET: a prior consent issues a code immediately; otherwise show the screen.
-	if ( aafm_oauth_has_consent( $user_id, $valid['client_id'] ) ) {
+	// GET: a prior consent issues a code immediately; otherwise (or for an expired grant its owner
+	// is renewing) show the screen.
+	if ( $has_consent && ! $renewing ) {
 		aafm_oauth_issue_code_and_redirect( $valid, $user_id );
 	}
 
-	aafm_oauth_show_consent( $valid );
+	aafm_oauth_show_consent( $valid, $renewing ? $grant : null );
 }

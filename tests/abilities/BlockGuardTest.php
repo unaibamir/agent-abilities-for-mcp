@@ -227,7 +227,7 @@ final class BlockGuardTest extends TestCase {
 	}
 
 	/**
-	 * Third-party (non-core) blocks are out of scope and never flagged.
+	 * A registered third-party (non-core) block is out of scope for the colour checks and is never flagged by them.
 	 */
 	public function test_third_party_block_is_never_flagged(): void {
 		$markup = '<!-- wp:acme/fancy -->' . "\n"

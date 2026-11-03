@@ -2751,6 +2751,12 @@
 			white-space: nowrap;
 		}
 
+		/* A starter already added, or a button waiting on its request. */
+		.aafm-btn[disabled] {
+			opacity: 0.5;
+			cursor: default;
+		}
+
 		.aafm-table-wrap,
 		.aafm-empty-state {
 			&[hidden] { display: none; }

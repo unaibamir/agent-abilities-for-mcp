@@ -35,6 +35,7 @@ Short walkthrough:
 * **Have the agent save drafts for you to approve.** Turn on Force draft on create and anything the agent creates or tries to publish is saved as a draft. The Needs review card on the Dashboard lists the drafts and pending posts an agent starts, with Preview, Open in editor, Publish and Discard (Discard moves the post to the Trash). To stop it changing posts that are already live as well, connect it as a Contributor.
 * **Let AI read your site without changing anything.** Read-only mode stops every write tool from loading.
 * **Tell the agent about your site once.** Write a few lines in Site Brief on the Settings tab, for example your house style or what to leave alone. This plugin sends it to every agent that connects, when its session starts.
+* **Give agents your own step-by-step playbooks.** Write a checklist once on the Playbooks tab, and agents list and load the Active ones when a task matches.
 * **Find out why an agent cannot connect.** Connection Doctor on the Connection tab checks the connection from your own server and names the fix, for example a host that strips the Authorization header.
 * **Fix typos and refresh old posts.** The agent can search your posts, read one and update it.
 * **Use your other plugins through the agent.** Plugins that register WordPress abilities, such as WPForms, show up on the Other plugins screen and stay off until you switch them on.
@@ -50,7 +51,7 @@ Short walkthrough:
 * **Bounded by construction.** No arbitrary option or meta access, no code execution. Uploads are validated by their real bytes against an image allow-list, and a URL upload refuses private, loopback, or link-local targets with no redirects followed. A new user gets the default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated. The trash tools for posts, pages, events and comments use the Trash; the delete tools remove items for good.
 * **Optional safety controls.** Switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
 * **No content leaves your site.** The plugin contacts no AI provider and has no telemetry; see External Services below for the two outbound requests it can make on its own.
-* **Two ways to connect.** Approve an agent over OAuth (no secret in a config file) or point a dedicated low-privilege user at an Application Password; a guided screen builds the config for you. An Application Password is a whole-site credential scoped only by that user's role, so this plugin's own limits (allowlist, high-risk floor, audit log) apply only to calls through its MCP endpoint. OAuth has no such limit, since a token this plugin issues only ever authenticates this one endpoint.
+* **Two ways to connect.** Approve an agent over OAuth (no secret in a config file) or point a dedicated low-privilege user at an Application Password; a guided screen builds the config for you.
 
 = 🤖 Built on the WordPress Abilities API and MCP Adapter =
 
@@ -151,7 +152,7 @@ Install the plugin, enable the abilities you want on the Abilities tab, then cop
 
 = Does the agent get admin access? =
 
-No. The agent authenticates as whatever WordPress user you bind it to. Point it at the dedicated low-privilege user the plugin can create for you, and it can only do what that user can do. Each of this plugin's abilities also re-checks the user's capability before it runs, so a connection can never call one of them if its user is not allowed to use it.
+No. The agent authenticates as whatever WordPress user you bind it to. Point it at the dedicated low-privilege user the plugin can create for you, and it can only do what that user can do. Each of this plugin's abilities also re-checks the user's capability before it runs, so a connection can never call one of them if its user is not allowed to use it. An Application Password is a whole-site credential scoped only by that user's role, so this plugin's own limits (allowlist, high-risk floor, audit log) apply only to calls through its MCP endpoint. OAuth has no such limit, since a token this plugin issues only ever authenticates this one endpoint.
 
 = What permission controls do I get over the AI agent? =
 
@@ -169,7 +170,7 @@ Yes. On the Connection tab each approved OAuth connection has Pause and Resume n
 
 To stop everything at once, use Pause all access on the Connection tab. It refuses every MCP request through this site, on this plugin's endpoint and on the MCP Adapter's default server, for OAuth apps and Application Passwords alike. It does not stop an Application Password from using the rest of the WordPress REST API.
 
-Rolling back to 1.9.x ignores per-connection pauses, end dates, access presets and limits: each connection runs with the site-wide access again.
+Rolling back to 1.9.x ignores per-connection pauses, end dates, access presets and limits: each connection runs with the site-wide access again. Before rolling back below 1.10.1, delete your playbooks on the Playbooks tab, or they stay in the database after a later uninstall.
 
 = Who can approve an app's connection? =
 
@@ -184,6 +185,22 @@ The Cloudflare address list ships with the plugin and is refreshed by hand each 
 = Why is a tool I switched on missing from my agent? =
 
 Look at the Why is my tool missing? card on the Dashboard. It lists every tool you switched on that agents cannot see right now and says why: the tool no longer exists, its plugin is inactive or older than the tool needs, read-only mode or the high-risk lock holds it, or the server left it out when it registered the tools, for example because the enabled tool limit was reached. Tools from other plugins are not listed there; the Other plugins tab shows their state.
+
+= My agent does not see a tool I just turned on. =
+
+The client keeps the tool list it loaded when it connected. In ChatGPT, open Settings, then Plugins (Apps or Connectors on some plans), pick your site and choose Refresh tools. In Claude, start a new chat or reconnect the connector.
+
+= Which ChatGPT plans can connect? =
+
+OpenAI's help article on custom MCP servers says Business, Enterprise and Edu plans get full access, writes included, and Pro is limited to read and fetch. It does not list Free or Plus. Plans change, so check [OpenAI's help article](https://help.openai.com/en/articles/12584461) for the current list.
+
+= What are playbooks? =
+
+Playbooks are step-by-step instructions you write on the Playbooks tab, such as how to check a draft before it goes out. Once List playbooks and Get playbook are on, agents can list your Active playbooks and load one when a task matches. Agents cannot change them, and every agent that can see those tools reads them word for word, so keep passwords and private details out. The list an agent gets when its session starts refreshes when the client reconnects.
+
+= Why was my browser-based MCP client refused? =
+
+The MCP endpoint refuses requests sent from a web page on another site, as the MCP specification requires. Desktop apps, command-line tools and the hosted ChatGPT and Claude apps are not affected. To allow a browser-based client you trust, add its origin with the `aafm_mcp_allowed_origins` filter. Each refusal is recorded on the Activity Log with the page's host.
 
 = Does my page cache update when an agent changes only custom fields? =
 
@@ -253,11 +270,11 @@ WordPress 6.9 or newer, which is where the Abilities API and the official MCP Ad
 
 = Which AI clients work? =
 
-Any MCP client that can reach your site's endpoint. With OAuth you paste the endpoint URL into the client and approve the connection once in the browser; clients like Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI connect this way, some directly and some through the mcp-remote bridge that runs on your own machine. You can also connect with an Application Password instead of OAuth, though the hosted cloud apps use OAuth only. ChatGPT connects too, once you turn on developer mode and add your site as a custom connector, and so does Manus. The hosted Gemini app is not supported yet.
+Any MCP client that can reach your site's endpoint. With OAuth you paste the endpoint URL into the client and approve the connection once in the browser; clients like Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI connect this way, some directly and some through the mcp-remote bridge that runs on your own machine. You can also connect with an Application Password instead of OAuth, though the hosted cloud apps use OAuth only. ChatGPT connects too, once you add your site as a custom MCP server, and so does Manus. The hosted Gemini app is not supported yet.
 
 = Does it work with ChatGPT? =
 
-Yes. In ChatGPT, turn on developer mode, then add your site as a custom connector using your MCP endpoint URL and approve the connection once over OAuth. This needs a ChatGPT plan that allows custom connectors. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI also work, some directly and some through the mcp-remote bridge that runs on your own machine.
+Yes. In ChatGPT, add your site as a custom MCP server using your endpoint URL and approve the connection once over OAuth. Which plans allow it is covered above. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI also work, some directly and some through the mcp-remote bridge that runs on your own machine.
 
 = Do I need to expose my computer to connect a remote site? =
 

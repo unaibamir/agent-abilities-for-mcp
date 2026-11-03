@@ -400,6 +400,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/plugins.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/activity-log.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/blocks.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/playbooks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/menus.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/themes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/yoast.php';

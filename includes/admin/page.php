@@ -1867,6 +1867,8 @@ function aafm_site_subgroups(): array {
 				'aafm/get-post-types',
 				'aafm/get-taxonomies',
 				'aafm/get-site-info',
+				'aafm/list-playbooks',
+				'aafm/get-playbook',
 				'aafm/get-activity-log',
 			),
 		),

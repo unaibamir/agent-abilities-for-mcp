@@ -16,7 +16,7 @@ WordPress MCP server for Claude and ChatGPT. Run one site or many with limited a
 
 ### WordPress MCP server for ChatGPT and Claude, with limited access and an audit log
 
-Agent Abilities for MCP connects ChatGPT, Claude, Cursor and other AI agents to your WordPress site over the Model Context Protocol (MCP), through 182 curated WordPress abilities (tools). The agent acts as a real WordPress user you choose, never with an admin key, so it can only do what that user's role allows. Run it on one site or on several, each with its own user, switches and audit log. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install.
+Agent Abilities for MCP connects ChatGPT, Claude, Cursor and other AI agents to your WordPress site over the Model Context Protocol (MCP), through 184 curated WordPress abilities (tools). The agent acts as a real WordPress user you choose, never with an admin key, so it can only do what that user's role allows. Run it on one site or on several, each with its own user, switches and audit log. It is built on the WordPress 6.9 Abilities API and comes with the official MCP Adapter bundled, so there is nothing else to install.
 
 Nothing this plugin serves is exposed until you turn it on. Every call to this plugin's tools is checked against the chosen user's permissions and written to the audit log before it runs, denied attempts included. An Editor account can write and publish posts but cannot install plugins or change settings, so you add reach as you build trust. To approve new posts before they go live, switch on Force draft and review what the agent wrote on the Needs review card on the Dashboard. See External Services below for exactly what the plugin can reach on its own.
 
@@ -60,11 +60,11 @@ Short walkthrough:
 
 WordPress 6.9 ships the Abilities API. The official MCP Adapter (`wordpress/mcp-adapter`) comes bundled with this plugin, so you do not install it separately. If the standalone Adapter plugin is active too, this plugin works with whichever copy loads first, from 0.6.1 through 0.7.x. Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or server, so there's no bespoke transport to trust. A Settings switch (Automatic, Always on, Always off) controls the Adapter's default server, which other plugins can publish tools to. Automatic, the default, starts it only when another plugin publishes tools there, and this plugin's own tools never appear on it.
 
-### 📦 182 governed abilities
+### 📦 184 governed abilities
 
-The plugin ships **182 governed abilities: 88 across WordPress core and 94 from auto-detected integrations**, every one off until you enable it, scoped, capability-gated, and logged. It can also bridge abilities from your other plugins (see below).
+The plugin ships **184 governed abilities: 90 across WordPress core and 94 from auto-detected integrations**, every one off until you enable it, scoped, capability-gated, and logged. It can also bridge abilities from your other plugins (see below).
 
-**WordPress core (88 abilities).** Reads plus guarded writes across your whole site:
+**WordPress core (90 abilities).** Reads plus guarded writes across your whole site:
 
 * **📝 Posts & Pages:** list, read, create, update, trash and permanently delete, with destructive actions off by default; trash tools move items to the Trash, delete tools bypass it.
 * **🏷️ Terms & Taxonomies:** manage categories, tags, and custom taxonomy terms.

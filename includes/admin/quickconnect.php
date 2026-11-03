@@ -154,6 +154,10 @@ function aafm_quickconnect_read_abilities(): array {
 	foreach ( aafm_get_abilities_registry() as $name => $def ) {
 		$subject = isset( $def['subject'] ) ? (string) $def['subject'] : '';
 		$group   = isset( $def['group'] ) ? (string) $def['group'] : '';
+		// Playbooks stay off until the owner turns them on, so the wizard never enables them.
+		if ( in_array( $name, array( 'aafm/list-playbooks', 'aafm/get-playbook' ), true ) ) {
+			continue;
+		}
 		if ( 'reads' === $group && in_array( $subject, $subjects, true ) ) {
 			$out[] = (string) $name;
 		}

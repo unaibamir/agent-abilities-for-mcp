@@ -1670,6 +1670,7 @@ function aafm_register_mcp_server( $adapter ): void {
 	$owned   = aafm_ownership_filter_server_tools( aafm_all_server_ability_names(), $claimed );
 	$bounded = aafm_preflight_bound_server_tools_cached( $owned, $claimed );
 	$tools   = aafm_build_server_tools( $bounded );
+	aafm_server_registered_abilities( $tools );
 
 	// Per-connection capability gate at request time (the user resolved at registration may be the
 	// bearer's approver, a cookie user or nobody; see aafm_build_server_tools()). Priority 5 so it

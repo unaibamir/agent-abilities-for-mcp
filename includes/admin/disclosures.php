@@ -55,6 +55,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/get-taxonomies'              => __( 'Lists the public taxonomies registered on the site.', 'agent-abilities-for-mcp' ),
 		'aafm/get-post-types'              => __( 'Lists the public post types registered on the site.', 'agent-abilities-for-mcp' ),
 		'aafm/get-site-info'               => __( 'Reads the site name, tagline, URL, and language.', 'agent-abilities-for-mcp' ),
+		'aafm/list-playbooks'              => __( 'Reads the titles and descriptions of your Active playbooks.', 'agent-abilities-for-mcp' ),
+		'aafm/get-playbook'                => __( 'Reads the steps of one Active playbook.', 'agent-abilities-for-mcp' ),
 		'aafm/get-site-settings'           => __( 'Reads a small allowlist of site settings (name, tagline, timezone, date and time formats, posts per page). Requires the manage-options capability. Never the site URL or admin email.', 'agent-abilities-for-mcp' ),
 		'aafm/list-revisions'              => __( "Lists a post's revisions by id, author, and date. No body content.", 'agent-abilities-for-mcp' ),
 		'aafm/get-revision'                => __( "Reads one revision's id, author, date, and body content (rendered by default, raw on request), plus an optional diff against the current post. Gated by edit access to the parent post.", 'agent-abilities-for-mcp' ),

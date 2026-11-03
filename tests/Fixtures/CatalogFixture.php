@@ -38,6 +38,8 @@ final class CatalogFixture {
 		'aafm/get-taxonomies',
 		'aafm/get-post-types',
 		'aafm/get-site-info',
+		'aafm/list-playbooks',
+		'aafm/get-playbook',
 		'aafm/get-comments',
 		'aafm/get-pending-comments',
 		'aafm/get-comment',

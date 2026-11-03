@@ -184,6 +184,16 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		'aafm/get-playbook'                => array(
+			/* translators: %s: the playbook slug. */
+			'template' => __( 'Read playbook slug:%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'slug',
+					'type' => 'key',
+				),
+			),
+		),
 		'aafm/get-post-meta'               => array(
 			/* translators: 1: meta key name. 2: the post's numeric ID. */
 			'template' => __( 'Read meta key `%1$s` on post #%2$s', 'agent-abilities-for-mcp' ),

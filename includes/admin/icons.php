@@ -32,6 +32,7 @@ function aafm_icon( string $name ): string {
 		'dashboard'          => array( 'svg' => '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>' ),
 		'connection'         => array( 'svg' => '<path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5"/>' ),
 		'abilities'          => array( 'svg' => '<path d="M13 3 4 14h6l-1 7 9-11h-6l1-7Z"/>' ),
+		'playbooks'          => array( 'svg' => '<path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2V5Z"/><path d="M4 19a2 2 0 0 1 2-2h12M8 7h6M8 11h6"/>' ),
 		'integrations'       => array( 'svg' => '<path d="M9 7V4M15 7V4M9 7h6a2 2 0 0 1 2 2v3a5 5 0 0 1-10 0V9a2 2 0 0 1 2-2ZM12 17v3"/>' ),
 		// Deliberately NOT the plug: 'integrations' owns that glyph, and this tab used to carry a
 		// byte-identical copy of it, so the two nav items were indistinguishable. An arrow landing

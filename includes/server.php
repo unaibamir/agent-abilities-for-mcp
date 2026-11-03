@@ -1894,6 +1894,23 @@ function aafm_mcp_explain_transport_refusal( $response, $server, $request ) {
 }
 
 /**
+ * Send Cache-Control: no-store on every MCP route response, refusals and errors included. Core only
+ * sends its no-cache headers to logged-in requests, so an anonymous 401 would otherwise carry none.
+ *
+ * @param mixed $response The response.
+ * @param mixed $server   The REST server.
+ * @param mixed $request  The request.
+ * @return mixed
+ */
+function aafm_mcp_no_store( $response, $server, $request ) {
+	unset( $server );
+	if ( $response instanceof WP_REST_Response && $request instanceof WP_REST_Request && aafm_is_mcp_route( (string) $request->get_route() ) ) {
+		$response->header( 'Cache-Control', 'no-store' );
+	}
+	return $response;
+}
+
+/**
  * Fail an MCP session-establishing response honestly when its session was never persisted.
  *
  * The bundled adapter's SessionManager::create_session()

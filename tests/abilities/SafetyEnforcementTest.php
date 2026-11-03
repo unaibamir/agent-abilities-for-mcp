@@ -21,6 +21,18 @@ final class SafetyEnforcementTest extends TestCase {
 	 */
 	private $original_remote_addr;
 
+	/**
+	 * Assert a permission fire was refused by the rate limit: the adapter's fire gets the named error.
+	 *
+	 * @param mixed  $result  The permission result.
+	 * @param string $message Failure message.
+	 * @return void
+	 */
+	private function assert_rate_refused( $result, string $message = '' ): void {
+		$this->assertWPError( $result, $message );
+		$this->assertSame( 'aafm_rate_limited', $result->get_error_code(), $message );
+	}
+
 	public function set_up(): void {
 		parent::set_up();
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
@@ -318,7 +330,7 @@ final class SafetyEnforcementTest extends TestCase {
 		// therefore allow the whole first call and only deny the second call.
 		$this->assertTrue( $ability->check_permissions( array() ) );                 // call 1, phase A.
 		$this->assertNotInstanceOf( \WP_Error::class, $ability->execute( array() ) ); // call 1 proceeds.
-		$this->assertFalse( $ability->check_permissions( array() ) );                // call 2: over limit.
+		$this->assert_rate_refused( $ability->check_permissions( array() ) );                // call 2: over limit.
 
 		$denied = aafm_query_activity(
 			array(
@@ -381,7 +393,7 @@ final class SafetyEnforcementTest extends TestCase {
 
 		// Call 2, valid, same ability, same request: the only token is already spent, so this must
 		// be denied. A stale memo from the dead call must not pay for it.
-		$this->assertFalse(
+		$this->assert_rate_refused(
 			$ability->check_permissions( array( 'ok' => true ) ),
 			'A schema-invalid call must not gift its rate token to the next same-ability call in the batch.'
 		);
@@ -432,7 +444,7 @@ final class SafetyEnforcementTest extends TestCase {
 
 		// The token was still spent, and then released: the next valid call is denied by the limit,
 		// not gifted the dead call's allow.
-		$this->assertFalse(
+		$this->assert_rate_refused(
 			$ability->check_permissions( array( 'ok' => true ) ),
 			'A malformed call must not gift its rate token to the next same-ability call.'
 		);
@@ -484,7 +496,7 @@ final class SafetyEnforcementTest extends TestCase {
 		$this->assertTrue( $abort->check_permissions( array() ) );
 		$error = new \WP_Error( 'blocked', 'Blocked by a consumer filter.' );
 		$this->assertSame( $error, aafm_release_rate_memo_on_aborted_tool_call( $error, 'aafm-rl-abort-probe', $abort_tool ) );
-		$this->assertFalse(
+		$this->assert_rate_refused(
 			$abort->check_permissions( array() ),
 			'An aborted call must not leave its allowed memo behind for the next same-ability call.'
 		);
@@ -565,7 +577,7 @@ final class SafetyEnforcementTest extends TestCase {
 
 		// The crashed fire consumed the only token. With the memo released, this fire consumes
 		// fresh and finds the bucket empty; with a stale memo it would wrongly answer true.
-		$this->assertFalse(
+		$this->assert_rate_refused(
 			$ability->check_permissions( array() ),
 			'A rethrown permission crash must not leave its allowed memo behind.'
 		);
@@ -627,7 +639,7 @@ final class SafetyEnforcementTest extends TestCase {
 		$ability = wp_get_ability( 'aafm/rl-disc-probe' );
 		$this->assertTrue( $ability->check_permissions( array() ) );                 // 1st real call allowed.
 		$this->assertNotInstanceOf( \WP_Error::class, $ability->execute( array() ) ); // 1st real call proceeds.
-		$this->assertFalse( $ability->check_permissions( array() ) );                // 2nd real call over limit.
+		$this->assert_rate_refused( $ability->check_permissions( array() ) );                // 2nd real call over limit.
 	}
 
 	public function test_force_draft_overrides_create_post(): void {

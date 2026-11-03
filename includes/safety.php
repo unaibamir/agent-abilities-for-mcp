@@ -100,6 +100,12 @@ function aafm_rate_limit_consume( int $user_id ): bool {
 	foreach ( $limits as $key => $limit ) {
 		$count = aafm_transient_count( $key );
 		if ( null === $count || $count >= $limit ) {
+			aafm_rate_limit_last_refusal(
+				array(
+					'scope' => null === $count ? 'unreadable' : ( 0 === strpos( $key, 'aafm_rla_' ) ? 'app' : 'user' ),
+					'limit' => null === $count ? 0 : $limit,
+				)
+			);
 			return false; // Refused by one bucket: neither is consumed.
 		}
 		$counts[ $key ] = $count;
@@ -108,6 +114,43 @@ function aafm_rate_limit_consume( int $user_id ): bool {
 		set_transient( $key, $count + 1, 2 * MINUTE_IN_SECONDS );
 	}
 	return true;
+}
+
+/**
+ * The most recent rate-limit refusal in this request: which bucket refused and its limit.
+ *
+ * @param array{scope:string,limit:int}|null $set A refusal to record; null to read.
+ * @return array{scope:string,limit:int}|null Scope user, app or unreadable (limit 0); null when none.
+ */
+function aafm_rate_limit_last_refusal( ?array $set = null ): ?array {
+	global $aafm_policy_state;
+	if ( null !== $set ) {
+		$aafm_policy_state['rate_refusal'] = $set;
+	}
+	return $aafm_policy_state['rate_refusal'] ?? null;
+}
+
+/**
+ * The refusal an agent sees when the rate limit stops its call, naming the bucket and its limit.
+ *
+ * @return WP_Error
+ */
+function aafm_rate_limit_error(): WP_Error {
+	$refusal = aafm_rate_limit_last_refusal() ?? array(
+		'scope' => 'unreadable',
+		'limit' => 0,
+	);
+	$limit   = (int) $refusal['limit'];
+	if ( 'user' === $refusal['scope'] ) {
+		/* translators: %d: calls allowed per minute. */
+		$message = sprintf( _n( 'This WordPress account has reached the site\'s limit of %d call a minute. Wait for the next minute, then try again.', 'This WordPress account has reached the site\'s limit of %d calls a minute. Wait for the next minute, then try again.', $limit, 'agent-abilities-for-mcp' ), $limit );
+	} elseif ( 'app' === $refusal['scope'] ) {
+		/* translators: %d: calls allowed per minute. */
+		$message = sprintf( _n( 'This app has reached its limit of %d call a minute on this site. Wait for the next minute, then try again.', 'This app has reached its limit of %d calls a minute on this site. Wait for the next minute, then try again.', $limit, 'agent-abilities-for-mcp' ), $limit );
+	} else {
+		$message = __( 'The site could not check its rate limit, so the call was refused. Try again shortly.', 'agent-abilities-for-mcp' );
+	}
+	return new WP_Error( 'aafm_rate_limited', $message );
 }
 
 /**

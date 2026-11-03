@@ -1853,6 +1853,47 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 }
 
 /**
+ * Say why the transport refused a request: core answers a false permission callback with a bare
+ * rest_forbidden, so a paused connection or a blocked address rewrites that 403 body to name the
+ * reason. The status stays 403, and the REST shape (not JSON-RPC) keeps the transport outcome log
+ * from writing a second row.
+ *
+ * @param mixed $response The response.
+ * @param mixed $server   The REST server.
+ * @param mixed $request  The request.
+ * @return mixed
+ */
+function aafm_mcp_explain_transport_refusal( $response, $server, $request ) {
+	unset( $server );
+	if ( ! $response instanceof WP_REST_Response || ! $request instanceof WP_REST_Request || 403 !== (int) $response->get_status() ) {
+		return $response;
+	}
+	if ( ! aafm_is_mcp_route( (string) $request->get_route() ) ) {
+		return $response;
+	}
+	$data = $response->get_data();
+	if ( ! is_array( $data ) || 'rest_forbidden' !== ( $data['code'] ?? '' ) ) {
+		return $response;
+	}
+	$messages = array(
+		'connection_paused' => array( 'aafm_connection_paused', __( 'This connection is paused by the site owner. It keeps its sign-in and works again as soon as they resume it.', 'agent-abilities-for-mcp' ) ),
+		'ip_blocked'        => array( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ) ),
+	);
+	$reason   = aafm_transport_refusal( $request );
+	if ( null === $reason || ! isset( $messages[ $reason ] ) ) {
+		return $response;
+	}
+	$response->set_data(
+		array(
+			'code'    => $messages[ $reason ][0],
+			'message' => $messages[ $reason ][1],
+			'data'    => array( 'status' => 403 ),
+		)
+	);
+	return $response;
+}
+
+/**
  * Fail an MCP session-establishing response honestly when its session was never persisted.
  *
  * The bundled adapter's SessionManager::create_session()

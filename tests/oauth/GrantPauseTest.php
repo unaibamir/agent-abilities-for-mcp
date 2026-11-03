@@ -182,6 +182,36 @@ class GrantPauseTest extends TestCase {
 		$this->assertSame( '', $logged, 'A plain false writes no adapter error_log line.' );
 	}
 
+	public function test_paused_grant_body_names_the_pause(): void {
+		$this->set_paused( '2026-10-01 00:00:00' );
+		$this->resolve();
+		$this->dispatch(); // Registers the route.
+		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );
+		$before   = $this->paused_rows();
+		$response = rest_send_allow_header( rest_do_request( $request ), rest_get_server(), $request );
+		$response = apply_filters( 'rest_post_dispatch', $response, rest_get_server(), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, applied as serve_request() does.
+
+		$this->assertSame( 403, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertSame( array( 'code', 'message', 'data' ), array_keys( $data ) );
+		$this->assertSame( 'aafm_connection_paused', $data['code'] );
+		$this->assertSame( array( 'status' => 403 ), $data['data'] );
+		$this->assertArrayNotHasKey( 'WWW-Authenticate', $response->get_headers() );
+		$this->assertSame( $before + 1, $this->paused_rows(), 'One denial row per paused request.' );
+		$this->assertCount(
+			0,
+			aafm_query_activity(
+				array(
+					'ability' => '(transport)',
+					'status'  => 'error',
+				)
+			),
+			'No transport outcome row for the REST-shaped body.'
+		);
+	}
+
 	public function test_one_refused_request_writes_one_denial_row_although_core_reruns_the_permission_callback(): void {
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->resolve();

@@ -601,6 +601,7 @@ function aafm_oauth_maybe_serve_well_known(): void {
 	}
 
 	if ( aafm_oauth_https_required() && ! is_ssl() ) {
+		header( 'Cache-Control: no-store' );
 		status_header( 403 );
 		exit;
 	}
@@ -671,7 +672,9 @@ function aafm_oauth_register_discovery_routes(): void {
 				'methods'             => 'GET',
 				'callback'            => static function () use ( $which ): WP_REST_Response {
 					if ( aafm_oauth_https_required() && ! is_ssl() ) {
-						return new WP_REST_Response( null, 403 );
+						$refused = new WP_REST_Response( null, 403 );
+						$refused->header( 'Cache-Control', 'no-store' );
+						return $refused;
 					}
 
 					$metadata = 'protected-resource' === $which

@@ -386,6 +386,9 @@ function aafm_bootstrap() {
 	// it runs AFTER the governed-status rewrite above and records the final HTTP status the client sees.
 	add_filter( 'rest_post_dispatch', 'aafm_log_mcp_transport_outcome', 11, 3 );
 
+	// Cache-Control: no-store on every MCP response, after every other MCP filter has run.
+	add_filter( 'rest_post_dispatch', 'aafm_mcp_no_store', 20, 3 );
+
 	// The Connection Doctor's own probe: answered before any MCP code runs, only for a live single-use token.
 	add_filter( 'rest_pre_dispatch', 'aafm_doctor_handle_probe', 1, 3 );
 

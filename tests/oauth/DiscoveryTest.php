@@ -302,7 +302,7 @@ class DiscoveryTest extends TestCase {
 
 			$this->assertSame( 403, $response->get_status(), $suffix );
 			$this->assertNull( $response->get_data(), $suffix );
-			$this->assertArrayNotHasKey( 'Cache-Control', $response->get_headers(), $suffix );
+			$this->assertSame( 'no-store', $response->get_headers()['Cache-Control'] ?? null, $suffix );
 		}
 	}
 

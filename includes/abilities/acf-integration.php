@@ -1069,6 +1069,30 @@ function aafm_acf_unknown_sub_field_error( array $addresses ): WP_Error {
 }
 
 /**
+ * The refusal for top-level field names ACF cannot resolve on this site: names the caller's own
+ * addresses (at most five, then a count) and points at acf-list-field-groups when the caller can use
+ * it. Never used when one of the names is protected meta; that stays the generic refusal.
+ *
+ * @param array<int,string> $addresses The unresolved addresses.
+ * @return \WP_Error
+ */
+function aafm_acf_unknown_field_error( array $addresses ): WP_Error {
+	$listed = aafm_acf_safe_address_list( $addresses );
+	$more   = count( array_unique( $addresses ) ) - count( $listed );
+	$names  = implode( ', ', $listed );
+	if ( $more > 0 ) {
+		/* translators: 1: comma-separated field names. 2: how many more were not listed. */
+		$names = sprintf( __( '%1$s and %2$d more', 'agent-abilities-for-mcp' ), $names, $more );
+	}
+	/* translators: %s: the field names the caller sent. */
+	$message = sprintf( __( 'These are not ACF fields on this site, so nothing was written: %s.', 'agent-abilities-for-mcp' ), $names );
+	if ( in_array( 'aafm/acf-list-field-groups', aafm_get_enabled_abilities(), true ) && aafm_user_can_discover_ability( 'aafm/acf-list-field-groups' ) ) {
+		$message .= ' ' . __( 'Call acf-list-field-groups to see the field names you can use.', 'agent-abilities-for-mcp' );
+	}
+	return new WP_Error( 'aafm_acf_unknown_field', $message );
+}
+
+/**
  * The bounded, sanitized address list both container refusals put in their message.
  *
  * Extracted so the two refusals share ONE copy of the cap and the strip rather than each carrying
@@ -1553,6 +1577,27 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 	// named after a protected key reached it. Every key refused here is a key this same block
 	// already refuses when the field carrying that name is addressed directly, so this closes a
 	// hole rather than inventing a new class of refusal.
+	// Unresolved top-level keys first, all of them: a name ACF cannot resolve would reach the
+	// update_field() raw-meta fallback, so nothing is written. The caller's own addresses are named
+	// back, unless any of them is hard-blocked meta for this selector type, which stays generic so a
+	// protected name is never echoed.
+	$unresolved = array();
+	foreach ( array_keys( $fields ) as $field_key ) {
+		$field_key = (string) $field_key;
+		$def       = function_exists( 'acf_get_field' ) ? acf_get_field( $field_key ) : false;
+		if ( ! is_array( $def ) || empty( $def['key'] ) ) {
+			$unresolved[] = $field_key;
+		}
+	}
+	if ( array() !== $unresolved ) {
+		foreach ( $unresolved as $field_key ) {
+			if ( aafm_acf_meta_key_hard_blocked( $field_key, $selector_type ) || aafm_acf_meta_key_hard_blocked( aafm_sanitize_plain_text( $field_key ), $selector_type ) ) {
+				return aafm_generic_error();
+			}
+		}
+		return aafm_acf_unknown_field_error( $unresolved );
+	}
+
 	$cleaned = array();
 	foreach ( $fields as $field_key => $raw ) {
 		$field_key = (string) $field_key;

@@ -260,7 +260,9 @@ final class DenialReasonTest extends TestCase {
 		$this->assertNull( aafm_redact_denial_reason( null ) );
 		$this->assertSame( 'Read post #7', aafm_redact_denial_reason( 'Read post #7' ) );
 		foreach ( array_keys( aafm_denial_reason_labels() ) as $code ) {
-			$this->assertSame( 'Attempted: y', aafm_redact_denial_reason( (string) aafm_compose_denied_detail( 'Attempted: y', $code ) ), $code );
+			// A refused browser origin's whole detail names another caller's page, so none of it is kept.
+			$want = 'origin_not_allowed' === $code ? null : 'Attempted: y';
+			$this->assertSame( $want, aafm_redact_denial_reason( (string) aafm_compose_denied_detail( 'Attempted: y', $code ) ), $code );
 		}
 	}
 

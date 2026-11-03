@@ -53,12 +53,12 @@ function aafm_clean_stored_playbook( $entry ): ?array {
 	if ( ! preg_match( '/^[a-z0-9-]{1,64}$/', $slug ) ) {
 		return null;
 	}
-	$title = isset( $entry['title'] ) && is_string( $entry['title'] ) ? mb_substr( sanitize_text_field( $entry['title'] ), 0, AAFM_PLAYBOOK_TITLE_MAX ) : '';
+	$title = isset( $entry['title'] ) && is_string( $entry['title'] ) ? mb_substr( aafm_sanitize_plain_text( $entry['title'] ), 0, AAFM_PLAYBOOK_TITLE_MAX ) : '';
 	$body  = isset( $entry['body'] ) && is_string( $entry['body'] ) ? mb_substr( aafm_clean_playbook_body( $entry['body'] ), 0, AAFM_PLAYBOOK_BODY_MAX ) : '';
 	if ( '' === trim( $title ) || '' === $body ) {
 		return null;
 	}
-	$description = isset( $entry['description'] ) && is_string( $entry['description'] ) ? mb_substr( sanitize_text_field( $entry['description'] ), 0, AAFM_PLAYBOOK_DESC_MAX ) : '';
+	$description = isset( $entry['description'] ) && is_string( $entry['description'] ) ? mb_substr( aafm_sanitize_plain_text( $entry['description'] ), 0, AAFM_PLAYBOOK_DESC_MAX ) : '';
 	$updated     = isset( $entry['updated_gmt'] ) && is_string( $entry['updated_gmt'] ) && preg_match( '/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', $entry['updated_gmt'] ) ? $entry['updated_gmt'] : '';
 
 	return array(
@@ -136,8 +136,8 @@ function aafm_playbook( string $slug ): ?array {
  * @return array{title:string,description:string,body:string,active:bool}|WP_Error
  */
 function aafm_clean_playbook_input( array $raw ) {
-	$title       = trim( sanitize_text_field( is_string( $raw['title'] ?? null ) ? $raw['title'] : '' ) );
-	$description = trim( sanitize_text_field( is_string( $raw['description'] ?? null ) ? $raw['description'] : '' ) );
+	$title       = trim( aafm_sanitize_plain_text( is_string( $raw['title'] ?? null ) ? $raw['title'] : '' ) );
+	$description = trim( aafm_sanitize_plain_text( is_string( $raw['description'] ?? null ) ? $raw['description'] : '' ) );
 	$body        = aafm_clean_playbook_body( is_string( $raw['body'] ?? null ) ? $raw['body'] : '' );
 
 	if ( '' === $title || mb_strlen( $title ) > AAFM_PLAYBOOK_TITLE_MAX ) {

@@ -679,6 +679,8 @@ function aafm_config_option_names(): array {
 		'aafm_omitted_abilities',
 		// The owner's standing rules for every agent; reset and delete-data uninstall clear it.
 		'aafm_site_brief',
+		// The owner's playbooks; reset and delete-data uninstall clear them.
+		'aafm_playbooks',
 		// The adapter default-server mode; a reset returns it to Automatic (the absent row).
 		'aafm_default_server_mode',
 		// The once-only marker for the "started automatically" log row; a reset logs it afresh.

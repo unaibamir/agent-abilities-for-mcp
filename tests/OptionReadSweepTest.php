@@ -152,6 +152,7 @@ final class OptionReadSweepTest extends TestCase {
 		'includes/oauth/discovery.php|aafm_oauth_dcr_adopt_on_by_default|2',
 		'includes/oauth/discovery.php|aafm_oauth_dcr_adopt_on_by_default|3',
 		'includes/oauth/schema.php|aafm_maybe_upgrade_oauth_tables|1',
+		'includes/playbooks.php|aafm_playbooks_read|1',
 		'includes/option-cache.php|aafm_option_write_certified|1',
 		'includes/write-contract.php|aafm_option_write|1',
 		'includes/write-contract.php|aafm_wc_write|1',

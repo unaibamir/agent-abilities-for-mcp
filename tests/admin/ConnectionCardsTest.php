@@ -271,15 +271,13 @@ class ConnectionCardsTest extends TestCase {
 		$this->assertStringContainsString( 'min="' . wp_date( 'Y-m-d', time() + DAY_IN_SECONDS ) . '"', $html );
 	}
 
-	public function test_the_grant_status_wraps_below_the_buttons_inside_the_actions_column(): void {
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test, not a remote URL.
-		$css   = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.css' );
-		$start = strpos( $css, "\t\t.aafm-grant-status {" );
-		$this->assertNotFalse( $start, 'The .aafm-grant-status rule must exist.' );
-		$block = substr( $css, (int) $start, (int) strpos( $css, "\n\t\t}", (int) $start ) - (int) $start );
-		$this->assertStringContainsString( 'display: block;', $block );
-		$this->assertStringContainsString( 'white-space: normal;', $block );
-		// A long message must not widen the column: it adds no intrinsic width of its own.
-		$this->assertStringContainsString( 'contain: inline-size;', $block );
+	public function test_refusal_message_has_one_line_under_the_table(): void {
+		$this->seed_grant();
+		$html = $this->grants_html();
+		$this->assertSame( 1, preg_match_all( '/<p class="aafm-grants-msg" role="status" aria-live="polite" hidden><\/p>/', $html ) );
+		$this->assertMatchesRegularExpression( '/<\/table><\/div><p class="aafm-grants-msg"/', $html, 'The message line sits right after the table wrapper.' );
+		$this->assertStringNotContainsString( 'aafm-grant-status', $html );
+		preg_match( '/<tbody>(.*?)<\/tbody>/s', $html, $body );
+		$this->assertSame( count( aafm_connection_grants_data()['grants'] ?? array( 1 ) ), substr_count( $body[1], '<tr' ) );
 	}
 }

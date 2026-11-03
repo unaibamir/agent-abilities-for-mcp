@@ -2665,16 +2665,11 @@
 			white-space: nowrap;
 		}
 
-		/* A refusal message wraps below Save, Pause and Revoke at the column's width instead of
-		   widening the column: contain drops the text's own width from the table layout. */
-		.aafm-grant-status {
-			display: block;
-			white-space: normal;
-			contain: inline-size;
+		/* One message line under the grants table, starting with the app name. */
+		.aafm-grants-msg {
+			margin-block: 0 var(--aafm-space-2);
 
-			&:not(:empty) {
-				margin-block-start: var(--aafm-space-2);
-			}
+			&[hidden] { display: none; }
 		}
 
 		/* Sized so the grants table fits the card at 1440: the controls take a fixed width and

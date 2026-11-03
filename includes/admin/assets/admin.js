@@ -2817,7 +2817,12 @@
 				if ( ! row || ! root.contains( btn ) ) {
 					return;
 				}
-				const status = row.querySelector( '.aafm-grant-status' );
+				const line = root.querySelector( '.aafm-grants-msg' );
+				const app = row.cells[ 2 ]?.textContent.trim() ?? '';
+				const say = ( text ) => {
+					line.textContent = app ? `${ app }: ${ text }` : text;
+					line.hidden = false;
+				};
 				const data = { user_id: btn.dataset.userId ?? '', client_id: btn.dataset.clientId ?? '' };
 				const sent = {};
 				if ( btn.classList.contains( 'aafm-grant-pause' ) ) {
@@ -2832,7 +2837,7 @@
 						}
 					} );
 					if ( ! Object.keys( sent ).length ) {
-						status.textContent = this.#t( 'grantNothingChanged', 'Nothing to save.' );
+						say( this.#t( 'grantNothingChanged', 'Nothing to save.' ) );
 						return;
 					}
 				}
@@ -2841,17 +2846,18 @@
 				buttons.forEach( ( b ) => {
 					b.disabled = true;
 				} );
-				status.textContent = this.#t( 'saving', 'Saving…' );
+				say( this.#t( 'saving', 'Saving…' ) );
 				const json = await this.#post( 'aafm_oauth_update_grant', data );
 				buttons.forEach( ( b ) => {
 					b.disabled = false;
 				} );
 				btn.focus(); // A disabled button drops focus to the body.
 				if ( ! json?.success ) {
-					status.textContent =
-						json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					say( json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' ) );
 					return;
 				}
+				line.hidden = true;
+				line.textContent = '';
 				const grant = json.data ?? {};
 				if ( Object.keys( sent ).length ) {
 					// Record what was sent, so a control edited while the save was in flight keeps its dot.
@@ -2879,7 +2885,6 @@
 					pill.className = `aafm-pill ${ look[ 0 ] }`;
 					pill.textContent = look[ 1 ];
 				}
-				status.textContent = this.#t( 'saved', 'Saved' );
 			} );
 		}
 

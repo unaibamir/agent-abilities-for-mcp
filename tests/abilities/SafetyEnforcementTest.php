@@ -44,9 +44,9 @@ final class SafetyEnforcementTest extends TestCase {
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
 		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
 
-		$result = aafm_transport_permission_callback( null );
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 403, $result->get_error_data()['status'] ?? 0 );
+		$request = new \WP_REST_Request();
+		$this->assertFalse( aafm_transport_permission_callback( $request ), 'A refusal is false, so the adapter logs nothing; core answers 403 for a logged-in user.' );
+		$this->assertSame( 'ip_blocked', aafm_transport_refusal( $request ) );
 
 		$denied = aafm_query_activity(
 			array(
@@ -73,9 +73,7 @@ final class SafetyEnforcementTest extends TestCase {
 		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
 
 		for ( $i = 0; $i < AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 3; $i++ ) {
-			$result = aafm_transport_permission_callback( null );
-			$this->assertInstanceOf( \WP_Error::class, $result );
-			$this->assertSame( 'aafm_ip_blocked', $result->get_error_code(), 'The denial itself must never be capped, only its audit rows.' );
+			$this->assertFalse( aafm_transport_permission_callback( null ), 'The denial itself must never be capped, only its audit rows.' );
 		}
 
 		$rows = aafm_query_activity( array( 'per_page' => 50 ) );
@@ -88,7 +86,7 @@ final class SafetyEnforcementTest extends TestCase {
 		// A different source IP writes its own row: one attacker's flood must not crowd out a
 		// genuine signal from a different address.
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.78';
-		$this->assertInstanceOf( \WP_Error::class, aafm_transport_permission_callback( null ) );
+		$this->assertFalse( aafm_transport_permission_callback( null ) );
 		$rows = aafm_query_activity( array( 'per_page' => 50 ) );
 		$this->assertCount( AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 1, $rows );
 	}
@@ -113,9 +111,9 @@ final class SafetyEnforcementTest extends TestCase {
 		wp_set_current_user( 0 );
 		$_SERVER['REMOTE_ADDR'] = '10.1.2.3'; // Would be allowed if it mattered.
 		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
-		$result = aafm_transport_permission_callback( null );
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 401, $result->get_error_data()['status'] ?? 0 );
+		$request = new \WP_REST_Request();
+		$this->assertFalse( aafm_transport_permission_callback( $request ), 'Core turns false into 401 for an anonymous caller.' );
+		$this->assertSame( 'unauthenticated', aafm_transport_refusal( $request ) );
 	}
 
 	/**

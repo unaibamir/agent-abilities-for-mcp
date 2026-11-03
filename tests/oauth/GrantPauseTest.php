@@ -260,7 +260,7 @@ class GrantPauseTest extends TestCase {
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
 		$this->resolve();
 		$result = aafm_transport_permission_callback( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) );
-		$this->assertWPError( $result );
+		$this->assertFalse( $result );
 		$this->assertNull( $this->last_used() );
 
 		$_SERVER['REMOTE_ADDR'] = '198.51.100.1';

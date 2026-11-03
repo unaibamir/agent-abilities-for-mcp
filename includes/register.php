@@ -1018,7 +1018,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				aafm_announce_ability_resolved( null, 'denied', null, $rate_detail );
 			}
 			aafm_notify_event( 'denial_burst', 'rate_limit', array( 'row_id' => (int) $rate_row_id ) );
-			return false;
+			// The adapter's own fire relays a WP_Error message to the agent; a bare false reads as
+			// "Permission denied". Core's re-check inside execute() calls _doing_it_wrong() on a
+			// WP_Error from permissions, so that fire keeps returning false.
+			return null === aafm_executing_ability() ? aafm_rate_limit_error() : false;
 		}
 
 		// The permission phase gets the same floor as the execute phase below, and for the same

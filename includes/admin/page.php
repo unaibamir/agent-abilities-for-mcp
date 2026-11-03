@@ -171,13 +171,13 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'playbookAddedTitle'       => __( 'Already in your playbooks.', 'agent-abilities-for-mcp' ),
 				'playbookDiscard'          => __( 'Discard your unsaved changes to this playbook?', 'agent-abilities-for-mcp' ),
 				'playbookDeleteConfirm'    => __( 'Delete this playbook? Agents will no longer be able to load it.', 'agent-abilities-for-mcp' ),
-				/* translators: %d: how many abilities the playbook names (singular). */
+				/* translators: %d: how many abilities the playbook names. */
 				'playbookUsesOne'          => __( 'Uses %d ability', 'agent-abilities-for-mcp' ),
-				/* translators: %d: how many abilities the playbook names (plural). */
+				/* translators: %d: how many abilities the playbook names. */
 				'playbookUsesMany'         => __( 'Uses %d abilities', 'agent-abilities-for-mcp' ),
-				/* translators: 1: "Uses N abilities". 2: how many of them are off (singular). */
+				/* translators: 1: "Uses N abilities". 2: how many of them are off on this site. */
 				'playbookOffOne'           => __( '%1$s, %2$d is off here', 'agent-abilities-for-mcp' ),
-				/* translators: 1: "Uses N abilities". 2: how many of them are off (plural). */
+				/* translators: 1: "Uses N abilities". 2: how many of them are off on this site. */
 				'playbookOffMany'          => __( '%1$s, %2$d are off here', 'agent-abilities-for-mcp' ),
 				'saved'                    => __( 'Saved', 'agent-abilities-for-mcp' ),
 				'errorSaving'              => __( 'Error saving', 'agent-abilities-for-mcp' ),

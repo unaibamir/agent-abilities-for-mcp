@@ -24,6 +24,7 @@ defined( 'ABSPATH' ) || exit;
 function aafm_denial_reason_labels(): array {
 	return array(
 		'not_allowlisted'     => __( 'key is not on the allowlist', 'agent-abilities-for-mcp' ),
+		'origin_not_allowed'  => __( 'browser origin is not allowed', 'agent-abilities-for-mcp' ),
 		'key_denied'          => __( 'key is on the deny list', 'agent-abilities-for-mcp' ),
 		'key_protected'       => __( 'key is protected or reserved', 'agent-abilities-for-mcp' ),
 		'reserved_key'        => __( 'key is reserved by WordPress', 'agent-abilities-for-mcp' ),
@@ -204,6 +205,10 @@ function aafm_redact_denial_reason( ?string $detail ): ?string {
 	$parts = aafm_split_denied_detail( $detail );
 	if ( null === $parts ) {
 		return $detail;
+	}
+	// A refused browser origin names another caller's web page: owner surfaces only, never an agent.
+	if ( 'origin_not_allowed' === ( $parts[1] ?? '' ) ) {
+		return null;
 	}
 	return '' === $parts[0] ? null : $parts[0];
 }

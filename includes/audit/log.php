@@ -410,13 +410,14 @@ function aafm_denial_log_within_cap( string $bucket ): bool {
  * Write one "(transport)" denied row for the current user, inside the per-IP cap of its bucket, at most
  * once per bucket per request object. The refusal itself is the caller's and happens on every call.
  *
- * @param string $bucket    Cap bucket, as aafm_denial_log_within_cap() takes it: 'ipb', 'cpa' or 'pau' here.
- * @param string $reason    Refusal reason for the detail column, or '' for a row without detail.
- * @param string $client_id OAuth client id the call carried, or '' when it was not a bearer call.
- * @param mixed  $request   The REST request being refused, or null.
+ * @param string      $bucket    Cap bucket, as aafm_denial_log_within_cap() takes it: 'ipb', 'cpa', 'pau' or 'org' here.
+ * @param string      $reason    Refusal reason for the detail column, or '' for a row without detail.
+ * @param string      $client_id OAuth client id the call carried, or '' when it was not a bearer call.
+ * @param mixed       $request   The REST request being refused, or null.
+ * @param string|null $base      Detail text before the reason clause, such as the refused origin's host.
  * @return void
  */
-function aafm_log_transport_denial( string $bucket, string $reason = '', string $client_id = '', $request = null ): void {
+function aafm_log_transport_denial( string $bucket, string $reason = '', string $client_id = '', $request = null, ?string $base = null ): void {
 	// Core's Allow header filter calls each handler's permission callback again once per HTTP method, with the
 	// SAME request object, so one refused request reaches here several times. One row per bucket per request
 	// object, or it spends the cap; a separate dispatch in the same process is a different object. The object
@@ -442,7 +443,7 @@ function aafm_log_transport_denial( string $bucket, string $reason = '', string 
 		$record['client_id'] = $client_id;
 	}
 	if ( '' !== $reason ) {
-		$record['detail'] = aafm_compose_denied_detail( null, $reason );
+		$record['detail'] = aafm_compose_denied_detail( $base, $reason );
 	}
 	aafm_log_activity( $record );
 }

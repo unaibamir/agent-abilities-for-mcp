@@ -513,7 +513,11 @@ upgrade_grant_checks() {
 		fail upgrade "pre-update code redemption: HTTP $code $(head -c 150 "$SMOKE_ROOT/body.json" | tr '\n' ' ')"
 	fi
 	got=$(W eval 'global $wpdb; $t = $wpdb->prefix . "aafm_oauth_consents"; $ok = true; foreach ( aafm_oauth_grant_columns() as $c ) { $ok = $ok && aafm_oauth_table_has_column( $t, $c ); } echo aafm_read_option_views( "aafm_oauth_schema_version" )["db_value"], " ", $ok ? "columns" : "missing", " ", (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t" ), " ", (int) $wpdb->get_var( "SELECT COUNT(*) FROM $t WHERE COALESCE( paused_at, expires_at, last_used_at, last_used_ip, preset, rate_per_min ) IS NOT NULL" );' 2>/dev/null)
-	if [ "$got" = "9 columns $before 0" ]; then
+	# A release that already has the grant columns (1.10.0 and later) can fill them in before the update,
+	# so the all-NULL check only applies to an upgrade from an older release.
+	if [ "$(printf '%s\n' 1.10.0 "$FROM" | sort -V | head -1)" = 1.10.0 ] && [ "${got% *}" = "9 columns $before" ]; then
+		pass upgrade "OAuth schema 9, all six grant columns present, $before consent row(s) kept (from $FROM, which already had them)"
+	elif [ "$got" = "9 columns $before 0" ]; then
 		pass upgrade "OAuth schema 9, all six grant columns present, $before consent row(s) kept, every new column NULL"
 	else
 		fail upgrade "schema, columns, consent rows, non-NULL rows: '$got' (wanted '9 columns $before 0')"

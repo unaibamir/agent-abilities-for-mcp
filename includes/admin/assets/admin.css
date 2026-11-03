@@ -2731,7 +2731,7 @@
 	.aafm-playbooks {
 		.aafm-playbooks-table {
 			table-layout: fixed;
-			min-inline-size: 720px;
+			min-inline-size: 900px;
 
 			th:nth-child(2) { inline-size: 7em; }
 			th:nth-child(3) { inline-size: 14em; }

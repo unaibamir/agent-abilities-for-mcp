@@ -2727,6 +2727,92 @@
 		}
 	}
 
+	/* ---------- Playbooks tab ---------- */
+	.aafm-playbooks {
+		.aafm-playbooks-table {
+			table-layout: fixed;
+			min-inline-size: 720px;
+
+			th:nth-child(2) { inline-size: 7em; }
+			th:nth-child(3) { inline-size: 14em; }
+			th:nth-child(4) { inline-size: 10em; }
+			th:nth-child(5) { inline-size: 12em; }
+		}
+
+		/* The title and uses cells clip; their title attribute holds the full text. */
+		.aafm-playbook-title,
+		.aafm-playbook-uses {
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		.aafm-playbook-actions {
+			white-space: nowrap;
+		}
+
+		.aafm-table-wrap,
+		.aafm-empty-state {
+			&[hidden] { display: none; }
+		}
+
+		.aafm-playbooks-list-status:empty {
+			display: none;
+		}
+
+		.aafm-playbook-starters {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+
+			li {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: var(--aafm-space-3);
+				padding-block: var(--aafm-space-3);
+				border-block-end: 1px solid var(--aafm-border);
+
+				&:last-child { border-block-end: 0; }
+			}
+		}
+
+		.aafm-playbook-starter-text {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--aafm-space-2);
+			min-inline-size: 0;
+
+			span:not(.aafm-pill) {
+				flex-basis: 100%;
+				color: var(--aafm-text-subtle);
+			}
+		}
+
+		/* Phones: the table scrolls inside its wrapper, so pin the actions column. */
+		@media (max-width: 600px) {
+			.aafm-playbooks-table {
+				th:last-child,
+				td:last-child {
+					position: sticky;
+					inset-inline-end: 0;
+					z-index: 1;
+					background: var(--aafm-surface);
+					box-shadow: -1px 0 0 var(--aafm-border);
+				}
+
+				tbody tr:nth-child(odd) td:last-child {
+					background: var(--aafm-surface-2);
+				}
+			}
+
+			.aafm-playbook-starters li {
+				flex-wrap: wrap;
+			}
+		}
+	}
+
 	/* ---------- Ability allowlist (Connections tab) ---------- */
 	.aafm-allowlist-card {
 		.aafm-allowlist-table {

@@ -162,6 +162,23 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 			'allowlistCatalog' => aafm_allowlist_ability_catalog(),
 			'i18n'             => array(
 				'saving'                   => __( 'Saving…', 'agent-abilities-for-mcp' ),
+				'playbookActive'           => __( 'Active', 'agent-abilities-for-mcp' ),
+				'playbookOff'              => __( 'Off', 'agent-abilities-for-mcp' ),
+				'playbookEdit'             => __( 'Edit', 'agent-abilities-for-mcp' ),
+				'playbookDelete'           => __( 'Delete', 'agent-abilities-for-mcp' ),
+				'playbookDeleted'          => __( 'Deleted', 'agent-abilities-for-mcp' ),
+				'playbookAdded'            => __( 'Added. It is switched Off until you turn it on.', 'agent-abilities-for-mcp' ),
+				'playbookAddedTitle'       => __( 'Already in your playbooks.', 'agent-abilities-for-mcp' ),
+				'playbookDiscard'          => __( 'Discard your unsaved changes to this playbook?', 'agent-abilities-for-mcp' ),
+				'playbookDeleteConfirm'    => __( 'Delete this playbook? Agents will no longer be able to load it.', 'agent-abilities-for-mcp' ),
+				/* translators: %d: how many abilities the playbook names (singular). */
+				'playbookUsesOne'          => __( 'Uses %d ability', 'agent-abilities-for-mcp' ),
+				/* translators: %d: how many abilities the playbook names (plural). */
+				'playbookUsesMany'         => __( 'Uses %d abilities', 'agent-abilities-for-mcp' ),
+				/* translators: 1: "Uses N abilities". 2: how many of them are off (singular). */
+				'playbookOffOne'           => __( '%1$s, %2$d is off here', 'agent-abilities-for-mcp' ),
+				/* translators: 1: "Uses N abilities". 2: how many of them are off (plural). */
+				'playbookOffMany'          => __( '%1$s, %2$d are off here', 'agent-abilities-for-mcp' ),
 				'saved'                    => __( 'Saved', 'agent-abilities-for-mcp' ),
 				'errorSaving'              => __( 'Error saving', 'agent-abilities-for-mcp' ),
 				'creating'                 => __( 'Creating…', 'agent-abilities-for-mcp' ),
@@ -1644,6 +1661,7 @@ function aafm_admin_tabs(): array {
 		'dashboard'    => __( 'Dashboard', 'agent-abilities-for-mcp' ),
 		'connection'   => __( 'Connection', 'agent-abilities-for-mcp' ),
 		'abilities'    => __( 'Abilities', 'agent-abilities-for-mcp' ),
+		'playbooks'    => __( 'Playbooks', 'agent-abilities-for-mcp' ),
 		'integrations' => __( 'Integrations', 'agent-abilities-for-mcp' ),
 		// Short on purpose. This label renders twice, in the on-page tab strip and in the wp-admin
 		// submenu, and every other entry is one or two words. The page lede carries the explanation
@@ -1796,6 +1814,9 @@ function aafm_render_admin_page(): void {
 			break;
 		case 'abilities':
 			aafm_render_abilities_tab();
+			break;
+		case 'playbooks':
+			aafm_render_playbooks_tab();
 			break;
 		case 'integrations':
 			aafm_render_integrations_tab();

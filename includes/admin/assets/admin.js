@@ -85,6 +85,7 @@
 			this.#bindClientAgentToggle();
 			this.#bindAllowlist();
 			this.#bindQuickConnect();
+			this.#bindPlaybooks();
 			this.#bindDirtyDots();
 			this.#revealActiveNavTab();
 		}
@@ -104,12 +105,12 @@
 
 		/**
 		 * Show a dot on the current tab while one of its saved controls differs from what was
-		 * last loaded or saved. Integrations, Other plugins, Settings and Connection only.
+		 * last loaded or saved. Integrations, Other plugins, Settings, Connection and Playbooks only.
 		 * Controls whose value no Save on the tab stores are left out.
 		 */
 		#bindDirtyDots() {
 			const slug = new URLSearchParams( window.location.search ).get( 'tab' ) ?? 'dashboard';
-			if ( ! [ 'integrations', 'bridge', 'settings', 'connection' ].includes( slug ) ) {
+			if ( ! [ 'integrations', 'bridge', 'settings', 'connection', 'playbooks' ].includes( slug ) ) {
 				return;
 			}
 			const dot = document.querySelector( `.nav-tab[data-tab="${ slug }"] .aafm-dirty-dot` );
@@ -3822,6 +3823,233 @@
 					status.textContent = json?.data?.message ?? this.#t( 'resetFailed', 'Reset failed.' );
 				}
 				btn.disabled = false;
+			} );
+		}
+
+		/**
+		 * The Playbooks tab: load a row into the editor, save it, delete it and add a starter, with
+		 * the list updated live. Stored text reaches the editor only through .value.
+		 */
+		#bindPlaybooks() {
+			const form = document.getElementById( 'aafm-playbook-form' );
+			if ( ! form ) {
+				return;
+			}
+			const tbody = document.querySelector( '.aafm-playbooks-table tbody' );
+			const wrap = tbody?.closest( '.aafm-table-wrap' );
+			const empty = document.querySelector( '.aafm-playbooks-empty' );
+			const listStatus = document.querySelector( '.aafm-playbooks-list-status' );
+			const status = form.querySelector( '.aafm-playbook-status' );
+			const newBtn = form.querySelector( '.aafm-playbook-new' );
+			const fields = {
+				slug: form.querySelector( '#aafm-playbook-slug' ),
+				title: form.querySelector( '#aafm-playbook-title' ),
+				description: form.querySelector( '#aafm-playbook-description' ),
+				body: form.querySelector( '#aafm-playbook-body' ),
+				active: form.querySelector( '#aafm-playbook-active' ),
+			};
+			const isDirty = () =>
+				Array.from( form.querySelectorAll( 'input:not([type="hidden"]), textarea' ) ).some(
+					( c ) => this.#controlValue( c ) !== ( c.dataset.aafmSaved ?? this.#controlValue( c ) )
+				);
+			const confirmDiscard = () =>
+				! isDirty() || window.confirm( this.#t( 'playbookDiscard', 'Discard your unsaved changes to this playbook?' ) );
+			const load = ( p ) => {
+				fields.slug.value = p.slug;
+				fields.title.value = p.title;
+				fields.description.value = p.description;
+				fields.body.value = p.body;
+				fields.active.checked = p.active;
+				status.textContent = '';
+				this.#markClean( form );
+			};
+			const usesText = ( uses, off ) => {
+				const base = this.#format(
+					this.#t( 1 === uses ? 'playbookUsesOne' : 'playbookUsesMany', 1 === uses ? 'Uses %d ability' : 'Uses %d abilities' ),
+					uses
+				);
+				return off > 0
+					? this.#format(
+							this.#t( 1 === off ? 'playbookOffOne' : 'playbookOffMany', '%1$s, %2$d are off here' ),
+							base,
+							off
+					  )
+					: base;
+			};
+			const fromRow = ( tr ) => ( {
+				slug: tr.dataset.playbookSlug,
+				title: tr.dataset.playbookTitle,
+				description: tr.dataset.playbookDescription,
+				body: tr.dataset.playbookBody,
+				active: '1' === tr.dataset.playbookActive,
+			} );
+			const button = ( cls, label ) => {
+				const b = document.createElement( 'button' );
+				b.type = 'button';
+				b.className = `aafm-btn aafm-btn-secondary aafm-btn-sm ${ cls }`;
+				b.textContent = label;
+				return b;
+			};
+			const cell = ( text, cls = '' ) => {
+				const td = document.createElement( 'td' );
+				td.textContent = text;
+				if ( cls ) {
+					td.className = cls;
+					td.title = text;
+				}
+				return td;
+			};
+			const syncEmpty = () => {
+				const none = ! tbody.querySelector( 'tr' );
+				wrap.hidden = none;
+				empty.hidden = ! none;
+			};
+			const upsertRow = ( data ) => {
+				const p = data.playbook;
+				const tr = document.createElement( 'tr' );
+				tr.dataset.playbookSlug = p.slug;
+				tr.dataset.playbookTitle = p.title;
+				tr.dataset.playbookDescription = p.description;
+				tr.dataset.playbookBody = p.body;
+				tr.dataset.playbookActive = p.active ? '1' : '0';
+				const pill = document.createElement( 'span' );
+				pill.className = `aafm-pill ${ p.active ? 'aafm-pill-success' : 'aafm-pill-neutral' }`;
+				pill.textContent = p.active ? this.#t( 'playbookActive', 'Active' ) : this.#t( 'playbookOff', 'Off' );
+				const pillCell = document.createElement( 'td' );
+				pillCell.append( pill );
+				const actions = document.createElement( 'td' );
+				actions.className = 'aafm-playbook-actions';
+				actions.append(
+					button( 'aafm-playbook-edit', this.#t( 'playbookEdit', 'Edit' ) ),
+					' ',
+					button( 'aafm-playbook-delete', this.#t( 'playbookDelete', 'Delete' ) )
+				);
+				tr.append(
+					cell( p.title, 'aafm-playbook-title' ),
+					pillCell,
+					cell( usesText( data.uses_count, data.unavailable_count ), 'aafm-playbook-uses' ),
+					cell( p.updated_gmt ? `${ p.updated_gmt.slice( 0, 16 ) } UTC` : '' ),
+					actions
+				);
+				const old = tbody.querySelector( `tr[data-playbook-slug="${ CSS.escape( p.slug ) }"]` );
+				if ( old ) {
+					old.replaceWith( tr );
+				} else {
+					tbody.append( tr );
+				}
+				syncEmpty();
+				return tr;
+			};
+			const setStarterState = ( slug, added ) => {
+				const btn = document.querySelector( `.aafm-playbook-starter-add[data-starter="${ CSS.escape( slug ) }"]` );
+				if ( btn ) {
+					btn.disabled = added;
+					btn.title = added ? this.#t( 'playbookAddedTitle', 'Already in your playbooks.' ) : '';
+				}
+			};
+
+			form.addEventListener( 'submit', async ( e ) => {
+				e.preventDefault();
+				const submit = form.querySelector( '[type="submit"]' );
+				const sent = this.#snapshot( form );
+				submit.disabled = true;
+				status.className = 'aafm-save-status aafm-playbook-status';
+				status.textContent = this.#t( 'saving', 'Saving...' );
+				const json = await this.#post( 'aafm_save_playbook', {
+					slug: fields.slug.value,
+					title: fields.title.value,
+					description: fields.description.value,
+					body: fields.body.value,
+					active: fields.active.checked ? '1' : '0',
+				} );
+				submit.disabled = false;
+				submit.focus();
+				if ( ! json?.success ) {
+					status.classList.add( 'is-error' );
+					status.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
+					return;
+				}
+				const p = json.data.playbook;
+				fields.slug.value = p.slug;
+				sent.set( fields.slug, p.slug );
+				this.#applyServerValue( sent, fields.title, p.title );
+				this.#applyServerValue( sent, fields.description, p.description );
+				this.#applyServerValue( sent, fields.body, p.body );
+				this.#markClean( form, sent );
+				upsertRow( json.data );
+				setStarterState( p.slug, true );
+				status.textContent = this.#t( 'saved', 'Saved' );
+			} );
+
+			newBtn.addEventListener( 'click', () => {
+				if ( ! confirmDiscard() ) {
+					return;
+				}
+				load( { slug: '', title: '', description: '', body: '', active: false } );
+				fields.title.focus();
+			} );
+
+			tbody?.addEventListener( 'click', async ( e ) => {
+				const btn = e.target.closest( 'button' );
+				const tr = btn?.closest( 'tr' );
+				if ( ! tr ) {
+					return;
+				}
+				if ( btn.classList.contains( 'aafm-playbook-edit' ) ) {
+					if ( confirmDiscard() ) {
+						load( fromRow( tr ) );
+						fields.title.focus();
+					}
+					return;
+				}
+				if ( ! btn.classList.contains( 'aafm-playbook-delete' ) ) {
+					return;
+				}
+				if ( ! window.confirm( this.#t( 'playbookDeleteConfirm', 'Delete this playbook? Agents will no longer be able to load it.' ) ) ) {
+					return;
+				}
+				const slug = tr.dataset.playbookSlug;
+				btn.disabled = true;
+				listStatus.className = 'aafm-save-status aafm-playbooks-list-status';
+				listStatus.textContent = this.#t( 'saving', 'Saving...' );
+				const json = await this.#post( 'aafm_delete_playbook', { slug } );
+				if ( ! json?.success ) {
+					btn.disabled = false;
+					btn.focus();
+					listStatus.classList.add( 'is-error' );
+					listStatus.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
+					return;
+				}
+				const next = tr.nextElementSibling ?? tr.previousElementSibling;
+				tr.remove();
+				syncEmpty();
+				setStarterState( slug, false );
+				if ( fields.slug.value === slug ) {
+					fields.slug.value = '';
+					this.#markClean( form );
+				}
+				listStatus.textContent = this.#t( 'playbookDeleted', 'Deleted' );
+				( next?.querySelector( '.aafm-playbook-edit' ) ?? newBtn ).focus();
+			} );
+
+			document.querySelectorAll( '.aafm-playbook-starter-add' ).forEach( ( btn ) => {
+				btn.addEventListener( 'click', async () => {
+					btn.disabled = true;
+					listStatus.className = 'aafm-save-status aafm-playbooks-list-status';
+					listStatus.textContent = this.#t( 'saving', 'Saving...' );
+					const json = await this.#post( 'aafm_add_starter_playbook', { starter: btn.dataset.starter } );
+					if ( ! json?.success ) {
+						btn.disabled = false;
+						btn.focus();
+						listStatus.classList.add( 'is-error' );
+						listStatus.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
+						return;
+					}
+					const tr = upsertRow( json.data );
+					setStarterState( json.data.playbook.slug, true );
+					listStatus.textContent = this.#t( 'playbookAdded', 'Added. It is switched Off until you turn it on.' );
+					tr.querySelector( '.aafm-playbook-edit' )?.focus();
+				} );
 			} );
 		}
 

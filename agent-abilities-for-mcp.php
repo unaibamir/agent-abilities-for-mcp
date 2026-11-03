@@ -472,6 +472,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/disclosures.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/settings.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/playbooks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/bridge-directory.php';
 	if ( is_admin() ) {
@@ -480,6 +481,9 @@ function aafm_bootstrap() {
 		add_filter( 'plugin_action_links_' . AAFM_PLUGIN_BASENAME, 'aafm_plugin_action_links' );
 		add_action( 'admin_enqueue_scripts', 'aafm_enqueue_admin_assets' );
 		add_action( 'wp_ajax_aafm_save_abilities', 'aafm_ajax_save_abilities' );
+		add_action( 'wp_ajax_aafm_save_playbook', 'aafm_ajax_save_playbook' );
+		add_action( 'wp_ajax_aafm_delete_playbook', 'aafm_ajax_delete_playbook' );
+		add_action( 'wp_ajax_aafm_add_starter_playbook', 'aafm_ajax_add_starter_playbook' );
 		add_action( 'wp_ajax_aafm_save_abilities_page', 'aafm_ajax_save_abilities_page' );
 		add_action( 'wp_ajax_aafm_save_bridged_abilities', 'aafm_ajax_save_bridged_abilities' );
 		add_action( 'wp_ajax_aafm_save_post_types', 'aafm_ajax_save_post_types' );

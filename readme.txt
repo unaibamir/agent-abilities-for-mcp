@@ -4,7 +4,7 @@ Tags: chatgpt, claude, ai-agent, mcp, mcp-server
 Requires at least: 6.9
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.10.0
+Stable tag: 1.10.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -412,6 +412,14 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 
 == Changelog ==
 
+= 1.10.1 =
+
+* **Feature:** Playbooks: write step-by-step instructions on the new Playbooks tab or start from three starters, and agents list and load the Active ones through two new read tools that stay off until you enable them.
+* **Fix:** A paused connection, a blocked address, the rate limit and an unknown ACF field name now say so in the refusal, instead of a generic "forbidden" or "permission denied". Status codes are unchanged.
+* **Fix:** The MCP endpoint refuses requests from web pages on other sites, as the MCP specification requires, and every MCP response now carries Cache-Control: no-store.
+* **Fix:** An unauthenticated MCP request no longer writes four lines to the PHP error log, and a refused connection save shows its message on one line under the grants table.
+* **Chore:** New FAQ answers cover refreshing a client's tools, ChatGPT plans, playbooks and refused browser clients. The ChatGPT setup steps no longer mention developer mode.
+
 = 1.10.0 =
 
 * **Feature:** Each OAuth connection can be paused and resumed without signing in again, given an end date and a lower rate limit of its own, and shows when and from which address it was last used. Approving an app, and Quick Connect, offer Read only, Content editor, Shop manager or Custom access.
@@ -535,6 +543,10 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 [Full release history](https://agentabilitieswp.com/changelog/).
 
 == Upgrade Notice ==
+
+= 1.10.1 =
+
+Nothing changes until you use the new Playbooks tab, and its two tools stay off until you turn them on. Browser pages on other sites can no longer call the MCP endpoint, and refusals now say why.
 
 = 1.10.0 =
 

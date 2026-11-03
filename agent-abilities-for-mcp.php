@@ -365,6 +365,9 @@ function aafm_bootstrap() {
 	// aafm_is_mcp_route() - the first thing this filter calls - is defined.
 	add_filter( 'rest_post_dispatch', 'aafm_mcp_filter_governed_error_status', 10, 3 );
 
+	// Name the reason in a paused-connection or blocked-address 403 (same status, clearer body).
+	add_filter( 'rest_post_dispatch', 'aafm_mcp_explain_transport_refusal', 10, 3 );
+
 	// Session-persistence guard: the adapter's SessionManager::create_session() returns a session id
 	// without checking its update_user_meta() write succeeded, so a silent write failure hands the
 	// client a valid-looking Mcp-Session-Id that its next request can't resolve (the "OAuth ok, then

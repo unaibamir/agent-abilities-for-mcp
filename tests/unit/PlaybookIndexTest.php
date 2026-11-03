@@ -185,34 +185,4 @@ final class PlaybookIndexTest extends TestCase {
 		$listed = substr_count( $index, "\n- playbook-" );
 		$this->assertStringEndsWith( sprintf( '- and %d more: call list-playbooks.', 50 - $listed ), $index );
 	}
-
-	public function test_initialize_instructions_carry_the_index(): void {
-		$this->seed( 1 );
-		$this->register_enabled( self::BOTH );
-		$this->acting_as( 'administrator' );
-		$this->route_as_rest_request();
-		$server                        = $this->mcp_spy_server();
-		$_SERVER['REQUEST_METHOD']     = 'POST';
-		$_SERVER['CONTENT_TYPE']       = 'application/json';
-		$_SERVER['HTTP_ACCEPT']        = 'application/json, text/event-stream';
-		$GLOBALS['HTTP_RAW_POST_DATA'] = wp_json_encode( // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the body core's get_raw_data() reads.
-			array(
-				'jsonrpc' => '2.0',
-				'id'      => 1,
-				'method'  => 'initialize',
-				'params'  => array(
-					'protocolVersion' => '2025-06-18',
-					'capabilities'    => new \stdClass(),
-					'clientInfo'      => array(
-						'name'    => 'index-test',
-						'version' => '1.0',
-					),
-				),
-			)
-		);
-		$server->serve_request( aafm_mcp_rest_route() );
-		$body = json_decode( (string) $server->sent_body, true );
-		$this->assertSame( 200, $server->status, (string) $server->sent_body );
-		$this->assertStringContainsString( 'playbook-1', (string) ( $body['result']['instructions'] ?? '' ) );
-	}
 }

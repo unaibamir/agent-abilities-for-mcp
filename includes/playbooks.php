@@ -361,3 +361,82 @@ function aafm_playbook_index(): string {
 	}
 	return implode( "\n", $lines );
 }
+
+/**
+ * The starter playbooks the Playbooks tab offers, keyed by starter id.
+ *
+ * Filter `aafm_playbook_starters` may ADD starters; the free plugin never hides or locks one. The
+ * three built-in starters are restored after the filter, so a filter cannot remove or replace them.
+ * Added entries must pass the same cleaning a save does or they are dropped. `requires` lists plugin
+ * markers ('' or 'woocommerce') and is display-only: it is never stored with a playbook.
+ *
+ * @return array<string,array{title:string,description:string,body:string,requires:list<string>}>
+ */
+function aafm_playbook_starters(): array {
+	$built_in = array(
+		'publish-checklist'     => array(
+			'title'       => __( 'Publish checklist', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Check a draft before it goes out and report what is missing. Never publishes.', 'agent-abilities-for-mcp' ),
+			'body'        => __( "Use this when the user asks you to check a draft before it is published.\n\n1. Read the draft with aafm/get-post.\n2. Check the title: say so if it is longer than about 60 characters or does not say what the post is about.\n3. Check the excerpt: say so if it is empty or just repeats the first paragraph.\n4. Check the featured image. If there is none, say so. Set one with aafm/set-featured-image only if the user asks you to.\n5. Check the categories and tags. Read the site's terms with aafm/get-terms and suggest ones that fit; flag a post left in Uncategorized.\n6. Leave the post as a draft. Reply with a short list of what is missing or worth fixing.\n\nNever publish or schedule the post unless the user tells you to.", 'agent-abilities-for-mcp' ),
+			'requires'    => array(),
+		),
+		'weekly-content-report' => array(
+			'title'       => __( 'Weekly content report', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Posts published, drafts created and comments waiting from the last 7 days, as a short table. Read-only.', 'agent-abilities-for-mcp' ),
+			'body'        => __( "Use this when the user asks what happened on the site this week. This playbook only reads; change nothing.\n\n1. Page through aafm/get-posts with status publish. Results come newest first by post date. Keep posts dated within the last 7 days and stop paging once you reach an older one.\n2. Do the same with status draft for drafts created in the last 7 days. An older draft that was only edited this week is out of scope, because the list is ordered by post date, not by the date it was last changed.\n3. Page through aafm/get-pending-comments and keep the comments from the last 7 days.\n4. If a paging limit stops you before you reach 7 days back, say so plainly instead of guessing.\n5. Reply with one short table: published posts, new drafts and pending comments, with a count and the titles for each.\n\nIf the user also wants all-time totals, use aafm/count-posts and label those numbers as all-time, not weekly.", 'agent-abilities-for-mcp' ),
+			'requires'    => array(),
+		),
+		'shop-tidy-up'          => array(
+			'title'       => __( 'Shop tidy-up', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Find WooCommerce products with no price, no image, no stock or still in draft, and propose fixes.', 'agent-abilities-for-mcp' ),
+			'body'        => __( "Use this when the user asks you to tidy up the shop. Propose changes; do not make them.\n\n1. Page through aafm/wc-list-products.\n2. List the products with no price, the ones out of stock and the ones still in draft.\n3. For products you need more detail on, such as whether there is a main image, read them with aafm/wc-get-product.\n4. Reply with one table per problem: product name, ID and what to fix.\n5. Suggest the fix for each one. Change a product with aafm/wc-update-product only after the user confirms that exact change.", 'agent-abilities-for-mcp' ),
+			'requires'    => array( 'woocommerce' ),
+		),
+	);
+
+	$filtered = apply_filters( 'aafm_playbook_starters', $built_in );
+	$out      = $built_in;
+	if ( is_array( $filtered ) ) {
+		foreach ( $filtered as $id => $starter ) {
+			if ( ! is_string( $id ) || isset( $built_in[ $id ] ) || ! is_array( $starter ) ) {
+				continue;
+			}
+			$clean = aafm_clean_playbook_input( $starter );
+			if ( is_wp_error( $clean ) ) {
+				continue;
+			}
+			$requires   = isset( $starter['requires'] ) && is_array( $starter['requires'] ) ? $starter['requires'] : array();
+			$out[ $id ] = array(
+				'title'       => $clean['title'],
+				'description' => $clean['description'],
+				'body'        => $clean['body'],
+				'requires'    => array_values( array_intersect( $requires, array( '', 'woocommerce' ) ) ),
+			);
+		}
+	}
+	return $out;
+}
+
+/**
+ * Add a starter to the library as an ordinary playbook, switched Off.
+ *
+ * @param string $starter_id Starter id.
+ * @return array{slug:string,title:string,description:string,body:string,active:bool,updated_gmt:string}|WP_Error
+ */
+function aafm_add_starter_playbook( string $starter_id ) {
+	$starters = aafm_playbook_starters();
+	if ( ! isset( $starters[ $starter_id ] ) ) {
+		return new WP_Error( 'aafm_playbook_starter_unknown', __( 'That starter playbook does not exist.', 'agent-abilities-for-mcp' ) );
+	}
+	$starter = $starters[ $starter_id ];
+	return aafm_save_playbook(
+		array(
+			'title'       => $starter['title'],
+			'description' => $starter['description'],
+			'body'        => $starter['body'],
+			'active'      => false,
+		),
+		'',
+		'added_starter'
+	);
+}

@@ -677,9 +677,8 @@ final class ServerToolsTest extends TestCase {
 
 	public function test_transport_gate_denies_anonymous(): void {
 		wp_set_current_user( 0 );
-		$result = aafm_transport_permission_callback( new \WP_REST_Request() );
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 401, $result->get_error_data()['status'] );
+		$this->assertFalse( aafm_transport_permission_callback( new \WP_REST_Request() ) );
+		$this->assertSame( 401, rest_authorization_required_code() );
 	}
 
 	public function test_transport_gate_allows_authenticated(): void {

@@ -1036,11 +1036,16 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
  * PHPStan-visible.
  *
  * @param \WP_REST_Request<array<string,mixed>> $request Incoming request; keys the once-per-request denial row.
- * @return bool|WP_Error
+ * @return bool
  */
 function aafm_transport_permission_callback( $request ) {
+	// Every refusal returns false, not a WP_Error. The adapter logs each WP_Error from this callback to
+	// error_log, and core calls the callback again once per HTTP method for the Allow header, so one
+	// refused request wrote four lines. false becomes core's rest_forbidden with the same 401 or 403;
+	// the reason is recorded so aafm_mcp_explain_transport_refusal() can name it in the body.
 	if ( ! is_user_logged_in() ) {
-		return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), array( 'status' => 401 ) );
+		aafm_transport_refusal( $request, 'unauthenticated' );
+		return false;
 	}
 
 	if ( ! aafm_ip_is_allowed( aafm_source_ip() ) ) {
@@ -1049,15 +1054,15 @@ function aafm_transport_permission_callback( $request ) {
 		// uncapped row per denial lets one address flood the 30-day activity table. Only the
 		// row is capped - the denial below is returned every time regardless.
 		aafm_log_transport_denial( 'ipb', '', '', $request );
-		return new WP_Error( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
+		aafm_transport_refusal( $request, 'ip_blocked' );
+		return false;
 	}
 
 	// A paused connection keeps its login but may not use the endpoint. Resume is instant: nothing was revoked.
-	// Return false, not a WP_Error: the adapter turns false into core's generic rest_forbidden (a plain 403) and writes no
-	// error_log line, whereas a returned WP_Error is logged by HttpTransport::check_permission() on every request.
 	$grant = aafm_oauth_current_grant();
 	if ( $grant['paused'] ) {
 		aafm_log_transport_denial( 'cpa', 'connection_paused', (string) $grant['client_id'], $request );
+		aafm_transport_refusal( $request, 'connection_paused' );
 		return false;
 	}
 
@@ -1067,6 +1072,27 @@ function aafm_transport_permission_callback( $request ) {
 	}
 
 	return true;
+}
+
+/**
+ * Record or read why the transport refused a request, per request object.
+ *
+ * @param mixed       $request The REST request.
+ * @param string|null $reason  unauthenticated, ip_blocked or connection_paused to record; null to read.
+ * @return string|null The recorded reason, or null when this request was not refused.
+ */
+function aafm_transport_refusal( $request, ?string $reason = null ): ?string {
+	global $aafm_policy_state;
+	if ( ! is_object( $request ) ) {
+		return null;
+	}
+	$recorded = $aafm_policy_state['transport_refusal'] ?? null;
+	if ( null !== $reason ) {
+		// The object itself is kept, as aafm_log_transport_denial() does, because PHP reuses object ids.
+		$aafm_policy_state['transport_refusal'] = array( $request, $reason );
+		return $reason;
+	}
+	return is_array( $recorded ) && $recorded[0] === $request ? $recorded[1] : null;
 }
 
 /**

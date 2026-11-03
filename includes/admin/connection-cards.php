@@ -348,13 +348,14 @@ function aafm_render_grants_card( array $data ): void {
 				esc_attr( sprintf( _x( 'Revoke %s', 'OAuth grant button label', 'agent-abilities-for-mcp' ), $who ) ),
 				esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
 			);
-			echo ' <span class="aafm-grant-status" role="status"></span>';
 			echo '</td>';
 			echo '</tr>';
 		}
 
 		echo '</tbody></table>';
 		echo '</div>';
+		// One message line for the whole table: a refused save names its app here, so no row grows taller.
+		echo '<p class="aafm-grants-msg" role="status" aria-live="polite" hidden></p>';
 		echo '<p class="aafm-card-desc">' . esc_html__( 'Access presets only narrow what you have switched on under Abilities. They never add anything.', 'agent-abilities-for-mcp' );
 		if ( $site_limit > 0 ) {
 			/* translators: %d: the site-wide calls-a-minute limit. */

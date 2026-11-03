@@ -162,9 +162,9 @@ final class OriginGuardTest extends TestCase {
 		$this->assertFalse( $this->passes( 'https://inspector.example' ) );
 		add_filter(
 			'aafm_mcp_allowed_origins',
-			static function ( array $list ): array {
-				$list[] = 'https://inspector.example';
-				return $list;
+			static function ( array $origins ): array {
+				$origins[] = 'https://inspector.example';
+				return $origins;
 			}
 		);
 		$this->assertTrue( $this->passes( 'https://inspector.example' ) );
@@ -173,8 +173,8 @@ final class OriginGuardTest extends TestCase {
 	public function test_blank_or_malformed_filter_entries_never_match(): void {
 		add_filter(
 			'aafm_mcp_allowed_origins',
-			static function ( array $list ): array {
-				return array_merge( $list, array( '', 'not a url', 'https://x/y' ) );
+			static function ( array $origins ): array {
+				return array_merge( $origins, array( '', 'not a url', 'https://x/y' ) );
 			}
 		);
 		$this->assertNotContains( '', aafm_mcp_allowed_origins() );

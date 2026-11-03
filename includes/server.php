@@ -1203,6 +1203,14 @@ function aafm_filter_initialize_capabilities( $result, $server = null, $schema =
 
 		unset( $data['capabilities']['resources'], $data['capabilities']['prompts'] );
 
+		// The playbook index is decided here, per request, after the transport permission check,
+		// so a connection whose rules hide the two playbook tools never sees it.
+		$index = function_exists( 'aafm_playbook_index' ) ? aafm_playbook_index() : '';
+		if ( '' !== $index ) {
+			$instructions         = isset( $data['instructions'] ) && is_string( $data['instructions'] ) ? $data['instructions'] : '';
+			$data['instructions'] = '' !== $instructions ? $instructions . "\n\n" . $index : $index;
+		}
+
 		return $via_schema ? $schema->fromArray( get_class( $result ), $data ) : call_user_func( array( get_class( $result ), 'fromArray' ), $data );
 	} catch ( \Throwable $e ) {
 		return $result;

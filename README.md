@@ -9,7 +9,7 @@ WordPress MCP server for Claude and ChatGPT. Run one site or many with limited a
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.10.0 |
+| **Stable tag** | 1.10.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -395,6 +395,14 @@ It makes two kinds of outbound HTTP request on its own: the Connection tab's che
 Connecting a client is done by the client, not this plugin. Some reach your endpoint directly; others use a bridge such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote), run on your own machine and not bundled with this plugin.
 
 ## Changelog
+### 1.10.1
+
+* **Feature:** Playbooks: write step-by-step instructions on the new Playbooks tab or start from three starters, and agents list and load the Active ones through two new read tools that stay off until you enable them.
+* **Fix:** A paused connection, a blocked address, the rate limit and an unknown ACF field name now say so in the refusal, instead of a generic "forbidden" or "permission denied". Status codes are unchanged.
+* **Fix:** The MCP endpoint refuses requests from web pages on other sites, as the MCP specification requires, and every MCP response now carries Cache-Control: no-store.
+* **Fix:** An unauthenticated MCP request no longer writes four lines to the PHP error log, and a refused connection save shows its message on one line under the grants table.
+* **Chore:** New FAQ answers cover refreshing a client's tools, ChatGPT plans, playbooks and refused browser clients. The ChatGPT setup steps no longer mention developer mode.
+
 ### 1.10.0
 
 * **Feature:** Each OAuth connection can be paused and resumed without signing in again, given an end date and a lower rate limit of its own, and shows when and from which address it was last used. Approving an app, and Quick Connect, offer Read only, Content editor, Shop manager or Custom access.

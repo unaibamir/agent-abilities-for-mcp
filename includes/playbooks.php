@@ -315,3 +315,49 @@ function aafm_log_playbook_change( string $action, string $slug, bool $ok ): voi
 		)
 	);
 }
+
+/**
+ * The playbook index appended to the server instructions on initialize: '' unless at least one
+ * playbook is Active, both playbook abilities are enabled and the current principal can discover
+ * both. Otherwise a heading plus one "- slug: description" line per Active playbook, cut at 600
+ * characters on a line boundary with a closing "and N more" line.
+ *
+ * @return string
+ */
+function aafm_playbook_index(): string {
+	$active = array_values(
+		array_filter(
+			aafm_playbooks(),
+			static function ( array $playbook ): bool {
+				return $playbook['active'];
+			}
+		)
+	);
+	if ( array() === $active ) {
+		return '';
+	}
+	$enabled = aafm_get_enabled_abilities();
+	foreach ( array( 'aafm/list-playbooks', 'aafm/get-playbook' ) as $name ) {
+		if ( ! in_array( $name, $enabled, true ) || ! aafm_user_can_discover_ability( $name ) ) {
+			return '';
+		}
+	}
+
+	$lines = array( __( 'Playbooks the site owner wrote for this site. When a task matches one, load it with get-playbook and follow it:', 'agent-abilities-for-mcp' ) );
+	$total = count( $active );
+	$more  = static function ( int $left ): string {
+		/* translators: %d: how many playbooks are not listed. */
+		return sprintf( __( '- and %d more: call list-playbooks.', 'agent-abilities-for-mcp' ), $left );
+	};
+	foreach ( $active as $i => $playbook ) {
+		$line      = '- ' . $playbook['slug'] . ': ' . ( '' !== $playbook['description'] ? $playbook['description'] : $playbook['title'] );
+		$left      = $total - $i - 1;
+		$candidate = array_merge( $lines, array( $line ), $left > 0 ? array( $more( $left ) ) : array() );
+		if ( mb_strlen( implode( "\n", $candidate ) ) > 600 ) {
+			$lines[] = $more( $total - $i );
+			return implode( "\n", $lines );
+		}
+		$lines[] = $line;
+	}
+	return implode( "\n", $lines );
+}

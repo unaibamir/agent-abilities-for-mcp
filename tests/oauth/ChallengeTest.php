@@ -88,19 +88,17 @@ final class ChallengeTest extends TestCase {
 	}
 
 	/**
-	 * The transport's unauthenticated 401 is a PLAIN WP_Error: status 401 and no
-	 * www_authenticate data key. The adapter would discard such data anyway, so the
+	 * The transport's unauthenticated refusal is a plain false: core turns it into a 401 and no
+	 * www_authenticate data key exists. The adapter would discard such data anyway, so the
 	 * header is delivered by the dispatch filter instead. The absence holds whether
 	 * or not OAuth is enabled.
 	 */
 	public function test_unauthenticated_401_is_a_plain_error_when_oauth_enabled(): void {
 		wp_set_current_user( 0 );
 
-		$result = aafm_transport_permission_callback( null );
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 401, $result->get_error_data()['status'] ?? 0 );
-		$this->assertArrayNotHasKey( 'www_authenticate', $result->get_error_data() );
+		$request = new \WP_REST_Request();
+		$this->assertFalse( aafm_transport_permission_callback( $request ), 'A plain false: core answers 401 and the header comes from the dispatch filter.' );
+		$this->assertSame( 'unauthenticated', aafm_transport_refusal( $request ) );
 	}
 
 	/**
@@ -110,11 +108,9 @@ final class ChallengeTest extends TestCase {
 		update_option( 'aafm_oauth_enabled', '0' );
 		wp_set_current_user( 0 );
 
-		$result = aafm_transport_permission_callback( null );
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 401, $result->get_error_data()['status'] ?? 0 );
-		$this->assertArrayNotHasKey( 'www_authenticate', $result->get_error_data() );
+		$request = new \WP_REST_Request();
+		$this->assertFalse( aafm_transport_permission_callback( $request ), 'A plain false: core answers 401 and the header comes from the dispatch filter.' );
+		$this->assertSame( 'unauthenticated', aafm_transport_refusal( $request ) );
 	}
 
 	/**
@@ -127,11 +123,9 @@ final class ChallengeTest extends TestCase {
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
 		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
 
-		$result = aafm_transport_permission_callback( null );
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 403, $result->get_error_data()['status'] ?? 0 );
-		$this->assertArrayNotHasKey( 'www_authenticate', $result->get_error_data() );
+		$request = new \WP_REST_Request();
+		$this->assertFalse( aafm_transport_permission_callback( $request ), 'A plain false carries no challenge data at all.' );
+		$this->assertSame( 'ip_blocked', aafm_transport_refusal( $request ) );
 	}
 
 	/**

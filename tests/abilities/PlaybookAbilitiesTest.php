@@ -26,12 +26,13 @@ final class PlaybookAbilitiesTest extends TestCase {
 	/**
 	 * Store a playbook straight in the row.
 	 *
-	 * @param string $slug   Slug.
-	 * @param bool   $active Active switch.
-	 * @param string $body   Body.
+	 * @param string   $slug   Slug.
+	 * @param bool     $active Active switch.
+	 * @param string   $body   Body.
+	 * @param string[] $abilities Picked abilities.
 	 * @return void
 	 */
-	private function seed( string $slug, bool $active = true, string $body = 'Read the draft.' ): void {
+	private function seed( string $slug, bool $active = true, string $body = 'Read the draft.', array $abilities = array() ): void {
 		$list   = get_option( 'aafm_playbooks', array() );
 		$list[] = array(
 			'slug'        => $slug,
@@ -39,6 +40,7 @@ final class PlaybookAbilitiesTest extends TestCase {
 			'description' => 'About ' . $slug,
 			'body'        => $body,
 			'active'      => $active,
+			'abilities'   => $abilities,
 			'updated_gmt' => '2026-11-04 10:00:00',
 		);
 		update_option( 'aafm_playbooks', $list, false );
@@ -117,7 +119,7 @@ final class PlaybookAbilitiesTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$result = aafm_exec_get_playbook( array( 'slug' => 'on-one' ) );
 		$this->assertSame( "Line one\nLine \"two\" & more", $result['body'] );
-		$this->assertSame( array( 'slug', 'title', 'description', 'body', 'uses_abilities', 'unavailable_abilities', 'updated_gmt' ), array_keys( $result ) );
+		$this->assertSame( array( 'slug', 'title', 'description', 'body', 'uses_abilities', 'unavailable_abilities', 'abilities', 'updated_gmt' ), array_keys( $result ) );
 	}
 
 	public function test_get_playbook_for_a_removed_slug_is_a_named_error(): void {
@@ -173,23 +175,6 @@ final class PlaybookAbilitiesTest extends TestCase {
 		$this->assertNotInstanceOf( McpProtocolError::class, $result );
 		$this->assertTrue( $result->getIsError() );
 		$this->assertSame( aafm_missing_input_error( 'aafm/get-playbook', array( 'slug' ) )->get_error_message(), $result->getContent()[0]->getText() );
-	}
-
-	public function test_named_abilities_and_unavailable_ones(): void {
-		$this->register_enabled( array( 'aafm/get-posts' ) );
-		$this->acting_as( 'administrator' );
-		$names = aafm_playbook_named_abilities( 'Use aafm/create-draft, then aafm-get-posts and aafm-trash-post; aafm/not-real.' );
-		$this->assertSame( array( 'aafm/create-draft', 'aafm/get-posts', 'aafm/trash-post', 'aafm/not-real' ), $names );
-		$this->assertSame( array( 'aafm/create-draft', 'aafm/trash-post', 'aafm/not-real' ), aafm_playbook_unavailable_abilities( $names ) );
-	}
-
-	public function test_thirty_one_names_are_all_reported(): void {
-		$picked = array_slice( array_keys( aafm_get_abilities_registry() ), 0, 31 );
-		$this->register_enabled( array_slice( $picked, 0, 30 ) );
-		$this->acting_as( 'administrator' );
-		$names = aafm_playbook_named_abilities( implode( "\n", array_map( 'aafm_mcp_tool_name', $picked ) ) );
-		$this->assertCount( 31, $names );
-		$this->assertContains( $picked[30], aafm_playbook_unavailable_abilities( $names ) );
 	}
 
 	public function test_a_subscriber_agent_with_the_ability_enabled_can_read(): void {
@@ -277,5 +262,88 @@ final class PlaybookAbilitiesTest extends TestCase {
 		$this->assertSame( 'aafm_playbooks_unreadable', $list->get_error_code() );
 		$this->assertWPError( $get );
 		$this->assertSame( 'aafm_playbooks_unreadable', $get->get_error_code() );
+	}
+
+	public function test_abilities_are_stored_and_read_back(): void {
+		$this->acting_as( 'administrator' );
+		$saved = aafm_save_playbook(
+			array(
+				'title'     => 'Picks',
+				'body'      => 'Steps.',
+				'abilities' => array( 'aafm/get-post', 'aafm/get-post', 'aafm/not-real' ),
+			)
+		);
+		$this->assertSame( array( 'aafm/get-post' ), aafm_playbook( $saved['slug'] )['abilities'] );
+	}
+
+	public function test_abilities_accept_a_json_string(): void {
+		$this->assertSame( array( 'aafm/get-terms' ), aafm_clean_playbook_abilities( '["aafm/get-terms"]' ) );
+		$this->assertSame( array(), aafm_clean_playbook_abilities( 'nonsense' ) );
+	}
+
+	public function test_more_than_fifty_abilities_names_the_range(): void {
+		$names  = array_slice( array_keys( aafm_get_abilities_registry_full() ), 0, 51 );
+		$result = aafm_clean_playbook_abilities( $names );
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_playbook_invalid', $result->get_error_code() );
+		$this->assertStringContainsString( '50', $result->get_error_message() );
+	}
+
+	public function test_entry_without_abilities_reads_as_empty(): void {
+		update_option(
+			'aafm_playbooks',
+			array(
+				array(
+					'slug'   => 'old',
+					'title'  => 'Old',
+					'body'   => 'Read it with aafm/get-post.',
+					'active' => true,
+				),
+			),
+			false
+		);
+		$this->acting_as( 'administrator' );
+		$this->assertSame( array(), aafm_playbook( 'old' )['abilities'] );
+		$this->assertSame( array(), aafm_exec_list_playbooks()['playbooks'][0]['uses_abilities'] );
+	}
+
+	public function test_stored_list_is_the_only_source(): void {
+		$this->seed( 'one', true, 'Read it with aafm/get-post.', array( 'aafm/get-terms' ) );
+		$this->acting_as( 'administrator' );
+		$this->assertSame( array( 'aafm/get-terms' ), aafm_exec_list_playbooks()['playbooks'][0]['uses_abilities'] );
+	}
+
+	public function test_named_abilities_function_is_gone(): void {
+		$this->assertFalse( function_exists( 'aafm_playbook_named_abilities' ) );
+	}
+
+	public function test_stored_pick_for_an_inactive_integration_survives_read(): void {
+		$this->seed( 'shop', true, 'Steps.', array( 'aafm/wc-get-product' ) );
+		$this->acting_as( 'administrator' );
+		$item = aafm_exec_list_playbooks()['playbooks'][0];
+		$this->assertSame( array( 'aafm/wc-get-product' ), $item['uses_abilities'] );
+		$this->assertSame( array( 'aafm/wc-get-product' ), $item['unavailable_abilities'] );
+	}
+
+	public function test_get_returns_ability_detail(): void {
+		$this->register_enabled( array( 'aafm/get-post', 'aafm/get-playbook' ) );
+		$this->seed( 'one', true, 'Steps.', array( 'aafm/get-post', 'aafm/get-terms' ) );
+		$this->acting_as( 'administrator' );
+		$result = aafm_exec_get_playbook( array( 'slug' => 'one' ) );
+		$this->assertSame( array( 'slug', 'title', 'description', 'body', 'uses_abilities', 'unavailable_abilities', 'abilities', 'updated_gmt' ), array_keys( $result ) );
+		$registry = aafm_get_abilities_registry_full();
+		foreach ( $result['abilities'] as $item ) {
+			$this->assertSame( array( 'name', 'tool', 'label', 'available' ), array_keys( $item ) );
+			$this->assertSame( aafm_mcp_tool_name( $item['name'] ), $item['tool'] );
+			$this->assertSame( $registry[ $item['name'] ]['label'], $item['label'] );
+		}
+		$this->assertTrue( $result['abilities'][0]['available'] );
+		$this->assertFalse( $result['abilities'][1]['available'], 'get-terms is not enabled.' );
+	}
+
+	public function test_list_keys_unchanged(): void {
+		$this->seed( 'one', true, 'Steps.', array( 'aafm/get-post' ) );
+		$this->acting_as( 'administrator' );
+		$this->assertSame( array( 'slug', 'title', 'description', 'uses_abilities', 'unavailable_abilities' ), array_keys( aafm_exec_list_playbooks()['playbooks'][0] ) );
 	}
 }

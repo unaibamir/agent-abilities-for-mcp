@@ -46,8 +46,9 @@ final class PlaybooksTabTest extends TestCase {
 			array(
 				'title'       => 'Publish checklist',
 				'description' => 'Check a draft.',
-				'body'        => 'Read it with aafm/get-post.',
+				'body'        => 'Read it with the Get post tool.',
 				'active'      => '1',
+				'abilities'   => '["aafm/get-post"]',
 			),
 			$over
 		);
@@ -87,6 +88,7 @@ final class PlaybooksTabTest extends TestCase {
 		$this->assertTrue( $json['success'] );
 		$this->assertSame( array( 'playbook', 'uses_count', 'unavailable_count' ), array_keys( $json['data'] ) );
 		$this->assertSame( 1, $json['data']['uses_count'] );
+		$this->assertSame( array( 'aafm/get-post' ), $json['data']['playbook']['abilities'] );
 		$slug = $json['data']['playbook']['slug'];
 
 		$this->post_as(

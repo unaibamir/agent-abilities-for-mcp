@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * @return array{uses:int,unavailable:int}
  */
 function aafm_playbook_admin_counts( array $playbook ): array {
-	$uses = aafm_playbook_named_abilities( (string) $playbook['body'] );
+	$uses = $playbook['abilities'] ?? array();
 	return array(
 		'uses'        => count( $uses ),
 		'unavailable' => count( aafm_playbook_unavailable_abilities( $uses ) ),
@@ -263,6 +263,7 @@ function aafm_ajax_save_playbook(): void {
 				'description' => $post['description'] ?? '',
 				'body'        => $post['body'] ?? '',
 				'active'      => isset( $post['active'] ) && '1' === $post['active'],
+				'abilities'   => $post['abilities'] ?? '',
 			),
 			$slug
 		)

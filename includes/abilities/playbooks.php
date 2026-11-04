@@ -30,7 +30,7 @@ function aafm_register_playbook_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-playbook']   = array(
 		'label'        => __( 'Get playbook', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Load one of the site owner\'s playbooks by slug: the steps to follow, the abilities it uses and which of those you cannot use on this connection.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Load one of the site owner\'s playbooks by slug: the steps to follow, the abilities it uses and which of those you cannot use on this connection. The steps name tools by label; the abilities list gives the tool to call for each.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -138,6 +138,18 @@ function aafm_args_get_playbook(): array {
 				aafm_playbook_output_properties(),
 				array(
 					'body'        => array( 'type' => 'string' ),
+					'abilities'   => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'name'      => array( 'type' => 'string' ),
+								'tool'      => array( 'type' => 'string' ),
+								'label'     => array( 'type' => 'string' ),
+								'available' => array( 'type' => 'boolean' ),
+							),
+						),
+					),
 					'updated_gmt' => array( 'type' => 'string' ),
 				)
 			),
@@ -149,31 +161,28 @@ function aafm_args_get_playbook(): array {
 }
 
 /**
- * The abilities a playbook body names, as ability names, in order of first appearance.
+ * Name, tool name, label and availability for each ability a playbook lists, so an agent can map
+ * a label in the steps to the tool it calls.
  *
- * Matches aafm/... and aafm-bridge/... names and the MCP tool form (aafm-...). A tool form maps
- * back to its ability name over the full registry and the enabled bridged names, so a disabled
- * ability written as a tool is still recognized; an unknown tool form is kept as written.
- *
- * @param string $body Playbook body.
- * @return list<string>
+ * @param string[] $names       Ability names.
+ * @param string[] $unavailable The names the caller cannot use.
+ * @return list<array{name:string,tool:string,label:string,available:bool}>
  */
-function aafm_playbook_named_abilities( string $body ): array {
-	if ( ! preg_match_all( '#\baafm(?:-bridge)?/[a-z0-9-]+|\baafm-[a-z0-9-]+#', $body, $matches ) ) {
-		return array();
-	}
-	$by_tool = array();
-	$names   = array_merge( array_keys( aafm_get_abilities_registry_full() ), aafm_get_enabled_bridged_abilities() );
+function aafm_playbook_ability_details( array $names, array $unavailable ): array {
+	$registry = aafm_get_abilities_registry_full();
+	$out      = array();
 	foreach ( $names as $name ) {
-		$by_tool[ aafm_mcp_tool_name( (string) $name ) ] = (string) $name;
-	}
-	$out = array();
-	foreach ( $matches[0] as $found ) {
-		$found = rtrim( $found, '-' );
-		$name  = false === strpos( $found, '/' ) ? ( $by_tool[ $found ] ?? $found ) : $found;
-		if ( ! in_array( $name, $out, true ) ) {
-			$out[] = $name;
+		$label   = isset( $registry[ $name ]['label'] ) ? (string) $registry[ $name ]['label'] : '';
+		$ability = '' === $label && wp_has_ability( $name ) ? wp_get_ability( $name ) : null;
+		if ( null !== $ability ) {
+			$label = (string) $ability->get_label();
 		}
+		$out[] = array(
+			'name'      => $name,
+			'tool'      => aafm_mcp_tool_name( $name ),
+			'label'     => '' !== $label ? $label : $name,
+			'available' => ! in_array( $name, $unavailable, true ),
+		);
 	}
 	return $out;
 }
@@ -221,7 +230,7 @@ function aafm_playbook_unavailable_abilities( array $names ): array {
  * @return array<string,mixed>
  */
 function aafm_playbook_public_fields( array $playbook ): array {
-	$uses = aafm_playbook_named_abilities( (string) $playbook['body'] );
+	$uses = $playbook['abilities'] ?? array();
 	return array(
 		'slug'                  => $playbook['slug'],
 		'title'                 => $playbook['title'],
@@ -308,6 +317,7 @@ function aafm_exec_get_playbook( array $input ) {
 		'body'                  => $playbook['body'],
 		'uses_abilities'        => $fields['uses_abilities'],
 		'unavailable_abilities' => $fields['unavailable_abilities'],
+		'abilities'             => aafm_playbook_ability_details( $fields['uses_abilities'], $fields['unavailable_abilities'] ),
 		'updated_gmt'           => $playbook['updated_gmt'],
 	);
 }

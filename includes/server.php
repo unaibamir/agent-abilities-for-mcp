@@ -1031,9 +1031,44 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
 }
 
 /**
- * Transport-level gate: require an authenticated user, enforce the IP allowlist, then refuse a
- * paused connection. Per-ability caps do the real work. Named (not inline) so it is unit-testable and
- * PHPStan-visible.
+ * Whether the current request carries an OAuth connection its owner has paused.
+ *
+ * @return bool
+ */
+function aafm_connection_is_paused(): bool {
+	return (bool) aafm_oauth_current_grant()['paused'];
+}
+
+/**
+ * The tool error a paused connection gets for every tools/call.
+ *
+ * A paused connection signs in and lists tools as usual, because clients such as claude.ai discard
+ * the body of an HTTP 403 and show a firewall or sign-in error instead of the reason. The refusal
+ * therefore comes back as an ordinary tool error with HTTP 200, the way a rate-limit refusal does.
+ *
+ * @return WP_Error
+ */
+function aafm_connection_paused_error(): WP_Error {
+	return new WP_Error( 'aafm_connection_paused', __( 'This connection is paused by the site owner. It keeps its sign-in and works again as soon as they resume it.', 'agent-abilities-for-mcp' ) );
+}
+
+/**
+ * The text appended to the server instructions: one line saying the connection is paused, or else
+ * the playbook index. A paused connection cannot call a playbook tool, so it never gets the index.
+ *
+ * @return string
+ */
+function aafm_server_instructions_addendum(): string {
+	if ( aafm_connection_is_paused() ) {
+		return __( 'This connection is paused by the site owner. You can list tools, but every tool call is refused until they resume it.', 'agent-abilities-for-mcp' );
+	}
+	return function_exists( 'aafm_playbook_index' ) ? aafm_playbook_index() : '';
+}
+
+/**
+ * Transport-level gate: require an authenticated user and enforce the IP allowlist. A paused
+ * connection is admitted and refused per tool call (aafm_connection_paused_error()). Per-ability
+ * caps do the real work. Named (not inline) so it is unit-testable and PHPStan-visible.
  *
  * @param \WP_REST_Request<array<string,mixed>> $request Incoming request; keys the once-per-request denial row.
  * @return bool
@@ -1058,12 +1093,11 @@ function aafm_transport_permission_callback( $request ) {
 		return false;
 	}
 
-	// A paused connection keeps its login but may not use the endpoint. Resume is instant: nothing was revoked.
+	// A paused connection keeps its login and may list tools, but every tools/call is refused in the
+	// ability gate. Resume is instant: nothing was revoked. A paused grant is not stamped as used.
 	$grant = aafm_oauth_current_grant();
 	if ( $grant['paused'] ) {
-		aafm_log_transport_denial( 'cpa', 'connection_paused', (string) $grant['client_id'], $request );
-		aafm_transport_refusal( $request, 'connection_paused' );
-		return false;
+		return true;
 	}
 
 	// Admitted: only now is the call a use of the grant (refused calls are not stamped).
@@ -1078,7 +1112,7 @@ function aafm_transport_permission_callback( $request ) {
  * Record or read why the transport refused a request, per request object.
  *
  * @param mixed       $request The REST request.
- * @param string|null $reason  unauthenticated, ip_blocked or connection_paused to record; null to read.
+ * @param string|null $reason  unauthenticated or ip_blocked to record; null to read.
  * @return string|null The recorded reason, or null when this request was not refused.
  */
 function aafm_transport_refusal( $request, ?string $reason = null ): ?string {
@@ -1229,12 +1263,12 @@ function aafm_filter_initialize_capabilities( $result, $server = null, $schema =
 
 		unset( $data['capabilities']['resources'], $data['capabilities']['prompts'] );
 
-		// The playbook index is decided here, per request, after the transport permission check,
-		// so a connection whose rules hide the two playbook tools never sees it.
-		$index = function_exists( 'aafm_playbook_index' ) ? aafm_playbook_index() : '';
-		if ( '' !== $index ) {
+		// The playbook index, or the paused line, is decided here per request after the transport
+		// permission check, so a connection whose rules hide the two playbook tools never sees it.
+		$addendum = aafm_server_instructions_addendum();
+		if ( '' !== $addendum ) {
 			$instructions         = isset( $data['instructions'] ) && is_string( $data['instructions'] ) ? $data['instructions'] : '';
-			$data['instructions'] = '' !== $instructions ? $instructions . "\n\n" . $index : $index;
+			$data['instructions'] = '' !== $instructions ? $instructions . "\n\n" . $addendum : $addendum;
 		}
 
 		return $via_schema ? $schema->fromArray( get_class( $result ), $data ) : call_user_func( array( get_class( $result ), 'fromArray' ), $data );
@@ -1854,8 +1888,7 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 
 /**
  * Say why the transport refused a request: core answers a false permission callback with a bare
- * rest_forbidden, so a paused connection or a blocked address rewrites that 403 body to name the
- * reason. The status stays 403, and the REST shape (not JSON-RPC) keeps the transport outcome log
+ * rest_forbidden, so a blocked address rewrites that 403 body to name the reason. The status stays 403, and the REST shape (not JSON-RPC) keeps the transport outcome log
  * from writing a second row.
  *
  * @param mixed $response The response.
@@ -1876,8 +1909,7 @@ function aafm_mcp_explain_transport_refusal( $response, $server, $request ) {
 		return $response;
 	}
 	$messages = array(
-		'connection_paused' => array( 'aafm_connection_paused', __( 'This connection is paused by the site owner. It keeps its sign-in and works again as soon as they resume it.', 'agent-abilities-for-mcp' ) ),
-		'ip_blocked'        => array( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ) ),
+		'ip_blocked' => array( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ) ),
 	);
 	$reason   = aafm_transport_refusal( $request );
 	if ( null === $reason || ! isset( $messages[ $reason ] ) ) {

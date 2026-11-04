@@ -1116,7 +1116,7 @@ function aafm_render_settings_tab(): void {
 				'<textarea id="aafm-ip-allowlist" name="aafm_ip_allowlist" rows="5" class="large-text code" aria-label="%2$s">%1$s</textarea>',
 				esc_textarea( implode( "\n", aafm_ip_allowlist() ) ),
 				esc_attr__( 'IP allowlist, one per line', 'agent-abilities-for-mcp' )
-			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped.', 'agent-abilities-for-mcp' ) . '</p>' . $ip_notice,
+			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped. A blocked client is refused before it signs in. Claude shows that as a firewall or sign-in error, and ChatGPT shows the reason.', 'agent-abilities-for-mcp' ) . '</p>' . $ip_notice,
 		)
 	);
 

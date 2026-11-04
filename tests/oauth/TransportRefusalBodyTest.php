@@ -49,7 +49,7 @@ final class TransportRefusalBodyTest extends TestCase {
 
 	public function test_other_routes_are_untouched(): void {
 		$request = new \WP_REST_Request( 'POST', '/wp/v2/posts' );
-		aafm_transport_refusal( $request, 'connection_paused' );
+		aafm_transport_refusal( $request, 'ip_blocked' );
 		$response = aafm_mcp_explain_transport_refusal( $this->forbidden( 403 ), null, $request );
 		$this->assertSame( 'rest_forbidden', $response->get_data()['code'] );
 	}

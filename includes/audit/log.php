@@ -410,7 +410,7 @@ function aafm_denial_log_within_cap( string $bucket ): bool {
  * Write one "(transport)" denied row for the current user, inside the per-IP cap of its bucket, at most
  * once per bucket per request object. The refusal itself is the caller's and happens on every call.
  *
- * @param string      $bucket    Cap bucket, as aafm_denial_log_within_cap() takes it: 'ipb', 'cpa', 'pau' or 'org' here.
+ * @param string      $bucket    Cap bucket, as aafm_denial_log_within_cap() takes it: 'ipb', 'pau' or 'org' here.
  * @param string      $reason    Refusal reason for the detail column, or '' for a row without detail.
  * @param string      $client_id OAuth client id the call carried, or '' when it was not a bearer call.
  * @param mixed       $request   The REST request being refused, or null.

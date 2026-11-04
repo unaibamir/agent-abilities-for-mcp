@@ -20,8 +20,28 @@ final class PlaybookStartersTest extends TestCase {
 		parent::tear_down();
 	}
 
-	public function test_three_starters_ship(): void {
-		$this->assertSame( array( 'publish-checklist', 'weekly-content-report', 'shop-tidy-up' ), array_keys( aafm_playbook_starters() ) );
+	public function test_five_starters_ship(): void {
+		$this->assertSame( array( 'publish-checklist', 'weekly-content-report', 'content-health-check', 'draft-a-post', 'shop-tidy-up' ), array_keys( aafm_playbook_starters() ) );
+	}
+
+	public function test_every_starter_ability_exists(): void {
+		$registry = aafm_get_abilities_registry_full();
+		foreach ( aafm_playbook_starters() as $id => $starter ) {
+			$this->assertNotEmpty( $starter['abilities'], $id );
+			$this->assertDoesNotMatchRegularExpression( '#aafm(-bridge)?/#', $starter['body'], $id );
+			$this->assertDoesNotMatchRegularExpression( '#\\baafm-[a-z]#', $starter['body'], $id );
+			foreach ( $starter['abilities'] as $name ) {
+				$this->assertArrayHasKey( $name, $registry, "{$id} lists {$name}" );
+				$this->assertStringContainsString( 'the ' . $registry[ $name ]['label'] . ' tool', $starter['body'], "{$id} names {$name} by its label" );
+			}
+		}
+	}
+
+	public function test_woocommerce_abilities_are_in_the_full_registry_with_woocommerce_off(): void {
+		$this->assertFalse( class_exists( 'WooCommerce' ), 'The test site runs without WooCommerce.' );
+		foreach ( aafm_playbook_starters()['shop-tidy-up']['abilities'] as $name ) {
+			$this->assertArrayHasKey( $name, aafm_get_abilities_registry_full() );
+		}
 	}
 
 	public function test_filter_can_add_but_not_break(): void {
@@ -37,7 +57,7 @@ final class PlaybookStartersTest extends TestCase {
 				return $starters;
 			}
 		);
-		$this->assertSame( array( 'publish-checklist', 'weekly-content-report', 'shop-tidy-up', 'extra' ), array_keys( aafm_playbook_starters() ) );
+		$this->assertSame( array( 'publish-checklist', 'weekly-content-report', 'content-health-check', 'draft-a-post', 'shop-tidy-up', 'extra' ), array_keys( aafm_playbook_starters() ) );
 	}
 
 	public function test_filter_cannot_remove_or_replace_built_ins(): void {
@@ -45,8 +65,10 @@ final class PlaybookStartersTest extends TestCase {
 		add_filter(
 			'aafm_playbook_starters',
 			static function ( array $starters ): array {
-				unset( $starters['publish-checklist'] );
-				$starters['shop-tidy-up']['title'] = 'Replaced';
+				unset( $starters['publish-checklist'], $starters['draft-a-post'] );
+				$starters['shop-tidy-up']['title']              = 'Replaced';
+				$starters['content-health-check']['body']       = 'Replaced';
+				$starters['weekly-content-report']['abilities'] = array();
 				return $starters;
 			}
 		);
@@ -100,5 +122,65 @@ final class PlaybookStartersTest extends TestCase {
 			);
 			$this->assertSame( $fields, array_diff_key( aafm_clean_playbook_input( $fields ), array( 'abilities' => true ) ) );
 		}
+	}
+
+	public function test_add_starter_stores_its_abilities(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$entry = aafm_add_starter_playbook( 'draft-a-post' );
+		$this->assertSame( array( 'aafm/get-site-info', 'aafm/search-content', 'aafm/get-terms', 'aafm/create-draft' ), aafm_playbook( $entry['slug'] )['abilities'] );
+		$this->assertFalse( $entry['active'] );
+		$this->assertSame( 'draft-a-post', aafm_playbook( $entry['slug'] )['starter'] );
+		$this->assertSame( 'draft-a-new-post', $entry['slug'] );
+	}
+
+	public function test_starter_id_is_kept_on_edit(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$entry = aafm_add_starter_playbook( 'publish-checklist' );
+		aafm_save_playbook(
+			array_merge(
+				$entry,
+				array(
+					'title'   => 'Renamed',
+					'starter' => 'something-else',
+				)
+			),
+			$entry['slug']
+		);
+		$this->assertSame( 'publish-checklist', aafm_playbook( $entry['slug'] )['starter'] );
+	}
+
+	public function test_shop_starter_adds_with_woocommerce_inactive(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$entry = aafm_add_starter_playbook( 'shop-tidy-up' );
+		$this->assertNotWPError( $entry );
+		$want = array( 'aafm/wc-count-products', 'aafm/wc-list-products', 'aafm/wc-get-product' );
+		$this->assertSame( $want, aafm_playbook( $entry['slug'] )['abilities'] );
+		aafm_save_playbook( array_merge( aafm_playbook( $entry['slug'] ), array( 'active' => true ) ), $entry['slug'] );
+		$item = aafm_exec_list_playbooks()['playbooks'][0];
+		$this->assertSame( $want, $item['uses_abilities'] );
+		$this->assertSame( $want, $item['unavailable_abilities'] );
+	}
+
+	public function test_filter_added_starter_abilities_are_cleaned_alone(): void {
+		add_filter(
+			'aafm_playbook_starters',
+			static function ( array $starters ): array {
+				$starters['bad-list'] = array(
+					'title'     => 'Bad list',
+					'body'      => 'Steps.',
+					'abilities' => array_slice( array_keys( aafm_get_abilities_registry_full() ), 0, 60 ),
+				);
+				$starters['mixed']    = array(
+					'title'     => 'Mixed',
+					'body'      => 'Steps.',
+					'abilities' => array( 'aafm/get-post', 'aafm/gone-forever' ),
+				);
+				return $starters;
+			}
+		);
+		$starters = aafm_playbook_starters();
+		$this->assertSame( array(), $starters['bad-list']['abilities'] );
+		$this->assertSame( 'Bad list', $starters['bad-list']['title'] );
+		$this->assertSame( array( 'aafm/get-post' ), $starters['mixed']['abilities'] );
 	}
 }

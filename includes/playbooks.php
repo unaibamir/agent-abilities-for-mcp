@@ -47,7 +47,7 @@ function aafm_clean_playbook_body( string $raw ): string {
  * dropped.
  *
  * @param mixed $entry Stored entry.
- * @return array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,updated_gmt:string}|null
+ * @return array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,starter:string,updated_gmt:string}|null
  */
 function aafm_clean_stored_playbook( $entry ): ?array {
 	if ( ! is_array( $entry ) ) {
@@ -72,6 +72,7 @@ function aafm_clean_stored_playbook( $entry ): ?array {
 		'body'        => $body,
 		'active'      => ! empty( $entry['active'] ),
 		'abilities'   => aafm_clean_stored_playbook_abilities( $entry['abilities'] ?? null ),
+		'starter'     => isset( $entry['starter'] ) && is_string( $entry['starter'] ) && preg_match( '/^[a-z0-9_-]{1,64}$/', $entry['starter'] ) ? $entry['starter'] : '',
 		'updated_gmt' => $updated,
 	);
 }
@@ -79,7 +80,7 @@ function aafm_clean_stored_playbook( $entry ): ?array {
 /**
  * Read the library from the database row.
  *
- * @return array{ok:bool,list:list<array{slug:string,title:string,description:string,body:string,active:bool,updated_gmt:string}>}
+ * @return array{ok:bool,list:list<array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,starter:string,updated_gmt:string}>}
  *         ok is false when the row could not be read; an absent row is ok with an empty list.
  */
 function aafm_playbooks_read(): array {
@@ -114,7 +115,7 @@ function aafm_playbooks_read(): array {
 /**
  * Every stored playbook, Active or not, in stored order. Empty when the row cannot be read.
  *
- * @return list<array{slug:string,title:string,description:string,body:string,active:bool,updated_gmt:string}>
+ * @return list<array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,starter:string,updated_gmt:string}>
  */
 function aafm_playbooks(): array {
 	// ponytail: one extra query per read; reads happen only on the Playbooks tab, the two abilities and initialize.
@@ -125,7 +126,7 @@ function aafm_playbooks(): array {
  * One playbook by slug.
  *
  * @param string $slug Slug.
- * @return array{slug:string,title:string,description:string,body:string,active:bool,updated_gmt:string}|null
+ * @return array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,starter:string,updated_gmt:string}|null
  */
 function aafm_playbook( string $slug ): ?array {
 	foreach ( aafm_playbooks() as $playbook ) {
@@ -254,7 +255,7 @@ function aafm_playbook_new_slug( string $title, array $taken ): string {
  * @param array<string,mixed> $raw        Fields title, description, body, active.
  * @param string              $slug       Slug to update, '' to create.
  * @param string              $log_action Activity Log action, '' for added or edited.
- * @return array{slug:string,title:string,description:string,body:string,active:bool,updated_gmt:string}|WP_Error
+ * @return array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,starter:string,updated_gmt:string}|WP_Error
  */
 function aafm_save_playbook( array $raw, string $slug = '', string $log_action = '' ) {
 	$action = '' !== $log_action ? $log_action : ( '' === $slug ? 'added' : 'edited' );
@@ -288,7 +289,16 @@ function aafm_save_playbook( array $raw, string $slug = '', string $log_action =
 		}
 	}
 
-	$entry          = array_merge( array( 'slug' => $slug ), $clean, array( 'updated_gmt' => current_time( 'mysql', true ) ) );
+	// The starter a playbook came from is set once, when it is added, and kept on every edit.
+	$starter        = isset( $list[ $index ] ) ? $list[ $index ]['starter'] : ( is_string( $raw['starter'] ?? null ) && preg_match( '/^[a-z0-9_-]{1,64}$/', $raw['starter'] ) ? $raw['starter'] : '' );
+	$entry          = array_merge(
+		array( 'slug' => $slug ),
+		$clean,
+		array(
+			'starter'     => $starter,
+			'updated_gmt' => current_time( 'mysql', true ),
+		)
+	);
 	$list[ $index ] = $entry;
 
 	if ( ! aafm_update_option_verified( AAFM_PLAYBOOKS_OPTION, array_values( $list ), false ) ) {
@@ -440,30 +450,50 @@ function aafm_playbook_index(): string {
  * The starter playbooks the Playbooks tab offers, keyed by starter id.
  *
  * Filter `aafm_playbook_starters` may ADD starters; the free plugin never hides or locks one. The
- * three built-in starters are restored after the filter, so a filter cannot remove or replace them.
- * Added entries must pass the same cleaning a save does or they are dropped. `requires` lists plugin
- * markers ('' or 'woocommerce') and is display-only: it is never stored with a playbook.
+ * five built-in starters are restored after the filter, so a filter cannot remove or replace them.
+ * An added starter's text must pass the same cleaning a save does or it is dropped; its abilities
+ * list is cleaned on its own, so a bad list becomes empty without losing the starter. `requires`
+ * lists plugin markers ('' or 'woocommerce') and is display-only: it is never stored.
  *
- * @return array<string,array{title:string,description:string,body:string,requires:list<string>}>
+ * The steps name tools by their registry label ("the Get post tool"); `abilities` lists the names.
+ *
+ * @return array<string,array{title:string,description:string,body:string,abilities:list<string>,requires:list<string>}>
  */
 function aafm_playbook_starters(): array {
 	$built_in = array(
 		'publish-checklist'     => array(
 			'title'       => __( 'Publish checklist', 'agent-abilities-for-mcp' ),
-			'description' => __( 'Check a draft before it goes out and report what is missing. Never publishes.', 'agent-abilities-for-mcp' ),
-			'body'        => __( "Use this when the user asks you to check a draft before it is published.\n\n1. Read the draft with aafm/get-post.\n2. Check the title: say so if it is longer than about 60 characters or does not say what the post is about.\n3. Check the excerpt: say so if it is empty or just repeats the first paragraph.\n4. Check the featured image. If there is none, say so. Set one with aafm/set-featured-image only if the user asks you to.\n5. Check the categories and tags. Read the site's terms with aafm/get-terms and suggest ones that fit; flag a post left in Uncategorized.\n6. Leave the post as a draft. Reply with a short list of what is missing or worth fixing.\n\nNever publish or schedule the post unless the user tells you to.", 'agent-abilities-for-mcp' ),
+			'description' => __( 'Check one draft before it goes live and list what is missing or worth fixing. Changes nothing unless you say yes. Never publishes.', 'agent-abilities-for-mcp' ),
+			'body'        => __( "Use this when the user asks you to check a draft before it is published.\n\n1. Find the draft. If the user named it or gave a link or ID, read it with the Get post tool. If not, list recent drafts with the Get posts tool (status draft) and ask which one to check. Do not guess.\n2. Title. Say so if it is longer than about 60 characters, is vague, or does not match what the post is about.\n3. Content. Look for placeholder text (such as \"lorem ipsum\", \"TODO\" or \"[insert\"), empty headings, very short sections and repeated paragraphs. Quote the exact spot for each problem.\n4. Excerpt. Say so if it is empty, and suggest one of one or two sentences. Do not save it.\n5. Featured image. Say so if there is none. If the user asks you to add one, search the media library with the Get media tool, show up to three options, and set the one the user picks with the Set featured image tool.\n6. Categories and tags. Read the site's categories and tags with the Get terms tool. Flag a post that is only in Uncategorized or has no tags, and suggest existing terms that fit. Add them with the Add post terms tool only after the user says yes to those exact terms. Do not create new terms.\n7. Reply with a short checklist. Mark each item OK or Needs work, with one line on what to fix.\n\nRules:\n- Leave the post as a draft. Never publish, schedule or delete it, even if everything looks fine.\n- Change nothing until the user says yes to that exact change.\n- If a tool is missing or returns an error, say which check you could not do and finish the others.", 'agent-abilities-for-mcp' ),
+			'abilities'   => array( 'aafm/get-posts', 'aafm/get-post', 'aafm/get-terms', 'aafm/get-media', 'aafm/set-featured-image', 'aafm/add-post-terms' ),
 			'requires'    => array(),
 		),
 		'weekly-content-report' => array(
 			'title'       => __( 'Weekly content report', 'agent-abilities-for-mcp' ),
-			'description' => __( 'Posts published, drafts created and comments waiting from the last 7 days, as a short table. Read-only.', 'agent-abilities-for-mcp' ),
-			'body'        => __( "Use this when the user asks what happened on the site this week. This playbook only reads; change nothing.\n\n1. Page through aafm/get-posts with status publish. Results come newest first by post date. Keep posts dated within the last 7 days and stop paging once you reach an older one.\n2. Do the same with status draft for drafts created in the last 7 days. An older draft that was only edited this week is out of scope, because the list is ordered by post date, not by the date it was last changed.\n3. Page through aafm/get-pending-comments and keep the comments from the last 7 days.\n4. If a paging limit stops you before you reach 7 days back, say so plainly instead of guessing.\n5. Reply with one short table: published posts, new drafts and pending comments, with a count and the titles for each.\n\nIf the user also wants all-time totals, use aafm/count-posts and label those numbers as all-time, not weekly.", 'agent-abilities-for-mcp' ),
+			'description' => __( 'Posts published, drafts started and comments waiting in the last 7 days, as one short table. Read-only.', 'agent-abilities-for-mcp' ),
+			'body'        => __( "Use this when the user asks what happened on the site this week. Only read. Change nothing.\n\n1. Date range. Use the last 7 days up to today. If you do not know today's date, ask the user before you start.\n2. Published posts. List published posts with the Get posts tool. They come newest first by publish date. Keep the ones dated inside the range and stop paging once you reach an older one.\n3. New drafts. Do the same with status draft and keep the drafts created inside the range. A draft created earlier and only edited this week does not show up this way. Say so in one line under the table.\n4. Comments waiting. Page through the Get pending comments tool and keep the comments dated inside the range. The tool also returns a total for the whole queue. Report it as \"waiting in total\".\n5. If paging stops before you reach 7 days back, or a tool is off or fails, say exactly what is missing. Never fill a gap with a guess.\n6. Reply with one table with three rows: Published, New drafts, Comments waiting. Give a count for each, plus the titles (for comments, the post each one is on).\n\nIf the user also asks for totals, use the Count posts tool and label those numbers \"all time\", not \"this week\".", 'agent-abilities-for-mcp' ),
+			'abilities'   => array( 'aafm/get-posts', 'aafm/get-pending-comments', 'aafm/count-posts' ),
+			'requires'    => array(),
+		),
+		'content-health-check'  => array(
+			'title'       => __( 'Content health check', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Scan recent posts, images and terms for common gaps: no featured image, no category, missing alt text, unused tags. Reports only.', 'agent-abilities-for-mcp' ),
+			'body'        => __( "Use this when the user asks for a health check of the site's content. Only read. Change nothing.\n\n1. Scope. Check the 100 most recent published posts unless the user asks for a different number. Use the Count posts tool to get the total number of published posts, so you can tell the user how much you covered.\n2. Posts. Page through the Get posts tool (status publish, 50 per page). For each post, note any of these:\n- no featured image\n- only in Uncategorized, or no category at all\n- no tags\n- no excerpt\n- a title longer than about 60 characters\n3. Images. Page through the Get media tool for up to 100 of the newest items. Note every image with empty alt text. Skip files that are not images.\n4. Categories and tags. Read them with the Get terms tool. Note terms used by 0 posts, and pairs that look like duplicates (for example \"Recipe\" and \"Recipes\").\n5. Reply with one short table per problem, with the item's title, ID and link. Put the problem that affects the most items first. End with the three fixes you would make first.\n6. If a tool is off, fails or hits a paging limit, say which part you could not check. Do not guess.\n\nNever edit, delete or merge anything during this check. If the user wants a fix, they can ask for it separately after reading the report.", 'agent-abilities-for-mcp' ),
+			'abilities'   => array( 'aafm/count-posts', 'aafm/get-posts', 'aafm/get-media', 'aafm/get-terms' ),
+			'requires'    => array(),
+		),
+		'draft-a-post'          => array(
+			'title'       => __( 'Draft a new post', 'agent-abilities-for-mcp' ),
+			'description' => __( "Write a blog post from the user's brief and save it as a draft for review. Never publishes or schedules.", 'agent-abilities-for-mcp' ),
+			'body'        => __( "Use this when the user asks you to write a new blog post.\n\n1. Brief. Make sure you know the topic, who the post is for, and roughly how long it should be. If any of these is missing, ask for all of them in one message. Do not start writing on a guess.\n2. Site. Read the site name and tagline with the Get site info tool so the tone fits the site.\n3. Repeats. Search the site for the topic with the Search content tool. If a close match exists, tell the user and ask whether to go ahead or stop.\n4. Write the post: a clear title of about 60 characters or fewer, a short intro, a heading for each section, and an excerpt of one or two sentences. Use plain paragraphs and headings with no inline styles.\n5. Facts. Do not invent numbers, prices, quotes, dates, or claims about real people or businesses. Where a fact is needed and you do not have it, write [CHECK: what is needed] in the text.\n6. Category. Read the categories with the Get terms tool and pick one or two existing ones that fit. Do not create new categories.\n7. Save the post with the Create draft tool, with the status set to draft. Then give the user the title, the link to the draft and a list of every [CHECK] note.\n\nRules:\n- Only ever save as a draft. Never publish or schedule, and never change any other post. If the user asks you to publish, tell them to review the draft and publish it themselves in WordPress.\n- If saving fails or the tool is off, paste the full post into the chat so nothing is lost, and say why it was not saved.", 'agent-abilities-for-mcp' ),
+			'abilities'   => array( 'aafm/get-site-info', 'aafm/search-content', 'aafm/get-terms', 'aafm/create-draft' ),
 			'requires'    => array(),
 		),
 		'shop-tidy-up'          => array(
 			'title'       => __( 'Shop tidy-up', 'agent-abilities-for-mcp' ),
-			'description' => __( 'Find WooCommerce products with no price, no image, no stock or still in draft, and propose fixes.', 'agent-abilities-for-mcp' ),
-			'body'        => __( "Use this when the user asks you to tidy up the shop. Propose changes; do not make them.\n\n1. Page through aafm/wc-list-products.\n2. List the products with no price, the ones out of stock and the ones still in draft.\n3. For products you need more detail on, such as whether there is a main image, read them with aafm/wc-get-product.\n4. Reply with one table per problem: product name, ID and what to fix.\n5. Suggest the fix for each one. Change a product with aafm/wc-update-product only after the user confirms that exact change.", 'agent-abilities-for-mcp' ),
+			'description' => __( 'Find WooCommerce products with no price, no image, no stock or stuck in draft, and suggest fixes. Changes nothing.', 'agent-abilities-for-mcp' ),
+			'body'        => __( "Use this when the user asks you to tidy up the shop. Only read and suggest. Change nothing.\n\n1. Size. Get the product counts with the Count WooCommerce products tool so you know how many products there are.\n2. List. Page through the List WooCommerce products tool with status \"any\", 100 per page. From each row, note products that have:\n- no price\n- stock status \"out of stock\"\n- status draft or pending\n3. Images. The list does not show images. Read up to 50 products with the Get WooCommerce product tool, published ones first, and note any with no main image. If there are more than 50, say how many you did not check.\n4. Variable products. A variable product can show no price in the list. Read it with the Get WooCommerce product tool before you report a missing price.\n5. Reply with one table per problem: product name, ID, status and what to fix. Add a one-line suggested fix for each product.\n6. If a tool is off, fails or stops paging early, say what you could not check. Do not guess.\n\nNever change, publish, hide or delete a product. If the user wants a fix made, they can ask for that exact change separately.", 'agent-abilities-for-mcp' ),
+			'abilities'   => array( 'aafm/wc-count-products', 'aafm/wc-list-products', 'aafm/wc-get-product' ),
 			'requires'    => array( 'woocommerce' ),
 		),
 	);
@@ -472,18 +502,20 @@ function aafm_playbook_starters(): array {
 	$out      = $built_in;
 	if ( is_array( $filtered ) ) {
 		foreach ( $filtered as $id => $starter ) {
-			if ( ! is_string( $id ) || isset( $built_in[ $id ] ) || ! is_array( $starter ) ) {
+			if ( ! is_string( $id ) || isset( $built_in[ $id ] ) || ! is_array( $starter ) || ! preg_match( '/^[a-z0-9_-]{1,64}$/', $id ) ) {
 				continue;
 			}
-			$clean = aafm_clean_playbook_input( $starter );
+			$clean = aafm_clean_playbook_input( array_diff_key( $starter, array( 'abilities' => true ) ) );
 			if ( is_wp_error( $clean ) ) {
 				continue;
 			}
+			$abilities  = aafm_clean_playbook_abilities( $starter['abilities'] ?? array() );
 			$requires   = isset( $starter['requires'] ) && is_array( $starter['requires'] ) ? $starter['requires'] : array();
 			$out[ $id ] = array(
 				'title'       => $clean['title'],
 				'description' => $clean['description'],
 				'body'        => $clean['body'],
+				'abilities'   => is_wp_error( $abilities ) ? array() : $abilities,
 				'requires'    => array_values( array_intersect( $requires, array( '', 'woocommerce' ) ) ),
 			);
 		}
@@ -495,7 +527,7 @@ function aafm_playbook_starters(): array {
  * Add a starter to the library as an ordinary playbook, switched Off.
  *
  * @param string $starter_id Starter id.
- * @return array{slug:string,title:string,description:string,body:string,active:bool,updated_gmt:string}|WP_Error
+ * @return array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,starter:string,updated_gmt:string}|WP_Error
  */
 function aafm_add_starter_playbook( string $starter_id ) {
 	$starters = aafm_playbook_starters();
@@ -509,6 +541,8 @@ function aafm_add_starter_playbook( string $starter_id ) {
 			'description' => $starter['description'],
 			'body'        => $starter['body'],
 			'active'      => false,
+			'abilities'   => $starter['abilities'],
+			'starter'     => $starter_id,
 		),
 		'',
 		'added_starter'

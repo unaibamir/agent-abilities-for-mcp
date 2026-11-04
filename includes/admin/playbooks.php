@@ -184,7 +184,7 @@ function aafm_render_playbooks_tab(): void {
 
 	// Card 3: starters.
 	ob_start();
-	$taken = array_column( $playbooks, 'slug' );
+	$taken = array_column( $playbooks, 'starter' );
 	echo '<ul class="aafm-playbook-starters">';
 	foreach ( aafm_playbook_starters() as $id => $starter ) {
 		$needs_wc = in_array( 'woocommerce', $starter['requires'], true ) && ! aafm_woocommerce_active();

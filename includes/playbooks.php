@@ -28,9 +28,10 @@ const AAFM_PLAYBOOK_ABILITIES_MAX = 50;
 const AAFM_PLAYBOOK_LIBRARY_URL   = 'https://agentabilitieswp.com/playbooks/';
 
 /**
- * Clean a playbook body: the text exactly as typed, with LF line endings and without invalid UTF-8,
- * control characters or invisible and bidirectional override characters. Markup-like text is kept
- * as text: the body only ever leaves as JSON or through an escaped attribute, never as HTML.
+ * Clean a playbook body: the text exactly as typed (indentation and trailing lines included), with LF
+ * line endings and without invalid UTF-8, control characters or invisible and bidirectional override
+ * characters. Markup-like text is kept as text: the body only ever leaves as JSON or through an
+ * escaped attribute, never as HTML.
  *
  * @param string $raw Raw text.
  * @return string
@@ -38,7 +39,7 @@ const AAFM_PLAYBOOK_LIBRARY_URL   = 'https://agentabilitieswp.com/playbooks/';
 function aafm_clean_playbook_body( string $raw ): string {
 	$text = str_replace( aafm_unsafe_text_characters(), '', wp_check_invalid_utf8( $raw ) );
 
-	return trim( (string) preg_replace( '/\r\n|\r/', "\n", $text ) );
+	return (string) preg_replace( '/\r\n|\r/', "\n", $text );
 }
 
 /**
@@ -59,7 +60,7 @@ function aafm_clean_stored_playbook( $entry ): ?array {
 	}
 	$title = isset( $entry['title'] ) && is_string( $entry['title'] ) ? mb_substr( aafm_sanitize_plain_text( $entry['title'] ), 0, AAFM_PLAYBOOK_TITLE_MAX ) : '';
 	$body  = isset( $entry['body'] ) && is_string( $entry['body'] ) ? mb_substr( aafm_clean_playbook_body( $entry['body'] ), 0, AAFM_PLAYBOOK_BODY_MAX ) : '';
-	if ( '' === trim( $title ) || '' === $body ) {
+	if ( '' === trim( $title ) || '' === trim( $body ) ) {
 		return null;
 	}
 	$description = isset( $entry['description'] ) && is_string( $entry['description'] ) ? mb_substr( aafm_sanitize_plain_text( $entry['description'] ), 0, AAFM_PLAYBOOK_DESC_MAX ) : '';
@@ -160,7 +161,7 @@ function aafm_clean_playbook_input( array $raw ) {
 	if ( is_wp_error( $abilities ) ) {
 		return $abilities;
 	}
-	if ( '' === $body || mb_strlen( $body ) > AAFM_PLAYBOOK_BODY_MAX ) {
+	if ( '' === trim( $body ) || mb_strlen( $body ) > AAFM_PLAYBOOK_BODY_MAX ) {
 		/* translators: %s: the longest body allowed, in characters, for example 8,000. */
 		return new WP_Error( 'aafm_playbook_invalid', sprintf( __( 'Write the steps in 1 to %s characters.', 'agent-abilities-for-mcp' ), number_format_i18n( AAFM_PLAYBOOK_BODY_MAX ) ) );
 	}

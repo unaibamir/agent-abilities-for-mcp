@@ -4094,7 +4094,11 @@
 				const next = tr.nextElementSibling ?? tr.previousElementSibling;
 				tr.remove();
 				syncEmpty();
-				setStarterState( tr.dataset.playbookStarter, false );
+				// Another remaining row may still carry the starter, so the button follows the rows left.
+				const starterId = tr.dataset.playbookStarter;
+				if ( starterId ) {
+					setStarterState( starterId, !! tbody.querySelector( `tr[data-playbook-starter="${ CSS.escape( starterId ) }"]` ) );
+				}
 				if ( fields.slug.value === slug ) {
 					fields.slug.value = '';
 					this.#markClean( form );

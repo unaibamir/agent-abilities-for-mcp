@@ -213,6 +213,8 @@ function aafm_admin_allowed_html(): array {
 		'data-playbook-body'        => true,
 		'data-playbook-active'      => true,
 		'data-starter'              => true,
+		'data-playbook-abilities'   => true,
+		'data-playbook-starter'     => true,
 	);
 
 	$global = array_merge(
@@ -263,18 +265,21 @@ function aafm_admin_allowed_html(): array {
 		'input'    => array_merge(
 			$global,
 			array(
-				'type'        => true,
-				'name'        => true,
-				'value'       => true,
-				'placeholder' => true,
-				'disabled'    => true,
-				'readonly'    => true,
-				'checked'     => true,
-				'min'         => true,
-				'max'         => true,
-				'step'        => true,
+				'type'         => true,
+				'name'         => true,
+				'value'        => true,
+				'placeholder'  => true,
+				'disabled'     => true,
+				'readonly'     => true,
+				'checked'      => true,
+				'min'          => true,
+				'max'          => true,
+				'step'         => true,
+				'autocomplete' => true,
 			)
 		),
+		'fieldset' => $global,
+		'legend'   => $global,
 		'textarea' => array_merge(
 			$global,
 			array(

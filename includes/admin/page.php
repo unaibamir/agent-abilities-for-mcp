@@ -163,6 +163,16 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 			'i18n'             => array(
 				'saving'                   => __( 'Saving…', 'agent-abilities-for-mcp' ),
 				'playbookActive'           => __( 'Active', 'agent-abilities-for-mcp' ),
+				/* translators: %s: comma-separated ability names. */
+				'playbookChosen'           => __( 'Chosen: %s.', 'agent-abilities-for-mcp' ),
+				'playbookChosenNone'       => __( 'No abilities chosen yet.', 'agent-abilities-for-mcp' ),
+				'playbookOffNoteOne'       => __( '1 of the abilities you chose is off or needs a plugin that is not active. Agents cannot use it until you turn it on on the Abilities or Integrations tab.', 'agent-abilities-for-mcp' ),
+				/* translators: %d: how many chosen abilities agents cannot use yet. */
+				'playbookOffNoteMany'      => __( '%d of the abilities you chose are off or need a plugin that is not active. Agents cannot use them until you turn them on on the Abilities or Integrations tab.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: playbook title. */
+				'playbookEditLabel'        => __( 'Edit %s', 'agent-abilities-for-mcp' ),
+				/* translators: %s: playbook title. */
+				'playbookDeleteLabel'      => __( 'Delete %s', 'agent-abilities-for-mcp' ),
 				'playbookOff'              => __( 'Off', 'agent-abilities-for-mcp' ),
 				'playbookEdit'             => __( 'Edit', 'agent-abilities-for-mcp' ),
 				'playbookDelete'           => __( 'Delete', 'agent-abilities-for-mcp' ),

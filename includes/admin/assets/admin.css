@@ -2757,8 +2757,23 @@
 			&[hidden] { display: none; }
 		}
 
-		.aafm-playbooks-list-status:empty {
+		.aafm-playbooks-list-status:empty,
+		.aafm-playbook-starters-status:empty {
 			display: none;
+		}
+
+		.aafm-allowlist-picker.aafm-playbook-picker {
+			max-inline-size: none;
+		}
+
+		.aafm-allowlist-item .aafm-pill {
+			margin-inline-start: var(--aafm-space-1);
+			vertical-align: middle;
+		}
+
+		.aafm-empty-state a {
+			display: inline-block;
+			margin-block-start: var(--aafm-space-1);
 		}
 
 		.aafm-playbook-starters {
@@ -2814,6 +2829,84 @@
 		}
 	}
 
+	/* Shared by the Connection tab allowlist and the Playbooks editor, so it nests under .aafm-wrap. */
+	/* The "Allowed abilities" picker: an "All abilities" checkbox, then - visible only while
+	   that checkbox is unchecked, no disclosure to open - a plain count, a zero-selected
+	   warning, a search field, and the subject-grouped checkbox list. admin.js builds this per
+	   row (see #buildAllowlistPicker()) from the same catalog every row's picker shares. */
+	.aafm-allowlist-picker {
+		min-inline-size: 240px;
+		max-inline-size: 360px;
+
+		.aafm-allowlist-all {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			font-size: 13px;
+			font-weight: 600;
+			margin-block-end: 6px;
+		}
+
+		.aafm-allowlist-picker-body {
+			margin-block-start: 8px;
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+
+			/* Same trap as .aafm-allowlist-item below: an author-stylesheet `display: flex`
+			   beats the user-agent's `[hidden] { display: none }` regardless of specificity,
+			   and this body toggles via `hidden` on the "All abilities" checkbox. */
+			&[hidden] { display: none; }
+		}
+
+		.aafm-allowlist-picker-count {
+			margin: 0;
+			font-size: 12.5px;
+			color: var(--aafm-text-subtle);
+		}
+
+		.aafm-allowlist-warning {
+			font-size: 12.5px;
+		}
+
+		.aafm-allowlist-picker-groups {
+			max-block-size: 220px;
+			overflow-y: auto;
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			padding-block: 4px;
+			padding-inline: 8px;
+		}
+
+		.aafm-allowlist-group {
+			border: none;
+			margin: 0;
+			padding-block: 4px;
+			padding-inline: 0;
+
+			legend {
+				font-size: 11px;
+				font-weight: 600;
+				text-transform: uppercase;
+				letter-spacing: 0.02em;
+				color: var(--aafm-text-subtle);
+				padding: 0;
+			}
+		}
+
+		.aafm-allowlist-item {
+			display: block;
+			font-size: 12.5px;
+			padding-block: 2px;
+
+			/* Same trap as .aafm-ability-row's own [hidden] rule elsewhere in this file: an
+			   author-stylesheet `display: block` beats the user-agent's
+			   `[hidden] { display: none }` regardless of specificity, so the per-picker
+			   search's `item.hidden = true` would otherwise do nothing visible. */
+			&[hidden] { display: none; }
+		}
+	}
+
 	/* ---------- Ability allowlist (Connections tab) ---------- */
 	.aafm-allowlist-card {
 		.aafm-allowlist-table {
@@ -2826,83 +2919,6 @@
 			margin: 0;
 			font-size: 12.5px;
 			color: var(--aafm-text-subtle);
-		}
-
-		/* The "Allowed abilities" picker: an "All abilities" checkbox, then - visible only while
-		   that checkbox is unchecked, no disclosure to open - a plain count, a zero-selected
-		   warning, a search field, and the subject-grouped checkbox list. admin.js builds this per
-		   row (see #buildAllowlistPicker()) from the same catalog every row's picker shares. */
-		.aafm-allowlist-picker {
-			min-inline-size: 240px;
-			max-inline-size: 360px;
-
-			.aafm-allowlist-all {
-				display: flex;
-				align-items: center;
-				gap: 6px;
-				font-size: 13px;
-				font-weight: 600;
-				margin-block-end: 6px;
-			}
-
-			.aafm-allowlist-picker-body {
-				margin-block-start: 8px;
-				display: flex;
-				flex-direction: column;
-				gap: 8px;
-
-				/* Same trap as .aafm-allowlist-item below: an author-stylesheet `display: flex`
-				   beats the user-agent's `[hidden] { display: none }` regardless of specificity,
-				   and this body toggles via `hidden` on the "All abilities" checkbox. */
-				&[hidden] { display: none; }
-			}
-
-			.aafm-allowlist-picker-count {
-				margin: 0;
-				font-size: 12.5px;
-				color: var(--aafm-text-subtle);
-			}
-
-			.aafm-allowlist-warning {
-				font-size: 12.5px;
-			}
-
-			.aafm-allowlist-picker-groups {
-				max-block-size: 220px;
-				overflow-y: auto;
-				border: 1px solid var(--aafm-border);
-				border-radius: var(--aafm-radius-sm);
-				padding-block: 4px;
-				padding-inline: 8px;
-			}
-
-			.aafm-allowlist-group {
-				border: none;
-				margin: 0;
-				padding-block: 4px;
-				padding-inline: 0;
-
-				legend {
-					font-size: 11px;
-					font-weight: 600;
-					text-transform: uppercase;
-					letter-spacing: 0.02em;
-					color: var(--aafm-text-subtle);
-					padding: 0;
-				}
-			}
-
-			.aafm-allowlist-item {
-				display: block;
-				font-size: 12.5px;
-				padding-block: 2px;
-
-				/* Same trap as .aafm-ability-row's own [hidden] rule elsewhere in this file: an
-				   author-stylesheet `display: block` beats the user-agent's
-				   `[hidden] { display: none }` regardless of specificity, so the per-picker
-				   search's `item.hidden = true` would otherwise do nothing visible. */
-				&[hidden] { display: none; }
-			}
 		}
 
 		.aafm-allowlist-add {

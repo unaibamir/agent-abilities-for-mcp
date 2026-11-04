@@ -99,6 +99,7 @@ final class TransportNoticeTest extends TestCase {
 		$server = $this->serve();
 		$this->assertSame( 0, $this->adapter_lines() );
 		$this->assertSame( 403, $server->status );
+		$this->assertSame( 'aafm_ip_blocked', json_decode( (string) $server->sent_body, true )['code'] ?? null, 'The real blocked request carries the reason in its body.' );
 	}
 
 	public function test_a_throwing_callback_still_logs(): void {

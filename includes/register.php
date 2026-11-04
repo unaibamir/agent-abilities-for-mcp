@@ -1073,7 +1073,13 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// includes/audit/denial-reason.php; it lands in the admin-only detail and never on the wire.
 		$reason = null;
 
-		if ( array() !== $missing ) {
+		if ( aafm_connection_is_paused() ) {
+			// A paused connection lists tools but may not call one. The refusal is a tool error, not a
+			// transport 403, so the client shows the reason. Core's re-check inside execute() gets a bare
+			// false, as the rate-limit refusal does, because a WP_Error there trips _doing_it_wrong().
+			$allowed = null === aafm_executing_ability() ? aafm_connection_paused_error() : false;
+			$reason  = 'connection_paused';
+		} elseif ( array() !== $missing ) {
 			// No try/catch around this one: building the refusal cannot crash, and it falls through
 			// to the shared non-true branch below, so the denial is audited, announced and has its
 			// rate memo released exactly as every other refusal does rather than growing a second

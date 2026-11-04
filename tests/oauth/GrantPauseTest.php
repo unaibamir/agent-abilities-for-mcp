@@ -135,11 +135,14 @@ class GrantPauseTest extends TestCase {
 	 * Send a tools/list request through the real REST dispatch, putting the transport's route back if an
 	 * earlier test rebuilt the REST server after the adapter registered it.
 	 *
-	 * @param bool $as_served Also run core's Allow header filter, which calls every handler's
-	 *                        permission callback again once per HTTP method, as serving a request does.
+	 * @param bool                 $as_served Also run core's Allow header filter, which calls every handler's
+	 *                                        permission callback again once per HTTP method, as serving a request does.
+	 * @param string               $body      The JSON-RPC body to send.
+	 * @param string               $session   Mcp-Session-Id to send; the adapter wants one on everything after initialize.
+	 * @param array<string,string> $headers Extra request headers.
 	 * @return \WP_REST_Response
 	 */
-	private function dispatch( bool $as_served = false ): \WP_REST_Response {
+	private function dispatch( bool $as_served = false, string $body = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}', string $session = '', array $headers = array() ): \WP_REST_Response {
 		if ( ! isset( rest_get_server()->get_routes()[ aafm_mcp_rest_route() ] ) ) {
 			$server = \WP\MCP\Core\McpAdapter::instance()->get_server( 'aafm-server' );
 			$this->assertNotNull( $server );
@@ -147,84 +150,132 @@ class GrantPauseTest extends TestCase {
 		}
 		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
 		$request->set_header( 'Content-Type', 'application/json' );
-		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );
+		if ( '' !== $session ) {
+			$request->set_header( 'Mcp-Session-Id', $session );
+			$request->set_header( 'MCP-Protocol-Version', '2025-11-25' );
+		}
+		foreach ( $headers as $name => $value ) {
+			$request->set_header( $name, $value );
+		}
+		$request->set_body( $body );
 		$response = rest_do_request( $request );
+		$response = apply_filters( 'rest_post_dispatch', $response, rest_get_server(), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, applied as serve_request() does.
 		return $as_served ? rest_send_allow_header( $response, rest_get_server(), $request ) : $response;
 	}
 
-	public function test_a_paused_grant_still_resolves_a_user_but_the_transport_gate_refuses_it(): void {
+	/**
+	 * A response body as the client reads it: the adapter hands back schema records, not arrays.
+	 *
+	 * @param \WP_REST_Response $response Response.
+	 * @return array<string,mixed>
+	 */
+	private function wire( \WP_REST_Response $response ): array {
+		return (array) json_decode( (string) wp_json_encode( $response->get_data() ), true );
+	}
+
+	/**
+	 * Run the initialize handshake for the current grant.
+	 *
+	 * @return array{0:string,1:\WP_REST_Response} Session id and the initialize response.
+	 */
+	private function handshake(): array {
+		$response = $this->dispatch( false, '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"pause-test","version":"1"}}}' );
+		$this->assertSame( 200, $response->get_status() );
+		return array( (string) ( $response->get_headers()['Mcp-Session-Id'] ?? '' ), $response );
+	}
+
+	public function test_a_paused_grant_still_resolves_a_user_and_the_transport_gate_admits_it(): void {
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->assertSame( $this->user, $this->resolve() );
-		$this->assertFalse( aafm_transport_permission_callback( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) ) );
-		$this->assertSame( 1, $this->paused_rows() );
-		$this->assertSame( self::CLIENT, aafm_query_activity( array( 'ability' => '(transport)' ) )[0]['client_id'] );
-
-		for ( $i = 0; $i < 10; $i++ ) {
-			aafm_transport_permission_callback( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) );
-		}
-		$this->assertLessThanOrEqual( AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW, $this->paused_rows() );
+		$this->assertTrue( aafm_transport_permission_callback( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) ) );
+		$this->assertSame( 0, $this->paused_rows(), 'Admitting writes no transport denial row.' );
 	}
 
-	public function test_a_paused_grant_is_a_plain_403_forbidden_on_the_wire(): void {
-		$this->set_paused( '2026-10-01 00:00:00' );
-		$this->resolve();
-		$log      = wp_tempnam( 'aafm-pause-log' );
-		$previous = ini_set( 'error_log', $log ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- capture the adapter's log line, if any.
-
-		$response = $this->dispatch();
-
-		ini_set( 'error_log', (string) $previous ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- restore.
-		$logged = (string) file_get_contents( $log ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local temp file.
-		wp_delete_file( $log );
-
-		$this->assertSame( 403, $response->get_status() );
-		$this->assertSame( 'rest_forbidden', $response->as_error()->get_error_code() );
-		$this->assertSame( '', $logged, 'A plain false writes no adapter error_log line.' );
-	}
-
-	public function test_paused_grant_body_names_the_pause(): void {
-		$this->set_paused( '2026-10-01 00:00:00' );
-		$this->resolve();
-		$this->dispatch(); // Registers the route.
-		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
-		$request->set_header( 'Content-Type', 'application/json' );
-		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );
-		$before   = $this->paused_rows();
-		$response = rest_send_allow_header( rest_do_request( $request ), rest_get_server(), $request );
-		$response = apply_filters( 'rest_post_dispatch', $response, rest_get_server(), $request ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook, applied as serve_request() does.
-
-		$this->assertSame( 403, $response->get_status() );
-		$data = $response->get_data();
-		$this->assertSame( array( 'code', 'message', 'data' ), array_keys( $data ) );
-		$this->assertSame( 'aafm_connection_paused', $data['code'] );
-		$this->assertSame( array( 'status' => 403 ), $data['data'] );
-		$this->assertArrayNotHasKey( 'WWW-Authenticate', $response->get_headers() );
-		$this->assertSame( $before + 1, $this->paused_rows(), 'One denial row per paused request.' );
-		$this->assertCount(
-			0,
-			aafm_query_activity(
-				array(
-					'ability' => '(transport)',
-					'status'  => 'error',
-				)
-			),
-			'No transport outcome row for the REST-shaped body.'
+	/**
+	 * A throwaway server carrying one ability, so a tools/call can run through the adapter's real
+	 * handler whatever the process-wide server was built with (see AllowlistWireTest).
+	 *
+	 * @return \AAFM\Tests\Support\McpToolsHandlerShim
+	 */
+	private function single_tool_handler(): \AAFM\Tests\Support\McpToolsHandlerShim {
+		$this->register_enabled( array( 'aafm/get-posts' ) );
+		static $counter = 0;
+		++$counter;
+		$id      = 'aafm-server-pause-test-' . $counter;
+		$tools   = aafm_build_server_tools( aafm_preflight_bound_server_tools_cached( array( 'aafm/get-posts' ) ) );
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$this->in_action(
+			'mcp_adapter_init',
+			static function () use ( $adapter, $tools, $id ): void {
+				$adapter->create_server(
+					$id,
+					AAFM_MCP_NAMESPACE,
+					AAFM_MCP_ROUTE_SEGMENT,
+					'Agent Abilities for MCP (pause test)',
+					'Test-only server.',
+					AAFM_VERSION,
+					array( \WP\MCP\Transport\HttpTransport::class ),
+					\WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
+					\WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
+					$tools,
+					array(),
+					array(),
+					'aafm_transport_permission_callback'
+				);
+			}
 		);
+		$server = $adapter->get_server( $id );
+		$this->assertInstanceOf( \WP\MCP\Core\McpServer::class, $server );
+		return new \AAFM\Tests\Support\McpToolsHandlerShim( $server );
 	}
 
-	public function test_one_refused_request_writes_one_denial_row_although_core_reruns_the_permission_callback(): void {
+	public function test_a_paused_connection_lists_tools_with_a_normal_200(): void {
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->resolve();
-		$this->assertSame( 403, $this->dispatch( true )->get_status() );
-		$this->assertSame( 1, $this->paused_rows(), 'The Allow header re-run must not spend the denial cap.' );
+		list( $session ) = $this->handshake();
+		$response        = $this->dispatch( true, '{"jsonrpc":"2.0","id":2,"method":"tools/list"}', $session );
 
-		// A second, separate dispatch in the same process is a different request and gets its own row.
-		$this->assertSame( 403, $this->dispatch( true )->get_status() );
-		$this->assertSame( 2, $this->paused_rows() );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertIsArray( $this->wire( $response )['result']['tools'] );
+	}
 
+	public function test_a_paused_tools_call_is_a_tool_error_naming_the_pause(): void {
+		$handler = $this->single_tool_handler();
+		$this->set_paused( '2026-10-01 00:00:00' );
+		$this->resolve();
+		$result = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/get-posts' ),
+				'arguments' => array(),
+			)
+		);
+
+		$this->assertInstanceOf( \AAFM\Tests\Support\McpToolCallOutcome::class, $result );
+		$this->assertTrue( $result->getIsError() );
+		$this->assertStringContainsString( 'This connection is paused by the site owner', (string) wp_json_encode( $result->getContent() ) );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm/get-posts' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'denied', $rows[0]['status'] );
+		$this->assertStringContainsString( 'Refused: connection_paused', (string) $rows[0]['detail'] );
+		$this->assertSame( self::CLIENT, $rows[0]['client_id'] );
+	}
+
+	public function test_a_paused_connection_gets_the_pause_line_in_initialize_instructions(): void {
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-site-info' ) );
+		// The server is built once per process and the test library drops hooks added during a test,
+		// so a later test in the class needs the filter put back.
+		if ( ! has_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities' ) ) {
+			add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 3 );
+		}
+		$this->set_paused( '2026-10-01 00:00:00' );
+		$this->resolve();
+		list( , $init ) = $this->handshake();
+		$this->assertStringContainsString( 'paused by the site owner', $this->wire( $init )['result']['instructions'] );
+	}
+
+	public function test_one_blocked_request_writes_one_denial_row_although_core_reruns_the_permission_callback(): void {
 		update_option( 'aafm_ip_allowlist', array( '198.51.100.1' ) );
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
-		$this->set_paused( null );
 		$this->resolve();
 		$this->assertSame( 403, $this->dispatch( true )->get_status() );
 		$rows = aafm_query_activity(
@@ -233,17 +284,22 @@ class GrantPauseTest extends TestCase {
 				'status'  => 'denied',
 			)
 		);
-		$this->assertCount( 3, $rows, 'One more row for the blocked address, not four.' );
+		$this->assertCount( 1, $rows, 'One row for the blocked address, not four.' );
 	}
 
-	public function test_resuming_restores_access_without_a_new_token(): void {
+	public function test_resuming_restores_tool_calls_without_a_new_token(): void {
+		$handler = $this->single_tool_handler();
+		$call    = array(
+			'name'      => aafm_mcp_tool_name( 'aafm/get-posts' ),
+			'arguments' => array(),
+		);
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->resolve();
-		$this->assertFalse( aafm_transport_permission_callback( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) ) );
+		$this->assertTrue( $handler->call_tool( $call )->getIsError() );
 
 		$this->assertTrue( aafm_oauth_grant_update( $this->user, self::CLIENT, array( 'paused' => false ) ) );
 		$this->resolve();
-		$this->assertTrue( aafm_transport_permission_callback( new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' ) ) );
+		$this->assertFalse( $handler->call_tool( $call )->getIsError() );
 	}
 
 	public function test_a_paused_grant_is_not_stamped_as_used(): void {

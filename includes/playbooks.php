@@ -79,7 +79,9 @@ function aafm_clean_stored_playbook( $entry ): ?array {
  */
 function aafm_playbooks_read(): array {
 	$views = aafm_read_option_views( AAFM_PLAYBOOKS_OPTION );
-	if ( $views['db_error'] ) {
+	// A row that cannot be read, or one that is present but not a list, is a failed read: nothing is
+	// served and writes refuse, so a corrupt row is never mistaken for an empty library.
+	if ( $views['db_error'] || ( $views['db_found'] && ! is_array( $views['db_value'] ) ) ) {
 		return array(
 			'ok'   => false,
 			'list' => array(),
@@ -87,7 +89,7 @@ function aafm_playbooks_read(): array {
 	}
 	$list = array();
 	$seen = array();
-	if ( $views['db_found'] && is_array( $views['db_value'] ) ) {
+	if ( $views['db_found'] ) {
 		foreach ( $views['db_value'] as $entry ) {
 			$clean = aafm_clean_stored_playbook( $entry );
 			if ( null === $clean || isset( $seen[ $clean['slug'] ] ) ) {

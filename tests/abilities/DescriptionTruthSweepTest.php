@@ -21,6 +21,45 @@ final class DescriptionTruthSweepTest extends TestCase {
 
 	private const INTEGRATIONS = array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce', 'slim_seo', 'tec', 'event_tickets', 'avada', 'geodirectory' );
 
+	/**
+	 * Capabilities a description may name, each with the spellings the descriptions use.
+	 * Spaces, hyphens and underscores are interchangeable ("manage-WooCommerce", "manage_woocommerce").
+	 *
+	 * @var string[]
+	 */
+	private const VOCABULARY = array(
+		'edit_users',
+		'manage_woocommerce',
+		'upload_files',
+		'manage_options',
+		'list_users',
+		'edit_theme_options',
+		'moderate_comments',
+		'install_plugins',
+		'activate_plugins',
+		'create_users',
+		'delete_users',
+	);
+
+	/**
+	 * Abilities whose discovery is gated by a vocabulary capability that the description deliberately
+	 * leaves out, each with the reason. Keep this short: an entry is a decision, not a hiding place.
+	 *
+	 * @var array<string,string>
+	 */
+	private const UNNAMED_BY_DESIGN = array(
+		// Described as edit access to the object, which is how WordPress states these capabilities to a user.
+		'aafm/delete-comment:moderate_comments'   => 'Described as edit access to that comment.',
+		'aafm/get-user-meta:edit_users'           => 'Described as a user the agent can edit.',
+		'aafm/update-user-meta:edit_users'        => 'Described as a user the agent can edit.',
+		'aafm/delete-user-meta:edit_users'        => 'Described as a user the agent can edit.',
+		'aafm/acf-get-user-fields:edit_users'     => 'Described as edit access to that user.',
+		'aafm/acf-update-user-fields:edit_users'  => 'Described as edit access to that user.',
+		// Real omissions in descriptions this release does not touch; reported for a later pass.
+		'aafm/upload-media:upload_files'          => 'The description never names the upload capability. Open.',
+		'aafm/upload-media-from-url:upload_files' => 'The description never names the upload capability. Open.',
+	);
+
 	public function set_up(): void {
 		parent::set_up();
 		foreach ( self::INTEGRATIONS as $slug ) {
@@ -157,6 +196,91 @@ final class DescriptionTruthSweepTest extends TestCase {
 		);
 		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, and Visual Composer', aafm_page_builder_names(), 'A site filter does not change registry text.' );
 		remove_all_filters( 'aafm_page_builder_markers' );
+	}
+
+	/**
+	 * Whether a text names a capability, in any of the spellings the descriptions use.
+	 *
+	 * @param string $text Text.
+	 * @param string $cap  Capability.
+	 * @return bool
+	 */
+	private function names_cap( string $text, string $cap ): bool {
+		return 1 === preg_match( '/\b' . str_replace( '_', '[-_ ]', preg_quote( $cap, '/' ) ) . '\b/i', $text );
+	}
+
+	/**
+	 * A user with no role and every administrator capability granted directly.
+	 *
+	 * @return \WP_User
+	 */
+	private function fixture_user(): \WP_User {
+		$id   = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user = new \WP_User( $id );
+		$user->set_role( '' );
+		foreach ( array_keys( array_filter( (array) get_role( 'administrator' )->capabilities ) ) as $cap ) {
+			$user->add_cap( (string) $cap );
+		}
+		// Work on the object WordPress checks, so add_cap() takes effect without a reload.
+		wp_set_current_user( $id );
+		return wp_get_current_user();
+	}
+
+	/**
+	 * Whether the fixture user can discover an ability.
+	 *
+	 * @param \WP_User $user Fixture.
+	 * @param string   $name Ability.
+	 * @return bool
+	 */
+	private function discovers( \WP_User $user, string $name ): bool {
+		unset( $user );
+		return aafm_user_can_discover_ability( $name );
+	}
+
+	public function test_described_capabilities_are_the_ones_the_code_enforces(): void {
+		$user      = $this->fixture_user();
+		$texts     = $this->texts();
+		$unclaimed = array();
+		$unproved  = array();
+		$probed    = 0;
+		foreach ( array_keys( aafm_get_abilities_registry_full() ) as $name ) {
+			if ( ! $this->discovers( $user, $name ) ) {
+				continue; // Not probeable on empty input; the ability's own tests cover it.
+			}
+			$joined = implode( "\n", $texts[ $name ] ?? array() );
+			++$probed;
+			foreach ( self::VOCABULARY as $cap ) {
+				$user->add_cap( $cap, false );
+				$flips = ! $this->discovers( $user, $name );
+				$user->add_cap( $cap, true );
+				$named = $this->names_cap( $joined, $cap );
+				if ( $flips && ! $named && ! isset( self::UNNAMED_BY_DESIGN[ $name . ':' . $cap ] ) ) {
+					$unclaimed[] = $name . ' needs ' . $cap . ' but never says so';
+				}
+				if ( $named && ! $flips && $this->claims_required( $name, $joined, $cap ) ) {
+					$unproved[] = $name . ' says it requires ' . $cap . ' but discovery does not';
+				}
+			}
+		}
+		$this->assertGreaterThan( 100, $probed, 'Most of the catalog is probeable.' );
+		$this->assertSame( array(), $unclaimed, "Capabilities the code enforces and the text omits:\n" . implode( "\n", $unclaimed ) );
+		$this->assertSame( array(), $unproved, "Capabilities the text requires and discovery does not:\n" . implode( "\n", $unproved ) );
+	}
+
+	/**
+	 * Whether a text says the capability is REQUIRED ("Requires the X capability", "Gated by the X
+	 * capability", "requires the create-users capability as well"), as opposed to mentioning it.
+	 *
+	 * @param string $name   Ability.
+	 * @param string $joined All the ability's texts.
+	 * @param string $cap    Capability.
+	 * @return bool
+	 */
+	private function claims_required( string $name, string $joined, string $cap ): bool {
+		unset( $name );
+		$spelled = str_replace( '_', '[-_ ]', preg_quote( $cap, '/' ) );
+		return 1 === preg_match( '/(requires?|gated by|needs?)[^.]{0,60}\b' . $spelled . '\b/i', $joined );
 	}
 
 	public function test_the_seven_rows_say_what_the_code_does(): void {

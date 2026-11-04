@@ -351,4 +351,14 @@ final class PlaybooksStoreTest extends TestCase {
 			$this->assertStringNotContainsString( 'secret step text', (string) $row['detail'] );
 		}
 	}
+
+	public function test_a_corrupt_row_is_a_failed_read_and_never_overwritten(): void {
+		update_option( 'aafm_playbooks', 'not a list', false );
+		$this->assertFalse( aafm_playbooks_read()['ok'] );
+		$this->assertSame( array(), aafm_playbooks() );
+		$result = aafm_save_playbook( $this->fields() );
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_playbook_not_saved', $result->get_error_code() );
+		$this->assertSame( 'not a list', $this->db_row() );
+	}
 }

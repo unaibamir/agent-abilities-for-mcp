@@ -197,6 +197,17 @@ final class PlaybooksTabTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/data-starter="publish-checklist"[^>]*disabled/', $this->render() );
 	}
 
+	public function test_delete_derives_the_starter_button_from_the_rows_left(): void {
+		// No JS runner in this repo: scan the delete handler the way DirtyBaselineScriptTest does.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$js    = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$start = strpos( $js, "aafm_delete_playbook'" );
+		$this->assertNotFalse( $start );
+		$handler = substr( $js, $start, 1500 );
+		$this->assertStringContainsString( 'tbody.querySelector( `tr[data-playbook-starter=', $handler );
+		$this->assertDoesNotMatchRegularExpression( '/setStarterState\( tr\.dataset\.playbookStarter, false \)/', $handler );
+	}
+
 	public function test_picker_renders_every_ability_with_its_state(): void {
 		$this->acting_as( 'administrator' );
 		// Other suites define the WooCommerce marker class for the whole process; pin it off here.

@@ -1053,14 +1053,17 @@ function aafm_connection_paused_error(): WP_Error {
 }
 
 /**
- * The text appended to the server instructions: one line saying the connection is paused, or else
- * the playbook index. A paused connection cannot call a playbook tool, so it never gets the index.
+ * The text appended to the server instructions: the playbook index. A paused connection gets nothing.
+ * Instructions are read once and clients may keep them for the whole session, so a "paused" line put
+ * here would outlive the owner pressing Resume and the server cannot take it back. The pause is
+ * reported where it is always current, in the refusal every tool call gets
+ * (aafm_connection_paused_error()). A paused connection could not call a playbook tool anyway.
  *
  * @return string
  */
 function aafm_server_instructions_addendum(): string {
 	if ( aafm_connection_is_paused() ) {
-		return __( 'This connection is paused by the site owner. You can list tools, but every tool call is refused until they resume it.', 'agent-abilities-for-mcp' );
+		return '';
 	}
 	return function_exists( 'aafm_playbook_index' ) ? aafm_playbook_index() : '';
 }

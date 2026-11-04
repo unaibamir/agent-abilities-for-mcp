@@ -301,7 +301,7 @@ class GrantPauseTest extends TestCase {
 		$this->assertFalse( aafm_rate_limit_consume( $this->user ) );
 	}
 
-	public function test_a_paused_connection_gets_the_pause_line_in_initialize_and_discover_instructions(): void {
+	public function test_a_paused_connection_gets_no_pause_line_in_instructions(): void {
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-site-info' ) );
 		// The server is built once per process and the test library drops hooks added during a test,
 		// so a later test in the class needs the filter put back.
@@ -311,7 +311,8 @@ class GrantPauseTest extends TestCase {
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->resolve();
 		list( , $init ) = $this->handshake();
-		$this->assertStringContainsString( 'paused by the site owner', $this->wire( $init )['result']['instructions'] );
+		$this->assertStringNotContainsString( 'paused', $this->wire( $init )['result']['instructions'] ?? '' );
+		$this->assertSame( '', aafm_server_instructions_addendum(), 'Pause is carried by the per-call refusal, never by instructions a client may cache.' );
 
 		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
 		$request->set_header( 'Content-Type', 'application/json' );
@@ -325,16 +326,22 @@ class GrantPauseTest extends TestCase {
 			200
 		);
 		$out   = $this->wire( aafm_mcp_add_discover_instructions( $fresh(), null, $request ) );
-		$this->assertSame( "Base.\n\n" . aafm_server_instructions_addendum(), $out['result']['instructions'] );
+		$this->assertSame( 'Base.', $out['result']['instructions'], 'Nothing is appended for a paused connection.' );
 
 		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );
 		$this->assertSame( 'Base.', $this->wire( aafm_mcp_add_discover_instructions( $fresh(), null, $request ) )['result']['instructions'], 'Only server/discover is rewritten.' );
 		$other = new \WP_REST_Request( 'POST', '/wp/v2/posts' );
 		$other->set_body( '{"method":"server/discover"}' );
 		$this->assertSame( 'Base.', $this->wire( aafm_mcp_add_discover_instructions( $fresh(), null, $other ) )['result']['instructions'], 'Other routes are untouched.' );
+
+		// Resume: the instructions are exactly what an unpaused connection gets, because nothing was ever added.
+		$this->set_paused( null );
+		$this->resolve();
+		$this->assertSame( aafm_playbook_index(), aafm_server_instructions_addendum() );
+		$this->assertStringNotContainsString( 'paused', aafm_server_instructions_addendum() );
 	}
 
-	public function test_server_discover_on_the_wire_carries_the_pause_line(): void {
+	public function test_server_discover_on_the_wire_carries_no_pause_line(): void {
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-site-info' ) );
 		$this->set_paused( '2026-10-01 00:00:00' );
 		$this->resolve();
@@ -349,7 +356,7 @@ class GrantPauseTest extends TestCase {
 		);
 		$body     = $this->wire( $response );
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertStringContainsString( 'paused by the site owner', $body['result']['instructions'] );
+		$this->assertStringNotContainsString( 'paused', $body['result']['instructions'] ?? '' );
 	}
 
 	public function test_one_blocked_request_writes_one_denial_row_although_core_reruns_the_permission_callback(): void {

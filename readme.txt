@@ -48,7 +48,7 @@ Short walkthrough:
 * **Two-layer capability gating.** A connection only sees the tools its user can call, and every call re-checks that capability before it runs. One exception: a tool bridged from another plugin whose own check needs an item id is listed to anyone who can edit posts, and that plugin's check still decides every call.
 * **Per-role and per-connection allowlist.** Narrow what one role, or one connection, can reach on top of the global list. The lists only narrow: an ability has to clear the global list, the role's list, and that connection's list before an agent can call it. A site that never opens the screen sees no change.
 * **Honest audit log.** Every call to this plugin's tools is recorded, denied attempts included, along with the user or connection that made the call, the argument keys, and a short identifier-only note of what it touched. Free-text argument content is never stored, and the log lives in your own database.
-* **Bounded by construction.** No arbitrary option or meta access, no code execution. Uploads are validated by their real bytes against an image allow-list, and a URL upload refuses private, loopback, or link-local targets with no redirects followed. A new user gets the default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated. The trash tools for posts, pages, events and comments use the Trash; the delete tools remove items for good.
+* **Bounded by construction.** No arbitrary option or meta access, no code execution. Uploads are validated by their real bytes against an image allow-list, and a URL upload refuses private, loopback, or link-local targets with no redirects followed. A new user gets the default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated. The trash tools for posts and pages, and comment moderation, use the Trash, as do the event and reusable block deletes. The other delete tools remove items for good.
 * **Optional safety controls.** Switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
 * **No content leaves your site.** The plugin contacts no AI provider and has no telemetry; see External Services below for the two outbound requests it can make on its own.
 * **Two ways to connect.** Approve an agent over OAuth (no secret in a config file) or point a dedicated low-privilege user at an Application Password; a guided screen builds the config for you.
@@ -166,7 +166,7 @@ Each OAuth connection can also carry an access preset: Read only, Content editor
 
 = Can I pause a connection or give it an end date? =
 
-Yes. On the Connection tab each approved OAuth connection has Pause and Resume next to Revoke, an optional end date and an optional rate limit, and shows when and from which address it was last used. A paused connection keeps its sign-in: its calls get an ordinary 403 Forbidden until you resume it, and nobody has to approve it again. After its end date a connection is refused until a site administrator renews it, and its old tokens never work again. Pausing one connection does not stop the same person's Application Password.
+Yes. On the Connection tab each approved OAuth connection has Pause and Resume next to Revoke, an optional end date and an optional rate limit, and shows when and from which address it was last used. A paused connection keeps its sign-in and can still list tools, but every tool call is refused with a message that the connection is paused, until you resume it. Nobody has to approve it again. After its end date a connection is refused until a site administrator renews it, and its old tokens never work again. Pausing one connection does not stop the same person's Application Password. A request from a blocked IP address is refused before it signs in. Claude shows that as a firewall or sign-in error, and ChatGPT shows the reason.
 
 To stop everything at once, use Pause all access on the Connection tab. It refuses every MCP request through this site, on this plugin's endpoint and on the MCP Adapter's default server, for OAuth apps and Application Passwords alike. It does not stop an Application Password from using the rest of the WordPress REST API.
 
@@ -188,7 +188,7 @@ Look at the Why is my tool missing? card on the Dashboard. It lists every tool y
 
 = My agent does not see a tool I just turned on. =
 
-The client keeps the tool list it loaded when it connected. In ChatGPT, open Settings, then Plugins (Apps or Connectors on some plans), pick your site and choose Refresh tools. In Claude, start a new chat or reconnect the connector.
+The client keeps the tool list it loaded when it connected. In ChatGPT, open Settings, then Integrations, then Plugins (Apps or Connectors on some plans), pick your site and choose Refresh tools. In Claude, start a new chat or reconnect the connector.
 
 = Which ChatGPT plans can connect? =
 
@@ -200,7 +200,7 @@ Playbooks are step-by-step instructions you write on the Playbooks tab, such as 
 
 = Why was my browser-based MCP client refused? =
 
-The MCP endpoint refuses requests sent from a web page on another site, as the MCP specification requires. Desktop apps, command-line tools and the hosted ChatGPT and Claude apps are not affected. To allow a browser-based client you trust, add its origin with the `aafm_mcp_allowed_origins` filter. Each refusal is recorded on the Activity Log with the page's host.
+The MCP endpoint refuses requests sent from a web page on another site, as the MCP specification requires. Desktop apps, command-line tools and the hosted ChatGPT and Claude apps are not affected. To allow a browser-based client you trust, add its origin with the `aafm_mcp_allowed_origins` filter. Refusals are recorded on the Activity Log with the page's host, up to five rows per address every ten minutes.
 
 = Does my page cache update when an agent changes only custom fields? =
 

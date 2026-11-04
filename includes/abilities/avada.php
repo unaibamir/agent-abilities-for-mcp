@@ -58,7 +58,7 @@ function aafm_avada_registry_definitions(): array {
 	return array(
 		'aafm/avada-get-page-content' => array(
 			'label'        => __( 'Get Avada page content', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. Requires edit access to the post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'avada',

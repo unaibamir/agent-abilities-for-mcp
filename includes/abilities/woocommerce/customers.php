@@ -88,7 +88,7 @@ function aafm_wc_customers_registry_definitions(): array {
 
 		'aafm/wc-update-customer' => array(
 			'label'        => __( 'Update WooCommerce customer', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce customer by id, changing only the fields you send. An empty request body is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Updates a WooCommerce customer by id, changing only the fields you send. An empty request body is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability, the edit-users capability, and permission to edit that user. It stays locked until High-risk abilities is turned on under Settings.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',

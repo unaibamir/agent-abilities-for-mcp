@@ -158,4 +158,22 @@ final class DescriptionTruthSweepTest extends TestCase {
 		$this->assertSame( 'Elementor, Divi, Beaver Builder, Avada, and Visual Composer', aafm_page_builder_names(), 'A site filter does not change registry text.' );
 		remove_all_filters( 'aafm_page_builder_markers' );
 	}
+
+	public function test_the_seven_rows_say_what_the_code_does(): void {
+		$registry = aafm_get_abilities_registry_full();
+		$customer = $registry['aafm/wc-update-customer']['description'];
+		$this->assertStringContainsString( 'edit-users', $customer );
+		$this->assertStringContainsString( 'manage-WooCommerce', $customer );
+		$this->assertStringContainsString( 'High-risk', aafm_ability_disclosures()['aafm/wc-update-customer'] );
+		$this->assertStringContainsString( 'edit-users', aafm_ability_disclosures()['aafm/wc-update-customer'] );
+		foreach ( array( 'aafm/tec-update-event', 'aafm/geodirectory-update-listing' ) as $name ) {
+			foreach ( $this->builder_labels() as $label ) {
+				$this->assertStringContainsString( $label, $registry[ $name ]['description'], $name );
+			}
+		}
+		foreach ( array( 'aafm/tec-get-events', 'aafm/tec-get-venues', 'aafm/tec-get-organizers' ) as $name ) {
+			$this->assertStringContainsString( 'status', $registry[ $name ]['description'], $name );
+		}
+		$this->assertStringContainsString( 'is_avada_owned', $registry['aafm/avada-get-page-content']['description'] );
+	}
 }

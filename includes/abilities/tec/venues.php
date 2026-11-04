@@ -52,7 +52,7 @@ function aafm_tec_venues_registry_definitions(): array {
 	return array(
 		'aafm/tec-get-venues'   => array(
 			'label'        => __( 'Get venues', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'List venues via the Events Calendar ORM (tribe_venues()).', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'List venues via the Events Calendar ORM (tribe_venues()), optionally filtered by status (by default what you can already see; draft, pending and future need edit access to venues).', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'tec',

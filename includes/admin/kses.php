@@ -215,6 +215,8 @@ function aafm_admin_allowed_html(): array {
 		'data-starter'              => true,
 		'data-playbook-abilities'   => true,
 		'data-playbook-starter'     => true,
+		// 1.10.2 stale-save check.
+		'data-playbook-version'     => true,
 	);
 
 	$global = array_merge(

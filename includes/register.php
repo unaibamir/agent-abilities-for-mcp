@@ -980,7 +980,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// returns true, making this block a no-op - the path stays identical to today.
 		$p         = $principal();
 		$call_args = is_array( $input ) ? $input : array();
-		if ( $p['principal_user_id'] > 0 && ! aafm_rate_limit_consume_once( $p['principal_user_id'], $name ) ) {
+		// A paused connection is refused below with the pause error, and its refusal must neither be
+		// replaced by a rate-limit error nor spend a token the same person's Application Password shares.
+		$paused = aafm_connection_is_paused();
+		if ( ! $paused && $p['principal_user_id'] > 0 && ! aafm_rate_limit_consume_once( $p['principal_user_id'], $name ) ) {
 			// The call is refused, so start the next one on a fresh token rather than leaving this
 			// denial memoized for the rest of the request.
 			aafm_rate_limit_call_reset( $name );
@@ -1073,7 +1076,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// includes/audit/denial-reason.php; it lands in the admin-only detail and never on the wire.
 		$reason = null;
 
-		if ( aafm_connection_is_paused() ) {
+		if ( $paused ) {
 			// A paused connection lists tools but may not call one. The refusal is a tool error, not a
 			// transport 403, so the client shows the reason. Core's re-check inside execute() gets a bare
 			// false, as the rate-limit refusal does, because a WP_Error there trips _doing_it_wrong().

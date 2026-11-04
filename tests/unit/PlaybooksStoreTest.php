@@ -127,6 +127,54 @@ final class PlaybooksStoreTest extends TestCase {
 		$this->assertStringContainsString( 'Starter playbook added', (string) $rows[1]['detail'] );
 	}
 
+	public function test_save_with_the_current_version_succeeds_and_returns_a_new_version(): void {
+		$first   = aafm_save_playbook( $this->fields() );
+		$version = aafm_playbook_version( $first );
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{32}$/', $version );
+		$this->assertSame( $version, aafm_playbook_version( aafm_playbook( $first['slug'] ) ), 'The version of the returned entry is the version of the stored one.' );
+		$second = aafm_save_playbook( array_merge( $this->fields( array( 'body' => 'Second body.' ) ), array( 'version' => $version ) ), $first['slug'] );
+		$this->assertIsArray( $second );
+		$this->assertNotSame( $version, aafm_playbook_version( $second ) );
+		// A normal save, then save again in one tab, uses the version the first save returned.
+		$third = aafm_save_playbook( array_merge( $this->fields( array( 'body' => 'Third body.' ) ), array( 'version' => aafm_playbook_version( $second ) ) ), $first['slug'] );
+		$this->assertIsArray( $third );
+		$this->assertSame( 'Third body.', aafm_playbook( $first['slug'] )['body'] );
+	}
+
+	public function test_save_with_a_stale_version_is_refused_and_changes_nothing(): void {
+		$first = aafm_save_playbook( $this->fields() );
+		$v     = aafm_playbook_version( $first );
+		// Admin A saves from the version both loaded.
+		aafm_save_playbook( array_merge( $this->fields( array( 'body' => 'A wrote this.' ) ), array( 'version' => $v ) ), $first['slug'] );
+		$before = $this->db_row();
+		// Admin B still holds the old version.
+		$result = aafm_save_playbook( array_merge( $this->fields( array( 'body' => 'B wrote this.' ) ), array( 'version' => $v ) ), $first['slug'] );
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_playbook_stale', $result->get_error_code() );
+		$this->assertSame( $before, $this->db_row(), 'The stored row is exactly what A saved.' );
+		$this->assertSame( 'A wrote this.', aafm_playbook( $first['slug'] )['body'] );
+		$rows = $this->log_rows();
+		$this->assertSame( 'error', (string) end( $rows )['status'], 'The refusal is logged as a failed change.' );
+		$message = $result->get_error_message();
+		$this->assertStringContainsString( 'Someone else saved', $message );
+		$this->assertStringContainsString( 'Copy your text', $message );
+		$this->assertStringNotContainsString( 'aafm_', $message );
+	}
+
+	public function test_save_without_a_version_is_unchecked(): void {
+		$first = aafm_save_playbook( $this->fields() );
+		aafm_save_playbook( $this->fields( array( 'body' => 'One.' ) ), $first['slug'] );
+		$again = aafm_save_playbook( $this->fields( array( 'body' => 'Two.' ) ), $first['slug'] );
+		$this->assertIsArray( $again );
+		$this->assertSame( 'Two.', aafm_playbook( $first['slug'] )['body'] );
+	}
+
+	public function test_create_ignores_the_version(): void {
+		$made = aafm_save_playbook( array_merge( $this->fields(), array( 'version' => 'ffffffffffffffffffffffffffffffff' ) ) );
+		$this->assertIsArray( $made );
+		$this->assertCount( 1, aafm_playbooks() );
+	}
+
 	public function test_slug_never_changes_on_edit(): void {
 		aafm_save_playbook( $this->fields() );
 		$edited = aafm_save_playbook( $this->fields( array( 'title' => 'Something else' ) ), 'publish-checklist' );

@@ -86,7 +86,9 @@ final class PlaybooksTabTest extends TestCase {
 		$this->post_as( 'administrator', $this->fields() );
 		$json = $this->run_handler( 'aafm_ajax_save_playbook' );
 		$this->assertTrue( $json['success'] );
-		$this->assertSame( array( 'playbook', 'uses_count', 'unavailable_count' ), array_keys( $json['data'] ) );
+		$this->assertSame( array( 'playbook', 'version', 'uses_count', 'unavailable_count' ), array_keys( $json['data'] ) );
+		$this->assertSame( aafm_playbook_version( aafm_playbook( $json['data']['playbook']['slug'] ) ), $json['data']['version'] );
+		$this->assertStringContainsString( 'data-playbook-version="' . $json['data']['version'] . '"', $this->render() );
 		$this->assertSame( 1, $json['data']['uses_count'] );
 		$this->assertSame( array( 'aafm/get-post' ), $json['data']['playbook']['abilities'] );
 		$slug = $json['data']['playbook']['slug'];
@@ -109,6 +111,43 @@ final class PlaybooksTabTest extends TestCase {
 		$json = $this->run_handler( 'aafm_ajax_delete_playbook' );
 		$this->assertTrue( $json['success'] );
 		$this->assertNull( get_option( 'aafm_playbooks', null ) );
+	}
+
+	public function test_ajax_stale_save_returns_the_message(): void {
+		$this->post_as( 'administrator', $this->fields() );
+		$data = $this->run_handler( 'aafm_ajax_save_playbook' )['data'];
+		$slug = $data['playbook']['slug'];
+		$old  = $data['version'];
+		// The first tab saves with the version it loaded and gets a new one back.
+		$this->post_as(
+			'administrator',
+			$this->fields(
+				array(
+					'slug'    => $slug,
+					'body'    => 'First tab.',
+					'version' => $old,
+				)
+			)
+		);
+		$ok = $this->run_handler( 'aafm_ajax_save_playbook' );
+		$this->assertTrue( $ok['success'] );
+		$this->assertNotSame( $old, $ok['data']['version'] );
+		// The second tab still holds the old one.
+		$this->post_as(
+			'administrator',
+			$this->fields(
+				array(
+					'slug'    => $slug,
+					'body'    => 'Second tab.',
+					'version' => $old,
+				)
+			)
+		);
+		$json = $this->run_handler( 'aafm_ajax_save_playbook' );
+		$this->assertFalse( $json['success'] );
+		$this->assertStringContainsString( 'Someone else saved', $json['data']['message'] );
+		$this->assertArrayNotHasKey( 'playbook', $json['data'] );
+		$this->assertSame( 'First tab.', aafm_playbook( $slug )['body'] );
 	}
 
 	public function test_two_saves_from_a_new_editor_make_one_playbook(): void {

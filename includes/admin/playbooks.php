@@ -59,7 +59,7 @@ function aafm_playbook_row_html( array $playbook ): string {
 	$title   = (string) $playbook['title'];
 
 	return sprintf(
-		'<tr data-playbook-slug="%1$s" data-playbook-title="%2$s" data-playbook-description="%3$s" data-playbook-body="%4$s" data-playbook-active="%5$s" data-playbook-abilities="%13$s" data-playbook-starter="%14$s">'
+		'<tr data-playbook-slug="%1$s" data-playbook-title="%2$s" data-playbook-description="%3$s" data-playbook-body="%4$s" data-playbook-active="%5$s" data-playbook-abilities="%13$s" data-playbook-starter="%14$s" data-playbook-version="%17$s">'
 		. '<td class="aafm-playbook-title" title="%2$s">%6$s</td>'
 		. '<td><span class="aafm-pill %7$s">%8$s</span></td>'
 		. '<td class="aafm-playbook-uses" title="%9$s">%9$s</td>'
@@ -83,7 +83,8 @@ function aafm_playbook_row_html( array $playbook ): string {
 		/* translators: %s: playbook title. */
 		esc_attr( sprintf( __( 'Edit %s', 'agent-abilities-for-mcp' ), $title ) ),
 		/* translators: %s: playbook title. */
-		esc_attr( sprintf( __( 'Delete %s', 'agent-abilities-for-mcp' ), $title ) )
+		esc_attr( sprintf( __( 'Delete %s', 'agent-abilities-for-mcp' ), $title ) ),
+		esc_attr( aafm_playbook_version( $playbook ) )
 	);
 }
 
@@ -244,6 +245,7 @@ function aafm_render_playbooks_tab(): void {
 	ob_start();
 	echo '<form id="aafm-playbook-form" novalidate>';
 	echo '<input type="hidden" id="aafm-playbook-slug" name="slug" value="">';
+	echo '<input type="hidden" id="aafm-playbook-version" name="version" value="">';
 	aafm_render_set_row(
 		array(
 			'label'   => __( 'Title', 'agent-abilities-for-mcp' ),
@@ -324,6 +326,7 @@ function aafm_playbook_ajax_send( $result ): void {
 	wp_send_json_success(
 		array(
 			'playbook'          => $result,
+			'version'           => aafm_playbook_version( $result ),
 			'uses_count'        => $counts['uses'],
 			'unavailable_count' => $counts['unavailable'],
 		)
@@ -349,6 +352,7 @@ function aafm_ajax_save_playbook(): void {
 				'body'        => $post['body'] ?? '',
 				'active'      => isset( $post['active'] ) && '1' === $post['active'],
 				'abilities'   => $post['abilities'] ?? '',
+				'version'     => $post['version'] ?? '',
 			),
 			$slug
 		)

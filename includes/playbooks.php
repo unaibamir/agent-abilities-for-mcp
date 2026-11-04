@@ -250,10 +250,34 @@ function aafm_playbook_new_slug( string $title, array $taken ): string {
 }
 
 /**
+ * A short fingerprint of a stored playbook, for the editor's stale-save check. The editor sends back
+ * the one it loaded; a save whose fingerprint no longer matches the stored entry is refused so one
+ * administrator cannot silently overwrite another's newer edit. Not a security use of md5: it only
+ * detects change.
+ *
+ * @param array<string,mixed> $playbook A stored playbook.
+ * @return string 32 hex characters.
+ */
+function aafm_playbook_version( array $playbook ): string {
+	return md5( // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_md5 -- change detection, not security.
+		(string) wp_json_encode(
+			array(
+				(string) ( $playbook['title'] ?? '' ),
+				(string) ( $playbook['description'] ?? '' ),
+				(string) ( $playbook['body'] ?? '' ),
+				! empty( $playbook['active'] ),
+				array_values( (array) ( $playbook['abilities'] ?? array() ) ),
+				(string) ( $playbook['updated_gmt'] ?? '' ),
+			)
+		)
+	);
+}
+
+/**
  * Create (empty $slug) or update a playbook. Re-reads the row right before writing and applies the
  * one change to that fresh list by slug.
  *
- * @param array<string,mixed> $raw        Fields title, description, body, active.
+ * @param array<string,mixed> $raw        Fields title, description, body, active, abilities and, on an update, the optional version the editor loaded.
  * @param string              $slug       Slug to update, '' to create.
  * @param string              $log_action Activity Log action, '' for added or edited.
  * @return array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,starter:string,updated_gmt:string}|WP_Error
@@ -266,7 +290,8 @@ function aafm_save_playbook( array $raw, string $slug = '', string $log_action =
 		return $clean;
 	}
 
-	// ponytail: last save wins when two administrators save at once; add a per-entry revision check if users report lost edits.
+	// The editor's version check below catches two people editing the same playbook minutes apart.
+	// ponytail: the read-to-write window inside one request is still last write wins; a lock would close it if that ever shows up.
 	$read = aafm_playbooks_read();
 	if ( ! $read['ok'] ) {
 		aafm_log_playbook_change( $action, $slug, false );
@@ -294,6 +319,13 @@ function aafm_save_playbook( array $raw, string $slug = '', string $log_action =
 		if ( false === $index ) {
 			aafm_log_playbook_change( $action, $slug, false );
 			return aafm_playbook_admin_not_found_error();
+		}
+		// A save that names the version the editor loaded is refused when the stored entry has moved on.
+		// No version (a programmatic caller or an older cached page) is saved as before.
+		$loaded = is_string( $raw['version'] ?? null ) ? $raw['version'] : '';
+		if ( '' !== $loaded && ! hash_equals( aafm_playbook_version( $list[ $index ] ), $loaded ) ) {
+			aafm_log_playbook_change( $action, $slug, false );
+			return new WP_Error( 'aafm_playbook_stale', __( 'Someone else saved this playbook after you opened it, so your change was not saved. Copy your text, reload the page to see their version, then add your change again.', 'agent-abilities-for-mcp' ) );
 		}
 	}
 

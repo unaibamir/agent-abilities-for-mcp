@@ -3856,6 +3856,7 @@
 			const newBtn = form.querySelector( '.aafm-playbook-new' );
 			const fields = {
 				slug: form.querySelector( '#aafm-playbook-slug' ),
+				version: form.querySelector( '#aafm-playbook-version' ),
 				title: form.querySelector( '#aafm-playbook-title' ),
 				description: form.querySelector( '#aafm-playbook-description' ),
 				body: form.querySelector( '#aafm-playbook-body' ),
@@ -3895,6 +3896,7 @@
 				! isDirty() || window.confirm( this.#t( 'playbookDiscard', 'Discard your unsaved changes to this playbook?' ) );
 			const load = ( p ) => {
 				fields.slug.value = p.slug;
+				fields.version.value = p.version ?? '';
 				fields.title.value = p.title;
 				fields.description.value = p.description;
 				fields.body.value = p.body;
@@ -3933,6 +3935,7 @@
 			};
 			const fromRow = ( tr ) => ( {
 				slug: tr.dataset.playbookSlug,
+				version: tr.dataset.playbookVersion,
 				title: tr.dataset.playbookTitle,
 				description: tr.dataset.playbookDescription,
 				body: tr.dataset.playbookBody,
@@ -3971,6 +3974,7 @@
 				tr.dataset.playbookActive = p.active ? '1' : '0';
 				tr.dataset.playbookAbilities = JSON.stringify( p.abilities ?? [] );
 				tr.dataset.playbookStarter = p.starter ?? '';
+				tr.dataset.playbookVersion = data.version ?? '';
 				const pill = document.createElement( 'span' );
 				pill.className = `aafm-pill ${ p.active ? 'aafm-pill-success' : 'aafm-pill-neutral' }`;
 				pill.textContent = p.active ? this.#t( 'playbookActive', 'Active' ) : this.#t( 'playbookOff', 'Off' );
@@ -4027,6 +4031,7 @@
 				status.textContent = this.#t( 'saving', 'Saving...' );
 				const json = await this.#post( 'aafm_save_playbook', {
 					slug: fields.slug.value,
+					version: fields.version.value,
 					title: fields.title.value,
 					description: fields.description.value,
 					body: fields.body.value,
@@ -4043,6 +4048,8 @@
 				const p = json.data.playbook;
 				fields.slug.value = p.slug;
 				sent.set( fields.slug, p.slug );
+				fields.version.value = json.data.version ?? '';
+				sent.set( fields.version, fields.version.value );
 				this.#applyServerValue( sent, fields.title, p.title );
 				this.#applyServerValue( sent, fields.description, p.description );
 				this.#applyServerValue( sent, fields.body, p.body );

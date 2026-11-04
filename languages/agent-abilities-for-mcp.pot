@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-04T21:27:57+05:00\n"
+"POT-Creation-Date: 2026-11-04T23:23:52+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -10013,92 +10013,96 @@ msgid "This content is owned by %1$s. Writing to it through this ability would e
 msgstr ""
 
 #. translators: %d: the longest title allowed, in characters.
-#: includes/playbooks.php:153
+#: includes/playbooks.php:154
 #, php-format
 msgid "Give the playbook a title of 1 to %d characters."
 msgstr ""
 
 #. translators: %d: the longest description allowed, in characters.
-#: includes/playbooks.php:157
+#: includes/playbooks.php:158
 #, php-format
 msgid "Keep the description to %d characters or fewer."
 msgstr ""
 
 #. translators: %s: the longest body allowed, in characters, for example 8,000.
-#: includes/playbooks.php:165
+#: includes/playbooks.php:166
 #, php-format
 msgid "Write the steps in 1 to %s characters."
 msgstr ""
 
 #. translators: %d: the most abilities one playbook can list.
-#: includes/playbooks.php:221
+#: includes/playbooks.php:222
 #, php-format
 msgid "Choose up to %d abilities for one playbook."
 msgstr ""
 
+#: includes/playbooks.php:283
+msgid "That starter is already in your playbooks."
+msgstr ""
+
 #. translators: %d: the most playbooks a site can keep.
-#: includes/playbooks.php:280
+#: includes/playbooks.php:288
 #, php-format
 msgid "This site already has %d playbooks, the most it can keep. Delete one first."
 msgstr ""
 
-#: includes/playbooks.php:347
+#: includes/playbooks.php:354
 msgid "The playbook could not be saved. Reload the page and try again."
 msgstr ""
 
-#: includes/playbooks.php:356
+#: includes/playbooks.php:363
 msgid "That playbook no longer exists. Reload the page to see the current list."
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:367
+#: includes/playbooks.php:374
 #, php-format
 msgid "No active playbook is called \"%s\"."
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:381
+#: includes/playbooks.php:388
 #, php-format
 msgid "Playbook added: %s"
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:383
+#: includes/playbooks.php:390
 #, php-format
 msgid "Playbook edited: %s"
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:385
+#: includes/playbooks.php:392
 #, php-format
 msgid "Playbook deleted: %s"
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:387
+#: includes/playbooks.php:394
 #, php-format
 msgid "Starter playbook added: %s"
 msgstr ""
 
-#: includes/playbooks.php:430
+#: includes/playbooks.php:437
 msgid "Playbooks the site owner wrote for this site. When a task matches one, load it with get-playbook and follow it:"
 msgstr ""
 
 #. translators: %d: how many playbooks are not listed.
-#: includes/playbooks.php:434
+#: includes/playbooks.php:441
 #, php-format
 msgid "- and %d more: call list-playbooks."
 msgstr ""
 
-#: includes/playbooks.php:465
+#: includes/playbooks.php:472
 msgid "Publish checklist"
 msgstr ""
 
-#: includes/playbooks.php:466
+#: includes/playbooks.php:473
 msgid "Check one draft before it goes live and list what is missing or worth fixing. Changes nothing unless you say yes. Never publishes."
 msgstr ""
 
-#: includes/playbooks.php:467
+#: includes/playbooks.php:474
 msgid ""
 "Use this when the user asks you to check a draft before it is published.\n"
 "\n"
@@ -10116,15 +10120,15 @@ msgid ""
 "- If a tool is missing or returns an error, say which check you could not do and finish the others."
 msgstr ""
 
-#: includes/playbooks.php:472
+#: includes/playbooks.php:479
 msgid "Weekly content report"
 msgstr ""
 
-#: includes/playbooks.php:473
+#: includes/playbooks.php:480
 msgid "Posts published, drafts started and comments waiting in the last 7 days, as one short table. Read-only."
 msgstr ""
 
-#: includes/playbooks.php:474
+#: includes/playbooks.php:481
 msgid ""
 "Use this when the user asks what happened on the site this week. Only read. Change nothing.\n"
 "\n"
@@ -10138,15 +10142,15 @@ msgid ""
 "If the user also asks for totals, use the Count posts tool and label those numbers \"all time\", not \"this week\"."
 msgstr ""
 
-#: includes/playbooks.php:479
+#: includes/playbooks.php:486
 msgid "Content health check"
 msgstr ""
 
-#: includes/playbooks.php:480
+#: includes/playbooks.php:487
 msgid "Scan recent posts, images and terms for common gaps: no featured image, no category, missing alt text, unused tags. Reports only."
 msgstr ""
 
-#: includes/playbooks.php:481
+#: includes/playbooks.php:488
 msgid ""
 "Use this when the user asks for a health check of the site's content. Only read. Change nothing.\n"
 "\n"
@@ -10165,15 +10169,15 @@ msgid ""
 "Never edit, delete or merge anything during this check. If the user wants a fix, they can ask for it separately after reading the report."
 msgstr ""
 
-#: includes/playbooks.php:486
+#: includes/playbooks.php:493
 msgid "Draft a new post"
 msgstr ""
 
-#: includes/playbooks.php:487
+#: includes/playbooks.php:494
 msgid "Write a blog post from the user's brief and save it as a draft for review. Never publishes or schedules."
 msgstr ""
 
-#: includes/playbooks.php:488
+#: includes/playbooks.php:495
 msgid ""
 "Use this when the user asks you to write a new blog post.\n"
 "\n"
@@ -10190,15 +10194,15 @@ msgid ""
 "- If saving fails or the tool is off, paste the full post into the chat so nothing is lost, and say why it was not saved."
 msgstr ""
 
-#: includes/playbooks.php:493
+#: includes/playbooks.php:500
 msgid "Shop tidy-up"
 msgstr ""
 
-#: includes/playbooks.php:494
+#: includes/playbooks.php:501
 msgid "Find WooCommerce products with no price, no image, no stock or stuck in draft, and suggest fixes. Changes nothing."
 msgstr ""
 
-#: includes/playbooks.php:495
+#: includes/playbooks.php:502
 msgid ""
 "Use this when the user asks you to tidy up the shop. Only read and suggest. Change nothing.\n"
 "\n"
@@ -10215,7 +10219,7 @@ msgid ""
 "Never change, publish, hide or delete a product. If the user wants a fix made, they can ask for that exact change separately."
 msgstr ""
 
-#: includes/playbooks.php:535
+#: includes/playbooks.php:543
 msgid "That starter playbook does not exist."
 msgstr ""
 
@@ -10353,11 +10357,11 @@ msgstr ""
 msgid "Ability \"%s\" was not registered: an execute_callback is required."
 msgstr ""
 
-#: includes/register.php:1315
+#: includes/register.php:1318
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 
-#: includes/register.php:1395
+#: includes/register.php:1398
 msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
 msgstr ""
 

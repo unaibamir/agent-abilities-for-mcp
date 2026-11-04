@@ -361,4 +361,24 @@ final class PlaybooksStoreTest extends TestCase {
 		$this->assertSame( 'aafm_playbook_not_saved', $result->get_error_code() );
 		$this->assertSame( 'not a list', $this->db_row() );
 	}
+
+	public function test_refused_saves_and_deletes_log_one_failed_row_each(): void {
+		aafm_save_playbook( $this->fields( array( 'title' => '' ) ) );
+		aafm_save_playbook( $this->fields(), 'no-such-playbook' );
+		aafm_delete_playbook( 'no-such-playbook' );
+		$rows = $this->log_rows();
+		$this->assertCount( 3, $rows );
+		foreach ( $rows as $row ) {
+			$this->assertSame( 'error', $row['status'] );
+		}
+		$this->assertStringContainsString( 'no-such-playbook', (string) $rows[1]['detail'] );
+		$this->assertStringContainsString( 'no-such-playbook', (string) $rows[2]['detail'] );
+	}
+
+	public function test_admin_not_found_is_not_the_agent_text(): void {
+		$result = aafm_save_playbook( $this->fields(), 'no-such-playbook' );
+		$this->assertSame( 'aafm_playbook_not_found', $result->get_error_code() );
+		$this->assertStringNotContainsString( 'No active playbook', $result->get_error_message() );
+		$this->assertStringNotContainsString( 'No active playbook', aafm_delete_playbook( 'no-such-playbook' )->get_error_message() );
+	}
 }

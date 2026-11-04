@@ -198,11 +198,12 @@ function aafm_playbook_new_slug( string $title, array $taken ): string {
  * @return array{slug:string,title:string,description:string,body:string,active:bool,updated_gmt:string}|WP_Error
  */
 function aafm_save_playbook( array $raw, string $slug = '', string $log_action = '' ) {
-	$clean = aafm_clean_playbook_input( $raw );
+	$action = '' !== $log_action ? $log_action : ( '' === $slug ? 'added' : 'edited' );
+	$clean  = aafm_clean_playbook_input( $raw );
 	if ( is_wp_error( $clean ) ) {
+		aafm_log_playbook_change( $action, $slug, false );
 		return $clean;
 	}
-	$action = '' !== $log_action ? $log_action : ( '' === $slug ? 'added' : 'edited' );
 
 	// ponytail: last save wins when two administrators save at once; add a per-entry revision check if users report lost edits.
 	$read = aafm_playbooks_read();
@@ -214,6 +215,7 @@ function aafm_save_playbook( array $raw, string $slug = '', string $log_action =
 
 	if ( '' === $slug ) {
 		if ( count( $list ) >= AAFM_PLAYBOOKS_MAX ) {
+			aafm_log_playbook_change( $action, '', false );
 			/* translators: %d: the most playbooks a site can keep. */
 			return new WP_Error( 'aafm_playbook_limit', sprintf( __( 'This site already has %d playbooks, the most it can keep. Delete one first.', 'agent-abilities-for-mcp' ), AAFM_PLAYBOOKS_MAX ) );
 		}
@@ -222,7 +224,8 @@ function aafm_save_playbook( array $raw, string $slug = '', string $log_action =
 	} else {
 		$index = array_search( $slug, array_column( $list, 'slug' ), true );
 		if ( false === $index ) {
-			return aafm_playbook_not_found_error( $slug );
+			aafm_log_playbook_change( $action, $slug, false );
+			return aafm_playbook_admin_not_found_error();
 		}
 	}
 
@@ -253,7 +256,8 @@ function aafm_delete_playbook( string $slug ) {
 	$list  = $read['list'];
 	$index = array_search( $slug, array_column( $list, 'slug' ), true );
 	if ( false === $index ) {
-		return aafm_playbook_not_found_error( $slug );
+		aafm_log_playbook_change( 'deleted', $slug, false );
+		return aafm_playbook_admin_not_found_error();
 	}
 	unset( $list[ $index ] );
 
@@ -275,7 +279,16 @@ function aafm_playbook_not_saved_error(): WP_Error {
 }
 
 /**
- * The refusal for a slug with no playbook.
+ * The refusal the Playbooks tab shows when the playbook it edits or deletes is gone.
+ *
+ * @return WP_Error
+ */
+function aafm_playbook_admin_not_found_error(): WP_Error {
+	return new WP_Error( 'aafm_playbook_not_found', __( 'That playbook no longer exists. Reload the page to see the current list.', 'agent-abilities-for-mcp' ) );
+}
+
+/**
+ * The refusal an agent gets for a slug with no Active playbook.
  *
  * @param string $slug Slug as given.
  * @return WP_Error

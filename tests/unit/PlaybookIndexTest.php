@@ -185,4 +185,55 @@ final class PlaybookIndexTest extends TestCase {
 		$listed = substr_count( $index, "\n- playbook-" );
 		$this->assertStringEndsWith( sprintf( '- and %d more: call list-playbooks.', 50 - $listed ), $index );
 	}
+
+	/**
+	 * Run the server/discover filter over a record-shape response and return its instructions.
+	 *
+	 * @param string $method JSON-RPC method of the request.
+	 * @return string
+	 */
+	private function discover_instructions( string $method = 'server/discover' ): string {
+		$request = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			(string) wp_json_encode(
+				array(
+					'jsonrpc' => '2.0',
+					'id'      => 1,
+					'method'  => $method,
+				)
+			)
+		);
+		$body     = (object) array(
+			'jsonrpc' => '2.0',
+			'id'      => 1,
+			'result'  => (object) array(
+				'capabilities' => (object) array( 'tools' => (object) array() ),
+				'instructions' => aafm_server_description(),
+			),
+		);
+		$response = aafm_mcp_add_discover_instructions( new \WP_REST_Response( $body, 200 ), null, $request );
+		$out      = json_decode( (string) wp_json_encode( $response->get_data() ) );
+		$this->assertSame( '{}', wp_json_encode( $out->result->capabilities->tools ), 'An empty object stays an object.' );
+		return (string) $out->result->instructions;
+	}
+
+	public function test_discover_carries_the_same_index_as_initialize(): void {
+		$this->seed( 2 );
+		$this->register_enabled( self::BOTH );
+		$this->acting_as( 'administrator' );
+		$this->assertSame( $this->filtered_instructions(), $this->discover_instructions() );
+		$this->assertStringContainsString( '- playbook-2:', $this->discover_instructions() );
+		$this->assertSame( aafm_server_description(), $this->discover_instructions( 'tools/list' ), 'Only server/discover is rewritten.' );
+	}
+
+	public function test_discover_has_no_index_while_a_tool_is_off_or_nothing_is_active(): void {
+		$this->seed( 2 );
+		$this->register_enabled( array( 'aafm/list-playbooks' ) );
+		$this->acting_as( 'administrator' );
+		$this->assertSame( aafm_server_description(), $this->discover_instructions() );
+		$this->register_enabled( self::BOTH );
+		$this->seed( 2, false );
+		$this->assertSame( aafm_server_description(), $this->discover_instructions() );
+	}
 }

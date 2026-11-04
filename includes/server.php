@@ -1926,6 +1926,47 @@ function aafm_mcp_explain_transport_refusal( $response, $server, $request ) {
 }
 
 /**
+ * Give the server/discover response the same instructions addendum initialize carries.
+ *
+ * Clients such as claude.ai and ChatGPT open with server/discover, and the adapter answers it
+ * without running the initialize filter, so the playbook index (or the paused line) would never
+ * reach them. The adapter has no discover filter, so this rewrites the response after dispatch:
+ * our MCP route only, a single server/discover request, a successful result.
+ *
+ * @param mixed $response The response.
+ * @param mixed $server   The REST server.
+ * @param mixed $request  The request.
+ * @return mixed
+ */
+function aafm_mcp_add_discover_instructions( $response, $server, $request ) {
+	unset( $server );
+	if ( ! $response instanceof WP_REST_Response || ! $request instanceof WP_REST_Request || 200 !== (int) $response->get_status() ) {
+		return $response;
+	}
+	if ( ! aafm_is_mcp_route( (string) $request->get_route() ) ) {
+		return $response;
+	}
+	$body = $request->get_json_params();
+	if ( ! is_array( $body ) || 'server/discover' !== ( $body['method'] ?? null ) ) {
+		return $response;
+	}
+	// The adapter returns schema records, not arrays: read the body as the client does, edit the
+	// decoded object, and put it back, so an empty object in the result stays an object.
+	$data = json_decode( (string) wp_json_encode( $response->get_data() ) );
+	if ( ! $data instanceof \stdClass || ! isset( $data->result ) || ! $data->result instanceof \stdClass ) {
+		return $response;
+	}
+	$addendum = aafm_server_instructions_addendum();
+	if ( '' === $addendum ) {
+		return $response;
+	}
+	$instructions               = isset( $data->result->instructions ) && is_string( $data->result->instructions ) ? $data->result->instructions : '';
+	$data->result->instructions = '' !== $instructions ? $instructions . "\n\n" . $addendum : $addendum;
+	$response->set_data( $data );
+	return $response;
+}
+
+/**
  * Send Cache-Control: no-store on every MCP route response, refusals and errors included. Core only
  * sends its no-cache headers to logged-in requests, so an anonymous 401 would otherwise carry none.
  *

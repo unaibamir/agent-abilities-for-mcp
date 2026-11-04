@@ -56,32 +56,106 @@ function aafm_playbook_row_html( array $playbook ): string {
 	$updated = '' !== $playbook['updated_gmt'] ? substr( (string) $playbook['updated_gmt'], 0, 16 ) . ' UTC' : '';
 	$active  = (bool) $playbook['active'];
 	$uses    = aafm_playbook_uses_text( $counts['uses'], $counts['unavailable'] );
+	$title   = (string) $playbook['title'];
 
 	return sprintf(
-		'<tr data-playbook-slug="%1$s" data-playbook-title="%2$s" data-playbook-description="%3$s" data-playbook-body="%4$s" data-playbook-active="%5$s">'
+		'<tr data-playbook-slug="%1$s" data-playbook-title="%2$s" data-playbook-description="%3$s" data-playbook-body="%4$s" data-playbook-active="%5$s" data-playbook-abilities="%13$s" data-playbook-starter="%14$s">'
 		. '<td class="aafm-playbook-title" title="%2$s">%6$s</td>'
 		. '<td><span class="aafm-pill %7$s">%8$s</span></td>'
 		. '<td class="aafm-playbook-uses" title="%9$s">%9$s</td>'
 		. '<td>%10$s</td>'
-		. '<td class="aafm-playbook-actions"><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-playbook-edit">%11$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-playbook-delete">%12$s</button></td>'
+		. '<td class="aafm-playbook-actions"><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-playbook-edit" aria-label="%15$s">%11$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-playbook-delete" aria-label="%16$s">%12$s</button></td>'
 		. '</tr>',
 		esc_attr( (string) $playbook['slug'] ),
-		esc_attr( (string) $playbook['title'] ),
+		esc_attr( $title ),
 		esc_attr( (string) $playbook['description'] ),
 		esc_attr( (string) $playbook['body'] ),
 		$active ? '1' : '0',
-		esc_html( (string) $playbook['title'] ),
+		esc_html( $title ),
 		$active ? 'aafm-pill-success' : 'aafm-pill-neutral',
 		$active ? esc_html__( 'Active', 'agent-abilities-for-mcp' ) : esc_html__( 'Off', 'agent-abilities-for-mcp' ),
 		esc_html( $uses ),
 		esc_html( $updated ),
 		esc_html__( 'Edit', 'agent-abilities-for-mcp' ),
-		esc_html__( 'Delete', 'agent-abilities-for-mcp' )
+		esc_html__( 'Delete', 'agent-abilities-for-mcp' ),
+		esc_attr( (string) wp_json_encode( array_values( (array) $playbook['abilities'] ) ) ),
+		esc_attr( (string) ( $playbook['starter'] ?? '' ) ),
+		/* translators: %s: playbook title. */
+		esc_attr( sprintf( __( 'Edit %s', 'agent-abilities-for-mcp' ), $title ) ),
+		/* translators: %s: playbook title. */
+		esc_attr( sprintf( __( 'Delete %s', 'agent-abilities-for-mcp' ), $title ) )
 	);
 }
 
 /**
- * Render the Playbooks tab.
+ * The "Find more playbooks on our website" link.
+ *
+ * @return string
+ */
+function aafm_playbook_library_link_html(): string {
+	return sprintf(
+		'<a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s<span class="screen-reader-text"> %3$s</span></a>',
+		esc_url( AAFM_PLAYBOOK_LIBRARY_URL ),
+		esc_html__( 'Find more playbooks on our website', 'agent-abilities-for-mcp' ),
+		esc_html__( '(opens in a new tab)', 'agent-abilities-for-mcp' )
+	);
+}
+
+/**
+ * The ability picker for the editor: every ability of this plugin by subject, each with its state.
+ *
+ * An ability is "Plugin not active" when the live (host-gated) registry lacks it, "Off" when it is
+ * not enabled, else it carries no pill. Off abilities can still be ticked.
+ *
+ * @return string
+ */
+function aafm_playbook_picker_html(): string {
+	$enabled = aafm_get_enabled_abilities();
+	$live    = aafm_get_abilities_registry();
+	$groups  = '';
+	foreach ( aafm_allowlist_ability_catalog() as $group ) {
+		$items = '';
+		foreach ( $group['abilities'] as $ability ) {
+			$name = (string) $ability['name'];
+			$pill = '';
+			if ( ! isset( $live[ $name ] ) ) {
+				$pill = ' <span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Plugin not active', 'agent-abilities-for-mcp' ) . '</span>';
+			} elseif ( ! in_array( $name, $enabled, true ) ) {
+				$pill = ' <span class="aafm-pill aafm-pill-warn">' . esc_html__( 'Off', 'agent-abilities-for-mcp' ) . '</span>';
+			}
+			$items .= sprintf(
+				'<label class="aafm-allowlist-item"><input type="checkbox" class="aafm-playbook-ability" name="abilities[]" value="%1$s"> %2$s%3$s</label>',
+				esc_attr( $name ),
+				esc_html( (string) $ability['label'] ),
+				$pill
+			);
+		}
+		$groups .= '<fieldset class="aafm-allowlist-group"><legend>' . esc_html( (string) $group['label'] ) . '</legend>' . $items . '</fieldset>';
+	}
+	if ( '' === $groups ) {
+		return '';
+	}
+
+	return '<div class="aafm-allowlist-picker aafm-playbook-picker" role="group" aria-label="' . esc_attr__( 'Abilities it uses', 'agent-abilities-for-mcp' ) . '">'
+		. '<input type="search" class="aafm-allowlist-picker-search aafm-integration-search" placeholder="' . esc_attr__( 'Search abilities…', 'agent-abilities-for-mcp' ) . '" aria-label="' . esc_attr__( 'Search abilities', 'agent-abilities-for-mcp' ) . '" autocomplete="off" data-aafm-untracked="1">'
+		. '<div class="aafm-playbook-picker-status" aria-live="polite">'
+		. '<p class="aafm-allowlist-picker-count aafm-playbook-chosen">' . esc_html__( 'No abilities chosen yet.', 'agent-abilities-for-mcp' ) . '</p>'
+		. '<div class="aafm-playbook-off-wrap" hidden>'
+		. aafm_get_notice_html(
+			'warning',
+			'',
+			array(
+				'inline' => true,
+				'class'  => 'aafm-playbook-off-note',
+			)
+		)
+		. '</div></div>'
+		. '<div class="aafm-allowlist-picker-groups">' . $groups . '</div>'
+		. '</div>';
+}
+
+/**
+ * Render the Playbooks tab: your playbooks, the starters, then the editor.
  *
  * @return void
  */
@@ -95,18 +169,18 @@ function aafm_render_playbooks_tab(): void {
 
 	// Card 1: the library.
 	ob_start();
-	$abilities_url = add_query_arg(
-		array(
-			'page' => 'agent-abilities-for-mcp',
-			'tab'  => 'abilities',
-		),
-		admin_url( 'admin.php' )
-	);
 	if ( $any_on && ! $both_on ) {
+		$abilities_url = add_query_arg(
+			array(
+				'page' => 'agent-abilities-for-mcp',
+				'tab'  => 'abilities',
+			),
+			admin_url( 'admin.php' )
+		);
 		aafm_render_notice(
 			'info',
 			sprintf(
-			/* translators: %s: link to the Abilities tab. */
+				/* translators: %s: link to the Abilities tab. */
 				__( 'Agents cannot see your Active playbooks yet. Turn on List playbooks and Get playbook in the Site section of the %s.', 'agent-abilities-for-mcp' ),
 				'<a href="' . esc_url( $abilities_url ) . '">' . esc_html__( 'Abilities tab', 'agent-abilities-for-mcp' ) . '</a>'
 			),
@@ -116,7 +190,7 @@ function aafm_render_playbooks_tab(): void {
 			)
 		);
 	}
-	echo '<p class="aafm-empty-state aafm-playbooks-empty"' . ( array() === $playbooks ? '' : ' hidden' ) . '>' . esc_html__( 'No playbooks yet. Write one below or add a starter.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<div class="aafm-empty-state aafm-playbooks-empty"' . ( array() === $playbooks ? '' : ' hidden' ) . '>' . esc_html__( 'No playbooks yet. Add a starter below or write your own.', 'agent-abilities-for-mcp' ) . '<br>' . aafm_playbook_library_link_html() . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the link helper escapes every part.
 	echo '<div class="aafm-table-wrap"' . ( array() === $playbooks ? ' hidden' : '' ) . '><table class="widefat striped aafm-playbooks-table">';
 	echo '<thead><tr><th scope="col">' . esc_html__( 'Title', 'agent-abilities-for-mcp' ) . '</th><th scope="col">' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th><th scope="col">' . esc_html__( 'Uses', 'agent-abilities-for-mcp' ) . '</th><th scope="col">' . esc_html__( 'Updated', 'agent-abilities-for-mcp' ) . '</th><th scope="col">' . esc_html__( 'Actions', 'agent-abilities-for-mcp' ) . '</th></tr></thead><tbody>';
 	foreach ( $playbooks as $playbook ) {
@@ -134,7 +208,39 @@ function aafm_render_playbooks_tab(): void {
 		)
 	);
 
-	// Card 2: the editor.
+	// Card 2: starters, right under the library so a new owner finds them first.
+	ob_start();
+	$taken = array_column( $playbooks, 'starter' );
+	echo '<ul class="aafm-playbook-starters">';
+	foreach ( aafm_playbook_starters() as $id => $starter ) {
+		$needs_wc = in_array( 'woocommerce', $starter['requires'], true ) && ! aafm_woocommerce_active();
+		$added    = in_array( $id, $taken, true );
+		printf(
+			'<li><div class="aafm-playbook-starter-text"><strong>%1$s</strong>%2$s<span>%3$s</span></div><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-playbook-starter-add" data-starter="%4$s" aria-label="%7$s"%5$s>%6$s</button></li>',
+			esc_html( $starter['title'] ),
+			$needs_wc ? ' <span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Needs WooCommerce', 'agent-abilities-for-mcp' ) . '</span>' : '',
+			esc_html( $starter['description'] ),
+			esc_attr( (string) $id ),
+			$added ? ' disabled title="' . esc_attr__( 'Already in your playbooks.', 'agent-abilities-for-mcp' ) . '"' : '',
+			esc_html__( 'Add to my playbooks', 'agent-abilities-for-mcp' ),
+			/* translators: %s: starter playbook title. */
+			esc_attr( sprintf( __( 'Add %s to my playbooks', 'agent-abilities-for-mcp' ), $starter['title'] ) )
+		);
+	}
+	echo '</ul>';
+	echo '<p class="aafm-save-status aafm-playbook-starters-status" role="status" aria-live="polite"></p>';
+	echo '<p class="aafm-card-desc">' . aafm_playbook_library_link_html() . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the link helper escapes every part.
+	aafm_render_section(
+		array(
+			'id'          => 'aafm-playbook-starters',
+			'icon'        => 'star',
+			'title'       => __( 'Starter playbooks', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Ready-made playbooks to start from. An added starter arrives switched Off, so you can read and edit it before agents see it.', 'agent-abilities-for-mcp' ),
+			'body'        => (string) ob_get_clean(),
+		)
+	);
+
+	// Card 3: the editor.
 	ob_start();
 	echo '<form id="aafm-playbook-form" novalidate>';
 	echo '<input type="hidden" id="aafm-playbook-slug" name="slug" value="">';
@@ -157,11 +263,18 @@ function aafm_render_playbooks_tab(): void {
 			'control' => sprintf( '<textarea id="aafm-playbook-body" name="body" rows="14" class="large-text" aria-label="%s"></textarea>', esc_attr__( 'Playbook steps', 'agent-abilities-for-mcp' ) ),
 			'help'    => sprintf(
 				/* translators: 1: longest title, 2: longest description, 3: longest body, in characters. */
-				__( 'Plain text. Title up to %1$d characters, description up to %2$d, steps up to %3$s. Name abilities as aafm/get-post or aafm-get-post and agents are told which ones they cannot use. Keep passwords and private details out of it: agents read it word for word. Site administrators can change it; agents cannot.', 'agent-abilities-for-mcp' ),
+				__( 'Plain text. Title up to %1$d characters, description up to %2$d, steps up to %3$s. Keep passwords and private details out of it: agents read it word for word. Site administrators can change it; agents cannot.', 'agent-abilities-for-mcp' ),
 				AAFM_PLAYBOOK_TITLE_MAX,
 				AAFM_PLAYBOOK_DESC_MAX,
 				number_format_i18n( AAFM_PLAYBOOK_BODY_MAX )
 			),
+		)
+	);
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Abilities it uses', 'agent-abilities-for-mcp' ),
+			'control' => aafm_playbook_picker_html(),
+			'help'    => __( 'Tick the abilities an agent needs for these steps. Agents get this list with the playbook, so you can write the steps in plain words.', 'agent-abilities-for-mcp' ),
 		)
 	);
 	aafm_render_set_row(
@@ -179,34 +292,6 @@ function aafm_render_playbooks_tab(): void {
 			'icon'  => 'terminal',
 			'title' => __( 'Write a playbook', 'agent-abilities-for-mcp' ),
 			'body'  => (string) ob_get_clean(),
-		)
-	);
-
-	// Card 3: starters.
-	ob_start();
-	$taken = array_column( $playbooks, 'starter' );
-	echo '<ul class="aafm-playbook-starters">';
-	foreach ( aafm_playbook_starters() as $id => $starter ) {
-		$needs_wc = in_array( 'woocommerce', $starter['requires'], true ) && ! aafm_woocommerce_active();
-		$added    = in_array( $id, $taken, true );
-		printf(
-			'<li><div class="aafm-playbook-starter-text"><strong>%1$s</strong>%2$s<span>%3$s</span></div><button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-playbook-starter-add" data-starter="%4$s"%5$s>%6$s</button></li>',
-			esc_html( $starter['title'] ),
-			$needs_wc ? ' <span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Needs WooCommerce', 'agent-abilities-for-mcp' ) . '</span>' : '',
-			esc_html( $starter['description'] ),
-			esc_attr( (string) $id ),
-			$added ? ' disabled title="' . esc_attr__( 'Already in your playbooks.', 'agent-abilities-for-mcp' ) . '"' : '',
-			esc_html__( 'Add to my playbooks', 'agent-abilities-for-mcp' )
-		);
-	}
-	echo '</ul>';
-	aafm_render_section(
-		array(
-			'id'          => 'aafm-playbook-starters',
-			'icon'        => 'star',
-			'title'       => __( 'Starter playbooks', 'agent-abilities-for-mcp' ),
-			'description' => __( 'Ready-made playbooks to start from. An added starter arrives switched Off, so you can read and edit it before agents see it.', 'agent-abilities-for-mcp' ),
-			'body'        => (string) ob_get_clean(),
 		)
 	);
 

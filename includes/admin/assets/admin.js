@@ -3844,7 +3844,12 @@
 			const wrap = tbody?.closest( '.aafm-table-wrap' );
 			const empty = document.querySelector( '.aafm-playbooks-empty' );
 			const listStatus = document.querySelector( '.aafm-playbooks-list-status' );
+			const starterStatus = document.querySelector( '.aafm-playbook-starters-status' );
 			const status = form.querySelector( '.aafm-playbook-status' );
+			const picker = form.querySelector( '.aafm-playbook-picker' );
+			const ticks = Array.from( form.querySelectorAll( '.aafm-playbook-ability' ) );
+			const chosenLine = form.querySelector( '.aafm-playbook-chosen' );
+			const offWrap = form.querySelector( '.aafm-playbook-off-wrap' );
 			const newBtn = form.querySelector( '.aafm-playbook-new' );
 			const fields = {
 				slug: form.querySelector( '#aafm-playbook-slug' ),
@@ -3854,9 +3859,35 @@
 				active: form.querySelector( '#aafm-playbook-active' ),
 			};
 			const isDirty = () =>
-				Array.from( form.querySelectorAll( 'input:not([type="hidden"]), textarea' ) ).some(
-					( c ) => this.#controlValue( c ) !== ( c.dataset.aafmSaved ?? this.#controlValue( c ) )
-				);
+				Array.from( form.querySelectorAll( 'input:not([type="hidden"]), textarea' ) )
+					.filter( ( c ) => ! c.closest( '[data-aafm-untracked]' ) )
+					.some( ( c ) => this.#controlValue( c ) !== ( c.dataset.aafmSaved ?? this.#controlValue( c ) ) );
+			const checkedNames = () => ticks.filter( ( c ) => c.checked ).map( ( c ) => c.value );
+			// Chosen line and the "off" warning follow the ticks. Text only, never markup.
+			const syncPicker = () => {
+				if ( ! picker ) {
+					return;
+				}
+				const chosen = ticks.filter( ( c ) => c.checked );
+				// The label's own text nodes, so a state pill is not read into the name.
+				const labelOf = ( c ) =>
+					Array.from( c.closest( 'label' ).childNodes )
+						.filter( ( n ) => Node.TEXT_NODE === n.nodeType )
+						.map( ( n ) => n.textContent )
+						.join( '' )
+						.trim() || c.value;
+				chosenLine.textContent = chosen.length
+					? this.#format( this.#t( 'playbookChosen', 'Chosen: %s.' ), chosen.map( labelOf ).join( ', ' ) )
+					: this.#t( 'playbookChosenNone', 'No abilities chosen yet.' );
+				const off = chosen.filter( ( c ) => c.closest( 'label' ).querySelector( '.aafm-pill' ) ).length;
+				offWrap.hidden = 0 === off;
+				if ( off > 0 ) {
+					offWrap.querySelector( '.aafm-notice-body' ).textContent =
+						1 === off
+							? this.#t( 'playbookOffNoteOne', '1 of the abilities you chose is off or needs a plugin that is not active.' )
+							: this.#format( this.#t( 'playbookOffNoteMany', '%d of the abilities you chose are off or need a plugin that is not active.' ), off );
+				}
+			};
 			const confirmDiscard = () =>
 				! isDirty() || window.confirm( this.#t( 'playbookDiscard', 'Discard your unsaved changes to this playbook?' ) );
 			const load = ( p ) => {
@@ -3865,8 +3896,24 @@
 				fields.description.value = p.description;
 				fields.body.value = p.body;
 				fields.active.checked = p.active;
+				const picked = new Set( p.abilities ?? [] );
+				ticks.forEach( ( c ) => {
+					c.checked = picked.has( c.value );
+				} );
+				resetSearch();
+				syncPicker();
 				status.textContent = '';
 				this.#markClean( form );
+			};
+			const resetSearch = () => {
+				const search = picker?.querySelector( '.aafm-allowlist-picker-search' );
+				if ( ! search ) {
+					return;
+				}
+				search.value = '';
+				picker.querySelectorAll( '.aafm-allowlist-item, .aafm-allowlist-group' ).forEach( ( el ) => {
+					el.hidden = false;
+				} );
 			};
 			const usesText = ( uses, off ) => {
 				const base = this.#format(
@@ -3887,12 +3934,14 @@
 				description: tr.dataset.playbookDescription,
 				body: tr.dataset.playbookBody,
 				active: '1' === tr.dataset.playbookActive,
+				abilities: JSON.parse( tr.dataset.playbookAbilities || '[]' ),
 			} );
-			const button = ( cls, label ) => {
+			const button = ( cls, label, aria ) => {
 				const b = document.createElement( 'button' );
 				b.type = 'button';
 				b.className = `aafm-btn aafm-btn-secondary aafm-btn-sm ${ cls }`;
 				b.textContent = label;
+				b.setAttribute( 'aria-label', aria );
 				return b;
 			};
 			const cell = ( text, cls = '' ) => {
@@ -3917,6 +3966,8 @@
 				tr.dataset.playbookDescription = p.description;
 				tr.dataset.playbookBody = p.body;
 				tr.dataset.playbookActive = p.active ? '1' : '0';
+				tr.dataset.playbookAbilities = JSON.stringify( p.abilities ?? [] );
+				tr.dataset.playbookStarter = p.starter ?? '';
 				const pill = document.createElement( 'span' );
 				pill.className = `aafm-pill ${ p.active ? 'aafm-pill-success' : 'aafm-pill-neutral' }`;
 				pill.textContent = p.active ? this.#t( 'playbookActive', 'Active' ) : this.#t( 'playbookOff', 'Off' );
@@ -3925,9 +3976,17 @@
 				const actions = document.createElement( 'td' );
 				actions.className = 'aafm-playbook-actions';
 				actions.append(
-					button( 'aafm-playbook-edit', this.#t( 'playbookEdit', 'Edit' ) ),
+					button(
+						'aafm-playbook-edit',
+						this.#t( 'playbookEdit', 'Edit' ),
+						this.#format( this.#t( 'playbookEditLabel', 'Edit %s' ), p.title )
+					),
 					' ',
-					button( 'aafm-playbook-delete', this.#t( 'playbookDelete', 'Delete' ) )
+					button(
+						'aafm-playbook-delete',
+						this.#t( 'playbookDelete', 'Delete' ),
+						this.#format( this.#t( 'playbookDeleteLabel', 'Delete %s' ), p.title )
+					)
 				);
 				tr.append(
 					cell( p.title, 'aafm-playbook-title' ),
@@ -3945,8 +4004,11 @@
 				syncEmpty();
 				return tr;
 			};
-			const setStarterState = ( slug, added ) => {
-				const btn = document.querySelector( `.aafm-playbook-starter-add[data-starter="${ CSS.escape( slug ) }"]` );
+			const setStarterState = ( starterId, added ) => {
+				if ( ! starterId ) {
+					return;
+				}
+				const btn = document.querySelector( `.aafm-playbook-starter-add[data-starter="${ CSS.escape( starterId ) }"]` );
 				if ( btn ) {
 					btn.disabled = added;
 					btn.title = added ? this.#t( 'playbookAddedTitle', 'Already in your playbooks.' ) : '';
@@ -3966,6 +4028,7 @@
 					description: fields.description.value,
 					body: fields.body.value,
 					active: fields.active.checked ? '1' : '0',
+					abilities: JSON.stringify( checkedNames() ),
 				} );
 				submit.disabled = false;
 				submit.focus();
@@ -3982,7 +4045,7 @@
 				this.#applyServerValue( sent, fields.body, p.body );
 				this.#markClean( form, sent );
 				upsertRow( json.data );
-				setStarterState( p.slug, true );
+				setStarterState( p.starter, true );
 				status.textContent = this.#t( 'saved', 'Saved' );
 			} );
 
@@ -3990,7 +4053,7 @@
 				if ( ! confirmDiscard() ) {
 					return;
 				}
-				load( { slug: '', title: '', description: '', body: '', active: false } );
+				load( { slug: '', title: '', description: '', body: '', active: false, abilities: [] } );
 				fields.title.focus();
 			} );
 
@@ -4028,7 +4091,7 @@
 				const next = tr.nextElementSibling ?? tr.previousElementSibling;
 				tr.remove();
 				syncEmpty();
-				setStarterState( slug, false );
+				setStarterState( tr.dataset.playbookStarter, false );
 				if ( fields.slug.value === slug ) {
 					fields.slug.value = '';
 					this.#markClean( form );
@@ -4037,21 +4100,49 @@
 				( next?.querySelector( '.aafm-playbook-edit' ) ?? newBtn ).focus();
 			} );
 
+			picker?.addEventListener( 'change', ( e ) => {
+				if ( e.target.classList.contains( 'aafm-playbook-ability' ) ) {
+					syncPicker();
+				}
+			} );
+			// Same match as the Connection tab picker: case-insensitive substring of the item's text,
+			// an emptied group hides with its legend. Never touches a tick.
+			const search = picker?.querySelector( '.aafm-allowlist-picker-search' );
+			search?.addEventListener( 'input', () => {
+				const query = search.value.trim().toLowerCase();
+				picker.querySelectorAll( '.aafm-allowlist-group' ).forEach( ( group ) => {
+					let visible = 0;
+					group.querySelectorAll( '.aafm-allowlist-item' ).forEach( ( item ) => {
+						const match = '' === query || item.textContent.toLowerCase().includes( query );
+						item.hidden = ! match;
+						visible += match ? 1 : 0;
+					} );
+					group.hidden = 0 === visible;
+				} );
+			} );
+			search?.addEventListener( 'keydown', ( e ) => {
+				if ( 'Enter' === e.key ) {
+					e.preventDefault();
+				}
+			} );
+
 			document.querySelectorAll( '.aafm-playbook-starter-add' ).forEach( ( btn ) => {
 				btn.addEventListener( 'click', async () => {
 					btn.disabled = true;
-					listStatus.className = 'aafm-save-status aafm-playbooks-list-status';
-					listStatus.textContent = this.#t( 'saving', 'Saving...' );
+					starterStatus.className = 'aafm-save-status aafm-playbook-starters-status';
+					starterStatus.textContent = this.#t( 'saving', 'Saving...' );
 					const json = await this.#post( 'aafm_add_starter_playbook', { starter: btn.dataset.starter } );
 					if ( ! json?.success ) {
 						btn.disabled = false;
 						btn.focus();
-						listStatus.classList.add( 'is-error' );
-						listStatus.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
+						starterStatus.classList.add( 'is-error' );
+						starterStatus.textContent = json?.data?.message ?? this.#t( 'errorSaving', 'Error saving' );
 						return;
 					}
+					starterStatus.textContent = '';
 					const tr = upsertRow( json.data );
-					setStarterState( json.data.playbook.slug, true );
+					setStarterState( json.data.playbook.starter, true );
+					listStatus.className = 'aafm-save-status aafm-playbooks-list-status';
 					listStatus.textContent = this.#t( 'playbookAdded', 'Added. It is switched Off until you turn it on.' );
 					tr.querySelector( '.aafm-playbook-edit' )?.focus();
 				} );

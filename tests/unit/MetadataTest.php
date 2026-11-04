@@ -74,12 +74,16 @@ final class MetadataTest extends TestCase {
 	 * B6: the blanket "argument values are never stored" claim is false and has been since
 	 * activity-log v5 (1.5.0): aafm_activity_detail_field() stores ids, meta key names, slugs,
 	 * and enum members in the detail column by design, and several of those arrive as argument
-	 * values. The honest claim is that free-text argument content (bodies, emails, anything
-	 * written) is never stored, and identifiers are. Pin both readmes so the blanket wording
-	 * cannot come back.
+	 * values. The honest claim is that free-text content (bodies, emails, anything written) is
+	 * never stored, and identifiers are. Pin both readmes so the blanket wording cannot come back
+	 * and the honest scope stays stated.
 	 */
 	public function test_readmes_do_not_overpromise_about_stored_argument_values(): void {
-		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+		$honest_scope = array(
+			'readme.txt' => 'never stores the text the AI wrote',
+			'README.md'  => 'never stores free-text content',
+		);
+		foreach ( $honest_scope as $file => $scope ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$text = (string) file_get_contents( AAFM_PLUGIN_DIR . $file );
 			$this->assertDoesNotMatchRegularExpression(
@@ -93,7 +97,7 @@ final class MetadataTest extends TestCase {
 				"{$file} must not carry the blanket never-the-values claim."
 			);
 			$this->assertStringContainsString(
-				'Free-text argument content',
+				$scope,
 				$text,
 				"{$file} must state the honest scope: free text is never stored, identifiers are."
 			);
@@ -142,16 +146,20 @@ final class MetadataTest extends TestCase {
 	/**
 	 * Audit finding (InstaWP review): "A connection only sees the tools its user can call" is not true
 	 * of a bridged tool whose own check needs an item id, which lists to anyone who can edit posts
-	 * (since 1.7.8) while the other plugin still decides every call. Both readmes must say so.
+	 * (since 1.7.8) while the other plugin still decides every call. The readmes therefore claim a
+	 * per-call capability check, which is true, and must not go back to a claim about what a
+	 * connection can see.
 	 */
-	public function test_the_capability_gating_sentence_names_the_bridged_exception(): void {
-		foreach ( array( 'readme.txt', 'README.md' ) as $file ) {
+	public function test_the_readmes_claim_a_per_call_capability_check_not_a_visibility_one(): void {
+		$checked = array(
+			'readme.txt' => 'Each call is checked against the capabilities of the WordPress user the AI connects as',
+			'README.md'  => "is checked against that user's capabilities",
+		);
+		foreach ( $checked as $file => $sentence ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$text = (string) file_get_contents( AAFM_PLUGIN_DIR . $file );
-			$this->assertSame( 1, preg_match( '/Two-layer capability gating\.\*\*([^\n]+)/', $text, $m ), $file );
-			$this->assertStringContainsString( 'every call re-checks that capability before it runs', $m[1], $file );
-			$this->assertStringContainsString( 'bridged from another plugin', $m[1], $file );
-			$this->assertStringContainsString( 'anyone who can edit posts', $m[1], $file );
+			$this->assertStringContainsString( $sentence, $text, $file );
+			$this->assertStringNotContainsString( 'only sees the tools its user can call', $text, $file );
 		}
 	}
 
@@ -167,6 +175,8 @@ final class MetadataTest extends TestCase {
 			$text = (string) file_get_contents( AAFM_PLUGIN_DIR . $file );
 			// Old changelog entries are history and keep the wording they shipped with.
 			$text = (string) preg_split( '/^(?:== Changelog ==|## Changelog)$/m', $text )[0];
+			// Screenshot captions describe a screen, not the endpoint's scope.
+			$text = (string) preg_replace( '/^== Screenshots ==\n.*?(?=^== |\z)/ms', '', $text );
 			$this->assertStringNotContainsString( 'including tools from other plugins', $text, $file );
 			$this->assertStringNotContainsString( 'including tools from your other plugins', $text, $file );
 			$this->assertStringNotContainsString( 'abilities from other plugins included', $text, $file );
@@ -174,11 +184,23 @@ final class MetadataTest extends TestCase {
 			foreach ( array( 'Nothing is exposed until you turn it on', 'Nothing is exposed until you switch it on', 'governed and off by default', 'logs every call including', 'every call is logged', 'writes every ability call', 'Every ability call, whether', 'capability-gated on every call, and logged', 'Every write is capability-checked' ) as $unscoped ) {
 				$this->assertStringNotContainsString( $unscoped, $text, "{$file}: '{$unscoped}' claims more than this plugin's own endpoint delivers." );
 			}
-			$this->assertSame( 1, preg_match( '/Do I need to install the MCP Adapter separately\?[ =]*\n\n([^\n]+)/', $text, $faq ), $file );
-			$this->assertStringContainsString( 'Always on', $faq[1], $file );
-			$this->assertStringContainsString( 'read-only mode', $faq[1], $file );
-			$this->assertStringContainsString( "WordPress core's own", $faq[1], $file );
 		}
+
+		// The FAQ entry names the default server, what sits outside the controls, and the core/* trade-off.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
+		$this->assertSame( 1, preg_match( '/= Do I need to install the MCP Adapter\?[^\n]*=\n(.+?)(?=\n= |\n== )/s', $readme, $faq ) );
+		$this->assertStringContainsString( 'default server', $faq[1] );
+		$this->assertStringContainsString( 'sit outside this plugin\'s controls', $faq[1] );
+		$this->assertStringContainsString( 'Always on', $faq[1] );
+		$this->assertStringContainsString( "WordPress core's public abilities", $faq[1] );
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$md = (string) file_get_contents( AAFM_PLUGIN_DIR . 'README.md' );
+		$this->assertSame( 1, preg_match( '/^One scope note:([^\n]+)/m', $md, $note ) );
+		$this->assertStringContainsString( 'default server', $note[1] );
+		$this->assertStringContainsString( "outside this plugin's controls", $note[1] );
+		$this->assertStringContainsString( 'Always on', $note[1] );
 	}
 
 	/**
@@ -201,18 +223,32 @@ final class MetadataTest extends TestCase {
 	public function test_readme_description_and_external_services_fit_the_wporg_word_cap(): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
-		$this->assertSame( 1, preg_match( '/== Description ==(.+?)== Installation ==/s', $readme, $description ) );
-		$this->assertSame( 1, preg_match( '/== External Services ==(.+?)== Screenshots ==/s', $readme, $external ) );
+		// Each section runs to the next "== Heading ==" line, so the count does not depend on section order.
+		$this->assertSame( 1, preg_match( '/^== Description ==\n(.+?)(?=^== )/ms', $readme, $description ) );
+		$this->assertSame( 1, preg_match( '/^== External Services ==\n(.+?)(?=^== )/ms', $readme, $external ) );
 		$words = count( preg_split( '/\s+/', trim( $description[1] . ' ' . $external[1] ) ) );
 		$this->assertLessThanOrEqual( 2450, $words, 'Description plus External Services is over the wordpress.org cap margin.' );
 	}
 
-	public function test_readme_core_ability_count_is_not_drifted(): void {
-		// The changelog advertises the core-ability count in digits ("NN across WordPress core").
-		// Assert it against the live count so the readme can never silently fall out of sync again.
+	public function test_readme_ability_counts_are_not_drifted(): void {
+		// Both readmes state the catalog size in digits. Assert it against the live registry so the
+		// numbers can never silently fall out of sync again.
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
-		$this->assertSame( 1, preg_match( '/(\d+) across WordPress core/', $readme, $matches ) );
-		$this->assertSame( aafm_core_ability_count(), (int) $matches[1] );
+		$this->assertSame( 1, preg_match( '/There are (\d+) abilities \(.*?\), (\d+) for WordPress itself and (\d+) for plugins/', $readme, $txt ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$md = (string) file_get_contents( AAFM_PLUGIN_DIR . 'README.md' );
+		$this->assertSame( 1, preg_match( '/ships (\d+) abilities \((\d+) core, (\d+) for plugins/', $md, $gh ) );
+
+		$total = count( aafm_get_abilities_registry_full() );
+		$core  = aafm_core_ability_count();
+		foreach ( array(
+			'readme.txt' => $txt,
+			'README.md'  => $gh,
+		) as $file => $m ) {
+			$this->assertSame( $total, (int) $m[1], "{$file}: total" );
+			$this->assertSame( $core, (int) $m[2], "{$file}: core" );
+			$this->assertSame( $total - $core, (int) $m[3], "{$file}: plugin integrations" );
+		}
 	}
 }

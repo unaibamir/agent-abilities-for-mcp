@@ -544,12 +544,15 @@ upgrade_grant_checks() {
 	fi
 	W eval "aafm_oauth_grant_update( 1, '$cid', array( 'paused' => true ) );" >/dev/null 2>&1
 	got="$(init_code "$access") $(init_code '')"
+	if MCP_BEARER="$access" tools_call "$ROUTE_OURS" aafm-count-posts '{}' >/dev/null; then verdict=$(call_verdict); else verdict=broken; fi
+	msg=$(jq -r '.result.content[0].text // empty' "$SMOKE_ROOT/body.json" 2>/dev/null)
 	W eval "aafm_oauth_grant_update( 1, '$cid', array( 'paused' => false ) );" >/dev/null 2>&1
 	got="$got $(init_code "$access")"
-	if [ "$got" = '403 200 200' ]; then
-		pass upgrade "pausing the upgraded grant gives the bearer 403, the Application Password still 200, Resume 200"
+	case "$msg" in *'paused by the site owner'*) said=1 ;; *) said=0 ;; esac
+	if [ "$got" = '200 200 200' ] && [ "$verdict" = refused ] && [ "$said" = 1 ]; then
+		pass upgrade "pausing the upgraded grant lets the bearer sign in, refuses its tool call with the pause message, the Application Password still 200, Resume 200"
 	else
-		fail upgrade "pause then resume: bearer, Application Password, bearer answered '$got' (wanted '403 200 200')"
+		fail upgrade "pause then resume: bearer, Application Password, bearer answered '$got' (wanted '200 200 200'), tool call $verdict, message '$msg'"
 	fi
 }
 
@@ -1027,10 +1030,13 @@ leg_grants() {
 
 	grant "array( 'paused' => true )"
 	got="$(init_code "$bearer") $(init_code '')"
-	if [ "$got" = '403 200' ]; then
-		pass grants "a paused grant gives the bearer a plain 403 while the same user's Application Password still works"
+	if MCP_BEARER="$bearer" tools_call "$ROUTE_OURS" aafm-count-posts '{}' >/dev/null; then verdict=$(call_verdict); else verdict=broken; fi
+	msg=$(jq -r '.result.content[0].text // empty' "$SMOKE_ROOT/body.json" 2>/dev/null)
+	case "$msg" in *'paused by the site owner'*) said=1 ;; *) said=0 ;; esac
+	if [ "$got" = '200 200' ] && [ "$verdict" = refused ] && [ "$said" = 1 ]; then
+		pass grants "a paused grant signs in, gets a tool error naming the pause on tools/call, and the same user's Application Password still works"
 	else
-		fail grants "paused grant: bearer, Application Password answered '$got' (wanted '403 200')"
+		fail grants "paused grant: bearer, Application Password answered '$got' (wanted '200 200'), tool call $verdict, message '$msg'"
 	fi
 	grant "array( 'paused' => false )"
 

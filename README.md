@@ -397,11 +397,11 @@ Connecting a client is done by the client, not this plugin. Some reach your endp
 ## Changelog
 ### 1.10.1
 
-* **Feature:** Playbooks: write step-by-step instructions on the new Playbooks tab or start from three starters, and agents list and load the Active ones through two new read tools that stay off until you enable them.
-* **Fix:** A paused connection, a blocked address, the rate limit and an unknown ACF field name now say so in the refusal, instead of a generic "forbidden" or "permission denied". Status codes are unchanged.
-* **Fix:** The MCP endpoint refuses requests from web pages on other sites, as the MCP specification requires, and every MCP response now carries Cache-Control: no-store.
-* **Fix:** An unauthenticated MCP request no longer writes four lines to the PHP error log, and a refused connection save shows its message on one line under the grants table.
-* **Chore:** New FAQ answers cover refreshing a client's tools, ChatGPT plans, playbooks and refused browser clients. The ChatGPT setup steps no longer mention developer mode.
+* **Feature:** The new Playbooks tab holds step-by-step instructions for agents. Tick the abilities each one uses or add one of five starters. Two read tools, off until you enable them, let agents list and load Active playbooks.
+* **Fix:** A paused connection now signs in and lists tools, and each tool call returns a message that the connection is paused. Claude used to show a firewall or sign-in error instead.
+* **Fix:** The MCP endpoint refuses requests from web pages on other sites, as the MCP specification requires, and sends Cache-Control: no-store on every response. Clients that open with server discovery now get the playbook list too.
+* **Fix:** A blocked address, the rate limit and an unknown ACF field name now say why in the refusal. An unreadable playbook list is reported rather than overwritten, and a connection row shows Saved after you save it.
+* **Chore:** New FAQ answers cover refreshing a client's tools, ChatGPT plans, playbooks and refused browser clients. The delete-tool and ChatGPT menu wording is corrected.
 
 ### 1.10.0
 

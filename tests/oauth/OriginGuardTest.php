@@ -16,7 +16,10 @@ final class OriginGuardTest extends TestCase {
 
 	public function tear_down(): void {
 		remove_all_filters( 'aafm_mcp_allowed_origins' );
-		unset( $GLOBALS['HTTP_RAW_POST_DATA'], $_SERVER['REQUEST_METHOD'], $_SERVER['CONTENT_TYPE'], $_SERVER['HTTP_ACCEPT'], $_SERVER['HTTP_ORIGIN'] );
+		unset( $GLOBALS['HTTP_RAW_POST_DATA'], $_SERVER['REQUEST_METHOD'], $_SERVER['CONTENT_TYPE'], $_SERVER['HTTP_ACCEPT'], $_SERVER['HTTP_ORIGIN'], $_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'], $_SERVER['HTTP_AUTHORIZATION'] );
+		unset( $GLOBALS['wp_rest_application_password_status'], $GLOBALS['wp_rest_application_password_uuid'], $GLOBALS['current_user'] );
+		remove_all_filters( 'wp_is_application_passwords_available' );
+		remove_all_filters( 'application_password_is_api_request' );
 		parent::tear_down();
 	}
 
@@ -44,7 +47,9 @@ final class OriginGuardTest extends TestCase {
 	 */
 	private function serve( ?string $origin, string $method = 'POST' ): \Spy_REST_Server {
 		$this->route_as_rest_request();
-		$server                    = $this->mcp_spy_server();
+		$server = $this->mcp_spy_server();
+		// Core's CORS filter calls header() directly, which a CLI test run cannot do after output started.
+		remove_filter( 'rest_pre_serve_request', 'rest_send_cors_headers' );
 		$_SERVER['REQUEST_METHOD'] = $method;
 		$_SERVER['CONTENT_TYPE']   = 'application/json';
 		$_SERVER['HTTP_ACCEPT']    = 'application/json, text/event-stream';
@@ -222,6 +227,112 @@ final class OriginGuardTest extends TestCase {
 
 	public function test_guard_ignores_other_routes(): void {
 		$this->assertNull( aafm_mcp_origin_guard( null, null, $this->request( 'https://evil.example', '/wp/v2/posts' ) ) );
+	}
+
+	/**
+	 * Serve an initialize with credentials in play, the way production runs it: nobody is logged in
+	 * yet, so core's authentication stage decides before dispatch.
+	 *
+	 * @param string|null $origin Origin header.
+	 * @param array       $server Extra $_SERVER entries (credentials).
+	 * @return \Spy_REST_Server
+	 */
+	private function serve_with_credentials( ?string $origin, array $server ): \Spy_REST_Server {
+		add_filter( 'wp_is_application_passwords_available', '__return_true' );
+		add_filter( 'application_password_is_api_request', '__return_true' );
+		foreach ( $server as $key => $value ) {
+			$_SERVER[ $key ] = $value;
+		}
+		// An unset global makes core resolve the user through determine_current_user, the way a real request does.
+		unset( $GLOBALS['current_user'] );
+		return $this->serve( $origin );
+	}
+
+	private function error_code( \Spy_REST_Server $server ): string {
+		// Database notices from a table another test dropped can precede the JSON; the body starts at the first brace.
+		$start = strpos( $server->sent_body, '{' );
+		$body  = false === $start ? null : json_decode( substr( $server->sent_body, $start ), true );
+		return is_array( $body ) ? (string) ( $body['code'] ?? '' ) : '';
+	}
+
+	public function test_foreign_origin_with_a_bad_application_password_is_403_not_401(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$login = get_userdata( $admin )->user_login;
+		// Core only runs the Application Password check once any user owns one.
+		\WP_Application_Passwords::create_new_application_password( $admin, array( 'name' => 'origin-test' ) );
+		$srv = $this->serve_with_credentials(
+			'https://evil.example',
+			array(
+				'PHP_AUTH_USER' => $login,
+				'PHP_AUTH_PW'   => 'wrong wrong wrong wrong',
+			)
+		);
+		$this->assertSame( 403, $srv->status );
+		$this->assertSame( 'aafm_origin_not_allowed', $this->error_code( $srv ) );
+	}
+
+	public function test_foreign_origin_with_no_credentials_is_403(): void {
+		$srv = $this->serve_with_credentials( 'https://evil.example', array() );
+		$this->assertSame( 403, $srv->status );
+		$this->assertSame( 'aafm_origin_not_allowed', $this->error_code( $srv ) );
+	}
+
+	public function test_foreign_origin_with_a_bad_bearer_is_403(): void {
+		global $wpdb;
+		// A schema test earlier in the directory run can leave the token table dropped; the lookup notice is not what this test is about.
+		$was_suppressed = $wpdb->suppress_errors( true );
+		$srv            = $this->serve_with_credentials( 'https://evil.example', array( 'HTTP_AUTHORIZATION' => 'Bearer aafm_oat_garbagegarbagegarbage' ) );
+		$wpdb->suppress_errors( $was_suppressed );
+		$this->assertSame( 403, $srv->status );
+		$this->assertSame( 'aafm_origin_not_allowed', $this->error_code( $srv ) );
+	}
+
+	public function test_allowed_origin_with_a_bad_application_password_is_still_401(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$login = get_userdata( $admin )->user_login;
+		// Core only runs the Application Password check once any user owns one.
+		\WP_Application_Passwords::create_new_application_password( $admin, array( 'name' => 'origin-test' ) );
+		$srv = $this->serve_with_credentials(
+			'https://claude.ai',
+			array(
+				'PHP_AUTH_USER' => $login,
+				'PHP_AUTH_PW'   => 'wrong wrong wrong wrong',
+			)
+		);
+		$this->assertSame( 401, $srv->status );
+		$this->assertNotSame( 'aafm_origin_not_allowed', $this->error_code( $srv ) );
+	}
+
+	public function test_foreign_origin_on_a_non_mcp_route_is_untouched(): void {
+		$_SERVER['HTTP_ORIGIN']                  = 'https://evil.example';
+		$GLOBALS['wp']->query_vars['rest_route'] = '/wp/v2/posts';
+		$this->assertNull( aafm_mcp_origin_auth_guard( null ) );
+		$error = new \WP_Error( 'x', 'y' );
+		$this->assertSame( $error, aafm_mcp_origin_auth_guard( $error ) );
+	}
+
+	public function test_oauth_and_discovery_routes_ignore_origin(): void {
+		$_SERVER['HTTP_ORIGIN'] = 'https://evil.example';
+		$server                 = $this->mcp_spy_server();
+		$prefix                 = '/' . aafm_oauth_rest_namespace() . '/';
+		$seen                   = 0;
+		foreach ( array_keys( $server->get_routes() ) as $route ) {
+			if ( 0 !== strpos( $route, $prefix ) ) {
+				continue;
+			}
+			++$seen;
+			$GLOBALS['wp']->query_vars['rest_route'] = $route;
+			$this->assertNull( aafm_mcp_origin_auth_guard( null ), $route );
+		}
+		$this->assertGreaterThan( 0, $seen, 'The OAuth namespace registers routes.' );
+	}
+
+	public function test_one_denial_row_for_a_refused_origin_at_the_auth_stage(): void {
+		$this->serve_with_credentials( 'https://evil.example', array() );
+		$rows = aafm_query_activity( array( 'ability' => '(transport)' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertStringContainsString( 'origin_not_allowed', (string) $rows[0]['detail'] );
+		$this->assertStringContainsString( 'evil.example', (string) $rows[0]['detail'] );
 	}
 
 	public function test_guard_before_bootstrap_is_a_no_op(): void {

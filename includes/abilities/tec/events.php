@@ -88,7 +88,11 @@ function aafm_tec_events_registry_definitions(): array {
 		),
 		'aafm/tec-update-event' => array(
 			'label'        => __( 'Update event', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Update an event by ID via the Events Calendar ORM. Requires edit access to that event. Refuses when the event is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			'description'  => sprintf(
+				/* translators: %s: page builder names, for example Elementor and Divi. */
+				__( 'Update an event by ID via the Events Calendar ORM. Requires edit access to that event. Refuses when the event is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+				aafm_page_builder_names()
+			),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'tec',

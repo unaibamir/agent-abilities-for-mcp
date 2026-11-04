@@ -127,17 +127,49 @@ function aafm_post_has_foreign_builder_ownership( int $post_id, bool $pure_read 
  * @return array<string,string> Meta key => builder short name.
  */
 function aafm_page_builder_markers(): array {
-	return apply_filters(
-		'aafm_page_builder_markers',
-		array(
-			'_elementor_data'          => 'elementor',
-			'et_pb_use_builder'        => 'divi',
-			'_fl_builder_data'         => 'beaver-builder',
-			'fusion_builder_status'    => 'avada',
-			'fusion_builder_converted' => 'avada',
-			'vcv-pageContent'          => 'visual-composer',
-		)
+	return apply_filters( 'aafm_page_builder_markers', aafm_page_builder_default_markers() );
+}
+
+/**
+ * The markers this plugin ships, before any site filter. The one array both the guard and the
+ * builder names in the ability descriptions read, so the text cannot drift from what is enforced.
+ *
+ * @return array<string,string> Meta key => builder short name.
+ */
+function aafm_page_builder_default_markers(): array {
+	return array(
+		'_elementor_data'          => 'elementor',
+		'et_pb_use_builder'        => 'divi',
+		'_fl_builder_data'         => 'beaver-builder',
+		'fusion_builder_status'    => 'avada',
+		'fusion_builder_converted' => 'avada',
+		'vcv-pageContent'          => 'visual-composer',
 	);
+}
+
+/**
+ * The display name of a builder short name ("beaver-builder" becomes "Beaver Builder").
+ *
+ * @param string $slug Builder short name from the marker map.
+ * @return string
+ */
+function aafm_page_builder_label( string $slug ): string {
+	return ucwords( str_replace( '-', ' ', $slug ) );
+}
+
+/**
+ * The builders the shipped guard covers as a sentence list, for ability descriptions. Built from the
+ * unfiltered defaults on purpose: a site filter that adds a marker must not change the registry text
+ * that is catalogued and translated for every site.
+ *
+ * @return string For example "Elementor, Divi, Beaver Builder, Avada, and Visual Composer".
+ */
+function aafm_page_builder_names(): string {
+	$labels = array();
+	foreach ( array_unique( array_values( aafm_page_builder_default_markers() ) ) as $slug ) {
+		$labels[] = aafm_page_builder_label( (string) $slug );
+	}
+	return wp_sprintf_l( '%l', $labels );
 }
 
 /**
@@ -162,7 +194,7 @@ function aafm_page_builder_owned_error( string $builder ): WP_Error {
 		);
 	}
 
-	$label = ucwords( str_replace( '-', ' ', $builder ) );
+	$label = aafm_page_builder_label( $builder );
 	return new WP_Error(
 		'aafm_page_builder_owned',
 		sprintf(

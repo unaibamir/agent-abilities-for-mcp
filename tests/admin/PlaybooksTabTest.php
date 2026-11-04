@@ -199,6 +199,8 @@ final class PlaybooksTabTest extends TestCase {
 
 	public function test_picker_renders_every_ability_with_its_state(): void {
 		$this->acting_as( 'administrator' );
+		// Other suites define the WooCommerce marker class for the whole process; pin it off here.
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-post' ) );
 		aafm_save_playbook( $this->fields() );
 		$html = $this->render();
@@ -232,6 +234,7 @@ final class PlaybooksTabTest extends TestCase {
 
 	public function test_shop_starter_is_addable_with_woocommerce_inactive(): void {
 		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$html = $this->render();
 		$this->assertMatchesRegularExpression( '#<strong>Shop tidy-up</strong> <span class="aafm-pill aafm-pill-neutral">Needs WooCommerce</span>.*?data-starter="shop-tidy-up" aria-label="[^"]+">#s', $html, 'Listed with its pill and an enabled button.' );
 	}

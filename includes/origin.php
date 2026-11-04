@@ -99,6 +99,24 @@ function aafm_mcp_allowed_origins(): array {
 }
 
 /**
+ * The 403 for an Origin header that is not allowed, or null when it is. A refusal writes its one
+ * denial row here, so both guards below log the same way.
+ *
+ * @param string                $header  The Origin header value.
+ * @param \WP_REST_Request|null $request The request, when there is one.
+ * @return WP_Error|null
+ */
+function aafm_mcp_origin_error( string $header, $request = null ): ?WP_Error {
+	if ( in_array( aafm_normalize_origin( $header ), aafm_mcp_allowed_origins(), true ) ) {
+		return null;
+	}
+	$host = wp_parse_url( $header, PHP_URL_HOST );
+	$host = substr( aafm_sanitize_plain_text( is_string( $host ) ? $host : $header ), 0, 100 );
+	aafm_log_transport_denial( 'org', 'origin_not_allowed', '', $request, 'origin:' . $host );
+	return new WP_Error( 'aafm_origin_not_allowed', __( 'This site does not accept MCP requests from that web page.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
+}
+
+/**
  * Refuse an MCP request whose Origin header is present and not allowed.
  *
  * @param mixed            $result  Earlier pre-dispatch result.
@@ -119,12 +137,33 @@ function aafm_mcp_origin_guard( $result, $server, $request ) {
 	if ( null === $header ) {
 		return $result;
 	}
-	if ( in_array( aafm_normalize_origin( (string) $header ), aafm_mcp_allowed_origins(), true ) ) {
-		return $result;
-	}
-	$host = wp_parse_url( (string) $header, PHP_URL_HOST );
-	$host = substr( aafm_sanitize_plain_text( is_string( $host ) ? $host : (string) $header ), 0, 100 );
-	aafm_log_transport_denial( 'org', 'origin_not_allowed', '', $request, 'origin:' . $host );
-	return new WP_Error( 'aafm_origin_not_allowed', __( 'This site does not accept MCP requests from that web page.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
+	return aafm_mcp_origin_error( (string) $header, $request ) ?? $result;
 }
 add_filter( 'rest_pre_dispatch', 'aafm_mcp_origin_guard', -1, 3 );
+
+/**
+ * Refuse a foreign Origin on the MCP route before authentication decides.
+ *
+ * Core authenticates before it dispatches, so a bad Application Password is answered with its own 401
+ * ahead of rest_pre_dispatch. This runs first on rest_authentication_errors so a disallowed Origin is a
+ * 403 whatever credentials ride along. Only the MCP route is touched; OAuth and discovery are not.
+ *
+ * @param mixed $errors Earlier authentication result.
+ * @return mixed $errors, or a 403 WP_Error.
+ */
+function aafm_mcp_origin_auth_guard( $errors ) {
+	if ( ! function_exists( 'aafm_is_mcp_route' ) || ! isset( $GLOBALS['wp'] ) || ! is_object( $GLOBALS['wp'] ) ) {
+		return $errors;
+	}
+	$route = $GLOBALS['wp']->query_vars['rest_route'] ?? null;
+	if ( ! is_string( $route ) || ! aafm_is_mcp_route( untrailingslashit( $route ) ) ) {
+		return $errors;
+	}
+	// Core's get_headers() builds the origin header from this same server variable.
+	if ( ! isset( $_SERVER['HTTP_ORIGIN'] ) || ! is_string( $_SERVER['HTTP_ORIGIN'] ) ) {
+		return $errors;
+	}
+	$header = wp_unslash( $_SERVER['HTTP_ORIGIN'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- compared against an allow-list, never stored raw.
+	return aafm_mcp_origin_error( $header ) ?? $errors;
+}
+add_filter( 'rest_authentication_errors', 'aafm_mcp_origin_auth_guard', 1 );

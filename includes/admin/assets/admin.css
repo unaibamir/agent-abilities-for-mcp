@@ -2764,6 +2764,9 @@
 
 		.aafm-allowlist-picker.aafm-playbook-picker {
 			max-inline-size: none;
+			display: flex;
+			flex-direction: column;
+			gap: var(--aafm-space-2);
 		}
 
 		.aafm-allowlist-item .aafm-pill {

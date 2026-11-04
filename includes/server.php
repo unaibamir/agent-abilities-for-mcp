@@ -1984,6 +1984,25 @@ function aafm_mcp_no_store( $response, $server, $request ) {
 }
 
 /**
+ * Send Cache-Control: no-store on an MCP response requested with ?_envelope. Core wraps that response
+ * in a new one whose own headers are folded into the body, so the header set in rest_post_dispatch
+ * never reaches the wire. This runs after core's send_headers() and before the body goes out.
+ *
+ * @param mixed $served  Whether the request was already served; returned unchanged.
+ * @param mixed $result  The response.
+ * @param mixed $request The request.
+ * @param mixed $server  The REST server.
+ * @return mixed
+ */
+function aafm_mcp_no_store_enveloped( $served, $result, $request, $server ) {
+	unset( $result );
+	if ( $request instanceof WP_REST_Request && is_object( $server ) && method_exists( $server, 'send_header' ) && aafm_is_mcp_route( (string) $request->get_route() ) ) {
+		$server->send_header( 'Cache-Control', 'no-store' );
+	}
+	return $served;
+}
+
+/**
  * Fail an MCP session-establishing response honestly when its session was never persisted.
  *
  * The bundled adapter's SessionManager::create_session()

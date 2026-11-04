@@ -112,6 +112,32 @@ final class PlaybookStartersTest extends TestCase {
 		$this->assertWPError( aafm_add_starter_playbook( 'nope' ) );
 	}
 
+	public function test_an_unknown_starter_is_refused_with_one_failed_log_row(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = aafm_add_starter_playbook( 'nope' );
+		$this->assertSame( 'aafm_playbook_starter_unknown', $result->get_error_code() );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm/playbooks' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', $rows[0]['status'] );
+		$this->assertStringContainsString( 'Starter playbook added', (string) $rows[0]['detail'] );
+		$this->assertSame( array(), aafm_playbooks() );
+	}
+
+	public function test_adding_the_same_starter_twice_is_refused_and_logged(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertIsArray( aafm_add_starter_playbook( 'publish-checklist' ) );
+		$second = aafm_add_starter_playbook( 'publish-checklist' );
+		$this->assertSame( 'aafm_playbook_starter_added', $second->get_error_code() );
+		$this->assertCount( 1, aafm_playbooks() );
+		$rows = aafm_query_activity(
+			array(
+				'ability' => 'aafm/playbooks',
+				'status'  => 'error',
+			)
+		);
+		$this->assertCount( 1, $rows );
+	}
+
 	public function test_starters_respect_the_limits(): void {
 		foreach ( aafm_playbook_starters() as $starter ) {
 			$fields = array(

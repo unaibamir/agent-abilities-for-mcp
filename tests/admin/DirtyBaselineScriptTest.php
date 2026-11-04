@@ -55,6 +55,17 @@ class DirtyBaselineScriptTest extends TestCase {
 	}
 
 	/**
+	 * A successful grant row save says so in the row's live-region line, rather than going quiet.
+	 */
+	public function test_a_successful_grant_save_announces_saved(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test.
+		$js    = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+		$start = (int) strpos( $js, '#bindGrantControls() {' );
+		$body  = substr( $js, $start, (int) strpos( $js, "\n\t\t#", $start + 30 ) - $start );
+		$this->assertMatchesRegularExpression( "/this\\.#markClean\\( row, snap \\);\\s*\\/\\/[^\\n]*\\n\\s*say\\( this\\.#t\\( 'saved', 'Saved' \\) \\);/", $body );
+	}
+
+	/**
 	 * A control the server answers for is overwritten only when the user has not edited it since the
 	 * request left; the three places that apply a server value must all go through the guard.
 	 */

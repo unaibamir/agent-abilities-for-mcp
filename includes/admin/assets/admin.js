@@ -2856,12 +2856,15 @@
 					say( json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' ) );
 					return;
 				}
-				line.hidden = true;
-				line.textContent = '';
 				const grant = json.data ?? {};
 				if ( Object.keys( sent ).length ) {
 					// Record what was sent, so a control edited while the save was in flight keeps its dot.
 					this.#markClean( row, snap );
+					// The line is a polite live region, so this is announced.
+					say( this.#t( 'saved', 'Saved' ) );
+				} else {
+					line.hidden = true;
+					line.textContent = '';
 				}
 				const pause = row.querySelector( '.aafm-grant-pause' );
 				if ( pause ) {

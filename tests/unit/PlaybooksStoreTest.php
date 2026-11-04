@@ -161,12 +161,10 @@ final class PlaybooksStoreTest extends TestCase {
 	}
 
 	public function test_body_is_stored_as_plain_text(): void {
-		$saved = aafm_save_playbook( $this->fields( array( 'body' => "<b>Step</b>\r\n<script>x()</script>\u{202E}two" ) ) );
-		$row   = $this->db_row();
-		$body  = $row[0]['body'];
-		$this->assertStringNotContainsString( '<', $body );
-		$this->assertStringNotContainsString( "\r", $body );
-		$this->assertStringNotContainsString( "\u{202E}", $body );
+		$typed = "<b>Step</b> one < two & 100%41 done\r\n<script>x()</script>\u{202E}two";
+		$saved = aafm_save_playbook( $this->fields( array( 'body' => $typed ) ) );
+		$body  = $this->db_row()[0]['body'];
+		$this->assertSame( "<b>Step</b> one < two & 100%41 done\n<script>x()</script>two", $body, 'Text is kept as typed; only line endings and invisible characters change.' );
 		$this->assertSame( $body, aafm_playbook( $saved['slug'] )['body'] );
 
 		$second = aafm_save_playbook( $this->fields( array( 'body' => "one\r\ntwo\rthree" ) ) );

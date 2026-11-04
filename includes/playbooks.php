@@ -26,13 +26,15 @@ const AAFM_PLAYBOOK_BODY_MAX  = 8000;
 const AAFM_PLAYBOOK_SLUG_MAX  = 64;
 
 /**
- * Clean a playbook body: plain multi-line text, LF line endings, no markup.
+ * Clean a playbook body: the text exactly as typed, with LF line endings and without invalid UTF-8,
+ * control characters or invisible and bidirectional override characters. Markup-like text is kept
+ * as text: the body only ever leaves as JSON or through an escaped attribute, never as HTML.
  *
  * @param string $raw Raw text.
  * @return string
  */
 function aafm_clean_playbook_body( string $raw ): string {
-	$text = aafm_sanitize_multiline_text( $raw );
+	$text = str_replace( aafm_unsafe_text_characters(), '', wp_check_invalid_utf8( $raw ) );
 
 	return trim( (string) preg_replace( '/\r\n|\r/', "\n", $text ) );
 }

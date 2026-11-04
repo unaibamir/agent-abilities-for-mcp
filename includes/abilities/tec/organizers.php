@@ -53,7 +53,7 @@ function aafm_tec_organizers_registry_definitions(): array {
 	return array(
 		'aafm/tec-get-organizers'   => array(
 			'label'        => __( 'Get organizers', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'List organizers via the Events Calendar ORM (tribe_organizers()).', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'List organizers via the Events Calendar ORM (tribe_organizers()), optionally filtered by status (by default what you can already see; draft, pending and future need edit access to organizers).', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'tec',

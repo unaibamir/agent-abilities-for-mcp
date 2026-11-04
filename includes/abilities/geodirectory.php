@@ -96,7 +96,11 @@ function aafm_geodirectory_registry_definitions(): array {
 		),
 		'aafm/geodirectory-update-listing' => array(
 			'label'        => __( 'Update a GeoDirectory listing', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration. Refuses when the listing is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.", 'agent-abilities-for-mcp' ),
+			'description'  => sprintf(
+				/* translators: %s: page builder names, for example Elementor and Divi. */
+				__( "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration. Refuses when the listing is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.", 'agent-abilities-for-mcp' ),
+				aafm_page_builder_names()
+			),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'geodirectory',

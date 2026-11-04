@@ -80,7 +80,11 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-post']      = array(
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+		'description'  => sprintf(
+			/* translators: %s: page builder names, for example Elementor and Divi. */
+			__( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			aafm_page_builder_names()
+		),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -88,7 +92,11 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-in-post']  = array(
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+		'description'  => sprintf(
+			/* translators: %s: page builder names, for example Elementor and Divi. */
+			__( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			aafm_page_builder_names()
+		),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -96,7 +104,11 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-block']    = array(
 		'label'        => __( 'Replace block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+		'description'  => sprintf(
+			/* translators: %s: page builder names, for example Elementor and Divi. */
+			__( 'Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block\'s inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks\' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post\'s existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			aafm_page_builder_names()
+		),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -128,7 +140,11 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-cpt-item']  = array(
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+		'description'  => sprintf(
+			/* translators: %s: page builder names, for example Elementor and Divi. */
+			__( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup.', 'agent-abilities-for-mcp' ),
+			aafm_page_builder_names()
+		),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -2084,7 +2100,11 @@ function aafm_args_replace_sitewide(): array {
 				'skipped_structure_guard' => array( 'type' => 'integer' ),
 				'skipped_builder_owned'   => array(
 					'type'        => 'integer',
-					'description' => __( 'Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content.', 'agent-abilities-for-mcp' ),
+					'description' => sprintf(
+						/* translators: %s: page builder names, for example Elementor and Divi. */
+						__( 'Matched posts skipped because a foreign page builder (%s) owns their content.', 'agent-abilities-for-mcp' ),
+						aafm_page_builder_names()
+					),
 				),
 				'failed_updates'          => array(
 					'type'        => 'integer',

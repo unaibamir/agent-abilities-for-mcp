@@ -251,15 +251,17 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 	 * the caller sent, verbatim, so an undeclared address round-trips and the defect this file
 	 * exists for cannot be reproduced at all.
 	 *
+	 * @param bool $listing Also enable acf-list-field-groups.
 	 * @return int The post id to write against.
 	 */
-	private function boot(): int {
+	private function boot( bool $listing = false ): int {
 		$this->force_integration( 'acf' );
 		$this->stub_acf( $this->config() );
 		AcfStubStore::$model_container_rekeying = true;
 		aafm_registry_cache_should_flush( true );
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		update_option( 'aafm_enabled_abilities', array( 'aafm/acf-update-post-fields' ) );
+		// The refusal names the caller's addresses only for a caller who could list fields.
+		update_option( 'aafm_enabled_abilities', $listing ? array( 'aafm/acf-update-post-fields', 'aafm/acf-list-field-groups' ) : array( 'aafm/acf-update-post-fields' ) );
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 
 		$admin_id = $this->acting_as( 'administrator' );
@@ -1005,7 +1007,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 	 * @return void
 	 */
 	public function test_the_refusal_names_the_address_the_caller_sent(): void {
-		$post_id = $this->boot();
+		$post_id = $this->boot( true );
 
 		$result = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
@@ -1196,7 +1198,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 	 * @return void
 	 */
 	public function test_the_refusal_message_is_bounded(): void {
-		$post_id = $this->boot();
+		$post_id = $this->boot( true );
 
 		$row = array();
 		foreach ( range( 1, 9 ) as $i ) {

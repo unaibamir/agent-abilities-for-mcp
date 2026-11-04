@@ -1058,6 +1058,9 @@ function aafm_acf_inexact_address_error( string $address ): WP_Error {
  * @return \WP_Error
  */
 function aafm_acf_unknown_sub_field_error( array $addresses ): WP_Error {
+	if ( ! aafm_acf_caller_can_list_fields() ) {
+		return new WP_Error( 'aafm_acf_unknown_sub_field', __( 'One or more of those do not name a sub-field of the field they were sent under, so nothing was written.', 'agent-abilities-for-mcp' ) );
+	}
 	return new WP_Error(
 		'aafm_acf_unknown_sub_field',
 		sprintf(
@@ -1069,14 +1072,33 @@ function aafm_acf_unknown_sub_field_error( array $addresses ): WP_Error {
 }
 
 /**
+ * Whether the caller could call acf-list-field-groups right now: the ability is switched on and
+ * discoverable for this caller. The two unknown-name refusals echo the caller's own names only when
+ * this is true, so they never open a channel for names that an owner (or a role, connection or
+ * preset allowlist) closed by hiding the list tool.
+ *
+ * The refused-versus-accepted outcome stays an oracle for anyone who can write: a real name is
+ * written, an unknown one is refused, and no wording removes that difference.
+ *
+ * @return bool
+ */
+function aafm_acf_caller_can_list_fields(): bool {
+	return in_array( 'aafm/acf-list-field-groups', aafm_get_enabled_abilities(), true ) && aafm_user_can_discover_ability( 'aafm/acf-list-field-groups' );
+}
+
+/**
  * The refusal for top-level field names ACF cannot resolve on this site: names the caller's own
  * addresses (at most five, then a count) and points at acf-list-field-groups when the caller can use
- * it. Never used when one of the names is protected meta; that stays the generic refusal.
+ * it; a caller who could not list fields gets a generic refusal with no names. Never used when one of
+ * the names is protected meta; that stays the generic refusal.
  *
  * @param array<int,string> $addresses The unresolved addresses.
  * @return \WP_Error
  */
 function aafm_acf_unknown_field_error( array $addresses ): WP_Error {
+	if ( ! aafm_acf_caller_can_list_fields() ) {
+		return new WP_Error( 'aafm_acf_unknown_field', __( 'One or more of those names are not ACF fields on this site, so nothing was written.', 'agent-abilities-for-mcp' ) );
+	}
 	$listed = aafm_acf_safe_address_list( $addresses );
 	$more   = count( array_unique( $addresses ) ) - count( $listed );
 	$names  = implode( ', ', $listed );
@@ -1085,10 +1107,8 @@ function aafm_acf_unknown_field_error( array $addresses ): WP_Error {
 		$names = sprintf( __( '%1$s and %2$d more', 'agent-abilities-for-mcp' ), $names, $more );
 	}
 	/* translators: %s: the field names the caller sent. */
-	$message = sprintf( __( 'These are not ACF fields on this site, so nothing was written: %s.', 'agent-abilities-for-mcp' ), $names );
-	if ( in_array( 'aafm/acf-list-field-groups', aafm_get_enabled_abilities(), true ) && aafm_user_can_discover_ability( 'aafm/acf-list-field-groups' ) ) {
-		$message .= ' ' . __( 'Call acf-list-field-groups to see the field names you can use.', 'agent-abilities-for-mcp' );
-	}
+	$message  = sprintf( __( 'These are not ACF fields on this site, so nothing was written: %s.', 'agent-abilities-for-mcp' ), $names );
+	$message .= ' ' . __( 'Call acf-list-field-groups to see the field names you can use.', 'agent-abilities-for-mcp' );
 	return new WP_Error( 'aafm_acf_unknown_field', $message );
 }
 

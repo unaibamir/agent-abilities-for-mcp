@@ -22,6 +22,7 @@ final class AcfUnknownFieldTest extends TestCase {
 
 	public function tear_down(): void {
 		$this->reset_integration_stubs();
+		remove_role( 'aafm_user_editor' );
 		parent::tear_down();
 	}
 
@@ -45,6 +46,21 @@ final class AcfUnknownFieldTest extends TestCase {
 								'name'  => 'headline',
 								'label' => 'Headline',
 								'type'  => 'text',
+							),
+							array(
+								'key'        => 'field_grp',
+								'name'       => 'grp',
+								'label'      => 'Group',
+								'type'       => 'group',
+								'sub_fields' => array(
+									array(
+										'key'   => 'field_grp_alpha',
+										'name'  => 'alpha',
+										'_name' => 'alpha',
+										'label' => 'Alpha',
+										'type'  => 'text',
+									),
+								),
 							),
 						),
 					),
@@ -156,10 +172,75 @@ final class AcfUnknownFieldTest extends TestCase {
 		$this->assertSame( 0, $this->meta_rows( 'livetest_field' ) );
 	}
 
-	public function test_pointer_only_when_the_list_tool_is_usable(): void {
+	public function test_names_and_pointer_only_when_the_list_tool_is_usable(): void {
 		$result = $this->write( 'aafm/acf-update-post-fields', array( 'livetest_field' => 'v' ), false );
-		$this->assertStringContainsString( 'livetest_field', $result->get_error_message() );
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_acf_unknown_field', $result->get_error_code() );
+		$this->assertStringNotContainsString( 'livetest_field', $result->get_error_message(), 'A caller who cannot list fields is not handed names back.' );
 		$this->assertStringNotContainsString( 'acf-list-field-groups', $result->get_error_message() );
+		$this->assertStringContainsString( 'nothing was written', $result->get_error_message() );
+
+		$listed = $this->write( 'aafm/acf-update-post-fields', array( 'livetest_field' => 'v' ), true );
+		$this->assertStringContainsString( 'livetest_field', $listed->get_error_message() );
+		$this->assertStringContainsString( 'acf-list-field-groups', $listed->get_error_message() );
+	}
+
+	/**
+	 * Switch to a user who holds edit_users but not edit_posts, so acf-list-field-groups is not
+	 * discoverable for them while acf-update-user-fields is.
+	 *
+	 * @return int The user id.
+	 */
+	private function user_editor_without_posts(): int {
+		add_role(
+			'aafm_user_editor',
+			'User editor',
+			array(
+				'read'       => true,
+				'edit_users' => true,
+				'list_users' => true,
+			)
+		);
+		$id = (int) self::factory()->user->create( array( 'role' => 'aafm_user_editor' ) );
+		wp_set_current_user( $id );
+		return $id;
+	}
+
+	public function test_a_role_that_cannot_discover_the_list_tool_gets_no_names(): void {
+		$this->boot( array( 'aafm/acf-update-user-fields', 'aafm/acf-list-field-groups' ) );
+		$id = $this->user_editor_without_posts();
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/acf-list-field-groups' ), 'Fixture: no edit_posts, so the list tool is hidden.' );
+		$result = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
+			array(
+				'user_id' => $id,
+				'fields'  => array( 'livetest_field' => 'v' ),
+			)
+		);
+		$this->assertWPError( $result );
+		$this->assertSame( 'aafm_acf_unknown_field', $result->get_error_code() );
+		$this->assertStringNotContainsString( 'livetest_field', $result->get_error_message() );
+		$this->assertStringNotContainsString( 'acf-list-field-groups', $result->get_error_message() );
+	}
+
+	public function test_the_sub_field_refusal_follows_the_same_rule(): void {
+		$call = function ( bool $listing ) {
+			$admin = $this->boot( $listing ? array( 'aafm/acf-update-post-fields', 'aafm/acf-list-field-groups' ) : array( 'aafm/acf-update-post-fields' ) );
+			return wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+				array(
+					'post_id' => (int) self::factory()->post->create( array( 'post_author' => $admin ) ),
+					'fields'  => array( 'field_grp' => array( 'nosuchsub' => 'x' ) ),
+				)
+			);
+		};
+		$with = $call( true );
+		$this->assertWPError( $with );
+		$this->assertSame( 'aafm_acf_unknown_sub_field', $with->get_error_code() );
+		$this->assertStringContainsString( 'nosuchsub', $with->get_error_message() );
+		$without = $call( false );
+		$this->assertWPError( $without );
+		$this->assertSame( 'aafm_acf_unknown_sub_field', $without->get_error_code() );
+		$this->assertStringNotContainsString( 'nosuchsub', $without->get_error_message() );
+		$this->assertStringContainsString( 'nothing was written', $without->get_error_message() );
 	}
 
 	public function test_unknown_field_reaches_the_agent_over_mcp(): void {
@@ -228,8 +309,9 @@ final class AcfUnknownFieldTest extends TestCase {
 		for ( $i = 1; $i <= 7; $i++ ) {
 			$fields[ 'unknown_' . $i ] = 'v';
 		}
-		$result = $this->write( 'aafm/acf-update-post-fields', $fields, false );
-		$this->assertStringEndsWith( 'unknown_5 and 2 more.', $result->get_error_message() );
+		$result = $this->write( 'aafm/acf-update-post-fields', $fields );
+		$this->assertStringStartsWith( 'These are not ACF fields', $result->get_error_message() );
+		$this->assertStringContainsString( 'unknown_5 and 2 more.', $result->get_error_message() );
 		$this->assertStringNotContainsString( 'unknown_6', $result->get_error_message() );
 	}
 

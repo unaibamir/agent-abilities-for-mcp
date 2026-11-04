@@ -260,6 +260,47 @@ class GrantPauseTest extends TestCase {
 		$this->assertSame( self::CLIENT, $rows[0]['client_id'] );
 	}
 
+	public function test_a_paused_call_gets_the_pause_error_even_when_the_rate_bucket_is_full(): void {
+		update_option( 'aafm_rate_limit_per_min', 1 );
+		$handler = $this->single_tool_handler();
+		$this->set_paused( '2026-10-01 00:00:00' );
+		$this->resolve();
+		$this->assertTrue( aafm_rate_limit_consume( $this->user ), 'The bucket is now full.' );
+		$result = $handler->call_tool(
+			array(
+				'name'      => aafm_mcp_tool_name( 'aafm/get-posts' ),
+				'arguments' => array(),
+			)
+		);
+
+		$this->assertTrue( $result->getIsError() );
+		$text = (string) wp_json_encode( $result->getContent() );
+		$this->assertStringContainsString( 'This connection is paused by the site owner', $text );
+		$this->assertStringNotContainsString( 'rate', strtolower( $text ) );
+		$rows = aafm_query_activity( array( 'ability' => 'aafm/get-posts' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertStringContainsString( 'Refused: connection_paused', (string) $rows[0]['detail'] );
+	}
+
+	public function test_a_paused_call_does_not_use_up_the_users_rate_bucket(): void {
+		update_option( 'aafm_rate_limit_per_min', 2 );
+		$handler = $this->single_tool_handler();
+		$this->set_paused( '2026-10-01 00:00:00' );
+		$this->resolve();
+		for ( $i = 0; $i < 3; $i++ ) {
+			$handler->call_tool(
+				array(
+					'name'      => aafm_mcp_tool_name( 'aafm/get-posts' ),
+					'arguments' => array(),
+				)
+			);
+		}
+		// The same person's Application Password shares the bucket and still has both tokens.
+		$this->assertTrue( aafm_rate_limit_consume( $this->user ) );
+		$this->assertTrue( aafm_rate_limit_consume( $this->user ) );
+		$this->assertFalse( aafm_rate_limit_consume( $this->user ) );
+	}
+
 	public function test_a_paused_connection_gets_the_pause_line_in_initialize_and_discover_instructions(): void {
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-site-info' ) );
 		// The server is built once per process and the test library drops hooks added during a test,

@@ -140,6 +140,7 @@ final class PlaybooksStoreTest extends TestCase {
 			array( array( 'title' => '' ), '80' ),
 			array( array( 'description' => str_repeat( 'a', 201 ) ), '200' ),
 			array( array( 'body' => '' ), number_format_i18n( 8000 ) ),
+			array( array( 'body' => " \n\t " ), number_format_i18n( 8000 ) ),
 			array( array( 'body' => str_repeat( 'a', 8001 ) ), number_format_i18n( 8000 ) ),
 		);
 		foreach ( $cases as $case ) {
@@ -170,6 +171,13 @@ final class PlaybooksStoreTest extends TestCase {
 		$second = aafm_save_playbook( $this->fields( array( 'body' => "one\r\ntwo\rthree" ) ) );
 		$this->assertSame( "one\ntwo\nthree", $this->db_row()[1]['body'] );
 		$this->assertSame( "one\ntwo\nthree", aafm_playbook( $second['slug'] )['body'] );
+	}
+
+	public function test_body_keeps_leading_indentation_and_trailing_lines(): void {
+		$typed = "  Step.\n    nested\n\n";
+		$saved = aafm_save_playbook( $this->fields( array( 'body' => $typed ) ) );
+		$this->assertSame( $typed, $this->db_row()[0]['body'] );
+		$this->assertSame( $typed, aafm_playbook( $saved['slug'] )['body'] );
 	}
 
 	public function test_hand_written_row_is_cleaned_on_read(): void {

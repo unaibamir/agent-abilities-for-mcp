@@ -258,4 +258,24 @@ final class PlaybookAbilitiesTest extends TestCase {
 			$this->assertTrue( aafm_preset_permits( 'read_only', $name ) );
 		}
 	}
+
+	public function test_a_failed_read_is_an_error_not_an_empty_library(): void {
+		$this->seed( 'on-one' );
+		$this->acting_as( 'administrator' );
+		add_filter(
+			'query',
+			static function ( string $query ): string {
+				return false !== strpos( $query, 'SELECT' ) && false !== strpos( $query, "'aafm_playbooks'" ) ? 'SELECT * FROM aafm_missing_table_for_test' : $query;
+			}
+		);
+		ob_start();
+		$list = aafm_exec_list_playbooks();
+		$get  = aafm_exec_get_playbook( array( 'slug' => 'on-one' ) );
+		ob_end_clean();
+		remove_all_filters( 'query' );
+		$this->assertWPError( $list );
+		$this->assertSame( 'aafm_playbooks_unreadable', $list->get_error_code() );
+		$this->assertWPError( $get );
+		$this->assertSame( 'aafm_playbooks_unreadable', $get->get_error_code() );
+	}
 }

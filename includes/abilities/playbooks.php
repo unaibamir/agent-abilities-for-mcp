@@ -232,15 +232,28 @@ function aafm_playbook_public_fields( array $playbook ): array {
 }
 
 /**
+ * The refusal for a library the site could not read: never reported as an empty library.
+ *
+ * @return WP_Error
+ */
+function aafm_playbooks_unreadable_error(): WP_Error {
+	return new WP_Error( 'aafm_playbooks_unreadable', __( 'The site could not read its playbooks right now. Try again shortly.', 'agent-abilities-for-mcp' ) );
+}
+
+/**
  * Execute aafm/list-playbooks: Active playbooks only, without their bodies.
  *
  * @param array<string,mixed> $input Unused.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_list_playbooks( array $input = array() ): array {
+function aafm_exec_list_playbooks( array $input = array() ) {
 	unset( $input );
+	$read = aafm_playbooks_read();
+	if ( ! $read['ok'] ) {
+		return aafm_playbooks_unreadable_error();
+	}
 	$out = array();
-	foreach ( aafm_playbooks() as $playbook ) {
+	foreach ( $read['list'] as $playbook ) {
 		if ( $playbook['active'] ) {
 			$out[] = aafm_playbook_public_fields( $playbook );
 		}
@@ -268,8 +281,18 @@ function aafm_playbook_list_tool_usable(): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_playbook( array $input ) {
-	$slug     = is_string( $input['slug'] ?? null ) ? $input['slug'] : '';
-	$playbook = aafm_playbook( $slug );
+	$slug = is_string( $input['slug'] ?? null ) ? $input['slug'] : '';
+	$read = aafm_playbooks_read();
+	if ( ! $read['ok'] ) {
+		return aafm_playbooks_unreadable_error();
+	}
+	$playbook = null;
+	foreach ( $read['list'] as $entry ) {
+		if ( $entry['slug'] === $slug ) {
+			$playbook = $entry;
+			break;
+		}
+	}
 	if ( null === $playbook || ! $playbook['active'] ) {
 		$error = aafm_playbook_not_found_error( $slug );
 		if ( aafm_playbook_list_tool_usable() ) {

@@ -274,7 +274,14 @@ function aafm_save_playbook( array $raw, string $slug = '', string $log_action =
 	}
 	$list = $read['list'];
 
+	// The starter a playbook came from is set once, when it is added, and kept on every edit.
+	$new_starter = is_string( $raw['starter'] ?? null ) && preg_match( '/^[a-z0-9_-]{1,64}$/', $raw['starter'] ) ? $raw['starter'] : '';
+
 	if ( '' === $slug ) {
+		if ( '' !== $new_starter && in_array( $new_starter, array_column( $list, 'starter' ), true ) ) {
+			aafm_log_playbook_change( $action, '', false );
+			return new WP_Error( 'aafm_playbook_starter_added', __( 'That starter is already in your playbooks.', 'agent-abilities-for-mcp' ) );
+		}
 		if ( count( $list ) >= AAFM_PLAYBOOKS_MAX ) {
 			aafm_log_playbook_change( $action, '', false );
 			/* translators: %d: the most playbooks a site can keep. */
@@ -290,8 +297,7 @@ function aafm_save_playbook( array $raw, string $slug = '', string $log_action =
 		}
 	}
 
-	// The starter a playbook came from is set once, when it is added, and kept on every edit.
-	$starter        = isset( $list[ $index ] ) ? $list[ $index ]['starter'] : ( is_string( $raw['starter'] ?? null ) && preg_match( '/^[a-z0-9_-]{1,64}$/', $raw['starter'] ) ? $raw['starter'] : '' );
+	$starter        = isset( $list[ $index ] ) ? $list[ $index ]['starter'] : $new_starter;
 	$entry          = array_merge(
 		array( 'slug' => $slug ),
 		$clean,
@@ -533,6 +539,7 @@ function aafm_playbook_starters(): array {
 function aafm_add_starter_playbook( string $starter_id ) {
 	$starters = aafm_playbook_starters();
 	if ( ! isset( $starters[ $starter_id ] ) ) {
+		aafm_log_playbook_change( 'added_starter', '', false );
 		return new WP_Error( 'aafm_playbook_starter_unknown', __( 'That starter playbook does not exist.', 'agent-abilities-for-mcp' ) );
 	}
 	$starter = $starters[ $starter_id ];

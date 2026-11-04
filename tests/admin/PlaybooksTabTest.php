@@ -144,11 +144,12 @@ final class PlaybooksTabTest extends TestCase {
 		);
 		$html  = $this->render();
 		$this->assertStringContainsString( 'data-playbook-title="' . esc_attr( $saved['title'] ) . '"', $html );
-		$this->assertStringContainsString( '>Fish &amp; &quot;chips&quot; &#039;n&#039; more</td>', $html );
+		// Core encodes an apostrophe as &#039; or, on newer versions, &apos;.
+		$this->assertMatchesRegularExpression( '/>Fish &amp; &quot;chips&quot; (&#039;|&apos;)n(&#039;|&apos;) more<\/td>/', $html );
 		preg_match( '/data-playbook-title="([^"]*)"/', $html, $title );
 		preg_match( '/data-playbook-body="([^"]*)"/', $html, $body );
-		$this->assertSame( $saved['title'], html_entity_decode( $title[1], ENT_QUOTES ) );
-		$this->assertSame( $saved['body'], html_entity_decode( $body[1], ENT_QUOTES ) );
+		$this->assertSame( $saved['title'], html_entity_decode( $title[1], ENT_QUOTES | ENT_HTML5 ) );
+		$this->assertSame( $saved['body'], html_entity_decode( $body[1], ENT_QUOTES | ENT_HTML5 ) );
 		$this->assertMatchesRegularExpression( '#<textarea id="aafm-playbook-body"[^>]*></textarea>#', $html );
 	}
 

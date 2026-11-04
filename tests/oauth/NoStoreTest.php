@@ -45,6 +45,57 @@ final class NoStoreTest extends TestCase {
 		$this->assertSame( 'no-store', $server->sent_headers['Cache-Control'] ?? null );
 	}
 
+	public function tear_down(): void {
+		unset( $_GET['_envelope'], $GLOBALS['HTTP_RAW_POST_DATA'], $_SERVER['REQUEST_METHOD'] );
+		parent::tear_down();
+	}
+
+	/**
+	 * Serve an initialize with the envelope flag on and return the headers the server sent.
+	 *
+	 * @param bool $logged_in Whether an administrator makes the call.
+	 * @return \Spy_REST_Server
+	 */
+	private function serve_enveloped( bool $logged_in ): \Spy_REST_Server {
+		if ( $logged_in ) {
+			$this->acting_as( 'administrator' );
+		} else {
+			wp_set_current_user( 0 );
+		}
+		$_GET['_envelope'] = '1';
+		$this->route_as_rest_request();
+		$server                        = $this->mcp_spy_server();
+		$_SERVER['REQUEST_METHOD']     = 'POST';
+		$GLOBALS['HTTP_RAW_POST_DATA'] = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"o","version":"1"}}}'; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- the body core's get_raw_data() reads.
+		$server->serve_request( aafm_mcp_rest_route() );
+		return $server;
+	}
+
+	public function test_enveloped_responses_carry_no_store(): void {
+		$denied = $this->serve_enveloped( false );
+		$this->assertSame( 401, json_decode( $denied->sent_body, true )['status'] ?? null, 'The envelope carries the real status in its body.' );
+		$this->assertSame( 'no-store', $denied->sent_headers['Cache-Control'] ?? null, 'enveloped 401' );
+		$ok = $this->serve_enveloped( true );
+		$this->assertSame( 200, json_decode( $ok->sent_body, true )['status'] ?? null );
+		$this->assertSame( 'no-store', $ok->sent_headers['Cache-Control'] ?? null, 'enveloped 200' );
+	}
+
+	public function test_envelope_flag_without_a_value_carries_no_store(): void {
+		$_GET['_envelope'] = '';
+		$server            = $this->mcp_spy_server();
+		$request           = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		aafm_mcp_no_store_enveloped( false, new \WP_REST_Response( array( 'a' => 1 ), 200 ), $request, $server );
+		$this->assertSame( 'no-store', $server->sent_headers['Cache-Control'] ?? null );
+	}
+
+	public function test_envelope_filter_ignores_other_routes(): void {
+		$server  = $this->mcp_spy_server();
+		$request = new \WP_REST_Request( 'GET', '/wp/v2/posts' );
+		$this->assertFalse( aafm_mcp_no_store_enveloped( false, new \WP_REST_Response( array(), 200 ), $request, $server ) );
+		$this->assertArrayNotHasKey( 'Cache-Control', $server->sent_headers );
+		$this->assertSame( 10, has_filter( 'rest_pre_serve_request', 'aafm_mcp_no_store_enveloped' ) );
+	}
+
 	public function test_other_routes_are_untouched(): void {
 		$this->assertArrayNotHasKey( 'Cache-Control', $this->headers_for( 200, '/wp/v2/posts' ) );
 	}

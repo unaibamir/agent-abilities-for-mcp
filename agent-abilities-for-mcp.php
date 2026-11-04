@@ -393,6 +393,7 @@ function aafm_bootstrap() {
 
 	// Cache-Control: no-store on every MCP response, after every other MCP filter has run.
 	add_filter( 'rest_post_dispatch', 'aafm_mcp_no_store', 20, 3 );
+	add_filter( 'rest_pre_serve_request', 'aafm_mcp_no_store_enveloped', 10, 4 );
 
 	// The Connection Doctor's own probe: answered before any MCP code runs, only for a live single-use token.
 	add_filter( 'rest_pre_dispatch', 'aafm_doctor_handle_probe', 1, 3 );

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-04T23:23:52+05:00\n"
+"POT-Creation-Date: 2026-11-05T02:02:47+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -9641,7 +9641,7 @@ msgid "%1$s was saved, but %2$s could not be changed: the site's persistent obje
 msgstr ""
 
 #: includes/oauth/authorize.php:113
-msgid "Unknown or inactive client."
+msgid "This app is no longer registered with this site."
 msgstr ""
 
 #: includes/oauth/authorize.php:123
@@ -9664,58 +9664,74 @@ msgstr ""
 msgid "The requested resource is not served by this server."
 msgstr ""
 
-#: includes/oauth/authorize.php:457
+#: includes/oauth/authorize.php:450
+msgid "This site no longer recognizes the app that is trying to connect. Its registration may have been deleted."
+msgstr ""
+
+#: includes/oauth/authorize.php:451
+msgid "To fix this, remove the app in your AI client, then add it again with this site's MCP URL:"
+msgstr ""
+
+#: includes/oauth/authorize.php:453
+msgid "ChatGPT: open Settings > Integrations > Plugins, remove the app, then add it again."
+msgstr ""
+
+#: includes/oauth/authorize.php:454
+msgid "Claude: remove the connector, then add it again."
+msgstr ""
+
+#: includes/oauth/authorize.php:474
 msgid "Authorization error"
 msgstr ""
 
-#: includes/oauth/authorize.php:515
+#: includes/oauth/authorize.php:542
 msgid "Could not issue an authorization code. Please try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:599
+#: includes/oauth/authorize.php:626
 msgid "none of the abilities you have switched on"
 msgstr ""
 
 #. translators: 1: abilities this preset reaches, 2: abilities switched on.
-#: includes/oauth/authorize.php:601
+#: includes/oauth/authorize.php:628
 #, php-format
 msgid "up to %1$d of the %2$d abilities you have switched on"
 msgstr ""
 
-#: includes/oauth/authorize.php:707
+#: includes/oauth/authorize.php:734
 msgid "HTTPS is required for authorization."
 msgstr ""
 
-#: includes/oauth/authorize.php:767
+#: includes/oauth/authorize.php:794
 msgid "Your account does not have permission to authorize access."
 msgstr ""
 
-#: includes/oauth/authorize.php:773
+#: includes/oauth/authorize.php:800
 msgid "Access to this site is paused by its owner. Try again after they resume it."
 msgstr ""
 
-#: includes/oauth/authorize.php:790
+#: includes/oauth/authorize.php:817
 msgid "Your authorization session expired. Please start again."
 msgstr ""
 
-#: includes/oauth/authorize.php:821
-#: includes/oauth/authorize.php:826
+#: includes/oauth/authorize.php:848
+#: includes/oauth/authorize.php:853
 msgid "This connection could not be checked. Please try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:830
+#: includes/oauth/authorize.php:857
 msgid "The site owner has paused this connection. Ask them to resume it, then try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:834
+#: includes/oauth/authorize.php:861
 msgid "This connection has ended. Ask the site owner to renew it."
 msgstr ""
 
-#: includes/oauth/authorize.php:855
+#: includes/oauth/authorize.php:882
 msgid "Could not renew this connection. Please try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:866
+#: includes/oauth/authorize.php:893
 msgid "Could not record your approval. Please try again."
 msgstr ""
 

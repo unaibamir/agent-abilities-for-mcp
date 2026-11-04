@@ -141,6 +141,14 @@ The plugin calls no AI provider and sends no telemetry. It makes two kinds of re
 The Model Context Protocol is an open specification that Anthropic originally developed. Claude, ChatGPT, Cursor, VS Code, Gemini and other product names belong to their owners, and Agent Abilities for MCP is a third-party plugin that isn't affiliated with, endorsed by or sponsored by any of them.
 
 ## Changelog
+### 1.10.2
+
+* **Fix:** A request from another site's web page now gets a 403 even when it carries wrong credentials, and responses requested with ?_envelope=1 send Cache-Control: no-store like every other response.
+* **Fix:** Content editor and Shop manager connections can read playbooks. The Playbooks editor refuses to save over a playbook someone else changed after you opened it, and keeps your text in the form.
+* **Fix:** The unknown ACF field refusal names fields only for callers who can list them. A paused connection no longer leaves a "paused" note in the server instructions after you resume it.
+* **Fix:** Seven integration tool descriptions now match what the tools do, and every description that lists page builders names all five.
+* **Chore:** The ability picker on the Playbooks tab has space between its search box and the count line.
+
 ### 1.10.1
 
 * **Feature:** The new Playbooks tab holds step-by-step instructions for agents. Tick the abilities each one uses or add one of five starters. Two read tools, off until you enable them, let agents list and load Active playbooks.

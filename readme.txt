@@ -300,6 +300,14 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 
 == Changelog ==
 
+= 1.10.2 =
+
+* **Fix:** A request from another site's web page now gets a 403 even when it carries wrong credentials, and responses requested with ?_envelope=1 send Cache-Control: no-store like every other response.
+* **Fix:** Content editor and Shop manager connections can read playbooks. The Playbooks editor refuses to save over a playbook someone else changed after you opened it, and keeps your text in the form.
+* **Fix:** The unknown ACF field refusal names fields only for callers who can list them. A paused connection no longer leaves a "paused" note in the server instructions after you resume it.
+* **Fix:** Seven integration tool descriptions now match what the tools do, and every description that lists page builders names all five.
+* **Chore:** The ability picker on the Playbooks tab has space between its search box and the count line.
+
 = 1.10.1 =
 
 * **Feature:** The new Playbooks tab holds step-by-step instructions for agents. Tick the abilities each one uses or add one of five starters. Two read tools, off until you enable them, let agents list and load Active playbooks.
@@ -381,6 +389,10 @@ Use the Report a vulnerability option on the Security tab of the [GitHub reposit
 [Full release history](https://agentabilitieswp.com/changelog/?utm_source=wordpress.org&utm_medium=readme&utm_campaign=plugin-listing).
 
 == Upgrade Notice ==
+
+= 1.10.2 =
+
+Content editor and Shop manager connections can now read your playbooks. Nothing else needs changing.
 
 = 1.10.1 =
 

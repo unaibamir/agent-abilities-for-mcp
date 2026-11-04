@@ -110,7 +110,7 @@ function aafm_oauth_validate_authorize_params( array $params ) {
 	if ( null === $client ) {
 		return aafm_oauth_local_error(
 			'invalid_client',
-			__( 'Unknown or inactive client.', 'agent-abilities-for-mcp' )
+			__( 'This app is no longer registered with this site.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -439,6 +439,22 @@ function aafm_oauth_send_consent_headers( string $redirect_origin = '' ): void {
 }
 
 /**
+ * Escaped help paragraphs for the unknown-client error page.
+ *
+ * A client that reconnects with a registration this site deleted lands here, and the only fix is
+ * on the client's side: remove the app and add it again with the MCP URL.
+ *
+ * @return string Escaped HTML.
+ */
+function aafm_oauth_unknown_client_help(): string {
+	return '<p>' . esc_html__( 'This site no longer recognizes the app that is trying to connect. Its registration may have been deleted.', 'agent-abilities-for-mcp' ) . '</p>'
+		. '<p>' . esc_html__( 'To fix this, remove the app in your AI client, then add it again with this site\'s MCP URL:', 'agent-abilities-for-mcp' ) . '</p>'
+		. '<p><code>' . esc_html( aafm_endpoint_url() ) . '</code></p>'
+		. '<ul><li>' . esc_html__( 'ChatGPT: open Settings > Integrations > Plugins, remove the app, then add it again.', 'agent-abilities-for-mcp' ) . '</li>'
+		. '<li>' . esc_html__( 'Claude: remove the connector, then add it again.', 'agent-abilities-for-mcp' ) . '</li></ul>';
+}
+
+/**
  * Render a minimal local error page and exit.
  *
  * Used for failures that must NOT be handed back to the client: a disabled surface,
@@ -447,9 +463,10 @@ function aafm_oauth_send_consent_headers( string $redirect_origin = '' ): void {
  *
  * @param int    $status  HTTP status code.
  * @param string $message Human-readable message (will be escaped).
+ * @param string $help    Optional extra markup (p, code, ul, li only) shown under the message.
  * @return never
  */
-function aafm_oauth_render_local_error( int $status, string $message ): void {
+function aafm_oauth_render_local_error( int $status, string $message, string $help = '' ): void {
 	aafm_oauth_send_consent_headers();
 	status_header( $status );
 	header( 'Content-Type: text/html; charset=utf-8' );
@@ -457,7 +474,17 @@ function aafm_oauth_render_local_error( int $status, string $message ): void {
 		. esc_html__( 'Authorization error', 'agent-abilities-for-mcp' )
 		. '</title></head><body><p>'
 		. esc_html( $message )
-		. '</p></body></html>';
+		. '</p>'
+		. wp_kses(
+			$help,
+			array(
+				'p'    => array(),
+				'code' => array(),
+				'ul'   => array(),
+				'li'   => array(),
+			)
+		)
+		. '</body></html>';
 	exit;
 }
 

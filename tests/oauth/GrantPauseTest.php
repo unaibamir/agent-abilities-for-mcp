@@ -260,7 +260,7 @@ class GrantPauseTest extends TestCase {
 		$this->assertSame( self::CLIENT, $rows[0]['client_id'] );
 	}
 
-	public function test_a_paused_connection_gets_the_pause_line_in_initialize_instructions(): void {
+	public function test_a_paused_connection_gets_the_pause_line_in_initialize_and_discover_instructions(): void {
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-site-info' ) );
 		// The server is built once per process and the test library drops hooks added during a test,
 		// so a later test in the class needs the filter put back.
@@ -271,6 +271,44 @@ class GrantPauseTest extends TestCase {
 		$this->resolve();
 		list( , $init ) = $this->handshake();
 		$this->assertStringContainsString( 'paused by the site owner', $this->wire( $init )['result']['instructions'] );
+
+		$request = new \WP_REST_Request( 'POST', '/agent-abilities-for-mcp/mcp' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"server/discover"}' );
+		$fresh = static fn(): \WP_REST_Response => new \WP_REST_Response(
+			array(
+				'jsonrpc' => '2.0',
+				'id'      => 1,
+				'result'  => array( 'instructions' => 'Base.' ),
+			),
+			200
+		);
+		$out   = $this->wire( aafm_mcp_add_discover_instructions( $fresh(), null, $request ) );
+		$this->assertSame( "Base.\n\n" . aafm_server_instructions_addendum(), $out['result']['instructions'] );
+
+		$request->set_body( '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' );
+		$this->assertSame( 'Base.', $this->wire( aafm_mcp_add_discover_instructions( $fresh(), null, $request ) )['result']['instructions'], 'Only server/discover is rewritten.' );
+		$other = new \WP_REST_Request( 'POST', '/wp/v2/posts' );
+		$other->set_body( '{"method":"server/discover"}' );
+		$this->assertSame( 'Base.', $this->wire( aafm_mcp_add_discover_instructions( $fresh(), null, $other ) )['result']['instructions'], 'Other routes are untouched.' );
+	}
+
+	public function test_server_discover_on_the_wire_carries_the_pause_line(): void {
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-site-info' ) );
+		$this->set_paused( '2026-10-01 00:00:00' );
+		$this->resolve();
+		$response = $this->dispatch(
+			true,
+			'{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}',
+			'',
+			array(
+				'MCP-Protocol-Version' => '2026-07-28',
+				'Mcp-Method'           => 'server/discover',
+			)
+		);
+		$body     = $this->wire( $response );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertStringContainsString( 'paused by the site owner', $body['result']['instructions'] );
 	}
 
 	public function test_one_blocked_request_writes_one_denial_row_although_core_reruns_the_permission_callback(): void {

@@ -366,8 +366,13 @@ function aafm_bootstrap() {
 	// aafm_is_mcp_route() - the first thing this filter calls - is defined.
 	add_filter( 'rest_post_dispatch', 'aafm_mcp_filter_governed_error_status', 10, 3 );
 
-	// Name the reason in a paused-connection or blocked-address 403 (same status, clearer body).
+	// Name the reason in a blocked-address 403 (same status, clearer body).
 	add_filter( 'rest_post_dispatch', 'aafm_mcp_explain_transport_refusal', 10, 3 );
+
+	// The playbook index (or the paused line) on the server/discover response, which the adapter
+	// answers without running its initialize filter. Priority 15: after the session guard and the
+	// transport log at 11, before the no-store header at 20.
+	add_filter( 'rest_post_dispatch', 'aafm_mcp_add_discover_instructions', 15, 3 );
 
 	// Session-persistence guard: the adapter's SessionManager::create_session() returns a session id
 	// without checking its update_user_meta() write succeeded, so a silent write failure hands the

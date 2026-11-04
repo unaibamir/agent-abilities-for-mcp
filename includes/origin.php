@@ -12,15 +12,16 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Normalize an incoming Origin header to scheme://host[:port]: lowercase scheme and host, default
- * port dropped, at most one trailing slash allowed.
+ * Normalize an incoming Origin header to scheme://host[:port]: lowercase scheme and host, an
+ * internationalised host in its ASCII (punycode) form, default port dropped, at most one trailing
+ * slash allowed.
  *
  * @param string $origin Header value.
  * @return string '' for anything else, including "null", a path, userinfo, a query or a fragment.
  */
 function aafm_normalize_origin( string $origin ): string {
 	$origin = trim( $origin );
-	if ( ! preg_match( '#^(https?)://([A-Za-z0-9.-]+)(?::([0-9]{1,5}))?/?$#', $origin, $m ) ) {
+	if ( ! preg_match( '#^(https?)://([\p{L}\p{N}.-]+)(?::([0-9]{1,5}))?/?$#iu', $origin, $m ) ) {
 		return '';
 	}
 	return aafm_origin_from_parts( $m[1], $m[2], isset( $m[3] ) ? (int) $m[3] : null );
@@ -50,9 +51,16 @@ function aafm_site_origin( string $url ): string {
  * @return string
  */
 function aafm_origin_from_parts( string $scheme, string $host, ?int $port ): string {
-	$scheme  = strtolower( $scheme );
+	$scheme = strtolower( $scheme );
+	$host   = strtolower( $host );
+	// Browsers send an internationalised host as punycode, so the site's own host is compared in that
+	// form. Without the intl extension a Unicode host stays as written and fails closed.
+	if ( function_exists( 'idn_to_ascii' ) && 1 === preg_match( '/[^\x00-\x7F]/', $host ) ) {
+		$ascii = idn_to_ascii( $host, IDNA_NONTRANSITIONAL_TO_ASCII, INTL_IDNA_VARIANT_UTS46 );
+		$host  = false !== $ascii ? $ascii : $host;
+	}
 	$default = 'https' === $scheme ? 443 : 80;
-	$origin  = $scheme . '://' . strtolower( $host );
+	$origin  = $scheme . '://' . $host;
 	return null !== $port && $port !== $default ? $origin . ':' . $port : $origin;
 }
 

@@ -122,14 +122,15 @@ final class OriginGuardTest extends TestCase {
 	 */
 	public function origin_cases(): array {
 		return array(
-			'upper case host' => array( 'https://EXAMPLE.ORG', true ),
-			'default port'    => array( 'https://example.org:443', true ),
-			'trailing slash'  => array( 'https://example.org/', true ),
-			'path'            => array( 'https://example.org/x', false ),
-			'userinfo'        => array( 'https://user@example.org', false ),
-			'wrong scheme'    => array( 'http://example.org', false ),
-			'null'            => array( 'null', false ),
-			'suffix host'     => array( 'https://example.org.evil.example', false ),
+			'upper case host'   => array( 'https://EXAMPLE.ORG', true ),
+			'upper case scheme' => array( 'HTTPS://example.org', true ),
+			'default port'      => array( 'https://example.org:443', true ),
+			'trailing slash'    => array( 'https://example.org/', true ),
+			'path'              => array( 'https://example.org/x', false ),
+			'userinfo'          => array( 'https://user@example.org', false ),
+			'wrong scheme'      => array( 'http://example.org', false ),
+			'null'              => array( 'null', false ),
+			'suffix host'       => array( 'https://example.org.evil.example', false ),
 		);
 	}
 
@@ -149,6 +150,27 @@ final class OriginGuardTest extends TestCase {
 			}
 		);
 		$this->assertSame( $passes, $this->passes( $origin ) );
+	}
+
+	/**
+	 * A site on an internationalised host matches the punycode Origin a browser sends, and the same
+	 * host written in Unicode, whichever way the site's own URL is spelled.
+	 */
+	public function test_internationalised_host_matches_its_punycode_origin(): void {
+		if ( ! function_exists( 'idn_to_ascii' ) ) {
+			$this->markTestSkipped( 'The intl extension is not loaded.' );
+		}
+		add_filter(
+			'aafm_mcp_allowed_origins',
+			static function (): array {
+				return array( 'https://münchen.example' );
+			}
+		);
+		$this->assertTrue( $this->passes( 'https://xn--mnchen-3ya.example' ) );
+		$this->assertTrue( $this->passes( 'https://münchen.example' ) );
+		$this->assertTrue( $this->passes( 'HTTPS://XN--MNCHEN-3YA.EXAMPLE' ) );
+		$this->assertFalse( $this->passes( 'https://xn--mnchen-3ya.evil.example' ) );
+		$this->assertSame( 'https://xn--mnchen-3ya.example', aafm_site_origin( 'https://münchen.example/blog' ) );
 	}
 
 	public function test_subdirectory_install_allows_its_own_origin(): void {

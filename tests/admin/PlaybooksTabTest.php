@@ -145,11 +145,15 @@ final class PlaybooksTabTest extends TestCase {
 			)
 		);
 		$html  = $this->render();
-		$this->assertStringContainsString( 'data-playbook-title="' . esc_attr( $saved['title'] ) . '"', $html );
-		// Core encodes an apostrophe as &#039; or, on newer versions, &apos;.
-		$this->assertMatchesRegularExpression( '/>Fish &amp; &quot;chips&quot; (&#039;|&apos;)n(&#039;|&apos;) more<\/td>/', $html );
-		preg_match( '/data-playbook-title="([^"]*)"/', $html, $title );
-		preg_match( '/data-playbook-body="([^"]*)"/', $html, $body );
+		// Which entity encodes an apostrophe (&#039; or &apos;) depends on the core version and on the
+		// section's kses pass, so the assertions check that markup is escaped and that decoding
+		// gives the typed text back, never one exact entity.
+		$this->assertSame( 1, preg_match( '/data-playbook-title="([^"]*)"/', $html, $title ) );
+		$this->assertSame( 1, preg_match( '/data-playbook-body="([^"]*)"/', $html, $body ) );
+		$this->assertSame( 1, preg_match( '/<td class="aafm-playbook-title"[^>]*>([^<]*)<\/td>/', $html, $cell ) );
+		$this->assertStringStartsWith( 'Fish &amp; &quot;chips&quot; ', $title[1] );
+		$this->assertStringStartsWith( 'Fish &amp; &quot;chips&quot; ', $cell[1] );
+		$this->assertSame( $saved['title'], html_entity_decode( $cell[1], ENT_QUOTES | ENT_HTML5 ) );
 		$this->assertSame( $saved['title'], html_entity_decode( $title[1], ENT_QUOTES | ENT_HTML5 ) );
 		$this->assertSame( $saved['body'], html_entity_decode( $body[1], ENT_QUOTES | ENT_HTML5 ) );
 		$this->assertMatchesRegularExpression( '#<textarea id="aafm-playbook-body"[^>]*></textarea>#', $html );

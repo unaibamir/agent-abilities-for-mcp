@@ -111,9 +111,11 @@ function aafm_preset_permits( string $preset, string $ability_name ): bool {
 		return true;
 	}
 	// replace-sitewide rewrites text across the whole site, so it stays out. The two site reads let an
-	// agent target custom post types and taxonomies.
+	// agent target custom post types and taxonomies, and the two playbook reads let a content job load
+	// its owner-written steps. A rule over the whole site subject would also admit the settings and the
+	// activity log, so these four are named.
 	return ( in_array( $subject, array( 'content', 'media', 'taxonomies' ), true ) && 'aafm/replace-sitewide' !== $ability_name )
-		|| in_array( $ability_name, array( 'aafm/get-post-types', 'aafm/get-taxonomies' ), true );
+		|| in_array( $ability_name, array( 'aafm/get-post-types', 'aafm/get-taxonomies', 'aafm/list-playbooks', 'aafm/get-playbook' ), true );
 }
 
 /**

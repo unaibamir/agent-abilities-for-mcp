@@ -85,11 +85,19 @@ final class PresetTest extends TestCase {
 	}
 
 	public function test_content_editor_membership(): void {
-		foreach ( array( 'aafm/create-post', 'aafm/update-page', 'aafm/upload-media', 'aafm/create-term', 'aafm/get-posts', 'aafm/update-post-meta', 'aafm/get-post-types', 'aafm/get-taxonomies' ) as $name ) {
+		foreach ( array( 'aafm/create-post', 'aafm/update-page', 'aafm/upload-media', 'aafm/create-term', 'aafm/get-posts', 'aafm/update-post-meta', 'aafm/get-post-types', 'aafm/get-taxonomies', 'aafm/list-playbooks', 'aafm/get-playbook' ) as $name ) {
 			$this->assertTrue( aafm_preset_permits( 'content_editor', $name ), $name );
 		}
 		foreach ( array( 'aafm/delete-post', 'aafm/trash-post', 'aafm/delete-media', 'aafm/delete-term-meta', 'aafm/create-user', 'aafm/update-user', 'aafm/moderate-comment', 'aafm/create-comment', 'aafm/update-site-settings', 'aafm/replace-sitewide', 'aafm/get-site-settings', 'aafm/get-site-info', 'aafm/wc-list-products', 'aafm-bridge/demo-writer', 'aafm-bridge/demo-reader' ) as $name ) {
 			$this->assertFalse( aafm_preset_permits( 'content_editor', $name ), $name );
+		}
+	}
+
+	public function test_playbook_reads_do_not_widen_anything_else(): void {
+		foreach ( array( 'content_editor', 'shop_manager' ) as $preset ) {
+			foreach ( array( 'aafm/get-site-info', 'aafm/get-site-settings', 'aafm/get-activity-log', 'aafm/list-plugins' ) as $name ) {
+				$this->assertFalse( aafm_preset_permits( $preset, $name ), "$preset: $name" );
+			}
 		}
 	}
 

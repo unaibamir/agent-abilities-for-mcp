@@ -244,6 +244,33 @@ final class PlaybookAbilitiesTest extends TestCase {
 		}
 	}
 
+	public function test_content_editor_and_shop_manager_reach_both_playbook_reads(): void {
+		foreach ( array( 'content_editor', 'shop_manager' ) as $preset ) {
+			foreach ( self::BOTH as $name ) {
+				$this->assertTrue( aafm_preset_permits( $preset, $name ), "$preset: $name" );
+			}
+		}
+	}
+
+	public function test_content_editor_grant_sees_the_playbook_index(): void {
+		$this->seed( 'on-one' );
+		$this->register_enabled( self::BOTH );
+		$this->acting_as( 'editor' );
+		aafm_oauth_current_client_id( 'preset-playbook-client' );
+		aafm_oauth_current_grant(
+			array_merge(
+				aafm_oauth_grant_defaults(),
+				array(
+					'preset'    => 'content_editor',
+					'client_id' => 'preset-playbook-client',
+					'user_id'   => get_current_user_id(),
+				)
+			)
+		);
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/list-playbooks' ) );
+		$this->assertStringContainsString( 'on-one', aafm_playbook_index() );
+	}
+
 	public function test_a_failed_read_is_an_error_not_an_empty_library(): void {
 		$this->seed( 'on-one' );
 		$this->acting_as( 'administrator' );

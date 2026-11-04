@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log 1.10.1\n"
+"Project-Id-Version: Agent Abilities for MCP - Connect Claude and ChatGPT with Permission Controls and Audit Log 1.10.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/agent-abilities-for-mcp\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-05T03:11:02+05:00\n"
+"POT-Creation-Date: 2026-11-05T04:53:38+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -103,79 +103,87 @@ msgstr ""
 msgid "This does not exactly name a field, so nothing was written. Send the field's exact name or its field key: %s"
 msgstr ""
 
+#: includes/abilities/acf-integration.php:1062
+msgid "One or more of those do not name a sub-field of the field they were sent under, so nothing was written."
+msgstr ""
+
 #. translators: %s: comma-separated list of sub-field addresses the caller sent.
-#: includes/abilities/acf-integration.php:1065
+#: includes/abilities/acf-integration.php:1068
 #, php-format
 msgid "These do not name a sub-field of the field they were sent under, so nothing was written: %s"
 msgstr ""
 
+#: includes/abilities/acf-integration.php:1100
+msgid "One or more of those names are not ACF fields on this site, so nothing was written."
+msgstr ""
+
 #. translators: 1: comma-separated field names. 2: how many more were not listed.
-#: includes/abilities/acf-integration.php:1085
+#: includes/abilities/acf-integration.php:1107
 #, php-format
 msgid "%1$s and %2$d more"
 msgstr ""
 
 #. translators: %s: the field names the caller sent.
-#: includes/abilities/acf-integration.php:1088
+#: includes/abilities/acf-integration.php:1110
 #, php-format
 msgid "These are not ACF fields on this site, so nothing was written: %s."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1090
+#: includes/abilities/acf-integration.php:1111
 msgid "Call acf-list-field-groups to see the field names you can use."
 msgstr ""
 
 #. translators: %s: comma-separated list of flexible-content row addresses.
-#: includes/abilities/acf-integration.php:1153
+#: includes/abilities/acf-integration.php:1173
 #, php-format
 msgid "Each flexible content row must name one of the field's own layouts in acf_fc_layout. These rows do not, so nothing was written: %s"
 msgstr ""
 
 #. translators: %s: comma-separated list of ACF field addresses that failed to persist.
-#: includes/abilities/acf-integration.php:1809
+#: includes/abilities/acf-integration.php:1829
 #, php-format
 msgid "None of the requested fields could be saved (%s failed to persist). Nothing was changed."
 msgstr ""
 
 #. translators: 1: comma-separated fields that saved, 2: comma-separated fields that failed.
-#: includes/abilities/acf-integration.php:1820
+#: includes/abilities/acf-integration.php:1840
 #, php-format
 msgid "Only part of the field update persisted: %1$s saved, but %2$s failed. Read the fields to see their current state."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1859
+#: includes/abilities/acf-integration.php:1879
 msgid "ID of the post whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1930
+#: includes/abilities/acf-integration.php:1950
 msgid "ID of the post whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1935
+#: includes/abilities/acf-integration.php:1955
 msgid "Map of ACF field name or field key to its new value. Each key must resolve to a real, defined ACF field (an unresolved key is refused rather than falling back to a raw meta write) and must clear the same protected-key hard-block the meta abilities enforce. Each value is sanitized per the field's ACF type: URL-typed fields via esc_url_raw, wysiwyg/textarea via wp_kses_post, everything else as plain text."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2032
+#: includes/abilities/acf-integration.php:2052
 msgid "ID of the term whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2097
+#: includes/abilities/acf-integration.php:2117
 msgid "ID of the term whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2102
+#: includes/abilities/acf-integration.php:2122
 msgid "Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules)."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2205
+#: includes/abilities/acf-integration.php:2225
 msgid "ID of the user whose ACF field values to read. The current user must have edit access to this user. A field of the user_email type returns the real email address (PII), governed by the edit-user capability gate rather than being redacted."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2274
+#: includes/abilities/acf-integration.php:2294
 msgid "ID of the user whose ACF field values to write. The current user must have edit access to this user."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2279
+#: includes/abilities/acf-integration.php:2299
 msgid "Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules). The user-scoped hard-block also blocks capability, session, application-password, and 2FA keys even if a field's storage name collides with one."
 msgstr ""
 
@@ -205,11 +213,11 @@ msgstr ""
 #: includes/abilities/comments.php:104
 #: includes/abilities/comments.php:706
 #: includes/abilities/media.php:111
-#: includes/abilities/pages.php:99
-#: includes/abilities/posts.php:180
-#: includes/abilities/revisions.php:96
+#: includes/abilities/pages.php:103
+#: includes/abilities/posts.php:196
+#: includes/abilities/revisions.php:100
 #: includes/abilities/search.php:65
-#: includes/abilities/tec/events.php:169
+#: includes/abilities/tec/events.php:173
 #: includes/abilities/tec/organizers.php:152
 #: includes/abilities/tec/venues.php:207
 #: includes/abilities/terms.php:115
@@ -318,8 +326,7 @@ msgid "Get Avada page content"
 msgstr ""
 
 #: includes/abilities/avada.php:61
-#: includes/admin/disclosures.php:229
-msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post."
+msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Also returns is_avada_owned, true when Avada owns the content. Requires edit access to the post."
 msgstr ""
 
 #: includes/abilities/avada.php:68
@@ -335,17 +342,17 @@ msgid "ID of the post/page to read. The current user must have edit access to it
 msgstr ""
 
 #: includes/abilities/avada.php:172
-#: includes/abilities/posts.php:1408
+#: includes/abilities/posts.php:1424
 msgid "ID of the post to edit."
 msgstr ""
 
 #: includes/abilities/avada.php:177
-#: includes/abilities/posts.php:1413
+#: includes/abilities/posts.php:1429
 msgid "Literal text to find in the post content. Matched as-is, not as a regular expression."
 msgstr ""
 
 #: includes/abilities/avada.php:181
-#: includes/abilities/posts.php:1417
+#: includes/abilities/posts.php:1433
 msgid "Literal text to substitute for every match of search. Sanitized the same way as a full content update."
 msgstr ""
 
@@ -358,7 +365,7 @@ msgid "That replacement would change the Fusion Builder shortcode structure rath
 msgstr ""
 
 #: includes/abilities/avada.php:467
-#: includes/abilities/posts.php:1788
+#: includes/abilities/posts.php:1804
 msgid "The replacement could not be confirmed as saved."
 msgstr ""
 
@@ -603,35 +610,37 @@ msgstr ""
 msgid "Update a GeoDirectory listing"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:99
-msgid "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration. Refuses when the listing is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/geodirectory.php:101
+#, php-format
+msgid "Update an existing listing's title, content, or address/coordinates. Fields omitted from the call are left untouched. Default-off integration. Refuses when the listing is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #. translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save".
-#: includes/abilities/geodirectory.php:804
+#: includes/abilities/geodirectory.php:808
 #, php-format
 msgid "The listing could not be created: %s. Nothing was created."
 msgstr ""
 
 #. translators: %s: fragment describing what could not be confirmed, e.g. "its address or location fields did not save".
-#: includes/abilities/geodirectory.php:809
+#: includes/abilities/geodirectory.php:813
 #, php-format
 msgid "The listing could not be created: %s, and the incomplete listing could not be removed automatically. Delete it manually."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:887
+#: includes/abilities/geodirectory.php:891
 msgid "its title or content could not be confirmed as saved"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:894
+#: includes/abilities/geodirectory.php:898
 msgid "its address or location fields did not save"
 msgstr ""
 
-#: includes/abilities/geodirectory.php:1021
+#: includes/abilities/geodirectory.php:1025
 msgid "The listing was updated, but its title or content could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/geodirectory.php:1029
+#: includes/abilities/geodirectory.php:1033
 msgid "The listing was updated, but its address or location fields did not save."
 msgstr ""
 
@@ -704,16 +713,16 @@ msgid "Free-text search term matched against the media item's title, content, ca
 msgstr ""
 
 #: includes/abilities/media.php:110
-#: includes/abilities/pages.php:98
-#: includes/abilities/posts.php:179
+#: includes/abilities/pages.php:102
+#: includes/abilities/posts.php:195
 msgid "Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted."
 msgstr ""
 
 #: includes/abilities/media.php:128
 #: includes/abilities/media.php:412
-#: includes/abilities/pages.php:131
-#: includes/abilities/posts.php:212
-#: includes/abilities/posts.php:380
+#: includes/abilities/pages.php:135
+#: includes/abilities/posts.php:228
+#: includes/abilities/posts.php:396
 #: includes/abilities/search.php:98
 #: includes/abilities/terms.php:131
 #: includes/abilities/woocommerce/products.php:378
@@ -1133,66 +1142,68 @@ msgstr ""
 msgid "Update page"
 msgstr ""
 
-#: includes/abilities/pages.php:47
-msgid "Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the page is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/pages.php:49
+#, php-format
+msgid "Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the page is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
-#: includes/abilities/pages.php:54
+#: includes/abilities/pages.php:58
 msgid "Trash page"
 msgstr ""
 
-#: includes/abilities/pages.php:55
+#: includes/abilities/pages.php:59
 msgid "Move a page to trash (recoverable, never permanently deleted)."
 msgstr ""
 
-#: includes/abilities/pages.php:62
+#: includes/abilities/pages.php:66
 msgid "Delete page"
 msgstr ""
 
-#: includes/abilities/pages.php:63
+#: includes/abilities/pages.php:67
 msgid "Permanently delete a page, bypassing the Trash. This cannot be undone - use trash-page to remove a page recoverably instead."
 msgstr ""
 
-#: includes/abilities/pages.php:89
+#: includes/abilities/pages.php:93
 msgid "Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private pages; any, trash, auto-draft, inherit, and unrecognized values are rejected."
 msgstr ""
 
-#: includes/abilities/pages.php:93
+#: includes/abilities/pages.php:97
 msgid "Free-text search term matched against the page title and content, using WordPress's normal search matching."
 msgstr ""
 
-#: includes/abilities/pages.php:106
-#: includes/abilities/posts.php:187
+#: includes/abilities/pages.php:110
+#: includes/abilities/posts.php:203
 msgid "Format for each item's content when include_content is true: rendered HTML or raw block markup. Has no effect when include_content is false."
 msgstr ""
 
-#: includes/abilities/pages.php:111
-#: includes/abilities/posts.php:192
+#: includes/abilities/pages.php:115
+#: includes/abilities/posts.php:208
 msgid "When true, also returns each item's full content (in content_format). Defaults to false, returning metadata only, to keep responses small."
 msgstr ""
 
-#: includes/abilities/pages.php:175
+#: includes/abilities/pages.php:179
 msgid "ID of the page to retrieve."
 msgstr ""
 
-#: includes/abilities/pages.php:181
-#: includes/abilities/posts.php:487
+#: includes/abilities/pages.php:185
+#: includes/abilities/posts.php:503
 msgid "Format for the returned content: rendered HTML (default) or raw block markup."
 msgstr ""
 
-#: includes/abilities/pages.php:186
+#: includes/abilities/pages.php:190
 msgid "Whether to include the page content. Defaults to true; pass false to omit it, for example when only content_length is needed to preflight size."
 msgstr ""
 
-#: includes/abilities/pages.php:364
+#: includes/abilities/pages.php:368
 msgid "ID of the page to update."
 msgstr ""
 
-#: includes/abilities/pages.php:451
+#: includes/abilities/pages.php:455
 msgid "ID of the page to move to trash."
 msgstr ""
 
-#: includes/abilities/pages.php:528
+#: includes/abilities/pages.php:532
 msgid "ID of the page to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -1277,228 +1288,238 @@ msgstr ""
 msgid "Update post"
 msgstr ""
 
-#: includes/abilities/posts.php:83
-msgid "Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/posts.php:85
+#, php-format
+msgid "Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
-#: includes/abilities/posts.php:90
+#: includes/abilities/posts.php:94
 msgid "Replace in post"
 msgstr ""
 
-#: includes/abilities/posts.php:91
-msgid "Literal find-and-replace inside a post's content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
-msgstr ""
-
-#: includes/abilities/posts.php:98
-msgid "Replace block"
-msgstr ""
-
-#: includes/abilities/posts.php:99
-msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/posts.php:97
+#, php-format
+msgid "Literal find-and-replace inside a post's content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
 #: includes/abilities/posts.php:106
+msgid "Replace block"
+msgstr ""
+
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/posts.php:109
+#, php-format
+msgid "Replace one whole block in a post or page with new block markup, without resending the rest of the content. The block is addressed by path: its index among the top-level blocks, then among that block's inner blocks, counting only real blocks (the blank lines between blocks are not counted), so [2, 0] is the first block inside the third top-level block. Read the post with content_format raw to count them; classic HTML between blocks is not counted. Pass expect_block (for example core/group) to refuse the write if the block at that path is a different one. The plugin leaves other blocks' parsed attributes and HTML unchanged; WordPress may sanitize the whole page on save for users who cannot post unfiltered HTML. Content warnings and strict-mode refusals cover the whole resulting page, not only the new block. Refuses when the post's existing block markup does not survive being re-serialized (for example a block with invalid attribute JSON); use aafm-update-post for those. When WordPress revisions are enabled, the change can be restored from revision history. Refuses when the post is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
+msgstr ""
+
+#: includes/abilities/posts.php:118
 msgid "Replace sitewide"
 msgstr ""
 
-#: includes/abilities/posts.php:107
+#: includes/abilities/posts.php:119
 msgid "Literal find-and-replace across multiple posts, scoped by post type and status. Dry-run by default (previews the match count and which posts would change, writes nothing); pass dry_run:false to apply. Each candidate post is guarded by the same structure-preserving check as replace-in-post, so a match landing inside markup is skipped and reported, not applied. A candidate owned by a foreign page builder is likewise skipped and counted in skipped_builder_owned, not applied. Bounded to 50 posts per call; a larger match set reports truncated:true with the real total."
 msgstr ""
 
-#: includes/abilities/posts.php:114
+#: includes/abilities/posts.php:126
 msgid "Trash post"
 msgstr ""
 
-#: includes/abilities/posts.php:115
+#: includes/abilities/posts.php:127
 msgid "Move a post to trash (recoverable, never permanently deleted)."
 msgstr ""
 
-#: includes/abilities/posts.php:122
+#: includes/abilities/posts.php:134
 msgid "Create content item"
 msgstr ""
 
-#: includes/abilities/posts.php:123
+#: includes/abilities/posts.php:135
 msgid "Create an item of an allowlisted custom content type (post_type), draft by default. An explicit status is honored, but publish, future, private, or any other publicly-visible status requires that type's publish capability. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid."
 msgstr ""
 
-#: includes/abilities/posts.php:130
+#: includes/abilities/posts.php:142
 msgid "Update content item"
 msgstr ""
 
-#: includes/abilities/posts.php:131
-msgid "Update an item of an allowlisted custom content type by ID (publishing requires that type's publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/posts.php:145
+#, php-format
+msgid "Update an item of an allowlisted custom content type by ID (publishing requires that type's publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid. Refuses when the item is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
-#: includes/abilities/posts.php:138
+#: includes/abilities/posts.php:154
 msgid "Delete post"
 msgstr ""
 
-#: includes/abilities/posts.php:139
+#: includes/abilities/posts.php:155
 msgid "Permanently delete a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead."
 msgstr ""
 
-#: includes/abilities/posts.php:165
+#: includes/abilities/posts.php:181
 msgid "Slug of an allowlisted content type to list. Defaults to post. Types outside the operator's exposed allowlist are rejected."
 msgstr ""
 
-#: includes/abilities/posts.php:170
+#: includes/abilities/posts.php:186
 msgid "Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private content for this type; any, trash, auto-draft, inherit, and unrecognized values are rejected."
 msgstr ""
 
-#: includes/abilities/posts.php:174
+#: includes/abilities/posts.php:190
 msgid "Free-text search term matched against the post title and content, using WordPress's normal search matching."
 msgstr ""
 
-#: includes/abilities/posts.php:366
+#: includes/abilities/posts.php:382
 msgid "Slug of an allowlisted content type to count. Defaults to post. Types outside the operator's exposed allowlist are rejected."
 msgstr ""
 
-#: includes/abilities/posts.php:481
+#: includes/abilities/posts.php:497
 msgid "ID of the post to retrieve."
 msgstr ""
 
-#: includes/abilities/posts.php:492
+#: includes/abilities/posts.php:508
 msgid "Whether to include the post content. Defaults to true; pass false to omit it, for example when only content_length is needed to preflight size."
 msgstr ""
 
-#: includes/abilities/posts.php:635
+#: includes/abilities/posts.php:651
 msgid "Post title. Required to create; omitting it on update leaves the existing title unchanged. Sanitized as plain text and subject to the operator's optional maximum-length setting, if one is configured."
 msgstr ""
 
-#: includes/abilities/posts.php:643
+#: includes/abilities/posts.php:659
 msgid "Short manual excerpt for the post. Sanitized as plain text with no HTML; omitting it on update leaves the existing excerpt unchanged."
 msgstr ""
 
-#: includes/abilities/posts.php:647
+#: includes/abilities/posts.php:663
 msgid "Status for the post. A status that makes content publicly visible now or on a future date - publish, future, private, or a custom public status - always requires this content type's publish capability; draft and pending need only the ability's base edit permission. any, trash, auto-draft, inherit, and unrecognized values are rejected; the operator's force-draft setting can still coerce such a request to draft. Omitting this field on update leaves the current status unchanged; create-draft defaults to draft, create-post and create-page default to publish."
 msgstr ""
 
-#: includes/abilities/posts.php:651
+#: includes/abilities/posts.php:667
 msgid "URL slug for the post. Run through WordPress's slug sanitizer; if that produces an empty string the slug is left as-is (auto-generated on create, unchanged on update) rather than cleared."
 msgstr ""
 
-#: includes/abilities/posts.php:656
+#: includes/abilities/posts.php:672
 msgid "Attachment ID to set as the post's featured image. Must be an existing image attachment; a non-image or nonexistent attachment ID is rejected."
 msgstr ""
 
-#: includes/abilities/posts.php:660
+#: includes/abilities/posts.php:676
 msgid "Taxonomy slug to term ID list mapping, for example {\"category\": [3, 7]}. REPLACES the post's existing terms for each taxonomy named; taxonomies left out are untouched. Every term ID must already exist in that taxonomy, the taxonomy itself must be public, and the caller needs that taxonomy's assign_terms capability."
 msgstr ""
 
-#: includes/abilities/posts.php:671
+#: includes/abilities/posts.php:687
 msgid "Post meta to write as key/value pairs. Only keys on the operator's meta allowlist are accepted (protected and internal keys are always blocked regardless of the allowlist); values must be scalar (string, number, boolean, or integer)."
 msgstr ""
 
-#: includes/abilities/posts.php:703
+#: includes/abilities/posts.php:719
 msgid "Slug of an agent-writable custom content type. Not every public type is writable - only types the operator has exposed to agents are accepted; others are rejected. Call aafm-get-post-types and use the writable flag to find valid slugs."
 msgstr ""
 
-#: includes/abilities/posts.php:832
+#: includes/abilities/posts.php:848
 msgid "You do not have permission to set that status."
 msgstr ""
 
-#: includes/abilities/posts.php:836
-#: includes/abilities/tec/events.php:222
+#: includes/abilities/posts.php:852
+#: includes/abilities/tec/events.php:226
 #: includes/abilities/tec/_shared.php:247
 #: includes/helpers.php:1994
 msgid "Unsupported or unauthorized post status."
 msgstr ""
 
-#: includes/abilities/posts.php:946
-#: includes/abilities/posts.php:1295
+#: includes/abilities/posts.php:962
+#: includes/abilities/posts.php:1311
 #: includes/safety.php:673
 msgid "The title exceeds the maximum allowed length."
 msgstr ""
 
-#: includes/abilities/posts.php:1207
+#: includes/abilities/posts.php:1223
 msgid "ID of the post to update."
 msgstr ""
 
-#: includes/abilities/posts.php:1753
+#: includes/abilities/posts.php:1769
 msgid "That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly. To change one whole block, use aafm-replace-block if it is enabled."
 msgstr ""
 
-#: includes/abilities/posts.php:1818
+#: includes/abilities/posts.php:1834
 msgid "ID of the post or page to edit."
 msgstr ""
 
-#: includes/abilities/posts.php:1828
+#: includes/abilities/posts.php:1844
 msgid "Index path to the block, from 0: its position among the top-level blocks, then among each parent's inner blocks. Only real blocks count, not the blank lines between them. [2, 0] is the first block inside the third top-level block."
 msgstr ""
 
-#: includes/abilities/posts.php:1833
+#: includes/abilities/posts.php:1849
 msgid "The complete markup of exactly one replacement block, from its opening delimiter to its closing one."
 msgstr ""
 
-#: includes/abilities/posts.php:1837
+#: includes/abilities/posts.php:1853
 msgid "Optional block name, such as core/group, that the block at path must have. The write is refused if it differs."
 msgstr ""
 
-#: includes/abilities/posts.php:1907
+#: includes/abilities/posts.php:1923
 msgid "This post's block markup does not survive being re-serialized (for example, a block has invalid attribute JSON), so one block cannot be replaced safely. Nothing was changed. Use aafm-update-post to rewrite the whole content instead."
 msgstr ""
 
-#: includes/abilities/posts.php:1921
+#: includes/abilities/posts.php:1937
 msgid "This post has no blocks to address by path. Nothing was changed. Use aafm-update-post to replace its content."
 msgstr ""
 
 #. translators: 1: level in the path, counted from 1; 2: number of blocks at that level.
-#: includes/abilities/posts.php:1930
+#: includes/abilities/posts.php:1946
 #, php-format
 msgid "No block at that path. Level %1$d of the path has %2$d blocks, counted from 0 and skipping the blank lines between blocks. Nothing was changed."
 msgstr ""
 
 #. translators: %s: block name found at the path.
-#: includes/abilities/posts.php:1949
+#: includes/abilities/posts.php:1965
 #, php-format
 msgid "The block at that path is %s, not the expected block. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:1966
+#: includes/abilities/posts.php:1982
 msgid "The markup must be exactly one block, from its opening delimiter to its closing one, with nothing else around it. Nothing was changed."
 msgstr ""
 
-#: includes/abilities/posts.php:1998
+#: includes/abilities/posts.php:2014
 msgid "The replaced block could not be confirmed as saved."
 msgstr ""
 
-#: includes/abilities/posts.php:2052
+#: includes/abilities/posts.php:2068
 msgid "Literal text to find. Matched as-is, not as a regular expression."
 msgstr ""
 
-#: includes/abilities/posts.php:2056
+#: includes/abilities/posts.php:2072
 msgid "Literal text to substitute for every match."
 msgstr ""
 
-#: includes/abilities/posts.php:2061
+#: includes/abilities/posts.php:2077
 msgid "Slug of an allowlisted content type to scope the replace to. Defaults to post."
 msgstr ""
 
-#: includes/abilities/posts.php:2066
+#: includes/abilities/posts.php:2082
 msgid "Post status to scope the replace to. Defaults to publish."
 msgstr ""
 
-#: includes/abilities/posts.php:2071
+#: includes/abilities/posts.php:2087
 msgid "When true (the default), previews the match without writing anything. Pass false to apply the change."
 msgstr ""
 
-#: includes/abilities/posts.php:2087
-msgid "Matched posts skipped because a foreign page builder (Elementor, Divi, Beaver Builder, Avada) owns their content."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/posts.php:2105
+#, php-format
+msgid "Matched posts skipped because a foreign page builder (%s) owns their content."
 msgstr ""
 
-#: includes/abilities/posts.php:2091
+#: includes/abilities/posts.php:2111
 msgid "Posts that cleared the structure guard but whose wp_update_post() call itself failed. Counted separately from skipped_structure_guard so a real write failure is never indistinguishable from a guard refusal."
 msgstr ""
 
-#: includes/abilities/posts.php:2375
+#: includes/abilities/posts.php:2395
 msgid "ID of the content item to update."
 msgstr ""
 
-#: includes/abilities/posts.php:2463
+#: includes/abilities/posts.php:2483
 msgid "ID of the post to move to trash."
 msgstr ""
 
-#: includes/abilities/posts.php:2533
+#: includes/abilities/posts.php:2553
 msgid "ID of the post to permanently delete. This bypasses the Trash; there is no undo."
 msgstr ""
 
@@ -1637,56 +1658,58 @@ msgstr ""
 msgid "Restore revision"
 msgstr ""
 
-#: includes/abilities/revisions.php:44
-msgid "Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible, or when the post is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since the restore would either have no visible effect or corrupt its own stored markup."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/revisions.php:46
+#, php-format
+msgid "Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible, or when the post is owned by a foreign page builder (%s), since the restore would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
-#: includes/abilities/revisions.php:51
+#: includes/abilities/revisions.php:55
 msgid "Delete revision"
 msgstr ""
 
-#: includes/abilities/revisions.php:52
+#: includes/abilities/revisions.php:56
 msgid "Permanently delete a single revision from a post's history. This cannot be undone (unlike trashing a post, there is no Trash for revisions). The live post is not changed. Requires edit access to the parent post."
 msgstr ""
 
-#: includes/abilities/revisions.php:90
+#: includes/abilities/revisions.php:94
 msgid "ID of the post whose revision history to list. The caller must be able to edit this post."
 msgstr ""
 
-#: includes/abilities/revisions.php:95
+#: includes/abilities/revisions.php:99
 msgid "Number of revisions per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted."
 msgstr ""
 
-#: includes/abilities/revisions.php:184
-#: includes/abilities/revisions.php:392
+#: includes/abilities/revisions.php:188
+#: includes/abilities/revisions.php:396
 msgid "ID of the parent post. The caller must be able to edit it, and the revision must genuinely belong to it."
 msgstr ""
 
-#: includes/abilities/revisions.php:189
+#: includes/abilities/revisions.php:193
 msgid "ID of the revision to read."
 msgstr ""
 
-#: includes/abilities/revisions.php:195
+#: includes/abilities/revisions.php:199
 msgid "Whether to return the body as rendered HTML (with the_content filters applied) or the raw stored markup. Defaults to rendered. On a password-protected post the body, excerpt, and diff are withheld either way."
 msgstr ""
 
-#: includes/abilities/revisions.php:200
+#: includes/abilities/revisions.php:204
 msgid "When true, also returns a text diff between this revision's content and the post's current content. Defaults to false. Withheld as null on a password-protected post."
 msgstr ""
 
-#: includes/abilities/revisions.php:274
+#: includes/abilities/revisions.php:278
 msgid "ID of the post to restore. The caller must be able to edit it, and the revision must genuinely belong to it."
 msgstr ""
 
-#: includes/abilities/revisions.php:279
+#: includes/abilities/revisions.php:283
 msgid "ID of the revision to restore the post to. The post's current state is saved as a fresh revision first, so this restore is itself reversible."
 msgstr ""
 
-#: includes/abilities/revisions.php:362
+#: includes/abilities/revisions.php:366
 msgid "Revisions are disabled for this post, so the current state cannot be saved before restoring and the restore would be irreversible. Refusing. Enable revisions for this post type to restore."
 msgstr ""
 
-#: includes/abilities/revisions.php:397
+#: includes/abilities/revisions.php:401
 msgid "ID of the revision to permanently delete from the post's history. This cannot be undone; the live post itself is never changed."
 msgstr ""
 
@@ -1823,7 +1846,7 @@ msgid "Get events"
 msgstr ""
 
 #: includes/abilities/tec/events.php:67
-msgid "List events via the Events Calendar ORM (tribe_events()), filtered by an optional free-text search term. Requires the object-independent read capability."
+msgid "List events via the Events Calendar ORM (tribe_events()), filtered by an optional free-text search term and an optional status (publish by default; draft, pending and future need edit access to events, private needs read-private access). Requires the object-independent read capability."
 msgstr ""
 
 #: includes/abilities/tec/events.php:74
@@ -1846,87 +1869,89 @@ msgstr ""
 msgid "Update event"
 msgstr ""
 
-#: includes/abilities/tec/events.php:91
-msgid "Update an event by ID via the Events Calendar ORM. Requires edit access to that event. Refuses when the event is owned by a foreign page builder (Elementor, Divi, Beaver Builder, Avada), since a write here would either have no visible effect or corrupt its own stored markup."
+#. translators: %s: page builder names, for example Elementor and Divi.
+#: includes/abilities/tec/events.php:93
+#, php-format
+msgid "Update an event by ID via the Events Calendar ORM. Requires edit access to that event. Refuses when the event is owned by a foreign page builder (%s), since a write here would either have no visible effect or corrupt its own stored markup."
 msgstr ""
 
-#: includes/abilities/tec/events.php:98
+#: includes/abilities/tec/events.php:102
 msgid "Delete event"
 msgstr ""
 
-#: includes/abilities/tec/events.php:99
+#: includes/abilities/tec/events.php:103
 msgid "Trash an event by ID (goes to Trash, matching this plugin's trash-post convention - never a permanent delete). Requires delete access to that event."
 msgstr ""
 
-#: includes/abilities/tec/events.php:159
+#: includes/abilities/tec/events.php:163
 msgid "Free-text search term matched against the event title."
 msgstr ""
 
-#: includes/abilities/tec/events.php:163
+#: includes/abilities/tec/events.php:167
 msgid "Post status to filter by. Defaults to \"publish\"; draft/pending/future require edit access to events (scoped to your own unless you can edit others' events); private requires read-private access."
 msgstr ""
 
-#: includes/abilities/tec/events.php:168
+#: includes/abilities/tec/events.php:172
 msgid "Number of events per page, clamped to the 1-50 range. Defaults to 10 when omitted."
 msgstr ""
 
-#: includes/abilities/tec/events.php:264
+#: includes/abilities/tec/events.php:268
 msgid "ID of the event to read."
 msgstr ""
 
 #. translators: %d: the invalid post id supplied as venue_id.
-#: includes/abilities/tec/events.php:379
+#: includes/abilities/tec/events.php:383
 #, php-format
 msgid "venue_id %d does not name an existing venue."
 msgstr ""
 
 #. translators: %d: the invalid post id found in organizer_ids.
-#: includes/abilities/tec/events.php:394
+#: includes/abilities/tec/events.php:398
 #, php-format
 msgid "organizer_ids contains %d, which does not name an existing organizer."
 msgstr ""
 
-#: includes/abilities/tec/events.php:420
+#: includes/abilities/tec/events.php:424
 msgid "Event title."
 msgstr ""
 
-#: includes/abilities/tec/events.php:424
+#: includes/abilities/tec/events.php:428
 msgid "Event description/body."
 msgstr ""
 
-#: includes/abilities/tec/events.php:428
+#: includes/abilities/tec/events.php:432
 msgid "Event start, e.g. 2027-01-01 09:00:00."
 msgstr ""
 
-#: includes/abilities/tec/events.php:432
+#: includes/abilities/tec/events.php:436
 msgid "Event end, e.g. 2027-01-01 12:00:00."
 msgstr ""
 
-#: includes/abilities/tec/events.php:436
+#: includes/abilities/tec/events.php:440
 msgid "Whether the event runs all day."
 msgstr ""
 
-#: includes/abilities/tec/events.php:441
+#: includes/abilities/tec/events.php:445
 msgid "ID of an existing venue to associate with this event."
 msgstr ""
 
-#: includes/abilities/tec/events.php:449
+#: includes/abilities/tec/events.php:453
 msgid "IDs of existing organizers to associate with this event."
 msgstr ""
 
-#: includes/abilities/tec/events.php:453
+#: includes/abilities/tec/events.php:457
 msgid "Post status, e.g. draft or publish. Defaults to draft."
 msgstr ""
 
-#: includes/abilities/tec/events.php:533
+#: includes/abilities/tec/events.php:537
 msgid "ID of the event to update."
 msgstr ""
 
-#: includes/abilities/tec/events.php:623
+#: includes/abilities/tec/events.php:627
 msgid "The event was updated, but its all-day flag could not be confirmed as cleared."
 msgstr ""
 
-#: includes/abilities/tec/events.php:662
+#: includes/abilities/tec/events.php:666
 msgid "ID of the event to trash."
 msgstr ""
 
@@ -1935,7 +1960,7 @@ msgid "Get organizers"
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:56
-msgid "List organizers via the Events Calendar ORM (tribe_organizers())."
+msgid "List organizers via the Events Calendar ORM (tribe_organizers()), optionally filtered by status (by default what you can already see; draft, pending and future need edit access to organizers)."
 msgstr ""
 
 #: includes/abilities/tec/organizers.php:63
@@ -2046,7 +2071,7 @@ msgid "Get venues"
 msgstr ""
 
 #: includes/abilities/tec/venues.php:55
-msgid "List venues via the Events Calendar ORM (tribe_venues())."
+msgid "List venues via the Events Calendar ORM (tribe_venues()), optionally filtered by status (by default what you can already see; draft, pending and future need edit access to venues)."
 msgstr ""
 
 #: includes/abilities/tec/venues.php:62
@@ -2750,7 +2775,7 @@ msgid "Update WooCommerce customer"
 msgstr ""
 
 #: includes/abilities/woocommerce/customers.php:91
-msgid "Updates a WooCommerce customer by id, changing only the fields you send. An empty request body is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability."
+msgid "Updates a WooCommerce customer by id, changing only the fields you send. An empty request body is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability, the edit-users capability, and permission to edit that user. It stays locked until High-risk abilities is turned on under Settings."
 msgstr ""
 
 #: includes/abilities/woocommerce/customers.php:161
@@ -4080,7 +4105,7 @@ msgstr ""
 #: includes/admin/page.php:1364
 #: includes/admin/page.php:1538
 #: includes/admin/page.php:1595
-#: includes/admin/playbooks.php:309
+#: includes/admin/playbooks.php:311
 #: includes/admin/quickconnect.php:302
 #: includes/admin/quickconnect.php:331
 #: includes/admin/quickconnect.php:391
@@ -4200,7 +4225,7 @@ msgstr ""
 #: includes/admin/allowlist.php:372
 #: includes/admin/page.php:306
 #: includes/audit/log-query.php:407
-#: includes/server.php:1648
+#: includes/server.php:1651
 #, php-format
 msgid "%1$s (%2$s)"
 msgstr ""
@@ -4345,14 +4370,14 @@ msgstr ""
 
 #: includes/admin/components.php:273
 #: includes/admin/page.php:2028
-#: includes/admin/playbooks.php:140
+#: includes/admin/playbooks.php:141
 msgid "Search abilities"
 msgstr ""
 
 #: includes/admin/components.php:278
 #: includes/admin/page.php:273
 #: includes/admin/page.php:2032
-#: includes/admin/playbooks.php:140
+#: includes/admin/playbooks.php:141
 msgid "Search abilities…"
 msgstr ""
 
@@ -4432,7 +4457,7 @@ msgstr ""
 #: includes/admin/connection-cards.php:107
 #: includes/admin/connection-cards.php:250
 #: includes/admin/page.php:1632
-#: includes/admin/playbooks.php:195
+#: includes/admin/playbooks.php:196
 msgid "Status"
 msgstr ""
 
@@ -4474,7 +4499,7 @@ msgstr ""
 #: includes/admin/page.php:165
 #: includes/admin/page.php:199
 #: includes/admin/playbooks.php:76
-#: includes/admin/playbooks.php:282
+#: includes/admin/playbooks.php:284
 msgid "Active"
 msgstr ""
 
@@ -4540,7 +4565,7 @@ msgid "Limit"
 msgstr ""
 
 #: includes/admin/connection-cards.php:250
-#: includes/admin/playbooks.php:195
+#: includes/admin/playbooks.php:196
 msgid "Actions"
 msgstr ""
 
@@ -5593,7 +5618,7 @@ msgid "Creates a WooCommerce customer from an email, name, username, and optiona
 msgstr ""
 
 #: includes/admin/disclosures.php:105
-msgid "Updates a WooCommerce customer by id, changing only the fields you send. An empty request is a no-op success. Returns the full customer record, including PII, under the Integrations security disclaimer. Requires the manage-WooCommerce capability."
+msgid "Updates a WooCommerce customer by id, changing only the fields you send. An empty request is a no-op success. Returns the full customer record, including PII, under the Integrations security disclaimer. Requires the manage-WooCommerce capability, the edit-users capability, and permission to edit that user. It stays locked until High-risk abilities is turned on under Settings."
 msgstr ""
 
 #: includes/admin/disclosures.php:108
@@ -5962,6 +5987,10 @@ msgstr ""
 
 #: includes/admin/disclosures.php:226
 msgid "Writes a post's Slim SEO fields. A field omitted from the call is left untouched. Requires edit access to that post."
+msgstr ""
+
+#: includes/admin/disclosures.php:229
+msgid "Reads the raw post content of an Avada/Fusion Builder page, unchanged - Fusion Builder shortcodes are returned exactly as stored, never rendered or stripped. Requires edit access to the post."
 msgstr ""
 
 #: includes/admin/disclosures.php:234
@@ -6481,7 +6510,7 @@ msgstr ""
 #: includes/admin/quickconnect.php:440
 #: includes/catalog.php:105
 #: includes/oauth/consent-template.php:235
-#: includes/server.php:1783
+#: includes/server.php:1786
 msgid "Agent Abilities for MCP"
 msgstr ""
 
@@ -6563,7 +6592,7 @@ msgid "Chosen: %s."
 msgstr ""
 
 #: includes/admin/page.php:168
-#: includes/admin/playbooks.php:142
+#: includes/admin/playbooks.php:143
 msgid "No abilities chosen yet."
 msgstr ""
 
@@ -6594,7 +6623,7 @@ msgstr ""
 #: includes/admin/page.php:176
 #: includes/admin/page.php:297
 #: includes/admin/playbooks.php:76
-#: includes/admin/playbooks.php:124
+#: includes/admin/playbooks.php:125
 #: includes/admin/quickconnect.php:721
 #: includes/admin/settings.php:1128
 #: includes/audit/notifications.php:52
@@ -6620,7 +6649,7 @@ msgid "Added. It is switched Off until you turn it on."
 msgstr ""
 
 #: includes/admin/page.php:181
-#: includes/admin/playbooks.php:224
+#: includes/admin/playbooks.php:225
 msgid "Already in your playbooks."
 msgstr ""
 
@@ -7191,7 +7220,7 @@ msgid "Watch the demo"
 msgstr ""
 
 #: includes/admin/page.php:1813
-#: includes/admin/playbooks.php:100
+#: includes/admin/playbooks.php:101
 #: includes/admin/review-request.php:510
 msgid "(opens in a new tab)"
 msgstr ""
@@ -7919,128 +7948,128 @@ msgstr ""
 msgid "Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling."
 msgstr ""
 
-#: includes/admin/playbooks.php:99
+#: includes/admin/playbooks.php:100
 msgid "Find more playbooks on our website"
 msgstr ""
 
-#: includes/admin/playbooks.php:122
+#: includes/admin/playbooks.php:123
 msgid "Plugin not active"
 msgstr ""
 
-#: includes/admin/playbooks.php:139
-#: includes/admin/playbooks.php:275
+#: includes/admin/playbooks.php:140
+#: includes/admin/playbooks.php:277
 msgid "Abilities it uses"
 msgstr ""
 
 #. translators: %s: link to the Abilities tab.
-#: includes/admin/playbooks.php:184
+#: includes/admin/playbooks.php:185
 #, php-format
 msgid "Agents cannot see your Active playbooks yet. Turn on List playbooks and Get playbook in the Site section of the %s."
 msgstr ""
 
-#: includes/admin/playbooks.php:185
+#: includes/admin/playbooks.php:186
 msgid "Abilities tab"
 msgstr ""
 
-#: includes/admin/playbooks.php:193
+#: includes/admin/playbooks.php:194
 msgid "No playbooks yet. Add a starter below or write your own."
 msgstr ""
 
-#: includes/admin/playbooks.php:195
-#: includes/admin/playbooks.php:249
+#: includes/admin/playbooks.php:196
+#: includes/admin/playbooks.php:251
 msgid "Title"
 msgstr ""
 
-#: includes/admin/playbooks.php:195
+#: includes/admin/playbooks.php:196
 msgid "Uses"
 msgstr ""
 
-#: includes/admin/playbooks.php:195
+#: includes/admin/playbooks.php:196
 msgid "Updated"
 msgstr ""
 
-#: includes/admin/playbooks.php:205
+#: includes/admin/playbooks.php:206
 msgid "Your playbooks"
 msgstr ""
 
-#: includes/admin/playbooks.php:206
+#: includes/admin/playbooks.php:207
 msgid "A playbook is a set of steps you write for agents, such as how to check a draft or build a weekly report. Agents can list and load your Active playbooks once List playbooks and Get playbook are on and the connection's role and access rules allow them."
 msgstr ""
 
-#: includes/admin/playbooks.php:221
+#: includes/admin/playbooks.php:222
 msgid "Needs WooCommerce"
 msgstr ""
 
-#: includes/admin/playbooks.php:225
+#: includes/admin/playbooks.php:226
 msgid "Add to my playbooks"
 msgstr ""
 
 #. translators: %s: starter playbook title.
-#: includes/admin/playbooks.php:227
+#: includes/admin/playbooks.php:228
 #, php-format
 msgid "Add %s to my playbooks"
 msgstr ""
 
-#: includes/admin/playbooks.php:237
+#: includes/admin/playbooks.php:238
 msgid "Starter playbooks"
 msgstr ""
 
-#: includes/admin/playbooks.php:238
+#: includes/admin/playbooks.php:239
 msgid "Ready-made playbooks to start from. An added starter arrives switched Off, so you can read and edit it before agents see it."
 msgstr ""
 
-#: includes/admin/playbooks.php:250
+#: includes/admin/playbooks.php:252
 msgid "Playbook title"
 msgstr ""
 
-#: includes/admin/playbooks.php:255
+#: includes/admin/playbooks.php:257
 msgid "Description"
 msgstr ""
 
-#: includes/admin/playbooks.php:256
+#: includes/admin/playbooks.php:258
 #: includes/site-brief.php:102
 msgid "Optional"
 msgstr ""
 
-#: includes/admin/playbooks.php:257
+#: includes/admin/playbooks.php:259
 msgid "Playbook description: one line agents see in the list"
 msgstr ""
 
-#: includes/admin/playbooks.php:262
+#: includes/admin/playbooks.php:264
 msgid "Steps"
 msgstr ""
 
-#: includes/admin/playbooks.php:263
+#: includes/admin/playbooks.php:265
 msgid "Playbook steps"
 msgstr ""
 
 #. translators: 1: longest title, 2: longest description, 3: longest body, in characters.
-#: includes/admin/playbooks.php:266
+#: includes/admin/playbooks.php:268
 #, php-format
 msgid "Plain text. Title up to %1$d characters, description up to %2$d, steps up to %3$s. Keep passwords and private details out of it: agents read it word for word. Site administrators can change it; agents cannot."
 msgstr ""
 
-#: includes/admin/playbooks.php:277
+#: includes/admin/playbooks.php:279
 msgid "Tick the abilities an agent needs for these steps. Agents get this list with the playbook, so you can write the steps in plain words."
 msgstr ""
 
-#: includes/admin/playbooks.php:283
+#: includes/admin/playbooks.php:285
 msgid "Active: agents can list and load this playbook"
 msgstr ""
 
-#: includes/admin/playbooks.php:284
+#: includes/admin/playbooks.php:286
 msgid "Only Active playbooks reach agents."
 msgstr ""
 
-#: includes/admin/playbooks.php:287
+#: includes/admin/playbooks.php:289
 msgid "Save playbook"
 msgstr ""
 
-#: includes/admin/playbooks.php:287
+#: includes/admin/playbooks.php:289
 msgid "New playbook"
 msgstr ""
 
-#: includes/admin/playbooks.php:293
+#: includes/admin/playbooks.php:295
 msgid "Write a playbook"
 msgstr ""
 
@@ -10014,16 +10043,16 @@ msgstr ""
 msgid "Authentication required."
 msgstr ""
 
-#: includes/origin.php:128
+#: includes/origin.php:116
 msgid "This site does not accept MCP requests from that web page."
 msgstr ""
 
-#: includes/page-builder-guard.php:160
+#: includes/page-builder-guard.php:192
 msgid "This content may belong to a page builder, and the plugin could not tell which one, so it refused the write. Edit the content in the page builder directly, or try again."
 msgstr ""
 
 #. translators: 1: detected page builder name, e.g. Elementor. 2: same name, repeated for readability. 3: same name, repeated for readability.
-#: includes/page-builder-guard.php:170
+#: includes/page-builder-guard.php:202
 #, php-format
 msgid "This content is owned by %1$s. Writing to it through this ability would either have no visible effect or corrupt %2$s's own stored markup, because %3$s renders from its own stored data rather than (or in addition to) the post content field. Edit it there directly."
 msgstr ""
@@ -10052,73 +10081,77 @@ msgstr ""
 msgid "Choose up to %d abilities for one playbook."
 msgstr ""
 
-#: includes/playbooks.php:283
+#: includes/playbooks.php:308
 msgid "That starter is already in your playbooks."
 msgstr ""
 
 #. translators: %d: the most playbooks a site can keep.
-#: includes/playbooks.php:288
+#: includes/playbooks.php:313
 #, php-format
 msgid "This site already has %d playbooks, the most it can keep. Delete one first."
 msgstr ""
 
-#: includes/playbooks.php:354
+#: includes/playbooks.php:328
+msgid "Someone else saved this playbook after you opened it, so your change was not saved. Copy your text, reload the page to see their version, then add your change again."
+msgstr ""
+
+#: includes/playbooks.php:386
 msgid "The playbook could not be saved. Reload the page and try again."
 msgstr ""
 
-#: includes/playbooks.php:363
+#: includes/playbooks.php:395
 msgid "That playbook no longer exists. Reload the page to see the current list."
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:374
+#: includes/playbooks.php:406
 #, php-format
 msgid "No active playbook is called \"%s\"."
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:388
+#: includes/playbooks.php:420
 #, php-format
 msgid "Playbook added: %s"
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:390
+#: includes/playbooks.php:422
 #, php-format
 msgid "Playbook edited: %s"
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:392
+#: includes/playbooks.php:424
 #, php-format
 msgid "Playbook deleted: %s"
 msgstr ""
 
 #. translators: %s: the playbook slug.
-#: includes/playbooks.php:394
+#: includes/playbooks.php:426
 #, php-format
 msgid "Starter playbook added: %s"
 msgstr ""
 
-#: includes/playbooks.php:437
+#: includes/playbooks.php:469
 msgid "Playbooks the site owner wrote for this site. When a task matches one, load it with get-playbook and follow it:"
 msgstr ""
 
 #. translators: %d: how many playbooks are not listed.
-#: includes/playbooks.php:441
+#: includes/playbooks.php:473
 #, php-format
 msgid "- and %d more: call list-playbooks."
 msgstr ""
 
-#: includes/playbooks.php:472
+#: includes/playbooks.php:504
 msgid "Publish checklist"
 msgstr ""
 
-#: includes/playbooks.php:473
+#: includes/playbooks.php:505
 msgid "Check one draft before it goes live and list what is missing or worth fixing. Changes nothing unless you say yes. Never publishes."
 msgstr ""
 
-#: includes/playbooks.php:474
+#: includes/playbooks.php:506
 msgid ""
 "Use this when the user asks you to check a draft before it is published.\n"
 "\n"
@@ -10136,15 +10169,15 @@ msgid ""
 "- If a tool is missing or returns an error, say which check you could not do and finish the others."
 msgstr ""
 
-#: includes/playbooks.php:479
+#: includes/playbooks.php:511
 msgid "Weekly content report"
 msgstr ""
 
-#: includes/playbooks.php:480
+#: includes/playbooks.php:512
 msgid "Posts published, drafts started and comments waiting in the last 7 days, as one short table. Read-only."
 msgstr ""
 
-#: includes/playbooks.php:481
+#: includes/playbooks.php:513
 msgid ""
 "Use this when the user asks what happened on the site this week. Only read. Change nothing.\n"
 "\n"
@@ -10158,15 +10191,15 @@ msgid ""
 "If the user also asks for totals, use the Count posts tool and label those numbers \"all time\", not \"this week\"."
 msgstr ""
 
-#: includes/playbooks.php:486
+#: includes/playbooks.php:518
 msgid "Content health check"
 msgstr ""
 
-#: includes/playbooks.php:487
+#: includes/playbooks.php:519
 msgid "Scan recent posts, images and terms for common gaps: no featured image, no category, missing alt text, unused tags. Reports only."
 msgstr ""
 
-#: includes/playbooks.php:488
+#: includes/playbooks.php:520
 msgid ""
 "Use this when the user asks for a health check of the site's content. Only read. Change nothing.\n"
 "\n"
@@ -10185,15 +10218,15 @@ msgid ""
 "Never edit, delete or merge anything during this check. If the user wants a fix, they can ask for it separately after reading the report."
 msgstr ""
 
-#: includes/playbooks.php:493
+#: includes/playbooks.php:525
 msgid "Draft a new post"
 msgstr ""
 
-#: includes/playbooks.php:494
+#: includes/playbooks.php:526
 msgid "Write a blog post from the user's brief and save it as a draft for review. Never publishes or schedules."
 msgstr ""
 
-#: includes/playbooks.php:495
+#: includes/playbooks.php:527
 msgid ""
 "Use this when the user asks you to write a new blog post.\n"
 "\n"
@@ -10210,15 +10243,15 @@ msgid ""
 "- If saving fails or the tool is off, paste the full post into the chat so nothing is lost, and say why it was not saved."
 msgstr ""
 
-#: includes/playbooks.php:500
+#: includes/playbooks.php:532
 msgid "Shop tidy-up"
 msgstr ""
 
-#: includes/playbooks.php:501
+#: includes/playbooks.php:533
 msgid "Find WooCommerce products with no price, no image, no stock or stuck in draft, and suggest fixes. Changes nothing."
 msgstr ""
 
-#: includes/playbooks.php:502
+#: includes/playbooks.php:534
 msgid ""
 "Use this when the user asks you to tidy up the shop. Only read and suggest. Change nothing.\n"
 "\n"
@@ -10235,7 +10268,7 @@ msgid ""
 "Never change, publish, hide or delete a product. If the user wants a fix made, they can ask for that exact change separately."
 msgstr ""
 
-#: includes/playbooks.php:543
+#: includes/playbooks.php:575
 msgid "That starter playbook does not exist."
 msgstr ""
 
@@ -10405,57 +10438,53 @@ msgstr ""
 msgid "This connection is paused by the site owner. It keeps its sign-in and works again as soon as they resume it."
 msgstr ""
 
-#: includes/server.php:1063
-msgid "This connection is paused by the site owner. You can list tools, but every tool call is refused until they resume it."
-msgstr ""
-
-#: includes/server.php:1172
+#: includes/server.php:1175
 msgid "The MCP request body must be a JSON object."
 msgstr ""
 
-#: includes/server.php:1656
+#: includes/server.php:1659
 msgid "Agent Abilities for MCP left one ability out of the agent tool list because it exceeded a safety limit:"
 msgid_plural "Agent Abilities for MCP left some abilities out of the agent tool list because they exceeded a safety limit:"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/server.php:1677
+#: includes/server.php:1680
 msgid "its schema is nested too deeply"
 msgstr ""
 
-#: includes/server.php:1679
+#: includes/server.php:1682
 msgid "its schema has too many fields"
 msgstr ""
 
-#: includes/server.php:1681
+#: includes/server.php:1684
 msgid "its schema contains a value that is not valid JSON"
 msgstr ""
 
-#: includes/server.php:1683
+#: includes/server.php:1686
 msgid "its schema is too large"
 msgstr ""
 
-#: includes/server.php:1685
+#: includes/server.php:1688
 msgid "its schema could not be serialized"
 msgstr ""
 
-#: includes/server.php:1687
+#: includes/server.php:1690
 msgid "the enabled tool limit was reached"
 msgstr ""
 
-#: includes/server.php:1689
+#: includes/server.php:1692
 msgid "another plugin has already registered a tool under this name"
 msgstr ""
 
-#: includes/server.php:1691
+#: includes/server.php:1694
 msgid "it exceeded a safety limit"
 msgstr ""
 
-#: includes/server.php:1912
+#: includes/server.php:1915
 msgid "Your network address is not allowed to use this endpoint."
 msgstr ""
 
-#: includes/server.php:2127
+#: includes/server.php:2149
 msgid "Session could not be persisted; please retry."
 msgstr ""
 

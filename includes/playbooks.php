@@ -18,12 +18,14 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-const AAFM_PLAYBOOKS_OPTION   = 'aafm_playbooks';
-const AAFM_PLAYBOOKS_MAX      = 50;
-const AAFM_PLAYBOOK_TITLE_MAX = 80;
-const AAFM_PLAYBOOK_DESC_MAX  = 200;
-const AAFM_PLAYBOOK_BODY_MAX  = 8000;
-const AAFM_PLAYBOOK_SLUG_MAX  = 64;
+const AAFM_PLAYBOOKS_OPTION       = 'aafm_playbooks';
+const AAFM_PLAYBOOKS_MAX          = 50;
+const AAFM_PLAYBOOK_TITLE_MAX     = 80;
+const AAFM_PLAYBOOK_DESC_MAX      = 200;
+const AAFM_PLAYBOOK_BODY_MAX      = 8000;
+const AAFM_PLAYBOOK_SLUG_MAX      = 64;
+const AAFM_PLAYBOOK_ABILITIES_MAX = 50;
+const AAFM_PLAYBOOK_LIBRARY_URL   = 'https://agentabilitieswp.com/playbooks/';
 
 /**
  * Clean a playbook body: the text exactly as typed, with LF line endings and without invalid UTF-8,
@@ -45,7 +47,7 @@ function aafm_clean_playbook_body( string $raw ): string {
  * dropped.
  *
  * @param mixed $entry Stored entry.
- * @return array{slug:string,title:string,description:string,body:string,active:bool,updated_gmt:string}|null
+ * @return array{slug:string,title:string,description:string,body:string,active:bool,abilities:list<string>,updated_gmt:string}|null
  */
 function aafm_clean_stored_playbook( $entry ): ?array {
 	if ( ! is_array( $entry ) ) {
@@ -69,6 +71,7 @@ function aafm_clean_stored_playbook( $entry ): ?array {
 		'description' => trim( $description ),
 		'body'        => $body,
 		'active'      => ! empty( $entry['active'] ),
+		'abilities'   => aafm_clean_stored_playbook_abilities( $entry['abilities'] ?? null ),
 		'updated_gmt' => $updated,
 	);
 }
@@ -137,7 +140,7 @@ function aafm_playbook( string $slug ): ?array {
  * Clean and check the fields an owner submits.
  *
  * @param array<string,mixed> $raw Fields title, description, body, active.
- * @return array{title:string,description:string,body:string,active:bool}|WP_Error
+ * @return array{title:string,description:string,body:string,active:bool,abilities:list<string>}|WP_Error
  */
 function aafm_clean_playbook_input( array $raw ) {
 	$title       = trim( aafm_sanitize_plain_text( is_string( $raw['title'] ?? null ) ? $raw['title'] : '' ) );
@@ -152,6 +155,10 @@ function aafm_clean_playbook_input( array $raw ) {
 		/* translators: %d: the longest description allowed, in characters. */
 		return new WP_Error( 'aafm_playbook_invalid', sprintf( __( 'Keep the description to %d characters or fewer.', 'agent-abilities-for-mcp' ), AAFM_PLAYBOOK_DESC_MAX ) );
 	}
+	$abilities = aafm_clean_playbook_abilities( $raw['abilities'] ?? array() );
+	if ( is_wp_error( $abilities ) ) {
+		return $abilities;
+	}
 	if ( '' === $body || mb_strlen( $body ) > AAFM_PLAYBOOK_BODY_MAX ) {
 		/* translators: %s: the longest body allowed, in characters, for example 8,000. */
 		return new WP_Error( 'aafm_playbook_invalid', sprintf( __( 'Write the steps in 1 to %s characters.', 'agent-abilities-for-mcp' ), number_format_i18n( AAFM_PLAYBOOK_BODY_MAX ) ) );
@@ -162,7 +169,57 @@ function aafm_clean_playbook_input( array $raw ) {
 		'description' => $description,
 		'body'        => $body,
 		'active'      => ! empty( $raw['active'] ) && 'false' !== $raw['active'],
+		'abilities'   => $abilities,
 	);
+}
+
+/**
+ * The abilities list kept on a stored entry: well-formed names only, de-duplicated, at most
+ * AAFM_PLAYBOOK_ABILITIES_MAX. No registry check, so a pick for an inactive integration survives and
+ * is reported unavailable.
+ *
+ * @param mixed $stored Stored value.
+ * @return list<string>
+ */
+function aafm_clean_stored_playbook_abilities( $stored ): array {
+	if ( ! is_array( $stored ) ) {
+		return array();
+	}
+	$out = array();
+	foreach ( $stored as $name ) {
+		if ( is_string( $name ) && preg_match( '#^aafm(-bridge)?/[a-z0-9-]{1,100}$#', $name ) && ! in_array( $name, $out, true ) ) {
+			$out[] = $name;
+		}
+	}
+	return array_slice( $out, 0, AAFM_PLAYBOOK_ABILITIES_MAX );
+}
+
+/**
+ * Clean the abilities an owner picked: a list, or a JSON string of a list (the AJAX shape). Names
+ * that are not abilities of this plugin, or enabled bridged abilities, are dropped.
+ *
+ * @param mixed $raw Picked names.
+ * @return list<string>|WP_Error
+ */
+function aafm_clean_playbook_abilities( $raw ) {
+	if ( is_string( $raw ) ) {
+		$raw = json_decode( $raw, true );
+	}
+	if ( ! is_array( $raw ) ) {
+		return array();
+	}
+	$known = array_merge( array_keys( aafm_get_abilities_registry_full() ), aafm_get_enabled_bridged_abilities() );
+	$out   = array();
+	foreach ( $raw as $name ) {
+		if ( is_string( $name ) && in_array( $name, $known, true ) && ! in_array( $name, $out, true ) ) {
+			$out[] = $name;
+		}
+	}
+	if ( count( $out ) > AAFM_PLAYBOOK_ABILITIES_MAX ) {
+		/* translators: %d: the most abilities one playbook can list. */
+		return new WP_Error( 'aafm_playbook_invalid', sprintf( __( 'Choose up to %d abilities for one playbook.', 'agent-abilities-for-mcp' ), AAFM_PLAYBOOK_ABILITIES_MAX ) );
+	}
+	return $out;
 }
 
 /**

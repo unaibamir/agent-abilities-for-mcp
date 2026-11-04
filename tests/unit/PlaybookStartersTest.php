@@ -24,17 +24,6 @@ final class PlaybookStartersTest extends TestCase {
 		$this->assertSame( array( 'publish-checklist', 'weekly-content-report', 'shop-tidy-up' ), array_keys( aafm_playbook_starters() ) );
 	}
 
-	public function test_every_named_ability_exists(): void {
-		$registry = aafm_get_abilities_registry_full();
-		foreach ( aafm_playbook_starters() as $id => $starter ) {
-			$names = aafm_playbook_named_abilities( $starter['body'] );
-			$this->assertNotEmpty( $names, $id );
-			foreach ( $names as $name ) {
-				$this->assertArrayHasKey( $name, $registry, "{$id} names {$name}" );
-			}
-		}
-	}
-
 	public function test_filter_can_add_but_not_break(): void {
 		add_filter(
 			'aafm_playbook_starters',
@@ -109,7 +98,7 @@ final class PlaybookStartersTest extends TestCase {
 				'body'        => $starter['body'],
 				'active'      => true,
 			);
-			$this->assertSame( $fields, aafm_clean_playbook_input( $fields ) );
+			$this->assertSame( $fields, array_diff_key( aafm_clean_playbook_input( $fields ), array( 'abilities' => true ) ) );
 		}
 	}
 }

@@ -107,3 +107,23 @@ function aafm_bridge_provider_label( string $ns ): string {
 
 	return aafm_bridge_active_plugin_name( $ns );
 }
+
+/**
+ * A translated risk word for a bridged tool, and the reason when we inferred it from silence.
+ *
+ * @param array<string,mixed> $risk Result of aafm_bridge_risk().
+ * @return array{label:string,note:string}
+ */
+function aafm_bridge_risk_label( array $risk ): array {
+	$labels = array(
+		'read'        => __( 'Read', 'agent-abilities-for-mcp' ),
+		'write'       => __( 'Write', 'agent-abilities-for-mcp' ),
+		'destructive' => __( 'Destructive', 'agent-abilities-for-mcp' ),
+	);
+	$key    = (string) ( $risk['risk'] ?? 'destructive' );
+
+	return array(
+		'label' => $labels[ $key ] ?? $labels['destructive'],
+		'note'  => empty( $risk['declared'] ) ? __( 'The plugin did not label this tool, so it is treated as destructive.', 'agent-abilities-for-mcp' ) : '',
+	);
+}

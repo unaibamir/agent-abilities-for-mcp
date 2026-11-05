@@ -124,6 +124,38 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * A client the site deleted lands on a page that says how to fix it: the MCP URL and the
+	 * remove-the-app step. The handler ends in exit, so the page is built by the same two helpers it
+	 * calls and the call site is pinned by source.
+	 */
+	public function test_unknown_client_error_page_tells_the_user_how_to_fix_it(): void {
+		$error = aafm_oauth_validate_authorize_params( $this->valid_params( 'does_not_exist' ) );
+		$this->assertInstanceOf( WP_Error::class, $error );
+		$this->assertSame( 'invalid_client', $error->get_error_code() );
+
+		ob_start();
+		echo aafm_oauth_local_error_html( $error->get_error_message(), aafm_oauth_local_error_help( $error ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the helper escapes every value; this only captures it.
+		$page = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'This app is no longer registered with this site.', $page );
+		$this->assertStringContainsString( aafm_endpoint_url(), $page, 'The page shows the MCP URL to add the app back with.' );
+		$this->assertStringContainsString( 'remove the app', $page );
+
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/oauth/authorize.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading plugin source.
+		$this->assertStringContainsString( 'aafm_oauth_render_local_error( 400, $valid->get_error_message(), aafm_oauth_local_error_help( $valid ) )', $source, 'The authorize handler passes the help.' );
+	}
+
+	public function test_other_local_errors_get_no_unknown_client_help(): void {
+		$client                 = $this->register_client();
+		$params                 = $this->valid_params( $client );
+		$params['redirect_uri'] = 'https://elsewhere.example/cb';
+		$error                  = aafm_oauth_validate_authorize_params( $params );
+		$this->assertInstanceOf( WP_Error::class, $error );
+		$this->assertNotSame( 'invalid_client', $error->get_error_code() );
+		$this->assertSame( '', aafm_oauth_local_error_help( $error ) );
+	}
+
+	/**
 	 * A redirect_uri not in the client's registered set is a NON-redirectable error.
 	 */
 	public function test_unregistered_redirect_is_local_error(): void {

@@ -455,6 +455,42 @@ function aafm_oauth_unknown_client_help(): string {
 }
 
 /**
+ * The extra help markup for a local validation error: the unknown-client steps for invalid_client,
+ * nothing for any other error.
+ *
+ * @param \WP_Error $error The validation error.
+ * @return string Escaped HTML, or '' when there is no help for this error.
+ */
+function aafm_oauth_local_error_help( WP_Error $error ): string {
+	return 'invalid_client' === $error->get_error_code() ? aafm_oauth_unknown_client_help() : '';
+}
+
+/**
+ * The HTML of the minimal local error page.
+ *
+ * @param string $message Human-readable message (will be escaped).
+ * @param string $help    Optional extra markup (p, code, ul, li only) shown under the message.
+ * @return string
+ */
+function aafm_oauth_local_error_html( string $message, string $help = '' ): string {
+	return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'
+		. esc_html__( 'Authorization error', 'agent-abilities-for-mcp' )
+		. '</title></head><body><p>'
+		. esc_html( $message )
+		. '</p>'
+		. wp_kses(
+			$help,
+			array(
+				'p'    => array(),
+				'code' => array(),
+				'ul'   => array(),
+				'li'   => array(),
+			)
+		)
+		. '</body></html>';
+}
+
+/**
  * Render a minimal local error page and exit.
  *
  * Used for failures that must NOT be handed back to the client: a disabled surface,
@@ -470,21 +506,7 @@ function aafm_oauth_render_local_error( int $status, string $message, string $he
 	aafm_oauth_send_consent_headers();
 	status_header( $status );
 	header( 'Content-Type: text/html; charset=utf-8' );
-	echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'
-		. esc_html__( 'Authorization error', 'agent-abilities-for-mcp' )
-		. '</title></head><body><p>'
-		. esc_html( $message )
-		. '</p>'
-		. wp_kses(
-			$help,
-			array(
-				'p'    => array(),
-				'code' => array(),
-				'ul'   => array(),
-				'li'   => array(),
-			)
-		)
-		. '</body></html>';
+	echo aafm_oauth_local_error_html( $message, $help ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in aafm_oauth_local_error_html().
 	exit;
 }
 
@@ -830,7 +852,7 @@ function aafm_oauth_handle_authorize(): void {
 		// Both branches below exit internally; the trailing return makes that terminal
 		// to static analysis so $valid narrows to the array shape past this block.
 		if ( ! aafm_oauth_error_is_redirectable( $valid ) ) {
-			aafm_oauth_render_local_error( 400, $valid->get_error_message() );
+			aafm_oauth_render_local_error( 400, $valid->get_error_message(), aafm_oauth_local_error_help( $valid ) );
 		}
 
 		$redirect_uri = isset( $params['redirect_uri'] ) ? (string) $params['redirect_uri'] : '';

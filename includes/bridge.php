@@ -181,7 +181,8 @@ function aafm_bridge_tool_name( string $foreign_slug ): string {
  * Every case where the ability DOES declare its annotations keeps its previous classification.
  *
  * @param \WP_Ability $ability The foreign ability.
- * @return array{risk:string,readonly:bool,destructive:bool,idempotent:bool}
+ * @return array{risk:string,readonly:bool,destructive:bool,idempotent:bool,declared:bool} declared is
+ *                                                                                     false when destructive was inferred from silence.
  */
 function aafm_bridge_risk( $ability ): array {
 	$ann = array();
@@ -208,6 +209,7 @@ function aafm_bridge_risk( $ability ): array {
 		'readonly'    => $readonly,
 		'destructive' => $destructive,
 		'idempotent'  => $idempotent,
+		'declared'    => $readonly || null !== $declared,
 	);
 }
 
@@ -568,6 +570,7 @@ function aafm_discover_foreign_abilities(): array {
 			'risk'         => $risk['risk'],
 			'readonly'     => $risk['readonly'],
 			'destructive'  => $risk['destructive'],
+			'declared'     => $risk['declared'],
 			'input_schema' => aafm_bridge_input_schema( $ability ),
 			'tool_name'    => aafm_mcp_tool_name( aafm_bridge_tool_name( $slug ) ),
 		);

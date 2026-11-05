@@ -213,4 +213,89 @@ final class BridgeDiscoveryTest extends TestCase {
 			'The admin bridge directory must see every registered foreign ability, not whatever a third-party wp_get_abilities_result filter lets through.'
 		);
 	}
+
+	/**
+	 * The risk fields for a fixture ability with these annotations.
+	 *
+	 * @param array<string,mixed> $annotations Annotations.
+	 * @return array<string,mixed>
+	 */
+	private function risk_of( array $annotations ): array {
+		$this->register_foreign(
+			'demo/risk',
+			array(
+				'label'               => 'Risk',
+				'description'         => 'r',
+				'input_schema'        => array(
+					'type'       => 'object',
+					'properties' => array(),
+				),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+				'meta'                => array( 'annotations' => $annotations ),
+			)
+		);
+		return aafm_bridge_risk( wp_get_ability( 'demo/risk' ) );
+	}
+
+	public function test_an_unlabelled_ability_is_destructive_and_not_declared(): void {
+		$risk = $this->risk_of( array() );
+		$this->assertSame( 'destructive', $risk['risk'] );
+		$this->assertFalse( $risk['declared'] );
+	}
+
+	public function test_readonly_true_is_read_and_declared(): void {
+		$risk = $this->risk_of( array( 'readonly' => true ) );
+		$this->assertSame( 'read', $risk['risk'] );
+		$this->assertTrue( $risk['declared'] );
+	}
+
+	public function test_destructive_false_on_a_write_is_write_and_declared(): void {
+		$risk = $this->risk_of( array( 'destructive' => false ) );
+		$this->assertSame( 'write', $risk['risk'] );
+		$this->assertTrue( $risk['declared'] );
+	}
+
+	public function test_destructive_true_is_destructive_and_declared(): void {
+		$risk = $this->risk_of( array( 'destructive' => true ) );
+		$this->assertSame( 'destructive', $risk['risk'] );
+		$this->assertTrue( $risk['declared'] );
+	}
+
+	public function test_discovery_rows_carry_declared(): void {
+		$this->risk_of( array( 'readonly' => true ) );
+		$rows = aafm_discover_foreign_abilities()['demo']['abilities'];
+		$this->assertTrue( $rows[0]['declared'] );
+	}
+
+	public function test_the_risk_label_says_when_we_inferred_destructive(): void {
+		$silent = aafm_bridge_risk_label( $this->risk_of( array() ) );
+		$this->assertSame( 'Destructive', $silent['label'] );
+		$this->assertSame( 'The plugin did not label this tool, so it is treated as destructive.', $silent['note'] );
+
+		$this->assertSame(
+			array(
+				'label' => 'Read',
+				'note'  => '',
+			),
+			aafm_bridge_risk_label(
+				array(
+					'risk'     => 'read',
+					'declared' => true,
+				)
+			)
+		);
+		$this->assertSame(
+			array(
+				'label' => 'Write',
+				'note'  => '',
+			),
+			aafm_bridge_risk_label(
+				array(
+					'risk'     => 'write',
+					'declared' => true,
+				)
+			)
+		);
+	}
 }

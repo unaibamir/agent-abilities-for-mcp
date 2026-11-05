@@ -221,6 +221,11 @@ final class DescriptionTruthSweepTest extends TestCase {
 		foreach ( array_keys( array_filter( (array) get_role( 'administrator' )->capabilities ) ) as $cap ) {
 			$user->add_cap( (string) $cap );
 		}
+		// The administrator role does not carry every vocabulary capability (WooCommerce adds
+		// manage_woocommerce only when it is active), so grant them all directly.
+		foreach ( self::VOCABULARY as $cap ) {
+			$user->add_cap( $cap );
+		}
 		// Work on the object WordPress checks, so add_cap() takes effect without a reload.
 		wp_set_current_user( $id );
 		return wp_get_current_user();
@@ -238,17 +243,35 @@ final class DescriptionTruthSweepTest extends TestCase {
 		return aafm_user_can_discover_ability( $name );
 	}
 
+	/**
+	 * Abilities the capability sweep must reach. A skipped ability would otherwise pass silently, which
+	 * is how every WooCommerce ability once dropped out of the probe.
+	 *
+	 * @var string[]
+	 */
+	private const MUST_PROBE = array(
+		'aafm/wc-update-customer',
+		'aafm/wc-create-customer',
+		'aafm/wc-get-order',
+		'aafm/update-user',
+		'aafm/get-site-settings',
+		'aafm/list-menus',
+		'aafm/get-pending-comments',
+	);
+
 	public function test_described_capabilities_are_the_ones_the_code_enforces(): void {
 		$user      = $this->fixture_user();
 		$texts     = $this->texts();
 		$unclaimed = array();
 		$unproved  = array();
 		$probed    = 0;
+		$reached   = array();
 		foreach ( array_keys( aafm_get_abilities_registry_full() ) as $name ) {
 			if ( ! $this->discovers( $user, $name ) ) {
 				continue; // Not probeable on empty input; the ability's own tests cover it.
 			}
-			$joined = implode( "\n", $texts[ $name ] ?? array() );
+			$reached[] = $name;
+			$joined    = implode( "\n", $texts[ $name ] ?? array() );
 			++$probed;
 			foreach ( self::VOCABULARY as $cap ) {
 				$user->add_cap( $cap, false );
@@ -264,6 +287,7 @@ final class DescriptionTruthSweepTest extends TestCase {
 			}
 		}
 		$this->assertGreaterThan( 100, $probed, 'Most of the catalog is probeable.' );
+		$this->assertSame( array(), array_values( array_diff( self::MUST_PROBE, $reached ) ), 'These abilities must be reached by the probe; a skip here hides a description from the sweep.' );
 		$this->assertSame( array(), $unclaimed, "Capabilities the code enforces and the text omits:\n" . implode( "\n", $unclaimed ) );
 		$this->assertSame( array(), $unproved, "Capabilities the text requires and discovery does not:\n" . implode( "\n", $unproved ) );
 	}

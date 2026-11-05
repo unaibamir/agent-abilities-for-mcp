@@ -1991,6 +1991,10 @@ function aafm_mcp_no_store( $response, $server, $request ) {
  * in a new one whose own headers are folded into the body, so the header set in rest_post_dispatch
  * never reaches the wire. This runs after core's send_headers() and before the body goes out.
  *
+ * It acts only for an enveloped request. Where core sends its logged-in no-cache headers it sends
+ * core's full value (which already carries no-store and private) rather than narrowing it to a bare
+ * no-store.
+ *
  * @param mixed $served  Whether the request was already served; returned unchanged.
  * @param mixed $result  The response.
  * @param mixed $request The request.
@@ -1999,8 +2003,18 @@ function aafm_mcp_no_store( $response, $server, $request ) {
  */
 function aafm_mcp_no_store_enveloped( $served, $result, $request, $server ) {
 	unset( $result );
+	// Core's own test for the envelope is isset( $_GET['_envelope'] ); a read-only flag, no state changes.
+	if ( ! isset( $_GET['_envelope'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- mirrors core's isset() on the envelope flag.
+		return $served;
+	}
 	if ( $request instanceof WP_REST_Request && is_object( $server ) && method_exists( $server, 'send_header' ) && aafm_is_mcp_route( (string) $request->get_route() ) ) {
-		$server->send_header( 'Cache-Control', 'no-store' );
+		$value = 'no-store';
+		// The filter core applies before it sends its logged-in no-cache headers.
+		if ( apply_filters( 'rest_send_nocache_headers', is_user_logged_in() ) ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook.
+			$nocache = wp_get_nocache_headers();
+			$value   = is_string( $nocache['Cache-Control'] ?? null ) && str_contains( $nocache['Cache-Control'], 'no-store' ) ? $nocache['Cache-Control'] : 'no-store';
+		}
+		$server->send_header( 'Cache-Control', $value );
 	}
 	return $served;
 }

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-05T05:30:02+05:00\n"
+"POT-Creation-Date: 2026-11-06T01:05:49+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -9717,58 +9717,58 @@ msgstr ""
 msgid "Claude: remove the connector, then add it again."
 msgstr ""
 
-#: includes/oauth/authorize.php:474
+#: includes/oauth/authorize.php:477
 msgid "Authorization error"
 msgstr ""
 
-#: includes/oauth/authorize.php:542
+#: includes/oauth/authorize.php:564
 msgid "Could not issue an authorization code. Please try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:626
+#: includes/oauth/authorize.php:648
 msgid "none of the abilities you have switched on"
 msgstr ""
 
 #. translators: 1: abilities this preset reaches, 2: abilities switched on.
-#: includes/oauth/authorize.php:628
+#: includes/oauth/authorize.php:650
 #, php-format
 msgid "up to %1$d of the %2$d abilities you have switched on"
 msgstr ""
 
-#: includes/oauth/authorize.php:734
+#: includes/oauth/authorize.php:756
 msgid "HTTPS is required for authorization."
 msgstr ""
 
-#: includes/oauth/authorize.php:794
+#: includes/oauth/authorize.php:816
 msgid "Your account does not have permission to authorize access."
 msgstr ""
 
-#: includes/oauth/authorize.php:800
+#: includes/oauth/authorize.php:822
 msgid "Access to this site is paused by its owner. Try again after they resume it."
 msgstr ""
 
-#: includes/oauth/authorize.php:817
+#: includes/oauth/authorize.php:839
 msgid "Your authorization session expired. Please start again."
 msgstr ""
 
-#: includes/oauth/authorize.php:848
-#: includes/oauth/authorize.php:853
+#: includes/oauth/authorize.php:870
+#: includes/oauth/authorize.php:875
 msgid "This connection could not be checked. Please try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:857
+#: includes/oauth/authorize.php:879
 msgid "The site owner has paused this connection. Ask them to resume it, then try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:861
+#: includes/oauth/authorize.php:883
 msgid "This connection has ended. Ask the site owner to renew it."
 msgstr ""
 
-#: includes/oauth/authorize.php:882
+#: includes/oauth/authorize.php:904
 msgid "Could not renew this connection. Please try again."
 msgstr ""
 
-#: includes/oauth/authorize.php:893
+#: includes/oauth/authorize.php:915
 msgid "Could not record your approval. Please try again."
 msgstr ""
 

@@ -243,6 +243,26 @@ final class AcfUnknownFieldTest extends TestCase {
 		$this->assertStringContainsString( 'nothing was written', $without->get_error_message() );
 	}
 
+	public function test_the_layout_and_inexact_address_refusals_follow_the_same_rule(): void {
+		$this->boot( array( 'aafm/acf-update-post-fields', 'aafm/acf-list-field-groups' ) );
+		$layout  = aafm_acf_unknown_layout_error( array( 'flex.0' ) );
+		$inexact = aafm_acf_inexact_address_error( 'Headline ' );
+		$this->assertSame( 'aafm_acf_unknown_layout', $layout->get_error_code() );
+		$this->assertSame( 'aafm_acf_inexact_field_address', $inexact->get_error_code() );
+		$this->assertStringContainsString( 'flex.0', $layout->get_error_message(), 'A caller who can list fields gets the row address.' );
+		$this->assertStringContainsString( 'Headline', $inexact->get_error_message() );
+
+		$this->boot( array( 'aafm/acf-update-post-fields' ) );
+		$layout  = aafm_acf_unknown_layout_error( array( 'flex.0' ) );
+		$inexact = aafm_acf_inexact_address_error( 'Headline ' );
+		$this->assertSame( 'aafm_acf_unknown_layout', $layout->get_error_code() );
+		$this->assertSame( 'aafm_acf_inexact_field_address', $inexact->get_error_code() );
+		$this->assertStringNotContainsString( 'flex.0', $layout->get_error_message() );
+		$this->assertStringNotContainsString( 'Headline', $inexact->get_error_message() );
+		$this->assertStringContainsString( 'nothing was written', $layout->get_error_message() );
+		$this->assertStringContainsString( 'nothing was written', $inexact->get_error_message() );
+	}
+
 	public function test_unknown_field_reaches_the_agent_over_mcp(): void {
 		$admin   = $this->boot( array( 'aafm/acf-update-post-fields', 'aafm/acf-list-field-groups' ) );
 		$post_id = (int) self::factory()->post->create( array( 'post_author' => $admin ) );

@@ -1154,7 +1154,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 	 * @return void
 	 */
 	public function test_the_layout_refusal_names_the_row_and_its_own_cause(): void {
-		$post_id = $this->boot();
+		$post_id = $this->boot( true );
 
 		$result = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(

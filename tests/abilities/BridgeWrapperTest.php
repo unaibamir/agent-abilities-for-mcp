@@ -1257,7 +1257,7 @@ final class BridgeWrapperTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'vendor_boom', $result->get_error_code() );
-		$this->assertSame( 'The vendor plugin returned an error: That ability failed.', $result->get_error_message() );
+		$this->assertSame( 'A plugin that registers tools under the "vendor" namespace returned an error: That ability failed.', $result->get_error_message() );
 		$this->assertSame( array( 'status' => 409 ), $result->get_error_data() );
 	}
 
@@ -1284,7 +1284,24 @@ final class BridgeWrapperTest extends TestCase {
 
 		$plain    = new \WP_Error( 'x_failed', 'Product 5 was not found.' );
 		$prefixed = aafm_bridge_attribute_error( 'woocommerce/product-update', $plain );
-		$this->assertSame( 'The woocommerce plugin returned an error: Product 5 was not found.', $prefixed->get_error_message(), 'Guard on the guard: a message without the name is still prefixed.' );
+		$this->assertSame( 'The WooCommerce plugin returned an error: Product 5 was not found.', $prefixed->get_error_message(), 'Guard on the guard: a message without the name is still prefixed.' );
+	}
+
+	/**
+	 * The display name counts as naming the plugin, and so does the raw namespace, whatever the case.
+	 */
+	public function test_a_message_that_already_names_the_plugin_by_its_display_name_is_not_prefixed_again(): void {
+		$by_label = new \WP_Error( 'x_failed', 'Yoast SEO could not save.' );
+		$this->assertSame( $by_label, aafm_bridge_attribute_error( 'wordpress-seo/update-meta', $by_label ) );
+
+		$lower = new \WP_Error( 'x_failed', 'yoast seo could not save.' );
+		$this->assertSame( $lower, aafm_bridge_attribute_error( 'wordpress-seo/update-meta', $lower ) );
+
+		$by_ns = new \WP_Error( 'x_failed', 'WORDPRESS-SEO could not save.' );
+		$this->assertSame( $by_ns, aafm_bridge_attribute_error( 'wordpress-seo/update-meta', $by_ns ) );
+
+		$inside = new \WP_Error( 'x_failed', 'NotYoast SEOx could not save.' );
+		$this->assertSame( 'The Yoast SEO plugin returned an error: NotYoast SEOx could not save.', aafm_bridge_attribute_error( 'wordpress-seo/update-meta', $inside )->get_error_message(), 'Whole words only.' );
 	}
 
 	/**
@@ -1294,10 +1311,10 @@ final class BridgeWrapperTest extends TestCase {
 	public function test_a_short_namespace_inside_another_word_does_not_count_as_named(): void {
 		$inside = new \WP_Error( 'ai_failed', 'Request failed.' );
 		$result = aafm_bridge_attribute_error( 'ai/summarize', $inside );
-		$this->assertSame( 'The ai plugin returned an error: Request failed.', $result->get_error_message() );
+		$this->assertSame( 'A plugin that registers tools under the "ai" namespace returned an error: Request failed.', $result->get_error_message() );
 
 		$email = new \WP_Error( 'ai_failed', 'Could not send the email.' );
-		$this->assertSame( 'The ai plugin returned an error: Could not send the email.', aafm_bridge_attribute_error( 'ai/summarize', $email )->get_error_message() );
+		$this->assertSame( 'A plugin that registers tools under the "ai" namespace returned an error: Could not send the email.', aafm_bridge_attribute_error( 'ai/summarize', $email )->get_error_message() );
 
 		$named = new \WP_Error( 'ai_failed', 'The AI service is unavailable.' );
 		$this->assertSame( $named, aafm_bridge_attribute_error( 'ai/summarize', $named ), 'A whole-word mention is not prefixed again.' );

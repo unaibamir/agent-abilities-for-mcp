@@ -352,6 +352,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/class-aafm-rate-limited-ability.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/bridge-labels.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/default-server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/review-origin.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/catalog.php';

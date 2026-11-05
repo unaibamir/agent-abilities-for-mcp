@@ -368,6 +368,8 @@ function aafm_render_integrations_tab(): void {
 		// Accordion content: the status note, the per-card filter, then the ability list directly.
 		echo '<div class="aafm-integration-body">';
 
+		echo '<p class="aafm-card-desc">' . esc_html__( 'Maintained by Agent Abilities.', 'agent-abilities-for-mcp' ) . '</p>';
+
 		echo '<p class="aafm-integration-note">' . esc_html( aafm_integration_status_note( $slug, $status ) ) . '</p>';
 
 		aafm_render_integration_filter( $slug );

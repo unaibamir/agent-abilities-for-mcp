@@ -109,6 +109,33 @@ function aafm_bridge_provider_label( string $ns ): string {
 }
 
 /**
+ * The first line of an Other plugins group: who provides these tools, and that we do not maintain them.
+ *
+ * @param string $ns Ability namespace.
+ * @return string Plain text; the caller escapes it.
+ */
+function aafm_bridge_source_line( string $ns ): string {
+	if ( 'core' === $ns ) {
+		return __( 'Provided by WordPress. Agent Abilities does not maintain these tools.', 'agent-abilities-for-mcp' );
+	}
+
+	$provider = aafm_bridge_provider_label( $ns );
+	if ( '' === $provider ) {
+		return sprintf(
+			/* translators: %s: ability namespace, for example "writer". */
+			__( 'Provided by a plugin that registers its tools under the "%s" namespace. Agent Abilities does not maintain these tools.', 'agent-abilities-for-mcp' ),
+			$ns
+		);
+	}
+
+	return sprintf(
+		/* translators: %s: plugin name. */
+		__( 'Provided by %s. Agent Abilities does not maintain these tools.', 'agent-abilities-for-mcp' ),
+		$provider
+	);
+}
+
+/**
  * A translated risk word for a bridged tool, and the reason when we inferred it from silence.
  *
  * @param array<string,mixed> $risk Result of aafm_bridge_risk().

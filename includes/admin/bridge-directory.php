@@ -477,6 +477,11 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 
 	echo '<div class="aafm-integration-body">';
 
+	// The orphan group has no plugin to name: that is what makes it an orphan group.
+	if ( ! $disabled ) {
+		echo '<p class="aafm-card-desc">' . esc_html( aafm_bridge_source_line( (string) ( $group['label'] ?? $ns ) ) ) . '</p>';
+	}
+
 	// Per-group bulk controls: flip every ability in this plugin at once. Not on the orphan
 	// group (its rows are disabled). Bulk enable is a deliberate action, so it turns on
 	// destructive abilities too without the per-row confirm; the DESTRUCTIVE badge still warns.

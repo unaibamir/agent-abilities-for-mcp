@@ -1305,6 +1305,19 @@
 			padding-inline: 20px;
 		}
 
+		/* Who provides or maintains the card's tools. The body has no padding of its own. */
+		.aafm-integration-body > .aafm-card-desc {
+			margin-block: 0;
+			padding-block: var(--aafm-space-3) 0;
+			padding-inline: var(--aafm-space-5);
+		}
+
+		/* The group's personal-data notice, under its source line. */
+		.aafm-integration-body > .aafm-notice {
+			margin-block: var(--aafm-space-3) 0;
+			margin-inline: var(--aafm-space-5);
+		}
+
 		.aafm-section-toggle {
 			padding-inline: var(--aafm-space-5);
 			margin-block: var(--aafm-space-3) 0;
